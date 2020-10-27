@@ -1,0 +1,8 @@
+[package]
+name = "thermite"
+version = "0.1.0"
+authors = ["novacrazy <novacrazy@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+paste = "1.0.2"
