@@ -18,7 +18,7 @@ where
     V: SimdMask<S>,
 {
     #[inline(always)]
-    fn new(value: V) -> Self {
+    pub(crate) fn new(value: V) -> Self {
         Self(value, PhantomData)
     }
 

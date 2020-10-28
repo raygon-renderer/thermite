@@ -1,7 +1,7 @@
 //#![no_std]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
-//pub mod backends;
+pub mod backends;
 
 //mod double;
 
@@ -50,13 +50,13 @@ pub trait SimdCasts<S: Simd + ?Sized>:
     //+ SimdCastFrom<S::Vi8>
     //+ SimdCastFrom<S::Vi16>
     + SimdCastFrom<S::Vi32>
-    + SimdCastFrom<S::Vi64>
+    //+ SimdCastFrom<S::Vi64>
     //+ SimdCastFrom<S::Vu8>
     //+ SimdCastFrom<S::Vu16>
     //+ SimdCastFrom<S::Vu32>
     //+ SimdCastFrom<S::Vu64>
     + SimdCastFrom<S::Vf32>
-    + SimdCastFrom<S::Vf64>
+    //+ SimdCastFrom<S::Vf64>
 {
     #[inline(always)]
     fn cast_to<T: SimdCastFrom<Self>>(self) -> T {
@@ -119,9 +119,9 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
         !self & other
     }
 
-    //fn reduce_and(self) -> T;
-    //fn reduce_or(self) -> T;
-    //fn reduce_xor(self) -> T;
+    //fn reduce_and(self) -> Self::Element;
+    //fn reduce_or(self) -> Self::Element;
+    //fn reduce_xor(self) -> Self::Element;
 
     const FULL_BITMASK: u16;
 
@@ -141,9 +141,15 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
 #[doc(hidden)]
 pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
     /// Returns true if **all** lanes are non-zero
-    unsafe fn _mm_all(self) -> bool;
+    #[inline(always)]
+    unsafe fn _mm_all(self) -> bool {
+        self.bitmask() == Self::FULL_BITMASK
+    }
     /// Returns true if **any** lanes are non-zero
-    unsafe fn _mm_any(self) -> bool;
+    #[inline(always)]
+    unsafe fn _mm_any(self) -> bool {
+        self.bitmask() != 0
+    }
 
     /// Returns true if **none** of the lanes are non-zero (all zero)
     #[inline(always)]
@@ -212,22 +218,28 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn max_element(self) -> Self::Element;
 
     fn eq(self, other: Self) -> Mask<S, Self>;
-    fn ne(self, other: Self) -> Mask<S, Self>;
+    fn ne(self, other: Self) -> Mask<S, Self> {
+        !self.eq(other)
+    }
     fn lt(self, other: Self) -> Mask<S, Self>;
-    fn le(self, other: Self) -> Mask<S, Self>;
+    fn le(self, other: Self) -> Mask<S, Self> {
+        !self.gt(other)
+    }
     fn gt(self, other: Self) -> Mask<S, Self>;
-    fn ge(self, other: Self) -> Mask<S, Self>;
+    fn ge(self, other: Self) -> Mask<S, Self> {
+        !self.lt(other)
+    }
 
     #[doc(hidden)]
-    fn _mm_add(self, rhs: Self) -> Self;
+    unsafe fn _mm_add(self, rhs: Self) -> Self;
     #[doc(hidden)]
-    fn _mm_sub(self, rhs: Self) -> Self;
+    unsafe fn _mm_sub(self, rhs: Self) -> Self;
     #[doc(hidden)]
-    fn _mm_mul(self, rhs: Self) -> Self;
+    unsafe fn _mm_mul(self, rhs: Self) -> Self;
     #[doc(hidden)]
-    fn _mm_div(self, rhs: Self) -> Self;
+    unsafe fn _mm_div(self, rhs: Self) -> Self;
     #[doc(hidden)]
-    fn _mm_rem(self, rhs: Self) -> Self;
+    unsafe fn _mm_rem(self, rhs: Self) -> Self;
 }
 
 // /// Transmutations into raw bits
@@ -249,14 +261,22 @@ pub trait SimdVector<S: Simd + ?Sized>:
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// Saturating addition, will not wrap
-    fn saturating_add(self, rhs: Self) -> Self;
+    fn saturating_add(self, rhs: Self) -> Self {
+        unimplemented!()
+    }
     /// Saturating subtraction, will not wrap
-    fn saturating_sub(self, rhs: Self) -> Self;
+    fn saturating_sub(self, rhs: Self) -> Self {
+        unimplemented!()
+    }
 
     /// Sum all lanes together, wrapping the result if it can't fit in `T`
-    fn wrapping_sum(self) -> Self::Element;
+    fn wrapping_sum(self) -> Self::Element {
+        unimplemented!()
+    }
     /// Multiple all lanes together, wrapping the result if it can't fit in `T`
-    fn wrapping_product(self) -> Self::Element;
+    fn wrapping_product(self) -> Self::Element {
+        unimplemented!()
+    }
 }
 
 /// Signed SIMD vector, with negative numbers
@@ -291,7 +311,7 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
     }
 
     #[doc(hidden)]
-    fn _mm_neg(self) -> Self;
+    unsafe fn _mm_neg(self) -> Self;
 }
 
 /// Floating point SIMD vectors
@@ -383,7 +403,7 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //type Vi8: SimdIntVector<Self, i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vi16: SimdIntVector<Self, i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     type Vi32: SimdIntVector<Self, Element = i32> + SimdSignedVector<Self>;
-    type Vi64: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
+    //type Vi64: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
 
     //type Vu8: SimdIntVector<Self, u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
@@ -391,7 +411,7 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //type Vu64: SimdIntVector<Self, u64>;
 
     type Vf32: SimdFloatVector<Self, Element = f32>; // + SimdIntoBits<Self, f32, Self::Vu32> + SimdFromBits<Self, Self::Vu32, f32>;
-    type Vf64: SimdFloatVector<Self, Element = f64>; // + SimdIntoBits<Self, f64, Self::Vu64> + SimdFromBits<Self, Self::Vu64, f64>;
+                                                     //type Vf64: SimdFloatVector<Self, Element = f64>; // + SimdIntoBits<Self, f64, Self::Vu64> + SimdFromBits<Self, Self::Vu64, f64>;
 
     //#[cfg(target_pointer_width = "32")]
     //type Vusize: SimdIntVector<Self, u32>;
