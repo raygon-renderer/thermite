@@ -77,6 +77,14 @@ where
         Self::new(V::splat(Truthy::from_bool(value)))
     }
 
+    unsafe fn load_aligned_unchecked(_ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn store_aligned_unchecked(self, _ptr: *mut Self::Element) {
+        todo!()
+    }
+
     #[inline(always)]
     unsafe fn extract_unchecked(self, index: usize) -> bool {
         self.0.extract_unchecked(index) != Truthy::falsey()

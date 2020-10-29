@@ -11,7 +11,7 @@ pub mod backends;
 mod mask;
 pub use mask::Mask;
 
-use std::{fmt::Debug, marker::PhantomData, ops::*};
+use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
 ///
@@ -90,6 +90,47 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     #[inline(always)]
     fn splat_any(value: impl Into<Self::Element>) -> Self {
         Self::splat(value.into())
+    }
+
+    #[inline]
+    fn load_aligned(arr: &[Self::Element]) -> Self {
+        assert!(arr.len() >= Self::NUM_ELEMENTS);
+        let load_ptr = arr.as_ptr();
+        assert_eq!(0, load_ptr.align_offset(mem::align_of::<Self>()));
+        unsafe { Self::load_aligned_unchecked(load_ptr) }
+    }
+
+    #[inline]
+    fn load_unaligned(arr: &[Self::Element]) -> Self {
+        assert!(arr.len() >= Self::NUM_ELEMENTS);
+        unsafe { Self::load_unaligned_unchecked(arr.as_ptr()) }
+    }
+
+    fn store_aligned(self, arr: &mut [Self::Element]) {
+        assert!(arr.len() >= Self::NUM_ELEMENTS);
+        let store_ptr = arr.as_mut_ptr();
+        assert_eq!(0, store_ptr.align_offset(mem::align_of::<Self>()));
+        unsafe { self.store_aligned_unchecked(store_ptr) };
+    }
+
+    fn store_unaligned(self, arr: &mut [Self::Element]) {
+        assert!(arr.len() >= Self::NUM_ELEMENTS);
+        unsafe { self.store_unaligned_unchecked(arr.as_mut_ptr()) };
+    }
+
+    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self;
+    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element);
+
+    #[inline(always)]
+    unsafe fn load_unaligned_unchecked(ptr: *const Self::Element) -> Self {
+        let mut target = mem::MaybeUninit::uninit();
+        ptr::copy_nonoverlapping(ptr as *const Self, target.as_mut_ptr(), 1);
+        target.assume_init()
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, ptr: *mut Self::Element) {
+        ptr::copy_nonoverlapping(&self as *const Self, ptr as *mut Self, 1);
     }
 
     #[inline]

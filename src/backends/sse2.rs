@@ -57,6 +57,26 @@ impl SimdVectorBase<SSE2> for i32x4<SSE2> {
         Self::new(unsafe { _mm_set1_epi32(value) })
     }
 
+    #[inline(always)]
+    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
+        Self::new(_mm_load_si128(ptr as *const _))
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned_unchecked(ptr: *const Self::Element) -> Self {
+        Self::new(_mm_loadu_si128(ptr as *const _))
+    }
+
+    #[inline(always)]
+    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
+        _mm_store_si128(ptr as *mut _, self.value)
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, ptr: *mut Self::Element) {
+        _mm_storeu_si128(ptr as *mut _, self.value)
+    }
+
     #[inline]
     #[target_feature(enable = "sse2")]
     unsafe fn extract_unchecked(self, index: usize) -> i32 {
@@ -77,6 +97,26 @@ impl SimdVectorBase<SSE2> for f32x4<SSE2> {
     #[inline(always)]
     fn splat(value: f32) -> Self {
         Self::new(unsafe { _mm_set1_ps(value) })
+    }
+
+    #[inline(always)]
+    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
+        Self::new(_mm_load_ps(ptr))
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned_unchecked(ptr: *const Self::Element) -> Self {
+        Self::new(_mm_loadu_ps(ptr))
+    }
+
+    #[inline(always)]
+    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
+        _mm_store_ps(ptr, self.value)
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, ptr: *mut Self::Element) {
+        _mm_storeu_ps(ptr, self.value)
     }
 
     #[inline]
