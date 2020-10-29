@@ -29,7 +29,7 @@ impl<S: Simd> Vector3xN<S> {
     }
 
     pub fn normalize(&self) -> Self {
-        let inv_norm = self.norm_squared().rsqrt();
+        let inv_norm = self.norm_squared().rsqrt_precise();
 
         Self {
             x: self.x * inv_norm,
