@@ -13,15 +13,22 @@ where
     }
 }
 
-impl<S: Simd + ?Sized, V> Mask<S, V>
-where
-    V: SimdMask<S>,
-{
+impl<S: Simd + ?Sized, V> Mask<S, V> {
     #[inline(always)]
     pub(crate) fn new(value: V) -> Self {
         Self(value, PhantomData)
     }
 
+    #[inline(always)]
+    pub fn value(self) -> V {
+        self.0
+    }
+}
+
+impl<S: Simd + ?Sized, V> Mask<S, V>
+where
+    V: SimdMask<S>,
+{
     /// Mask vector containing all true/non-zero lanes.
     #[inline(always)]
     pub fn truthy() -> Self {
@@ -52,10 +59,10 @@ where
     #[inline(always)]
     pub fn select<U>(self, t: U, f: U) -> U
     where
-        V: SimdCastTo<U>,
-        U: SimdBitwise<S>,
+        V: SimdCastTo<S, U>,
+        U: SimdMask<S>,
     {
-        unsafe { self.0._mm_select(t, f) }
+        unsafe { V::cast_mask(self).0._mm_blendv(t, f) }
     }
 }
 

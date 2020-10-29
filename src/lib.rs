@@ -16,28 +16,41 @@ use std::{fmt::Debug, marker::PhantomData, ops::*};
 /// Describes casting from one SIMD vector type to another
 ///
 /// This should handle extending bits correctly
-pub trait SimdCastFrom<FROM> {
+pub trait SimdCastFrom<S: Simd, FROM>: Sized {
     fn from_cast(from: FROM) -> Self;
+    fn from_cast_mask(from: Mask<S, FROM>) -> Mask<S, Self>;
 }
 
-impl<T> SimdCastFrom<T> for T {
+impl<S: Simd, T> SimdCastFrom<S, T> for T {
+    #[inline(always)]
     fn from_cast(from: T) -> T {
+        from
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<S, T>) -> Mask<S, Self> {
         from
     }
 }
 
 /// Describes casting to one SIMD vector type from another
-pub trait SimdCastTo<TO> {
+pub trait SimdCastTo<S: Simd, TO>: Sized {
     fn cast(self) -> TO;
+    fn cast_mask(mask: Mask<S, Self>) -> Mask<S, TO>;
 }
 
-impl<FROM, TO> SimdCastTo<TO> for FROM
+impl<S: Simd, FROM, TO> SimdCastTo<S, TO> for FROM
 where
-    TO: SimdCastFrom<FROM>,
+    TO: SimdCastFrom<S, FROM>,
 {
     #[inline(always)]
     fn cast(self) -> TO {
         TO::from_cast(self)
+    }
+
+    #[inline(always)]
+    fn cast_mask(mask: Mask<S, Self>) -> Mask<S, TO> {
+        TO::from_cast_mask(mask)
     }
 }
 
@@ -45,21 +58,21 @@ where
 /// List of valid casts between SIMD types in an instruction set
 pub trait SimdCasts<S: Simd + ?Sized>:
     Sized
-    //+ SimdCastFrom<S::Vm8>
-    //+ SimdCastFrom<S::Vm16>
-    //+ SimdCastFrom<S::Vi8>
-    //+ SimdCastFrom<S::Vi16>
-    + SimdCastFrom<S::Vi32>
-    //+ SimdCastFrom<S::Vi64>
-    //+ SimdCastFrom<S::Vu8>
-    //+ SimdCastFrom<S::Vu16>
-    //+ SimdCastFrom<S::Vu32>
-    //+ SimdCastFrom<S::Vu64>
-    + SimdCastFrom<S::Vf32>
-    //+ SimdCastFrom<S::Vf64>
+    //+ SimdCastFrom<S, S::Vm8>
+    //+ SimdCastFrom<S, S::Vm16>
+    //+ SimdCastFrom<S, S::Vi8>
+    //+ SimdCastFrom<S, S::Vi16>
+    + SimdCastFrom<S, S::Vi32>
+    //+ SimdCastFrom<S, S::Vi64>
+    //+ SimdCastFrom<S, S::Vu8>
+    //+ SimdCastFrom<S, S::Vu16>
+    //+ SimdCastFrom<S, S::Vu32>
+    //+ SimdCastFrom<S, S::Vu64>
+    + SimdCastFrom<S, S::Vf32>
+    //+ SimdCastFrom<S, S::Vf64>
 {
     #[inline(always)]
-    fn cast_to<T: SimdCastFrom<Self>>(self) -> T {
+    fn cast_to<T: SimdCastFrom<S, Self>>(self) -> T {
         self.cast()
     }
 }
@@ -157,17 +170,9 @@ pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
         !self._mm_any()
     }
 
-    /// Per-lane, select a value from `t` if the mask is non-zero, otherwise `f`
-    unsafe fn _mm_select<V>(self, t: V, f: V) -> V
-    where
-        Self: SimdCastTo<V>,
-        V: SimdBitwise<S>,
-    {
-        // NOTE: Use blendv intrinsics where possible,
-        // and fallback to `(!m & a) | (m & b)` on sub-register ops
-        let m = self.cast();
-
-        m.and_not(t) | (m & f)
+    #[inline(always)]
+    unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
+        self.and_not(t) | (self & f)
     }
 }
 

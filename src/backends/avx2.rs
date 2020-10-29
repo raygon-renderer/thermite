@@ -172,8 +172,19 @@ impl PartialEq<Self> for f32x8<AVX2> {
 
 impl Eq for i32x8<AVX2> {}
 
-impl SimdMask<AVX2> for i32x8<AVX2> {}
-impl SimdMask<AVX2> for f32x8<AVX2> {}
+impl SimdMask<AVX2> for i32x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
+        Self::new(_mm256_blendv_epi8(t.value, f.value, self.value))
+    }
+}
+
+impl SimdMask<AVX2> for f32x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
+        Self::new(_mm256_blendv_ps(t.value, f.value, self.value))
+    }
+}
 
 impl SimdVector<AVX2> for i32x8<AVX2> {
     #[inline(always)]
@@ -442,6 +453,21 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn mul_sub(self, m: Self, s: Self) -> Self {
+        Self::new(unsafe { _mm256_fmsub_ps(self.value, m.value, s.value) })
+    }
+
+    #[inline(always)]
+    fn neg_mul_add(self, m: Self, a: Self) -> Self {
+        Self::new(unsafe { _mm256_fnmadd_ps(self.value, m.value, a.value) })
+    }
+
+    #[inline(always)]
+    fn neg_mul_sub(self, m: Self, s: Self) -> Self {
+        Self::new(unsafe { _mm256_fnmsub_ps(self.value, m.value, s.value) })
+    }
+
+    #[inline(always)]
     fn floor(self) -> Self {
         Self::new(unsafe { _mm256_floor_ps(self.value) })
     }
@@ -486,3 +512,27 @@ impl_ops!(@BINARY i32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem
 
 impl_ops!(@UNARY f32x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY f32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+
+impl SimdCastFrom<AVX2, i32x8<AVX2>> for f32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: i32x8<AVX2>) -> Self {
+        Self::new(unsafe { _mm256_cvtepi32_ps(from.value) })
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, i32x8<AVX2>>) -> Mask<AVX2, Self> {
+        Self::from_cast(from.value()).ne(Self::zero())
+    }
+}
+
+impl SimdCastFrom<AVX2, f32x8<AVX2>> for i32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: f32x8<AVX2>) -> Self {
+        Self::new(unsafe { _mm256_cvttps_epi32(from.value) })
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, f32x8<AVX2>>) -> Mask<AVX2, Self> {
+        Self::from_cast(from.value()).ne(Self::zero())
+    }
+}
