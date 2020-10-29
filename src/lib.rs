@@ -1,4 +1,4 @@
-//#![no_std]
+#![no_std]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
 pub mod backends;
@@ -11,7 +11,7 @@ pub use self::pointer::*;
 mod mask;
 pub use mask::Mask;
 
-use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
+use core::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
 ///
@@ -82,9 +82,9 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     type Element: mask::Truthy;
 
     /// Size of element type in bytes
-    const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
-    const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / 4;
-    const ALIGNMENT: usize = std::mem::align_of::<Self>();
+    const ELEMENT_SIZE: usize = core::mem::size_of::<Self::Element>();
+    const NUM_ELEMENTS: usize = core::mem::size_of::<S::Vi32>() / 4;
+    const ALIGNMENT: usize = core::mem::align_of::<Self>();
 
     fn splat(value: Self::Element) -> Self;
 
@@ -297,7 +297,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
 // pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
 //     #[inline(always)]
 //     fn into_bits(self) -> B {
-//         unsafe { std::mem::transmute_copy(&self) }
+//         unsafe { core::mem::transmute_copy(&self) }
 //     }
 // }
 
@@ -305,7 +305,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
 // pub trait SimdFromBits<S: Simd + ?Sized, B, T>: SimdVectorBase<S, T> {
 //     #[inline(always)]
 //     fn from_bits(bits: B) -> Self {
-//         unsafe { std::mem::transmute_copy(&bits) }
+//         unsafe { core::mem::transmute_copy(&bits) }
 //     }
 // }
 
