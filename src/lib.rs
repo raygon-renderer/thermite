@@ -11,6 +11,9 @@ pub use self::pointer::*;
 mod mask;
 pub use mask::Mask;
 
+mod ext;
+pub use ext::SimdFloatVectorExt;
+
 use core::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
@@ -343,6 +346,12 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
         self.lt(Self::zero()).select(-self, self)
     }
 
+    /// Copies the sign from `sign` to `self`
+    #[inline(always)]
+    fn copysign(self, sign: Self) -> Self {
+        self.abs() * sign.signum()
+    }
+
     /// Returns `-1` is less than zero, `+1` otherwise.
     #[inline(always)]
     fn signum(self) -> Self {
@@ -378,8 +387,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// Compute the horizontal product of all elements
     fn product(self) -> Self::Element;
 
-    const HAS_TRUE_FMA: bool = false;
-
     /// Fused multiply-add
     #[inline(always)]
     fn mul_add(self, m: Self, a: Self) -> Self {
@@ -395,7 +402,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// Fused negated multiple-add
     #[inline(always)]
     fn neg_mul_add(self, m: Self, a: Self) -> Self {
-        -(self * m) + a
+        self.mul_add(-m, a)
     }
 
     /// Fused negated multiple-subtract

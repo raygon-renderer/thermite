@@ -656,6 +656,12 @@ impl SimdSignedVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn copysign(self, sign: Self) -> Self {
+        // clear sign bit, then copy sign bit from `sign`
+        self.abs() | (sign & Self::neg_zero())
+    }
+
+    #[inline(always)]
     fn abs(self) -> Self {
         // clear sign bit
         self & Self::splat(f32::from_bits(0x7fffffff))
@@ -699,8 +705,6 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
         // TODO: Replace with log-reduce
         unsafe { self.reduce2(|prod, x| x * prod) }
     }
-
-    const HAS_TRUE_FMA: bool = true;
 
     #[inline(always)]
     fn mul_add(self, m: Self, a: Self) -> Self {

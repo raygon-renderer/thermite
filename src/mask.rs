@@ -83,6 +83,11 @@ where
     }
 
     #[inline(always)]
+    pub fn count(self) -> u32 {
+        self.0.bitmask().count_ones()
+    }
+
+    #[inline(always)]
     pub fn select<U>(self, t: U, f: U) -> U
     where
         V: SimdCastTo<S, U>,
