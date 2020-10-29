@@ -1,8 +1,23 @@
 use crate::*;
 
-#[derive(Debug, Clone, Copy)]
+use core::fmt;
+
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct Mask<S: Simd, V>(V, PhantomData<S>);
+
+impl<S: Simd, V> Debug for Mask<S, V>
+where
+    V: SimdMask<S>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut t = f.debug_tuple("Mask");
+        for i in 0..Self::NUM_ELEMENTS {
+            t.field(unsafe { &self.extract_unchecked(i) });
+        }
+        t.finish()
+    }
+}
 
 impl<S: Simd + ?Sized, V> Default for Mask<S, V>
 where
