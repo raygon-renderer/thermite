@@ -24,75 +24,6 @@ impl Simd for SSE2 {
     //type Vf64 = f64x4<SSE2>;
 }
 
-macro_rules! decl {
-    ($($name:ident: $ety:ty => $ty:ty),*) => {$(
-        #[derive(Clone, Copy)]
-        #[repr(transparent)]
-        pub struct $name<S: Simd> {
-            pub(crate) value: $ty,
-            _is: PhantomData<S>,
-        }
-
-        impl<S: Simd> $name<S> {
-            #[inline(always)]
-            pub(crate) fn new(value: $ty) -> Self {
-                Self { value, _is: PhantomData }
-            }
-        }
-
-        impl<S: Simd> $name<S> where Self: SimdVectorBase<S, Element = $ety> {
-            #[inline(always)]
-            pub(crate) unsafe fn map<F>(mut self, f: F) -> Self
-            where F: Fn($ety) -> $ety {
-                for i in 0..Self::NUM_ELEMENTS {
-                    let ptr = transmute::<&mut _, *mut $ety>(&mut self).add(i);
-                    *ptr = f(*ptr);
-                }
-                self
-            }
-
-            pub(crate) unsafe fn zip<F>(a: Self, b: Self, f: F) -> Self
-            where F: Fn($ety, $ety) -> $ety {
-                let mut out = Self::default();
-                for i in 0..Self::NUM_ELEMENTS {
-                    *transmute::<&mut _, *mut $ety>(&mut out).add(i) =
-                        f(a.extract_unchecked(i), b.extract_unchecked(i));
-                }
-                out
-            }
-
-            #[inline(always)]
-            pub(crate) unsafe fn reduce<F>(self, mut init: $ety, f: F) -> $ety
-            where F: Fn($ety, $ety) -> $ety {
-                for i in 0..Self::NUM_ELEMENTS {
-                    init = f(init, self.extract_unchecked(i));
-                }
-                init
-            }
-
-            #[inline(always)]
-            pub(crate) unsafe fn reduce2<F>(self, f: F) -> $ety
-            where F: Fn($ety, $ety) -> $ety {
-                let mut accum = self.extract_unchecked(0);
-                for i in 1..Self::NUM_ELEMENTS {
-                    accum = f(accum, self.extract_unchecked(i));
-                }
-                accum
-            }
-        }
-
-        impl<S: Simd> fmt::Debug for $name<S> where Self: SimdVectorBase<S> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let mut t = f.debug_tuple(stringify!($name));
-                for i in 0..Self::NUM_ELEMENTS {
-                    t.field(unsafe { &*transmute::<&_, *const $ety>(&self).add(i) });
-                }
-                t.finish()
-            }
-        }
-    )*};
-}
-
 decl!(i32x4: i32 => __m128i);
 impl<S: Simd> Default for i32x4<S> {
     #[inline(always)]
@@ -135,7 +66,7 @@ impl SimdVectorBase<SSE2> for i32x4<SSE2> {
     #[inline]
     #[target_feature(enable = "sse2")]
     unsafe fn replace_unchecked(mut self, index: usize, value: i32) -> Self {
-        *transmute::<&_, *mut i32>(&mut self).add(index) = value;
+        *transmute::<&mut _, *mut i32>(&mut self).add(index) = value;
         self
     }
 }
@@ -157,7 +88,7 @@ impl SimdVectorBase<SSE2> for f32x4<SSE2> {
     #[inline]
     #[target_feature(enable = "sse2")]
     unsafe fn replace_unchecked(mut self, index: usize, value: f32) -> Self {
-        *transmute::<&_, *mut f32>(&mut self).add(index) = value;
+        *transmute::<&mut _, *mut f32>(&mut self).add(index) = value;
         self
     }
 }
@@ -301,6 +232,11 @@ impl SimdVector<SSE2> for i32x4<SSE2> {
     }
 
     #[inline(always)]
+    fn ge(self, other: Self) -> Mask<SSE2, Self> {
+        self.gt(other) ^ self.eq(other)
+    }
+
+    #[inline(always)]
     unsafe fn _mm_add(self, rhs: Self) -> Self {
         Self::new(_mm_add_epi32(self.value, rhs.value))
     }
@@ -379,14 +315,27 @@ impl SimdVector<SSE2> for f32x4<SSE2> {
         Mask::new(Self::new(unsafe { _mm_cmpeq_ps(self.value, other.value) }))
     }
 
+    fn ne(self, other: Self) -> Mask<SSE2, Self> {
+        Mask::new(Self::new(unsafe { _mm_cmpneq_ps(self.value, other.value) }))
+    }
+
     #[inline(always)]
     fn lt(self, other: Self) -> Mask<SSE2, Self> {
         Mask::new(Self::new(unsafe { _mm_cmplt_ps(self.value, other.value) }))
     }
 
+    fn le(self, other: Self) -> Mask<SSE2, Self> {
+        Mask::new(Self::new(unsafe { _mm_cmple_ps(self.value, other.value) }))
+    }
+
     #[inline(always)]
     fn gt(self, other: Self) -> Mask<SSE2, Self> {
         Mask::new(Self::new(unsafe { _mm_cmpgt_ps(self.value, other.value) }))
+    }
+
+    #[inline(always)]
+    fn ge(self, other: Self) -> Mask<SSE2, Self> {
+        Mask::new(Self::new(unsafe { _mm_cmpge_ps(self.value, other.value) }))
     }
 
     #[inline(always)]
@@ -545,31 +494,11 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
     }
 }
 
-macro_rules! impl_ops {
-    (@UNARY $name:ident => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl $op_trait for $name<SSE2> {
-            type Output = Self;
-            #[inline(always)] fn $op(self) -> Self { unsafe { self. [<_mm_ $op>]() } }
-        }
-    )*}};
+impl_ops!(@UNARY i32x4 SSE2 => Not::not, Neg::neg);
+impl_ops!(@BINARY i32x4 SSE2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 
-    (@BINARY $name:ident => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl $op_trait<Self> for $name<SSE2> {
-            type Output = Self;
-            #[inline(always)] fn $op(self, rhs: Self) -> Self { unsafe { self. [<_mm_ $op>](rhs) } }
-        }
-
-        impl [<$op_trait Assign>]<Self> for $name<SSE2> {
-            #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) { *self = $op_trait::$op(*self, rhs); }
-        }
-    )*}};
-}
-
-impl_ops!(@UNARY i32x4 => Not::not, Neg::neg);
-impl_ops!(@BINARY i32x4 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
-
-impl_ops!(@UNARY f32x4 => Not::not, Neg::neg);
-impl_ops!(@BINARY f32x4 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@UNARY f32x4 SSE2 => Not::not, Neg::neg);
+impl_ops!(@BINARY f32x4 SSE2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 
 impl SimdCastFrom<i32x4<SSE2>> for f32x4<SSE2> {
     #[inline(always)]

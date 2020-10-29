@@ -221,13 +221,17 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn ne(self, other: Self) -> Mask<S, Self> {
         !self.eq(other)
     }
-    fn lt(self, other: Self) -> Mask<S, Self>;
-    fn le(self, other: Self) -> Mask<S, Self> {
-        !self.gt(other)
+    fn lt(self, other: Self) -> Mask<S, Self> {
+        other.gt(self)
     }
-    fn gt(self, other: Self) -> Mask<S, Self>;
+    fn le(self, other: Self) -> Mask<S, Self> {
+        other.ge(self)
+    }
+    fn gt(self, other: Self) -> Mask<S, Self> {
+        other.lt(self)
+    }
     fn ge(self, other: Self) -> Mask<S, Self> {
-        !self.lt(other)
+        other.le(self)
     }
 
     #[doc(hidden)]
@@ -261,11 +265,11 @@ pub trait SimdVector<S: Simd + ?Sized>:
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// Saturating addition, will not wrap
-    fn saturating_add(self, rhs: Self) -> Self {
+    fn saturating_add(self, _rhs: Self) -> Self {
         unimplemented!()
     }
     /// Saturating subtraction, will not wrap
-    fn saturating_sub(self, rhs: Self) -> Self {
+    fn saturating_sub(self, _rhs: Self) -> Self {
         unimplemented!()
     }
 
