@@ -79,7 +79,7 @@ macro_rules! decl {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut t = f.debug_tuple(stringify!($name));
                 for i in 0..Self::NUM_ELEMENTS {
-                    t.field(unsafe { &*transmute::<&_, *const $ety>(&self).add(i) });
+                    t.field(unsafe { &*transmute::<&_, *const $ety>(self).add(i) });
                 }
                 t.finish()
             }
