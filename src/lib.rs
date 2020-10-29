@@ -5,8 +5,8 @@ pub mod backends;
 
 //mod double;
 
-//mod ptr;
-//pub use self::ptr::*;
+mod pointer;
+pub use self::pointer::*;
 
 mod mask;
 pub use mask::Mask;
@@ -84,6 +84,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     /// Size of element type in bytes
     const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
     const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / 4;
+    const ALIGNMENT: usize = std::mem::align_of::<Self>();
 
     fn splat(value: Self::Element) -> Self;
 
@@ -96,7 +97,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     fn load_aligned(arr: &[Self::Element]) -> Self {
         assert!(arr.len() >= Self::NUM_ELEMENTS);
         let load_ptr = arr.as_ptr();
-        assert_eq!(0, load_ptr.align_offset(mem::align_of::<Self>()));
+        assert_eq!(0, load_ptr.align_offset(Self::ALIGNMENT));
         unsafe { Self::load_aligned_unchecked(load_ptr) }
     }
 
@@ -109,7 +110,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     fn store_aligned(self, arr: &mut [Self::Element]) {
         assert!(arr.len() >= Self::NUM_ELEMENTS);
         let store_ptr = arr.as_mut_ptr();
-        assert_eq!(0, store_ptr.align_offset(mem::align_of::<Self>()));
+        assert_eq!(0, store_ptr.align_offset(Self::ALIGNMENT));
         unsafe { self.store_aligned_unchecked(store_ptr) };
     }
 
@@ -458,17 +459,17 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //type Vu8: SimdIntVector<Self, u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     //type Vu32: SimdIntVector<Self, u32>;
-    //type Vu64: SimdIntVector<Self, u64>;
+    type Vu64: SimdIntVector<Self, Element = u64>;
 
     type Vf32: SimdFloatVector<Self, Element = f32>; // + SimdIntoBits<Self, f32, Self::Vu32> + SimdFromBits<Self, Self::Vu32, f32>;
                                                      //type Vf64: SimdFloatVector<Self, Element = f64>; // + SimdIntoBits<Self, f64, Self::Vu64> + SimdFromBits<Self, Self::Vu64, f64>;
 
-    //#[cfg(target_pointer_width = "32")]
-    //type Vusize: SimdIntVector<Self, u32>;
+    #[cfg(target_pointer_width = "32")]
+    type Vusize: SimdIntVector<Self, Element = u32>;
     //#[cfg(target_pointer_width = "32")]
     //type Visize: SimdIntVector<Self, i32> + SimdSignedVector<Self, i32>;
-    //#[cfg(target_pointer_width = "64")]
-    //type Vusize: SimdIntVector<Self, u64>;
+    #[cfg(target_pointer_width = "64")]
+    type Vusize: SimdIntVector<Self, Element = u64>;
     //#[cfg(target_pointer_width = "64")]
     //type Visize: SimdIntVector<Self, i64> + SimdSignedVector<Self, i64>;
 }

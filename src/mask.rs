@@ -8,6 +8,7 @@ impl<S: Simd + ?Sized, V> Default for Mask<S, V>
 where
     V: SimdMask<S>,
 {
+    #[inline(always)]
     fn default() -> Self {
         Self::falsey()
     }
@@ -22,6 +23,16 @@ impl<S: Simd + ?Sized, V> Mask<S, V> {
     #[inline(always)]
     pub fn value(self) -> V {
         self.0
+    }
+}
+
+impl<S: Simd + ?Sized, V> Mask<S, V>
+where
+    V: SimdVector<S>,
+{
+    #[inline(always)]
+    pub fn from_value(v: V) -> Self {
+        v.ne(V::zero())
     }
 }
 
@@ -77,12 +88,20 @@ where
         Self::new(V::splat(Truthy::from_bool(value)))
     }
 
-    unsafe fn load_aligned_unchecked(_ptr: *const Self::Element) -> Self {
-        todo!()
+    #[inline]
+    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
+        let mut mask = V::default();
+        for i in 0..Self::NUM_ELEMENTS {
+            mask = mask.replace_unchecked(i, Truthy::from_bool(*ptr.add(i)));
+        }
+        Mask::new(mask)
     }
 
-    unsafe fn store_aligned_unchecked(self, _ptr: *mut Self::Element) {
-        todo!()
+    #[inline]
+    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
+        for i in 0..Self::NUM_ELEMENTS {
+            *ptr.add(i) = self.extract_unchecked(i);
+        }
     }
 
     #[inline(always)]

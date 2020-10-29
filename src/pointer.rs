@@ -36,6 +36,7 @@ where
     //}
 }
 
+#[doc(hidden)]
 pub trait SimdPtr<S: Simd + ?Sized> {
     //unsafe fn read<V, U>(self, mask: MaskTy<S, V, U>) -> V
     //where
