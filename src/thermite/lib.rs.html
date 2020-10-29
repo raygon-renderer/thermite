@@ -474,6 +474,13 @@
 <span id="473">473</span>
 <span id="474">474</span>
 <span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -487,6 +494,9 @@
 
 <span class="kw">mod</span> <span class="ident">mask</span>;
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">mask</span>::<span class="ident">Mask</span>;
+
+<span class="kw">mod</span> <span class="ident">ext</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">ext</span>::<span class="ident">SimdFloatVectorExt</span>;
 
 <span class="kw">use</span> <span class="ident">core</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
 
@@ -820,6 +830,12 @@
         <span class="self">self</span>.<span class="ident">lt</span>(<span class="self">Self</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="op">-</span><span class="self">self</span>, <span class="self">self</span>)
     }
 
+    <span class="doccomment">/// Copies the sign from `sign` to `self`</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">copysign</span>(<span class="self">self</span>, <span class="ident">sign</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">abs</span>() <span class="op">*</span> <span class="ident">sign</span>.<span class="ident">signum</span>()
+    }
+
     <span class="doccomment">/// Returns `-1` is less than zero, `+1` otherwise.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">signum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
@@ -855,8 +871,6 @@
     <span class="doccomment">/// Compute the horizontal product of all elements</span>
     <span class="kw">fn</span> <span class="ident">product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
 
-    <span class="kw">const</span> <span class="ident">HAS_TRUE_FMA</span>: <span class="ident">bool</span> <span class="op">=</span> <span class="bool-val">false</span>;
-
     <span class="doccomment">/// Fused multiply-add</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
@@ -872,7 +886,7 @@
     <span class="doccomment">/// Fused negated multiple-add</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">neg_mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="op">-</span>(<span class="self">self</span> <span class="op">*</span> <span class="ident">m</span>) <span class="op">+</span> <span class="ident">a</span>
+        <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="ident">m</span>, <span class="ident">a</span>)
     }
 
     <span class="doccomment">/// Fused negated multiple-subtract</span>

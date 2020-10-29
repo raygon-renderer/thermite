@@ -831,6 +831,10 @@
 <span id="830">830</span>
 <span id="831">831</span>
 <span id="832">832</span>
+<span id="833">833</span>
+<span id="834">834</span>
+<span id="835">835</span>
+<span id="836">836</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -1490,6 +1494,12 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">copysign</span>(<span class="self">self</span>, <span class="ident">sign</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// clear sign bit, then copy sign bit from `sign`</span>
+        <span class="self">self</span>.<span class="ident">abs</span>() <span class="op">|</span> (<span class="ident">sign</span> <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">neg_zero</span>())
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="comment">// clear sign bit</span>
         <span class="self">self</span> <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x7fffffff</span>))
@@ -1533,8 +1543,6 @@
         <span class="comment">// TODO: Replace with log-reduce</span>
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">prod</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">prod</span>) }
     }
-
-    <span class="kw">const</span> <span class="ident">HAS_TRUE_FMA</span>: <span class="ident">bool</span> <span class="op">=</span> <span class="bool-val">true</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
