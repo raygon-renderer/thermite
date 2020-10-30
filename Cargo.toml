@@ -11,3 +11,7 @@ paste = "1.0.2"
 opt-level = 3
 lto = 'fat'
 codegen-units = 1
+
+[features]
+default = ["alloc"]
+alloc = []

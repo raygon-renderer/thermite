@@ -1,6 +1,11 @@
 #![no_std]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
+#[cfg(feature = "alloc")]
+mod buffer;
+#[cfg(feature = "alloc")]
+pub use buffer::SimdBuffer;
+
 pub mod backends;
 
 //mod double;
@@ -82,7 +87,7 @@ pub trait SimdCasts<S: Simd + ?Sized>:
 
 /// Basic shared vector interface
 pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sync + Send {
-    type Element: mask::Truthy;
+    type Element: Sized + mask::Truthy;
 
     /// Size of element type in bytes
     const ELEMENT_SIZE: usize = core::mem::size_of::<Self::Element>();
@@ -97,10 +102,29 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
     }
 
     #[inline]
+    fn extract(self, index: usize) -> Self::Element {
+        assert!(index < Self::NUM_ELEMENTS);
+        unsafe { self.extract_unchecked(index) }
+    }
+
+    #[inline]
+    fn replace(self, index: usize, value: Self::Element) -> Self {
+        assert!(index < Self::NUM_ELEMENTS);
+        unsafe { self.replace_unchecked(index, value) }
+    }
+
+    unsafe fn extract_unchecked(self, index: usize) -> Self::Element;
+    unsafe fn replace_unchecked(self, index: usize, value: Self::Element) -> Self;
+
+    #[inline]
     fn load_aligned(arr: &[Self::Element]) -> Self {
         assert!(arr.len() >= Self::NUM_ELEMENTS);
         let load_ptr = arr.as_ptr();
-        assert_eq!(0, load_ptr.align_offset(Self::ALIGNMENT));
+        assert_eq!(
+            0,
+            load_ptr.align_offset(Self::ALIGNMENT),
+            "source slice is not aligned properly"
+        );
         unsafe { Self::load_aligned_unchecked(load_ptr) }
     }
 
@@ -110,13 +134,19 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
         unsafe { Self::load_unaligned_unchecked(arr.as_ptr()) }
     }
 
+    #[inline]
     fn store_aligned(self, arr: &mut [Self::Element]) {
         assert!(arr.len() >= Self::NUM_ELEMENTS);
         let store_ptr = arr.as_mut_ptr();
-        assert_eq!(0, store_ptr.align_offset(Self::ALIGNMENT));
+        assert_eq!(
+            0,
+            store_ptr.align_offset(Self::ALIGNMENT),
+            "target slice is not aligned properly"
+        );
         unsafe { self.store_aligned_unchecked(store_ptr) };
     }
 
+    #[inline]
     fn store_unaligned(self, arr: &mut [Self::Element]) {
         assert!(arr.len() >= Self::NUM_ELEMENTS);
         unsafe { self.store_unaligned_unchecked(arr.as_mut_ptr()) };
@@ -137,22 +167,10 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Syn
         ptr::copy_nonoverlapping(&self as *const Self, ptr as *mut Self, 1);
     }
 
-    #[inline]
-    fn extract(self, index: usize) -> Self::Element {
-        assert!(index < Self::NUM_ELEMENTS);
-
-        unsafe { self.extract_unchecked(index) }
+    #[cfg(feature = "alloc")]
+    fn alloc(count: usize) -> SimdBuffer<S, Self> {
+        SimdBuffer::alloc(count)
     }
-
-    #[inline]
-    fn replace(self, index: usize, value: Self::Element) -> Self {
-        assert!(index < Self::NUM_ELEMENTS);
-
-        unsafe { self.replace_unchecked(index, value) }
-    }
-
-    unsafe fn extract_unchecked(self, index: usize) -> Self::Element;
-    unsafe fn replace_unchecked(self, index: usize, value: Self::Element) -> Self;
 }
 
 // TODO: Require op bounds for both Self and T
