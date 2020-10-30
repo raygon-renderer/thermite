@@ -230,6 +230,11 @@
 <span id="229">229</span>
 <span id="230">230</span>
 <span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
@@ -300,26 +305,31 @@
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">falsey</span>()))
     }
 
+    <span class="doccomment">/// Returns `true` if all lanes are truthy</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_all</span>() }
     }
 
+    <span class="doccomment">/// Returns `true` if any lanes are truthy</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_any</span>() }
     }
 
+    <span class="doccomment">/// Returns `true` if all lanes are falsey</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_none</span>() }
     }
 
+    <span class="doccomment">/// Counts the number of truthy lanes</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u32</span> {
         <span class="self">self</span>.<span class="number">0</span>.<span class="ident">bitmask</span>().<span class="ident">count_ones</span>()
     }
 
+    <span class="doccomment">/// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">select</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="ident">U</span>, <span class="ident">f</span>: <span class="ident">U</span>) <span class="op">-&gt;</span> <span class="ident">U</span>
     <span class="kw">where</span>
