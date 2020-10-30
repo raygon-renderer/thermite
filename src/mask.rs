@@ -67,26 +67,31 @@ where
         Self::new(V::splat(Truthy::falsey()))
     }
 
+    /// Returns `true` if all lanes are truthy
     #[inline(always)]
     pub fn all(self) -> bool {
         unsafe { self.0._mm_all() }
     }
 
+    /// Returns `true` if any lanes are truthy
     #[inline(always)]
     pub fn any(self) -> bool {
         unsafe { self.0._mm_any() }
     }
 
+    /// Returns `true` if all lanes are falsey
     #[inline(always)]
     pub fn none(self) -> bool {
         unsafe { self.0._mm_none() }
     }
 
+    /// Counts the number of truthy lanes
     #[inline(always)]
     pub fn count(self) -> u32 {
         self.0.bitmask().count_ones()
     }
 
+    /// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey
     #[inline(always)]
     pub fn select<U>(self, t: U, f: U) -> U
     where
