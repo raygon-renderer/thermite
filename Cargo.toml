@@ -11,11 +11,19 @@ alloc = []
 [dependencies]
 paste = "1.0.2"
 
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "main"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = 'fat'
 codegen-units = 1
 
-[features]
-default = ["alloc"]
-alloc = []
+[profile.bench]
+opt-level = 3
+lto = 'fat'
+codegen-units = 1
