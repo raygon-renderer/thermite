@@ -255,6 +255,16 @@ impl SimdBitwise<AVX2> for i32x8<AVX2> {
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self {
         Self::new(_mm256_xor_si256(self.value, rhs.value))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+        Self::new(_mm256_srlv_epi32(self.value, count.value))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+        Self::new(_mm256_sllv_epi32(self.value, count.value))
+    }
 }
 
 impl SimdBitwise<AVX2> for f32x8<AVX2> {
@@ -287,6 +297,22 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self {
         Self::new(_mm256_xor_ps(self.value, rhs.value))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+        Self::new(_mm256_castsi256_ps(_mm256_srlv_epi32(
+            _mm256_castps_si256(self.value),
+            count.value,
+        )))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+        Self::new(_mm256_castsi256_ps(_mm256_sllv_epi32(
+            _mm256_castps_si256(self.value),
+            count.value,
+        )))
     }
 }
 
@@ -340,6 +366,28 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
             _mm256_xor_si256(self.value.1, rhs.value.1),
         ))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+        let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
+        let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
+
+        Self::new((
+            _mm256_srlv_epi64(self.value.0, low),
+            _mm256_srlv_epi64(self.value.1, high),
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+        let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
+        let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
+
+        Self::new((
+            _mm256_sllv_epi64(self.value.0, low),
+            _mm256_sllv_epi64(self.value.1, high),
+        ))
+    }
 }
 
 impl SimdBitwise<AVX2> for f64x8<AVX2> {
@@ -391,6 +439,28 @@ impl SimdBitwise<AVX2> for f64x8<AVX2> {
         Self::new((
             _mm256_xor_pd(self.value.0, rhs.value.0),
             _mm256_xor_pd(self.value.1, rhs.value.1),
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+        let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
+        let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
+
+        Self::new((
+            _mm256_castsi256_pd(_mm256_srlv_epi64(_mm256_castpd_si256(self.value.0), low)),
+            _mm256_castsi256_pd(_mm256_srlv_epi64(_mm256_castpd_si256(self.value.1), high)),
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+        let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
+        let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
+
+        Self::new((
+            _mm256_castsi256_pd(_mm256_sllv_epi64(_mm256_castpd_si256(self.value.0), low)),
+            _mm256_castsi256_pd(_mm256_sllv_epi64(_mm256_castpd_si256(self.value.1), high)),
         ))
     }
 }
@@ -645,10 +715,12 @@ impl SimdVector<AVX2> for f32x8<AVX2> {
 }
 
 impl SimdVector<AVX2> for u64x8<AVX2> {
+    #[inline(always)]
     fn zero() -> Self {
         unsafe { Self::new((_mm256_setzero_si256(), _mm256_setzero_si256())) }
     }
 
+    #[inline(always)]
     fn one() -> Self {
         Self::splat(1)
     }
@@ -734,10 +806,12 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
 }
 
 impl SimdVector<AVX2> for f64x8<AVX2> {
+    #[inline(always)]
     fn zero() -> Self {
         unsafe { Self::new((_mm256_setzero_pd(), _mm256_setzero_pd())) }
     }
 
+    #[inline(always)]
     fn one() -> Self {
         Self::splat(1.0)
     }
@@ -1184,15 +1258,19 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
 
 impl_ops!(@UNARY i32x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY i32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS i32x8 AVX2 => Shr::shr, Shl::shl);
 
 impl_ops!(@UNARY f32x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY f32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS f32x8 AVX2 => Shr::shr, Shl::shl);
 
 impl_ops!(@UNARY u64x8 AVX2 => Not::not);
 impl_ops!(@BINARY u64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS u64x8 AVX2 => Shr::shr, Shl::shl);
 
 impl_ops!(@UNARY f64x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY f64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS f64x8 AVX2 => Shr::shr, Shl::shl);
 
 macro_rules! brute_force_convert {
     ($value:expr; $from:ty => $to:ty) => {

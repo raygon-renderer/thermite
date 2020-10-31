@@ -158,10 +158,22 @@ macro_rules! impl_ops {
             }
         }
     )*}};
+    (@SHIFTS => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
+        impl<S: Simd, V> $op_trait<<S as Simd>::Vi32> for Mask<S, V> where V: SimdMask<S> {
+            type Output = Self;
+            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vi32) -> Self { Self::new($op_trait::$op(self.0, rhs)) }
+        }
+        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vi32> for Mask<S, V> where V: SimdMask<S> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <S as Simd>::Vi32) {
+                self.0 = $op_trait::$op(self.0, rhs);
+            }
+        }
+    )*}};
 }
 
 impl_ops!(@UNARY => Not::not);
 impl_ops!(@BINARY => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS => Shr::shr, Shl::shl);
 
 impl<S: Simd + ?Sized, V> SimdBitwise<S> for Mask<S, V>
 where
@@ -197,6 +209,16 @@ where
     #[inline(always)]
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self {
         Self::new(self.0._mm_bitxor(rhs.0))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shr(self, count: S::Vi32) -> Self {
+        Self::new(self.0._mm_shr(count))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shl(self, count: S::Vi32) -> Self {
+        Self::new(self.0._mm_shl(count))
     }
 }
 

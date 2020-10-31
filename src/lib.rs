@@ -183,10 +183,10 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     + BitAndAssign<Self>
     + BitOrAssign<Self>
     + BitXorAssign<Self>
-//+ Shl<S::Vu32, Output = Self>
-//+ ShlAssign<S::Vu32>
-//+ Shr<S::Vu32, Output = Self>
-//+ ShrAssign<S::Vu32>
+    + Shl<S::Vi32, Output = Self>
+    + ShlAssign<S::Vi32>
+    + Shr<S::Vi32, Output = Self>
+    + ShrAssign<S::Vi32>
 {
     /// Computes `!self & other`, may be more performant than the naive version
     #[inline(always)]
@@ -210,6 +210,11 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     unsafe fn _mm_bitor(self, rhs: Self) -> Self;
     #[doc(hidden)]
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self;
+
+    #[doc(hidden)]
+    unsafe fn _mm_shr(self, count: S::Vi32) -> Self;
+    #[doc(hidden)]
+    unsafe fn _mm_shl(self, count: S::Vi32) -> Self;
 }
 
 /// Defines a mask type for results and selects

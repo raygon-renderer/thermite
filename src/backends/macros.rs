@@ -16,6 +16,17 @@ macro_rules! impl_ops {
             #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) { *self = $op_trait::$op(*self, rhs); }
         }
     )*}};
+
+    (@SHIFTS $name:ident $is:ident => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
+        impl $op_trait<<$is as Simd>::Vi32> for $name<$is> {
+            type Output = Self;
+            #[inline(always)] fn $op(self, rhs: <$is as Simd>::Vi32) -> Self { unsafe { self. [<_mm_ $op>](rhs) } }
+        }
+
+        impl [<$op_trait Assign>]<<$is as Simd>::Vi32> for $name<$is> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <$is as Simd>::Vi32) { *self = $op_trait::$op(*self, rhs); }
+        }
+    )*}};
 }
 
 macro_rules! decl {
