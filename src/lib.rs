@@ -1,4 +1,3 @@
-#![no_std]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
 #[cfg(feature = "alloc")]
@@ -19,7 +18,7 @@ pub use mask::Mask;
 mod ext;
 pub use ext::SimdFloatVectorExt;
 
-use core::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
+use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
 ///
@@ -86,13 +85,13 @@ pub trait SimdCasts<S: Simd + ?Sized>:
 }
 
 /// Basic shared vector interface
-pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sync + Send {
-    type Element: Sized + mask::Truthy;
+pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Send + Sync {
+    type Element: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync;
 
     /// Size of element type in bytes
-    const ELEMENT_SIZE: usize = core::mem::size_of::<Self::Element>();
-    const NUM_ELEMENTS: usize = core::mem::size_of::<S::Vi32>() / 4;
-    const ALIGNMENT: usize = core::mem::align_of::<Self>();
+    const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
+    const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / 4;
+    const ALIGNMENT: usize = std::mem::align_of::<Self>();
 
     fn splat(value: Self::Element) -> Self;
 
@@ -235,7 +234,7 @@ pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
 
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
-        self.and_not(t) | (self & f)
+        (self & t) | self.and_not(f)
     }
 }
 
@@ -318,7 +317,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
 // pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
 //     #[inline(always)]
 //     fn into_bits(self) -> B {
-//         unsafe { core::mem::transmute_copy(&self) }
+//         unsafe { std::mem::transmute_copy(&self) }
 //     }
 // }
 
@@ -326,7 +325,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
 // pub trait SimdFromBits<S: Simd + ?Sized, B, T>: SimdVectorBase<S, T> {
 //     #[inline(always)]
 //     fn from_bits(bits: B) -> Self {
-//         unsafe { core::mem::transmute_copy(&bits) }
+//         unsafe { std::mem::transmute_copy(&bits) }
 //     }
 // }
 
@@ -432,6 +431,14 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     fn round(self) -> Self;
     fn ceil(self) -> Self;
     fn floor(self) -> Self;
+
+    fn trunc(self) -> Self;
+
+    #[inline]
+    fn fract(self) -> Self {
+        self - self.trunc()
+    }
+
     fn sqrt(self) -> Self;
 
     /// Compute the reciprocal of the square root `(1 / sqrt(x))`

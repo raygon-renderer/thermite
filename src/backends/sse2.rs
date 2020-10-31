@@ -2,7 +2,7 @@
 
 use crate::*;
 
-use core::{
+use std::{
     fmt,
     marker::PhantomData,
     mem::{transmute, transmute_copy},
@@ -10,10 +10,10 @@ use core::{
 };
 
 #[cfg(target_arch = "x86")]
-use core::arch::x86::*;
+use std::arch::x86::*;
 
 #[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::*;
+use std::arch::x86_64::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SSE2;
@@ -497,6 +497,18 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
         unsafe { self.reduce2(|prod, x| x * prod) }
     }
 
+    fn mul_add(self, m: Self, a: Self) -> Self {
+        unsafe {
+            let mut res = mem::MaybeUninit::uninit();
+            for i in 0..Self::NUM_ELEMENTS {
+                *(res.as_mut_ptr() as *mut f32).add(i) = self
+                    .extract_unchecked(i)
+                    .mul_add(m.extract_unchecked(i), a.extract_unchecked(i));
+            }
+            res.assume_init()
+        }
+    }
+
     fn floor(self) -> Self {
         unsafe { self.map(|x| x.floor()) }
     }
@@ -507,6 +519,42 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
 
     fn round(self) -> Self {
         unsafe { self.map(|x| x.round()) }
+    }
+
+    fn trunc(self) -> Self {
+        #[inline(always)]
+        unsafe fn _mm_blendv_si128(mask: __m128i, t: __m128i, f: __m128i) -> __m128i {
+            _mm_or_si128(_mm_and_si128(mask, t), _mm_andnot_si128(mask, f))
+        }
+
+        unsafe {
+            let i = _mm_castps_si128(self.value);
+
+            // (u.i >> 23 & 0xff) - 0x7f + 9
+            let e = _mm_sub_epi32(
+                _mm_and_si128(_mm_srli_epi32(i, 23), _mm_set1_epi32(0xff)),
+                _mm_set1_epi32(0x7f - 9),
+            );
+
+            // use_original = e >= 23 + 9
+            let thirty_two = _mm_set1_epi32(23 + 9);
+            let use_original = _mm_xor_si128(_mm_cmpgt_epi32(e, thirty_two), _mm_cmpeq_epi32(e, thirty_two));
+
+            // e = e < 9 ? 1 : e
+            let e = _mm_blendv_si128(_mm_cmplt_epi32(e, _mm_set1_epi32(9)), _mm_set1_epi32(1), e);
+
+            // m = -1 >> e, painfully
+            let m = i32x4::zip(i32x4::splat(!0), i32x4::new(e), |n, e| (n as u32 >> e as u32) as i32).value;
+
+            // use_original = use_original || (i & m) == 0
+            let use_original = _mm_or_si128(use_original, _mm_cmpeq_epi32(_mm_set1_epi32(0), _mm_and_si128(i, m)));
+
+            // i = !m & i
+            let i_trunc = _mm_andnot_si128(m, i);
+
+            // f = use_original ? i : i_trunc
+            Self::new(_mm_castsi128_ps(_mm_blendv_si128(use_original, i, i_trunc)))
+        }
     }
 
     #[inline(always)]

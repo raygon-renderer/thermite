@@ -3,13 +3,14 @@ extern crate alloc;
 use crate::*;
 
 use alloc::alloc::{alloc, dealloc, Layout};
-use core::{
-    mem,
+use std::{
+    fmt, mem,
     ops::{Deref, DerefMut},
     ptr,
 };
 
 /// Aligned SIMD vector storage
+#[repr(transparent)]
 pub struct SimdBuffer<S: Simd, V: SimdVectorBase<S>> {
     buffer: *mut [V::Element],
 }
@@ -29,10 +30,17 @@ impl<S: Simd, V: SimdVectorBase<S>> DerefMut for SimdBuffer<S, V> {
     }
 }
 
+impl<S: Simd, V: SimdVectorBase<S>> fmt::Debug for SimdBuffer<S, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_vector_slice().fmt(f)
+    }
+}
+
 impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
     pub fn alloc(count: usize) -> Self {
         unsafe {
             // round up to multiple of NUM_ELEMENTS
+            // https://stackoverflow.com/a/9194117/2083075
             let count = (count + V::NUM_ELEMENTS - 1) & (-(V::NUM_ELEMENTS as isize) as usize);
 
             // allocate zeroed buffer. All SIMD types are valid when zeroed
@@ -110,6 +118,9 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
         unsafe { Layout::from_size_align_unchecked(count * mem::size_of::<V::Element>(), V::ALIGNMENT) }
     }
 }
+
+unsafe impl<S: Simd, V: SimdVectorBase<S>> Send for SimdBuffer<S, V> {}
+unsafe impl<S: Simd, V: SimdVectorBase<S>> Sync for SimdBuffer<S, V> {}
 
 impl<S: Simd, V: SimdVectorBase<S>> Drop for SimdBuffer<S, V> {
     fn drop(&mut self) {

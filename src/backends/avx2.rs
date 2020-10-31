@@ -2,7 +2,7 @@
 
 use crate::*;
 
-use core::{
+use std::{
     fmt,
     marker::PhantomData,
     mem::{transmute, transmute_copy},
@@ -10,10 +10,10 @@ use core::{
 };
 
 #[cfg(target_arch = "x86")]
-use core::arch::x86::*;
+use std::arch::x86::*;
 
 #[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::*;
+use std::arch::x86_64::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AVX2;
@@ -1052,6 +1052,11 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn trunc(self) -> Self {
+        Self::new(unsafe { _mm256_round_ps(self.value, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC) })
+    }
+
+    #[inline(always)]
     fn sqrt(self) -> Self {
         Self::new(unsafe { _mm256_sqrt_ps(self.value) })
     }
@@ -1164,6 +1169,16 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
             (
                 _mm256_round_pd(self.value.0, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC),
                 _mm256_round_pd(self.value.1, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC),
+            )
+        })
+    }
+
+    #[inline(always)]
+    fn trunc(self) -> Self {
+        Self::new(unsafe {
+            (
+                _mm256_round_pd(self.value.0, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC),
+                _mm256_round_pd(self.value.1, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC),
             )
         })
     }
