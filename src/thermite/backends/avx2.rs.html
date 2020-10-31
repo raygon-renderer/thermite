@@ -1254,13 +1254,6 @@
 <span id="1253">1253</span>
 <span id="1254">1254</span>
 <span id="1255">1255</span>
-<span id="1256">1256</span>
-<span id="1257">1257</span>
-<span id="1258">1258</span>
-<span id="1259">1259</span>
-<span id="1260">1260</span>
-<span id="1261">1261</span>
-<span id="1262">1262</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -1904,9 +1897,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>;
-        <span class="kw">let</span> <span class="ident">trunc</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_round_ps</span>(<span class="ident">d</span>.<span class="ident">value</span>, <span class="ident">_MM_FROUND_TO_ZERO</span> <span class="op">|</span> <span class="ident">_MM_FROUND_NO_EXC</span>));
-        <span class="self">self</span> <span class="op">-</span> (<span class="ident">trunc</span> <span class="op">*</span> <span class="ident">rhs</span>)
+        <span class="self">self</span> <span class="op">-</span> ((<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>() <span class="op">*</span> <span class="ident">rhs</span>)
     }
 }
 
@@ -2142,12 +2133,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>;
-        <span class="kw">let</span> <span class="ident">trunc</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_round_pd</span>(<span class="ident">d</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">_MM_FROUND_TO_ZERO</span> <span class="op">|</span> <span class="ident">_MM_FROUND_NO_EXC</span>),
-            <span class="ident">_mm256_round_pd</span>(<span class="ident">d</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">_MM_FROUND_TO_ZERO</span> <span class="op">|</span> <span class="ident">_MM_FROUND_NO_EXC</span>),
-        ));
-        <span class="self">self</span> <span class="op">-</span> (<span class="ident">trunc</span> <span class="op">*</span> <span class="ident">rhs</span>)
+        <span class="self">self</span> <span class="op">-</span> ((<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>() <span class="op">*</span> <span class="ident">rhs</span>)
     }
 }
 
