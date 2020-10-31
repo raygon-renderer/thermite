@@ -49,12 +49,7 @@ where
     pub fn from_value(v: V) -> Self {
         v.ne(V::zero())
     }
-}
 
-impl<S: Simd + ?Sized, V> Mask<S, V>
-where
-    V: SimdVector<S>,
-{
     /// Mask vector containing all true/non-zero lanes.
     #[inline(always)]
     pub fn truthy() -> Self {
