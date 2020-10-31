@@ -506,6 +506,11 @@
 <span id="505">505</span>
 <span id="506">506</span>
 <span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
 
@@ -692,10 +697,10 @@
     <span class="op">+</span> <span class="ident">BitAndAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">BitOrAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">BitXorAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
-<span class="comment">//+ Shl&lt;S::Vu32, Output = Self&gt;</span>
-<span class="comment">//+ ShlAssign&lt;S::Vu32&gt;</span>
-<span class="comment">//+ Shr&lt;S::Vu32, Output = Self&gt;</span>
-<span class="comment">//+ ShrAssign&lt;S::Vu32&gt;</span>
+    <span class="op">+</span> <span class="ident">Shl</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">ShlAssign</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Shr</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">ShrAssign</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
 {
     <span class="doccomment">/// Computes `!self &amp; other`, may be more performant than the naive version</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -719,6 +724,11 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_bitor</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_bitxor</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 }
 
 <span class="doccomment">/// Defines a mask type for results and selects</span>
