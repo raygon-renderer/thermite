@@ -8,7 +8,7 @@ pub struct Mask<S: Simd, V>(V, PhantomData<S>);
 
 impl<S: Simd, V> Debug for Mask<S, V>
 where
-    V: SimdMask<S>,
+    V: SimdVector<S>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut t = f.debug_tuple("Mask");
@@ -21,7 +21,7 @@ where
 
 impl<S: Simd + ?Sized, V> Default for Mask<S, V>
 where
-    V: SimdMask<S>,
+    V: SimdVector<S>,
 {
     #[inline(always)]
     fn default() -> Self {
@@ -53,7 +53,7 @@ where
 
 impl<S: Simd + ?Sized, V> Mask<S, V>
 where
-    V: SimdMask<S>,
+    V: SimdVector<S>,
 {
     /// Mask vector containing all true/non-zero lanes.
     #[inline(always)]
@@ -96,7 +96,7 @@ where
     pub fn select<U>(self, t: U, f: U) -> U
     where
         V: SimdCastTo<S, U>,
-        U: SimdMask<S>,
+        U: SimdVector<S>,
     {
         unsafe { V::cast_mask(self).0._mm_blendv(t, f) }
     }
@@ -104,7 +104,7 @@ where
 
 impl<S: Simd + ?Sized, V> SimdVectorBase<S> for Mask<S, V>
 where
-    V: SimdMask<S>,
+    V: SimdVector<S>,
 {
     type Element = bool;
 
@@ -142,30 +142,30 @@ where
 
 macro_rules! impl_ops {
     (@UNARY => $($op_trait:ident::$op:ident),* ) => {$(
-        impl<S: Simd, V> $op_trait for Mask<S, V> where V: SimdMask<S> {
+        impl<S: Simd, V> $op_trait for Mask<S, V> where V: SimdVector<S> {
             type Output = Self;
             #[inline(always)] fn $op(self) -> Self { Self::new($op_trait::$op(self.0)) }
         }
     )*};
     (@BINARY => $($op_trait:ident::$op:ident),* ) => {paste::paste! {$(
-        impl<S: Simd, V> $op_trait<Self> for Mask<S, V> where V: SimdMask<S> {
+        impl<S: Simd, V> $op_trait<Self> for Mask<S, V> where V: SimdVector<S> {
             type Output = Self;
             #[inline(always)] fn $op(self, rhs: Self) -> Self { Self::new($op_trait::$op(self.0, rhs.0)) }
         }
-        impl<S: Simd, V> [<$op_trait Assign>]<Self> for Mask<S, V> where V: SimdMask<S> {
+        impl<S: Simd, V> [<$op_trait Assign>]<Self> for Mask<S, V> where V: SimdVector<S> {
             #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) {
                 self.0 = $op_trait::$op(self.0, rhs.0);
             }
         }
     )*}};
     (@SHIFTS => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl<S: Simd, V> $op_trait<<S as Simd>::Vi32> for Mask<S, V> where V: SimdMask<S> {
+        impl<S: Simd, V> $op_trait<<S as Simd>::Vi32> for Mask<S, V> where V: SimdVector<S> {
             type Output = Self;
-            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vi32) -> Self { Self::new($op_trait::$op(self.0, rhs)) }
+            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vi32) -> Self { $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())) }
         }
-        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vi32> for Mask<S, V> where V: SimdMask<S> {
+        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vi32> for Mask<S, V> where V: SimdVector<S> {
             #[inline(always)] fn [<$op _assign>](&mut self, rhs: <S as Simd>::Vi32) {
-                self.0 = $op_trait::$op(self.0, rhs);
+                self.0 = $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())).0;
             }
         }
     )*}};
@@ -177,7 +177,7 @@ impl_ops!(@SHIFTS => Shr::shr, Shl::shl);
 
 impl<S: Simd + ?Sized, V> SimdBitwise<S> for Mask<S, V>
 where
-    V: SimdMask<S>,
+    V: SimdVector<S>,
 {
     const FULL_BITMASK: u16 = V::FULL_BITMASK;
 
