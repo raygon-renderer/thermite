@@ -400,7 +400,7 @@ impl SimdVector<SSE2> for f32x4<SSE2> {
 
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
-        Self::zip(self, rhs, Rem::rem)
+        self - ((self / rhs).trunc() * rhs)
     }
 }
 

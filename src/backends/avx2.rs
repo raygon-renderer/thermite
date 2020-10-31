@@ -640,9 +640,7 @@ impl SimdVector<AVX2> for f32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
-        let d = self / rhs;
-        let trunc = Self::new(_mm256_round_ps(d.value, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC));
-        self - (trunc * rhs)
+        self - ((self / rhs).trunc() * rhs)
     }
 }
 
@@ -878,12 +876,7 @@ impl SimdVector<AVX2> for f64x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
-        let d = self / rhs;
-        let trunc = Self::new((
-            _mm256_round_pd(d.value.0, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC),
-            _mm256_round_pd(d.value.1, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC),
-        ));
-        self - (trunc * rhs)
+        self - ((self / rhs).trunc() * rhs)
     }
 }
 
