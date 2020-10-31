@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["novacrazy <novacrazy@gmail.com>"]
 edition = "2018"
 
+[features]
+default = ["alloc"]
+alloc = []
+
 [dependencies]
 paste = "1.0.2"
 
