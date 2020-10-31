@@ -15,9 +15,6 @@ pub use self::pointer::*;
 mod mask;
 pub use mask::Mask;
 
-mod ext;
-pub use ext::SimdFloatVectorExt;
-
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
@@ -484,18 +481,55 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     fn is_nan(self) -> Mask<S, Self> {
         self.ne(self)
     }
+
+    #[inline]
+    fn approx_eq(self, other: Self, tolerance: Self) -> Mask<S, Self> {
+        (self - other).abs().lt(tolerance)
+    }
+
+    #[inline]
+    fn clamp(self, min: Self, max: Self) -> Self {
+        self.min(max).max(min)
+    }
+
+    /// Clamps self to between 0 and 1
+    #[inline]
+    fn saturate(self) -> Self {
+        self.clamp(Self::zero(), Self::one())
+    }
+
+    /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
+    #[inline]
+    fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+        ((self - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
+    }
+
+    /// Linearly interpolates between `a` and `b` using `self`
+    ///
+    /// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations
+    /// to improve performance while maintaining precision
+    #[inline]
+    fn lerp(self, a: Self, b: Self) -> Self {
+        self.mul_add(b - a, a)
+    }
+
+    /// Clamps input to positive numbers before calling `sqrt`
+    #[inline]
+    fn safe_sqrt(self) -> Self {
+        self.max(Self::zero()).sqrt()
+    }
 }
 
 /// SIMD Instruction set
 pub trait Simd: Debug + Send + Sync + Clone + Copy {
-    //type Vi8: SimdIntVector<Self, i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
-    //type Vi16: SimdIntVector<Self, i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
+    //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
+    //type Vi16: SimdIntVector<Self, Element = i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     type Vi32: SimdIntVector<Self, Element = i32> + SimdSignedVector<Self>;
     //type Vi64: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
 
-    //type Vu8: SimdIntVector<Self, u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
-    //type Vu16: SimdIntVector<Self, u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
-    //type Vu32: SimdIntVector<Self, u32>;
+    //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
+    //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
+    //type Vu32: SimdIntVector<Self, Element = u32>;
     type Vu64: SimdIntVector<Self, Element = u64>;
 
     type Vf32: SimdFloatVector<Self, Element = f32>; // + SimdIntoBits<Self, f32, Self::Vu32> + SimdFromBits<Self, Self::Vu32, f32>;
