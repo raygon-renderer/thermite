@@ -337,22 +337,14 @@ pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// Saturating addition, will not wrap
-    fn saturating_add(self, _rhs: Self) -> Self {
-        unimplemented!()
-    }
+    fn saturating_add(self, _rhs: Self) -> Self;
     /// Saturating subtraction, will not wrap
-    fn saturating_sub(self, _rhs: Self) -> Self {
-        unimplemented!()
-    }
+    fn saturating_sub(self, _rhs: Self) -> Self;
 
     /// Sum all lanes together, wrapping the result if it can't fit in `T`
-    fn wrapping_sum(self) -> Self::Element {
-        unimplemented!()
-    }
+    fn wrapping_sum(self) -> Self::Element;
     /// Multiple all lanes together, wrapping the result if it can't fit in `T`
-    fn wrapping_product(self) -> Self::Element {
-        unimplemented!()
-    }
+    fn wrapping_product(self) -> Self::Element;
 }
 
 /// Signed SIMD vector, with negative numbers

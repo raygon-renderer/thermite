@@ -211,6 +211,16 @@ impl SimdVector<AVX2> for u32x8<AVX2> {
 }
 
 impl SimdIntVector<AVX2> for u32x8<AVX2> {
+    #[inline(always)]
+    fn saturating_add(self, rhs: Self) -> Self {
+        rhs + self.min(rhs ^ Self::splat(!0))
+    }
+
+    #[inline(always)]
+    fn saturating_sub(self, rhs: Self) -> Self {
+        self.max(rhs) - rhs
+    }
+
     fn wrapping_sum(self) -> Self::Element {
         // TODO: Replace with log-reduce
         unsafe { self.reduce2(|sum, x| sum.wrapping_add(x)) }
