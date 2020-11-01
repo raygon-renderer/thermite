@@ -137,6 +137,27 @@ impl Eq for u64x8<AVX2> {}
 
 impl SimdMask<AVX2> for u64x8<AVX2> {
     #[inline(always)]
+    unsafe fn _mm_all(self) -> bool {
+        let low = _mm256_movemask_epi8(self.value.0) as u32;
+        let high = _mm256_movemask_epi8(self.value.1) as u32;
+        (low & high) == 0xFFFF_FFFF
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_any(self) -> bool {
+        let low = _mm256_movemask_epi8(self.value.0) as u32;
+        let high = _mm256_movemask_epi8(self.value.1) as u32;
+        (low | high) != 0
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_none(self) -> bool {
+        let low = _mm256_movemask_epi8(self.value.0) as u32;
+        let high = _mm256_movemask_epi8(self.value.1) as u32;
+        (low | high) == 0
+    }
+
+    #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new((
             _mm256_blendv_epi8(t.value.0, f.value.0, self.value.0),

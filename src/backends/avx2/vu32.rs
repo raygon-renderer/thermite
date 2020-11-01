@@ -108,6 +108,21 @@ impl Eq for u32x8<AVX2> {}
 
 impl SimdMask<AVX2> for u32x8<AVX2> {
     #[inline(always)]
+    unsafe fn _mm_all(self) -> bool {
+        _mm256_movemask_epi8(self.value) as u32 == 0xFFFF_FFFF
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_any(self) -> bool {
+        _mm256_movemask_epi8(self.value) as u32 != 0
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_none(self) -> bool {
+        _mm256_movemask_epi8(self.value) as u32 == 0
+    }
+
+    #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new(_mm256_blendv_epi8(t.value, f.value, self.value))
     }
