@@ -237,6 +237,18 @@
 <span id="236">236</span>
 <span id="237">237</span>
 <span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -461,7 +473,19 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>()).<span class="ident">ne</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>())) <span class="comment">// same width</span>
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">from</span>.<span class="ident">value</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>())) <span class="comment">// same width</span>
     }
 }
 

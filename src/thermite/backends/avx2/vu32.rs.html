@@ -191,6 +191,18 @@
 <span id="190">190</span>
 <span id="191">191</span>
 <span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -384,5 +396,17 @@
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">UNARY</span>  <span class="ident">u32x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Not</span>::<span class="ident">not</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="ident">u32x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Add</span>::<span class="ident">add</span>, <span class="ident">Sub</span>::<span class="ident">sub</span>, <span class="ident">Mul</span>::<span class="ident">mul</span>, <span class="ident">Div</span>::<span class="ident">div</span>, <span class="ident">Rem</span>::<span class="ident">rem</span>, <span class="ident">BitAnd</span>::<span class="ident">bitand</span>, <span class="ident">BitOr</span>::<span class="ident">bitor</span>, <span class="ident">BitXor</span>::<span class="ident">bitxor</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">SHIFTS</span> <span class="ident">u32x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Shr</span>::<span class="ident">shr</span>, <span class="ident">Shl</span>::<span class="ident">shl</span>);
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">from</span>.<span class="ident">value</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>())) <span class="comment">// same width</span>
+    }
+}
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../../";window.currentCrate = "thermite";</script><script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script><script defer src="../../../../search-index.js"></script></body></html>
