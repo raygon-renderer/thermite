@@ -410,6 +410,20 @@
 <span id="409">409</span>
 <span id="410">410</span>
 <span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -496,7 +510,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="ident">_mm256_srlv_epi32</span>(
             <span class="ident">_mm256_castps_si256</span>(<span class="self">self</span>.<span class="ident">value</span>),
             <span class="ident">count</span>.<span class="ident">value</span>,
@@ -504,7 +518,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="ident">_mm256_sllv_epi32</span>(
             <span class="ident">_mm256_castps_si256</span>(<span class="self">self</span>.<span class="ident">value</span>),
             <span class="ident">count</span>.<span class="ident">value</span>,
@@ -626,6 +640,20 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span> <span class="op">-</span> ((<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>() <span class="op">*</span> <span class="ident">rhs</span>)
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">into_bits</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+        <span class="ident">u32x8</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_castps_si256</span>(<span class="self">self</span>.<span class="ident">value</span>) })
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_bits</span>(<span class="ident">bits</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">bits</span>.<span class="ident">value</span>) })
     }
 }
 
