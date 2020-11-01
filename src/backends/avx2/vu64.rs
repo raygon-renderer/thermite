@@ -260,7 +260,7 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
 impl SimdIntVector<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     fn saturating_add(self, rhs: Self) -> Self {
-        rhs + self.min(rhs ^ Self::splat(!0))
+        rhs + self.min(!rhs)
     }
 
     #[inline(always)]
