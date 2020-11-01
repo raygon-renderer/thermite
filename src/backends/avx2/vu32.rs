@@ -140,6 +140,16 @@ impl SimdVector<AVX2> for u32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn min(self, other: Self) -> Self {
+        Self::new(unsafe { _mm256_min_epu32(self.value, other.value) })
+    }
+
+    #[inline(always)]
+    fn max(self, other: Self) -> Self {
+        Self::new(unsafe { _mm256_max_epu32(self.value, other.value) })
+    }
+
+    #[inline(always)]
     fn min_value() -> Self {
         Self::splat(u32::MIN)
     }
