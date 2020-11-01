@@ -464,7 +464,7 @@
 <span class="kw">impl</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">saturating_add</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="ident">rhs</span> <span class="op">+</span> <span class="self">self</span>.<span class="ident">min</span>(<span class="ident">rhs</span> <span class="op">^</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="op">!</span><span class="number">0</span>))
+        <span class="ident">rhs</span> <span class="op">+</span> <span class="self">self</span>.<span class="ident">min</span>(<span class="op">!</span><span class="ident">rhs</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
