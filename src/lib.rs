@@ -1,4 +1,7 @@
+#![cfg_attr(feature = "nightly", feature(stdsimd))]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
+
+use half::f16;
 
 #[cfg(feature = "alloc")]
 mod buffer;
@@ -113,9 +116,9 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     unsafe fn replace_unchecked(self, index: usize, value: Self::Element) -> Self;
 
     #[inline]
-    fn load_aligned(arr: &[Self::Element]) -> Self {
-        assert!(arr.len() >= Self::NUM_ELEMENTS);
-        let load_ptr = arr.as_ptr();
+    fn load_aligned(src: &[Self::Element]) -> Self {
+        assert!(src.len() >= Self::NUM_ELEMENTS);
+        let load_ptr = src.as_ptr();
         assert_eq!(
             0,
             load_ptr.align_offset(Self::ALIGNMENT),
@@ -125,15 +128,15 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     }
 
     #[inline]
-    fn load_unaligned(arr: &[Self::Element]) -> Self {
-        assert!(arr.len() >= Self::NUM_ELEMENTS);
-        unsafe { Self::load_unaligned_unchecked(arr.as_ptr()) }
+    fn load_unaligned(src: &[Self::Element]) -> Self {
+        assert!(src.len() >= Self::NUM_ELEMENTS);
+        unsafe { Self::load_unaligned_unchecked(src.as_ptr()) }
     }
 
     #[inline]
-    fn store_aligned(self, arr: &mut [Self::Element]) {
-        assert!(arr.len() >= Self::NUM_ELEMENTS);
-        let store_ptr = arr.as_mut_ptr();
+    fn store_aligned(self, dst: &mut [Self::Element]) {
+        assert!(dst.len() >= Self::NUM_ELEMENTS);
+        let store_ptr = dst.as_mut_ptr();
         assert_eq!(
             0,
             store_ptr.align_offset(Self::ALIGNMENT),
@@ -143,24 +146,24 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     }
 
     #[inline]
-    fn store_unaligned(self, arr: &mut [Self::Element]) {
-        assert!(arr.len() >= Self::NUM_ELEMENTS);
-        unsafe { self.store_unaligned_unchecked(arr.as_mut_ptr()) };
+    fn store_unaligned(self, dst: &mut [Self::Element]) {
+        assert!(dst.len() >= Self::NUM_ELEMENTS);
+        unsafe { self.store_unaligned_unchecked(dst.as_mut_ptr()) };
     }
 
-    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self;
-    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element);
+    unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self;
+    unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element);
 
     #[inline(always)]
-    unsafe fn load_unaligned_unchecked(ptr: *const Self::Element) -> Self {
+    unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
         let mut target = mem::MaybeUninit::uninit();
-        ptr::copy_nonoverlapping(ptr as *const Self, target.as_mut_ptr(), 1);
+        ptr::copy_nonoverlapping(src as *const Self, target.as_mut_ptr(), 1);
         target.assume_init()
     }
 
     #[inline(always)]
-    unsafe fn store_unaligned_unchecked(self, ptr: *mut Self::Element) {
-        ptr::copy_nonoverlapping(&self as *const Self, ptr as *mut Self, 1);
+    unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
+        ptr::copy_nonoverlapping(&self as *const Self, dst as *mut Self, 1);
     }
 
     #[cfg(feature = "alloc")]
@@ -401,16 +404,28 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     fn neg_zero() -> Self;
     fn nan() -> Self;
 
+    /// Load half-precision floats and up-convert them into `Self`
+    fn load_half_unaligned(src: &[f16]) -> Self {
+        assert!(src.len() >= Self::NUM_ELEMENTS);
+        unsafe { Self::load_half_unaligned_unchecked(src.as_ptr()) }
+    }
+
+    /// Down-convert `self` into half-precision and store
+    fn store_half_unaligned(&self, dst: &mut [f16]) {
+        assert!(dst.len() >= Self::NUM_ELEMENTS);
+        unsafe { self.store_half_unaligned_unchecked(dst.as_mut_ptr()) };
+    }
+
+    unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self;
+    unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16);
+
     /// Compute the horizontal sum of all elements
     fn sum(self) -> Self::Element;
     /// Compute the horizontal product of all elements
     fn product(self) -> Self::Element;
 
     /// Fused multiply-add
-    #[inline(always)]
-    fn mul_add(self, m: Self, a: Self) -> Self {
-        self * m + a
-    }
+    fn mul_add(self, m: Self, a: Self) -> Self;
 
     /// Fused multiply-subtract
     #[inline(always)]
@@ -462,6 +477,37 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         Self::one() / self
     }
 
+    #[inline]
+    fn approx_eq(self, other: Self, tolerance: Self) -> Mask<S, Self> {
+        (self - other).abs().lt(tolerance)
+    }
+
+    #[inline(always)]
+    fn clamp(self, min: Self, max: Self) -> Self {
+        self.min(max).max(min)
+    }
+
+    /// Clamps self to between 0 and 1
+    #[inline(always)]
+    fn saturate(self) -> Self {
+        self.clamp(Self::zero(), Self::one())
+    }
+
+    /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
+    #[inline]
+    fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+        ((self - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
+    }
+
+    /// Linearly interpolates between `a` and `b` using `self`
+    ///
+    /// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations
+    /// to improve performance while maintaining precision
+    #[inline(always)]
+    fn lerp(self, a: Self, b: Self) -> Self {
+        self.mul_add(b - a, a)
+    }
+
     #[inline(always)]
     fn is_finite(self) -> Mask<S, Self> {
         !(self.is_nan() | self.is_infinite())
@@ -480,43 +526,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     #[inline(always)]
     fn is_nan(self) -> Mask<S, Self> {
         self.ne(self)
-    }
-
-    #[inline]
-    fn approx_eq(self, other: Self, tolerance: Self) -> Mask<S, Self> {
-        (self - other).abs().lt(tolerance)
-    }
-
-    #[inline]
-    fn clamp(self, min: Self, max: Self) -> Self {
-        self.min(max).max(min)
-    }
-
-    /// Clamps self to between 0 and 1
-    #[inline]
-    fn saturate(self) -> Self {
-        self.clamp(Self::zero(), Self::one())
-    }
-
-    /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
-    #[inline]
-    fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
-        ((self - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
-    }
-
-    /// Linearly interpolates between `a` and `b` using `self`
-    ///
-    /// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations
-    /// to improve performance while maintaining precision
-    #[inline]
-    fn lerp(self, a: Self, b: Self) -> Self {
-        self.mul_add(b - a, a)
-    }
-
-    /// Clamps input to positive numbers before calling `sqrt`
-    #[inline]
-    fn safe_sqrt(self) -> Self {
-        self.max(Self::zero()).sqrt()
     }
 }
 
