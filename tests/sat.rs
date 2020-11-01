@@ -33,3 +33,6 @@ test_sat!(SUB: Vi32 => test_sat_ssub_regular_alt =>  1; 2);
 
 test_sat!(ADD: Vu32 => test_sat_uadd_overflowing => u32::MAX - 20; 210);
 test_sat!(ADD: Vu32 => test_sat_uadd_regular => 20; 210);
+
+test_sat!(SUB: Vu32 => test_sat_usub_overflowing => 20; 210);
+test_sat!(SUB: Vu32 => test_sat_usub_regular => 20; 2);
