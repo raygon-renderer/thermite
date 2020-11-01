@@ -221,7 +221,19 @@ impl SimdCastFrom<AVX2, f32x8<AVX2>> for i32x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, f32x8<AVX2>>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
+        Mask::new(Self::from_cast(from.value())) // same width
+    }
+}
+
+impl SimdCastFrom<AVX2, u32x8<AVX2>> for i32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: u32x8<AVX2>) -> Self {
+        Self::new(from.value)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, u32x8<AVX2>>) -> Mask<AVX2, Self> {
+        Mask::new(Self::from_cast(from.value())) // same width
     }
 }
 

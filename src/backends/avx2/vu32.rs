@@ -190,3 +190,15 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {}
 impl_ops!(@UNARY  u32x8 AVX2 => Not::not);
 impl_ops!(@BINARY u32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS u32x8 AVX2 => Shr::shr, Shl::shl);
+
+impl SimdCastFrom<AVX2, i32x8<AVX2>> for u32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: i32x8<AVX2>) -> Self {
+        Self::new(from.value)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, i32x8<AVX2>>) -> Mask<AVX2, Self> {
+        Mask::new(Self::from_cast(from.value())) // same width
+    }
+}

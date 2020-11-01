@@ -408,7 +408,7 @@ impl SimdCastFrom<AVX2, i32x8<AVX2>> for f32x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, i32x8<AVX2>>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
+        Mask::new(Self::from_cast(from.value())) // same width
     }
 }
 
