@@ -99,7 +99,7 @@ impl SimdBitwise<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 
@@ -110,7 +110,7 @@ impl SimdBitwise<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 
@@ -287,6 +287,20 @@ impl SimdVector<AVX2> for f64x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
         self - ((self / rhs).trunc() * rhs)
+    }
+}
+
+impl SimdIntoBits<AVX2, u64x8<AVX2>> for f64x8<AVX2> {
+    #[inline(always)]
+    fn into_bits(self) -> u64x8<AVX2> {
+        u64x8::new(unsafe { (_mm256_castpd_si256(self.value.0), _mm256_castpd_si256(self.value.1)) })
+    }
+}
+
+impl SimdFromBits<AVX2, u64x8<AVX2>> for f64x8<AVX2> {
+    #[inline(always)]
+    fn from_bits(bits: u64x8<AVX2>) -> Self {
+        Self::new(unsafe { (_mm256_castsi256_pd(bits.value.0), _mm256_castsi256_pd(bits.value.1)) })
     }
 }
 

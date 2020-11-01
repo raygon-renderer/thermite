@@ -1,19 +1,19 @@
 use super::*;
 
-decl!(i32x8: i32 => __m256i);
-impl<S: Simd> Default for i32x8<S> {
+decl!(u32x8: u32 => __m256i);
+impl<S: Simd> Default for u32x8<S> {
     #[inline(always)]
     fn default() -> Self {
         Self::new(unsafe { _mm256_setzero_si256() })
     }
 }
 
-impl SimdVectorBase<AVX2> for i32x8<AVX2> {
-    type Element = i32;
+impl SimdVectorBase<AVX2> for u32x8<AVX2> {
+    type Element = u32;
 
     #[inline(always)]
     fn splat(value: Self::Element) -> Self {
-        Self::new(unsafe { _mm256_set1_epi32(value) })
+        Self::new(unsafe { _mm256_set1_epi32(value as i32) })
     }
 
     #[inline(always)]
@@ -50,7 +50,7 @@ impl SimdVectorBase<AVX2> for i32x8<AVX2> {
     }
 }
 
-impl SimdBitwise<AVX2> for i32x8<AVX2> {
+impl SimdBitwise<AVX2> for u32x8<AVX2> {
     #[inline(always)]
     fn and_not(self, other: Self) -> Self {
         Self::new(unsafe { _mm256_andnot_si256(self.value, other.value) })
@@ -94,7 +94,7 @@ impl SimdBitwise<AVX2> for i32x8<AVX2> {
     }
 }
 
-impl PartialEq<Self> for i32x8<AVX2> {
+impl PartialEq<Self> for u32x8<AVX2> {
     fn eq(&self, other: &Self) -> bool {
         <Self as SimdVector<AVX2>>::eq(*self, *other).all()
     }
@@ -104,16 +104,16 @@ impl PartialEq<Self> for i32x8<AVX2> {
     }
 }
 
-impl Eq for i32x8<AVX2> {}
+impl Eq for u32x8<AVX2> {}
 
-impl SimdMask<AVX2> for i32x8<AVX2> {
+impl SimdMask<AVX2> for u32x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new(_mm256_blendv_epi8(t.value, f.value, self.value))
     }
 }
 
-impl SimdVector<AVX2> for i32x8<AVX2> {
+impl SimdVector<AVX2> for u32x8<AVX2> {
     #[inline(always)]
     fn zero() -> Self {
         Self::new(unsafe { _mm256_setzero_si256() })
@@ -126,12 +126,12 @@ impl SimdVector<AVX2> for i32x8<AVX2> {
 
     #[inline(always)]
     fn min_value() -> Self {
-        Self::splat(i32::MIN)
+        Self::splat(u32::MIN)
     }
 
     #[inline(always)]
     fn max_value() -> Self {
-        Self::splat(i32::MAX)
+        Self::splat(u32::MAX)
     }
 
     #[inline]
@@ -185,54 +185,8 @@ impl SimdVector<AVX2> for i32x8<AVX2> {
     }
 }
 
-impl SimdIntVector<AVX2> for i32x8<AVX2> {}
+impl SimdIntVector<AVX2> for u32x8<AVX2> {}
 
-impl SimdSignedVector<AVX2> for i32x8<AVX2> {
-    #[inline(always)]
-    fn neg_one() -> Self {
-        Self::splat(-1)
-    }
-
-    #[inline(always)]
-    fn min_positive() -> Self {
-        Self::splat(0)
-    }
-
-    #[inline(always)]
-    fn abs(self) -> Self {
-        Self::new(unsafe { _mm256_abs_epi32(self.value) })
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_neg(self) -> Self {
-        Self::new(_mm256_sign_epi32(self.value, _mm256_set1_epi32(-1)))
-    }
-}
-
-impl_ops!(@UNARY i32x8 AVX2 => Not::not, Neg::neg);
-impl_ops!(@BINARY i32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
-impl_ops!(@SHIFTS i32x8 AVX2 => Shr::shr, Shl::shl);
-
-impl SimdCastFrom<AVX2, f32x8<AVX2>> for i32x8<AVX2> {
-    #[inline(always)]
-    fn from_cast(from: f32x8<AVX2>) -> Self {
-        Self::new(unsafe { _mm256_cvttps_epi32(from.value) })
-    }
-
-    #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, f32x8<AVX2>>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
-    }
-}
-
-impl SimdCastFrom<AVX2, u64x8<AVX2>> for i32x8<AVX2> {
-    #[inline]
-    fn from_cast(from: u64x8<AVX2>) -> Self {
-        brute_force_convert!(&from; u64 => i32)
-    }
-
-    #[inline]
-    fn from_cast_mask(from: Mask<AVX2, u64x8<AVX2>>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
-    }
-}
+impl_ops!(@UNARY  u32x8 AVX2 => Not::not);
+impl_ops!(@BINARY u32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS u32x8 AVX2 => Shr::shr, Shl::shl);

@@ -183,10 +183,10 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     + BitAndAssign<Self>
     + BitOrAssign<Self>
     + BitXorAssign<Self>
-    + Shl<S::Vi32, Output = Self>
-    + ShlAssign<S::Vi32>
-    + Shr<S::Vi32, Output = Self>
-    + ShrAssign<S::Vi32>
+    + Shl<S::Vu32, Output = Self>
+    + ShlAssign<S::Vu32>
+    + Shr<S::Vu32, Output = Self>
+    + ShrAssign<S::Vu32>
 {
     /// Computes `!self & other`, may be more performant than the naive version
     #[inline(always)]
@@ -212,9 +212,9 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self;
 
     #[doc(hidden)]
-    unsafe fn _mm_shr(self, count: S::Vi32) -> Self;
+    unsafe fn _mm_shr(self, count: S::Vu32) -> Self;
     #[doc(hidden)]
-    unsafe fn _mm_shl(self, count: S::Vi32) -> Self;
+    unsafe fn _mm_shl(self, count: S::Vu32) -> Self;
 }
 
 /// Defines a mask type for results and selects
@@ -318,21 +318,21 @@ pub trait SimdVector<S: Simd + ?Sized>:
     unsafe fn _mm_rem(self, rhs: Self) -> Self;
 }
 
-// /// Transmutations into raw bits
-// pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
-//     #[inline(always)]
-//     fn into_bits(self) -> B {
-//         unsafe { std::mem::transmute_copy(&self) }
-//     }
-// }
+/// Transmutations into raw bits
+pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
+    #[inline(always)]
+    fn into_bits(self) -> B {
+        unsafe { std::mem::transmute_copy(&self) }
+    }
+}
 
-// /// Transmutations from raw bits
-// pub trait SimdFromBits<S: Simd + ?Sized, B, T>: SimdVectorBase<S, T> {
-//     #[inline(always)]
-//     fn from_bits(bits: B) -> Self {
-//         unsafe { std::mem::transmute_copy(&bits) }
-//     }
-// }
+/// Transmutations from raw bits
+pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
+    #[inline(always)]
+    fn from_bits(bits: B) -> Self {
+        unsafe { std::mem::transmute_copy(&bits) }
+    }
+}
 
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
@@ -538,11 +538,11 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
-    //type Vu32: SimdIntVector<Self, Element = u32>;
+    type Vu32: SimdIntVector<Self, Element = u32>;
     type Vu64: SimdIntVector<Self, Element = u64>;
 
-    type Vf32: SimdFloatVector<Self, Element = f32>; // + SimdIntoBits<Self, f32, Self::Vu32> + SimdFromBits<Self, Self::Vu32, f32>;
-    type Vf64: SimdFloatVector<Self, Element = f64>; // + SimdIntoBits<Self, f64, Self::Vu64> + SimdFromBits<Self, Self::Vu64, f64>;
+    type Vf32: SimdFloatVector<Self, Element = f32> + SimdIntoBits<Self, Self::Vu32> + SimdFromBits<Self, Self::Vu32>;
+    type Vf64: SimdFloatVector<Self, Element = f64> + SimdIntoBits<Self, Self::Vu64> + SimdFromBits<Self, Self::Vu64>;
 
     #[cfg(target_pointer_width = "32")]
     type Vusize: SimdIntVector<Self, Element = u32>;

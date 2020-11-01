@@ -154,12 +154,12 @@ macro_rules! impl_ops {
         }
     )*}};
     (@SHIFTS => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl<S: Simd, V> $op_trait<<S as Simd>::Vi32> for Mask<S, V> where V: SimdVector<S> {
+        impl<S: Simd, V> $op_trait<<S as Simd>::Vu32> for Mask<S, V> where V: SimdVector<S> {
             type Output = Self;
-            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vi32) -> Self { $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())) }
+            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vu32) -> Self { $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())) }
         }
-        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vi32> for Mask<S, V> where V: SimdVector<S> {
-            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <S as Simd>::Vi32) {
+        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vu32> for Mask<S, V> where V: SimdVector<S> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <S as Simd>::Vu32) {
                 self.0 = $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())).0;
             }
         }
@@ -207,12 +207,12 @@ where
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: S::Vi32) -> Self {
+    unsafe fn _mm_shr(self, count: S::Vu32) -> Self {
         Self::new(self.0._mm_shr(count))
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: S::Vi32) -> Self {
+    unsafe fn _mm_shl(self, count: S::Vu32) -> Self {
         Self::new(self.0._mm_shl(count))
     }
 }

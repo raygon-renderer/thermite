@@ -101,7 +101,7 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 
@@ -112,7 +112,7 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 

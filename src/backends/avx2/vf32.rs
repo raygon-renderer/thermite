@@ -83,7 +83,7 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
         Self::new(_mm256_castsi256_ps(_mm256_srlv_epi32(
             _mm256_castps_si256(self.value),
             count.value,
@@ -91,7 +91,7 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: i32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
         Self::new(_mm256_castsi256_ps(_mm256_sllv_epi32(
             _mm256_castps_si256(self.value),
             count.value,
@@ -213,6 +213,20 @@ impl SimdVector<AVX2> for f32x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
         self - ((self / rhs).trunc() * rhs)
+    }
+}
+
+impl SimdIntoBits<AVX2, u32x8<AVX2>> for f32x8<AVX2> {
+    #[inline(always)]
+    fn into_bits(self) -> u32x8<AVX2> {
+        u32x8::new(unsafe { _mm256_castps_si256(self.value) })
+    }
+}
+
+impl SimdFromBits<AVX2, u32x8<AVX2>> for f32x8<AVX2> {
+    #[inline(always)]
+    fn from_bits(bits: u32x8<AVX2>) -> Self {
+        Self::new(unsafe { _mm256_castsi256_ps(bits.value) })
     }
 }
 

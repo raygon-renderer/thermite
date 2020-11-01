@@ -18,13 +18,13 @@ macro_rules! impl_ops {
     )*}};
 
     (@SHIFTS $name:ident $is:ident => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl $op_trait<<$is as Simd>::Vi32> for $name<$is> {
+        impl $op_trait<<$is as Simd>::Vu32> for $name<$is> {
             type Output = Self;
-            #[inline(always)] fn $op(self, rhs: <$is as Simd>::Vi32) -> Self { unsafe { self. [<_mm_ $op>](rhs) } }
+            #[inline(always)] fn $op(self, rhs: <$is as Simd>::Vu32) -> Self { unsafe { self. [<_mm_ $op>](rhs) } }
         }
 
-        impl [<$op_trait Assign>]<<$is as Simd>::Vi32> for $name<$is> {
-            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <$is as Simd>::Vi32) { *self = $op_trait::$op(*self, rhs); }
+        impl [<$op_trait Assign>]<<$is as Simd>::Vu32> for $name<$is> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <$is as Simd>::Vu32) { *self = $op_trait::$op(*self, rhs); }
         }
     )*}};
 }
