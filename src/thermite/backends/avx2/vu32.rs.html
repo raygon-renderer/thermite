@@ -218,6 +218,16 @@
 <span id="217">217</span>
 <span id="218">218</span>
 <span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -421,7 +431,17 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {}
+<span class="kw">impl</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">wrapping_sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
+        <span class="comment">// TODO: Replace with log-reduce</span>
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">sum</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">sum</span>.<span class="ident">wrapping_add</span>(<span class="ident">x</span>)) }
+    }
+
+    <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
+        <span class="comment">// TODO: Replace with log-reduce</span>
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">prod</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">wrapping_mul</span>(<span class="ident">prod</span>)) }
+    }
+}
 
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">UNARY</span>  <span class="ident">u32x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Not</span>::<span class="ident">not</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="ident">u32x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Add</span>::<span class="ident">add</span>, <span class="ident">Sub</span>::<span class="ident">sub</span>, <span class="ident">Mul</span>::<span class="ident">mul</span>, <span class="ident">Div</span>::<span class="ident">div</span>, <span class="ident">Rem</span>::<span class="ident">rem</span>, <span class="ident">BitAnd</span>::<span class="ident">bitand</span>, <span class="ident">BitOr</span>::<span class="ident">bitor</span>, <span class="ident">BitXor</span>::<span class="ident">bitxor</span>);
