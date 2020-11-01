@@ -30,7 +30,7 @@ jobs:
         with:
           command: doc
           toolchain: stable
-          args: --all-features --no-deps
+          args: --no-deps
 
       - run: echo "<meta http-equiv=refresh content=0;url=`echo $GITHUB_REPOSITORY | cut -d '/' -f 2 | tr '[:upper:]' '[:lower:]'`/index.html>" > target/doc/index.html
 
