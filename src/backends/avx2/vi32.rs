@@ -230,7 +230,7 @@ impl SimdIntVector<AVX2> for i32x8<AVX2> {
 
             let overflow = _mm256_xor_si256(
                 _mm256_cmpgt_epi32(rhs.value, _mm256_setzero_si256()),
-                _mm256_cmpgt_epi32(self.value, rhs.value),
+                _mm256_cmpgt_epi32(self.value, res),
             );
 
             let saturated = _mm256_blendv_ps(
