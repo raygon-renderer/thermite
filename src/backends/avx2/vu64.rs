@@ -257,7 +257,17 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     }
 }
 
-impl SimdIntVector<AVX2> for u64x8<AVX2> {}
+impl SimdIntVector<AVX2> for u64x8<AVX2> {
+    fn wrapping_sum(self) -> Self::Element {
+        // TODO: Replace with log-reduce
+        unsafe { self.reduce2(|sum, x| sum.wrapping_add(x)) }
+    }
+
+    fn wrapping_product(self) -> Self::Element {
+        // TODO: Replace with log-reduce
+        unsafe { self.reduce2(|prod, x| x.wrapping_mul(prod)) }
+    }
+}
 
 impl_ops!(@UNARY u64x8 AVX2 => Not::not);
 impl_ops!(@BINARY u64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);

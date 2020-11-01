@@ -200,7 +200,63 @@ impl SimdVector<AVX2> for i32x8<AVX2> {
     }
 }
 
-impl SimdIntVector<AVX2> for i32x8<AVX2> {}
+impl SimdIntVector<AVX2> for i32x8<AVX2> {
+    #[inline]
+    fn saturating_add(self, rhs: Self) -> Self {
+        unsafe {
+            let res = _mm256_add_epi32(self.value, rhs.value);
+
+            // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
+            let saturated = _mm256_blendv_ps(
+                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
+                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
+                _mm256_castsi256_ps(res),
+            );
+
+            let overflow = _mm256_xor_si256(rhs.value, _mm256_cmpgt_epi32(self.value, res));
+
+            Self::new(_mm256_castps_si256(_mm256_blendv_ps(
+                _mm256_castsi256_ps(res),
+                saturated,
+                _mm256_castsi256_ps(overflow),
+            )))
+        }
+    }
+
+    #[inline]
+    fn saturating_sub(self, rhs: Self) -> Self {
+        unsafe {
+            let res = _mm256_sub_epi32(self.value, rhs.value);
+
+            let overflow = _mm256_xor_si256(
+                _mm256_cmpgt_epi32(rhs.value, _mm256_setzero_si256()),
+                _mm256_cmpgt_epi32(self.value, rhs.value),
+            );
+
+            let saturated = _mm256_blendv_ps(
+                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
+                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
+                _mm256_castsi256_ps(res),
+            );
+
+            Self::new(_mm256_castps_si256(_mm256_blendv_ps(
+                _mm256_castsi256_ps(res),
+                saturated,
+                _mm256_castsi256_ps(overflow),
+            )))
+        }
+    }
+
+    fn wrapping_sum(self) -> Self::Element {
+        // TODO: Replace with log-reduce
+        unsafe { self.reduce2(|sum, x| sum.wrapping_add(x)) }
+    }
+
+    fn wrapping_product(self) -> Self::Element {
+        // TODO: Replace with log-reduce
+        unsafe { self.reduce2(|prod, x| x.wrapping_mul(prod)) }
+    }
+}
 
 impl SimdSignedVector<AVX2> for i32x8<AVX2> {
     #[inline(always)]
