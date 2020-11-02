@@ -564,6 +564,8 @@
 <span id="563">563</span>
 <span id="564">564</span>
 <span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -787,11 +789,13 @@
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
+    <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shri</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">_mm_shr</span>(<span class="ident">S</span>::<span class="ident">Vu32</span>::<span class="ident">splat</span>(<span class="ident">count</span>))
     }
 
+    <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shli</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">_mm_shl</span>(<span class="ident">S</span>::<span class="ident">Vu32</span>::<span class="ident">splat</span>(<span class="ident">count</span>))
