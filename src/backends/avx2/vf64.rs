@@ -484,30 +484,6 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     fn sqrt(self) -> Self {
         Self::new(unsafe { (_mm256_sqrt_pd(self.value.0), _mm256_sqrt_pd(self.value.1)) })
     }
-
-    fn powi(self, mut e: Vi32) -> Self {
-        let mut res = Self::one();
-        let mut x = self;
-
-        x = e.is_negative().select(Self::one() / x, x);
-        e = e.abs();
-
-        loop {
-            res = (e & Vi32::one()).ne(Vi32::zero()).select(res * x, res);
-
-            e >>= 1;
-
-            let fin = e.eq(Vi32::zero());
-
-            x = fin.select(x, x * x);
-
-            if fin.all() {
-                break;
-            }
-        }
-
-        res
-    }
 }
 
 impl_ops!(@UNARY f64x8 AVX2 => Not::not, Neg::neg);

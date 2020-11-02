@@ -467,8 +467,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         self - self.trunc()
     }
 
-    fn powi(self, e: S::Vi32) -> Self;
-
     fn sqrt(self) -> Self;
 
     /// Compute the reciprocal of the square root `(1 / sqrt(x))`
