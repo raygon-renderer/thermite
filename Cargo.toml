@@ -1,7 +1,10 @@
 [package]
 name = "thermite"
 version = "0.1.0"
+license = "MIT OR Apache-2.0"
 authors = ["novacrazy <novacrazy@gmail.com>"]
+repository = "https://github.com/raygon-renderer/thermite"
+documentation = "https://raygon-renderer.github.io/thermite/"
 edition = "2018"
 
 [features]
