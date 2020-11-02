@@ -566,6 +566,15 @@
 <span id="565">565</span>
 <span id="566">566</span>
 <span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -586,6 +595,9 @@
 
 <span class="kw">mod</span> <span class="ident">mask</span>;
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">mask</span>::<span class="ident">Mask</span>;
+
+<span class="comment">//mod math;</span>
+<span class="comment">//pub use math::SimdMathExt;</span>
 
 <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
 
@@ -1134,5 +1146,11 @@
     <span class="comment">//#[cfg(target_pointer_width = &quot;64&quot;)]</span>
     <span class="comment">//type Visize: SimdIntVector&lt;Self, i64&gt; + SimdSignedVector&lt;Self, i64&gt;;</span>
 }
+
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vi32</span>;
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vu32</span>;
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vu64</span>;
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vf32</span>;
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vf64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vf64</span>;
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../";window.currentCrate = "thermite";</script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
