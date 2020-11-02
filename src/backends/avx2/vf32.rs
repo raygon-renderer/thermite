@@ -97,6 +97,22 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
             count.value,
         )))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_shli(self, count: u32) -> Self {
+        Self::new(_mm256_castsi256_ps(_mm256_sll_epi32(
+            _mm256_castps_si256(self.value),
+            _mm_setr_epi32(count as i32, 0, 0, 0),
+        )))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shri(self, count: u32) -> Self {
+        Self::new(_mm256_castsi256_ps(_mm256_srl_epi32(
+            _mm256_castps_si256(self.value),
+            _mm_setr_epi32(count as i32, 0, 0, 0),
+        )))
+    }
 }
 
 impl PartialEq<Self> for f32x8<AVX2> {
@@ -342,12 +358,12 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    fn neg_mul_add(self, m: Self, a: Self) -> Self {
+    fn nmul_add(self, m: Self, a: Self) -> Self {
         Self::new(unsafe { _mm256_fnmadd_ps(self.value, m.value, a.value) })
     }
 
     #[inline(always)]
-    fn neg_mul_sub(self, m: Self, s: Self) -> Self {
+    fn nmul_sub(self, m: Self, s: Self) -> Self {
         Self::new(unsafe { _mm256_fnmsub_ps(self.value, m.value, s.value) })
     }
 
@@ -385,11 +401,11 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
         e = e.abs();
 
         loop {
-            res = (e & i32x8::one()).ne(i32x8::zero()).select(res * x, res);
+            res = (e & Vi32::one()).ne(Vi32::zero()).select(res * x, res);
 
-            e >>= u32x8::one();
+            e >>= 1;
 
-            let fin = e.eq(i32x8::zero());
+            let fin = e.eq(Vi32::zero());
 
             x = fin.select(x, x * x);
 

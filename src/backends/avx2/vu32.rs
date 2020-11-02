@@ -92,6 +92,16 @@ impl SimdBitwise<AVX2> for u32x8<AVX2> {
     unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
         Self::new(_mm256_sllv_epi32(self.value, count.value))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_shli(self, count: u32) -> Self {
+        Self::new(_mm256_sll_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shri(self, count: u32) -> Self {
+        Self::new(_mm256_srl_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+    }
 }
 
 impl PartialEq<Self> for u32x8<AVX2> {

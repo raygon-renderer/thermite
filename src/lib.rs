@@ -184,9 +184,13 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     + BitOrAssign<Self>
     + BitXorAssign<Self>
     + Shl<S::Vu32, Output = Self>
+    + Shl<u32, Output = Self>
     + ShlAssign<S::Vu32>
+    + ShlAssign<u32>
     + Shr<S::Vu32, Output = Self>
+    + Shr<u32, Output = Self>
     + ShrAssign<S::Vu32>
+    + ShrAssign<u32>
 {
     /// Computes `!self & other`, may be more performant than the naive version
     #[inline(always)]
@@ -215,6 +219,16 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     unsafe fn _mm_shr(self, count: S::Vu32) -> Self;
     #[doc(hidden)]
     unsafe fn _mm_shl(self, count: S::Vu32) -> Self;
+
+    #[inline(always)]
+    unsafe fn _mm_shri(self, count: u32) -> Self {
+        self._mm_shr(S::Vu32::splat(count))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shli(self, count: u32) -> Self {
+        self._mm_shl(S::Vu32::splat(count))
+    }
 }
 
 /// Defines a mask type for results and selects
@@ -427,14 +441,14 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     /// Fused negated multiple-add
     #[inline(always)]
-    fn neg_mul_add(self, m: Self, a: Self) -> Self {
+    fn nmul_add(self, m: Self, a: Self) -> Self {
         self.mul_add(-m, a)
     }
 
     /// Fused negated multiple-subtract
     #[inline(always)]
-    fn neg_mul_sub(self, m: Self, s: Self) -> Self {
-        self.neg_mul_add(m, -s)
+    fn nmul_sub(self, m: Self, s: Self) -> Self {
+        self.nmul_add(m, -s)
     }
 
     fn round(self) -> Self;
@@ -461,7 +475,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible
     #[inline(always)]
     fn rsqrt_precise(self) -> Self {
-        // TODO: Replace this with rsqrt + one iteration of Newton's method
         self.sqrt().recepr()
     }
 

@@ -154,12 +154,12 @@ macro_rules! impl_ops {
         }
     )*}};
     (@SHIFTS => $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl<S: Simd, V> $op_trait<<S as Simd>::Vu32> for Mask<S, V> where V: SimdVector<S> {
+        impl<S: Simd, V, U> $op_trait<U> for Mask<S, V> where V: SimdVector<S> + $op_trait<U, Output = V> {
             type Output = Self;
-            #[inline(always)] fn $op(self, rhs: <S as Simd>::Vu32) -> Self { $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())) }
+            #[inline(always)] fn $op(self, rhs: U) -> Self { $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())) }
         }
-        impl<S: Simd, V> [<$op_trait Assign>]<<S as Simd>::Vu32> for Mask<S, V> where V: SimdVector<S> {
-            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <S as Simd>::Vu32) {
+        impl<S: Simd, V, U> [<$op_trait Assign>]<U> for Mask<S, V> where V: SimdVector<S> + [<$op_trait Assign>]<U> + $op_trait<U, Output = V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: U) {
                 self.0 = $op_trait::$op(self.0, rhs).ne(V::splat(Truthy::falsey())).0;
             }
         }

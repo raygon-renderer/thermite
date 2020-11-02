@@ -121,6 +121,26 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
             _mm256_sllv_epi64(self.value.1, high),
         ))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_shli(self, count: u32) -> Self {
+        let count = _mm_setr_epi32(count as i32, 0, 0, 0);
+
+        Self::new((
+            _mm256_sll_epi64(self.value.0, count),
+            _mm256_sll_epi64(self.value.1, count),
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_shri(self, count: u32) -> Self {
+        let count = _mm_setr_epi32(count as i32, 0, 0, 0);
+
+        Self::new((
+            _mm256_srl_epi64(self.value.0, count),
+            _mm256_srl_epi64(self.value.1, count),
+        ))
+    }
 }
 
 impl PartialEq<Self> for u64x8<AVX2> {
