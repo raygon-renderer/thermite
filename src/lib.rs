@@ -220,11 +220,13 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     #[doc(hidden)]
     unsafe fn _mm_shl(self, count: S::Vu32) -> Self;
 
+    #[doc(hidden)]
     #[inline(always)]
     unsafe fn _mm_shri(self, count: u32) -> Self {
         self._mm_shr(S::Vu32::splat(count))
     }
 
+    #[doc(hidden)]
     #[inline(always)]
     unsafe fn _mm_shli(self, count: u32) -> Self {
         self._mm_shl(S::Vu32::splat(count))
