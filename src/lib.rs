@@ -87,9 +87,13 @@ pub trait SimdCasts<S: Simd + ?Sized>:
     }
 }
 
+pub trait SimdElement: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
+
+impl<T> SimdElement for T where T: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
+
 /// Basic shared vector interface
 pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Send + Sync {
-    type Element: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync;
+    type Element: SimdElement;
 
     /// Size of element type in bytes
     const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
