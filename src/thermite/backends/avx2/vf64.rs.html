@@ -470,6 +470,113 @@
 <span id="469">469</span>
 <span id="470">470</span>
 <span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -572,7 +679,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_castsi256_si128</span>(<span class="ident">count</span>.<span class="ident">value</span>));
         <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_extracti128_si256</span>(<span class="ident">count</span>.<span class="ident">value</span>, <span class="number">1</span>));
 
@@ -583,7 +690,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_castsi256_si128</span>(<span class="ident">count</span>.<span class="ident">value</span>));
         <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_extracti128_si256</span>(<span class="ident">count</span>.<span class="ident">value</span>, <span class="number">1</span>));
 
@@ -608,8 +715,8 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_blendv</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="self">Self</span>, <span class="ident">f</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_blendv_pd</span>(<span class="ident">t</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">f</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
-            <span class="ident">_mm256_blendv_pd</span>(<span class="ident">t</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">f</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            <span class="ident">_mm256_blendv_pd</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+            <span class="ident">_mm256_blendv_pd</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
         ))
     }
 }
@@ -763,16 +870,16 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">into_bits</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">into_bits</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Vu64</span> {
         <span class="ident">u64x8</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_castpd_si256</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_castpd_si256</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">from_bits</span>(<span class="ident">bits</span>: <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">from_bits</span>(<span class="ident">bits</span>: <span class="ident">Vu64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_castsi256_pd</span>(<span class="ident">bits</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">bits</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 }
@@ -937,10 +1044,117 @@
     <span class="kw">fn</span> <span class="ident">sqrt</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_sqrt_pd</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_sqrt_pd</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
+
+    <span class="kw">fn</span> <span class="ident">powi</span>(<span class="self">self</span>, <span class="kw-2">mut</span> <span class="ident">e</span>: <span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">x</span> <span class="op">=</span> <span class="self">self</span>;
+
+        <span class="ident">x</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">is_negative</span>().<span class="ident">select</span>(<span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="ident">x</span>, <span class="ident">x</span>);
+        <span class="ident">e</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">abs</span>();
+
+        <span class="kw">loop</span> {
+            <span class="ident">res</span> <span class="op">=</span> (<span class="ident">e</span> <span class="op">&amp;</span> <span class="ident">i32x8</span>::<span class="ident">one</span>()).<span class="ident">ne</span>(<span class="ident">i32x8</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">res</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">res</span>);
+
+            <span class="ident">e</span> <span class="op">&gt;&gt;</span><span class="op">=</span> <span class="ident">u32x8</span>::<span class="ident">one</span>();
+
+            <span class="kw">let</span> <span class="ident">fin</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">eq</span>(<span class="ident">i32x8</span>::<span class="ident">zero</span>());
+
+            <span class="ident">x</span> <span class="op">=</span> <span class="ident">fin</span>.<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>);
+
+            <span class="kw">if</span> <span class="ident">fin</span>.<span class="ident">all</span>() {
+                <span class="kw">break</span>;
+            }
+        }
+
+        <span class="ident">res</span>
+    }
 }
 
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">UNARY</span> <span class="ident">f64x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Not</span>::<span class="ident">not</span>, <span class="ident">Neg</span>::<span class="ident">neg</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="ident">f64x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Add</span>::<span class="ident">add</span>, <span class="ident">Sub</span>::<span class="ident">sub</span>, <span class="ident">Mul</span>::<span class="ident">mul</span>, <span class="ident">Div</span>::<span class="ident">div</span>, <span class="ident">Rem</span>::<span class="ident">rem</span>, <span class="ident">BitAnd</span>::<span class="ident">bitand</span>, <span class="ident">BitOr</span>::<span class="ident">bitor</span>, <span class="ident">BitXor</span>::<span class="ident">bitxor</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">SHIFTS</span> <span class="ident">f64x8</span> <span class="ident">AVX2</span> <span class="op">=&gt;</span> <span class="ident">Shr</span>::<span class="ident">shr</span>, <span class="ident">Shl</span>::<span class="ident">shl</span>);
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vi32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            (
+                <span class="ident">_mm256_cvtepi32_pd</span>(<span class="ident">_mm256_castsi256_si128</span>(<span class="ident">from</span>.<span class="ident">value</span>)),
+                <span class="ident">_mm256_cvtepi32_pd</span>(<span class="ident">_mm256_extracti128_si256</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="number">1</span>)),
+            )
+        })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vi32</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>()).<span class="ident">ne</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            <span class="kw">let</span> <span class="ident">c0</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x4330000000000000</span>));
+
+            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_castsi256_si128</span>(<span class="ident">from</span>.<span class="ident">value</span>)));
+            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_extracti128_si256</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="number">1</span>)));
+
+            (
+                <span class="ident">_mm256_sub_pd</span>(<span class="ident">_mm256_xor_pd</span>(<span class="ident">low</span>, <span class="ident">c0</span>), <span class="ident">c0</span>),
+                <span class="ident">_mm256_sub_pd</span>(<span class="ident">_mm256_xor_pd</span>(<span class="ident">high</span>, <span class="ident">c0</span>), <span class="ident">c0</span>),
+            )
+        })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">from</span> <span class="op">=</span> <span class="ident">from</span>.<span class="ident">value</span>();
+
+        <span class="comment">// skip the conversion from int-&gt;float and just work with the bits</span>
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_castsi256_si128</span>(<span class="ident">from</span>.<span class="ident">value</span>));
+            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtepu32_epi64</span>(<span class="ident">_mm256_extracti128_si256</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="number">1</span>));
+
+            <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">_mm256_setzero_si256</span>();
+
+            (
+                <span class="comment">// any 32-bit unsigned int cast to 64-bit signed int will be positive</span>
+                <span class="comment">// so cmpgt zero is equivalent to cmpneq zero</span>
+                <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">low</span>, <span class="ident">zero</span>)),
+                <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">high</span>, <span class="ident">zero</span>)),
+            )
+        }))
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            (
+                <span class="ident">_mm256_cvtps_pd</span>(<span class="ident">_mm256_castps256_ps128</span>(<span class="ident">from</span>.<span class="ident">value</span>)),
+                <span class="ident">_mm256_cvtps_pd</span>(<span class="ident">_mm256_extractf128_ps</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="number">1</span>)),
+            )
+        })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf32</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="self">Self</span>::<span class="ident">from_cast</span>(<span class="ident">from</span>.<span class="ident">value</span>()).<span class="ident">ne</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="macro">unimplemented</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">from</span> <span class="op">=</span> <span class="ident">from</span>.<span class="ident">value</span>();
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            (<span class="ident">_mm256_castsi256_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>))
+        }))
+    }
+}
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../../";window.currentCrate = "thermite";</script><script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script><script defer src="../../../../search-index.js"></script></body></html>
