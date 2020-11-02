@@ -83,7 +83,7 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: Vu32) -> Self {
         Self::new(_mm256_castsi256_ps(_mm256_srlv_epi32(
             _mm256_castps_si256(self.value),
             count.value,
@@ -91,7 +91,7 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: Vu32) -> Self {
         Self::new(_mm256_castsi256_ps(_mm256_sllv_epi32(
             _mm256_castps_si256(self.value),
             count.value,
@@ -112,7 +112,7 @@ impl PartialEq<Self> for f32x8<AVX2> {
 impl SimdMask<AVX2> for f32x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
-        Self::new(_mm256_blendv_ps(t.value, f.value, self.value))
+        Self::new(_mm256_blendv_ps(f.value, t.value, self.value))
     }
 }
 
@@ -216,16 +216,16 @@ impl SimdVector<AVX2> for f32x8<AVX2> {
     }
 }
 
-impl SimdIntoBits<AVX2, u32x8<AVX2>> for f32x8<AVX2> {
+impl SimdIntoBits<AVX2, Vu32> for f32x8<AVX2> {
     #[inline(always)]
-    fn into_bits(self) -> u32x8<AVX2> {
+    fn into_bits(self) -> Vu32 {
         u32x8::new(unsafe { _mm256_castps_si256(self.value) })
     }
 }
 
-impl SimdFromBits<AVX2, u32x8<AVX2>> for f32x8<AVX2> {
+impl SimdFromBits<AVX2, Vu32> for f32x8<AVX2> {
     #[inline(always)]
-    fn from_bits(bits: u32x8<AVX2>) -> Self {
+    fn from_bits(bits: Vu32) -> Self {
         Self::new(unsafe { _mm256_castsi256_ps(bits.value) })
     }
 }
@@ -376,6 +376,31 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
         Self::new(unsafe { _mm256_sqrt_ps(self.value) })
     }
 
+    #[inline]
+    fn powi(self, mut e: Vi32) -> Self {
+        let mut res = Self::one();
+        let mut x = self;
+
+        x = e.is_negative().select(Self::one() / x, x);
+        e = e.abs();
+
+        loop {
+            res = (e & i32x8::one()).ne(i32x8::zero()).select(res * x, res);
+
+            e >>= u32x8::one();
+
+            let fin = e.eq(i32x8::zero());
+
+            x = fin.select(x, x * x);
+
+            if fin.all() {
+                break;
+            }
+        }
+
+        res
+    }
+
     #[inline(always)]
     fn rsqrt(self) -> Self {
         Self::new(unsafe { _mm256_rsqrt_ps(self.value) })
@@ -400,26 +425,26 @@ impl_ops!(@UNARY f32x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY f32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS f32x8 AVX2 => Shr::shr, Shl::shl);
 
-impl SimdCastFrom<AVX2, i32x8<AVX2>> for f32x8<AVX2> {
+impl SimdCastFrom<AVX2, Vi32> for f32x8<AVX2> {
     #[inline(always)]
-    fn from_cast(from: i32x8<AVX2>) -> Self {
+    fn from_cast(from: Vi32) -> Self {
         Self::new(unsafe { _mm256_cvtepi32_ps(from.value) })
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, i32x8<AVX2>>) -> Mask<AVX2, Self> {
-        Mask::new(Self::from_cast(from.value())) // same width
+    fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
+        Mask::new(Self::new(unsafe { _mm256_castsi256_ps(from.value().value) }))
     }
 }
 
-impl SimdCastFrom<AVX2, u64x8<AVX2>> for f32x8<AVX2> {
+impl SimdCastFrom<AVX2, Vu64> for f32x8<AVX2> {
     #[inline]
-    fn from_cast(from: u64x8<AVX2>) -> Self {
+    fn from_cast(from: Vu64) -> Self {
         brute_force_convert!(&from; u64 => f32)
     }
 
     #[inline]
-    fn from_cast_mask(from: Mask<AVX2, u64x8<AVX2>>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
         Self::from_cast(from.value()).ne(Self::zero())
     }
 }

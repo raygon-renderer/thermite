@@ -124,7 +124,7 @@ impl SimdMask<AVX2> for u32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
-        Self::new(_mm256_blendv_epi8(t.value, f.value, self.value))
+        Self::new(_mm256_blendv_epi8(f.value, t.value, self.value))
     }
 }
 
@@ -236,14 +236,40 @@ impl_ops!(@UNARY  u32x8 AVX2 => Not::not);
 impl_ops!(@BINARY u32x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS u32x8 AVX2 => Shr::shr, Shl::shl);
 
-impl SimdCastFrom<AVX2, i32x8<AVX2>> for u32x8<AVX2> {
+impl SimdCastFrom<AVX2, Vi32> for u32x8<AVX2> {
     #[inline(always)]
-    fn from_cast(from: i32x8<AVX2>) -> Self {
+    fn from_cast(from: Vi32) -> Self {
         Self::new(from.value)
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, i32x8<AVX2>>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
         Mask::new(Self::from_cast(from.value())) // same width
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: Vf32) -> Self {
+        Self::new(unsafe {
+            // TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -> u32x4)`, but it's not ideal and
+            // produces different results from `f32 as u32` with negaitve values and values larger than some value
+            let xmm0 = from.value;
+            let xmm1 = _mm256_set1_ps(f32::from_bits(0x4f000000));
+            let xmm2 = _mm256_cmp_ps(from.value, xmm1, _CMP_LT_OQ);
+            let xmm1 = _mm256_sub_ps(xmm0, xmm1);
+            let xmm1 = _mm256_cvtps_epi32(xmm1);
+            let xmm3 = _mm256_set1_epi32(0x80000000u32 as i32);
+            let xmm1 = _mm256_xor_si256(xmm1, xmm3);
+            let xmm0 = _mm256_cvtps_epi32(xmm0);
+            let xmm0 = _mm256_blendv_ps(_mm256_castsi256_ps(xmm1), _mm256_castsi256_ps(xmm0), xmm2);
+
+            _mm256_castps_si256(xmm0)
+        })
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
+        Mask::new(Self::new(unsafe { _mm256_castps_si256(from.value().value) }))
     }
 }

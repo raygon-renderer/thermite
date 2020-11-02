@@ -523,7 +523,7 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
 
     fn trunc(self) -> Self {
         #[inline(always)]
-        unsafe fn _mm_blendv_si128(mask: __m128i, t: __m128i, f: __m128i) -> __m128i {
+        unsafe fn _mm_blendv_si128(f: __m128i, t: __m128i, mask: __m128i) -> __m128i {
             _mm_or_si128(_mm_and_si128(mask, t), _mm_andnot_si128(mask, f))
         }
 
@@ -541,10 +541,10 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
             let use_original = _mm_xor_si128(_mm_cmpgt_epi32(e, thirty_two), _mm_cmpeq_epi32(e, thirty_two));
 
             // e = e < 9 ? 1 : e
-            let e = _mm_blendv_si128(_mm_cmplt_epi32(e, _mm_set1_epi32(9)), _mm_set1_epi32(1), e);
+            let e = _mm_blendv_si128(e, _mm_set1_epi32(1), _mm_cmplt_epi32(e, _mm_set1_epi32(9)));
 
-            // m = -1 >> e, painfully
-            let m = i32x4::zip(i32x4::splat(!0), i32x4::new(e), |n, e| (n as u32 >> e as u32) as i32).value;
+            // m = -1 >> e
+            let m = (i32x4::splat(-1) >> i32x4::new(e)).value;
 
             // use_original = use_original || (i & m) == 0
             let use_original = _mm_or_si128(use_original, _mm_cmpeq_epi32(_mm_set1_epi32(0), _mm_and_si128(i, m)));
@@ -553,7 +553,7 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
             let i_trunc = _mm_andnot_si128(m, i);
 
             // f = use_original ? i : i_trunc
-            Self::new(_mm_castsi128_ps(_mm_blendv_si128(use_original, i, i_trunc)))
+            Self::new(_mm_castsi128_ps(_mm_blendv_si128(i_trunc, i, use_original)))
         }
     }
 

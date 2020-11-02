@@ -101,7 +101,7 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: Vu32) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 
@@ -112,7 +112,7 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: Vu32) -> Self {
         let low = _mm256_cvtepu32_epi64(_mm256_castsi256_si128(count.value));
         let high = _mm256_cvtepu32_epi64(_mm256_extracti128_si256(count.value, 1));
 
@@ -160,8 +160,8 @@ impl SimdMask<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new((
-            _mm256_blendv_epi8(t.value.0, f.value.0, self.value.0),
-            _mm256_blendv_epi8(t.value.1, f.value.1, self.value.1),
+            _mm256_blendv_epi8(f.value.0, t.value.0, self.value.0),
+            _mm256_blendv_epi8(f.value.1, t.value.1, self.value.1),
         ))
     }
 }

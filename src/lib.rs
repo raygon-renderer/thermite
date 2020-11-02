@@ -448,6 +448,8 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         self - self.trunc()
     }
 
+    fn powi(self, e: S::Vi32) -> Self;
+
     fn sqrt(self) -> Self;
 
     /// Compute the reciprocal of the square root `(1 / sqrt(x))`
@@ -525,7 +527,10 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vi16: SimdIntVector<Self, Element = i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
-    type Vi32: SimdIntVector<Self, Element = i32> + SimdSignedVector<Self>;
+    type Vi32: SimdIntVector<Self, Element = i32>
+        + SimdSignedVector<Self>
+        + SimdIntoBits<Self, Self::Vu32>
+        + SimdFromBits<Self, Self::Vu32>;
     //type Vi64: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
