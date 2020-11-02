@@ -18,6 +18,9 @@ pub use self::pointer::*;
 mod mask;
 pub use mask::Mask;
 
+//mod math;
+//pub use math::SimdMathExt;
+
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
@@ -565,3 +568,9 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //#[cfg(target_pointer_width = "64")]
     //type Visize: SimdIntVector<Self, i64> + SimdSignedVector<Self, i64>;
 }
+
+pub type Vi32<S> = <S as Simd>::Vi32;
+pub type Vu32<S> = <S as Simd>::Vu32;
+pub type Vu64<S> = <S as Simd>::Vu64;
+pub type Vf32<S> = <S as Simd>::Vf32;
+pub type Vf64<S> = <S as Simd>::Vf64;

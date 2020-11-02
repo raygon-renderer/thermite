@@ -453,6 +453,16 @@ impl SimdCastFrom<AVX2, Vi32> for f32x8<AVX2> {
     }
 }
 
+impl SimdCastFrom<AVX2, Vu32> for f32x8<AVX2> {
+    fn from_cast(from: Vu32) -> Self {
+        unimplemented!()
+    }
+
+    fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
+        Mask::new(Self::new(unsafe { _mm256_castsi256_ps(from.value().value) }))
+    }
+}
+
 impl SimdCastFrom<AVX2, Vu64> for f32x8<AVX2> {
     #[inline]
     fn from_cast(from: Vu64) -> Self {
