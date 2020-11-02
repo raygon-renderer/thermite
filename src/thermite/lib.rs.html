@@ -551,6 +551,19 @@
 <span id="550">550</span>
 <span id="551">551</span>
 <span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -738,9 +751,13 @@
     <span class="op">+</span> <span class="ident">BitOrAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">BitXorAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">Shl</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vu32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Shl</span><span class="op">&lt;</span><span class="ident">u32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">ShlAssign</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">ShlAssign</span><span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">Shr</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vu32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Shr</span><span class="op">&lt;</span><span class="ident">u32</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">ShrAssign</span><span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">ShrAssign</span><span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>
 {
     <span class="doccomment">/// Computes `!self &amp; other`, may be more performant than the naive version</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -769,6 +786,16 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shri</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">_mm_shr</span>(<span class="ident">S</span>::<span class="ident">Vu32</span>::<span class="ident">splat</span>(<span class="ident">count</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shli</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">_mm_shl</span>(<span class="ident">S</span>::<span class="ident">Vu32</span>::<span class="ident">splat</span>(<span class="ident">count</span>))
+    }
 }
 
 <span class="doccomment">/// Defines a mask type for results and selects</span>
@@ -981,14 +1008,14 @@
 
     <span class="doccomment">/// Fused negated multiple-add</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">neg_mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">nmul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="ident">m</span>, <span class="ident">a</span>)
     }
 
     <span class="doccomment">/// Fused negated multiple-subtract</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">neg_mul_sub</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">neg_mul_add</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
+    <span class="kw">fn</span> <span class="ident">nmul_sub</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">nmul_add</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
     }
 
     <span class="kw">fn</span> <span class="ident">round</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
@@ -1015,7 +1042,6 @@
     <span class="doccomment">/// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">rsqrt_precise</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="comment">// TODO: Replace this with rsqrt + one iteration of Newton&#39;s method</span>
         <span class="self">self</span>.<span class="ident">sqrt</span>().<span class="ident">recepr</span>()
     }
 

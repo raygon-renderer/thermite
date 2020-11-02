@@ -274,6 +274,16 @@
 <span id="273">273</span>
 <span id="274">274</span>
 <span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -368,6 +378,16 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sllv_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">count</span>.<span class="ident">value</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shli</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sll_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shri</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_srl_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
     }
 }
 

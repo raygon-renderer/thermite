@@ -110,6 +110,15 @@
 <span id="109">109</span>
 <span id="110">110</span>
 <span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_ops</span> {
     (@<span class="ident">UNARY</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span>:<span class="ident">ident</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
@@ -136,8 +145,17 @@
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="kw">unsafe</span> { <span class="self">self</span>. [<span class="op">&lt;</span><span class="ident">_mm_</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span><span class="op">&gt;</span>](<span class="ident">rhs</span>) } }
         }
 
+        <span class="kw">impl</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span><span class="op">&gt;</span> {
+            <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="kw">unsafe</span> { <span class="self">self</span>.[<span class="op">&lt;</span><span class="ident">_mm_</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">i</span><span class="op">&gt;</span>](<span class="ident">rhs</span>) } }
+        }
+
         <span class="kw">impl</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span><span class="op">&gt;</span> {
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">_assign</span><span class="op">&gt;</span>](<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vu32</span>) { <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="ident">rhs</span>); }
+        }
+
+        <span class="kw">impl</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span><span class="op">&gt;</span> {
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">_assign</span><span class="op">&gt;</span>](<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="ident">u32</span>) { <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="ident">rhs</span>); }
         }
     )<span class="kw-2">*</span>}};
 }
