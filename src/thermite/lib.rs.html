@@ -577,6 +577,10 @@
 <span id="576">576</span>
 <span id="577">577</span>
 <span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -598,8 +602,8 @@
 <span class="kw">mod</span> <span class="ident">mask</span>;
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">mask</span>::<span class="ident">Mask</span>;
 
-<span class="comment">//mod math;</span>
-<span class="comment">//pub use math::SimdMathExt;</span>
+<span class="kw">mod</span> <span class="ident">math</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">math</span>::<span class="ident">SimdVectorizedMath</span>;
 
 <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
 
@@ -648,23 +652,26 @@
 <span class="doccomment">/// List of valid casts between SIMD types in an instruction set</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdCasts</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>:
     <span class="ident">Sized</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vm8&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vm16&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vi8&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vi16&gt;</span>
     <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vi64&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vu8&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vu16&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vu32&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vu64&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf32</span><span class="op">&gt;</span>
-    <span class="comment">//+ SimdCastFrom&lt;S, S::Vf64&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf64</span><span class="op">&gt;</span>
 {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">cast_to</span><span class="op">&lt;</span><span class="ident">T</span>: <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;&gt;</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">T</span> {
         <span class="self">self</span>.<span class="ident">cast</span>()
     }
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">T</span><span class="op">&gt;</span> <span class="ident">SimdCasts</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span>
+    <span class="ident">T</span>: <span class="ident">Sized</span>
+        <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf64</span><span class="op">&gt;</span>
+{
 }
 
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdElement</span>: <span class="ident">mask</span>::<span class="ident">Truthy</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">Default</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> {}
@@ -855,6 +862,7 @@
     <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">SimdMask</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdCasts</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">Add</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">Sub</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">Mul</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
