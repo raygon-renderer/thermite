@@ -562,8 +562,14 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     type Vu32: SimdIntVector<Self, Element = u32>;
     type Vu64: SimdIntVector<Self, Element = u64>;
 
-    type Vf32: SimdFloatVector<Self, Element = f32> + SimdIntoBits<Self, Self::Vu32> + SimdFromBits<Self, Self::Vu32>;
-    type Vf64: SimdFloatVector<Self, Element = f64> + SimdIntoBits<Self, Self::Vu64> + SimdFromBits<Self, Self::Vu64>;
+    type Vf32: SimdFloatVector<Self, Element = f32>
+        + SimdIntoBits<Self, Self::Vu32>
+        + SimdFromBits<Self, Self::Vu32>
+        + SimdVectorizedMath<Self>;
+    type Vf64: SimdFloatVector<Self, Element = f64>
+        + SimdIntoBits<Self, Self::Vu64>
+        + SimdFromBits<Self, Self::Vu64>
+        + SimdVectorizedMath<Self>;
 
     #[cfg(target_pointer_width = "32")]
     type Vusize: SimdIntVector<Self, Element = u32>;
