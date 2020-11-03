@@ -18,8 +18,8 @@ pub use self::pointer::*;
 mod mask;
 pub use mask::Mask;
 
-//mod math;
-//pub use math::SimdMathExt;
+mod math;
+pub use math::SimdVectorizedMath;
 
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
@@ -80,7 +80,7 @@ pub trait SimdCasts<S: Simd + ?Sized>:
     }
 }
 
-impl<S: Simd, T> SimdCasts<S> for T where
+impl<S: Simd + ?Sized, T> SimdCasts<S> for T where
     T: Sized
         + SimdCastFrom<S, S::Vi32>
         + SimdCastFrom<S, S::Vu32>

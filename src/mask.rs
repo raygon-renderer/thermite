@@ -50,6 +50,11 @@ where
         v.ne(V::zero())
     }
 
+    #[inline(always)]
+    pub fn cast_to<U: SimdCastFrom<S, V>>(self) -> Mask<S, U> {
+        U::from_cast_mask(self)
+    }
+
     /// Mask vector containing all true/non-zero lanes.
     #[inline(always)]
     pub fn truthy() -> Self {

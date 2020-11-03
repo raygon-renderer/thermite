@@ -3,21 +3,9 @@
 use crate::*;
 
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
-    #[inline]
-    fn sin(self) -> Self {
-        self.sin_cos().0
-    }
-
-    #[inline]
-    fn cos(self) -> Self {
-        self.sin_cos().1
-    }
-
-    #[inline]
-    fn tan(self) -> Self {
-        let (s, c) = self.sin_cos();
-        s / c
-    }
+    fn sin(self) -> Self;
+    fn cos(self) -> Self;
+    fn tan(self) -> Self;
 
     fn sin_cos(self) -> (Self, Self);
 
@@ -32,17 +20,92 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
 
     fn exp(self) -> Self;
     fn exp2(self) -> Self;
-    fn expm1(self) -> Self {
-        self.exp() - Self::one()
-    }
+    fn expm1(self) -> Self;
 
     fn powf(self, e: Self) -> Self;
-    fn powi(self, e: S::Vi32) -> Self {
-        let mut res = Self::one();
-        let mut x = self;
+    fn powi(self, e: S::Vi32) -> Self;
 
-        /*
-        x = e.is_negative().select(Self::one() / x, x);
+    fn ln(self) -> Self;
+    fn log2(self) -> Self;
+    fn log10(self) -> Self;
+
+    fn erf(self) -> Self;
+    fn ierf(self) -> Self;
+    fn erfcf(self) -> Self;
+}
+
+#[rustfmt::skip]
+impl<S: Simd, T> SimdVectorizedMath<S> for T
+where
+    T: SimdFloatVector<S>,
+    <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
+{
+    #[inline(always)] fn sin(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
+    #[inline(always)] fn cos(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
+    #[inline(always)] fn tan(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
+    #[inline(always)] fn sin_cos(self)            -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos(self) }
+    #[inline(always)] fn sinh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh(self) }
+    #[inline(always)] fn cosh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh(self) }
+    #[inline(always)] fn tanh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh(self) }
+    #[inline(always)] fn asin(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin(self) }
+    #[inline(always)] fn acos(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos(self) }
+    #[inline(always)] fn atan(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan(self) }
+    #[inline(always)] fn atan2(self, x: Self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2(self, x) }
+    #[inline(always)] fn exp(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp(self) }
+    #[inline(always)] fn exp2(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self) }
+    #[inline(always)] fn expm1(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::expm1(self) }
+    #[inline(always)] fn powf(self, e: Self)      -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
+    #[inline(always)] fn powi(self, e: S::Vi32)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
+    #[inline(always)] fn ln(self)                 -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self) }
+    #[inline(always)] fn log2(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self) }
+    #[inline(always)] fn log10(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self) }
+    #[inline(always)] fn erf(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self) }
+    #[inline(always)] fn ierf(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ierf(self) }
+    #[inline(always)] fn erfcf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfcf(self) }
+}
+
+#[doc(hidden)]
+pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
+    type Vf: SimdFloatVector<S, Element = Self>;
+
+    #[inline]
+    fn sin(x: Self::Vf) -> Self::Vf {
+        Self::sin_cos(x).0
+    }
+
+    #[inline]
+    fn cos(x: Self::Vf) -> Self::Vf {
+        Self::sin_cos(x).1
+    }
+
+    #[inline]
+    fn tan(x: Self::Vf) -> Self::Vf {
+        let (s, c) = Self::sin_cos(x);
+        s / c
+    }
+
+    fn sin_cos(x: Self::Vf) -> (Self::Vf, Self::Vf);
+
+    fn sinh(x: Self::Vf) -> Self::Vf;
+    fn cosh(x: Self::Vf) -> Self::Vf;
+    fn tanh(x: Self::Vf) -> Self::Vf;
+
+    fn asin(x: Self::Vf) -> Self::Vf;
+    fn acos(x: Self::Vf) -> Self::Vf;
+    fn atan(x: Self::Vf) -> Self::Vf;
+    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf;
+
+    fn exp(x: Self::Vf) -> Self::Vf;
+    fn exp2(x: Self::Vf) -> Self::Vf;
+    fn expm1(x: Self::Vf) -> Self::Vf {
+        Self::exp(x) - Self::Vf::one()
+    }
+
+    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
+    fn powi(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
+        let mut res = Self::Vf::one();
+
+        x = e.is_negative().select(Self::Vf::one() / x, x);
         e = e.abs();
 
         let zero = Vi32::<S>::zero();
@@ -54,45 +117,27 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
 
             let fin = e.eq(zero);
 
-            x = fin.select(x, x * x);
-
             if fin.all() {
                 break;
             }
+
+            x = fin.select(x, x * x); // x *= fin.select(1.0, x)
         }
-        */
 
         res
     }
 
-    fn ln(self) -> Self;
-    fn log2(self) -> Self;
-    fn log10(self) -> Self;
+    fn ln(x: Self::Vf) -> Self::Vf;
+    fn log2(x: Self::Vf) -> Self::Vf;
+    fn log10(x: Self::Vf) -> Self::Vf;
 
-    fn erf(self) -> Self;
-    fn ierf(self) -> Self;
+    fn erf(x: Self::Vf) -> Self::Vf;
+    fn ierf(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
-    fn erfcf(self) -> Self {
-        Self::one() - self.erf()
+    fn erfcf(x: Self::Vf) -> Self::Vf {
+        Self::Vf::one() - Self::erf(x)
     }
-}
-
-impl<S: Simd, T> SimdVectorizedMath<S> for T
-where
-    T: SimdFloatVector<S>,
-    <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
-{
-    #[inline(always)]
-    fn sin_cos(self) -> (Self, Self) {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos(self)
-    }
-}
-
-trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
-    type Vf: SimdFloatVector<S, Element = Self>;
-
-    fn sin_cos(x: Self::Vf) -> (Self::Vf, Self::Vf);
 }
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
@@ -113,11 +158,10 @@ where
         let p1cosf = Vf32::<S>::splat(-1.388731625493765E-3);
         let p2cosf = Vf32::<S>::splat(2.443315711809948E-5);
 
-        let xa = xx.abs();
+        let xa: Vf32<S> = xx.abs();
 
-        /*
-        let y = (xa * Vf32::<S>::splat(2.0 / std::f32::consts::PI)).round();
-        let q = Vi32::<S>::from_cast(y).into_bits(); // cast to signed (faster), then transmute to unsigned
+        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / std::f32::consts::PI)).round();
+        let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
 
         // Reduce by extended precision modular arithmetic
         // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
@@ -133,10 +177,10 @@ where
             .mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
 
         // swap sin and cos if odd quadrant
-        let swap = (q & Vu32::<S>::one()).ne(Vu32::zero());
+        let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
 
         let mut overflow = q.gt(Vu32::<S>::splat(0x2000000)); // q big if overflow
-        overflow &= Vu32::<S>::from_cast_mask(xa.is_finite());
+        overflow &= xa.is_finite().cast_to();
 
         s = overflow.select(Vf32::<S>::zero(), s);
         c = overflow.select(Vf32::<S>::one(), c);
@@ -149,8 +193,51 @@ where
 
         // combine signs
         (sin1 ^ (signsin & Vf32::<S>::neg_zero()), cos1 ^ signcos)
-        */
+    }
 
-        (xa, xa)
+    fn sinh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn cosh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn tanh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn asin(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn acos(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn atan(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn exp(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn exp2(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn ln(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn log2(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn log10(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn erf(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn ierf(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
     }
 }
