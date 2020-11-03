@@ -107,7 +107,7 @@ where
 }
 
 #[doc(hidden)]
-pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
+pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     type Vf: SimdFloatVector<S, Element = Self>;
 
     #[inline]
@@ -129,7 +129,14 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
     fn sin_cos(x: Self::Vf) -> (Self::Vf, Self::Vf);
 
     fn sinh(x: Self::Vf) -> Self::Vf;
-    fn cosh(x: Self::Vf) -> Self::Vf;
+
+    #[inline(always)]
+    fn cosh(x: Self::Vf) -> Self::Vf {
+        let x: Self::Vf = x.abs();
+        let y: Self::Vf = x.exph(); // 0.5 * exp(x)
+        y + Self::Vf::splat_any(0.25) / y // + 0.5 * exp(-x)
+    }
+
     fn tanh(x: Self::Vf) -> Self::Vf;
 
     fn asin(x: Self::Vf) -> Self::Vf;
@@ -248,11 +255,7 @@ where
     fn sinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
-    fn cosh(x: Self::Vf) -> Self::Vf {
-        //let xa = x.abs();
-        //let y =
-        unimplemented!()
-    }
+
     fn tanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
@@ -322,9 +325,7 @@ where
     fn sinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
-    fn cosh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
+
     fn tanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
