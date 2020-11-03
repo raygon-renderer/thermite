@@ -338,7 +338,7 @@ impl SimdCastFrom<AVX2, Vu32> for i32x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
-        Mask::new(Self::from_cast(from.value()))
+        Mask::new(from.value().cast())
     }
 }
 
@@ -348,8 +348,20 @@ impl SimdCastFrom<AVX2, Vu64> for i32x8<AVX2> {
         brute_force_convert!(&from; u64 => i32)
     }
 
-    #[inline]
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
+        Mask::new(from.value().cast()) // truncate
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf64> for i32x8<AVX2> {
+    fn from_cast(from: Vf64) -> Self {
+        brute_force_convert!(&from; f64 => i32)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
+        // skip float conversion and go through raw bits
+        Mask::new(Vi32::from_bits(from.value().into_bits().cast_to::<Vu32>()))
     }
 }

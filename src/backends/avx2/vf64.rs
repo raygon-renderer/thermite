@@ -556,13 +556,14 @@ impl SimdCastFrom<AVX2, Vf32> for f64x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
-        Self::from_cast(from.value()).ne(Self::zero())
+        // use unsigned conversion
+        Mask::new(Vf64::from_bits(Vu64::from_cast_mask(from).value()))
     }
 }
 
 impl SimdCastFrom<AVX2, Vu64> for f64x8<AVX2> {
     fn from_cast(from: Vu64) -> Self {
-        unimplemented!()
+        brute_force_convert!(&from; u64 => f64)
     }
 
     fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {

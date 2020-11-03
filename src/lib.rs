@@ -68,23 +68,26 @@ where
 /// List of valid casts between SIMD types in an instruction set
 pub trait SimdCasts<S: Simd + ?Sized>:
     Sized
-    //+ SimdCastFrom<S, S::Vm8>
-    //+ SimdCastFrom<S, S::Vm16>
-    //+ SimdCastFrom<S, S::Vi8>
-    //+ SimdCastFrom<S, S::Vi16>
     + SimdCastFrom<S, S::Vi32>
-    //+ SimdCastFrom<S, S::Vi64>
-    //+ SimdCastFrom<S, S::Vu8>
-    //+ SimdCastFrom<S, S::Vu16>
-    //+ SimdCastFrom<S, S::Vu32>
-    //+ SimdCastFrom<S, S::Vu64>
+    + SimdCastFrom<S, S::Vu32>
+    + SimdCastFrom<S, S::Vu64>
     + SimdCastFrom<S, S::Vf32>
-    //+ SimdCastFrom<S, S::Vf64>
+    + SimdCastFrom<S, S::Vf64>
 {
     #[inline(always)]
     fn cast_to<T: SimdCastFrom<S, Self>>(self) -> T {
         self.cast()
     }
+}
+
+impl<S: Simd, T> SimdCasts<S> for T where
+    T: Sized
+        + SimdCastFrom<S, S::Vi32>
+        + SimdCastFrom<S, S::Vu32>
+        + SimdCastFrom<S, S::Vu64>
+        + SimdCastFrom<S, S::Vf32>
+        + SimdCastFrom<S, S::Vf64>
+{
 }
 
 pub trait SimdElement: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
@@ -275,6 +278,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
     SimdVectorBase<S>
     + SimdMask<S>
     + SimdBitwise<S>
+    + SimdCasts<S>
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>

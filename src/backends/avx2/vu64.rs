@@ -302,3 +302,47 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
 impl_ops!(@UNARY u64x8 AVX2 => Not::not);
 impl_ops!(@BINARY u64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS u64x8 AVX2 => Shr::shr, Shl::shl);
+
+impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
+    fn from_cast(from: Vu32) -> Self {
+        brute_force_convert!(&from; u32 => u64)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
+        Self::from_cast(from.value()).ne(Self::zero())
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf32> for u64x8<AVX2> {
+    fn from_cast(from: Vf32) -> Self {
+        brute_force_convert!(&from; f32 => u64)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
+        Self::from_cast(from.value().into_bits()).ne(Self::zero())
+    }
+}
+
+impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
+    fn from_cast(from: Vi32) -> Self {
+        brute_force_convert!(&from; i32 => u64)
+    }
+
+    fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
+        // convert as unsigned to avoid sign extend overhead
+        from.value().into_bits().cast_to::<Vu64>().ne(Self::zero())
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
+    fn from_cast(from: Vf64) -> Self {
+        brute_force_convert!(&from; f64 => u64)
+    }
+
+    fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
+        // zero-cost transmute for same-width
+        Mask::new(from.value().into_bits())
+    }
+}

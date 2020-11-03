@@ -254,7 +254,7 @@ impl SimdCastFrom<AVX2, Vi32> for u32x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
-        Mask::new(Self::from_cast(from.value())) // same width
+        Mask::new(from.value().cast()) // same width
     }
 }
 
@@ -280,6 +280,30 @@ impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
+        // equal width mask, so zero-cost cast
         Mask::new(Self::new(unsafe { _mm256_castps_si256(from.value().value) }))
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
+    fn from_cast(from: Vf64) -> Self {
+        brute_force_convert!(&from; f64 => u32)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
+        // cast to bits and truncate
+        Mask::new(from.value().into_bits().cast())
+    }
+}
+
+impl SimdCastFrom<AVX2, Vu64> for u32x8<AVX2> {
+    fn from_cast(from: Vu64) -> Self {
+        brute_force_convert!(&from; u64 => u32)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
+        Mask::new(from.value().cast()) // truncate
     }
 }

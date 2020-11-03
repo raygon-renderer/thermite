@@ -430,7 +430,7 @@ impl SimdCastFrom<AVX2, Vi32> for f32x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vu32> for f32x8<AVX2> {
     fn from_cast(from: Vu32) -> Self {
-        unimplemented!()
+        brute_force_convert!(&from; u32 => f32)
     }
 
     fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
@@ -447,5 +447,24 @@ impl SimdCastFrom<AVX2, Vu64> for f32x8<AVX2> {
     #[inline]
     fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
         Self::from_cast(from.value()).ne(Self::zero())
+    }
+}
+
+impl SimdCastFrom<AVX2, Vf64> for f32x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: Vf64) -> Self {
+        Self::new(unsafe {
+            _mm256_insertf128_ps(
+                _mm256_castps128_ps256(_mm256_cvtpd_ps(from.value.0)),
+                _mm256_cvtpd_ps(from.value.1),
+                1,
+            )
+        })
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
+        // Cast u64 -> u32 with truncate, should be faster
+        Mask::new(Vf32::from_bits(from.value().into_bits().cast()))
     }
 }

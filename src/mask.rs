@@ -170,50 +170,20 @@ impl_ops!(@UNARY => Not::not);
 impl_ops!(@BINARY => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS => Shr::shr, Shl::shl);
 
-impl<S: Simd + ?Sized, V> SimdBitwise<S> for Mask<S, V>
+impl<S: Simd + ?Sized, V> Mask<S, V>
 where
     V: SimdVector<S>,
 {
-    const FULL_BITMASK: u16 = V::FULL_BITMASK;
+    pub const FULL_BITMASK: u16 = V::FULL_BITMASK;
 
     #[inline(always)]
-    fn and_not(self, other: Self) -> Self {
+    pub fn and_not(self, other: Self) -> Self {
         Self::new(self.0.and_not(other.0))
     }
 
     #[inline(always)]
-    fn bitmask(self) -> u16 {
+    pub fn bitmask(self) -> u16 {
         self.0.bitmask()
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_not(self) -> Self {
-        Self::new(self.0._mm_not())
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_bitand(self, rhs: Self) -> Self {
-        Self::new(self.0._mm_bitand(rhs.0))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_bitor(self, rhs: Self) -> Self {
-        Self::new(self.0._mm_bitor(rhs.0))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_bitxor(self, rhs: Self) -> Self {
-        Self::new(self.0._mm_bitxor(rhs.0))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_shr(self, count: S::Vu32) -> Self {
-        Self::new(self.0._mm_shr(count))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_shl(self, count: S::Vu32) -> Self {
-        Self::new(self.0._mm_shl(count))
     }
 }
 
