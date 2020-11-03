@@ -581,6 +581,12 @@
 <span id="580">580</span>
 <span id="581">581</span>
 <span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1146,8 +1152,14 @@
     <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
     <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
 
-    <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>;
-    <span class="kw">type</span> <span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
     <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
