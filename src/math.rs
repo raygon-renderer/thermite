@@ -2,36 +2,73 @@
 
 use crate::*;
 
+/// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
+    /// Computes the sine of a vector.
     fn sin(self) -> Self;
+    /// Computes the cosine of a vector.
     fn cos(self) -> Self;
+    /// Computes the tangent of a vector.
     fn tan(self) -> Self;
 
+    /// Computes both the sine and cosine of a vector.
     fn sin_cos(self) -> (Self, Self);
 
+    /// Computes the hyperbolic-sine of a vector.
     fn sinh(self) -> Self;
+    /// Computes the hyperbolic-cosine of a vector.
     fn cosh(self) -> Self;
+    /// Computes the hyperbolic-tangent of a vector.
     fn tanh(self) -> Self;
 
+    /// Computes the hyperbolic-arcsine of a vector.
+    fn asinh(self) -> Self;
+    /// Computes the hyperbolic-arccosine of a vector.
+    fn acosh(self) -> Self;
+    /// Computes the hyperbolic-arctangent of a vector.
+    fn atanh(self) -> Self;
+
+    /// Computes the arcsine of a vector.
     fn asin(self) -> Self;
+    /// Computes the arccosine of a vector.
     fn acos(self) -> Self;
+    /// Computes the arctangent of a vector.
     fn atan(self) -> Self;
+    /// Computes the four quadrant arc-tangent of `y`(`self`) and `x`
     fn atan2(self, x: Self) -> Self;
 
+    /// The exponential function, returns `e^(self)`
     fn exp(self) -> Self;
+    /// Half-exponential function, returns `0.5 * e^(self)`
+    fn exph(self) -> Self;
+    /// Binary exponential function, returns `2^(self)`
     fn exp2(self) -> Self;
-    fn expm1(self) -> Self;
+    /// Exponential function minus one, `e^(self) - 1.0`,
+    /// special implementation that is more accurate if the numbr if closer to zero.
+    fn exp_m1(self) -> Self;
 
+    /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
+    /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents
     fn powi(self, e: S::Vi32) -> Self;
 
+    /// Computes the natural logarithm of a vector.
     fn ln(self) -> Self;
+    /// Computes `ln(1+x)` where `x` is `self`, more accurately
+    /// than if operations were performed separately
+    fn ln_1p(self) -> Self;
+    /// Computes the base-2 logarithm of a vector
     fn log2(self) -> Self;
+    /// Computes the base-10 logarithm of a vector
     fn log10(self) -> Self;
 
+    /// Computes the error function for each value in a vector
     fn erf(self) -> Self;
+    /// Computes the inverse error function for each value in a vector
     fn ierf(self) -> Self;
-    fn erfcf(self) -> Self;
+    /// Computes the complementary error function `1 - erf(x)` more accurately
+    /// than if operations were performed separately
+    fn erfc(self) -> Self;
 }
 
 #[rustfmt::skip]
@@ -40,28 +77,33 @@ where
     T: SimdFloatVector<S>,
     <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
 {
-    #[inline(always)] fn sin(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
-    #[inline(always)] fn cos(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
-    #[inline(always)] fn tan(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
-    #[inline(always)] fn sin_cos(self)            -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos(self) }
-    #[inline(always)] fn sinh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh(self) }
-    #[inline(always)] fn cosh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh(self) }
-    #[inline(always)] fn tanh(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh(self) }
-    #[inline(always)] fn asin(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin(self) }
-    #[inline(always)] fn acos(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos(self) }
-    #[inline(always)] fn atan(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan(self) }
-    #[inline(always)] fn atan2(self, x: Self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2(self, x) }
-    #[inline(always)] fn exp(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp(self) }
-    #[inline(always)] fn exp2(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self) }
-    #[inline(always)] fn expm1(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::expm1(self) }
-    #[inline(always)] fn powf(self, e: Self)      -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
-    #[inline(always)] fn powi(self, e: S::Vi32)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
-    #[inline(always)] fn ln(self)                 -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self) }
-    #[inline(always)] fn log2(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self) }
-    #[inline(always)] fn log10(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self) }
-    #[inline(always)] fn erf(self)                -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self) }
-    #[inline(always)] fn ierf(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ierf(self) }
-    #[inline(always)] fn erfcf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfcf(self) }
+    #[inline(always)] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
+    #[inline(always)] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
+    #[inline(always)] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
+    #[inline(always)] fn sin_cos(self)          -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos(self) }
+    #[inline(always)] fn sinh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh(self) }
+    #[inline(always)] fn cosh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh(self) }
+    #[inline(always)] fn tanh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh(self) }
+    #[inline(always)] fn asinh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asinh(self) }
+    #[inline(always)] fn acosh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acosh(self) }
+    #[inline(always)] fn atanh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atanh(self) }
+    #[inline(always)] fn asin(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin(self) }
+    #[inline(always)] fn acos(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos(self) }
+    #[inline(always)] fn atan(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan(self) }
+    #[inline(always)] fn atan2(self, x: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2(self, x) }
+    #[inline(always)] fn exp(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp(self) }
+    #[inline(always)] fn exph(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exph(self) }
+    #[inline(always)] fn exp2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self) }
+    #[inline(always)] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1(self) }
+    #[inline(always)] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
+    #[inline(always)] fn powi(self, e: S::Vi32) -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
+    #[inline(always)] fn ln(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self) }
+    #[inline(always)] fn ln_1p(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p(self) }
+    #[inline(always)] fn log2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self) }
+    #[inline(always)] fn log10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self) }
+    #[inline(always)] fn erf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self) }
+    #[inline(always)] fn ierf(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ierf(self) }
+    #[inline(always)] fn erfc(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfc(self) }
 }
 
 #[doc(hidden)]
@@ -95,13 +137,20 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
     fn atan(x: Self::Vf) -> Self::Vf;
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf;
 
+    fn asinh(x: Self::Vf) -> Self::Vf;
+    fn acosh(x: Self::Vf) -> Self::Vf;
+    fn atanh(x: Self::Vf) -> Self::Vf;
+
     fn exp(x: Self::Vf) -> Self::Vf;
+    fn exph(x: Self::Vf) -> Self::Vf;
     fn exp2(x: Self::Vf) -> Self::Vf;
-    fn expm1(x: Self::Vf) -> Self::Vf {
+    fn exp_m1(x: Self::Vf) -> Self::Vf {
         Self::exp(x) - Self::Vf::one()
     }
 
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
+
+    #[inline]
     fn powi(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
         let mut res = Self::Vf::one();
 
@@ -128,6 +177,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
     }
 
     fn ln(x: Self::Vf) -> Self::Vf;
+    fn ln_1p(x: Self::Vf) -> Self::Vf;
     fn log2(x: Self::Vf) -> Self::Vf;
     fn log10(x: Self::Vf) -> Self::Vf;
 
@@ -135,7 +185,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement {
     fn ierf(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
-    fn erfcf(x: Self::Vf) -> Self::Vf {
+    fn erfc(x: Self::Vf) -> Self::Vf {
         Self::Vf::one() - Self::erf(x)
     }
 }
@@ -199,6 +249,8 @@ where
         unimplemented!()
     }
     fn cosh(x: Self::Vf) -> Self::Vf {
+        //let xa = x.abs();
+        //let y =
         unimplemented!()
     }
     fn tanh(x: Self::Vf) -> Self::Vf {
@@ -216,7 +268,19 @@ where
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+    fn asinh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn acosh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn atanh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
     fn exp(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn exph(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
     fn exp2(x: Self::Vf) -> Self::Vf {
@@ -226,6 +290,9 @@ where
         unimplemented!()
     }
     fn ln(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn ln_1p(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
     fn log2(x: Self::Vf) -> Self::Vf {
@@ -273,7 +340,19 @@ where
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+    fn asinh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn acosh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn atanh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
     fn exp(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn exph(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
     fn exp2(x: Self::Vf) -> Self::Vf {
@@ -283,6 +362,9 @@ where
         unimplemented!()
     }
     fn ln(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn ln_1p(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
     fn log2(x: Self::Vf) -> Self::Vf {
