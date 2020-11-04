@@ -128,6 +128,39 @@
 <span id="127">127</span>
 <span id="128">128</span>
 <span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
 
@@ -168,6 +201,10 @@
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span> <span class="ident">SimdBuffer</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+    <span class="doccomment">/// Allocates a new SIMD-aligned element buffer and zeroes the elements.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Due to the alignment, it will round up the number of elements to the nearest multiple of `V::NUM_ELEMENTS`,</span>
+    <span class="doccomment">/// making the &quot;wasted&quot; space visible.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">alloc</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw">unsafe</span> {
             <span class="comment">// round up to multiple of NUM_ELEMENTS</span>
@@ -184,6 +221,34 @@
         }
     }
 
+    <span class="doccomment">/// Gathers values from the buffer using more efficient instructions where possible</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Out-of-bounds indices will return default values in the veector, rather than panicing or segfaulting.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// However, if the length of the buffer itself exceeds `i32::MAX` elements, the function will panic, as it uses signed 32-bit offsets</span>
+    <span class="doccomment">/// for the gather instruction.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If your buffer is expected to be larger than `i32::MAX` elements, use `VPtr` instead.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">gather_checked</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="ident">V</span>
+    <span class="kw">where</span>
+        <span class="ident">V</span>: <span class="ident">SimdCasts</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+    {
+        <span class="kw">let</span> <span class="ident">s</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">as_slice</span>();
+
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">s</span>.<span class="ident">len</span>() <span class="op">&lt;=</span> (<span class="ident">i32</span>::<span class="ident">MAX</span> <span class="kw">as</span> <span class="ident">usize</span>));
+
+        <span class="kw">unsafe</span> {
+            <span class="ident">V</span>::<span class="ident">gather_masked</span>(
+                <span class="ident">s</span>.<span class="ident">as_ptr</span>(),
+                <span class="ident">indices</span>.<span class="ident">cast</span>(),
+                <span class="ident">indices</span>.<span class="ident">lt</span>(<span class="ident">S</span>::<span class="ident">Vu32</span>::<span class="ident">splat</span>(<span class="ident">s</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u32</span>)).<span class="ident">cast_to</span>(),
+                <span class="ident">V</span>::<span class="ident">default</span>(),
+            )
+        }
+    }
+
+    <span class="doccomment">/// Fills the buffer with vectors using aligned stores</span>
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">fill</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">value</span>: <span class="ident">V</span>) {
         <span class="kw">unsafe</span> {
@@ -244,6 +309,7 @@
         <span class="kw">unsafe</span> { <span class="ident">value</span>.<span class="ident">store_aligned_unchecked</span>(<span class="ident">s</span>.<span class="ident">as_mut_ptr</span>().<span class="ident">add</span>(<span class="ident">vector_index</span>)) }
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">layout</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="ident">Layout</span> {
         <span class="comment">// ensure the buffer has the proper size and alignment for SIMD values</span>
         <span class="kw">unsafe</span> { <span class="ident">Layout</span>::<span class="ident">from_size_align_unchecked</span>(<span class="ident">count</span> <span class="op">*</span> <span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">V</span>::<span class="ident">Element</span><span class="op">&gt;</span>(), <span class="ident">V</span>::<span class="ident">ALIGNMENT</span>) }
