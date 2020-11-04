@@ -409,7 +409,52 @@ impl SimdPtrInternal<AVX2, Vi32> for u64x8<AVX2> {
     }
 }
 
-impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {}
-impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {}
-impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {}
-impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {}
+impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu32>, default: Vu32) -> Vu32 {
+        // just load as Vi32 and transmute
+        self._mm_gather_masked(mask.cast_to::<Vi32>(), default.cast())
+            .into_bits()
+    }
+}
+
+impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf32>, default: Vf32) -> Vf32 {
+        let mask = mask.value();
+        let mask_low = _mm256_castps256_ps128(mask.value);
+        let mask_high = _mm256_extractf128_ps(mask.value, 1);
+
+        let default_low = _mm256_castps256_ps128(default.value);
+        let default_high = _mm256_extractf128_ps(default.value, 1);
+
+        let low = _mm256_mask_i64gather_ps(default_low, ptr::null(), self.value.0, mask_low, 1);
+        let high = _mm256_mask_i64gather_ps(default_high, ptr::null(), self.value.1, mask_high, 1);
+
+        Vf32::new(_mm256_insertf128_ps(_mm256_castps128_ps256(low), high, 1))
+    }
+}
+
+impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf64>, default: Vf64) -> Vf64 {
+        let mask = mask.value();
+
+        Vf64::new((
+            _mm256_mask_i64gather_pd(default.value.0, ptr::null(), self.value.0, mask.value.0, 1),
+            _mm256_mask_i64gather_pd(default.value.1, ptr::null(), self.value.1, mask.value.1, 1),
+        ))
+    }
+}
+
+impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu64>, default: Vu64) -> Vu64 {
+        let mask = mask.value();
+
+        Vu64::new((
+            _mm256_mask_i64gather_epi64(default.value.0, ptr::null(), self.value.0, mask.value.0, 1),
+            _mm256_mask_i64gather_epi64(default.value.1, ptr::null(), self.value.1, mask.value.1, 1),
+        ))
+    }
+}
