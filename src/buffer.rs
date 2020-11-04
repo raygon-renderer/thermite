@@ -59,7 +59,7 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
 
     /// Gathers values from the buffer using more efficient instructions where possible
     ///
-    /// Out-of-bounds indices will return default values in the veector, rather than panicing or segfaulting.
+    /// Out-of-bounds indices will return default values in the vector, rather than panicing or segfaulting.
     ///
     /// However, if the length of the buffer itself exceeds `i32::MAX` elements, the function will panic, as it uses signed 32-bit offsets
     /// for the gather instruction.
