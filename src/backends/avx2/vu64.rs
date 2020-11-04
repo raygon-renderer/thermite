@@ -47,6 +47,47 @@ impl SimdVectorBase<AVX2> for u64x8<AVX2> {
         *transmute::<&mut _, *mut Self::Element>(&mut self).add(index) = value;
         self
     }
+
+    #[inline(always)]
+    unsafe fn gather(base_ptr: *const Self::Element, indices: Vi32) -> Self {
+        let low_indices = _mm256_castsi256_si128(indices.value);
+        let high_indices = _mm256_extracti128_si256(indices.value, 1);
+
+        Self::new((
+            _mm256_i32gather_epi64(base_ptr as _, low_indices, mem::size_of::<Self::Element>() as _),
+            _mm256_i32gather_epi64(base_ptr as _, high_indices, mem::size_of::<Self::Element>() as _),
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn gather_masked(
+        base_ptr: *const Self::Element,
+        indices: Vi32,
+        mask: Mask<AVX2, Self>,
+        default: Self,
+    ) -> Self {
+        let low_indices = _mm256_castsi256_si128(indices.value);
+        let high_indices = _mm256_extracti128_si256(indices.value, 1);
+
+        let mask = mask.value();
+
+        Self::new((
+            _mm256_mask_i32gather_epi64(
+                default.value.0,
+                base_ptr as _,
+                low_indices,
+                mask.value.0,
+                mem::size_of::<Self::Element>() as _,
+            ),
+            _mm256_mask_i32gather_epi64(
+                default.value.1,
+                base_ptr as _,
+                high_indices,
+                mask.value.1,
+                mem::size_of::<Self::Element>() as _,
+            ),
+        ))
+    }
 }
 
 impl SimdBitwise<AVX2> for u64x8<AVX2> {
