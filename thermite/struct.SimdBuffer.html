@@ -4,7 +4,7 @@
 <p>Due to the alignment, it will round up the number of elements to the nearest multiple of <code>V::NUM_ELEMENTS</code>,
 making the &quot;wasted&quot; space visible.</p>
 </div><h4 id='method.gather_checked' class="method"><code>pub fn <a href='#method.gather_checked' class='fnname'>gather_checked</a>(&amp;self, indices: S::<a class="type" href="../thermite/trait.Simd.html#associatedtype.Vu32" title="type thermite::Simd::Vu32">Vu32</a>) -&gt; V <span class="where fmt-newline">where<br>&nbsp;&nbsp;&nbsp;&nbsp;V: <a class="trait" href="../thermite/trait.SimdCasts.html" title="trait thermite::SimdCasts">SimdCasts</a>&lt;S&gt;,&nbsp;</span></code><a class='srclink' href='../src/thermite/buffer.rs.html#69-85' title='goto source code'>[src]</a></h4><div class='docblock'><p>Gathers values from the buffer using more efficient instructions where possible</p>
-<p>Out-of-bounds indices will return default values in the veector, rather than panicing or segfaulting.</p>
+<p>Out-of-bounds indices will return default values in the vector, rather than panicing or segfaulting.</p>
 <p>However, if the length of the buffer itself exceeds <code>i32::MAX</code> elements, the function will panic, as it uses signed 32-bit offsets
 for the gather instruction.</p>
 <p>If your buffer is expected to be larger than <code>i32::MAX</code> elements, use <code>VPtr</code> instead.</p>
