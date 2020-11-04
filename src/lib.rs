@@ -479,6 +479,12 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self;
     unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16);
 
+    /// Same as `self * sign.signum()` or `select(sign_bit(sign), -self, self)`, but more efficient where possible.
+    #[inline(always)]
+    fn combine_sign(self, sign: Self) -> Self {
+        self ^ (sign & Self::neg_zero())
+    }
+
     /// Compute the horizontal sum of all elements
     fn sum(self) -> Self::Element;
     /// Compute the horizontal product of all elements
