@@ -204,7 +204,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         let mut res = default;
         for i in 0..Self::NUM_ELEMENTS {
             if mask.extract_unchecked(i) {
-                res = res.replace_unchecked(i, *base_ptr.offset(indices.extract_unchecked(i) as isize));
+                res = res.replace_unchecked(i, base_ptr.offset(indices.extract_unchecked(i) as isize).read());
             }
         }
         res
@@ -595,16 +595,20 @@ pub trait SimdPointer<S: Simd + ?Sized>:
     + SimdPtrInternal<S, S::Vf32>
     + SimdPtrInternal<S, S::Vu64>
     + SimdPtrInternal<S, S::Vf64>
+where
+    <Self as SimdVectorBase<S>>::Element: pointer::AsUsize,
 {
 }
 
-impl<S: Simd + ?Sized, T> SimdPointer<S> for T where
+impl<S: Simd + ?Sized, T> SimdPointer<S> for T
+where
     T: SimdIntVector<S>
         + SimdPtrInternal<S, S::Vi32>
         + SimdPtrInternal<S, S::Vu32>
         + SimdPtrInternal<S, S::Vf32>
         + SimdPtrInternal<S, S::Vu64>
-        + SimdPtrInternal<S, S::Vf64>
+        + SimdPtrInternal<S, S::Vf64>,
+    <Self as SimdVectorBase<S>>::Element: pointer::AsUsize,
 {
 }
 

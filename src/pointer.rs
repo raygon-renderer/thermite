@@ -79,7 +79,15 @@ macro_rules! impl_associated {
 impl_associated!(i32, u32, u64, f32, f64);
 
 #[doc(hidden)]
-pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S> {
+pub trait AsUsize: Sized {
+    fn as_usize(self) -> usize;
+}
+
+#[doc(hidden)]
+pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S>
+where
+    <Self as SimdVectorBase<S>>::Element: AsUsize,
+{
     #[inline(always)]
     unsafe fn _mm_gather(self) -> V {
         self._mm_gather_masked(Mask::truthy(), V::default())
@@ -90,23 +98,41 @@ pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S> {
         self._mm_scatter_masked(Mask::truthy(), value)
     }
 
+    #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<S, V>, default: V) -> V {
-        unimplemented!()
-        //let mut res = default;
-        //for i in 0..Self::NUM_ELEMENTS {
-        //    if mask.extract_unchecked(i) {
-        //        res = res.replace_unchecked(i, *mem::transmute::<_, *const V::Element>(self.extract_unchecked(i)));
-        //    }
-        //}
-        //res
+        let mut res = default;
+        for i in 0..Self::NUM_ELEMENTS {
+            if mask.extract_unchecked(i) {
+                res = res.replace_unchecked(
+                    i,
+                    mem::transmute::<_, *const V::Element>(self.extract_unchecked(i).as_usize()).read(),
+                );
+            }
+        }
+        res
     }
 
+    #[inline(always)]
     unsafe fn _mm_scatter_masked(self, mask: Mask<S, V>, value: V) {
-        unimplemented!()
-        //for i in 0..Self::NUM_ELEMENTS {
-        //    if mask.extract_unchecked(i) {
-        //        *mem::transmute::<_, *mut V::Element>(self.extract_unchecked(i)) = value.extract_unchecked(i);
-        //    }
-        //}
+        for i in 0..Self::NUM_ELEMENTS {
+            if mask.extract_unchecked(i) {
+                mem::transmute::<_, *mut V::Element>(self.extract_unchecked(i).as_usize())
+                    .write(value.extract_unchecked(i));
+            }
+        }
+    }
+}
+
+impl AsUsize for u32 {
+    #[inline(always)]
+    fn as_usize(self) -> usize {
+        self as usize
+    }
+}
+
+impl AsUsize for u64 {
+    #[inline(always)]
+    fn as_usize(self) -> usize {
+        self as usize
     }
 }
