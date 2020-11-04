@@ -638,6 +638,12 @@
 <span id="637">637</span>
 <span id="638">638</span>
 <span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1119,6 +1125,12 @@
 
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_half_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="ident">f16</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_half_unaligned_unchecked</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="ident">f16</span>);
+
+    <span class="doccomment">/// Same as `self * sign.signum()` or `select(sign_bit(sign), -self, self)`, but more efficient where possible.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">combine_sign</span>(<span class="self">self</span>, <span class="ident">sign</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span> <span class="op">^</span> (<span class="ident">sign</span> <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">neg_zero</span>())
+    }
 
     <span class="doccomment">/// Compute the horizontal sum of all elements</span>
     <span class="kw">fn</span> <span class="ident">sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
