@@ -68,7 +68,7 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
     #[inline(always)]
     pub fn gather_checked(&self, indices: S::Vu32) -> V
     where
-        V: SimdCasts<S>,
+        V: SimdVector<S>,
     {
         let s = self.as_slice();
 
