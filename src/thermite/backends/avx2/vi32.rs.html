@@ -479,7 +479,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">bitmask</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u16</span> {
-        <span class="kw">unsafe</span> { <span class="ident">_mm256_movemask_ps</span>(<span class="ident">transmute</span>(<span class="self">self</span>)) <span class="kw">as</span> <span class="ident">u16</span> }
+        <span class="kw">unsafe</span> { <span class="ident">_mm256_movemask_ps</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="self">self</span>.<span class="ident">value</span>)) <span class="kw">as</span> <span class="ident">u16</span> }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
