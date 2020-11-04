@@ -392,7 +392,7 @@ impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
 
 /////////////////////////////////////
 
-impl SimdPtr<AVX2, Vi32> for u64x8<AVX2> {
+impl SimdPtrInternal<AVX2, Vi32> for u64x8<AVX2> {
     #[inline]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vi32>, default: Vi32) -> Vi32 {
         let mask = mask.value();
@@ -409,7 +409,7 @@ impl SimdPtr<AVX2, Vi32> for u64x8<AVX2> {
     }
 }
 
-impl SimdPtr<AVX2, Vu32> for u64x8<AVX2> {}
-impl SimdPtr<AVX2, Vf32> for u64x8<AVX2> {}
-impl SimdPtr<AVX2, Vf64> for u64x8<AVX2> {}
-impl SimdPtr<AVX2, Vu64> for u64x8<AVX2> {}
+impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {}
+impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {}
+impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {}
+impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {}

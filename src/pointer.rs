@@ -13,7 +13,7 @@ pub struct VPtr<S: Simd, T> {
 impl<S: Simd, T> VPtr<S, T>
 where
     T: SimdAssociatedVector<S>,
-    S::Vusize: SimdPtr<S, <T as SimdAssociatedVector<S>>::V>,
+    S::Vusize: SimdPtrInternal<S, <T as SimdAssociatedVector<S>>::V>,
 {
     #[inline(always)]
     pub fn splat(ptr: *mut T) -> Self {
@@ -65,6 +65,7 @@ pub trait SimdAssociatedVector<S: Simd> {
     type V: SimdVector<S>;
 }
 
+/// Associated vector type for a scalar type
 pub type AssociatedVector<S, T> = <T as SimdAssociatedVector<S>>::V;
 
 macro_rules! impl_associated {
@@ -78,7 +79,7 @@ macro_rules! impl_associated {
 impl_associated!(i32, u32, u64, f32, f64);
 
 #[doc(hidden)]
-pub trait SimdPtr<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S> {
+pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S> {
     #[inline(always)]
     unsafe fn _mm_gather(self) -> V {
         self._mm_gather_masked(Mask::truthy(), V::default())

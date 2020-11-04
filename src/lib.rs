@@ -13,7 +13,8 @@ pub mod backends;
 //mod double;
 
 mod pointer;
-pub use self::pointer::*;
+use self::pointer::*;
+pub use self::pointer::{AssociatedVector, VPtr};
 
 mod mask;
 pub use mask::Mask;
@@ -90,6 +91,7 @@ impl<S: Simd + ?Sized, T> SimdCasts<S> for T where
 {
 }
 
+/// Umbrella trait for SIMD vector element bounds
 pub trait SimdElement: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
 
 impl<T> SimdElement for T where T: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
@@ -585,23 +587,24 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     }
 }
 
+/// Guarantees the vector can be used as a pointer in `VPtr`
 pub trait SimdPointer<S: Simd + ?Sized>:
     SimdIntVector<S>
-    + SimdPtr<S, S::Vi32>
-    + SimdPtr<S, S::Vu32>
-    + SimdPtr<S, S::Vf32>
-    + SimdPtr<S, S::Vu64>
-    + SimdPtr<S, S::Vf64>
+    + SimdPtrInternal<S, S::Vi32>
+    + SimdPtrInternal<S, S::Vu32>
+    + SimdPtrInternal<S, S::Vf32>
+    + SimdPtrInternal<S, S::Vu64>
+    + SimdPtrInternal<S, S::Vf64>
 {
 }
 
 impl<S: Simd + ?Sized, T> SimdPointer<S> for T where
     T: SimdIntVector<S>
-        + SimdPtr<S, S::Vi32>
-        + SimdPtr<S, S::Vu32>
-        + SimdPtr<S, S::Vf32>
-        + SimdPtr<S, S::Vu64>
-        + SimdPtr<S, S::Vf64>
+        + SimdPtrInternal<S, S::Vi32>
+        + SimdPtrInternal<S, S::Vu32>
+        + SimdPtrInternal<S, S::Vf32>
+        + SimdPtrInternal<S, S::Vu64>
+        + SimdPtrInternal<S, S::Vf64>
 {
 }
 
@@ -630,11 +633,11 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
         + SimdVectorizedMath<Self>;
 
     #[cfg(target_pointer_width = "32")]
-    type Vusize: SimdPointer<Self, Element = u32>;
+    type Vusize: SimdIntVector<Self, Element = u32> + SimdPointer<Self, Element = u32>;
     //#[cfg(target_pointer_width = "32")]
     //type Visize: SimdIntVector<Self, i32> + SimdSignedVector<Self, i32>;
     #[cfg(target_pointer_width = "64")]
-    type Vusize: SimdPointer<Self, Element = u64>;
+    type Vusize: SimdIntVector<Self, Element = u64> + SimdPointer<Self, Element = u64>;
     //#[cfg(target_pointer_width = "64")]
     //type Visize: SimdIntVector<Self, i64> + SimdSignedVector<Self, i64>;
 }
