@@ -37,6 +37,10 @@ impl<S: Simd, V: SimdVectorBase<S>> fmt::Debug for SimdBuffer<S, V> {
 }
 
 impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
+    /// Allocates a new SIMD-aligned element buffer and zeroes the elements.
+    ///
+    /// Due to the alignment, it will round up the number of elements to the nearest multiple of `V::NUM_ELEMENTS`,
+    /// making the "wasted" space visible.
     pub fn alloc(count: usize) -> Self {
         unsafe {
             // round up to multiple of NUM_ELEMENTS
@@ -53,6 +57,34 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
         }
     }
 
+    /// Gathers values from the buffer using more efficient instructions where possible
+    ///
+    /// Out-of-bounds indices will return default values in the veector, rather than panicing or segfaulting.
+    ///
+    /// However, if the length of the buffer itself exceeds `i32::MAX` elements, the function will panic, as it uses signed 32-bit offsets
+    /// for the gather instruction.
+    ///
+    /// If your buffer is expected to be larger than `i32::MAX` elements, use `VPtr` instead.
+    #[inline(always)]
+    pub fn gather_checked(&self, indices: S::Vu32) -> V
+    where
+        V: SimdCasts<S>,
+    {
+        let s = self.as_slice();
+
+        assert!(s.len() <= (i32::MAX as usize));
+
+        unsafe {
+            V::gather_masked(
+                s.as_ptr(),
+                indices.cast(),
+                indices.lt(S::Vu32::splat(s.len() as u32)).cast_to(),
+                V::default(),
+            )
+        }
+    }
+
+    /// Fills the buffer with vectors using aligned stores
     #[inline]
     pub fn fill(&mut self, value: V) {
         unsafe {
@@ -113,6 +145,7 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
         unsafe { value.store_aligned_unchecked(s.as_mut_ptr().add(vector_index)) }
     }
 
+    #[inline(always)]
     fn layout(count: usize) -> Layout {
         // ensure the buffer has the proper size and alignment for SIMD values
         unsafe { Layout::from_size_align_unchecked(count * mem::size_of::<V::Element>(), V::ALIGNMENT) }
