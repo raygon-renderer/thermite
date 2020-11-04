@@ -8,7 +8,7 @@ pub struct Mask<S: Simd, V>(V, PhantomData<S>);
 
 impl<S: Simd, V> Debug for Mask<S, V>
 where
-    V: SimdVector<S>,
+    V: SimdVectorBase<S>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut t = f.debug_tuple("Mask");
@@ -21,7 +21,7 @@ where
 
 impl<S: Simd + ?Sized, V> Default for Mask<S, V>
 where
-    V: SimdVector<S>,
+    V: SimdVectorBase<S>,
 {
     #[inline(always)]
     fn default() -> Self {
@@ -43,18 +43,8 @@ impl<S: Simd + ?Sized, V> Mask<S, V> {
 
 impl<S: Simd + ?Sized, V> Mask<S, V>
 where
-    V: SimdVector<S>,
+    V: SimdVectorBase<S>,
 {
-    #[inline(always)]
-    pub fn from_value(v: V) -> Self {
-        v.ne(V::zero())
-    }
-
-    #[inline(always)]
-    pub fn cast_to<U: SimdCastFrom<S, V>>(self) -> Mask<S, U> {
-        U::from_cast_mask(self)
-    }
-
     /// Mask vector containing all true/non-zero lanes.
     #[inline(always)]
     pub fn truthy() -> Self {
@@ -65,6 +55,21 @@ where
     #[inline(always)]
     pub fn falsey() -> Self {
         Self::new(V::splat(Truthy::falsey()))
+    }
+}
+
+impl<S: Simd + ?Sized, V> Mask<S, V>
+where
+    V: SimdVector<S>,
+{
+    #[inline(always)]
+    pub fn from_value(v: V) -> Self {
+        v.ne(V::zero())
+    }
+
+    #[inline(always)]
+    pub fn cast_to<U: SimdCastFrom<S, V>>(self) -> Mask<S, U> {
+        U::from_cast_mask(self)
     }
 
     /// Returns `true` if all lanes are truthy
@@ -104,7 +109,7 @@ where
 
 impl<S: Simd + ?Sized, V> SimdVectorBase<S> for Mask<S, V>
 where
-    V: SimdVector<S>,
+    V: SimdVectorBase<S>,
 {
     type Element = bool;
 
