@@ -85,7 +85,7 @@ impl SimdBitwise<AVX2> for u32x8<AVX2> {
 
     #[inline(always)]
     fn bitmask(self) -> u16 {
-        unsafe { _mm256_movemask_ps(transmute(self)) as u16 }
+        unsafe { _mm256_movemask_ps(_mm256_castsi256_ps(self.value)) as u16 }
     }
 
     #[inline(always)]

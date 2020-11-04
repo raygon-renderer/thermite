@@ -143,7 +143,7 @@ impl SimdBitwise<SSE2> for i32x4<SSE2> {
 
     #[inline(always)]
     fn bitmask(self) -> u16 {
-        unsafe { _mm_movemask_ps(transmute(self)) as u16 }
+        unsafe { _mm_movemask_ps(_mm_castsi128_ps(self.value)) as u16 }
     }
 
     #[inline(always)]
@@ -176,7 +176,7 @@ impl SimdBitwise<SSE2> for f32x4<SSE2> {
 
     #[inline(always)]
     fn bitmask(self) -> u16 {
-        unsafe { _mm_movemask_ps(transmute(self)) as u16 }
+        unsafe { _mm_movemask_ps(self.value) as u16 }
     }
 
     #[inline(always)]

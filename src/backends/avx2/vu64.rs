@@ -105,8 +105,8 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     fn bitmask(self) -> u16 {
         unsafe {
-            let low = _mm256_movemask_pd(transmute(self.value.0)) as u16;
-            let high = _mm256_movemask_pd(transmute(self.value.1)) as u16;
+            let low = _mm256_movemask_pd(_mm256_castsi256_pd(self.value.0)) as u16;
+            let high = _mm256_movemask_pd(_mm256_castsi256_pd(self.value.1)) as u16;
 
             low | (high << 4)
         }
