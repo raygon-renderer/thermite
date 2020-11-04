@@ -48,6 +48,31 @@ impl SimdVectorBase<AVX2> for u32x8<AVX2> {
         *transmute::<&mut _, *mut Self::Element>(&mut self).add(index) = value;
         self
     }
+
+    #[inline(always)]
+    unsafe fn gather(base_ptr: *const Self::Element, indices: Vi32) -> Self {
+        Self::new(_mm256_i32gather_epi32(
+            base_ptr as _,
+            indices.value,
+            mem::size_of::<Self::Element>() as _,
+        ))
+    }
+
+    #[inline(always)]
+    unsafe fn gather_masked(
+        base_ptr: *const Self::Element,
+        indices: Vi32,
+        mask: Mask<AVX2, Self>,
+        default: Self,
+    ) -> Self {
+        Self::new(_mm256_mask_i32gather_epi32(
+            default.value,
+            base_ptr as _,
+            indices.value,
+            mask.value().value,
+            mem::size_of::<Self::Element>() as _,
+        ))
+    }
 }
 
 impl SimdBitwise<AVX2> for u32x8<AVX2> {

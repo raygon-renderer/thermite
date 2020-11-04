@@ -330,6 +330,7 @@ impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
         brute_force_convert!(&from; i32 => u64)
     }
 
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
         // convert as unsigned to avoid sign extend overhead
         from.value().into_bits().cast_to::<Vu64>().ne(Self::zero())
@@ -341,8 +342,33 @@ impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
         brute_force_convert!(&from; f64 => u64)
     }
 
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
         // zero-cost transmute for same-width
         Mask::new(from.value().into_bits())
     }
 }
+
+/////////////////////////////////////
+
+impl SimdPtr<AVX2, Vi32> for u64x8<AVX2> {
+    #[inline]
+    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vi32>, default: Vi32) -> Vi32 {
+        let mask = mask.value();
+        let mask_low = _mm256_castsi256_si128(mask.value);
+        let mask_high = _mm256_extracti128_si256(mask.value, 1);
+
+        let default_low = _mm256_castsi256_si128(default.value);
+        let default_high = _mm256_extracti128_si256(default.value, 1);
+
+        let low = _mm256_mask_i64gather_epi32(default_low, ptr::null(), self.value.0, mask_low, 1);
+        let high = _mm256_mask_i64gather_epi32(default_high, ptr::null(), self.value.1, mask_high, 1);
+
+        Vi32::new(_mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1))
+    }
+}
+
+impl SimdPtr<AVX2, Vu32> for u64x8<AVX2> {}
+impl SimdPtr<AVX2, Vf32> for u64x8<AVX2> {}
+impl SimdPtr<AVX2, Vf64> for u64x8<AVX2> {}
+impl SimdPtr<AVX2, Vu64> for u64x8<AVX2> {}

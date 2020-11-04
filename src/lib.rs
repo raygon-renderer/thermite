@@ -110,6 +110,12 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         Self::splat(value.into())
     }
 
+    #[inline(always)]
+    #[cfg(feature = "alloc")]
+    fn alloc(count: usize) -> SimdBuffer<S, Self> {
+        SimdBuffer::alloc(count)
+    }
+
     #[inline]
     fn extract(self, index: usize) -> Self::Element {
         assert!(index < Self::NUM_ELEMENTS);
@@ -176,9 +182,41 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         ptr::copy_nonoverlapping(&self as *const Self, dst as *mut Self, 1);
     }
 
-    #[cfg(feature = "alloc")]
-    fn alloc(count: usize) -> SimdBuffer<S, Self> {
-        SimdBuffer::alloc(count)
+    #[inline(always)]
+    unsafe fn gather(base_ptr: *const Self::Element, indices: S::Vi32) -> Self {
+        Self::gather_masked(base_ptr, indices, Mask::truthy(), Self::default())
+    }
+
+    #[inline(always)]
+    unsafe fn scatter(self, base_ptr: *mut Self::Element, indices: S::Vi32) {
+        self.scatter_masked(base_ptr, indices, Mask::truthy())
+    }
+
+    #[inline(always)]
+    unsafe fn gather_masked(
+        base_ptr: *const Self::Element,
+        indices: S::Vi32,
+        mask: Mask<S, Self>,
+        default: Self,
+    ) -> Self {
+        let mut res = default;
+        for i in 0..Self::NUM_ELEMENTS {
+            if mask.extract_unchecked(i) {
+                res = res.replace_unchecked(i, *base_ptr.offset(indices.extract_unchecked(i) as isize));
+            }
+        }
+        res
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_masked(self, base_ptr: *mut Self::Element, indices: S::Vi32, mask: Mask<S, Self>) {
+        for i in 0..Self::NUM_ELEMENTS {
+            if mask.extract_unchecked(i) {
+                base_ptr
+                    .offset(indices.extract_unchecked(i) as isize)
+                    .write(self.extract_unchecked(i));
+            }
+        }
     }
 }
 
@@ -547,6 +585,26 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     }
 }
 
+pub trait SimdPointer<S: Simd + ?Sized>:
+    SimdIntVector<S>
+    + SimdPtr<S, S::Vi32>
+    + SimdPtr<S, S::Vu32>
+    + SimdPtr<S, S::Vf32>
+    + SimdPtr<S, S::Vu64>
+    + SimdPtr<S, S::Vf64>
+{
+}
+
+impl<S: Simd + ?Sized, T> SimdPointer<S> for T where
+    T: SimdIntVector<S>
+        + SimdPtr<S, S::Vi32>
+        + SimdPtr<S, S::Vu32>
+        + SimdPtr<S, S::Vf32>
+        + SimdPtr<S, S::Vu64>
+        + SimdPtr<S, S::Vf64>
+{
+}
+
 /// SIMD Instruction set
 pub trait Simd: Debug + Send + Sync + Clone + Copy {
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
@@ -572,11 +630,11 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
         + SimdVectorizedMath<Self>;
 
     #[cfg(target_pointer_width = "32")]
-    type Vusize: SimdIntVector<Self, Element = u32>;
+    type Vusize: SimdPointer<Self, Element = u32>;
     //#[cfg(target_pointer_width = "32")]
     //type Visize: SimdIntVector<Self, i32> + SimdSignedVector<Self, i32>;
     #[cfg(target_pointer_width = "64")]
-    type Vusize: SimdIntVector<Self, Element = u64>;
+    type Vusize: SimdPointer<Self, Element = u64>;
     //#[cfg(target_pointer_width = "64")]
     //type Visize: SimdIntVector<Self, i64> + SimdSignedVector<Self, i64>;
 }
