@@ -75,25 +75,25 @@ where
     /// Returns `true` if all lanes are truthy
     #[inline(always)]
     pub fn all(self) -> bool {
-        unsafe { self.0._mm_all() }
+        unsafe { self.value()._mm_all() }
     }
 
     /// Returns `true` if any lanes are truthy
     #[inline(always)]
     pub fn any(self) -> bool {
-        unsafe { self.0._mm_any() }
+        unsafe { self.value()._mm_any() }
     }
 
     /// Returns `true` if all lanes are falsey
     #[inline(always)]
     pub fn none(self) -> bool {
-        unsafe { self.0._mm_none() }
+        unsafe { self.value()._mm_none() }
     }
 
     /// Counts the number of truthy lanes
     #[inline(always)]
     pub fn count(self) -> u32 {
-        self.0.bitmask().count_ones()
+        self.value().bitmask().count_ones()
     }
 
     /// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey
@@ -103,7 +103,7 @@ where
         V: SimdCastTo<S, U>,
         U: SimdVector<S>,
     {
-        unsafe { V::cast_mask(self).0._mm_blendv(t, f) }
+        unsafe { V::cast_mask(self).value()._mm_blendv(t, f) }
     }
 }
 
@@ -118,7 +118,7 @@ where
         Self::new(V::splat(Truthy::from_bool(value)))
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
         let mut mask = V::default();
         for i in 0..Self::NUM_ELEMENTS {
@@ -127,21 +127,33 @@ where
         Mask::new(mask)
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
         for i in 0..Self::NUM_ELEMENTS {
             *ptr.add(i) = self.extract_unchecked(i);
         }
     }
 
+    // The aligned versions of these two are scalar, so just call those
+
+    #[inline(always)]
+    unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
+        Self::load_aligned_unchecked(src)
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
+        self.store_aligned_unchecked(dst);
+    }
+
     #[inline(always)]
     unsafe fn extract_unchecked(self, index: usize) -> bool {
-        self.0.extract_unchecked(index) != Truthy::falsey()
+        self.value().extract_unchecked(index) != Truthy::falsey()
     }
 
     #[inline(always)]
     unsafe fn replace_unchecked(self, index: usize, value: bool) -> Self {
-        Self::new(self.0.replace_unchecked(index, Truthy::from_bool(value)))
+        Self::new(self.value().replace_unchecked(index, Truthy::from_bool(value)))
     }
 }
 
@@ -182,7 +194,7 @@ impl_ops!(@SHIFTS => Shr::shr, Shl::shl);
 
 impl<S: Simd + ?Sized, V> Mask<S, V>
 where
-    V: SimdVector<S>,
+    V: SimdBitwise<S>,
 {
     pub const FULL_BITMASK: u16 = V::FULL_BITMASK;
 

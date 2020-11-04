@@ -169,8 +169,15 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         unsafe { self.store_unaligned_unchecked(dst.as_mut_ptr()) };
     }
 
-    unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self;
-    unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element);
+    #[inline(always)]
+    unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self {
+        Self::load_unaligned_unchecked(src)
+    }
+
+    #[inline(always)]
+    unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element) {
+        self.store_unaligned_unchecked(dst);
+    }
 
     #[inline(always)]
     unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
