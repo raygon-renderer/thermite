@@ -370,12 +370,9 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn le(self, other: Self) -> Mask<S, Self> {
         other.ge(self)
     }
-    fn gt(self, other: Self) -> Mask<S, Self> {
-        other.lt(self)
-    }
-    fn ge(self, other: Self) -> Mask<S, Self> {
-        other.le(self)
-    }
+
+    fn gt(self, other: Self) -> Mask<S, Self>;
+    fn ge(self, other: Self) -> Mask<S, Self>;
 
     #[doc(hidden)]
     unsafe fn _mm_add(self, rhs: Self) -> Self;
