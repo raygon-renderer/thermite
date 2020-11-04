@@ -397,6 +397,10 @@
 <span id="396">396</span>
 <span id="397">397</span>
 <span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -405,19 +409,13 @@
 <span class="doccomment">/// Set of vectorized special functions optimized for both single and double precision</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="doccomment">/// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">scale</span>(<span class="self">self</span>, <span class="ident">in_min</span>: <span class="self">Self</span>, <span class="ident">in_max</span>: <span class="self">Self</span>, <span class="ident">out_min</span>: <span class="self">Self</span>, <span class="ident">out_max</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        ((<span class="self">self</span> <span class="op">-</span> <span class="ident">in_min</span>) <span class="op">/</span> (<span class="ident">in_max</span> <span class="op">-</span> <span class="ident">in_min</span>)).<span class="ident">mul_add</span>(<span class="ident">out_max</span> <span class="op">-</span> <span class="ident">out_min</span>, <span class="ident">out_min</span>)
-    }
+    <span class="kw">fn</span> <span class="ident">scale</span>(<span class="self">self</span>, <span class="ident">in_min</span>: <span class="self">Self</span>, <span class="ident">in_max</span>: <span class="self">Self</span>, <span class="ident">out_min</span>: <span class="self">Self</span>, <span class="ident">out_max</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Linearly interpolates between `a` and `b` using `self`</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations</span>
     <span class="doccomment">/// to improve performance while maintaining precision</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">lerp</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">b</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">b</span> <span class="op">-</span> <span class="ident">a</span>, <span class="ident">a</span>)
-    }
+    <span class="kw">fn</span> <span class="ident">lerp</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">b</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes the sine of a vector.</span>
     <span class="kw">fn</span> <span class="ident">sin</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
@@ -492,6 +490,16 @@
     <span class="ident">T</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
     <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf</span> <span class="op">=</span> <span class="ident">T</span><span class="op">&gt;</span>,
 {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">scale</span>(<span class="self">self</span>, <span class="ident">in_min</span>: <span class="self">Self</span>, <span class="ident">in_max</span>: <span class="self">Self</span>, <span class="ident">out_min</span>: <span class="self">Self</span>, <span class="ident">out_max</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        ((<span class="self">self</span> <span class="op">-</span> <span class="ident">in_min</span>) <span class="op">/</span> (<span class="ident">in_max</span> <span class="op">-</span> <span class="ident">in_min</span>)).<span class="ident">mul_add</span>(<span class="ident">out_max</span> <span class="op">-</span> <span class="ident">out_min</span>, <span class="ident">out_min</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">lerp</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">b</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">b</span> <span class="op">-</span> <span class="ident">a</span>, <span class="ident">a</span>)
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">sin</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">sin</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">cos</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">cos</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">tan</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">tan</span>(<span class="self">self</span>) }
