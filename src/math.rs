@@ -52,6 +52,8 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     fn exph(self) -> Self;
     /// Binary exponential function, returns `2^(self)`
     fn exp2(self) -> Self;
+    /// Base-10 exponential function, returns `10^(self)`
+    fn exp10(self) -> Self;
     /// Exponential function minus one, `e^(self) - 1.0`,
     /// special implementation that is more accurate if the numbr if closer to zero.
     fn exp_m1(self) -> Self;
@@ -113,6 +115,7 @@ where
     #[inline(always)] fn exp(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp(self) }
     #[inline(always)] fn exph(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exph(self) }
     #[inline(always)] fn exp2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self) }
+    #[inline(always)] fn exp10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10(self) }
     #[inline(always)] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1(self) }
     #[inline(always)] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
     #[inline(always)] fn powi(self, e: S::Vi32) -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
@@ -170,6 +173,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     fn exp(x: Self::Vf) -> Self::Vf;
     fn exph(x: Self::Vf) -> Self::Vf;
     fn exp2(x: Self::Vf) -> Self::Vf;
+    fn exp10(x: Self::Vf) -> Self::Vf;
     fn exp_m1(x: Self::Vf) -> Self::Vf {
         Self::exp(x) - Self::Vf::one()
     }
@@ -214,6 +218,114 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     fn erfc(x: Self::Vf) -> Self::Vf {
         Self::Vf::one() - Self::erf(x)
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExpMode {
+    Exp,
+    Expm1,
+    Exph,
+    Pow2,
+    Pow10,
+}
+
+#[inline(always)]
+fn pow2n<S: Simd>(n: Vf32<S>) -> Vf32<S> {
+    let pow2_23 = Vf32::<S>::splat(8388608.0);
+    let bias = Vf32::<S>::splat(127.0);
+
+    (n + (bias + pow2_23)) << 23
+}
+
+#[inline(always)]
+fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
+    use std::f32::consts::{LN_10, LN_2, LOG10_2, LOG2_E};
+
+    let p0expf = Vf32::<S>::splat(1.0 / 2.0);
+    let p1expf = Vf32::<S>::splat(1.0 / 6.0);
+    let p2expf = Vf32::<S>::splat(1.0 / 24.0);
+    let p3expf = Vf32::<S>::splat(1.0 / 120.0);
+    let p4expf = Vf32::<S>::splat(1.0 / 720.0);
+    let p5expf = Vf32::<S>::splat(1.0 / 5040.0);
+
+    let mut x = x0;
+    let mut r = Vf32::<S>::zero();
+
+    let mut max_x = 0.0;
+
+    match mode {
+        ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
+            max_x = if mode == ExpMode::Exp { 87.3 } else { 89.0 };
+
+            let ln2f_hi = Vf32::<S>::splat(0.693359375);
+            let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
+
+            r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
+
+            x = r.nmul_add(ln2f_hi, x); // x -= r * ln2f_hi;
+            x = r.nmul_add(ln2f_lo, x); // x -= r * ln2f_lo;
+        }
+        ExpMode::Pow2 => {
+            max_x = 126.0;
+
+            r = x0.round();
+
+            x -= r;
+            x *= Vf32::<S>::splat(LN_2);
+        }
+        ExpMode::Pow10 => {
+            max_x = 37.9;
+
+            let log10_2_hi = Vf32::<S>::splat(0.301025391); // log10(2) in two parts
+            let log10_2_lo = Vf32::<S>::splat(4.60503907E-6);
+
+            r = (x0 * Vf32::<S>::splat(LN_10 * LOG2_E)).round();
+
+            x = r.nmul_add(log10_2_hi, x); // x -= r * log10_2_hi;
+            x = r.nmul_add(log10_2_lo, x); // x -= r * log10_2_lo;
+            x *= Vf32::<S>::splat(LN_10);
+        }
+    }
+
+    let x2 = x * x;
+    let x3 = x2 * x;
+    let x4 = x2 * x2;
+
+    let mut z = x
+        .mul_add(p3expf, p2expf)
+        .mul_add(x2, x4.mul_add(x.mul_add(p5expf, p4expf), x.mul_add(p1expf, p0expf)))
+        .mul_add(x2, x);
+
+    if mode == ExpMode::Exph {
+        r -= Vf32::<S>::one();
+    }
+
+    let n2 = pow2n::<S>(r);
+
+    if mode == ExpMode::Expm1 {
+        z = z.mul_add(n2, n2 - Vf32::<S>::one());
+    } else {
+        z = (z + Vf32::<S>::one()) * n2;
+    }
+
+    let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite().cast_to();
+
+    if !in_range.all() {
+        let sign_bit_mask = (x0 & Vf32::<S>::neg_zero()).into_bits().ne(Vu32::<S>::zero());
+        let is_nan = x0.is_nan();
+
+        let underflow_value = if mode == ExpMode::Expm1 {
+            Vf32::<S>::neg_one()
+        } else {
+            Vf32::<S>::zero()
+        };
+
+        r = sign_bit_mask.select(underflow_value, Vf32::<S>::infinity());
+        z = in_range.select(z, r);
+        z = is_nan.select(x0, z);
+    }
+
+    z
 }
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
@@ -268,11 +380,40 @@ where
         let signcos = Vf32::<S>::from_bits(((q + Vu32::<S>::one()) & Vu32::<S>::splat(2)) << 30);
 
         // combine signs
-        (sin1 ^ (signsin & Vf32::<S>::neg_zero()), cos1 ^ signcos)
+        (sin1.combine_sign(signsin), cos1 ^ signcos)
     }
 
-    fn sinh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    #[inline(always)]
+    fn sinh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(1.66667160211E-1);
+        let r1 = Vf32::<S>::splat(8.33028376239E-3);
+        let r2 = Vf32::<S>::splat(2.03721912945E-4);
+
+        let x = x0.abs();
+
+        let x_small = x.le(Vf32::<S>::one());
+
+        let mut y1 = Vf32::<S>::zero();
+        let mut y2 = Vf32::<S>::zero();
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+
+            y1 = x4.mul_add(r2, x2.mul_add(r1, r0)).mul_add(x2 * x, x);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = Self::exph(x);
+            y2 -= Vf32::<S>::splat(0.25) / y2;
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     fn tanh(x: Self::Vf) -> Self::Vf {
@@ -299,15 +440,27 @@ where
     fn atanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
+    #[inline(always)]
     fn exp(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_f_internal::<S>(x, ExpMode::Exp)
     }
+
+    #[inline(always)]
     fn exph(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_f_internal::<S>(x, ExpMode::Exph)
     }
+
+    #[inline(always)]
     fn exp2(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_f_internal::<S>(x, ExpMode::Pow2)
     }
+
+    #[inline(always)]
+    fn exp10(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Pow10)
+    }
+
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
@@ -376,6 +529,9 @@ where
         unimplemented!()
     }
     fn exp2(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+    fn exp10(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
