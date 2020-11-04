@@ -393,7 +393,15 @@ impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
 /////////////////////////////////////
 
 impl SimdPtrInternal<AVX2, Vi32> for u64x8<AVX2> {
-    #[inline]
+    #[inline(always)]
+    unsafe fn _mm_gather(self) -> Vi32 {
+        let low = _mm256_i64gather_epi32(ptr::null(), self.value.0, 1);
+        let high = _mm256_i64gather_epi32(ptr::null(), self.value.1, 1);
+
+        Vi32::new(_mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1))
+    }
+
+    #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vi32>, default: Vi32) -> Vi32 {
         let mask = mask.value();
         let mask_low = _mm256_castsi256_si128(mask.value);
@@ -411,6 +419,11 @@ impl SimdPtrInternal<AVX2, Vi32> for u64x8<AVX2> {
 
 impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {
     #[inline(always)]
+    unsafe fn _mm_gather(self) -> Vu32 {
+        <Self as SimdPtrInternal<AVX2, Vi32>>::_mm_gather(self).into_bits()
+    }
+
+    #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu32>, default: Vu32) -> Vu32 {
         // just load as Vi32 and transmute
         self._mm_gather_masked(mask.cast_to::<Vi32>(), default.cast())
@@ -419,6 +432,14 @@ impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {
 }
 
 impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather(self) -> Vf32 {
+        let low = _mm256_i64gather_ps(ptr::null(), self.value.0, 1);
+        let high = _mm256_i64gather_ps(ptr::null(), self.value.1, 1);
+
+        Vf32::new(_mm256_insertf128_ps(_mm256_castps128_ps256(low), high, 1))
+    }
+
     #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf32>, default: Vf32) -> Vf32 {
         let mask = mask.value();
@@ -437,6 +458,14 @@ impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {
 
 impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {
     #[inline(always)]
+    unsafe fn _mm_gather(self) -> Vf64 {
+        Vf64::new((
+            _mm256_i64gather_pd(ptr::null(), self.value.0, 1),
+            _mm256_i64gather_pd(ptr::null(), self.value.1, 1),
+        ))
+    }
+
+    #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf64>, default: Vf64) -> Vf64 {
         let mask = mask.value();
 
@@ -448,6 +477,14 @@ impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {
 }
 
 impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {
+    #[inline(always)]
+    unsafe fn _mm_gather(self) -> Vu64 {
+        Vu64::new((
+            _mm256_i64gather_epi64(ptr::null(), self.value.0, 1),
+            _mm256_i64gather_epi64(ptr::null(), self.value.1, 1),
+        ))
+    }
+
     #[inline(always)]
     unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu64>, default: Vu64) -> Vu64 {
         let mask = mask.value();
