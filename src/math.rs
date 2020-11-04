@@ -4,6 +4,21 @@ use crate::*;
 
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
+    /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
+    #[inline(always)]
+    fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+        ((self - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
+    }
+
+    /// Linearly interpolates between `a` and `b` using `self`
+    ///
+    /// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations
+    /// to improve performance while maintaining precision
+    #[inline(always)]
+    fn lerp(self, a: Self, b: Self) -> Self {
+        self.mul_add(b - a, a)
+    }
+
     /// Computes the sine of a vector.
     fn sin(self) -> Self;
     /// Computes the cosine of a vector.

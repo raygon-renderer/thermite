@@ -316,9 +316,6 @@ pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
     }
 }
 
-/// Alias for vector mask type
-// pub type MaskTy<S, V, U> = <V as SimdMasked<S, U>>::Mask;
-
 // TODO: Require op bounds for both Self and T
 /// Defines common operations on numeric vectors
 pub trait SimdVector<S: Simd + ?Sized>:
@@ -524,7 +521,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     fn sqrt(self) -> Self;
 
-    /// Compute the reciprocal of the square root `(1 / sqrt(x))`
+    /// Compute the approximate reciprocal of the square root `(1 / sqrt(x))`
     #[inline(always)]
     fn rsqrt(self) -> Self {
         self.sqrt().recepr()
@@ -533,7 +530,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible
     #[inline(always)]
     fn rsqrt_precise(self) -> Self {
-        self.sqrt().recepr()
+        Self::one() / self.sqrt()
     }
 
     /// Computes the approximate reciprocal/inverse of each value
@@ -556,21 +553,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     #[inline(always)]
     fn saturate(self) -> Self {
         self.clamp(Self::zero(), Self::one())
-    }
-
-    /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
-    #[inline]
-    fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
-        ((self - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
-    }
-
-    /// Linearly interpolates between `a` and `b` using `self`
-    ///
-    /// Equivalent to `(1 - t) * a + t * b`, but uses fused multiply-add operations
-    /// to improve performance while maintaining precision
-    #[inline(always)]
-    fn lerp(self, a: Self, b: Self) -> Self {
-        self.mul_add(b - a, a)
     }
 
     #[inline(always)]
