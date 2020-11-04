@@ -232,6 +232,18 @@
 <span id="231">231</span>
 <span id="232">232</span>
 <span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
@@ -310,25 +322,25 @@
     <span class="doccomment">/// Returns `true` if all lanes are truthy</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_all</span>() }
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_all</span>() }
     }
 
     <span class="doccomment">/// Returns `true` if any lanes are truthy</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_any</span>() }
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_any</span>() }
     }
 
     <span class="doccomment">/// Returns `true` if all lanes are falsey</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="number">0</span>.<span class="ident">_mm_none</span>() }
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_none</span>() }
     }
 
     <span class="doccomment">/// Counts the number of truthy lanes</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u32</span> {
-        <span class="self">self</span>.<span class="number">0</span>.<span class="ident">bitmask</span>().<span class="ident">count_ones</span>()
+        <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">bitmask</span>().<span class="ident">count_ones</span>()
     }
 
     <span class="doccomment">/// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey</span>
@@ -338,7 +350,7 @@
         <span class="ident">V</span>: <span class="ident">SimdCastTo</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span>,
         <span class="ident">U</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
     {
-        <span class="kw">unsafe</span> { <span class="ident">V</span>::<span class="ident">cast_mask</span>(<span class="self">self</span>).<span class="number">0</span>.<span class="ident">_mm_blendv</span>(<span class="ident">t</span>, <span class="ident">f</span>) }
+        <span class="kw">unsafe</span> { <span class="ident">V</span>::<span class="ident">cast_mask</span>(<span class="self">self</span>).<span class="ident">value</span>().<span class="ident">_mm_blendv</span>(<span class="ident">t</span>, <span class="ident">f</span>) }
     }
 }
 
@@ -353,7 +365,7 @@
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="ident">value</span>)))
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_aligned_unchecked</span>(<span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">default</span>();
         <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
@@ -362,21 +374,33 @@
         <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="ident">mask</span>)
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_aligned_unchecked</span>(<span class="self">self</span>, <span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
         <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
             <span class="kw-2">*</span><span class="ident">ptr</span>.<span class="ident">add</span>(<span class="ident">i</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>);
         }
     }
 
+    <span class="comment">// The aligned versions of these two are scalar, so just call those</span>
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">load_aligned_unchecked</span>(<span class="ident">src</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_unaligned_unchecked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
+        <span class="self">self</span>.<span class="ident">store_aligned_unchecked</span>(<span class="ident">dst</span>);
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">extract_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="number">0</span>.<span class="ident">extract_unchecked</span>(<span class="ident">index</span>) <span class="op">!=</span> <span class="ident">Truthy</span>::<span class="ident">falsey</span>()
+        <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">extract_unchecked</span>(<span class="ident">index</span>) <span class="op">!=</span> <span class="ident">Truthy</span>::<span class="ident">falsey</span>()
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">replace_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>, <span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="number">0</span>.<span class="ident">replace_unchecked</span>(<span class="ident">index</span>, <span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="ident">value</span>)))
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="ident">value</span>().<span class="ident">replace_unchecked</span>(<span class="ident">index</span>, <span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="ident">value</span>)))
     }
 }
 
@@ -417,7 +441,7 @@
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span>
 <span class="kw">where</span>
-    <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+    <span class="ident">V</span>: <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
     <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">FULL_BITMASK</span>: <span class="ident">u16</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">FULL_BITMASK</span>;
 
