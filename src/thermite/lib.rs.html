@@ -587,6 +587,64 @@
 <span id="586">586</span>
 <span id="587">587</span>
 <span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
+<span id="608">608</span>
+<span id="609">609</span>
+<span id="610">610</span>
+<span id="611">611</span>
+<span id="612">612</span>
+<span id="613">613</span>
+<span id="614">614</span>
+<span id="615">615</span>
+<span id="616">616</span>
+<span id="617">617</span>
+<span id="618">618</span>
+<span id="619">619</span>
+<span id="620">620</span>
+<span id="621">621</span>
+<span id="622">622</span>
+<span id="623">623</span>
+<span id="624">624</span>
+<span id="625">625</span>
+<span id="626">626</span>
+<span id="627">627</span>
+<span id="628">628</span>
+<span id="629">629</span>
+<span id="630">630</span>
+<span id="631">631</span>
+<span id="632">632</span>
+<span id="633">633</span>
+<span id="634">634</span>
+<span id="635">635</span>
+<span id="636">636</span>
+<span id="637">637</span>
+<span id="638">638</span>
+<span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
+<span id="646">646</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -700,6 +758,12 @@
         <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">value</span>.<span class="ident">into</span>())
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">alloc</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="ident">SimdBuffer</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">SimdBuffer</span>::<span class="ident">alloc</span>(<span class="ident">count</span>)
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">fn</span> <span class="ident">extract</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
         <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">index</span> <span class="op">&lt;</span> <span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span>);
@@ -766,9 +830,41 @@
         <span class="ident">ptr</span>::<span class="ident">copy_nonoverlapping</span>(<span class="kw-2">&amp;</span><span class="self">self</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>, <span class="ident">dst</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>, <span class="number">1</span>);
     }
 
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">alloc</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="ident">SimdBuffer</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident">SimdBuffer</span>::<span class="ident">alloc</span>(<span class="ident">count</span>)
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather</span>(<span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">gather_masked</span>(<span class="ident">base_ptr</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>(), <span class="self">Self</span>::<span class="ident">default</span>())
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter</span>(<span class="self">self</span>, <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) {
+        <span class="self">self</span>.<span class="ident">scatter_masked</span>(<span class="ident">base_ptr</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>())
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked</span>(
+        <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>,
+        <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>,
+        <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>,
+        <span class="ident">default</span>: <span class="self">Self</span>,
+    ) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">default</span>;
+        <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
+            <span class="kw">if</span> <span class="ident">mask</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) {
+                <span class="ident">res</span> <span class="op">=</span> <span class="ident">res</span>.<span class="ident">replace_unchecked</span>(<span class="ident">i</span>, <span class="kw-2">*</span><span class="ident">base_ptr</span>.<span class="ident">offset</span>(<span class="ident">indices</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) <span class="kw">as</span> <span class="ident">isize</span>));
+            }
+        }
+        <span class="ident">res</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter_masked</span>(<span class="self">self</span>, <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>) {
+        <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
+            <span class="kw">if</span> <span class="ident">mask</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) {
+                <span class="ident">base_ptr</span>
+                    .<span class="ident">offset</span>(<span class="ident">indices</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) <span class="kw">as</span> <span class="ident">isize</span>)
+                    .<span class="ident">write</span>(<span class="self">self</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>));
+            }
+        }
     }
 }
 
@@ -1137,6 +1233,26 @@
     }
 }
 
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>:
+    <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf64</span><span class="op">&gt;</span>
+{
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">T</span><span class="op">&gt;</span> <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span>
+    <span class="ident">T</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf32</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdPtr</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">S</span>::<span class="ident">Vf64</span><span class="op">&gt;</span>
+{
+}
+
 <span class="doccomment">/// SIMD Instruction set</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> {
     <span class="comment">//type Vi8: SimdIntVector&lt;Self, Element = i8&gt; + SimdSignedVector&lt;Self, i8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
@@ -1162,11 +1278,11 @@
         <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
     <span class="comment">//#[cfg(target_pointer_width = &quot;32&quot;)]</span>
     <span class="comment">//type Visize: SimdIntVector&lt;Self, i32&gt; + SimdSignedVector&lt;Self, i32&gt;;</span>
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;64&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
     <span class="comment">//#[cfg(target_pointer_width = &quot;64&quot;)]</span>
     <span class="comment">//type Visize: SimdIntVector&lt;Self, i64&gt; + SimdSignedVector&lt;Self, i64&gt;;</span>
 }

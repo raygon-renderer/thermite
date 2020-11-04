@@ -308,6 +308,31 @@
 <span id="307">307</span>
 <span id="308">308</span>
 <span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -358,6 +383,31 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">replace_unchecked</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>, <span class="ident">value</span>: <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw-2">*</span><span class="ident">transmute</span>::<span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw">_</span>, <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>).<span class="ident">add</span>(<span class="ident">index</span>) <span class="op">=</span> <span class="ident">value</span>;
         <span class="self">self</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather</span>(<span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_i32gather_epi32</span>(
+            <span class="ident">base_ptr</span> <span class="kw">as</span> <span class="kw">_</span>,
+            <span class="ident">indices</span>.<span class="ident">value</span>,
+            <span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>() <span class="kw">as</span> <span class="kw">_</span>,
+        ))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked</span>(
+        <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>,
+        <span class="ident">indices</span>: <span class="ident">Vi32</span>,
+        <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span>,
+        <span class="ident">default</span>: <span class="self">Self</span>,
+    ) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_mask_i32gather_epi32</span>(
+            <span class="ident">default</span>.<span class="ident">value</span>,
+            <span class="ident">base_ptr</span> <span class="kw">as</span> <span class="kw">_</span>,
+            <span class="ident">indices</span>.<span class="ident">value</span>,
+            <span class="ident">mask</span>.<span class="ident">value</span>().<span class="ident">value</span>,
+            <span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>() <span class="kw">as</span> <span class="kw">_</span>,
+        ))
     }
 }
 
