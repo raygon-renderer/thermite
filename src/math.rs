@@ -288,13 +288,7 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     }
 
     let x2 = x * x;
-    let x3 = x2 * x;
-    let x4 = x2 * x2;
-
-    let mut z = x
-        .mul_add(p3expf, p2expf)
-        .mul_add(x2, x4.mul_add(x.mul_add(p5expf, p4expf), x.mul_add(p1expf, p0expf)))
-        .mul_add(x2, x);
+    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_add(x2, x);
 
     if mode == ExpMode::Exph {
         r -= Vf32::<S>::one();
@@ -434,9 +428,7 @@ where
         // if any are small
         if bitmask != 0 {
             let x2 = x * x;
-            let x4 = x2 * x2;
-
-            y1 = x4.mul_add(r2, x2.mul_add(r1, r0)).mul_add(x2 * x, x);
+            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
         }
 
         // if not all are small
@@ -468,9 +460,8 @@ where
         if bitmask != 0 {
             let x2 = x * x;
             let x4 = x2 * x2;
-            let x8 = x4 * x4;
 
-            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
         }
 
         if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
