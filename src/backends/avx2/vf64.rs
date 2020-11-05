@@ -530,6 +530,31 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     fn sqrt(self) -> Self {
         Self::new(unsafe { (_mm256_sqrt_pd(self.value.0), _mm256_sqrt_pd(self.value.1)) })
     }
+
+    #[inline(always)]
+    fn is_infinite(self) -> Mask<AVX2, Self> {
+        (self << 1).eq(Self::splat(f64::from_bits(0xFFE0000000000000)))
+    }
+
+    #[inline(always)]
+    fn is_finite(self) -> Mask<AVX2, Self> {
+        let tmp = Self::splat(f64::from_bits(0xFFE0000000000000));
+        ((self << 1) & tmp).ne(tmp)
+    }
+
+    #[inline(always)]
+    fn is_subnormal(self) -> Mask<AVX2, Self> {
+        let m: Self = Self::splat(f64::from_bits(0xFFE0000000000000));
+        let u: Self = self << 1;
+        let zero = Self::zero();
+
+        (u & m).eq(zero) & m.and_not(u).ne(zero)
+    }
+
+    #[inline(always)]
+    fn is_zero_or_subnormal(self) -> Mask<AVX2, Self> {
+        (self & Self::splat(f64::from_bits(0x7FF0000000000000))).eq(Self::zero())
+    }
 }
 
 impl_ops!(@UNARY f64x8 AVX2 => Not::not, Neg::neg);

@@ -580,7 +580,13 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     #[inline(always)]
     fn is_normal(self) -> Mask<S, Self> {
-        !(self.is_nan() | self.is_infinite() | self.eq(Self::zero()))
+        self.is_finite() & self.is_subnormal().and_not(self.ne(Self::zero()))
+    }
+
+    fn is_subnormal(self) -> Mask<S, Self>;
+
+    fn is_zero_or_subnormal(self) -> Mask<S, Self> {
+        self.is_subnormal() | self.eq(Self::zero())
     }
 
     #[inline(always)]
