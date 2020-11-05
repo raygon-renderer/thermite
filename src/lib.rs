@@ -434,7 +434,7 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
         self.abs() * sign.signum()
     }
 
-    /// Returns `-1` is less than zero, `+1` otherwise.
+    /// Returns `-1` if less than zero, `+1` otherwise.
     #[inline(always)]
     fn signum(self) -> Self {
         self.is_negative().select(Self::neg_one(), Self::one())
