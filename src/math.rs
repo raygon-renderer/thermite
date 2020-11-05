@@ -20,7 +20,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes the tangent of a vector.
     fn tan(self) -> Self;
 
-    /// Computes both the sine and cosine of a vector.
+    /// Computes both the sine and cosine of a vector together faster than they would be computed separately.
+    ///
+    /// If you need both, use this.
     fn sin_cos(self) -> (Self, Self);
 
     /// Computes the hyperbolic-sine of a vector.
@@ -188,9 +190,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
         e = e.abs();
 
         let zero = Vi32::<S>::zero();
+        let one = Vi32::<S>::one();
 
         loop {
-            res = (e & Vi32::<S>::one()).ne(zero).select(res * x, res);
+            res = (e & one).ne(zero).select(res * x, res);
 
             e >>= 1;
 
@@ -304,7 +307,7 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
     let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite().cast_to();
 
-    if !in_range.all() {
+    if unlikely!(!in_range.all()) {
         let sign_bit_mask = (x0 & Vf32::<S>::neg_zero()).into_bits().ne(Vu32::<S>::zero());
         let is_nan = x0.is_nan();
 
@@ -579,7 +582,7 @@ where
 
         let both_infinite = (x.is_infinite() & y.is_infinite());
 
-        if both_infinite.any() {
+        if unlikely!(both_infinite.any()) {
             x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
             y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
         }

@@ -1,5 +1,8 @@
-#![cfg_attr(feature = "nightly", feature(stdsimd))]
+#![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics))]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
+
+#[macro_use]
+mod macros;
 
 use half::f16;
 
