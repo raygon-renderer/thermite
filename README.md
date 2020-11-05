@@ -10,3 +10,13 @@ However, unlike SIMDeez, all vectors within a supported instruction set have the
 Furthermore, unlike `packed_simd`, Thermite compiles on Stable Rust, though there is a `nightly` feature flag for hardware-accelerated half-precision float conversions. (It's currently marked unstable for some reason).
 
 Thermite also provides a set of high-performance vectorized special math functions that can take advantage of all instruction sets, with specialized versions for single and double precision floats.
+
+## Cargo `--features`
+
+### `alloc`
+
+The `alloc` feature enables aligned allocation of buffers suitable to reading/writing to with SIMD.
+
+### `nightly`
+
+The `nightly` feature enables nightly-only optimizations such as accelerated half-precision encoding/decoding, as well as some extra optimization hints for likely and unlikely branching.
