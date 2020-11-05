@@ -323,6 +323,44 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 }
 
 #[inline(always)]
+fn asin_f_internal<S: Simd>(x: Vf32<S>, acos: bool) -> Vf32<S> {
+    let p4asinf = Vf32::<S>::splat(4.2163199048E-2);
+    let p3asinf = Vf32::<S>::splat(2.4181311049E-2);
+    let p2asinf = Vf32::<S>::splat(4.5470025998E-2);
+    let p1asinf = Vf32::<S>::splat(7.4953002686E-2);
+    let p0asinf = Vf32::<S>::splat(1.6666752422E-1);
+
+    let xa = x.abs();
+
+    let is_big = xa.gt(Vf32::<S>::splat(0.5));
+
+    let x1 = Vf32::<S>::splat(0.5) * (Vf32::<S>::one() - xa);
+    let x2 = xa * xa;
+    let x3 = is_big.select(x1, x2);
+    let xb = x1.sqrt();
+    let x4 = is_big.select(xb, xa);
+
+    let xx = x3;
+    let xx2 = xx * xx;
+    let xx4 = xx2 * xx2;
+
+    let z = poly_4(xx, xx2, xx4, p0asinf, p1asinf, p2asinf, p3asinf, p4asinf).mul_add(x3 * x4, x4);
+
+    let z1 = z + z;
+
+    if acos {
+        let z1 = x.is_positive().select(Vf32::<S>::splat(std::f32::consts::PI) - z1, z1);
+        let z2 = Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - z.combine_sign(x);
+
+        is_big.select(z1, z2)
+    } else {
+        let z1 = Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - z1;
+
+        is_big.select(z1, z).combine_sign(x)
+    }
+}
+
+#[inline(always)]
 fn poly_2<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, c0: V, c1: V, c2: V) -> V {
     x2.mul_add(c2, x.mul_add(c1, c0))
 }
@@ -440,6 +478,7 @@ where
         x_small.select(y1, y2).combine_sign(x0)
     }
 
+    #[inline(always)]
     fn tanh(x0: Self::Vf) -> Self::Vf {
         let r0 = Vf32::<S>::splat(-3.33332819422E-1);
         let r1 = Vf32::<S>::splat(1.33314422036E-1);
@@ -464,6 +503,7 @@ where
             y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
         }
 
+        // if not all are small
         if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
             y2 = (x + x).exp();
             y2 = Vf32::<S>::one() - Vf32::<S>::splat(2.0) / (y2 + Vf32::<S>::one());
@@ -477,18 +517,97 @@ where
         y1.combine_sign(x0)
     }
 
+    #[inline(always)]
     fn asin(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        asin_f_internal::<S>(x, false)
     }
+
+    #[inline(always)]
     fn acos(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        asin_f_internal::<S>(x, true)
     }
-    fn atan(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+
+    #[inline(always)]
+    fn atan(y: Self::Vf) -> Self::Vf {
+        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
+        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
+        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
+        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
+
+        let t = y.abs();
+
+        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0)); // t >= tan  pi/8
+        let not_big = t.le(Vf32::<S>::splat(std::f32::consts::SQRT_2 + 1.0)); // t <= tan 3pi/8
+
+        let s = not_big.select(
+            Vf32::<S>::splat(std::f32::consts::FRAC_PI_4),
+            Vf32::<S>::splat(std::f32::consts::FRAC_PI_2),
+        ) & not_small.value(); // select(not_small, s, 0.0);
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        // big:    z = -1.0 / t;
+
+        // this trick avoids having to place a zero in any register
+        let a = (not_big.value() & t) + (not_small.value() & Vf32::<S>::neg_one());
+        let b = (not_big.value() & Vf32::<S>::one()) + (not_small.value() & t);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf)
+            .mul_add(z2 * z, z + s)
+            .combine_sign(y)
     }
+
+    #[inline(always)]
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
+        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
+        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
+        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
+        let neg_one = Vf32::<S>::neg_one();
+        let zero = Vf32::<S>::zero();
+
+        let x1 = x.abs();
+        let y1 = y.abs();
+
+        let swap_xy = y1.gt(x1);
+
+        let mut x2 = swap_xy.select(y1, x1);
+        let mut y2 = swap_xy.select(x1, y1);
+
+        let both_infinite = (x.is_infinite() & y.is_infinite());
+
+        if both_infinite.any() {
+            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+        }
+
+        // x = y = 0 will produce NAN. No problem, fixed below
+        let t = y2 / x2;
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0));
+
+        let a = t + (not_small.value() & neg_one);
+        let b = Vf32::<S>::one() + (not_small.value() & t);
+
+        let s = not_small.value() & Vf32::<S>::splat(std::f32::consts::FRAC_PI_4);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_add(z2 * z, z + s);
+
+        re = swap_xy.select(Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - re, re);
+        re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
+        re = x.is_negative().select(Vf32::<S>::splat(std::f32::consts::PI) - re, re); // also for x = -0.
+
+        re
     }
+
     fn asinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }

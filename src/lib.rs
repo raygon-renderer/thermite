@@ -443,12 +443,14 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
     /// Test if positive, greater or equal to zero
     #[inline(always)]
     fn is_positive(self) -> Mask<S, Self> {
+        // TODO: Specialize these to get sign bit (if available)
         self.ge(Self::zero())
     }
 
     /// Test if negative, less than zero
     #[inline(always)]
     fn is_negative(self) -> Mask<S, Self> {
+        // TODO: Specialize these to get sign bit (if available)
         self.lt(Self::zero())
     }
 
