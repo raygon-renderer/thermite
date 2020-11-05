@@ -3,8 +3,8 @@
 use crate::*;
 
 mod common;
-mod vf32;
-mod vf64;
+mod pd;
+mod ps;
 
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {

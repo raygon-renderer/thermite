@@ -131,6 +131,19 @@ fn asin_f_internal<S: Simd>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     }
 }
 
+#[inline(always)]
+fn fraction2<S: Simd>(x: Vf32<S>) -> Vf32<S> {
+    // set exponent to 0 + bias
+    (x & Vf32::<S>::splat(f32::from_bits(0x007FFFFF))) | Vf32::<S>::splat(f32::from_bits(0x3F000000))
+}
+
+#[inline(always)]
+fn exponent<S: Simd>(x: Vf32<S>) -> Vi32<S> {
+    // shift out sign, extract exp, subtract bias
+    Vi32::<S>::from_bits((x.into_bits() << 1) >> 24) - Vi32::<S>::splat(0x7F)
+}
+
+#[inline(always)]
 fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let ln2f_hi = Vf32::<S>::splat(0.693359375);
     let ln2f_lo = Vf32::<S>::splat(-2.12194440E-4);
@@ -146,7 +159,64 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
 
     let x1 = if p1 { x0 + Vf32::<S>::one() } else { x0 };
 
-    unimplemented!()
+    let mut x = fraction2::<S>(x1);
+    let mut e = exponent::<S>(x1);
+
+    let blend = x.gt(Vf32::<S>::splat(std::f32::consts::SQRT_2 * 0.5));
+
+    x += !blend.value() & x; // conditional addition
+    e += Vi32::<S>::from_bits(blend.value().into_bits() & Vu32::<S>::one()); // conditional (signed) addition
+
+    // TODO: Fix this cast when the type inference bug hits stable
+    let fe = <Vf32<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(e);
+
+    let xp1 = x - Vf32::<S>::one();
+
+    if p1 {
+        // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
+        x = e.eq(Vi32::<S>::zero()).select(x0, xp1);
+    } else {
+        // log(x). Expand around 1.0
+        x = xp1;
+    }
+
+    let x2 = x * x;
+    let x3 = x2 * x;
+    let x4 = x2 * x2;
+
+    let mut res = poly_8(
+        x,
+        x2,
+        x4,
+        x4 * x4,
+        p0logf,
+        p1logf,
+        p2logf,
+        p3logf,
+        p4logf,
+        p5logf,
+        p6logf,
+        p7logf,
+        p8logf,
+    ) * x3;
+
+    res = fe.mul_add(ln2f_lo, res);
+    res += x2.nmul_add(Vf32::<S>::splat(0.5), x);
+    res = fe.mul_add(ln2f_hi, res);
+
+    let overflow = !x1.is_finite();
+    let underflow = x1.lt(Vf32::<S>::splat(1.17549435e-38));
+
+    if likely!((overflow | underflow).none()) {
+        return res;
+    }
+
+    res = underflow.select(Vf32::<S>::nan(), res); // x1 < 0 gives NAN
+    res = x1.is_zero_or_subnormal().select(Vf32::<S>::neg_infinity(), res); // x1 == 0 gives -INF
+    res = overflow.select(x1, res); // INF or NAN goes through
+    res = (x1.is_infinite() & x1.is_negative()).select(Vf32::<S>::nan(), res); // -INF gives NAN
+
+    res
 }
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
@@ -427,21 +497,31 @@ where
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
+    #[inline(always)]
     fn ln(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        ln_f_internal::<S>(x, false)
     }
+
+    #[inline(always)]
     fn ln_1p(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        ln_f_internal::<S>(x, true)
     }
+
+    #[inline(always)]
     fn log2(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG2_E)
     }
+
+    #[inline(always)]
     fn log10(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG10_E)
     }
+
     fn erf(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
     fn ierf(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
