@@ -615,15 +615,6 @@
 <span id="614">614</span>
 <span id="615">615</span>
 <span id="616">616</span>
-<span id="617">617</span>
-<span id="618">618</span>
-<span id="619">619</span>
-<span id="620">620</span>
-<span id="621">621</span>
-<span id="622">622</span>
-<span id="623">623</span>
-<span id="624">624</span>
-<span id="625">625</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -915,13 +906,7 @@
     }
 
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-    <span class="kw">let</span> <span class="ident">x3</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>;
-    <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">x</span>
-        .<span class="ident">mul_add</span>(<span class="ident">p3expf</span>, <span class="ident">p2expf</span>)
-        .<span class="ident">mul_add</span>(<span class="ident">x2</span>, <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">p5expf</span>, <span class="ident">p4expf</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">p1expf</span>, <span class="ident">p0expf</span>)))
-        .<span class="ident">mul_add</span>(<span class="ident">x2</span>, <span class="ident">x</span>);
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>, <span class="ident">p0expf</span>, <span class="ident">p1expf</span>, <span class="ident">p2expf</span>, <span class="ident">p3expf</span>, <span class="ident">p4expf</span>, <span class="ident">p5expf</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span>, <span class="ident">x</span>);
 
     <span class="kw">if</span> <span class="ident">mode</span> <span class="op">==</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> {
         <span class="ident">r</span> <span class="op">-=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
@@ -1061,9 +1046,7 @@
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="number">0</span> {
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="ident">r2</span>, <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">r1</span>, <span class="ident">r0</span>)).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_2</span>(<span class="ident">x2</span>, <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
         <span class="comment">// if not all are small</span>
@@ -1095,9 +1078,8 @@
         <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="number">0</span> {
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-            <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
 
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>, <span class="ident">r3</span>, <span class="ident">r4</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>, <span class="ident">r3</span>, <span class="ident">r4</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
         <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span> {
