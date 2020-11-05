@@ -654,6 +654,12 @@
 <span id="653">653</span>
 <span id="654">654</span>
 <span id="655">655</span>
+<span id="656">656</span>
+<span id="657">657</span>
+<span id="658">658</span>
+<span id="659">659</span>
+<span id="660">660</span>
+<span id="661">661</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1237,7 +1243,13 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_normal</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="op">!</span>(<span class="self">self</span>.<span class="ident">is_nan</span>() <span class="op">|</span> <span class="self">self</span>.<span class="ident">is_infinite</span>() <span class="op">|</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>()))
+        <span class="self">self</span>.<span class="ident">is_finite</span>() <span class="op">&amp;</span> <span class="self">self</span>.<span class="ident">is_subnormal</span>().<span class="ident">and_not</span>(<span class="self">self</span>.<span class="ident">ne</span>(<span class="self">Self</span>::<span class="ident">zero</span>()))
+    }
+
+    <span class="kw">fn</span> <span class="ident">is_subnormal</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>;
+
+    <span class="kw">fn</span> <span class="ident">is_zero_or_subnormal</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="self">self</span>.<span class="ident">is_subnormal</span>() <span class="op">|</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

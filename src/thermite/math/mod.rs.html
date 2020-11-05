@@ -242,8 +242,8 @@
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
 <span class="kw">mod</span> <span class="ident">common</span>;
-<span class="kw">mod</span> <span class="ident">vf32</span>;
-<span class="kw">mod</span> <span class="ident">vf64</span>;
+<span class="kw">mod</span> <span class="ident">pd</span>;
+<span class="kw">mod</span> <span class="ident">ps</span>;
 
 <span class="doccomment">/// Set of vectorized special functions optimized for both single and double precision</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
