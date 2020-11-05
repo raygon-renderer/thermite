@@ -230,7 +230,7 @@ enum ExpMode {
 }
 
 #[inline(always)]
-fn pow2n<S: Simd>(n: Vf32<S>) -> Vf32<S> {
+fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
     let pow2_23 = Vf32::<S>::splat(8388608.0);
     let bias = Vf32::<S>::splat(127.0);
 
@@ -251,7 +251,7 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     let mut x = x0;
     let mut r = Vf32::<S>::zero();
 
-    let mut max_x = 0.0;
+    let max_x;
 
     match mode {
         ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
@@ -300,7 +300,7 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         r -= Vf32::<S>::one();
     }
 
-    let n2 = pow2n::<S>(r);
+    let n2 = pow2n_f::<S>(r);
 
     if mode == ExpMode::Expm1 {
         z = z.mul_add(n2, n2 - Vf32::<S>::one());
@@ -326,6 +326,38 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     }
 
     z
+}
+
+#[inline(always)]
+fn poly_2<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, c0: V, c1: V, c2: V) -> V {
+    x2.mul_add(c2, x.mul_add(c1, c0))
+}
+
+#[inline(always)]
+fn poly_3<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, c0: V, c1: V, c2: V, c3: V) -> V {
+    // x^2 * (x * c3 + c2) + (x*c1 + c0)
+    x2.mul_add(x.mul_add(c3, c2), x.mul_add(c1, c0))
+}
+
+#[inline(always)]
+fn poly_4<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, x4: V, c0: V, c1: V, c2: V, c3: V, c4: V) -> V {
+    // x^4 * c4 + (x^2 * (x * c3 + c2) + (x*c1 + c0))
+    x4.mul_add(c4, x2.mul_add(x.mul_add(c3, c2), x.mul_add(c1, c0)))
+}
+
+#[inline(always)]
+fn poly_5<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, x4: V, c0: V, c1: V, c2: V, c3: V, c4: V, c5: V) -> V {
+    // x^4 * (x * c5 + c4) + (x^2 * (x * c3 + c2) + (x*c1 + c0))
+    x4.mul_add(x.mul_add(c4, c4), x2.mul_add(x.mul_add(c3, c2), x.mul_add(c1, c0)))
+}
+
+#[inline(always)]
+fn poly_6<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, x4: V, c0: V, c1: V, c2: V, c3: V, c4: V, c5: V, c6: V) -> V {
+    // x^4 * (x^2 * c6 + (x * c5 + c4)) + (x^2 * (x * c3 + c2) + (x * c1 + c0))
+    x4.mul_add(
+        x2.mul_add(c6, x.mul_add(c5, c4)),
+        x2.mul_add(x.mul_add(c3, c2), x.mul_add(c1, c0)),
+    )
 }
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
@@ -359,10 +391,10 @@ where
         let x2: Vf32<S> = x * x;
         let x3: Vf32<S> = x2 * x;
         let x4: Vf32<S> = x2 * x2;
-        let mut s = x4.mul_add(p2sinf, x2.mul_add(p1sinf, p0sinf)).mul_add(x3, x);
-        let mut c = x4
-            .mul_add(p2cosf, x2.mul_add(p1cosf, p0cosf))
-            .mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
+
+        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_add(x3, x);
+        let mut c =
+            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
 
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
@@ -409,16 +441,51 @@ where
 
         // if not all are small
         if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            y2 = Self::exph(x);
+            y2 = x.exph();
             y2 -= Vf32::<S>::splat(0.25) / y2;
         }
 
         x_small.select(y1, y2).combine_sign(x0)
     }
 
-    fn tanh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn tanh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(-3.33332819422E-1);
+        let r1 = Vf32::<S>::splat(1.33314422036E-1);
+        let r2 = Vf32::<S>::splat(-5.37397155531E-2);
+        let r3 = Vf32::<S>::splat(2.06390887954E-2);
+        let r4 = Vf32::<S>::splat(-5.70498872745E-3);
+
+        let x = x0.abs();
+        let x_small = x.le(Vf32::<S>::splat(0.625));
+
+        let mut y1 = Vf32::<S>::zero();
+        let mut y2 = Vf32::<S>::zero();
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+            let x8 = x4 * x4;
+
+            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+        }
+
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = (x + x).exp();
+            y2 = Vf32::<S>::one() - Vf32::<S>::splat(2.0) / (y2 + Vf32::<S>::one());
+        }
+
+        let x_big = x.gt(Vf32::<S>::splat(44.4));
+
+        y1 = x_small.select(y1, y2);
+        y1 = x_big.select(Vf32::<S>::one(), y1);
+
+        y1.combine_sign(x0)
     }
+
     fn asin(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
