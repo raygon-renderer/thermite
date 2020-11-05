@@ -644,6 +644,8 @@
 <span id="643">643</span>
 <span id="644">644</span>
 <span id="645">645</span>
+<span id="646">646</span>
+<span id="647">647</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1081,7 +1083,7 @@
         <span class="self">self</span>.<span class="ident">abs</span>() <span class="op">*</span> <span class="ident">sign</span>.<span class="ident">signum</span>()
     }
 
-    <span class="doccomment">/// Returns `-1` is less than zero, `+1` otherwise.</span>
+    <span class="doccomment">/// Returns `-1` if less than zero, `+1` otherwise.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">signum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">is_negative</span>().<span class="ident">select</span>(<span class="self">Self</span>::<span class="ident">neg_one</span>(), <span class="self">Self</span>::<span class="ident">one</span>())
@@ -1090,12 +1092,14 @@
     <span class="doccomment">/// Test if positive, greater or equal to zero</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_positive</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="comment">// TODO: Specialize these to get sign bit (if available)</span>
         <span class="self">self</span>.<span class="ident">ge</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
     }
 
     <span class="doccomment">/// Test if negative, less than zero</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_negative</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="comment">// TODO: Specialize these to get sign bit (if available)</span>
         <span class="self">self</span>.<span class="ident">lt</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
     }
 
