@@ -17,6 +17,11 @@ impl SimdVectorBase<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
+    unsafe fn undefined() -> Self {
+        Self::new(_mm256_undefined_ps())
+    }
+
+    #[inline(always)]
     unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
         Self::new(_mm256_load_ps(ptr))
     }

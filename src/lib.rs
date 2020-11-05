@@ -110,6 +110,11 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
 
     fn splat(value: Self::Element) -> Self;
 
+    /// Possibly returns a vector containing undefined or uninitialized data
+    unsafe fn undefined() -> Self {
+        Self::default()
+    }
+
     #[inline(always)]
     fn splat_any(value: impl Into<Self::Element>) -> Self {
         Self::splat(value.into())

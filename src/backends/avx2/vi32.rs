@@ -17,23 +17,28 @@ impl SimdVectorBase<AVX2> for i32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
-        Self::new(_mm256_load_si256(ptr as *const _))
+    unsafe fn undefined() -> Self {
+        Self::new(_mm256_undefined_si256())
     }
 
     #[inline(always)]
-    unsafe fn load_unaligned_unchecked(ptr: *const Self::Element) -> Self {
-        Self::new(_mm256_loadu_si256(ptr as *const _))
+    unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self {
+        Self::new(_mm256_load_si256(src as *const _))
     }
 
     #[inline(always)]
-    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
-        _mm256_store_si256(ptr as *mut _, self.value)
+    unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
+        Self::new(_mm256_loadu_si256(src as *const _))
     }
 
     #[inline(always)]
-    unsafe fn store_unaligned_unchecked(self, ptr: *mut Self::Element) {
-        _mm256_storeu_si256(ptr as *mut _, self.value)
+    unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element) {
+        _mm256_store_si256(dst as *mut _, self.value)
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
+        _mm256_storeu_si256(dst as *mut _, self.value)
     }
 
     #[inline]
