@@ -22,16 +22,19 @@ pub struct AVX2;
 
 mod vf32;
 mod vf64;
+mod vi16;
 mod vi32;
 mod vu32;
 mod vu64;
 
 pub use vf32::*;
 pub use vf64::*;
+pub use vi16::*;
 pub use vi32::*;
 pub use vu32::*;
 pub use vu64::*;
 
+type Vi16 = i16x8<AVX2>;
 type Vi32 = i32x8<AVX2>;
 type Vu32 = u32x8<AVX2>;
 type Vu64 = u64x8<AVX2>;
