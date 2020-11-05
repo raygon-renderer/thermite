@@ -444,7 +444,7 @@ where
         let x = x0.abs();
         let x2 = x0 * x0;
 
-        let x_small = x.le(Vf32::<S>::splat(0.5));
+        let x_small = x.le(Vf32::<S>::splat(0.51));
         let x_huge = x.gt(Vf32::<S>::splat(1e10));
 
         let mut y1 = unsafe { Vf32::<S>::undefined() };
@@ -467,11 +467,82 @@ where
         x_small.select(y1, y2).combine_sign(x0)
     }
 
-    fn acosh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    #[inline(always)]
+    fn acosh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(1.4142135263E0);
+        let r1 = Vf32::<S>::splat(-1.1784741703E-1);
+        let r2 = Vf32::<S>::splat(2.6454905019E-2);
+        let r3 = Vf32::<S>::splat(-7.5272886713E-3);
+        let r4 = Vf32::<S>::splat(1.7596881071E-3);
+
+        let one = Vf32::<S>::one();
+
+        let x1 = x0 - one;
+
+        let undef = x0.lt(one); // result is NAN
+        let x_small = x1.lt(Vf32::<S>::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
+        let x_huge = x1.gt(Vf32::<S>::splat(1e10));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x1 * x1;
+            let x4 = x2 * x2;
+            y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
+            y1 = undef.select(Vf32::<S>::nan(), y1);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
+
+            if x_huge.any() {
+                y2 = x_huge.select(x0.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
+            }
+        }
+
+        x_small.select(y1, y2)
     }
-    fn atanh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+
+    #[inline(always)]
+    fn atanh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(3.33337300303E-1);
+        let r1 = Vf32::<S>::splat(1.99782164500E-1);
+        let r2 = Vf32::<S>::splat(1.46691431730E-1);
+        let r3 = Vf32::<S>::splat(8.24370301058E-2);
+        let r4 = Vf32::<S>::splat(1.81740078349E-1);
+
+        let x = x0.abs();
+
+        let x_small = x.lt(Vf32::<S>::splat(0.5));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+            let x8 = x4 * x4;
+
+            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+        }
+
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            let one = Vf32::<S>::one();
+
+            y2 = ((one + x) / (one - x)).ln() * Vf32::<S>::splat(0.5);
+
+            let y3 = x.eq(one).select(Vf32::<S>::infinity(), Vf32::<S>::nan());
+            y2 = x.ge(one).select(y3, y2);
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     #[inline(always)]
