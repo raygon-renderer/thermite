@@ -82,7 +82,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes the error function for each value in a vector
     fn erf(self) -> Self;
     /// Computes the inverse error function for each value in a vector
-    fn ierf(self) -> Self;
+    fn erfinv(self) -> Self;
     /// Computes the complementary error function `1 - erf(x)` more accurately
     /// than if operations were performed separately
     fn erfc(self) -> Self;
@@ -130,7 +130,7 @@ where
     #[inline(always)] fn log2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self) }
     #[inline(always)] fn log10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self) }
     #[inline(always)] fn erf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self) }
-    #[inline(always)] fn ierf(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ierf(self) }
+    #[inline(always)] fn erfinv(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv(self) }
     #[inline(always)] fn erfc(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfc(self) }
 }
 
@@ -219,7 +219,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     fn log10(x: Self::Vf) -> Self::Vf;
 
     fn erf(x: Self::Vf) -> Self::Vf;
-    fn ierf(x: Self::Vf) -> Self::Vf;
+    fn erfinv(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
     fn erfc(x: Self::Vf) -> Self::Vf {

@@ -68,7 +68,7 @@ where
     fn erf(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
-    fn ierf(x: Self::Vf) -> Self::Vf {
+    fn erfinv(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
 }

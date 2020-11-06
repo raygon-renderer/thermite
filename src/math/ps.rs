@@ -1,5 +1,466 @@
 use super::{common::*, *};
 
+impl<S: Simd> SimdVectorizedMathInternal<S> for f32
+where
+    <S as Simd>::Vf32: SimdFloatVector<S, Element = f32>,
+{
+    type Vf = <S as Simd>::Vf32;
+
+    #[inline(always)]
+    fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+        let dp1f = Vf32::<S>::splat(0.78515625 * 2.0);
+        let dp2f = Vf32::<S>::splat(2.4187564849853515625E-4 * 2.0);
+        let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
+        let p0sinf = Vf32::<S>::splat(-1.6666654611E-1);
+        let p1sinf = Vf32::<S>::splat(8.3321608736E-3);
+        let p2sinf = Vf32::<S>::splat(-1.9515295891E-4);
+        let p0cosf = Vf32::<S>::splat(4.166664568298827E-2);
+        let p1cosf = Vf32::<S>::splat(-1.388731625493765E-3);
+        let p2cosf = Vf32::<S>::splat(2.443315711809948E-5);
+
+        let xa: Vf32<S> = xx.abs();
+
+        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / std::f32::consts::PI)).round();
+        let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
+
+        // Reduce by extended precision modular arithmetic
+        // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
+        let x = y.nmul_add(dp3f, y.nmul_add(dp2f, y.nmul_add(dp1f, xa)));
+
+        // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
+        let x2: Vf32<S> = x * x;
+        let x3: Vf32<S> = x2 * x;
+        let x4: Vf32<S> = x2 * x2;
+
+        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_add(x3, x);
+        let mut c =
+            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
+
+        // swap sin and cos if odd quadrant
+        let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
+
+        let overflow = q.gt(Vu32::<S>::splat(0x2000000)) & xa.is_finite().cast_to(); // q big if overflow
+
+        s = overflow.select(Vf32::<S>::zero(), s);
+        c = overflow.select(Vf32::<S>::one(), c);
+
+        let sin1 = swap.select(c, s);
+        let cos1 = swap.select(s, c);
+
+        let signsin = Vf32::<S>::from_bits((q << 30) ^ xx.into_bits());
+        let signcos = Vf32::<S>::from_bits(((q + Vu32::<S>::one()) & Vu32::<S>::splat(2)) << 30);
+
+        // combine signs
+        (sin1.combine_sign(signsin), cos1 ^ signcos)
+    }
+
+    #[inline(always)]
+    fn sinh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(1.66667160211E-1);
+        let r1 = Vf32::<S>::splat(8.33028376239E-3);
+        let r2 = Vf32::<S>::splat(2.03721912945E-4);
+
+        let x = x0.abs();
+
+        let x_small = x.le(Vf32::<S>::one());
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = x.exph();
+            y2 -= Vf32::<S>::splat(0.25) / y2;
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
+    }
+
+    #[inline(always)]
+    fn tanh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(-3.33332819422E-1);
+        let r1 = Vf32::<S>::splat(1.33314422036E-1);
+        let r2 = Vf32::<S>::splat(-5.37397155531E-2);
+        let r3 = Vf32::<S>::splat(2.06390887954E-2);
+        let r4 = Vf32::<S>::splat(-5.70498872745E-3);
+
+        let x = x0.abs();
+        let x_small = x.le(Vf32::<S>::splat(0.625));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+
+            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = (x + x).exp();
+            y2 = Vf32::<S>::one() - Vf32::<S>::splat(2.0) / (y2 + Vf32::<S>::one());
+        }
+
+        let x_big = x.gt(Vf32::<S>::splat(44.4));
+
+        y1 = x_small.select(y1, y2);
+        y1 = x_big.select(Vf32::<S>::one(), y1);
+
+        y1.combine_sign(x0)
+    }
+
+    #[inline(always)]
+    fn asin(x: Self::Vf) -> Self::Vf {
+        asin_f_internal::<S>(x, false)
+    }
+
+    #[inline(always)]
+    fn acos(x: Self::Vf) -> Self::Vf {
+        asin_f_internal::<S>(x, true)
+    }
+
+    #[inline(always)]
+    fn atan(y: Self::Vf) -> Self::Vf {
+        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
+        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
+        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
+        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
+
+        let t = y.abs();
+
+        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0)); // t >= tan  pi/8
+        let not_big = t.le(Vf32::<S>::splat(std::f32::consts::SQRT_2 + 1.0)); // t <= tan 3pi/8
+
+        let s = not_big.select(
+            Vf32::<S>::splat(std::f32::consts::FRAC_PI_4),
+            Vf32::<S>::splat(std::f32::consts::FRAC_PI_2),
+        ) & not_small.value(); // select(not_small, s, 0.0);
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        // big:    z = -1.0 / t;
+
+        // this trick avoids having to place a zero in any register
+        let a = (not_big.value() & t) + (not_small.value() & Vf32::<S>::neg_one());
+        let b = (not_big.value() & Vf32::<S>::one()) + (not_small.value() & t);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf)
+            .mul_add(z2 * z, z + s)
+            .combine_sign(y)
+    }
+
+    #[inline(always)]
+    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
+        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
+        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
+        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
+        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
+        let neg_one = Vf32::<S>::neg_one();
+        let zero = Vf32::<S>::zero();
+
+        let x1 = x.abs();
+        let y1 = y.abs();
+
+        let swap_xy = y1.gt(x1);
+
+        let mut x2 = swap_xy.select(y1, x1);
+        let mut y2 = swap_xy.select(x1, y1);
+
+        let both_infinite = (x.is_infinite() & y.is_infinite());
+
+        if unlikely!(both_infinite.any()) {
+            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+        }
+
+        // x = y = 0 will produce NAN. No problem, fixed below
+        let t = y2 / x2;
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0));
+
+        let a = t + (not_small.value() & neg_one);
+        let b = Vf32::<S>::one() + (not_small.value() & t);
+
+        let s = not_small.value() & Vf32::<S>::splat(std::f32::consts::FRAC_PI_4);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_add(z2 * z, z + s);
+
+        re = swap_xy.select(Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - re, re);
+        re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
+        re = x.is_negative().select(Vf32::<S>::splat(std::f32::consts::PI) - re, re); // also for x = -0.
+
+        re
+    }
+
+    #[inline(always)]
+    fn asinh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(-1.6666288134E-1);
+        let r1 = Vf32::<S>::splat(7.4847586088E-2);
+        let r2 = Vf32::<S>::splat(-4.2699340972E-2);
+        let r3 = Vf32::<S>::splat(2.0122003309E-2);
+
+        let x = x0.abs();
+        let x2 = x0 * x0;
+
+        let x_small = x.le(Vf32::<S>::splat(0.51));
+        let x_huge = x.gt(Vf32::<S>::splat(1e10));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask != 0 {
+            y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_add(x2 * x, x);
+        }
+
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = ((x2 + Vf32::<S>::one()).sqrt() + x).ln();
+
+            if unlikely!(x_huge.any()) {
+                y2 = x_huge.select(x.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
+            }
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
+    }
+
+    #[inline(always)]
+    fn acosh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(1.4142135263E0);
+        let r1 = Vf32::<S>::splat(-1.1784741703E-1);
+        let r2 = Vf32::<S>::splat(2.6454905019E-2);
+        let r3 = Vf32::<S>::splat(-7.5272886713E-3);
+        let r4 = Vf32::<S>::splat(1.7596881071E-3);
+
+        let one = Vf32::<S>::one();
+
+        let x1 = x0 - one;
+
+        let undef = x0.lt(one); // result is NAN
+        let x_small = x1.lt(Vf32::<S>::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
+        let x_huge = x1.gt(Vf32::<S>::splat(1e10));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x1 * x1;
+            let x4 = x2 * x2;
+            y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
+            y1 = undef.select(Vf32::<S>::nan(), y1);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
+
+            if x_huge.any() {
+                y2 = x_huge.select(x0.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
+            }
+        }
+
+        x_small.select(y1, y2)
+    }
+
+    #[inline(always)]
+    fn atanh(x0: Self::Vf) -> Self::Vf {
+        let r0 = Vf32::<S>::splat(3.33337300303E-1);
+        let r1 = Vf32::<S>::splat(1.99782164500E-1);
+        let r2 = Vf32::<S>::splat(1.46691431730E-1);
+        let r3 = Vf32::<S>::splat(8.24370301058E-2);
+        let r4 = Vf32::<S>::splat(1.81740078349E-1);
+
+        let x = x0.abs();
+
+        let x_small = x.lt(Vf32::<S>::splat(0.5));
+
+        let mut y1 = unsafe { Vf32::<S>::undefined() };
+        let mut y2 = unsafe { Vf32::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+            let x8 = x4 * x4;
+
+            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+        }
+
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            let one = Vf32::<S>::one();
+
+            y2 = ((one + x) / (one - x)).ln() * Vf32::<S>::splat(0.5);
+
+            let y3 = x.eq(one).select(Vf32::<S>::infinity(), Vf32::<S>::nan());
+            y2 = x.ge(one).select(y3, y2);
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
+    }
+
+    #[inline(always)]
+    fn exp(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Exp)
+    }
+
+    #[inline(always)]
+    fn exph(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Exph)
+    }
+
+    #[inline(always)]
+    fn exp2(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Pow2)
+    }
+
+    #[inline(always)]
+    fn exp10(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Pow10)
+    }
+
+    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+
+    #[inline(always)]
+    fn ln(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S>(x, false)
+    }
+
+    #[inline(always)]
+    fn ln_1p(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S>(x, true)
+    }
+
+    #[inline(always)]
+    fn log2(x: Self::Vf) -> Self::Vf {
+        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG2_E)
+    }
+
+    #[inline(always)]
+    fn log10(x: Self::Vf) -> Self::Vf {
+        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG10_E)
+    }
+
+    #[inline(always)]
+    fn erf(x: Self::Vf) -> Self::Vf {
+        /* Abramowitz and Stegun, 7.1.28. */
+        let a0 = Vf32::<S>::one();
+        let a1 = Vf32::<S>::splat(0.0705230784);
+        let a2 = Vf32::<S>::splat(0.0422820123);
+        let a3 = Vf32::<S>::splat(0.0092705272);
+        let a4 = Vf32::<S>::splat(0.0001520143);
+        let a5 = Vf32::<S>::splat(0.0002765672);
+        let a6 = Vf32::<S>::splat(0.0000430638);
+
+        let b = a0 - (a0 - x.abs()); // crush denormals
+        let b2 = b * b;
+        let b4 = b2 * b2;
+
+        let r = poly_6(b, b2, b4, a0, a1, a2, a3, a4, a5, a6);
+
+        let r2 = r * r;
+        let r4 = r2 * r2;
+        let r8 = r4 * r4;
+        let r16 = r8 * r8;
+
+        (a0 - a0 / r16).copysign(x)
+    }
+
+    #[inline(always)]
+    fn erfinv(x: Self::Vf) -> Self::Vf {
+        /*
+            Approximating the erfinv function, Mike Giles
+            https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
+        */
+        let one = Vf32::<S>::one();
+
+        let a = x.abs();
+
+        let w = -((one - a) * (one + a)).ln();
+
+        let p0 = {
+            let p0low = Vf32::<S>::splat(1.50140941);
+            let p1low = Vf32::<S>::splat(0.246640727);
+            let p2low = Vf32::<S>::splat(-0.00417768164);
+            let p3low = Vf32::<S>::splat(-0.00125372503);
+            let p4low = Vf32::<S>::splat(0.00021858087);
+            let p5low = Vf32::<S>::splat(-4.39150654e-06);
+            let p6low = Vf32::<S>::splat(-3.5233877e-06);
+            let p7low = Vf32::<S>::splat(3.43273939e-07);
+            let p8low = Vf32::<S>::splat(2.81022636e-08);
+
+            let w1 = w - Vf32::<S>::splat(2.5);
+            let w2 = w1 * w1;
+            let w4 = w2 * w2;
+            let w8 = w4 * w4;
+
+            poly_8(
+                w1, w2, w4, w8, p0low, p1low, p2low, p3low, p4low, p5low, p6low, p7low, p8low,
+            )
+        };
+
+        let mut p1 = unsafe { Vf32::<S>::undefined() };
+
+        let w_big = w.ge(Vf32::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
+
+        // avoids a costly sqrt and polynomial if false
+        if unlikely!(w_big.any()) {
+            let p0high = Vf32::<S>::splat(2.83297682);
+            let p1high = Vf32::<S>::splat(1.00167406);
+            let p2high = Vf32::<S>::splat(0.00943887047);
+            let p3high = Vf32::<S>::splat(-0.0076224613);
+            let p4high = Vf32::<S>::splat(0.00573950773);
+            let p5high = Vf32::<S>::splat(-0.00367342844);
+            let p6high = Vf32::<S>::splat(0.00134934322);
+            let p7high = Vf32::<S>::splat(0.000100950558);
+            let p8high = Vf32::<S>::splat(-0.000200214257);
+
+            let w1 = w.sqrt() - Vf32::<S>::splat(3.0);
+            let w2 = w1 * w1;
+            let w4 = w2 * w2;
+            let w8 = w4 * w4;
+
+            p1 = poly_8(
+                w1, w2, w4, w8, p0high, p1high, p2high, p3high, p4high, p5high, p6high, p7high, p8high,
+            );
+
+            p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfi(x == 1) = inf
+            p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfi(x > 1) = NaN
+        }
+
+        w_big.select(p1, p0) * x
+    }
+}
+
 #[inline(always)]
 fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
     let pow2_23 = Vf32::<S>::splat(8388608.0);
@@ -217,383 +678,4 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     res = (x1.is_infinite() & x1.is_negative()).select(Vf32::<S>::nan(), res); // -INF gives NAN
 
     res
-}
-
-impl<S: Simd> SimdVectorizedMathInternal<S> for f32
-where
-    <S as Simd>::Vf32: SimdFloatVector<S, Element = f32>,
-{
-    type Vf = <S as Simd>::Vf32;
-
-    #[inline(always)]
-    fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
-        let dp1f = Vf32::<S>::splat(0.78515625 * 2.0);
-        let dp2f = Vf32::<S>::splat(2.4187564849853515625E-4 * 2.0);
-        let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
-        let p0sinf = Vf32::<S>::splat(-1.6666654611E-1);
-        let p1sinf = Vf32::<S>::splat(8.3321608736E-3);
-        let p2sinf = Vf32::<S>::splat(-1.9515295891E-4);
-        let p0cosf = Vf32::<S>::splat(4.166664568298827E-2);
-        let p1cosf = Vf32::<S>::splat(-1.388731625493765E-3);
-        let p2cosf = Vf32::<S>::splat(2.443315711809948E-5);
-
-        let xa: Vf32<S> = xx.abs();
-
-        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / std::f32::consts::PI)).round();
-        let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
-
-        // Reduce by extended precision modular arithmetic
-        // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
-        let x = y.nmul_add(dp3f, y.nmul_add(dp2f, y.nmul_add(dp1f, xa)));
-
-        // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
-        let x2: Vf32<S> = x * x;
-        let x3: Vf32<S> = x2 * x;
-        let x4: Vf32<S> = x2 * x2;
-
-        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_add(x3, x);
-        let mut c =
-            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
-
-        // swap sin and cos if odd quadrant
-        let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
-
-        let mut overflow = q.gt(Vu32::<S>::splat(0x2000000)); // q big if overflow
-        overflow &= xa.is_finite().cast_to();
-
-        s = overflow.select(Vf32::<S>::zero(), s);
-        c = overflow.select(Vf32::<S>::one(), c);
-
-        let sin1 = swap.select(c, s);
-        let cos1 = swap.select(s, c);
-
-        let signsin = Vf32::<S>::from_bits((q << 30) ^ xx.into_bits());
-        let signcos = Vf32::<S>::from_bits(((q + Vu32::<S>::one()) & Vu32::<S>::splat(2)) << 30);
-
-        // combine signs
-        (sin1.combine_sign(signsin), cos1 ^ signcos)
-    }
-
-    #[inline(always)]
-    fn sinh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(1.66667160211E-1);
-        let r1 = Vf32::<S>::splat(8.33028376239E-3);
-        let r2 = Vf32::<S>::splat(2.03721912945E-4);
-
-        let x = x0.abs();
-
-        let x_small = x.le(Vf32::<S>::one());
-
-        let mut y1 = unsafe { Vf32::<S>::undefined() };
-        let mut y2 = unsafe { Vf32::<S>::undefined() };
-
-        // use bitmask directly to avoid two calls
-        let bitmask = x_small.bitmask();
-
-        // if any are small
-        if bitmask != 0 {
-            let x2 = x * x;
-            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
-        }
-
-        // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            y2 = x.exph();
-            y2 -= Vf32::<S>::splat(0.25) / y2;
-        }
-
-        x_small.select(y1, y2).combine_sign(x0)
-    }
-
-    #[inline(always)]
-    fn tanh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(-3.33332819422E-1);
-        let r1 = Vf32::<S>::splat(1.33314422036E-1);
-        let r2 = Vf32::<S>::splat(-5.37397155531E-2);
-        let r3 = Vf32::<S>::splat(2.06390887954E-2);
-        let r4 = Vf32::<S>::splat(-5.70498872745E-3);
-
-        let x = x0.abs();
-        let x_small = x.le(Vf32::<S>::splat(0.625));
-
-        let mut y1 = unsafe { Vf32::<S>::undefined() };
-        let mut y2 = unsafe { Vf32::<S>::undefined() };
-
-        // use bitmask directly to avoid two calls
-        let bitmask = x_small.bitmask();
-
-        // if any are small
-        if bitmask != 0 {
-            let x2 = x * x;
-            let x4 = x2 * x2;
-
-            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
-        }
-
-        // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            y2 = (x + x).exp();
-            y2 = Vf32::<S>::one() - Vf32::<S>::splat(2.0) / (y2 + Vf32::<S>::one());
-        }
-
-        let x_big = x.gt(Vf32::<S>::splat(44.4));
-
-        y1 = x_small.select(y1, y2);
-        y1 = x_big.select(Vf32::<S>::one(), y1);
-
-        y1.combine_sign(x0)
-    }
-
-    #[inline(always)]
-    fn asin(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S>(x, false)
-    }
-
-    #[inline(always)]
-    fn acos(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S>(x, true)
-    }
-
-    #[inline(always)]
-    fn atan(y: Self::Vf) -> Self::Vf {
-        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
-        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
-        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
-        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
-
-        let t = y.abs();
-
-        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0)); // t >= tan  pi/8
-        let not_big = t.le(Vf32::<S>::splat(std::f32::consts::SQRT_2 + 1.0)); // t <= tan 3pi/8
-
-        let s = not_big.select(
-            Vf32::<S>::splat(std::f32::consts::FRAC_PI_4),
-            Vf32::<S>::splat(std::f32::consts::FRAC_PI_2),
-        ) & not_small.value(); // select(not_small, s, 0.0);
-
-        // small:  z = t / 1.0;
-        // medium: z = (t-1.0) / (t+1.0);
-        // big:    z = -1.0 / t;
-
-        // this trick avoids having to place a zero in any register
-        let a = (not_big.value() & t) + (not_small.value() & Vf32::<S>::neg_one());
-        let b = (not_big.value() & Vf32::<S>::one()) + (not_small.value() & t);
-
-        let z = a / b;
-        let z2 = z * z;
-
-        poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf)
-            .mul_add(z2 * z, z + s)
-            .combine_sign(y)
-    }
-
-    #[inline(always)]
-    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
-        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
-        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
-        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
-        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
-        let neg_one = Vf32::<S>::neg_one();
-        let zero = Vf32::<S>::zero();
-
-        let x1 = x.abs();
-        let y1 = y.abs();
-
-        let swap_xy = y1.gt(x1);
-
-        let mut x2 = swap_xy.select(y1, x1);
-        let mut y2 = swap_xy.select(x1, y1);
-
-        let both_infinite = (x.is_infinite() & y.is_infinite());
-
-        if unlikely!(both_infinite.any()) {
-            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
-            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
-        }
-
-        // x = y = 0 will produce NAN. No problem, fixed below
-        let t = y2 / x2;
-
-        // small:  z = t / 1.0;
-        // medium: z = (t-1.0) / (t+1.0);
-        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0));
-
-        let a = t + (not_small.value() & neg_one);
-        let b = Vf32::<S>::one() + (not_small.value() & t);
-
-        let s = not_small.value() & Vf32::<S>::splat(std::f32::consts::FRAC_PI_4);
-
-        let z = a / b;
-        let z2 = z * z;
-
-        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_add(z2 * z, z + s);
-
-        re = swap_xy.select(Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - re, re);
-        re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
-        re = x.is_negative().select(Vf32::<S>::splat(std::f32::consts::PI) - re, re); // also for x = -0.
-
-        re
-    }
-
-    fn asinh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(-1.6666288134E-1);
-        let r1 = Vf32::<S>::splat(7.4847586088E-2);
-        let r2 = Vf32::<S>::splat(-4.2699340972E-2);
-        let r3 = Vf32::<S>::splat(2.0122003309E-2);
-
-        let x = x0.abs();
-        let x2 = x0 * x0;
-
-        let x_small = x.le(Vf32::<S>::splat(0.51));
-        let x_huge = x.gt(Vf32::<S>::splat(1e10));
-
-        let mut y1 = unsafe { Vf32::<S>::undefined() };
-        let mut y2 = unsafe { Vf32::<S>::undefined() };
-
-        let bitmask = x_small.bitmask();
-
-        if bitmask != 0 {
-            y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_add(x2 * x, x);
-        }
-
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            y2 = ((x2 + Vf32::<S>::one()).sqrt() + x).ln();
-
-            if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
-            }
-        }
-
-        x_small.select(y1, y2).combine_sign(x0)
-    }
-
-    #[inline(always)]
-    fn acosh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(1.4142135263E0);
-        let r1 = Vf32::<S>::splat(-1.1784741703E-1);
-        let r2 = Vf32::<S>::splat(2.6454905019E-2);
-        let r3 = Vf32::<S>::splat(-7.5272886713E-3);
-        let r4 = Vf32::<S>::splat(1.7596881071E-3);
-
-        let one = Vf32::<S>::one();
-
-        let x1 = x0 - one;
-
-        let undef = x0.lt(one); // result is NAN
-        let x_small = x1.lt(Vf32::<S>::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
-        let x_huge = x1.gt(Vf32::<S>::splat(1e10));
-
-        let mut y1 = unsafe { Vf32::<S>::undefined() };
-        let mut y2 = unsafe { Vf32::<S>::undefined() };
-
-        let bitmask = x_small.bitmask();
-
-        // if any are small
-        if bitmask != 0 {
-            let x2 = x1 * x1;
-            let x4 = x2 * x2;
-            y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
-            y1 = undef.select(Vf32::<S>::nan(), y1);
-        }
-
-        // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
-
-            if x_huge.any() {
-                y2 = x_huge.select(x0.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
-            }
-        }
-
-        x_small.select(y1, y2)
-    }
-
-    #[inline(always)]
-    fn atanh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(3.33337300303E-1);
-        let r1 = Vf32::<S>::splat(1.99782164500E-1);
-        let r2 = Vf32::<S>::splat(1.46691431730E-1);
-        let r3 = Vf32::<S>::splat(8.24370301058E-2);
-        let r4 = Vf32::<S>::splat(1.81740078349E-1);
-
-        let x = x0.abs();
-
-        let x_small = x.lt(Vf32::<S>::splat(0.5));
-
-        let mut y1 = unsafe { Vf32::<S>::undefined() };
-        let mut y2 = unsafe { Vf32::<S>::undefined() };
-
-        let bitmask = x_small.bitmask();
-
-        if bitmask != 0 {
-            let x2 = x * x;
-            let x4 = x2 * x2;
-            let x8 = x4 * x4;
-
-            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
-        }
-
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
-            let one = Vf32::<S>::one();
-
-            y2 = ((one + x) / (one - x)).ln() * Vf32::<S>::splat(0.5);
-
-            let y3 = x.eq(one).select(Vf32::<S>::infinity(), Vf32::<S>::nan());
-            y2 = x.ge(one).select(y3, y2);
-        }
-
-        x_small.select(y1, y2).combine_sign(x0)
-    }
-
-    #[inline(always)]
-    fn exp(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Exp)
-    }
-
-    #[inline(always)]
-    fn exph(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Exph)
-    }
-
-    #[inline(always)]
-    fn exp2(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Pow2)
-    }
-
-    #[inline(always)]
-    fn exp10(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Pow10)
-    }
-
-    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
-
-    #[inline(always)]
-    fn ln(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S>(x, false)
-    }
-
-    #[inline(always)]
-    fn ln_1p(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S>(x, true)
-    }
-
-    #[inline(always)]
-    fn log2(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG2_E)
-    }
-
-    #[inline(always)]
-    fn log10(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG10_E)
-    }
-
-    fn erf(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
-
-    fn ierf(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
 }
