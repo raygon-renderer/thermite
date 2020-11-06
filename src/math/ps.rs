@@ -574,7 +574,7 @@ where
 
         let w = -((one - a) * (one + a)).ln();
 
-        let p0 = {
+        let mut p0 = {
             let p0low = Vf32::<S>::splat(1.50140941);
             let p1low = Vf32::<S>::splat(0.246640727);
             let p2low = Vf32::<S>::splat(-0.00417768164);
@@ -595,8 +595,6 @@ where
             )
         };
 
-        let mut p1 = unsafe { Vf32::<S>::undefined() };
-
         let w_big = w.ge(Vf32::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         // avoids a costly sqrt and polynomial if false
@@ -616,15 +614,17 @@ where
             let w4 = w2 * w2;
             let w8 = w4 * w4;
 
-            p1 = poly_8(
+            let mut p1 = poly_8(
                 w1, w2, w4, w8, p0high, p1high, p2high, p3high, p4high, p5high, p6high, p7high, p8high,
             );
 
-            p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfi(x == 1) = inf
-            p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfi(x > 1) = NaN
+            p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfinv(x == 1) = inf
+            p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfinv(x > 1) = NaN
+
+            p0 = w_big.select(p1, p0);
         }
 
-        w_big.select(p1, p0) * x
+        p0 * x
     }
 }
 
