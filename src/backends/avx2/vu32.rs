@@ -328,8 +328,18 @@ impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
 }
 
 impl SimdCastFrom<AVX2, Vu64> for u32x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
-        brute_force_convert!(&from; u64 => u32)
+        Self::new(unsafe {
+            let (ymm0, ymm1) = from.value;
+            let xmm1 = _mm256_castsi256_si128(ymm1);
+
+            _mm256_castps_si256(_mm256_shuffle_ps(
+                _mm256_castsi256_ps(_mm256_inserti128_si256(ymm0, xmm1, 1)),
+                _mm256_castsi256_ps(_mm256_permute2f128_si256(ymm0, ymm1, 49)),
+                136,
+            ))
+        })
     }
 
     #[inline(always)]
