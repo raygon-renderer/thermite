@@ -1424,7 +1424,7 @@
 
         <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span>((<span class="ident">one</span> <span class="op">-</span> <span class="ident">a</span>) <span class="op">*</span> (<span class="ident">one</span> <span class="op">+</span> <span class="ident">a</span>)).<span class="ident">ln</span>();
 
-        <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> {
             <span class="kw">let</span> <span class="ident">p0low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.50140941</span>);
             <span class="kw">let</span> <span class="ident">p1low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.246640727</span>);
             <span class="kw">let</span> <span class="ident">p2low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.00417768164</span>);
@@ -1445,8 +1445,6 @@
             )
         };
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p1</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">undefined</span>() };
-
         <span class="kw">let</span> <span class="ident">w_big</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">ge</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.0</span>)); <span class="comment">// at around |x| &gt; 0.99662533231, so unlikely</span>
 
         <span class="comment">// avoids a costly sqrt and polynomial if false</span>
@@ -1466,15 +1464,17 @@
             <span class="kw">let</span> <span class="ident">w4</span> <span class="op">=</span> <span class="ident">w2</span> <span class="op">*</span> <span class="ident">w2</span>;
             <span class="kw">let</span> <span class="ident">w8</span> <span class="op">=</span> <span class="ident">w4</span> <span class="op">*</span> <span class="ident">w4</span>;
 
-            <span class="ident">p1</span> <span class="op">=</span> <span class="ident">poly_8</span>(
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">poly_8</span>(
                 <span class="ident">w1</span>, <span class="ident">w2</span>, <span class="ident">w4</span>, <span class="ident">w8</span>, <span class="ident">p0high</span>, <span class="ident">p1high</span>, <span class="ident">p2high</span>, <span class="ident">p3high</span>, <span class="ident">p4high</span>, <span class="ident">p5high</span>, <span class="ident">p6high</span>, <span class="ident">p7high</span>, <span class="ident">p8high</span>,
             );
 
-            <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">eq</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>(), <span class="ident">p1</span>); <span class="comment">// erfi(x == 1) = inf</span>
-            <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">gt</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">p1</span>); <span class="comment">// erfi(x &gt; 1) = NaN</span>
+            <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">eq</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x == 1) = inf</span>
+            <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">gt</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x &gt; 1) = NaN</span>
+
+            <span class="ident">p0</span> <span class="op">=</span> <span class="ident">w_big</span>.<span class="ident">select</span>(<span class="ident">p1</span>, <span class="ident">p0</span>);
         }
 
-        <span class="ident">w_big</span>.<span class="ident">select</span>(<span class="ident">p1</span>, <span class="ident">p0</span>) <span class="op">*</span> <span class="ident">x</span>
+        <span class="ident">p0</span> <span class="op">*</span> <span class="ident">x</span>
     }
 }
 
