@@ -34,41 +34,47 @@
 <span id="33">33</span>
 <span id="34">34</span>
 <span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
 </pre><div class="example-wrap"><pre class="rust ">
-<span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
-
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
-<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">likely</span> {
-    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {{
-        <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">unused_unsafe</span>)]</span>
-        <span class="kw">unsafe</span> {
-            <span class="ident">std</span>::<span class="ident">intrinsics</span>::<span class="ident">likely</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>)
-        }
-    }};
-}
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">intrinsics</span>::{<span class="ident">likely</span>, <span class="ident">unlikely</span>};
 
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
-<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">unlikely</span> {
-    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {{
-        <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">unused_unsafe</span>)]</span>
-        <span class="kw">unsafe</span> {
-            <span class="ident">std</span>::<span class="ident">intrinsics</span>::<span class="ident">unlikely</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>)
-        }
-    }};
+<span class="comment">// borrows technique from https://github.com/rust-lang/hashbrown/pull/209</span>
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>))]</span>
+<span class="attribute">#[<span class="ident">inline</span>]</span>
+<span class="attribute">#[<span class="ident">cold</span>]</span>
+<span class="kw">fn</span> <span class="ident">cold</span>() {}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>))]</span>
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">likely</span>(<span class="ident">b</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">if</span> <span class="op">!</span><span class="ident">b</span> { <span class="ident">cold</span>() } <span class="ident">b</span>
 }
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>))]</span>
-<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">likely</span> {
-    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {
-        <span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>
-    };
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">unlikely</span>(<span class="ident">b</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">if</span> <span class="ident">b</span> { <span class="ident">cold</span>() } <span class="ident">b</span>
 }
 
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>))]</span>
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">likely</span> {
+    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {{
+        <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">unused_unsafe</span>)]</span>
+        <span class="kw">unsafe</span> { <span class="macro-nonterminal">$</span><span class="kw">crate</span>::<span class="macro-nonterminal">macros</span>::<span class="ident">likely</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>) }
+    }};
+}
+
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">unlikely</span> {
-    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {
-        <span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>
-    };
+    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {{
+        <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">unused_unsafe</span>)]</span>
+        <span class="kw">unsafe</span> { <span class="macro-nonterminal">$</span><span class="kw">crate</span>::<span class="macro-nonterminal">macros</span>::<span class="ident">unlikely</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">e</span>) }
+    }};
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../";window.currentCrate = "thermite";</script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
