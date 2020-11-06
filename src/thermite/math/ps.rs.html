@@ -847,6 +847,7 @@
 <span id="846">846</span>
 <span id="847">847</span>
 <span id="848">848</span>
+<span id="849">849</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1413,14 +1414,14 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+    <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="comment">/*
             Approximating the erfinv function, Mike Giles
             https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
         */</span>
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
 
-        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
+        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">abs</span>();
 
         <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span>((<span class="ident">one</span> <span class="op">-</span> <span class="ident">a</span>) <span class="op">*</span> (<span class="ident">one</span> <span class="op">+</span> <span class="ident">a</span>)).<span class="ident">ln</span>();
 
@@ -1474,7 +1475,7 @@
             <span class="ident">p0</span> <span class="op">=</span> <span class="ident">w_big</span>.<span class="ident">select</span>(<span class="ident">p1</span>, <span class="ident">p0</span>);
         }
 
-        <span class="ident">p0</span> <span class="op">*</span> <span class="ident">x</span>
+        <span class="ident">p0</span> <span class="op">*</span> <span class="ident">y</span>
     }
 }
 
@@ -1634,8 +1635,9 @@
     <span class="kw">let</span> <span class="ident">p6logf</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.1676998740E-1</span>);
     <span class="kw">let</span> <span class="ident">p7logf</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.1514610310E-1</span>);
     <span class="kw">let</span> <span class="ident">p8logf</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.0376836292E-2</span>);
+    <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
 
-    <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">p1</span> { <span class="ident">x0</span> <span class="op">+</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>() } <span class="kw">else</span> { <span class="ident">x0</span> };
+    <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">p1</span> { <span class="ident">x0</span> <span class="op">+</span> <span class="ident">one</span> } <span class="kw">else</span> { <span class="ident">x0</span> };
 
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">fraction2</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x1</span>);
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">e</span> <span class="op">=</span> <span class="ident">exponent</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x1</span>);
@@ -1648,7 +1650,7 @@
     <span class="comment">// TODO: Fix this cast when the type inference bug hits stable</span>
     <span class="kw">let</span> <span class="ident">fe</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">e</span>);
 
-    <span class="kw">let</span> <span class="ident">xp1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+    <span class="kw">let</span> <span class="ident">xp1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">-</span> <span class="ident">one</span>;
 
     <span class="kw">if</span> <span class="ident">p1</span> {
         <span class="comment">// log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0</span>
