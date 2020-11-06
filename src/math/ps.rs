@@ -346,8 +346,174 @@ where
         exp_f_internal::<S>(x, ExpMode::Pow10)
     }
 
-    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
+        // define constants
+        let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
+        let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
+        let log2e = Vf32::<S>::splat(std::f32::consts::LOG2_E); // 1/log(2)
+        let ln2 = Vf32::<S>::splat(std::f32::consts::LN_2);
+
+        // coefficients for logarithm expansion
+        let p0logf = Vf32::<S>::splat(3.3333331174E-1);
+        let p1logf = Vf32::<S>::splat(-2.4999993993E-1);
+        let p2logf = Vf32::<S>::splat(2.0000714765E-1);
+        let p3logf = Vf32::<S>::splat(-1.6668057665E-1);
+        let p4logf = Vf32::<S>::splat(1.4249322787E-1);
+        let p5logf = Vf32::<S>::splat(-1.2420140846E-1);
+        let p6logf = Vf32::<S>::splat(1.1676998740E-1);
+        let p7logf = Vf32::<S>::splat(-1.1514610310E-1);
+        let p8logf = Vf32::<S>::splat(7.0376836292E-2);
+
+        // coefficients for Taylor expansion of exp
+        let p2expf = Vf32::<S>::splat(1.0 / 2.0);
+        let p3expf = Vf32::<S>::splat(1.0 / 6.0);
+        let p4expf = Vf32::<S>::splat(1.0 / 24.0);
+        let p5expf = Vf32::<S>::splat(1.0 / 120.0);
+        let p6expf = Vf32::<S>::splat(1.0 / 720.0);
+        let p7expf = Vf32::<S>::splat(1.0 / 5040.0);
+
+        let zero = Vf32::<S>::zero();
+        let one = Vf32::<S>::one();
+        let half = Vf32::<S>::splat(0.5);
+
+        let x1 = x0.abs();
+
+        let mut x = fraction2::<S>(x1);
+
+        let blend = x.gt(Vf32::<S>::splat(std::f32::consts::SQRT_2 * 0.5));
+
+        // reduce range of x = +/- sqrt(2)/2
+        x += !blend.value() & x;
+        x -= one;
+
+        // Taylor expansion, high precision
+        let x2 = x * x;
+        let x4 = x2 * x2;
+        let mut lg1 = poly_8(
+            x,
+            x2,
+            x4,
+            x4 * x4,
+            p0logf,
+            p1logf,
+            p2logf,
+            p3logf,
+            p4logf,
+            p5logf,
+            p6logf,
+            p7logf,
+            p8logf,
+        );
+        lg1 *= x2 * x;
+
+        let ef = <Vf32<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(exponent::<S>(x1)) + (blend.value() & one);
+
+        // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
+        let e1 = (ef * y).round();
+        let yr = ef.mul_sub(y, e1); // calculate remainder yr. precision very important here
+
+        // add initial terms to expansion
+        let lg = half.nmul_add(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
+
+        // calculate rounding errors in lg
+        // rounding error in multiplication 0.5*x*x
+        let x2err = (half * x).mul_sub(x, half * x2);
+
+        // rounding error in additions and subtractions
+        let lgerr = half.mul_add(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
+
+        // extract something for the exponent
+        let e2 = (lg * y * log2e).round();
+
+        // subtract this from lg, with extra precision
+        let mut v = e2.nmul_add(ln2f_lo, lg.mul_sub(y, e2 * ln2f_hi));
+
+        // correct for previous rounding errors
+        v -= (lgerr + x2err).mul_sub(y, yr * ln2);
+
+        // extract something for the exponent if possible
+        let mut x = v;
+        let e3 = (x * log2e).round();
+
+        // high precision multiplication not needed here because abs(e3) <= 1
+        x = e3.nmul_add(ln2, x); // x -= e3 * float(VM_LN2);
+
+        let x2 = x * x;
+        let x4 = x2 * x2;
+        let z = poly_5(x, x2, x4, p2expf, p3expf, p4expf, p5expf, p6expf, p7expf).mul_add(x2, x + one);
+
+        // contributions to exponent
+        let ee = e1 + e2 + e3;
+        let ei = ee.cast_to::<Vi32<S>>();
+
+        // biased exponent of result:
+        let ej = ei + Vi32::<S>::from_bits(z.into_bits() >> 23);
+
+        // check exponent for overflow and underflow
+        let overflow = Vf32::<S>::from_cast_mask(ej.ge(Vi32::<S>::splat(0x0FF))) | ee.gt(Vf32::<S>::splat(300.0));
+        let underflow = Vf32::<S>::from_cast_mask(ej.le(Vi32::<S>::splat(0x000))) | ee.lt(Vf32::<S>::splat(-300.0));
+
+        // add exponent by signed integer addition
+        let mut z = Vf32::<S>::from_bits((Vi32::<S>::from_bits(z.into_bits()) + (ei << 23)).into_bits());
+
+        // check for special cases
+        let xfinite = x0.is_finite();
+        let yfinite = y.is_finite();
+        let efinite = ee.is_finite();
+
+        let xzero = x0.is_zero_or_subnormal();
+        let xsign = x0.is_negative();
+
+        if unlikely!((overflow | underflow).any()) {
+            z = underflow.select(zero, z);
+            z = overflow.select(Vf32::<S>::infinity(), z);
+        }
+
+        let yzero = y.eq(zero);
+        let yneg = y.lt(zero);
+
+        // pow_case_x0
+        z = xzero.select(yneg.select(Vf32::<S>::infinity(), yzero.select(one, zero)), z);
+
+        let mut yodd = zero;
+
+        if xsign.any() {
+            let yint = y.eq(y.round());
+            yodd = y << 31;
+
+            let z1 = yint.select(z | yodd, x0.eq(zero).select(z, Vf32::<S>::nan()));
+
+            yodd = yint.select(yodd, zero);
+
+            z = xsign.select(z1, z);
+        }
+
+        let not_special = (xfinite & yfinite & (efinite | xzero));
+
+        if likely!(not_special.all()) {
+            return z; // fast return
+        }
+
+        // handle special error cases: y infinite
+        let z1 = (yfinite & efinite).select(
+            z,
+            x1.eq(one)
+                .select(one, (x1.gt(one) ^ y.is_negative()).select(Vf32::<S>::infinity(), zero)),
+        );
+
+        // handle x infinite
+        let z1 = xfinite.select(
+            z1,
+            yzero.select(
+                one,
+                yneg.select(
+                    yodd & z,               // 0.0 with the sign of z from above
+                    x0.abs() | (x0 & yodd), // get sign of x0 only if y is odd integer
+                ),
+            ),
+        );
+
+        (x0.is_nan() | y.is_nan()).select(x0 + y, z1)
     }
 
     #[inline(always)]

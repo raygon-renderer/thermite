@@ -6,6 +6,8 @@ mod common;
 mod pd;
 mod ps;
 
+//TODO: Gamma function, beta function
+
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
