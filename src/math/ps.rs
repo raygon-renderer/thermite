@@ -351,7 +351,7 @@ where
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
-        let log2e = Vf32::<S>::splat(std::f32::consts::LOG2_E); // 1/log(2)
+        let log2e = Vf32::<S>::splat(std::f32::consts::LOG2_E); // 1/ln(2)
         let ln2 = Vf32::<S>::splat(std::f32::consts::LN_2);
 
         // coefficients for logarithm expansion
