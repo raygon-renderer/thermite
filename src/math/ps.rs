@@ -346,6 +346,7 @@ where
         exp_f_internal::<S>(x, ExpMode::Pow10)
     }
 
+    #[inline(always)]
     fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
