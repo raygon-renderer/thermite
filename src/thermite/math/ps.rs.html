@@ -846,6 +846,7 @@
 <span id="845">845</span>
 <span id="846">846</span>
 <span id="847">847</span>
+<span id="848">848</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1195,6 +1196,7 @@
         <span class="ident">exp_f_internal</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="ident">ExpMode</span>::<span class="ident">Pow10</span>)
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">powf</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="comment">// define constants</span>
         <span class="kw">let</span> <span class="ident">ln2f_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.693359375</span>); <span class="comment">// log(2), split in two for extended precision</span>
