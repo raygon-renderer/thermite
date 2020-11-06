@@ -227,6 +227,8 @@
 <span id="226">226</span>
 <span id="227">227</span>
 <span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -235,6 +237,8 @@
 <span class="kw">mod</span> <span class="ident">common</span>;
 <span class="kw">mod</span> <span class="ident">pd</span>;
 <span class="kw">mod</span> <span class="ident">ps</span>;
+
+<span class="comment">//TODO: Gamma function, beta function</span>
 
 <span class="doccomment">/// Set of vectorized special functions optimized for both single and double precision</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
