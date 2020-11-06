@@ -563,14 +563,14 @@ where
     }
 
     #[inline(always)]
-    fn erfinv(x: Self::Vf) -> Self::Vf {
+    fn erfinv(y: Self::Vf) -> Self::Vf {
         /*
             Approximating the erfinv function, Mike Giles
             https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
         */
         let one = Vf32::<S>::one();
 
-        let a = x.abs();
+        let a = y.abs();
 
         let w = -((one - a) * (one + a)).ln();
 
@@ -624,7 +624,7 @@ where
             p0 = w_big.select(p1, p0);
         }
 
-        p0 * x
+        p0 * y
     }
 }
 
@@ -784,8 +784,9 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let p6logf = Vf32::<S>::splat(1.1676998740E-1);
     let p7logf = Vf32::<S>::splat(-1.1514610310E-1);
     let p8logf = Vf32::<S>::splat(7.0376836292E-2);
+    let one = Vf32::<S>::one();
 
-    let x1 = if p1 { x0 + Vf32::<S>::one() } else { x0 };
+    let x1 = if p1 { x0 + one } else { x0 };
 
     let mut x = fraction2::<S>(x1);
     let mut e = exponent::<S>(x1);
@@ -798,7 +799,7 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     // TODO: Fix this cast when the type inference bug hits stable
     let fe = <Vf32<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(e);
 
-    let xp1 = x - Vf32::<S>::one();
+    let xp1 = x - one;
 
     if p1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
