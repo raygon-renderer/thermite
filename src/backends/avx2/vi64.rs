@@ -462,7 +462,9 @@ impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
         if likely!(from.abs().lt(Vf64::splat((1u64 << 51) as f64 - 1.0)).all()) {
             Self::new(unsafe { (_cvtpd_epi64(from.value.0), _cvtpd_epi64(from.value.1)) })
         } else {
-            brute_force_convert!(&from; f64 => i64)
+            // TODO: Write out LLVM cast manually
+            decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => i64);
+            unsafe { do_convert(from) }
         }
     }
 

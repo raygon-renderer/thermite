@@ -107,14 +107,18 @@ macro_rules! decl {
     )*};
 }
 
-macro_rules! brute_force_convert {
-    ($value:expr; $from:ty => $to:ty) => {
-        unsafe {
-            let mut res = mem::MaybeUninit::uninit();
-            for i in 0..Self::NUM_ELEMENTS {
-                *(res.as_mut_ptr() as *mut $to).add(i) = (*transmute::<&_, *const $from>($value).add(i)) as $to;
+macro_rules! decl_brute_force_convert {
+    (#[$meta:meta] $from:ty => $to:ty) => {
+        paste::paste! {
+            #[$meta]
+            #[inline]
+            unsafe fn do_convert(value: [<V $from>]) -> [<V $to>] {
+                let mut res = mem::MaybeUninit::uninit();
+                for i in 0..[<V $from>]::NUM_ELEMENTS {
+                    *(res.as_mut_ptr() as *mut $to).add(i) = (*transmute::<&_, *const $from>(&value).add(i)) as $to;
+                }
+                res.assume_init()
             }
-            res.assume_init()
         }
     };
 }

@@ -351,7 +351,8 @@ impl_ops!(@SHIFTS u64x8 AVX2 => Shr::shr, Shl::shl);
 
 impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
     fn from_cast(from: Vu32) -> Self {
-        brute_force_convert!(&from; u32 => u64)
+        decl_brute_force_convert!(#[target_feature(enable = "avx2")] u32 => u64);
+        unsafe { do_convert(from) }
     }
 
     #[inline(always)]
@@ -362,7 +363,8 @@ impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vf32> for u64x8<AVX2> {
     fn from_cast(from: Vf32) -> Self {
-        brute_force_convert!(&from; f32 => u64)
+        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f32 => u64);
+        unsafe { do_convert(from) }
     }
 
     #[inline(always)]
@@ -373,7 +375,8 @@ impl SimdCastFrom<AVX2, Vf32> for u64x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
     fn from_cast(from: Vi32) -> Self {
-        brute_force_convert!(&from; i32 => u64)
+        decl_brute_force_convert!(#[target_feature(enable = "avx2")] i32 => u64);
+        unsafe { do_convert(from) }
     }
 
     #[inline(always)]
@@ -397,7 +400,8 @@ impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
             from.is_positive().cast_to::<Vu64>().value()
                 & Self::new(unsafe { (_cvtpd_epu64(from.value.0), _cvtpd_epu64(from.value.1)) })
         } else {
-            brute_force_convert!(&from; f64 => u64)
+            decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u64);
+            unsafe { do_convert(from) }
         }
     }
 

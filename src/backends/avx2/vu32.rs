@@ -317,7 +317,8 @@ impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
     fn from_cast(from: Vf64) -> Self {
-        brute_force_convert!(&from; f64 => u32)
+        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u32);
+        unsafe { do_convert(from) }
     }
 
     #[inline(always)]
