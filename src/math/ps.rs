@@ -572,7 +572,7 @@ where
 
         let a = y.abs();
 
-        let w = -((one - a) * (one + a)).ln();
+        let w = -a.nmul_add(a, one).ln();
 
         let mut p0 = {
             let p0low = Vf32::<S>::splat(1.50140941);
@@ -801,13 +801,13 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
 
     let xp1 = x - one;
 
-    if p1 {
+    x = if p1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
-        x = e.eq(Vi32::<S>::zero()).select(x0, xp1);
+        e.eq(Vi32::<S>::zero()).select(x0, xp1)
     } else {
         // log(x). Expand around 1.0
-        x = xp1;
-    }
+        xp1
+    };
 
     let x2 = x * x;
     let x3 = x2 * x;
