@@ -15,10 +15,7 @@ impl SimdVectorBase<AVX2> for f64x8<AVX2> {
 
     #[inline(always)]
     fn splat(value: Self::Element) -> Self {
-        Self::new(unsafe {
-            let value = _mm256_set1_pd(value);
-            (value, value)
-        })
+        Self::new(unsafe { (_mm256_set1_pd(value), _mm256_set1_pd(value)) })
     }
 
     #[inline(always)]
@@ -633,14 +630,56 @@ impl SimdCastFrom<AVX2, Vf32> for f64x8<AVX2> {
 }
 
 impl SimdCastFrom<AVX2, Vu64> for f64x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
-        brute_force_convert!(&from; u64 => f64)
+        // https://stackoverflow.com/a/41223013/2083075
+        #[inline(always)]
+        #[rustfmt::skip]
+        unsafe fn _cvtepu64_pd(v: __m256i) -> __m256d {
+            let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000);  // 2^52        encoded as floating-point
+            let magic_i_hi32 = _mm256_set1_epi64x(0x4530000000000000);  // 2^84        encoded as floating-point
+            let magic_i_all  = _mm256_set1_epi64x(0x4530000000100000);  // 2^84 + 2^52 encoded as floating-point
+            let magic_d_all  = _mm256_castsi256_pd(magic_i_all);
+
+            let     v_lo     = _mm256_blend_epi32(magic_i_lo, v, 0b01010101);         // Blend the 32 lowest significant bits of v with magic_int_lo
+            let mut v_hi     = _mm256_srli_epi64(v, 32);                              // Extract the 32 most significant bits of v
+                    v_hi     = _mm256_xor_si256(v_hi, magic_i_hi32);                  // Blend v_hi with 0x45300000
+            let     v_hi_dbl = _mm256_sub_pd(_mm256_castsi256_pd(v_hi), magic_d_all); // Compute in double precision:
+                               _mm256_add_pd(v_hi_dbl, _mm256_castsi256_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
+        }
+
+        Self::new(unsafe { (_cvtepu64_pd(from.value.0), _cvtepu64_pd(from.value.1)) })
     }
 
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
-        let from = from.value();
-        Mask::new(Self::new(unsafe {
-            (_mm256_castsi256_pd(from.value.0), _mm256_castsi256_pd(from.value.1))
-        }))
+        Mask::new(Self::from_bits(from.value()))
+    }
+}
+
+impl SimdCastFrom<AVX2, Vi64> for f64x8<AVX2> {
+    fn from_cast(from: Vi64) -> Self {
+        // https://stackoverflow.com/a/41223013/2083075
+        #[inline(always)]
+        #[rustfmt::skip]
+        unsafe fn _cvtepi64_pd(v: __m256i) -> __m256d {
+            let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000); // 2^52               encoded as floating-point
+            let magic_i_hi32 = _mm256_set1_epi64x(0x4530000080000000); // 2^84 + 2^63        encoded as floating-point
+            let magic_i_all  = _mm256_set1_epi64x(0x4530000080100000); // 2^84 + 2^63 + 2^52 encoded as floating-point
+            let magic_d_all  = _mm256_castsi256_pd(magic_i_all);
+
+            let     v_lo     = _mm256_blend_epi32(magic_i_lo, v, 0b01010101);         // Blend the 32 lowest significant bits of v with magic_int_lo
+            let mut v_hi     = _mm256_srli_epi64(v, 32);                              // Extract the 32 most significant bits of v
+                    v_hi     = _mm256_xor_si256(v_hi, magic_i_hi32);                  // Flip the msb of v_hi and blend with 0x45300000
+            let     v_hi_dbl = _mm256_sub_pd(_mm256_castsi256_pd(v_hi), magic_d_all); // Compute in double precision:
+                               _mm256_add_pd(v_hi_dbl, _mm256_castsi256_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
+        }
+
+        Self::new(unsafe { (_cvtepi64_pd(from.value.0), _cvtepi64_pd(from.value.1)) })
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vi64>) -> Mask<AVX2, Self> {
+        Mask::new(Self::from_bits(from.value().into_bits()))
     }
 }
