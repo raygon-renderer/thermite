@@ -524,6 +524,8 @@
 <span id="523">523</span>
 <span id="524">524</span>
 <span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1012,7 +1014,8 @@
 
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="macro">brute_force_convert</span><span class="macro">!</span>(<span class="kw-2">&amp;</span><span class="ident">from</span>; <span class="ident">u32</span> <span class="op">=&gt;</span> <span class="ident">f32</span>)
+        <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">u32</span> <span class="op">=&gt;</span> <span class="ident">f32</span>);
+        <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
     }
 
     <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
@@ -1023,7 +1026,8 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="macro">brute_force_convert</span><span class="macro">!</span>(<span class="kw-2">&amp;</span><span class="ident">from</span>; <span class="ident">u64</span> <span class="op">=&gt;</span> <span class="ident">f32</span>)
+        <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">u64</span> <span class="op">=&gt;</span> <span class="ident">f32</span>);
+        <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>]</span>
