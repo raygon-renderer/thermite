@@ -475,6 +475,18 @@
 <span id="474">474</span>
 <span id="475">475</span>
 <span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -930,7 +942,7 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-        <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_cvtpd_epi64</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+        <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_cvtpd_epi64_fast</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
             <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
             <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0018000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
             <span class="ident">_mm256_sub_epi64</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
@@ -938,11 +950,23 @@
 
         <span class="comment">// make sure to test the limit of the absolute value</span>
         <span class="kw">if</span> <span class="macro">likely</span><span class="macro">!</span>(<span class="ident">from</span>.<span class="ident">abs</span>().<span class="ident">lt</span>(<span class="ident">Vf64</span>::<span class="ident">splat</span>((<span class="number">1u64</span> <span class="op">&lt;&lt;</span> <span class="number">51</span>) <span class="kw">as</span> <span class="ident">f64</span> <span class="op">-</span> <span class="number">1.0</span>)).<span class="ident">all</span>()) {
-            <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_cvtpd_epi64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_cvtpd_epi64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+            <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_cvtpd_epi64_fast</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_cvtpd_epi64_fast</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
         } <span class="kw">else</span> {
-            <span class="comment">// TODO: Write out LLVM cast manually</span>
-            <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">f64</span> <span class="op">=&gt;</span> <span class="ident">i64</span>);
-            <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
+            <span class="comment">// TODO: Investigate if this is fast enough on its own?</span>
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+            <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_cvtpd_epi64_slow</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+                <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">x</span>);
+                <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_pd</span>(<span class="ident">x</span>, <span class="number">1</span>);
+
+                <span class="kw">let</span> <span class="ident">x0</span> <span class="op">=</span> <span class="ident">_mm_cvttsd_si64</span>(<span class="ident">low</span>);
+                <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">_mm_cvttsd_si64</span>(<span class="ident">_mm_permute_pd</span>(<span class="ident">low</span>, <span class="number">1</span>));
+                <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">_mm_cvttsd_si64</span>(<span class="ident">high</span>);
+                <span class="kw">let</span> <span class="ident">x3</span> <span class="op">=</span> <span class="ident">_mm_cvttsd_si64</span>(<span class="ident">_mm_permute_pd</span>(<span class="ident">high</span>, <span class="number">1</span>));
+
+                <span class="ident">_mm256_setr_epi64x</span>(<span class="ident">x0</span>, <span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x3</span>)
+            }
+
+            <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_cvtpd_epi64_slow</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_cvtpd_epi64_slow</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
         }
     }
 
