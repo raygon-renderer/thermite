@@ -7,6 +7,49 @@ where
     type Vf = <S as Simd>::Vf64;
 
     fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+        let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
+        let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
+        let dp3 = Vf64::<S>::splat(3.06161699786838294307E-17 * 2.0);
+        let p0sin = Vf64::<S>::splat(-1.66666666666666307295E-1);
+        let p1sin = Vf64::<S>::splat(8.33333333332211858878E-3);
+        let p2sin = Vf64::<S>::splat(-1.98412698295895385996E-4);
+        let p3sin = Vf64::<S>::splat(2.75573136213857245213E-6);
+        let p4sin = Vf64::<S>::splat(-2.50507477628578072866E-8);
+        let p5sin = Vf64::<S>::splat(1.58962301576546568060E-10);
+        let p0cos = Vf64::<S>::splat(4.16666666666665929218E-2);
+        let p1cos = Vf64::<S>::splat(-1.38888888888730564116E-3);
+        let p2cos = Vf64::<S>::splat(2.48015872888517045348E-5);
+        let p3cos = Vf64::<S>::splat(-2.75573141792967388112E-7);
+        let p4cos = Vf64::<S>::splat(2.08757008419747316778E-9);
+        let p5cos = Vf64::<S>::splat(-1.13585365213876817300E-11);
+        let one = Vf64::<S>::one();
+
+        let xa = xx.abs();
+
+        let y = (xa * Vf64::<S>::splat(2.0 / std::f64::consts::PI));
+        let q = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
+
+        // Reduce by extended precision modular arithmetic
+        // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
+        let x = y.nmul_add(dp3, y.nmul_add(dp2, y.nmul_add(dp1, xa)));
+
+        // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
+        let x2 = x * x;
+        let x3 = x2 * x;
+        let x4 = x2 * x2;
+        let x8 = x4 * x4;
+
+        let mut s = poly_5(x2, x4, x8, p0sin, p1sin, p2sin, p3sin, p4sin, p5sin);
+        let mut c = poly_5(x2, x4, x8, p0cos, p1cos, p2cos, p3cos, p4cos, p5cos);
+
+        s = s.mul_add(x2 * x, x); // s = x + (x * x2) * s;
+        c = c.mul_add(x4, x2.mul_add(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+
+        // swap sin and cos if odd quadrant
+        let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
+
+        //let overflow = q.gt(Vu64::<S>::splat(0x80000000000000)) & xa.is_finite().cast_to(); // q big if overflow
+
         unimplemented!()
     }
 
@@ -111,6 +154,7 @@ where
         (a0 - a0 / r8).copysign(x)
     }
 
+    #[inline(always)]
     fn erfinv(y: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
@@ -120,6 +164,7 @@ where
 
         let mut p0 = {
             // https://www.desmos.com/calculator/06q98crjp0
+            // TODO: Increase to 13?
             let c0 = Vf64::<S>::splat(1.50140935129);
             let c1 = Vf64::<S>::splat(0.246640278996);
             let c2 = Vf64::<S>::splat(-0.00417730548583);
