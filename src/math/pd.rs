@@ -77,11 +77,13 @@ where
     fn acos(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+    #[inline(always)]
     fn atan(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        atan_internal::<S>(x, unsafe { Vf64::<S>::undefined() }, false)
     }
+    #[inline(always)]
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        atan_internal::<S>(y, x, true)
     }
     fn asinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
@@ -316,4 +318,81 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     res = (x1.is_infinite() & x1.is_negative()).select(Vf64::<S>::nan(), res); // -INF gives NAN
 
     res
+}
+
+#[inline(always)]
+fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
+    let morebits = Vf64::<S>::splat(6.123233995736765886130E-17);
+    let morebitso2 = Vf64::<S>::splat(6.123233995736765886130E-17 * 0.5);
+    let t3po8 = Vf64::<S>::splat(std::f64::consts::SQRT_2 + 1.0);
+    let p4atan = Vf64::<S>::splat(-8.750608600031904122785E-1);
+    let p3atan = Vf64::<S>::splat(-1.615753718733365076637E1);
+    let p2atan = Vf64::<S>::splat(-7.500855792314704667340E1);
+    let p1atan = Vf64::<S>::splat(-1.228866684490136173410E2);
+    let p0atan = Vf64::<S>::splat(-6.485021904942025371773E1);
+    let q4atan = Vf64::<S>::splat(2.485846490142306297962E1);
+    let q3atan = Vf64::<S>::splat(1.650270098316988542046E2);
+    let q2atan = Vf64::<S>::splat(4.328810604912902668951E2);
+    let q1atan = Vf64::<S>::splat(4.853903996359136964868E2);
+    let q0atan = Vf64::<S>::splat(1.945506571482613964425E2);
+    let neg_one = Vf64::<S>::neg_one();
+    let one = Vf64::<S>::one();
+    let zero = Vf64::<S>::zero();
+
+    let mut swapxy = Mask::new(unsafe { Vf64::<S>::undefined() });
+
+    let t = if atan2 {
+        let x1 = x.abs();
+        let y1 = y.abs();
+
+        swapxy = y1.gt(x1);
+
+        let mut x2 = swapxy.select(y1, x1);
+        let mut y2 = swapxy.select(x1, y1);
+
+        let both_inf = x.is_infinite() & y.is_infinite();
+
+        if unlikely!(both_inf.any()) {
+            x2 = both_inf.select(x2 & neg_one, x2);
+            y2 = both_inf.select(y2 & neg_one, y2);
+        }
+
+        y2 / x2
+    } else {
+        y.abs()
+    };
+
+    let not_big = t.le(t3po8);
+    let not_small = t.ge(Vf64::<S>::splat(0.66));
+
+    let s = not_big.select(
+        Vf64::<S>::splat(std::f64::consts::FRAC_PI_4),
+        Vf64::<S>::splat(std::f64::consts::FRAC_PI_2),
+    ) & not_small.value();
+
+    let fac = not_big.select(morebitso2, morebits) & not_small.value();
+
+    let a = (not_big.value() & t) + (not_small.value() & neg_one);
+    let b = (not_big.value() & one) + (not_small.value() & t);
+
+    let z = a / b;
+
+    let zz = z * z;
+    let zz2 = zz * zz;
+    let zz4 = zz2 * zz2;
+
+    let px = poly_4(zz, zz2, zz4, p0atan, p1atan, p2atan, p3atan, p4atan);
+    let qx = poly_5(zz, zz2, zz4, q0atan, q1atan, q2atan, q3atan, q4atan, one);
+
+    // place additions before mul_add to lessen dependency chain
+    let mut re = (px / qx).mul_add(z * zz, z + s + fac);
+
+    if atan2 {
+        re = swapxy.select(Vf64::<S>::splat(std::f64::consts::FRAC_PI_2) - re, re);
+        re = (x | y).eq(zero).select(zero, re); // atan2(0,0) = 0 by convention
+                                                // also for x = -0.
+        re = x.is_negative().select(Vf64::<S>::splat(std::f64::consts::PI) - re, re);
+    }
+
+    re.combine_sign(y)
 }
