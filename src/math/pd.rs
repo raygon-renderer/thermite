@@ -87,23 +87,101 @@ where
     }
 
     #[inline(always)]
-    fn sinh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn sinh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+
+        let p0 = Vf64::<S>::splat(-3.51754964808151394800E5);
+        let p1 = Vf64::<S>::splat(-1.15614435765005216044E4);
+        let p2 = Vf64::<S>::splat(-1.63725857525983828727E2);
+        let p3 = Vf64::<S>::splat(-7.89474443963537015605E-1);
+        let q0 = Vf64::<S>::splat(-2.11052978884890840399E6);
+        let q1 = Vf64::<S>::splat(3.61578279834431989373E4);
+        let q2 = Vf64::<S>::splat(-2.77711081420602794433E2);
+        let q3 = one;
+
+        let x = x0.abs();
+
+        let x_small = x.le(one);
+
+        let mut y1 = unsafe { Vf64::<S>::undefined() };
+        let mut y2 = unsafe { Vf64::<S>::undefined() };
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+
+            y1 = poly_3(x2, x4, p0, p1, p2, p3) / poly_3(x2, x4, q0, q1, q2, q3);
+            y1 = y1.mul_add(x * x2, x);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = x.exph();
+            y2 -= Vf64::<S>::splat(0.25) / y2;
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     #[inline(always)]
-    fn tanh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn tanh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+
+        let p0 = Vf64::<S>::splat(-1.61468768441708447952E3);
+        let p1 = Vf64::<S>::splat(-9.92877231001918586564E1);
+        let p2 = Vf64::<S>::splat(-9.64399179425052238628E-1);
+        let q0 = Vf64::<S>::splat(4.84406305325125486048E3);
+        let q1 = Vf64::<S>::splat(2.23548839060100448583E3);
+        let q2 = Vf64::<S>::splat(1.12811678491632931402E2);
+        let q3 = one;
+
+        let x = x0.abs();
+
+        let x_small = x.le(Vf64::<S>::splat(0.625));
+
+        let mut y1 = unsafe { Vf64::<S>::undefined() };
+        let mut y2 = unsafe { Vf64::<S>::undefined() };
+
+        // use bitmask directly to avoid two calls
+        let bitmask = x_small.bitmask();
+
+        // if any are small
+        if bitmask != 0 {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+
+            y1 = poly_2(x2, x4, p0, p1, p2) / poly_3(x2, x4, q0, q1, q2, q3);
+            y1 = y1.mul_add(x2 * x, x);
+        }
+
+        // if not all are small
+        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+            y2 = (x + x).exp();
+            y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
+        }
+
+        let x_big = x.gt(Vf64::<S>::splat(350.0));
+
+        y1 = x_small.select(y1, y2);
+        y1 = x_big.select(one, y1);
+
+        y1.combine_sign(x0)
     }
 
     #[inline(always)]
     fn asinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
     #[inline(always)]
     fn acosh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
     #[inline(always)]
     fn atanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()

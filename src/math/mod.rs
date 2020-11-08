@@ -158,8 +158,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
 
     #[inline(always)]
     fn cosh(x: Self::Vf) -> Self::Vf {
-        let x: Self::Vf = x.abs();
-        let y: Self::Vf = x.exph(); // 0.5 * exp(x)
+        let y: Self::Vf = x.abs().exph(); // 0.5 * exp(x)
         y + Self::Vf::splat_any(0.25) / y // + 0.5 * exp(-x)
     }
 

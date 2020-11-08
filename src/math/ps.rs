@@ -89,6 +89,8 @@ where
 
     #[inline(always)]
     fn tanh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf32::<S>::one();
+
         let r0 = Vf32::<S>::splat(-3.33332819422E-1);
         let r1 = Vf32::<S>::splat(1.33314422036E-1);
         let r2 = Vf32::<S>::splat(-5.37397155531E-2);
@@ -115,13 +117,13 @@ where
         // if not all are small
         if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
             y2 = (x + x).exp();
-            y2 = Vf32::<S>::one() - Vf32::<S>::splat(2.0) / (y2 + Vf32::<S>::one());
+            y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
 
         let x_big = x.gt(Vf32::<S>::splat(44.4));
 
         y1 = x_small.select(y1, y2);
-        y1 = x_big.select(Vf32::<S>::one(), y1);
+        y1 = x_big.select(one, y1);
 
         y1.combine_sign(x0)
     }
