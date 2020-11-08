@@ -626,6 +626,10 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
 
             x = r.nmul_add(ln2d_hi, x); // x -= r * ln2_hi;
             x = r.nmul_add(ln2d_lo, x); // x -= r * ln2_lo;
+
+            if mode == ExpMode::Exph {
+                r -= one;
+            }
         }
         ExpMode::Pow2 => {
             max_x = 1022.0;
@@ -647,10 +651,6 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
             x = r.nmul_add(log10_2_lo, x); // x -= r * log10_2_lo;
             x *= Vf64::<S>::splat(LN_10);
         }
-    }
-
-    if mode == ExpMode::Exph {
-        r -= one;
     }
 
     let x2 = x * x;
