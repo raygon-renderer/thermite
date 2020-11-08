@@ -940,12 +940,12 @@
     <span class="kw">if</span> <span class="ident">do_small</span> {
         <span class="ident">px</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0asin</span>, <span class="ident">p1asin</span>, <span class="ident">p2asin</span>, <span class="ident">p3asin</span>, <span class="ident">p4asin</span>, <span class="ident">p5asin</span>);
         <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0asin</span>, <span class="ident">q1asin</span>, <span class="ident">q2asin</span>, <span class="ident">q3asin</span>, <span class="ident">q4asin</span>, <span class="ident">one</span>);
-        <span class="ident">xb</span> <span class="op">=</span> (<span class="ident">x1</span> <span class="op">+</span> <span class="ident">x1</span>).<span class="ident">sqrt</span>();
     }
 
     <span class="kw">if</span> <span class="ident">do_big</span> {
         <span class="ident">rx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">r0asin</span>, <span class="ident">r1asin</span>, <span class="ident">r2asin</span>, <span class="ident">r3asin</span>, <span class="ident">r4asin</span>);
         <span class="ident">sx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">s0asin</span>, <span class="ident">s1asin</span>, <span class="ident">s2asin</span>, <span class="ident">s3asin</span>, <span class="ident">one</span>);
+        <span class="ident">xb</span> <span class="op">=</span> (<span class="ident">x1</span> <span class="op">+</span> <span class="ident">x1</span>).<span class="ident">sqrt</span>();
     }
 
     <span class="kw">let</span> <span class="ident">vx</span> <span class="op">=</span> <span class="ident">is_big</span>.<span class="ident">select</span>(<span class="ident">rx</span>, <span class="ident">px</span>);
