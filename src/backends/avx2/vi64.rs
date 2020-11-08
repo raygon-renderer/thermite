@@ -457,29 +457,43 @@ impl SimdCastFrom<AVX2, Vf32> for i64x8<AVX2> {
 }
 
 impl SimdCastFrom<AVX2, Vi32> for i64x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vi32) -> Self {
-        unimplemented!()
+        Self::new(unsafe {
+            (
+                _mm256_cvtepi32_epi64(_mm256_castsi256_si128(from.value)),
+                _mm256_cvtepi32_epi64(_mm256_extracti128_si256(from.value, 1)),
+            )
+        })
     }
+
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
-        unimplemented!()
+        Self::from_cast(from.value()).ne(Self::zero())
     }
 }
 
 impl SimdCastFrom<AVX2, Vu32> for i64x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
-        unimplemented!()
+        // zero extend
+        Self::from_bits(from.cast_to::<Vu64>())
     }
+
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
-        unimplemented!()
+        Self::from_cast(from.value()).ne(Self::zero())
     }
 }
 
 impl SimdCastFrom<AVX2, Vu64> for i64x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
-        unimplemented!()
+        Self::new(from.value)
     }
+
     fn from_cast_mask(from: Mask<AVX2, Vu64>) -> Mask<AVX2, Self> {
-        unimplemented!()
+        Mask::new(Self::new(from.value().value))
     }
 }
 

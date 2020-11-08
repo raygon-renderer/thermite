@@ -351,8 +351,12 @@ impl_ops!(@SHIFTS u64x8 AVX2 => Shr::shr, Shl::shl);
 
 impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
     fn from_cast(from: Vu32) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] u32 => u64);
-        unsafe { do_convert(from) }
+        Self::new(unsafe {
+            (
+                _mm256_cvtepu32_epi64(_mm256_castsi256_si128(from.value)),
+                _mm256_cvtepu32_epi64(_mm256_extracti128_si256(from.value, 1)),
+            )
+        })
     }
 
     #[inline(always)]
@@ -375,14 +379,13 @@ impl SimdCastFrom<AVX2, Vf32> for u64x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
     fn from_cast(from: Vi32) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] i32 => u64);
-        unsafe { do_convert(from) }
+        // zero extend
+        from.cast_to::<Vu32>().cast()
     }
 
     #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
-        // convert as unsigned to avoid sign extend overhead
-        from.value().into_bits().cast_to::<Vu64>().ne(Self::zero())
+        Self::from_cast(from.value()).ne(Self::zero())
     }
 }
 
