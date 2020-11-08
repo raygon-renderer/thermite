@@ -1,5 +1,7 @@
 use super::{common::*, *};
 
+use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+
 impl<S: Simd> SimdVectorizedMathInternal<S> for f64
 where
     <S as Simd>::Vf64: SimdFloatVector<S, Element = f64>,
@@ -28,7 +30,7 @@ where
 
         let xa = xx.abs();
 
-        let y = (xa * Vf64::<S>::splat(2.0 / std::f64::consts::PI)).round();
+        let y = (xa * Vf64::<S>::splat(2.0 / PI)).round();
         let q = unsafe { y.to_uint_fast() };
 
         // Reduce by extended precision modular arithmetic
@@ -149,12 +151,12 @@ where
 
     #[inline(always)]
     fn log2(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf64::<S>::splat(std::f64::consts::LOG2_E)
+        x.ln() * Vf64::<S>::splat(LOG2_E)
     }
 
     #[inline(always)]
     fn log10(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf64::<S>::splat(std::f64::consts::LOG10_E)
+        x.ln() * Vf64::<S>::splat(LOG10_E)
     }
 
     #[rustfmt::skip]
@@ -304,7 +306,7 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     let mut x = fraction2::<S>(x1);
     let mut fe = <Vf64<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(exponent::<S>(x1));
 
-    let blend = x.gt(Vf64::<S>::splat(std::f64::consts::SQRT_2 * 0.5));
+    let blend = x.gt(Vf64::<S>::splat(SQRT_2 * 0.5));
 
     // conditional adds
     x += !blend.value() & x;
@@ -352,7 +354,7 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
 fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
     let morebits = Vf64::<S>::splat(6.123233995736765886130E-17);
     let morebitso2 = Vf64::<S>::splat(6.123233995736765886130E-17 * 0.5);
-    let t3po8 = Vf64::<S>::splat(std::f64::consts::SQRT_2 + 1.0);
+    let t3po8 = Vf64::<S>::splat(SQRT_2 + 1.0);
     let p4atan = Vf64::<S>::splat(-8.750608600031904122785E-1);
     let p3atan = Vf64::<S>::splat(-1.615753718733365076637E1);
     let p2atan = Vf64::<S>::splat(-7.500855792314704667340E1);
@@ -393,10 +395,7 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
     let not_big = t.le(t3po8);
     let not_small = t.ge(Vf64::<S>::splat(0.66));
 
-    let s = not_big.select(
-        Vf64::<S>::splat(std::f64::consts::FRAC_PI_4),
-        Vf64::<S>::splat(std::f64::consts::FRAC_PI_2),
-    ) & not_small.value();
+    let s = not_big.select(Vf64::<S>::splat(FRAC_PI_4), Vf64::<S>::splat(FRAC_PI_2)) & not_small.value();
 
     let fac = not_big.select(morebitso2, morebits) & not_small.value();
 
@@ -416,10 +415,10 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
     let mut re = (px / qx).mul_add(z * zz, z + s + fac);
 
     if atan2 {
-        re = swapxy.select(Vf64::<S>::splat(std::f64::consts::FRAC_PI_2) - re, re);
+        re = swapxy.select(Vf64::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,0) = 0 by convention
                                                 // also for x = -0.
-        re = x.is_negative().select(Vf64::<S>::splat(std::f64::consts::PI) - re, re);
+        re = x.is_negative().select(Vf64::<S>::splat(PI) - re, re);
     }
 
     re.combine_sign(y)
@@ -491,10 +490,10 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let z1 = xb.mul_add(y1, xb);
     let z2 = xa.mul_add(y1, xa);
 
-    let frac_pi_2 = Vf64::<S>::splat(std::f64::consts::FRAC_PI_2);
+    let frac_pi_2 = Vf64::<S>::splat(FRAC_PI_2);
 
     if acos {
-        let z1 = x.is_negative().select(Vf64::<S>::splat(std::f64::consts::PI) - z1, z1);
+        let z1 = x.is_negative().select(Vf64::<S>::splat(PI) - z1, z1);
         let z2 = frac_pi_2 - z2.combine_sign(x);
         is_big.select(z1, z2)
     } else {
@@ -503,6 +502,7 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     }
 }
 
+#[inline(always)]
 fn pow2n_d<S: Simd>(n: Vf64<S>) -> Vf64<S> {
     let pow2_52 = Vf64::<S>::splat(4503599627370496.0);
     let bias = Vf64::<S>::splat(1023.0);
@@ -512,8 +512,6 @@ fn pow2n_d<S: Simd>(n: Vf64<S>) -> Vf64<S> {
 
 #[inline(always)]
 fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
-    use std::f64::consts::{LN_10, LN_2, LOG10_2, LOG2_E};
-
     let zero = Vf64::<S>::zero();
     let one = Vf64::<S>::one();
 

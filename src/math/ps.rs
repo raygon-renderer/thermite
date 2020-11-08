@@ -1,5 +1,7 @@
 use super::{common::*, *};
 
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
 where
     <S as Simd>::Vf32: SimdFloatVector<S, Element = f32>,
@@ -20,7 +22,7 @@ where
 
         let xa: Vf32<S> = xx.abs();
 
-        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / std::f32::consts::PI)).round();
+        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / PI)).round();
         let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
 
         // Reduce by extended precision modular arithmetic
@@ -143,13 +145,10 @@ where
 
         let t = y.abs();
 
-        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0)); // t >= tan  pi/8
-        let not_big = t.le(Vf32::<S>::splat(std::f32::consts::SQRT_2 + 1.0)); // t <= tan 3pi/8
+        let not_small = t.ge(Vf32::<S>::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
+        let not_big = t.le(Vf32::<S>::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
 
-        let s = not_big.select(
-            Vf32::<S>::splat(std::f32::consts::FRAC_PI_4),
-            Vf32::<S>::splat(std::f32::consts::FRAC_PI_2),
-        ) & not_small.value(); // select(not_small, s, 0.0);
+        let s = not_big.select(Vf32::<S>::splat(FRAC_PI_4), Vf32::<S>::splat(FRAC_PI_2)) & not_small.value(); // select(not_small, s, 0.0);
 
         // small:  z = t / 1.0;
         // medium: z = (t-1.0) / (t+1.0);
@@ -196,21 +195,21 @@ where
 
         // small:  z = t / 1.0;
         // medium: z = (t-1.0) / (t+1.0);
-        let not_small = t.ge(Vf32::<S>::splat(std::f32::consts::SQRT_2 - 1.0));
+        let not_small = t.ge(Vf32::<S>::splat(SQRT_2 - 1.0));
 
         let a = t + (not_small.value() & neg_one);
         let b = Vf32::<S>::one() + (not_small.value() & t);
 
-        let s = not_small.value() & Vf32::<S>::splat(std::f32::consts::FRAC_PI_4);
+        let s = not_small.value() & Vf32::<S>::splat(FRAC_PI_4);
 
         let z = a / b;
         let z2 = z * z;
 
         let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_add(z2 * z, z + s);
 
-        re = swap_xy.select(Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - re, re);
+        re = swap_xy.select(Vf32::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
-        re = x.is_negative().select(Vf32::<S>::splat(std::f32::consts::PI) - re, re); // also for x = -0.
+        re = x.is_negative().select(Vf32::<S>::splat(PI) - re, re); // also for x = -0.
 
         re
     }
@@ -241,7 +240,7 @@ where
             y2 = ((x2 + Vf32::<S>::one()).sqrt() + x).ln();
 
             if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
+                y2 = x_huge.select(x.ln() + Vf32::<S>::splat(LN_2), y2);
             }
         }
 
@@ -282,7 +281,7 @@ where
             y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
 
             if x_huge.any() {
-                y2 = x_huge.select(x0.ln() + Vf32::<S>::splat(std::f32::consts::LN_2), y2);
+                y2 = x_huge.select(x0.ln() + Vf32::<S>::splat(LN_2), y2);
             }
         }
 
@@ -356,8 +355,8 @@ where
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
-        let log2e = Vf32::<S>::splat(std::f32::consts::LOG2_E); // 1/ln(2)
-        let ln2 = Vf32::<S>::splat(std::f32::consts::LN_2);
+        let log2e = Vf32::<S>::splat(LOG2_E); // 1/ln(2)
+        let ln2 = Vf32::<S>::splat(LN_2);
 
         // coefficients for logarithm expansion
         let p0logf = Vf32::<S>::splat(3.3333331174E-1);
@@ -386,7 +385,7 @@ where
 
         let mut x = fraction2::<S>(x1);
 
-        let blend = x.gt(Vf32::<S>::splat(std::f32::consts::SQRT_2 * 0.5));
+        let blend = x.gt(Vf32::<S>::splat(SQRT_2 * 0.5));
 
         // reduce range of x = +/- sqrt(2)/2
         x += !blend.value() & x;
@@ -534,12 +533,12 @@ where
 
     #[inline(always)]
     fn log2(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG2_E)
+        x.ln() * Vf32::<S>::splat(LOG2_E)
     }
 
     #[inline(always)]
     fn log10(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(std::f32::consts::LOG10_E)
+        x.ln() * Vf32::<S>::splat(LOG10_E)
     }
 
     #[inline(always)]
@@ -643,8 +642,6 @@ fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
 
 #[inline(always)]
 fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
-    use std::f32::consts::{LN_10, LN_2, LOG10_2, LOG2_E};
-
     let p0expf = Vf32::<S>::splat(1.0 / 2.0);
     let p1expf = Vf32::<S>::splat(1.0 / 6.0);
     let p2expf = Vf32::<S>::splat(1.0 / 24.0);
@@ -755,12 +752,12 @@ fn asin_f_internal<S: Simd>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     let z1 = z + z;
 
     if acos {
-        let z1 = x.is_positive().select(Vf32::<S>::splat(std::f32::consts::PI) - z1, z1);
-        let z2 = Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - z.combine_sign(x);
+        let z1 = x.is_positive().select(Vf32::<S>::splat(PI) - z1, z1);
+        let z2 = Vf32::<S>::splat(FRAC_PI_2) - z.combine_sign(x);
 
         is_big.select(z1, z2)
     } else {
-        let z1 = Vf32::<S>::splat(std::f32::consts::FRAC_PI_2) - z1;
+        let z1 = Vf32::<S>::splat(FRAC_PI_2) - z1;
 
         is_big.select(z1, z).combine_sign(x)
     }
@@ -798,7 +795,7 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let mut x = fraction2::<S>(x1);
     let mut e = exponent::<S>(x1);
 
-    let blend = x.gt(Vf32::<S>::splat(std::f32::consts::SQRT_2 * 0.5));
+    let blend = x.gt(Vf32::<S>::splat(SQRT_2 * 0.5));
 
     x += !blend.value() & x; // conditional addition
     e += Vi32::<S>::from_bits(blend.value().into_bits() & Vu32::<S>::one()); // conditional (signed) addition
