@@ -6,6 +6,7 @@ where
 {
     type Vf = <S as Simd>::Vf64;
 
+    #[inline(always)]
     fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
@@ -83,35 +84,55 @@ where
         atan_internal::<S>(y, x, true)
     }
 
+    #[inline(always)]
     fn sinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
 
+    #[inline(always)]
     fn tanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
 
+    #[inline(always)]
     fn asinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+    #[inline(always)]
     fn acosh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+    #[inline(always)]
     fn atanh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
+
+    #[inline(always)]
     fn exp(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_d_internal::<S>(x, ExpMode::Exp)
     }
+
+    #[inline(always)]
     fn exph(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_d_internal::<S>(x, ExpMode::Exph)
     }
+
+    #[inline(always)]
     fn exp2(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_d_internal::<S>(x, ExpMode::Pow2)
     }
+
+    #[inline(always)]
     fn exp10(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        exp_d_internal::<S>(x, ExpMode::Pow10)
     }
+
+    #[inline(always)]
+    fn exp_m1(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S>(x, ExpMode::Expm1)
+    }
+
+    #[inline(always)]
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
@@ -259,6 +280,7 @@ fn exponent<S: Simd>(x: Vf64<S>) -> Vi32<S> {
     )) - Vi32::<S>::splat(0x3FF)
 }
 
+#[inline(always)]
 fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     let ln2_hi = Vf64::<S>::splat(0.693359375);
     let ln2_lo = Vf64::<S>::splat(-2.121944400546905827679E-4);
@@ -433,11 +455,6 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
 
     let x1 = is_big.select(one - xa, xa * xa);
 
-    let bitmask = is_big.bitmask();
-
-    let do_big = bitmask != 0; // if any are big
-    let do_small = bitmask != Mask::<S, Vf64<S>>::FULL_BITMASK; // if any are not big
-
     let x2 = x1 * x1;
     let x4 = x2 * x2;
     let x8 = x4 * x4;
@@ -448,15 +465,18 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let mut qx = undef;
     let mut rx = undef;
     let mut sx = undef;
+    let mut xb = undef;
 
-    let mut xb = one;
+    let bitmask = is_big.bitmask();
 
-    if do_small {
+    // if any are not big
+    if bitmask != Mask::<S, Vf64<S>>::FULL_BITMASK {
         px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
         qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
     }
 
-    if do_big {
+    // if any are big
+    if bitmask != 0 {
         rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
         sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
         xb = (x1 + x1).sqrt();
@@ -481,4 +501,116 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
         let z1 = frac_pi_2 - z1;
         is_big.select(z1, z2).combine_sign(x)
     }
+}
+
+fn pow2n_d<S: Simd>(n: Vf64<S>) -> Vf64<S> {
+    let pow2_52 = Vf64::<S>::splat(4503599627370496.0);
+    let bias = Vf64::<S>::splat(1023.0);
+
+    (n + (bias + pow2_52)) << 52
+}
+
+#[inline(always)]
+fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
+    use std::f64::consts::{LN_10, LN_2, LOG10_2, LOG2_E};
+
+    let zero = Vf64::<S>::zero();
+    let one = Vf64::<S>::one();
+
+    // Taylor coefficients, 1/n!
+    // Not using minimax approximation because we prioritize precision close to x = 0
+    let p0 = zero;
+    let p1 = one;
+    let p2 = Vf64::<S>::splat(1.0 / 2.0);
+    let p3 = Vf64::<S>::splat(1.0 / 6.0);
+    let p4 = Vf64::<S>::splat(1.0 / 24.0);
+    let p5 = Vf64::<S>::splat(1.0 / 120.0);
+    let p6 = Vf64::<S>::splat(1.0 / 720.0);
+    let p7 = Vf64::<S>::splat(1.0 / 5040.0);
+    let p8 = Vf64::<S>::splat(1.0 / 40320.0);
+    let p9 = Vf64::<S>::splat(1.0 / 362880.0);
+    let p10 = Vf64::<S>::splat(1.0 / 3628800.0);
+    let p11 = Vf64::<S>::splat(1.0 / 39916800.0);
+    let p12 = Vf64::<S>::splat(1.0 / 479001600.0);
+    let p13 = Vf64::<S>::splat(1.0 / 6227020800.0);
+
+    let mut x = x0;
+    let mut r;
+
+    let max_x;
+
+    match mode {
+        ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
+            max_x = if mode == ExpMode::Exp { 708.39 } else { 709.7 };
+
+            let ln2d_hi = Vf64::<S>::splat(0.693145751953125);
+            let ln2d_lo = Vf64::<S>::splat(1.42860682030941723212E-6);
+
+            r = (x0 * Vf64::<S>::splat(LOG2_E)).round();
+
+            x = r.nmul_add(ln2d_hi, x); // x -= r * ln2_hi;
+            x = r.nmul_add(ln2d_lo, x); // x -= r * ln2_lo;
+        }
+        ExpMode::Pow2 => {
+            max_x = 1022.0;
+
+            r = x0.round();
+
+            x -= r;
+            x *= Vf64::<S>::splat(LN_2);
+        }
+        ExpMode::Pow10 => {
+            max_x = 307.65;
+
+            let log10_2_hi = Vf64::<S>::splat(0.30102999554947019); // log10(2) in two parts
+            let log10_2_lo = Vf64::<S>::splat(1.1451100899212592E-10);
+
+            r = (x0 * Vf64::<S>::splat(LN_10 * LOG2_E)).round();
+
+            x = r.nmul_add(log10_2_hi, x); // x -= r * log10_2_hi;
+            x = r.nmul_add(log10_2_lo, x); // x -= r * log10_2_lo;
+            x *= Vf64::<S>::splat(LN_10);
+        }
+    }
+
+    if mode == ExpMode::Exph {
+        r -= one;
+    }
+
+    let x2 = x * x;
+    let x4 = x2 * x2;
+    let x8 = x4 * x4;
+
+    let mut z = poly_13(
+        x, x2, x4, x8, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13,
+    );
+
+    let n2 = pow2n_d::<S>(r);
+
+    if mode == ExpMode::Expm1 {
+        z = z.mul_add(n2, n2 - one);
+    } else {
+        z = z.mul_add(n2, n2); // (z + 1.0f) * n2
+    }
+
+    let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite().cast_to();
+
+    if likely!(in_range.all()) {
+        return z;
+    }
+
+    let sign_bit_mask = (x0 & Vf64::<S>::neg_zero()).into_bits().ne(Vu64::<S>::zero());
+    let is_nan = x0.is_nan();
+
+    let underflow_value = if mode == ExpMode::Expm1 {
+        Vf64::<S>::neg_one()
+    } else {
+        Vf64::<S>::zero()
+    };
+
+    r = sign_bit_mask.select(underflow_value, Vf64::<S>::infinity());
+    z = in_range.select(z, r);
+    z = is_nan.select(x0, z);
+
+    z
 }

@@ -347,6 +347,11 @@ where
     }
 
     #[inline(always)]
+    fn exp_m1(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S>(x, ExpMode::Expm1)
+    }
+
+    #[inline(always)]
     fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
@@ -686,37 +691,39 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         }
     }
 
-    let x2 = x * x;
-    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_add(x2, x);
-
     if mode == ExpMode::Exph {
         r -= Vf32::<S>::one();
     }
+
+    let x2 = x * x;
+    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_add(x2, x);
 
     let n2 = pow2n_f::<S>(r);
 
     if mode == ExpMode::Expm1 {
         z = z.mul_add(n2, n2 - Vf32::<S>::one());
     } else {
-        z = (z + Vf32::<S>::one()) * n2;
+        z = z.mul_add(n2, n2); // (z + 1.0f) * n2
     }
 
     let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite().cast_to();
 
-    if unlikely!(!in_range.all()) {
-        let sign_bit_mask = (x0 & Vf32::<S>::neg_zero()).into_bits().ne(Vu32::<S>::zero());
-        let is_nan = x0.is_nan();
-
-        let underflow_value = if mode == ExpMode::Expm1 {
-            Vf32::<S>::neg_one()
-        } else {
-            Vf32::<S>::zero()
-        };
-
-        r = sign_bit_mask.select(underflow_value, Vf32::<S>::infinity());
-        z = in_range.select(z, r);
-        z = is_nan.select(x0, z);
+    if likely!(in_range.all()) {
+        return z;
     }
+
+    let sign_bit_mask = (x0 & Vf32::<S>::neg_zero()).into_bits().ne(Vu32::<S>::zero());
+    let is_nan = x0.is_nan();
+
+    let underflow_value = if mode == ExpMode::Expm1 {
+        Vf32::<S>::neg_one()
+    } else {
+        Vf32::<S>::zero()
+    };
+
+    r = sign_bit_mask.select(underflow_value, Vf32::<S>::infinity());
+    z = in_range.select(z, r);
+    z = is_nan.select(x0, z);
 
     z
 }
