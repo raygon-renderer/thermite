@@ -505,19 +505,6 @@
 <span id="504">504</span>
 <span id="505">505</span>
 <span id="506">506</span>
-<span id="507">507</span>
-<span id="508">508</span>
-<span id="509">509</span>
-<span id="510">510</span>
-<span id="511">511</span>
-<span id="512">512</span>
-<span id="513">513</span>
-<span id="514">514</span>
-<span id="515">515</span>
-<span id="516">516</span>
-<span id="517">517</span>
-<span id="518">518</span>
-<span id="519">519</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -909,21 +896,8 @@
 
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-        <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_cvtpd_epu64</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-            <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
-            <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0010000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
-            <span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
-        }
-
-        <span class="kw">if</span> <span class="macro">likely</span><span class="macro">!</span>(<span class="ident">from</span>.<span class="ident">lt</span>(<span class="ident">Vf64</span>::<span class="ident">splat</span>((<span class="number">1u64</span> <span class="op">&lt;&lt;</span> <span class="number">52</span>) <span class="kw">as</span> <span class="ident">f64</span> <span class="op">-</span> <span class="number">1.0</span>)).<span class="ident">all</span>()) {
-            <span class="comment">// saturate cast</span>
-            <span class="ident">from</span>.<span class="ident">is_positive</span>().<span class="ident">cast_to</span>::<span class="op">&lt;</span><span class="ident">Vu64</span><span class="op">&gt;</span>().<span class="ident">value</span>()
-                <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_cvtpd_epu64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_cvtpd_epu64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
-        } <span class="kw">else</span> {
-            <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">f64</span> <span class="op">=&gt;</span> <span class="ident">u64</span>);
-            <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
-        }
+        <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">f64</span> <span class="op">=&gt;</span> <span class="ident">u64</span>);
+        <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
