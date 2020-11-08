@@ -349,6 +349,17 @@
 <span id="348">348</span>
 <span id="349">349</span>
 <span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -668,6 +679,7 @@
 }
 
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">f64</span> <span class="op">=&gt;</span> <span class="ident">u32</span>);
         <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
@@ -697,6 +709,16 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="ident">from</span>.<span class="ident">value</span>().<span class="ident">cast</span>()) <span class="comment">// truncate</span>
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vi64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vi64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="ident">from</span>.<span class="ident">into_bits</span>().<span class="ident">cast</span>() <span class="comment">// truncate</span>
+    }
+
+    <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vi64</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="ident">from</span>.<span class="ident">value</span>().<span class="ident">cast</span>()) <span class="comment">// truncate</span>
     }
 }
