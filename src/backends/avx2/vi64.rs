@@ -487,32 +487,19 @@ impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
         #[inline(always)]
-        unsafe fn _cvtpd_epi64_fast(x: __m256d) -> __m256i {
-            // https://stackoverflow.com/a/41148578/2083075
-            let m = _mm256_set1_pd(transmute::<u64, i64>(0x0018000000000000) as f64);
-            _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
+        unsafe fn _cvtpd_epi64_slow(x: __m256d) -> __m256i {
+            let low = _mm256_castpd256_pd128(x);
+            let high = _mm256_extractf128_pd(x, 1);
+
+            let x0 = _mm_cvttsd_si64(low);
+            let x1 = _mm_cvttsd_si64(_mm_permute_pd(low, 1));
+            let x2 = _mm_cvttsd_si64(high);
+            let x3 = _mm_cvttsd_si64(_mm_permute_pd(high, 1));
+
+            _mm256_setr_epi64x(x0, x1, x2, x3)
         }
 
-        // make sure to test the limit of the absolute value
-        if likely!(from.abs().lt(Vf64::splat((1u64 << 51) as f64 - 1.0)).all()) {
-            Self::new(unsafe { (_cvtpd_epi64_fast(from.value.0), _cvtpd_epi64_fast(from.value.1)) })
-        } else {
-            // TODO: Investigate if this is fast enough on its own?
-            #[inline(always)]
-            unsafe fn _cvtpd_epi64_slow(x: __m256d) -> __m256i {
-                let low = _mm256_castpd256_pd128(x);
-                let high = _mm256_extractf128_pd(x, 1);
-
-                let x0 = _mm_cvttsd_si64(low);
-                let x1 = _mm_cvttsd_si64(_mm_permute_pd(low, 1));
-                let x2 = _mm_cvttsd_si64(high);
-                let x3 = _mm_cvttsd_si64(_mm_permute_pd(high, 1));
-
-                _mm256_setr_epi64x(x0, x1, x2, x3)
-            }
-
-            Self::new(unsafe { (_cvtpd_epi64_slow(from.value.0), _cvtpd_epi64_slow(from.value.1)) })
-        }
+        Self::new(unsafe { (_cvtpd_epi64_slow(from.value.0), _cvtpd_epi64_slow(from.value.1)) })
     }
 
     #[inline(always)]

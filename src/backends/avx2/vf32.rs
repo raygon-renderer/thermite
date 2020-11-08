@@ -313,6 +313,9 @@ impl SimdSignedVector<AVX2> for f32x8<AVX2> {
 }
 
 impl SimdFloatVector<AVX2> for f32x8<AVX2> {
+    type Vu = Vu32;
+    type Vi = Vi32;
+
     #[inline(always)]
     fn epsilon() -> Self {
         Self::splat(f32::EPSILON)
@@ -365,6 +368,16 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
         for i in 0..Self::NUM_ELEMENTS {
             *dst.add(i) = f16::from_f32(self.extract_unchecked(i));
         }
+    }
+
+    #[inline(always)]
+    unsafe fn to_int_fast(self) -> Self::Vi {
+        self.cast()
+    }
+
+    #[inline(always)]
+    unsafe fn to_uint_fast(self) -> Self::Vu {
+        self.cast()
     }
 
     fn sum(self) -> Self::Element {

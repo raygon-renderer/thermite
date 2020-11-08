@@ -468,6 +468,9 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
 
 /// Floating point SIMD vectors
 pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S> {
+    type Vi: SimdIntVector<S> + SimdSignedVector<S>;
+    type Vu: SimdIntVector<S>;
+
     fn epsilon() -> Self;
     fn infinity() -> Self;
     fn neg_infinity() -> Self;
@@ -488,6 +491,24 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self;
     unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16);
+
+    /// Can convert to a signed integer faster than a regular `cast`, but may not provide
+    /// correct results above a certain range.
+    ///
+    /// For example, `f64 -> i64` is only valid from `(-2^51, 2^51)` or so.
+    ///
+    /// On instruction sets where this can be done in-hardware,
+    /// the results should be exact, but do not rely on this for large floats.
+    unsafe fn to_int_fast(self) -> Self::Vi;
+
+    /// Can convert to a signed integer faster than a regular `cast`, but may not provide
+    /// correct results above a certain range.
+    ///
+    /// For example, `f64 -> u64` is only valid from `[0, 2^52)` or so.
+    ///
+    /// On instruction sets where this can be done in-hardware,
+    /// the results should be exact, but do not rely on this for large floats.
+    unsafe fn to_uint_fast(self) -> Self::Vu;
 
     /// Same as `self * sign.signum()` or `select(sign_bit(sign), -self, self)`, but more efficient where possible.
     #[inline(always)]
@@ -628,6 +649,11 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
         + SimdSignedVector<Self>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>;
+
+    type Vi64: SimdIntVector<Self, Element = i64>
+        + SimdSignedVector<Self>
+        + SimdIntoBits<Self, Self::Vu64>
+        + SimdFromBits<Self, Self::Vu64>;
     //type Vi64: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
@@ -635,11 +661,11 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     type Vu32: SimdIntVector<Self, Element = u32>;
     type Vu64: SimdIntVector<Self, Element = u64>;
 
-    type Vf32: SimdFloatVector<Self, Element = f32>
+    type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>
         + SimdVectorizedMath<Self>;
-    type Vf64: SimdFloatVector<Self, Element = f64>
+    type Vf64: SimdFloatVector<Self, Element = f64, Vu = Self::Vu64, Vi = Self::Vi64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>
         + SimdVectorizedMath<Self>;

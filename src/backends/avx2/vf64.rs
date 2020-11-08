@@ -404,6 +404,9 @@ impl SimdSignedVector<AVX2> for f64x8<AVX2> {
 }
 
 impl SimdFloatVector<AVX2> for f64x8<AVX2> {
+    type Vu = Vu64;
+    type Vi = Vi64;
+
     #[inline(always)]
     fn epsilon() -> Self {
         Self::splat(f64::EPSILON)
@@ -441,6 +444,30 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
         for i in 0..Self::NUM_ELEMENTS {
             *dst.add(i) = f16::from_f64(self.extract_unchecked(i));
         }
+    }
+
+    #[inline(always)]
+    unsafe fn to_int_fast(self) -> Self::Vi {
+        #[inline(always)]
+        unsafe fn _cvtpd_epi64_fast(x: __m256d) -> __m256i {
+            // https://stackoverflow.com/a/41148578/2083075
+            let m = _mm256_set1_pd(transmute::<u64, i64>(0x0018000000000000) as f64);
+            _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
+        }
+
+        Vi64::new(unsafe { (_cvtpd_epi64_fast(self.value.0), _cvtpd_epi64_fast(self.value.1)) })
+    }
+
+    #[inline(always)]
+    unsafe fn to_uint_fast(self) -> Self::Vu {
+        #[inline(always)]
+        unsafe fn _cvtpd_epu64(x: __m256d) -> __m256i {
+            // https://stackoverflow.com/a/41148578/2083075
+            let m = _mm256_set1_pd(transmute::<u64, i64>(0x0010000000000000) as f64);
+            _mm256_xor_si256(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
+        }
+
+        Vu64::new(unsafe { (_cvtpd_epu64(self.value.0), _cvtpd_epu64(self.value.1)) })
     }
 
     fn sum(self) -> Self::Element {

@@ -46,6 +46,7 @@ type Vf64 = f64x8<AVX2>;
 
 impl Simd for AVX2 {
     type Vi32 = Vi32;
+    type Vi64 = Vi64;
     type Vu32 = Vu32;
     type Vu64 = Vu64;
     type Vf32 = Vf32;

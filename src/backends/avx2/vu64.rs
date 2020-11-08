@@ -388,21 +388,8 @@ impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
     fn from_cast(from: Vf64) -> Self {
-        #[inline(always)]
-        unsafe fn _cvtpd_epu64(x: __m256d) -> __m256i {
-            // https://stackoverflow.com/a/41148578/2083075
-            let m = _mm256_set1_pd(transmute::<u64, i64>(0x0010000000000000) as f64);
-            _mm256_xor_si256(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
-        }
-
-        if likely!(from.lt(Vf64::splat((1u64 << 52) as f64 - 1.0)).all()) {
-            // saturate cast
-            from.is_positive().cast_to::<Vu64>().value()
-                & Self::new(unsafe { (_cvtpd_epu64(from.value.0), _cvtpd_epu64(from.value.1)) })
-        } else {
-            decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u64);
-            unsafe { do_convert(from) }
-        }
+        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u64);
+        unsafe { do_convert(from) }
     }
 
     #[inline(always)]
