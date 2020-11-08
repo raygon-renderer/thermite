@@ -454,12 +454,12 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     if do_small {
         px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
         qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
-        xb = (x1 + x1).sqrt();
     }
 
     if do_big {
         rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
         sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
+        xb = (x1 + x1).sqrt();
     }
 
     let vx = is_big.select(rx, px);
