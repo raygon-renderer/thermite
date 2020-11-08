@@ -22,12 +22,13 @@ where
         let p3cos = Vf64::<S>::splat(-2.75573141792967388112E-7);
         let p4cos = Vf64::<S>::splat(2.08757008419747316778E-9);
         let p5cos = Vf64::<S>::splat(-1.13585365213876817300E-11);
+        let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
 
         let xa = xx.abs();
 
-        let y = (xa * Vf64::<S>::splat(2.0 / std::f64::consts::PI));
-        let q = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
+        let y = (xa * Vf64::<S>::splat(2.0 / std::f64::consts::PI)).round();
+        let q = unsafe { y.to_uint_fast() };
 
         // Reduce by extended precision modular arithmetic
         // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
@@ -43,14 +44,24 @@ where
         let mut c = poly_5(x2, x4, x8, p0cos, p1cos, p2cos, p3cos, p4cos, p5cos);
 
         s = s.mul_add(x2 * x, x); // s = x + (x * x2) * s;
-        c = c.mul_add(x4, x2.mul_add(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+        c = c.mul_add(x4, x2.nmul_add(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
 
         // swap sin and cos if odd quadrant
-        let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
+        let swap = (q & Vu64::<S>::one()).ne(Vu64::<S>::zero());
 
-        //let overflow = q.gt(Vu64::<S>::splat(0x80000000000000)) & xa.is_finite().cast_to(); // q big if overflow
+        let overflow = y.gt(Vf64::<S>::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
-        unimplemented!()
+        let s = overflow.select(zero, s);
+        let c = overflow.select(one, c);
+
+        let sin1 = swap.select(c, s);
+        let cos1 = swap.select(s, c);
+
+        let signsin = Vf64::<S>::from_bits((q << 62) ^ xx.into_bits());
+        let signcos = Vf64::<S>::from_bits(((q + Vu64::<S>::one()) & Vu64::<S>::splat(2)) << 62);
+
+        // combine signs
+        (sin1.combine_sign(signsin), cos1 ^ signcos)
     }
 
     fn sinh(x: Self::Vf) -> Self::Vf {
