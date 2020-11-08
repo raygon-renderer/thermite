@@ -407,7 +407,42 @@ impl SimdIntVector<AVX2> for i64x8<AVX2> {
     }
 }
 
-impl_ops!(@UNARY i64x8 AVX2 => Not::not);
+impl SimdSignedVector<AVX2> for i64x8<AVX2> {
+    #[inline(always)]
+    fn neg_one() -> Self {
+        Self::splat(-1)
+    }
+
+    #[inline(always)]
+    fn min_positive() -> Self {
+        Self::splat(0)
+    }
+
+    #[inline(always)]
+    fn abs(self) -> Self {
+        Self::new(unsafe {
+            #[inline(always)]
+            unsafe fn _mm256_abs_epi64(x: __m256i) -> __m256i {
+                let should_negate =
+                    _mm256_xor_si256(_mm256_cmpgt_epi64(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
+
+                _mm256_add_epi64(
+                    _mm256_xor_si256(should_negate, x),
+                    _mm256_and_si256(should_negate, _mm256_set1_epi64x(1)),
+                )
+            }
+
+            (_mm256_abs_epi64(self.value.0), _mm256_abs_epi64(self.value.1))
+        })
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_neg(self) -> Self {
+        self ^ Self::neg_one() + Self::one()
+    }
+}
+
+impl_ops!(@UNARY i64x8 AVX2 => Not::not, Neg::neg);
 impl_ops!(@BINARY i64x8 AVX2 => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@BINARY i64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
 impl_ops!(@SHIFTS i64x8 AVX2 => Shr::shr, Shl::shl);
