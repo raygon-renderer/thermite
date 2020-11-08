@@ -64,19 +64,16 @@ where
         (sin1.combine_sign(signsin), cos1 ^ signcos)
     }
 
-    fn sinh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    #[inline(always)]
+    fn asin(x: Self::Vf) -> Self::Vf {
+        asin_internal::<S>(x, false)
     }
 
-    fn tanh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
-    fn asin(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
-    }
+    #[inline(always)]
     fn acos(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+        asin_internal::<S>(x, true)
     }
+
     #[inline(always)]
     fn atan(x: Self::Vf) -> Self::Vf {
         atan_internal::<S>(x, unsafe { Vf64::<S>::undefined() }, false)
@@ -85,6 +82,15 @@ where
     fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
         atan_internal::<S>(y, x, true)
     }
+
+    fn sinh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+
+    fn tanh(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
+
     fn asinh(x: Self::Vf) -> Self::Vf {
         unimplemented!()
     }
@@ -395,4 +401,84 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
     }
 
     re.combine_sign(y)
+}
+
+#[inline(always)]
+fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
+    let r4asin = Vf64::<S>::splat(2.967721961301243206100E-3);
+    let r3asin = Vf64::<S>::splat(-5.634242780008963776856E-1);
+    let r2asin = Vf64::<S>::splat(6.968710824104713396794E0);
+    let r1asin = Vf64::<S>::splat(-2.556901049652824852289E1);
+    let r0asin = Vf64::<S>::splat(2.853665548261061424989E1);
+    let s3asin = Vf64::<S>::splat(-2.194779531642920639778E1);
+    let s2asin = Vf64::<S>::splat(1.470656354026814941758E2);
+    let s1asin = Vf64::<S>::splat(-3.838770957603691357202E2);
+    let s0asin = Vf64::<S>::splat(3.424398657913078477438E2);
+    let p5asin = Vf64::<S>::splat(4.253011369004428248960E-3);
+    let p4asin = Vf64::<S>::splat(-6.019598008014123785661E-1);
+    let p3asin = Vf64::<S>::splat(5.444622390564711410273E0);
+    let p2asin = Vf64::<S>::splat(-1.626247967210700244449E1);
+    let p1asin = Vf64::<S>::splat(1.956261983317594739197E1);
+    let p0asin = Vf64::<S>::splat(-8.198089802484824371615E0);
+    let q4asin = Vf64::<S>::splat(-1.474091372988853791896E1);
+    let q3asin = Vf64::<S>::splat(7.049610280856842141659E1);
+    let q2asin = Vf64::<S>::splat(-1.471791292232726029859E2);
+    let q1asin = Vf64::<S>::splat(1.395105614657485689735E2);
+    let q0asin = Vf64::<S>::splat(-4.918853881490881290097E1);
+    let one = Vf64::<S>::one();
+
+    let xa = x.abs();
+
+    let is_big = xa.ge(Vf64::<S>::splat(0.625));
+
+    let x1 = is_big.select(one - xa, xa * xa);
+
+    let bitmask = is_big.bitmask();
+
+    let do_big = bitmask != 0; // if any are big
+    let do_small = bitmask != Mask::<S, Vf64<S>>::FULL_BITMASK; // if any are not big
+
+    let x2 = x1 * x1;
+    let x4 = x2 * x2;
+    let x8 = x4 * x4;
+
+    let undef = unsafe { Vf64::<S>::undefined() };
+
+    let mut px = undef;
+    let mut qx = undef;
+    let mut rx = undef;
+    let mut sx = undef;
+
+    let mut xb = one;
+
+    if do_small {
+        px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
+        qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
+        xb = (x1 + x1).sqrt();
+    }
+
+    if do_big {
+        rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
+        sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
+    }
+
+    let vx = is_big.select(rx, px);
+    let wx = is_big.select(sx, qx);
+
+    let y1 = vx / wx * x1;
+
+    // avoid branching again for this single instruction, just do it
+    let z1 = xb.mul_add(y1, xb);
+    let z2 = xa.mul_add(y1, xa);
+
+    let frac_pi_2 = Vf64::<S>::splat(std::f64::consts::FRAC_PI_2);
+
+    if acos {
+        let z1 = x.is_negative().select(Vf64::<S>::splat(std::f64::consts::PI) - z1, z1);
+        let z2 = frac_pi_2 - z2.combine_sign(x);
+        is_big.select(z1, z2)
+    } else {
+        let z1 = frac_pi_2 - z1;
+        is_big.select(z1, z2).combine_sign(x)
+    }
 }
