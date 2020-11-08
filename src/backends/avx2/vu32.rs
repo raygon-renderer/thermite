@@ -349,3 +349,13 @@ impl SimdCastFrom<AVX2, Vu64> for u32x8<AVX2> {
         Mask::new(from.value().cast()) // truncate
     }
 }
+
+impl SimdCastFrom<AVX2, Vi64> for u32x8<AVX2> {
+    fn from_cast(from: Vi64) -> Self {
+        from.into_bits().cast() // truncate
+    }
+
+    fn from_cast_mask(from: Mask<AVX2, Vi64>) -> Mask<AVX2, Self> {
+        Mask::new(from.value().cast()) // truncate
+    }
+}

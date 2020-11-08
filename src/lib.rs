@@ -77,6 +77,7 @@ pub trait SimdCasts<S: Simd + ?Sized>:
     + SimdCastFrom<S, S::Vu64>
     + SimdCastFrom<S, S::Vf32>
     + SimdCastFrom<S, S::Vf64>
+    + SimdCastFrom<S, S::Vi64>
 {
     #[inline(always)]
     fn cast_to<T: SimdCastFrom<S, Self>>(self) -> T {
@@ -91,6 +92,7 @@ impl<S: Simd + ?Sized, T> SimdCasts<S> for T where
         + SimdCastFrom<S, S::Vu64>
         + SimdCastFrom<S, S::Vf32>
         + SimdCastFrom<S, S::Vf64>
+        + SimdCastFrom<S, S::Vi64>
 {
 }
 

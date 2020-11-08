@@ -507,3 +507,15 @@ impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {
         ))
     }
 }
+
+impl SimdCastFrom<AVX2, Vi64> for u64x8<AVX2> {
+    #[inline(always)]
+    fn from_cast(from: Vi64) -> Self {
+        Self::new(from.value)
+    }
+
+    #[inline(always)]
+    fn from_cast_mask(from: Mask<AVX2, Vi64>) -> Mask<AVX2, Self> {
+        Mask::new(Self::new(from.value().value))
+    }
+}

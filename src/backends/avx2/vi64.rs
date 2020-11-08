@@ -448,11 +448,28 @@ impl_ops!(@BINARY i64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem
 impl_ops!(@SHIFTS i64x8 AVX2 => Shr::shr, Shl::shl);
 
 impl SimdCastFrom<AVX2, Vf32> for i64x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vf32) -> Self {
-        unimplemented!()
+        Self::new(unsafe {
+            let low = _mm256_castps256_ps128(from.value);
+            let high = _mm256_extractf128_ps(from.value, 1);
+
+            let x0 = _mm_cvttss_si64(low);
+            let x1 = _mm_cvttss_si64(_mm_permute_ps(low, 1));
+            let x2 = _mm_cvttss_si64(_mm_permute_ps(low, 2));
+            let x3 = _mm_cvttss_si64(_mm_permute_ps(low, 3));
+            let x4 = _mm_cvttss_si64(high);
+            let x5 = _mm_cvttss_si64(_mm_permute_ps(high, 1));
+            let x6 = _mm_cvttss_si64(_mm_permute_ps(high, 2));
+            let x7 = _mm_cvttss_si64(_mm_permute_ps(high, 3));
+
+            (_mm256_setr_epi64x(x0, x1, x2, x3), _mm256_setr_epi64x(x4, x5, x6, x7))
+        })
     }
+
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
-        unimplemented!()
+        Vi64::from_cast_mask(Mask::new(from.value().into_bits()))
     }
 }
 
@@ -501,7 +518,7 @@ impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
         #[inline(always)]
-        unsafe fn _cvtpd_epi64_slow(x: __m256d) -> __m256i {
+        unsafe fn _cvtpd_epi64(x: __m256d) -> __m256i {
             let low = _mm256_castpd256_pd128(x);
             let high = _mm256_extractf128_pd(x, 1);
 
@@ -513,7 +530,7 @@ impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
             _mm256_setr_epi64x(x0, x1, x2, x3)
         }
 
-        Self::new(unsafe { (_cvtpd_epi64_slow(from.value.0), _cvtpd_epi64_slow(from.value.1)) })
+        Self::new(unsafe { (_cvtpd_epi64(from.value.0), _cvtpd_epi64(from.value.1)) })
     }
 
     #[inline(always)]
