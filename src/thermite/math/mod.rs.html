@@ -228,7 +228,6 @@
 <span id="227">227</span>
 <span id="228">228</span>
 <span id="229">229</span>
-<span id="230">230</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -390,8 +389,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">cosh</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
-        <span class="kw">let</span> <span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">exph</span>(); <span class="comment">// 0.5 * exp(x)</span>
+        <span class="kw">let</span> <span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>().<span class="ident">exph</span>(); <span class="comment">// 0.5 * exp(x)</span>
         <span class="ident">y</span> <span class="op">+</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">0.25</span>) <span class="op">/</span> <span class="ident">y</span> <span class="comment">// + 0.5 * exp(-x)</span>
     }
 

@@ -852,6 +852,8 @@
 <span id="851">851</span>
 <span id="852">852</span>
 <span id="853">853</span>
+<span id="854">854</span>
+<span id="855">855</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -944,6 +946,8 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">tanh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+
         <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.33332819422E-1</span>);
         <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.33314422036E-1</span>);
         <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.37397155531E-2</span>);
@@ -970,13 +974,13 @@
         <span class="comment">// if not all are small</span>
         <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span> {
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>).<span class="ident">exp</span>();
-            <span class="ident">y2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>() <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>) <span class="op">/</span> (<span class="ident">y2</span> <span class="op">+</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>());
+            <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">y2</span> <span class="op">-</span> <span class="ident">one</span>) <span class="op">/</span> (<span class="ident">y2</span> <span class="op">+</span> <span class="ident">one</span>); <span class="comment">// originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0</span>
         }
 
         <span class="kw">let</span> <span class="ident">x_big</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">44.4</span>));
 
         <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">select</span>(<span class="ident">y1</span>, <span class="ident">y2</span>);
-        <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x_big</span>.<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>(), <span class="ident">y1</span>);
+        <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x_big</span>.<span class="ident">select</span>(<span class="ident">one</span>, <span class="ident">y1</span>);
 
         <span class="ident">y1</span>.<span class="ident">combine_sign</span>(<span class="ident">x0</span>)
     }
