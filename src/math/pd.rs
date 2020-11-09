@@ -173,18 +173,140 @@ where
     }
 
     #[inline(always)]
-    fn asinh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn asinh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+
+        let p0 = Vf64::<S>::splat(-5.56682227230859640450E0);
+        let p1 = Vf64::<S>::splat(-9.09030533308377316566E0);
+        let p2 = Vf64::<S>::splat(-4.37390226194356683570E0);
+        let p3 = Vf64::<S>::splat(-5.91750212056387121207E-1);
+        let p4 = Vf64::<S>::splat(-4.33231683752342103572E-3);
+        let q0 = Vf64::<S>::splat(3.34009336338516356383E1);
+        let q1 = Vf64::<S>::splat(6.95722521337257608734E1);
+        let q2 = Vf64::<S>::splat(4.86042483805291788324E1);
+        let q3 = Vf64::<S>::splat(1.28757002067426453537E1);
+        let q4 = one;
+
+        let x = x0.abs();
+        let x2 = x0 * x0;
+
+        let x_small = x.le(Vf64::<S>::splat(0.533));
+        let x_huge = x.gt(Vf64::<S>::splat(1e20));
+
+        let mut y1 = unsafe { Vf64::<S>::undefined() };
+        let mut y2 = unsafe { Vf64::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask.any() {
+            let x4 = x2 * x2;
+            let x8 = x4 * x4;
+
+            y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_4(x2, x4, x8, q0, q1, q2, q3, q4);
+            y1 = y1.mul_add(x2 * x, x);
+        }
+
+        if !bitmask.all() {
+            y2 = ((x2 + one).sqrt() + x).ln();
+
+            if unlikely!(x_huge.any()) {
+                y2 = x_huge.select(x.ln() + Vf64::<S>::splat(LN_2), y2);
+            }
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     #[inline(always)]
-    fn acosh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn acosh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+
+        let p0 = Vf64::<S>::splat(1.10855947270161294369E5);
+        let p1 = Vf64::<S>::splat(1.08102874834699867335E5);
+        let p2 = Vf64::<S>::splat(3.43989375926195455866E4);
+        let p3 = Vf64::<S>::splat(3.94726656571334401102E3);
+        let p4 = Vf64::<S>::splat(1.18801130533544501356E2);
+        let q0 = Vf64::<S>::splat(7.83869920495893927727E4);
+        let q1 = Vf64::<S>::splat(8.29725251988426222434E4);
+        let q2 = Vf64::<S>::splat(2.97683430363289370382E4);
+        let q3 = Vf64::<S>::splat(4.15352677227719831579E3);
+        let q4 = Vf64::<S>::splat(1.86145380837903397292E2);
+        let q5 = one;
+
+        let x1 = x0 - one;
+
+        let is_undef = x0.lt(one);
+        let x_small = x1.lt(Vf64::<S>::splat(0.49));
+        let x_huge = x1.gt(Vf64::<S>::splat(1e20));
+
+        let mut y1 = unsafe { Vf64::<S>::undefined() };
+        let mut y2 = unsafe { Vf64::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask.any() {
+            let x2 = x1 * x1;
+            let x4 = x2 * x2;
+
+            y1 = x1.sqrt() * (poly_4(x1, x2, x4, p0, p1, p2, p3, p4) / poly_5(x1, x2, x4, q0, q1, q2, q3, q4, q5));
+            y1 = is_undef.select(Vf64::<S>::nan(), y1);
+        }
+
+        if !bitmask.all() {
+            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
+
+            if unlikely!(x_huge.any()) {
+                y2 = x_huge.select(x0.ln() + Vf64::<S>::splat(LN_2), y2);
+            }
+        }
+
+        x_small.select(y1, y2)
     }
 
     #[inline(always)]
-    fn atanh(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    fn atanh(x0: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+        let half = Vf64::<S>::splat(0.5);
+
+        let p0 = Vf64::<S>::splat(-3.09092539379866942570E1);
+        let p1 = Vf64::<S>::splat(6.54566728676544377376E1);
+        let p2 = Vf64::<S>::splat(-4.61252884198732692637E1);
+        let p3 = Vf64::<S>::splat(1.20426861384072379242E1);
+        let p4 = Vf64::<S>::splat(-8.54074331929669305196E-1);
+        let q0 = Vf64::<S>::splat(-9.27277618139601130017E1);
+        let q1 = Vf64::<S>::splat(2.52006675691344555838E2);
+        let q2 = Vf64::<S>::splat(-2.49839401325893582852E2);
+        let q3 = Vf64::<S>::splat(1.08938092147140262656E2);
+        let q4 = Vf64::<S>::splat(-1.95638849376911654834E1);
+        let q5 = one;
+
+        let x = x0.abs();
+
+        let x_small = x.lt(half);
+
+        let mut y1 = unsafe { Vf64::<S>::undefined() };
+        let mut y2 = unsafe { Vf64::<S>::undefined() };
+
+        let bitmask = x_small.bitmask();
+
+        if bitmask.any() {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+            let x8 = x4 * x4;
+
+            y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_5(x2, x4, x8, q0, q1, q2, q3, q4, q5);
+            y1 = y1.mul_add(x2 * x, x);
+        }
+
+        if !bitmask.all() {
+            y2 = ((one + x) / (one - x)).ln() * half;
+
+            y2 = x
+                .gt(one)
+                .select(x.eq(one).select(Vf64::<S>::infinity(), Vf64::<S>::nan()), y2)
+        }
+
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     #[inline(always)]
