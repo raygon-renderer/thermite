@@ -239,6 +239,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     }
 }
 
+/*
 /// Extra scalar operator overloads, exists because stable Rust is bugged
 pub trait SimdBitwiseExtra<E>:
     Sized
@@ -248,21 +249,25 @@ pub trait SimdBitwiseExtra<E>:
     + BitAndAssign<E>
     + BitOrAssign<E>
     + BitXorAssign<E>
+where
+    E: Sized + BitAnd<Self, Output = Self> + BitOr<Self, Output = Self> + BitXor<Self, Output = Self>,
 {
 }
 
-impl<E, V> SimdBitwiseExtra<E> for V where
+impl<E, V> SimdBitwiseExtra<E> for V
+where
     V: Sized
         + BitAnd<E, Output = Self>
         + BitOr<E, Output = Self>
         + BitXor<E, Output = Self>
         + BitAndAssign<E>
         + BitOrAssign<E>
-        + BitXorAssign<E>
+        + BitXorAssign<E>,
+    E: Sized + BitAnd<V, Output = V> + BitOr<V, Output = V> + BitXor<V, Output = V>,
 {
 }
+*/
 
-// TODO: Require op bounds for both Self and T
 /// Defines bitwise operations on vectors
 pub trait SimdBitwise<S: Simd + ?Sized>:
     SimdVectorBase<S>
@@ -349,6 +354,7 @@ pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
     }
 }
 
+/*
 /// Extra scalar operator overloads, exists because stable Rust is bugged
 pub trait SimdVectorExtra<E>:
     Sized
@@ -379,8 +385,8 @@ impl<E, V> SimdVectorExtra<E> for V where
         + RemAssign<E>
 {
 }
+*/
 
-// TODO: Require op bounds for both Self and T
 /// Defines common operations on numeric vectors
 pub trait SimdVector<S: Simd + ?Sized>:
     SimdVectorBase<S>
@@ -707,63 +713,43 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
     type Vi32: SimdIntVector<Self, Element = i32>
         + SimdSignedVector<Self>
         + SimdIntoBits<Self, Self::Vu32>
-        + SimdFromBits<Self, Self::Vu32>
-        + SimdVectorExtra<i32>
-        + SimdBitwiseExtra<i32>;
+        + SimdFromBits<Self, Self::Vu32>;
 
     /// 64-bit signed integer vector
     type Vi64: SimdIntVector<Self, Element = i64>
         + SimdSignedVector<Self>
         + SimdIntoBits<Self, Self::Vu64>
-        + SimdFromBits<Self, Self::Vu64>
-        + SimdVectorExtra<i64>
-        + SimdBitwiseExtra<i64>;
+        + SimdFromBits<Self, Self::Vu64>;
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     /// 32-bit unsigned integer vector
-    type Vu32: SimdIntVector<Self, Element = u32> + SimdVectorExtra<u32> + SimdBitwiseExtra<u32>;
+    type Vu32: SimdIntVector<Self, Element = u32>;
     /// 64-bit unsigned integer vector
-    type Vu64: SimdIntVector<Self, Element = u64> + SimdVectorExtra<u64> + SimdBitwiseExtra<u64>;
+    type Vu64: SimdIntVector<Self, Element = u64>;
 
     /// Single-precision 32-bit floating point vector
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
-        + SimdVectorExtra<f32>
-        + SimdBitwiseExtra<f32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>
         + SimdVectorizedMath<Self>;
     /// Double-precision 64-bit floating point vector
     type Vf64: SimdFloatVector<Self, Element = f64, Vu = Self::Vu64, Vi = Self::Vi64>
-        + SimdVectorExtra<f64>
-        + SimdBitwiseExtra<f64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>
         + SimdVectorizedMath<Self>;
 
     #[cfg(target_pointer_width = "32")]
-    type Vusize: SimdIntVector<Self, Element = u32>
-        + SimdPointer<Self, Element = u32>
-        + SimdVectorExtra<u32>
-        + SimdBitwiseExtra<u32>;
+    type Vusize: SimdIntVector<Self, Element = u32> + SimdPointer<Self, Element = u32>;
 
     #[cfg(target_pointer_width = "32")]
-    type Visize: SimdIntVector<Self, Element = i32>
-        + SimdSignedVector<Self>
-        + SimdVectorExtra<i32>
-        + SimdBitwiseExtra<i32>;
+    type Visize: SimdIntVector<Self, Element = i32> + SimdSignedVector<Self>;
 
     #[cfg(target_pointer_width = "64")]
-    type Vusize: SimdIntVector<Self, Element = u64>
-        + SimdPointer<Self, Element = u64>
-        + SimdVectorExtra<u64>
-        + SimdBitwiseExtra<u64>;
+    type Vusize: SimdIntVector<Self, Element = u64> + SimdPointer<Self, Element = u64>;
 
     #[cfg(target_pointer_width = "64")]
-    type Visize: SimdIntVector<Self, Element = i64>
-        + SimdSignedVector<Self>
-        + SimdVectorExtra<i64>
-        + SimdBitwiseExtra<i64>;
+    type Visize: SimdIntVector<Self, Element = i64> + SimdSignedVector<Self>;
 }
 
 pub type Vi32<S> = <S as Simd>::Vi32;
