@@ -854,6 +854,8 @@
 <span id="853">853</span>
 <span id="854">854</span>
 <span id="855">855</span>
+<span id="856">856</span>
+<span id="857">857</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1311,7 +1313,7 @@
         <span class="kw">let</span> <span class="ident">ei</span> <span class="op">=</span> <span class="ident">ee</span>.<span class="ident">cast_to</span>::<span class="op">&lt;</span><span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>();
 
         <span class="comment">// biased exponent of result:</span>
-        <span class="kw">let</span> <span class="ident">ej</span> <span class="op">=</span> <span class="ident">ei</span> <span class="op">+</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">z</span>.<span class="ident">into_bits</span>() <span class="op">&gt;&gt;</span> <span class="number">23</span>);
+        <span class="kw">let</span> <span class="ident">ej</span> <span class="op">=</span> <span class="ident">ei</span> <span class="op">+</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">z</span>.<span class="ident">into_bits</span>()) <span class="op">&gt;&gt;</span> <span class="number">23</span>;
 
         <span class="comment">// check exponent for overflow and underflow</span>
         <span class="kw">let</span> <span class="ident">overflow</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_cast_mask</span>(<span class="ident">ej</span>.<span class="ident">ge</span>(<span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x0FF</span>))) <span class="op">|</span> <span class="ident">ee</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">300.0</span>));
@@ -1377,6 +1379,8 @@
             ),
         );
 
+        <span class="comment">// Always propagate nan:</span>
+        <span class="comment">// Deliberately differing from the IEEE-754 standard which has pow(0,nan)=1, and pow(1,nan)=1</span>
         (<span class="ident">x0</span>.<span class="ident">is_nan</span>() <span class="op">|</span> <span class="ident">y</span>.<span class="ident">is_nan</span>()).<span class="ident">select</span>(<span class="ident">x0</span> <span class="op">+</span> <span class="ident">y</span>, <span class="ident">z1</span>)
     }
 
@@ -1524,6 +1528,10 @@
 
             <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_add</span>(<span class="ident">ln2f_hi</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_hi;</span>
             <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_add</span>(<span class="ident">ln2f_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_lo;</span>
+
+            <span class="kw">if</span> <span class="ident">mode</span> <span class="op">==</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> {
+                <span class="ident">r</span> <span class="op">-=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+            }
         }
         <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="op">=&gt;</span> {
             <span class="ident">max_x</span> <span class="op">=</span> <span class="number">126.0</span>;
@@ -1545,10 +1553,6 @@
             <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_add</span>(<span class="ident">log10_2_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * log10_2_lo;</span>
             <span class="ident">x</span> <span class="op">*=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_10</span>);
         }
-    }
-
-    <span class="kw">if</span> <span class="ident">mode</span> <span class="op">==</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> {
-        <span class="ident">r</span> <span class="op">-=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
     }
 
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
