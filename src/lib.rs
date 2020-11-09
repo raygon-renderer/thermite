@@ -13,8 +13,6 @@ pub use buffer::SimdBuffer;
 
 pub mod backends;
 
-//mod double;
-
 mod pointer;
 use self::pointer::*;
 pub use self::pointer::{AssociatedVector, VPtr};
@@ -758,3 +756,6 @@ pub type Vu32<S> = <S as Simd>::Vu32;
 pub type Vu64<S> = <S as Simd>::Vu64;
 pub type Vf32<S> = <S as Simd>::Vf32;
 pub type Vf64<S> = <S as Simd>::Vf64;
+
+pub type Vusize<S> = <S as Simd>::Vusize;
+pub type Visize<S> = <S as Simd>::Visize;
