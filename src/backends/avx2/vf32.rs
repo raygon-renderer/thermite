@@ -8,22 +8,22 @@ impl<S: Simd> Default for f32x8<S> {
     }
 }
 
+#[rustfmt::skip]
 macro_rules! log_reduce_ps_avx2 {
-    ($value:expr; $op:ident $last:ident) => {
-        unsafe {
-            // split the 256-bit vector into two 128-bit vectors
-            let xmm0 = _mm256_castps256_ps128($value);
-            let xmm1 = _mm256_extractf128_ps($value, 1);
-            let xmm0 = $op(xmm0, xmm1); // then run one regular op on the split vectors
+    ($value:expr; $op:ident $last:ident) => {unsafe {
+        let ymm0 = $value;
+        // split the 256-bit vector into two 128-bit vectors
+        let xmm0 = _mm256_castps256_ps128(ymm0);
+        let xmm1 = _mm256_extractf128_ps(ymm0, 1);
+        let xmm0 = $op(xmm0, xmm1); // then run one regular op on the split vectors
 
-            // shuffle the upper 2 floats to the front
-            let xmm1 = _mm_castpd_ps(_mm_permute_pd(_mm_castps_pd(xmm0), 1));
-            let xmm0 = $op(xmm0, xmm1);
-            let xmm1 = _mm_movehdup_ps(xmm0); // interleave
+        // shuffle the upper 2 floats to the front
+        let xmm1 = _mm_castpd_ps(_mm_permute_pd(_mm_castps_pd(xmm0), 1));
+        let xmm0 = $op(xmm0, xmm1);
+        let xmm1 = _mm_movehdup_ps(xmm0); // interleave
 
-            _mm_cvtss_f32($last(xmm0, xmm1))
-        }
-    };
+        _mm_cvtss_f32($last(xmm0, xmm1))
+    }};
 }
 
 impl SimdVectorBase<AVX2> for f32x8<AVX2> {

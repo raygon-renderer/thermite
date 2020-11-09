@@ -8,6 +8,23 @@ impl<S: Simd> Default for u32x8<S> {
     }
 }
 
+#[rustfmt::skip]
+macro_rules! log_reduce_epu32_avx2 {
+    ($value:expr; $op:ident) => {unsafe {
+        let ymm0 = $value;
+
+        let xmm0 = _mm256_castsi256_si128($value);
+        let xmm1 = _mm256_extracti128_si256($value, 1);
+        let xmm0 = $op(xmm0, xmm1);
+        let xmm1 = _mm_shuffle_epi32(xmm0, 78);
+        let xmm0 = $op(xmm0, xmm1);
+        let xmm1 = _mm_shuffle_epi32(xmm0, 229);
+        let xmm0 = $op(xmm0, xmm1);
+
+        _mm_cvtsi128_si32(xmm0) as u32
+    }};
+}
+
 impl SimdVectorBase<AVX2> for u32x8<AVX2> {
     type Element = u32;
 
@@ -199,14 +216,14 @@ impl SimdVector<AVX2> for u32x8<AVX2> {
         Self::splat(u32::MAX)
     }
 
-    #[inline]
+    #[inline(always)]
     fn min_element(self) -> Self::Element {
-        unsafe { self.reduce2(|a, x| a.min(x)) }
+        log_reduce_epu32_avx2!(self.value; _mm_min_epu32)
     }
 
-    #[inline]
+    #[inline(always)]
     fn max_element(self) -> Self::Element {
-        unsafe { self.reduce2(|a, x| a.max(x)) }
+        log_reduce_epu32_avx2!(self.value; _mm_max_epu32)
     }
 
     #[inline(always)]
@@ -261,14 +278,14 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {
         self.max(rhs) - rhs
     }
 
+    #[inline(always)]
     fn wrapping_sum(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|sum, x| sum.wrapping_add(x)) }
+        log_reduce_epu32_avx2!(self.value; _mm_add_epi32)
     }
 
+    #[inline(always)]
     fn wrapping_product(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|prod, x| x.wrapping_mul(prod)) }
+        log_reduce_epu32_avx2!(self.value; _mm_mullo_epi32)
     }
 }
 
