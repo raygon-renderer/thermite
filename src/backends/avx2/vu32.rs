@@ -333,10 +333,30 @@ impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
 }
 
 impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
-    #[inline]
+    #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u32);
-        unsafe { do_convert(from) }
+        unsafe fn cvtpd_epu32(ymm0: __m256d) -> __m128i {
+            let ymm1 = _mm256_set1_pd(f64::from_bits(0x41e0000000000000));
+            let ymm2 = _mm256_cmp_pd(ymm0, ymm1, _CMP_LT_OQ);
+            let xmm2 = _mm256_castpd256_pd128(ymm2); // lower half of ymm2
+            let xmm3 = _mm256_extractf128_pd(ymm2, 1);
+            let xmm2 = _mm_packs_epi32(_mm_castpd_si128(xmm2), _mm_castpd_si128(xmm3));
+            let ymm1 = _mm256_sub_pd(ymm0, ymm1);
+            let xmm1 = _mm256_cvttpd_epi32(ymm1);
+            let xmm3 = _mm_set1_ps(f32::from_bits(0x80000000));
+            let xmm1 = _mm_xor_ps(_mm_castsi128_ps(xmm1), xmm3);
+            let xmm0 = _mm256_cvttpd_epi32(ymm0);
+            let xmm0 = _mm_blendv_ps(xmm1, _mm_castsi128_ps(xmm0), _mm_castsi128_ps(xmm2));
+
+            _mm_castps_si128(xmm0)
+        }
+
+        Self::new(unsafe {
+            let low = cvtpd_epu32(from.value.0);
+            let high = cvtpd_epu32(from.value.1);
+
+            _mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1)
+        })
     }
 
     #[inline(always)]
