@@ -567,6 +567,19 @@
 <span id="566">566</span>
 <span id="567">567</span>
 <span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1083,13 +1096,26 @@
 }
 
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="macro">decl_brute_force_convert</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2&quot;</span>)]</span> <span class="ident">u32</span> <span class="op">=&gt;</span> <span class="ident">f32</span>);
-        <span class="kw">unsafe</span> { <span class="ident">do_convert</span>(<span class="ident">from</span>) }
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">from</span>.<span class="ident">value</span>;
+            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>(<span class="number">0x4B000000u32</span> <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_blend_epi16</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>, <span class="number">170</span>);
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi32</span>(<span class="ident">xmm0</span>, <span class="number">16</span>);
+            <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>(<span class="number">0x53000000u32</span> <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">_mm256_blend_epi16</span>(<span class="ident">xmm0</span>, <span class="ident">xmm2</span>, <span class="number">170</span>));
+            <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_set1_ps</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x53000080</span>));
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_sub_ps</span>(<span class="ident">xmm0</span>, <span class="ident">xmm2</span>);
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_add_ps</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="ident">xmm1</span>), <span class="ident">xmm0</span>);
+
+            <span class="ident">xmm0</span>
+        })
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast_mask</span>(<span class="ident">from</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu32</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">from</span>.<span class="ident">value</span>().<span class="ident">value</span>) }))
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">from_bits</span>(<span class="ident">from</span>.<span class="ident">value</span>()))
     }
 }
 
