@@ -580,6 +580,7 @@
 <span id="579">579</span>
 <span id="580">580</span>
 <span id="581">581</span>
+<span id="582">582</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -857,7 +858,8 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span> <span class="op">-</span> ((<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>() <span class="op">*</span> <span class="ident">rhs</span>)
+        <span class="comment">// https://stackoverflow.com/a/26342944/2083075 + Bernard&#39;s comment</span>
+        (<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>().<span class="ident">nmul_add</span>(<span class="ident">rhs</span>, <span class="self">self</span>)
     }
 }
 

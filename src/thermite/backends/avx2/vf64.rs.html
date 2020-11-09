@@ -1091,7 +1091,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span> <span class="op">-</span> ((<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>() <span class="op">*</span> <span class="ident">rhs</span>)
+        (<span class="self">self</span> <span class="op">/</span> <span class="ident">rhs</span>).<span class="ident">trunc</span>().<span class="ident">nmul_add</span>(<span class="ident">rhs</span>, <span class="self">self</span>)
     }
 }
 
