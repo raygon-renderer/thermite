@@ -689,6 +689,76 @@
 <span id="688">688</span>
 <span id="689">689</span>
 <span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
+<span id="705">705</span>
+<span id="706">706</span>
+<span id="707">707</span>
+<span id="708">708</span>
+<span id="709">709</span>
+<span id="710">710</span>
+<span id="711">711</span>
+<span id="712">712</span>
+<span id="713">713</span>
+<span id="714">714</span>
+<span id="715">715</span>
+<span id="716">716</span>
+<span id="717">717</span>
+<span id="718">718</span>
+<span id="719">719</span>
+<span id="720">720</span>
+<span id="721">721</span>
+<span id="722">722</span>
+<span id="723">723</span>
+<span id="724">724</span>
+<span id="725">725</span>
+<span id="726">726</span>
+<span id="727">727</span>
+<span id="728">728</span>
+<span id="729">729</span>
+<span id="730">730</span>
+<span id="731">731</span>
+<span id="732">732</span>
+<span id="733">733</span>
+<span id="734">734</span>
+<span id="735">735</span>
+<span id="736">736</span>
+<span id="737">737</span>
+<span id="738">738</span>
+<span id="739">739</span>
+<span id="740">740</span>
+<span id="741">741</span>
+<span id="742">742</span>
+<span id="743">743</span>
+<span id="744">744</span>
+<span id="745">745</span>
+<span id="746">746</span>
+<span id="747">747</span>
+<span id="748">748</span>
+<span id="749">749</span>
+<span id="750">750</span>
+<span id="751">751</span>
+<span id="752">752</span>
+<span id="753">753</span>
+<span id="754">754</span>
+<span id="755">755</span>
+<span id="756">756</span>
+<span id="757">757</span>
+<span id="758">758</span>
+<span id="759">759</span>
+<span id="760">760</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -931,7 +1001,35 @@
     }
 }
 
-<span class="comment">// TODO: Require op bounds for both Self and T</span>
+<span class="comment">/*
+/// Extra scalar operator overloads, exists because stable Rust is bugged
+pub trait SimdBitwiseExtra&lt;E&gt;:
+    Sized
+    + BitAnd&lt;E, Output = Self&gt;
+    + BitOr&lt;E, Output = Self&gt;
+    + BitXor&lt;E, Output = Self&gt;
+    + BitAndAssign&lt;E&gt;
+    + BitOrAssign&lt;E&gt;
+    + BitXorAssign&lt;E&gt;
+where
+    E: Sized + BitAnd&lt;Self, Output = Self&gt; + BitOr&lt;Self, Output = Self&gt; + BitXor&lt;Self, Output = Self&gt;,
+{
+}
+
+impl&lt;E, V&gt; SimdBitwiseExtra&lt;E&gt; for V
+where
+    V: Sized
+        + BitAnd&lt;E, Output = Self&gt;
+        + BitOr&lt;E, Output = Self&gt;
+        + BitXor&lt;E, Output = Self&gt;
+        + BitAndAssign&lt;E&gt;
+        + BitOrAssign&lt;E&gt;
+        + BitXorAssign&lt;E&gt;,
+    E: Sized + BitAnd&lt;V, Output = V&gt; + BitOr&lt;V, Output = V&gt; + BitXor&lt;V, Output = V&gt;,
+{
+}
+*/</span>
+
 <span class="doccomment">/// Defines bitwise operations on vectors</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>:
     <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
@@ -1018,7 +1116,39 @@
     }
 }
 
-<span class="comment">// TODO: Require op bounds for both Self and T</span>
+<span class="comment">/*
+/// Extra scalar operator overloads, exists because stable Rust is bugged
+pub trait SimdVectorExtra&lt;E&gt;:
+    Sized
+    + Add&lt;E, Output = Self&gt;
+    + Sub&lt;E, Output = Self&gt;
+    + Mul&lt;E, Output = Self&gt;
+    + Div&lt;E, Output = Self&gt;
+    + Rem&lt;E, Output = Self&gt;
+    + AddAssign&lt;E&gt;
+    + SubAssign&lt;E&gt;
+    + MulAssign&lt;E&gt;
+    + DivAssign&lt;E&gt;
+    + RemAssign&lt;E&gt;
+{
+}
+
+impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
+    V: Sized
+        + Add&lt;E, Output = Self&gt;
+        + Sub&lt;E, Output = Self&gt;
+        + Mul&lt;E, Output = Self&gt;
+        + Div&lt;E, Output = Self&gt;
+        + Rem&lt;E, Output = Self&gt;
+        + AddAssign&lt;E&gt;
+        + SubAssign&lt;E&gt;
+        + MulAssign&lt;E&gt;
+        + DivAssign&lt;E&gt;
+        + RemAssign&lt;E&gt;
+{
+}
+*/</span>
+
 <span class="doccomment">/// Defines common operations on numeric vectors</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>:
     <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>
@@ -1113,7 +1243,7 @@
 
     <span class="doccomment">/// Sum all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
     <span class="kw">fn</span> <span class="ident">wrapping_sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
-    <span class="doccomment">/// Multiple all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
+    <span class="doccomment">/// Multiply all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
     <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
 }
 
@@ -1224,13 +1354,13 @@
         <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
     }
 
-    <span class="doccomment">/// Fused negated multiple-add</span>
+    <span class="doccomment">/// Fused negated multiply-add</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">nmul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="ident">m</span>, <span class="ident">a</span>)
     }
 
-    <span class="doccomment">/// Fused negated multiple-subtract</span>
+    <span class="doccomment">/// Fused negated multiply-subtract</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">nmul_sub</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">nmul_add</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
@@ -1335,30 +1465,37 @@
 {
 }
 
-<span class="doccomment">/// SIMD Instruction set</span>
+<span class="doccomment">/// SIMD Instruction set, contains all types</span>
+<span class="doccomment">///</span>
+<span class="doccomment">///</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> {
     <span class="comment">//type Vi8: SimdIntVector&lt;Self, Element = i8&gt; + SimdSignedVector&lt;Self, i8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vi16: SimdIntVector&lt;Self, Element = i16&gt; + SimdSignedVector&lt;Self, i16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
+    <span class="doccomment">/// 32-bit signed integer vector</span>
     <span class="kw">type</span> <span class="ident">Vi32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>;
 
+    <span class="doccomment">/// 64-bit signed integer vector</span>
     <span class="kw">type</span> <span class="ident">Vi64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>;
-    <span class="comment">//type Vi64: SimdIntVector&lt;Self, Element = i64&gt; + SimdSignedVector&lt;Self&gt;;</span>
 
     <span class="comment">//type Vu8: SimdIntVector&lt;Self, Element = u8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vu16: SimdIntVector&lt;Self, Element = u16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
+    <span class="doccomment">/// 32-bit unsigned integer vector</span>
     <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
+    <span class="doccomment">/// 64-bit unsigned integer vector</span>
     <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
 
+    <span class="doccomment">/// Single-precision 32-bit floating point vector</span>
     <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu32</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+    <span class="doccomment">/// Double-precision 64-bit floating point vector</span>
     <span class="kw">type</span> <span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu64</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
@@ -1366,12 +1503,15 @@
 
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
     <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
-    <span class="comment">//#[cfg(target_pointer_width = &quot;32&quot;)]</span>
-    <span class="comment">//type Visize: SimdIntVector&lt;Self, i32&gt; + SimdSignedVector&lt;Self, i32&gt;;</span>
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
+    <span class="kw">type</span> <span class="ident">Visize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;64&quot;</span>)]</span>
     <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
-    <span class="comment">//#[cfg(target_pointer_width = &quot;64&quot;)]</span>
-    <span class="comment">//type Visize: SimdIntVector&lt;Self, i64&gt; + SimdSignedVector&lt;Self, i64&gt;;</span>
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;64&quot;</span>)]</span>
+    <span class="kw">type</span> <span class="ident">Visize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 }
 
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vi32</span>;

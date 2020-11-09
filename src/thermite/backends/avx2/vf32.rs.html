@@ -551,6 +551,22 @@
 <span id="550">550</span>
 <span id="551">551</span>
 <span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -560,6 +576,24 @@
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_setzero_ps</span>() })
     }
+}
+
+<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">log_reduce_ps_avx2</span> {
+    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>:<span class="ident">expr</span>; <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">last</span>:<span class="ident">ident</span>) <span class="op">=&gt;</span> {
+        <span class="kw">unsafe</span> {
+            <span class="comment">// split the 256-bit vector into two 128-bit vectors</span>
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_castps256_ps128</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>);
+            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_ps</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>, <span class="number">1</span>);
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>); <span class="comment">// then run one regular op on the split vectors</span>
+
+            <span class="comment">// shuffle the upper 2 floats to the front</span>
+            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_castpd_ps</span>(<span class="ident">_mm_permute_pd</span>(<span class="ident">_mm_castps_pd</span>(<span class="ident">xmm0</span>), <span class="number">1</span>));
+            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
+            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_movehdup_ps</span>(<span class="ident">xmm0</span>); <span class="comment">// interleave</span>
+
+            <span class="ident">_mm_cvtss_f32</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">last</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>))
+        }
+    };
 }
 
 <span class="kw">impl</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
@@ -747,16 +781,14 @@
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_max_ps</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">other</span>.<span class="ident">value</span>) })
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">min_element</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">a</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">a</span>.<span class="ident">min</span>(<span class="ident">x</span>)) }
+        <span class="macro">log_reduce_ps_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_min_ps</span> <span class="ident">_mm_min_ss</span>)
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">max_element</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">a</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">a</span>.<span class="ident">max</span>(<span class="ident">x</span>)) }
+        <span class="macro">log_reduce_ps_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_max_ps</span> <span class="ident">_mm_max_ss</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -934,14 +966,14 @@
         <span class="self">self</span>.<span class="ident">cast</span>()
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">sum</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">sum</span> <span class="op">+</span> <span class="ident">x</span>) }
+        <span class="macro">log_reduce_ps_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_add_ps</span> <span class="ident">_mm_add_ss</span>)
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">prod</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">prod</span>) }
+        <span class="macro">log_reduce_ps_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_mul_ps</span> <span class="ident">_mm_mul_ss</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
