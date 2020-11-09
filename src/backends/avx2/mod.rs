@@ -55,6 +55,12 @@ impl Simd for AVX2 {
     #[cfg(target_pointer_width = "32")]
     type Vusize = Vu32;
 
+    #[cfg(target_pointer_width = "32")]
+    type Visize = Vi32;
+
     #[cfg(target_pointer_width = "64")]
     type Vusize = Vu64;
+
+    #[cfg(target_pointer_width = "64")]
+    type Visize = Vi64;
 }

@@ -12,8 +12,21 @@ macro_rules! impl_ops {
             #[inline(always)] fn $op(self, rhs: Self) -> Self { unsafe { self. [<_mm_ $op>](rhs) } }
         }
 
+        impl $op_trait<<Self as SimdVectorBase<$is>>::Element> for $name<$is> {
+            type Output = Self;
+            #[inline(always)] fn $op(self, rhs: <Self as SimdVectorBase<$is>>::Element) -> Self {
+                unsafe { self. [<_mm_ $op>](Self::splat(rhs)) }
+            }
+        }
+
         impl [<$op_trait Assign>]<Self> for $name<$is> {
             #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) { *self = $op_trait::$op(*self, rhs); }
+        }
+
+        impl [<$op_trait Assign>]<<Self as SimdVectorBase<$is>>::Element> for $name<$is> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: <Self as SimdVectorBase<$is>>::Element) {
+                *self = $op_trait::$op(*self, Self::splat(rhs));
+            }
         }
     )*}};
 
