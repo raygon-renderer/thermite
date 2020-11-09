@@ -76,7 +76,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
 
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
-    /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents
+    /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents via repeated squaring
     fn powi(self, e: S::Vi32) -> Self;
 
     /// Computes the natural logarithm of a vector.
@@ -116,6 +116,32 @@ where
         self % y // Already implemented with operator overloads anyway
     }
 
+    #[inline(always)]
+    fn powi(self, mut e: S::Vi32) -> Self {
+        let zero_i = Vi32::<S>::zero();
+        let one_i = Vi32::<S>::one();
+        let one = Self::one();
+
+        let mut x = self;
+        let mut res = one;
+
+        x = e.is_negative().select(one / x, x);
+        e = e.abs();
+
+        loop {
+            // TODO: Maybe try to optimize out the compare on platforms that support blendv,
+            // since blendv only cares about the highest bit
+            res = (e & one_i).ne(zero_i).select(res * x, res);
+
+            e >>= 1;
+            x *= x;
+
+            if e.eq(zero_i).all() {
+                return res;
+            }
+        }
+    }
+
     #[inline] fn hypot(self, y: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot(self, y) }
     #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
     #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
@@ -137,7 +163,6 @@ where
     #[inline] fn exp10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10(self) }
     #[inline] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1(self) }
     #[inline] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
-    #[inline] fn powi(self, e: S::Vi32) -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
     #[inline] fn ln(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self) }
     #[inline] fn ln_1p(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p(self) }
     #[inline] fn log2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self) }
@@ -215,33 +240,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     }
 
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
-
-    #[inline(always)]
-    fn powi(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
-        let zero_i = Vi32::<S>::zero();
-        let one_i = Vi32::<S>::one();
-        let one = Self::Vf::one();
-
-        let mut res = one;
-
-        x = e.is_negative().select(one / x, x);
-        e = e.abs();
-
-        loop {
-            // TODO: Maybe try to optimize out the compare on platforms that support blendv,
-            // since blendv only cares about the highest bit
-            res = (e & one_i).ne(zero_i).select(res * x, res);
-
-            e >>= 1;
-            x *= x;
-
-            if e.eq(zero_i).all() {
-                break;
-            }
-        }
-
-        res
-    }
 
     fn ln(x: Self::Vf) -> Self::Vf;
     fn ln_1p(x: Self::Vf) -> Self::Vf;
