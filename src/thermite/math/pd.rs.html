@@ -986,7 +986,7 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="comment">// if any are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="number">0</span> {
+        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
@@ -995,7 +995,7 @@
         }
 
         <span class="comment">// if not all are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span> {
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">exph</span>();
             <span class="ident">y2</span> <span class="op">-=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>) <span class="op">/</span> <span class="ident">y2</span>;
         }
@@ -1026,7 +1026,7 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="comment">// if any are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="number">0</span> {
+        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
@@ -1035,7 +1035,7 @@
         }
 
         <span class="comment">// if not all are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span> {
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>).<span class="ident">exp</span>();
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">y2</span> <span class="op">-</span> <span class="ident">one</span>) <span class="op">/</span> (<span class="ident">y2</span> <span class="op">+</span> <span class="ident">one</span>); <span class="comment">// originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0</span>
         }
@@ -1604,14 +1604,14 @@
 
     <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">is_big</span>.<span class="ident">bitmask</span>();
 
-    <span class="comment">// if any are not big</span>
-    <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span> {
+    <span class="comment">// if not all are big (if any are small)</span>
+    <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
         <span class="ident">px</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0asin</span>, <span class="ident">p1asin</span>, <span class="ident">p2asin</span>, <span class="ident">p3asin</span>, <span class="ident">p4asin</span>, <span class="ident">p5asin</span>);
         <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0asin</span>, <span class="ident">q1asin</span>, <span class="ident">q2asin</span>, <span class="ident">q3asin</span>, <span class="ident">q4asin</span>, <span class="ident">one</span>);
     }
 
     <span class="comment">// if any are big</span>
-    <span class="kw">if</span> <span class="ident">bitmask</span> <span class="op">!=</span> <span class="number">0</span> {
+    <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
         <span class="ident">rx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">r0asin</span>, <span class="ident">r1asin</span>, <span class="ident">r2asin</span>, <span class="ident">r3asin</span>, <span class="ident">r4asin</span>);
         <span class="ident">sx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">s0asin</span>, <span class="ident">s1asin</span>, <span class="ident">s2asin</span>, <span class="ident">s3asin</span>, <span class="ident">one</span>);
         <span class="ident">xb</span> <span class="op">=</span> (<span class="ident">x1</span> <span class="op">+</span> <span class="ident">x1</span>).<span class="ident">sqrt</span>();
