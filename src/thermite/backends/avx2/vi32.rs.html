@@ -414,6 +414,23 @@
 <span id="413">413</span>
 <span id="414">414</span>
 <span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -423,6 +440,23 @@
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_setzero_si256</span>() })
     }
+}
+
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">log_reduce_epi32_avx2</span> {
+    (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>:<span class="ident">expr</span>; <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>) <span class="op">=&gt;</span> {<span class="kw">unsafe</span> {
+        <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>;
+
+        <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_si128</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>);
+        <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_extracti128_si256</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>, <span class="number">1</span>);
+        <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
+        <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_shuffle_epi32</span>(<span class="ident">xmm0</span>, <span class="number">78</span>);
+        <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
+        <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_shuffle_epi32</span>(<span class="ident">xmm0</span>, <span class="number">229</span>);
+        <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
+
+        <span class="ident">_mm_cvtsi128_si32</span>(<span class="ident">xmm0</span>)
+    }};
 }
 
 <span class="kw">impl</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
@@ -616,14 +650,14 @@
         <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">i32</span>::<span class="ident">MAX</span>)
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">min_element</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">a</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">a</span>.<span class="ident">min</span>(<span class="ident">x</span>)) }
+        <span class="macro">log_reduce_epi32_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_min_epi32</span>)
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">max_element</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">a</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">a</span>.<span class="ident">max</span>(<span class="ident">x</span>)) }
+        <span class="macro">log_reduce_epi32_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_max_epi32</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -728,14 +762,14 @@
         }
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">wrapping_sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">sum</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">sum</span>.<span class="ident">wrapping_add</span>(<span class="ident">x</span>)) }
+        <span class="macro">log_reduce_epi32_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_add_epi32</span>)
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
-        <span class="comment">// TODO: Replace with log-reduce</span>
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">reduce2</span>(<span class="op">|</span><span class="ident">prod</span>, <span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">wrapping_mul</span>(<span class="ident">prod</span>)) }
+        <span class="macro">log_reduce_epi32_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_mullo_epi32</span>)
     }
 }
 
