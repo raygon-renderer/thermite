@@ -110,7 +110,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -119,7 +119,7 @@ where
         }
 
         // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = x.exph();
             y2 -= Vf64::<S>::splat(0.25) / y2;
         }
@@ -150,7 +150,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -159,7 +159,7 @@ where
         }
 
         // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = (x + x).exp();
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
@@ -728,14 +728,14 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
 
     let bitmask = is_big.bitmask();
 
-    // if any are not big
-    if bitmask != Mask::<S, Vf64<S>>::FULL_BITMASK {
+    // if not all are big (if any are small)
+    if !bitmask.all() {
         px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
         qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
     }
 
     // if any are big
-    if bitmask != 0 {
+    if bitmask.any() {
         rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
         sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
         xb = (x1 + x1).sqrt();

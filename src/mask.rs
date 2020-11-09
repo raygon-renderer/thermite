@@ -6,6 +6,92 @@ use std::fmt;
 #[repr(transparent)]
 pub struct Mask<S: Simd, V>(V, PhantomData<S>);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Bitmask<S: Simd, V> {
+    mask: u16,
+    vec: PhantomData<(S, V)>,
+}
+
+impl<S: Simd, V> Bitmask<S, V>
+where
+    V: SimdBitwise<S>,
+{
+    #[inline(always)]
+    pub fn truthy() -> Self {
+        Self {
+            mask: <V as SimdBitwise<S>>::FULL_BITMASK,
+            vec: PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    pub fn falsey() -> Self {
+        Self {
+            mask: 0,
+            vec: PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    pub fn all(self) -> bool {
+        self.mask == <V as SimdBitwise<S>>::FULL_BITMASK
+    }
+
+    #[inline(always)]
+    pub fn any(self) -> bool {
+        self.mask != 0
+    }
+
+    #[inline(always)]
+    pub fn none(self) -> bool {
+        !self.any()
+    }
+
+    #[inline(always)]
+    pub fn count(self) -> u32 {
+        self.mask.count_ones()
+    }
+}
+
+impl<S: Simd, V> Debug for Bitmask<S, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Bitmask({:b})", self.mask)
+    }
+}
+
+impl<S: Simd, V> Not for Bitmask<S, V>
+where
+    V: SimdBitwise<S>,
+{
+    type Output = Self;
+
+    #[inline(always)]
+    fn not(mut self) -> Self {
+        self.mask = (!self.mask) & <V as SimdBitwise<S>>::FULL_BITMASK;
+        self
+    }
+}
+
+macro_rules! impl_bitmask_ops {
+    (@BINARY $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
+        impl<S: Simd, V> $op_trait<Self> for Bitmask<S, V> {
+            type Output = Self;
+            #[inline(always)] fn $op(mut self, rhs: Self) -> Self {
+                self.mask = $op_trait::$op(self.mask, rhs.mask);
+                self
+            }
+        }
+        impl<S: Simd, V> [<$op_trait Assign>]<Self> for Bitmask<S, V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) {
+                self.mask = $op_trait::$op(self.mask, rhs.mask);
+            }
+        }
+    )*}}
+}
+
+impl_bitmask_ops!(@BINARY BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+
 impl<S: Simd, V> Debug for Mask<S, V>
 where
     V: SimdVectorBase<S>,
@@ -190,13 +276,15 @@ macro_rules! impl_ops {
 
 impl_ops!(@UNARY => Not::not);
 impl_ops!(@BINARY => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
-impl_ops!(@SHIFTS => Shr::shr, Shl::shl);
 
 impl<S: Simd + ?Sized, V> Mask<S, V>
 where
     V: SimdBitwise<S>,
 {
-    pub const FULL_BITMASK: u16 = V::FULL_BITMASK;
+    pub const FULL_BITMASK: Bitmask<S, V> = Bitmask {
+        mask: V::FULL_BITMASK,
+        vec: PhantomData,
+    };
 
     #[inline(always)]
     pub fn and_not(self, other: Self) -> Self {
@@ -204,8 +292,11 @@ where
     }
 
     #[inline(always)]
-    pub fn bitmask(self) -> u16 {
-        self.0.bitmask()
+    pub fn bitmask(self) -> Bitmask<S, V> {
+        Bitmask {
+            mask: self.0.bitmask(),
+            vec: PhantomData,
+        }
     }
 }
 

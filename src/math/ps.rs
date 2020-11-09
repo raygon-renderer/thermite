@@ -73,13 +73,13 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x * x;
             y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
         }
 
         // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = x.exph();
             y2 -= Vf32::<S>::splat(0.25) / y2;
         }
@@ -107,7 +107,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -115,7 +115,7 @@ where
         }
 
         // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = (x + x).exp();
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
@@ -234,11 +234,11 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask != 0 {
+        if bitmask.any() {
             y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_add(x2 * x, x);
         }
 
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = ((x2 + Vf32::<S>::one()).sqrt() + x).ln();
 
             if unlikely!(x_huge.any()) {
@@ -271,7 +271,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x1 * x1;
             let x4 = x2 * x2;
             y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
@@ -279,7 +279,7 @@ where
         }
 
         // if not all are small
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
 
             if x_huge.any() {
@@ -307,7 +307,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask != 0 {
+        if bitmask.any() {
             let x2 = x * x;
             let x4 = x2 * x2;
             let x8 = x4 * x4;
@@ -315,7 +315,7 @@ where
             y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
         }
 
-        if bitmask != Mask::<S, Vf32<S>>::FULL_BITMASK {
+        if !bitmask.all() {
             let one = Vf32::<S>::one();
 
             y2 = ((one + x) / (one - x)).ln() * Vf32::<S>::splat(0.5);
