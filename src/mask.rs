@@ -6,17 +6,40 @@ use std::fmt;
 #[repr(transparent)]
 pub struct Mask<S: Simd, V>(V, PhantomData<S>);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Small integer representation of a mask using individual bits
 #[repr(transparent)]
 pub struct BitMask<S: Simd, V> {
     mask: u16,
     vec: PhantomData<(S, V)>,
 }
 
+impl<S: Simd, V> Clone for BitMask<S, V> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<S: Simd, V> Copy for BitMask<S, V> {}
+
+impl<S: Simd, V> PartialEq<Self> for BitMask<S, V> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.mask == other.mask
+    }
+
+    #[inline]
+    fn ne(&self, other: &Self) -> bool {
+        self.mask != other.mask
+    }
+}
+
+impl<S: Simd, V> Eq for BitMask<S, V> {}
+
 impl<S: Simd, V> BitMask<S, V>
 where
     V: SimdBitwise<S>,
 {
+    /// Create a bitmask for this vector type of all true bits
     #[inline(always)]
     pub fn truthy() -> Self {
         Self {
@@ -25,6 +48,7 @@ where
         }
     }
 
+    /// Create a bitmask with all false bits
     #[inline(always)]
     pub fn falsey() -> Self {
         Self {
@@ -34,20 +58,29 @@ where
     }
 
     #[inline(always)]
+    pub fn raw(self) -> u16 {
+        self.mask
+    }
+
+    /// Return true if all lanes for this vector type are set to true
+    #[inline(always)]
     pub fn all(self) -> bool {
         self.mask == <V as SimdBitwise<S>>::FULL_BITMASK
     }
 
+    /// Return true if any lane for this vector type is set to true
     #[inline(always)]
     pub fn any(self) -> bool {
         self.mask != 0
     }
 
+    /// Return true if no lanes for this vector type are set to true
     #[inline(always)]
     pub fn none(self) -> bool {
         !self.any()
     }
 
+    /// Count the number of set bits
     #[inline(always)]
     pub fn count(self) -> u32 {
         self.mask.count_ones()
