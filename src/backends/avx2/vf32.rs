@@ -513,13 +513,26 @@ impl SimdCastFrom<AVX2, Vi32> for f32x8<AVX2> {
 }
 
 impl SimdCastFrom<AVX2, Vu32> for f32x8<AVX2> {
+    #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] u32 => f32);
-        unsafe { do_convert(from) }
+        Self::new(unsafe {
+            let xmm0 = from.value;
+            let xmm1 = _mm256_set1_epi32(0x4B000000u32 as i32);
+            let xmm1 = _mm256_blend_epi16(xmm0, xmm1, 170);
+            let xmm0 = _mm256_srli_epi32(xmm0, 16);
+            let xmm2 = _mm256_set1_epi32(0x53000000u32 as i32);
+            let xmm0 = _mm256_castsi256_ps(_mm256_blend_epi16(xmm0, xmm2, 170));
+            let xmm2 = _mm256_set1_ps(f32::from_bits(0x53000080));
+            let xmm0 = _mm256_sub_ps(xmm0, xmm2);
+            let xmm0 = _mm256_add_ps(_mm256_castsi256_ps(xmm1), xmm0);
+
+            xmm0
+        })
     }
 
+    #[inline(always)]
     fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
-        Mask::new(Self::new(unsafe { _mm256_castsi256_ps(from.value().value) }))
+        Mask::new(Self::from_bits(from.value()))
     }
 }
 
