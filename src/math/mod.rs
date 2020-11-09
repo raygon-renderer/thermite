@@ -142,7 +142,20 @@ where
         }
     }
 
-    #[inline] fn hypot(self, y: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot(self, y) }
+    #[inline(always)]
+    fn hypot(self, y: Self) -> Self {
+        let x = self.abs();
+        let y = y.abs();
+
+        let min = x.min(y);
+        let max = x.max(y);
+        let t = min / max;
+
+        let ret = max * t.mul_add(t, Self::one()).sqrt();
+
+        min.eq(Self::zero()).select(max, ret)
+    }
+
     #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
     #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
     #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
@@ -174,23 +187,6 @@ where
 #[doc(hidden)]
 pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     type Vf: SimdFloatVector<S, Element = Self>;
-
-    #[inline(always)]
-    fn hypot(x: Self::Vf, y: Self::Vf) -> Self::Vf {
-        let one = Self::Vf::one();
-        let zero = Self::Vf::zero();
-
-        let x = x.abs();
-        let y = y.abs();
-
-        let min = x.min(y);
-        let max = x.max(y);
-        let t = min / max;
-
-        let ret = max * t.mul_add(t, one).sqrt();
-
-        min.eq(zero).select(max, ret)
-    }
 
     #[inline(always)]
     fn sin(x: Self::Vf) -> Self::Vf {
