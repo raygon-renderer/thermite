@@ -20,7 +20,7 @@ use self::pointer::*;
 pub use self::pointer::{AssociatedVector, VPtr};
 
 mod mask;
-pub use mask::Mask;
+pub use mask::{BitMask, Mask};
 
 mod math;
 pub use math::SimdVectorizedMath;

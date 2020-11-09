@@ -8,12 +8,12 @@ pub struct Mask<S: Simd, V>(V, PhantomData<S>);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct Bitmask<S: Simd, V> {
+pub struct BitMask<S: Simd, V> {
     mask: u16,
     vec: PhantomData<(S, V)>,
 }
 
-impl<S: Simd, V> Bitmask<S, V>
+impl<S: Simd, V> BitMask<S, V>
 where
     V: SimdBitwise<S>,
 {
@@ -54,13 +54,13 @@ where
     }
 }
 
-impl<S: Simd, V> Debug for Bitmask<S, V> {
+impl<S: Simd, V> Debug for BitMask<S, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Bitmask({:b})", self.mask)
     }
 }
 
-impl<S: Simd, V> Not for Bitmask<S, V>
+impl<S: Simd, V> Not for BitMask<S, V>
 where
     V: SimdBitwise<S>,
 {
@@ -75,14 +75,14 @@ where
 
 macro_rules! impl_bitmask_ops {
     (@BINARY $($op_trait:ident::$op:ident),*) => {paste::paste! {$(
-        impl<S: Simd, V> $op_trait<Self> for Bitmask<S, V> {
+        impl<S: Simd, V> $op_trait<Self> for BitMask<S, V> {
             type Output = Self;
             #[inline(always)] fn $op(mut self, rhs: Self) -> Self {
                 self.mask = $op_trait::$op(self.mask, rhs.mask);
                 self
             }
         }
-        impl<S: Simd, V> [<$op_trait Assign>]<Self> for Bitmask<S, V> {
+        impl<S: Simd, V> [<$op_trait Assign>]<Self> for BitMask<S, V> {
             #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) {
                 self.mask = $op_trait::$op(self.mask, rhs.mask);
             }
@@ -281,7 +281,7 @@ impl<S: Simd + ?Sized, V> Mask<S, V>
 where
     V: SimdBitwise<S>,
 {
-    pub const FULL_BITMASK: Bitmask<S, V> = Bitmask {
+    pub const FULL_BITMASK: BitMask<S, V> = BitMask {
         mask: V::FULL_BITMASK,
         vec: PhantomData,
     };
@@ -292,8 +292,8 @@ where
     }
 
     #[inline(always)]
-    pub fn bitmask(self) -> Bitmask<S, V> {
-        Bitmask {
+    pub fn bitmask(self) -> BitMask<S, V> {
+        BitMask {
             mask: self.0.bitmask(),
             vec: PhantomData,
         }
