@@ -683,6 +683,7 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy {
 }
 
 pub type Vi32<S> = <S as Simd>::Vi32;
+pub type Vi64<S> = <S as Simd>::Vi64;
 pub type Vu32<S> = <S as Simd>::Vu32;
 pub type Vu64<S> = <S as Simd>::Vu64;
 pub type Vf32<S> = <S as Simd>::Vf32;

@@ -454,7 +454,7 @@ where
         let ei = ee.cast_to::<Vi32<S>>();
 
         // biased exponent of result:
-        let ej = ei + Vi32::<S>::from_bits(z.into_bits() >> 23);
+        let ej = ei + Vi32::<S>::from_bits(z.into_bits()) >> 23;
 
         // check exponent for overflow and underflow
         let overflow = Vf32::<S>::from_cast_mask(ej.ge(Vi32::<S>::splat(0x0FF))) | ee.gt(Vf32::<S>::splat(300.0));
@@ -520,6 +520,8 @@ where
             ),
         );
 
+        // Always propagate nan:
+        // Deliberately differing from the IEEE-754 standard which has pow(0,nan)=1, and pow(1,nan)=1
         (x0.is_nan() | y.is_nan()).select(x0 + y, z1)
     }
 
