@@ -346,12 +346,12 @@
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
 <span class="attribute">#[<span class="ident">repr</span>(<span class="ident">transparent</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> {
     <span class="ident">mask</span>: <span class="ident">u16</span>,
     <span class="ident">vec</span>: <span class="ident">PhantomData</span><span class="op">&lt;</span>(<span class="ident">S</span>, <span class="ident">V</span>)<span class="op">&gt;</span>,
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span>
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span>
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
@@ -392,13 +392,13 @@
     }
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Debug</span> <span class="kw">for</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Debug</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
     <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">fmt</span>::<span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
         <span class="macro">write</span><span class="macro">!</span>(<span class="ident">f</span>, <span class="string">&quot;Bitmask({:b})&quot;</span>, <span class="self">self</span>.<span class="ident">mask</span>)
     }
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Not</span> <span class="kw">for</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span>
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Not</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span>
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
@@ -413,14 +413,14 @@
 
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_bitmask_ops</span> {
     (@<span class="ident">BINARY</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
-        <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+        <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
             <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
                 <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="ident">mask</span>, <span class="ident">rhs</span>.<span class="ident">mask</span>);
                 <span class="self">self</span>
             }
         }
-        <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+        <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">_assign</span><span class="op">&gt;</span>](<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) {
                 <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="ident">mask</span>, <span class="ident">rhs</span>.<span class="ident">mask</span>);
             }
@@ -619,7 +619,7 @@
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
-    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">FULL_BITMASK</span>: <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Bitmask</span> {
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">FULL_BITMASK</span>: <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">BitMask</span> {
         <span class="ident">mask</span>: <span class="ident">V</span>::<span class="ident">FULL_BITMASK</span>,
         <span class="ident">vec</span>: <span class="ident">PhantomData</span>,
     };
@@ -630,8 +630,8 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bitmask</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Bitmask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
-        <span class="ident">Bitmask</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bitmask</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+        <span class="ident">BitMask</span> {
             <span class="ident">mask</span>: <span class="self">self</span>.<span class="number">0</span>.<span class="ident">bitmask</span>(),
             <span class="ident">vec</span>: <span class="ident">PhantomData</span>,
         }
