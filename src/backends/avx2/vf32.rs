@@ -8,6 +8,24 @@ impl<S: Simd> Default for f32x8<S> {
     }
 }
 
+macro_rules! log_reduce_ps_avx2 {
+    ($value:expr; $op:ident $last:ident) => {
+        unsafe {
+            // split the 256-bit vector into two 128-bit vectors
+            let xmm0 = _mm256_castps256_ps128($value);
+            let xmm1 = _mm256_extractf128_ps($value, 1);
+            let xmm0 = $op(xmm0, xmm1); // then run one regular op on the split vectors
+
+            // shuffle the upper 2 floats to the front
+            let xmm1 = _mm_castpd_ps(_mm_permute_pd(_mm_castps_pd(xmm0), 1));
+            let xmm0 = $op(xmm0, xmm1);
+            let xmm1 = _mm_movehdup_ps(xmm0); // interleave
+
+            _mm_cvtss_f32($last(xmm0, xmm1))
+        }
+    };
+}
+
 impl SimdVectorBase<AVX2> for f32x8<AVX2> {
     type Element = f32;
 
@@ -193,16 +211,14 @@ impl SimdVector<AVX2> for f32x8<AVX2> {
         Self::new(unsafe { _mm256_max_ps(self.value, other.value) })
     }
 
-    #[inline]
+    #[inline(always)]
     fn min_element(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|a, x| a.min(x)) }
+        log_reduce_ps_avx2!(self.value; _mm_min_ps _mm_min_ss)
     }
 
-    #[inline]
+    #[inline(always)]
     fn max_element(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|a, x| a.max(x)) }
+        log_reduce_ps_avx2!(self.value; _mm_max_ps _mm_max_ss)
     }
 
     #[inline(always)]
@@ -380,14 +396,14 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
         self.cast()
     }
 
+    #[inline(always)]
     fn sum(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|sum, x| sum + x) }
+        log_reduce_ps_avx2!(self.value; _mm_add_ps _mm_add_ss)
     }
 
+    #[inline(always)]
     fn product(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|prod, x| x * prod) }
+        log_reduce_ps_avx2!(self.value; _mm_mul_ps _mm_mul_ss)
     }
 
     #[inline(always)]

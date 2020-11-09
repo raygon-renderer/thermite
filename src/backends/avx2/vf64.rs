@@ -8,6 +8,20 @@ impl<S: Simd> Default for f64x8<S> {
     }
 }
 
+#[rustfmt::skip]
+macro_rules! log_reduce_pd_avx2 {
+    ($value:expr; $op:ident $last:ident) => {paste::paste! {unsafe {
+        let ymm0 = [<_mm256_ $op>]($value.0, $value.1);
+        let xmm0 = _mm256_castpd256_pd128(ymm0);
+        let xmm1 = _mm256_extractf128_pd(ymm0, 1);
+        let xmm0 = [<_mm_ $op>](xmm0, xmm1);
+        let xmm1 = _mm_permute_pd(xmm0, 1);
+        let xmm0 = [<_mm_ $last>](xmm0, xmm1);
+
+        _mm_cvtsd_f64(xmm0)
+    }}};
+}
+
 impl SimdVectorBase<AVX2> for f64x8<AVX2> {
     type Element = f64;
 
@@ -245,14 +259,14 @@ impl SimdVector<AVX2> for f64x8<AVX2> {
         })
     }
 
-    #[inline]
+    #[inline(always)]
     fn min_element(self) -> Self::Element {
-        unsafe { self.reduce2(|a, x| a.min(x)) }
+        log_reduce_pd_avx2!(self.value; min_pd min_sd)
     }
 
-    #[inline]
+    #[inline(always)]
     fn max_element(self) -> Self::Element {
-        unsafe { self.reduce2(|a, x| a.max(x)) }
+        log_reduce_pd_avx2!(self.value; max_pd max_sd)
     }
 
     #[inline(always)]
@@ -470,14 +484,14 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
         Vu64::new(unsafe { (_cvtpd_epu64(self.value.0), _cvtpd_epu64(self.value.1)) })
     }
 
+    #[inline(always)]
     fn sum(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|sum, x| sum + x) }
+        log_reduce_pd_avx2!(self.value; add_pd add_sd)
     }
 
+    #[inline(always)]
     fn product(self) -> Self::Element {
-        // TODO: Replace with log-reduce
-        unsafe { self.reduce2(|prod, x| x * prod) }
+        log_reduce_pd_avx2!(self.value; mul_pd mul_sd)
     }
 
     #[inline(always)]
