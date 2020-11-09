@@ -181,6 +181,7 @@ impl<S: Simd + ?Sized, V> Mask<S, V>
 where
     V: SimdVector<S>,
 {
+    /// Creates a mask from a value. Any non-zero lanes are considered truthy.
     #[inline(always)]
     pub fn from_value(v: V) -> Self {
         v.ne(V::zero())
@@ -191,19 +192,51 @@ where
         U::from_cast_mask(self)
     }
 
+    /// Bitmask indicating all truthy values for each lane
+    pub const FULL_BITMASK: BitMask<S, V> = BitMask {
+        mask: V::FULL_BITMASK,
+        vec: PhantomData,
+    };
+
+    /// Computes `!self & other` for each lane of the mask.
+    #[inline(always)]
+    pub fn and_not(self, other: Self) -> Self {
+        Self::new(self.0.and_not(other.0))
+    }
+
+    /// Returns a bitmask that can be trivially evaluated to all/any/none/etc.
+    ///
+    /// The can be useful for reusing a mask value for branching
+    #[inline(always)]
+    pub fn bitmask(self) -> BitMask<S, V> {
+        BitMask {
+            mask: self.0.bitmask(),
+            vec: PhantomData,
+        }
+    }
+
     /// Returns `true` if all lanes are truthy
+    ///
+    /// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,
+    /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn all(self) -> bool {
         unsafe { self.value()._mm_all() }
     }
 
     /// Returns `true` if any lanes are truthy
+    ///
+    /// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,
+    /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn any(self) -> bool {
         unsafe { self.value()._mm_any() }
     }
 
     /// Returns `true` if all lanes are falsey
+    ///
+    /// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,
+    /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn none(self) -> bool {
         unsafe { self.value()._mm_none() }
@@ -212,7 +245,7 @@ where
     /// Counts the number of truthy lanes
     #[inline(always)]
     pub fn count(self) -> u32 {
-        self.value().bitmask().count_ones()
+        self.bitmask().count()
     }
 
     /// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey
@@ -309,29 +342,6 @@ macro_rules! impl_ops {
 
 impl_ops!(@UNARY => Not::not);
 impl_ops!(@BINARY => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
-
-impl<S: Simd + ?Sized, V> Mask<S, V>
-where
-    V: SimdBitwise<S>,
-{
-    pub const FULL_BITMASK: BitMask<S, V> = BitMask {
-        mask: V::FULL_BITMASK,
-        vec: PhantomData,
-    };
-
-    #[inline(always)]
-    pub fn and_not(self, other: Self) -> Self {
-        Self::new(self.0.and_not(other.0))
-    }
-
-    #[inline(always)]
-    pub fn bitmask(self) -> BitMask<S, V> {
-        BitMask {
-            mask: self.0.bitmask(),
-            vec: PhantomData,
-        }
-    }
-}
 
 pub trait Truthy: Sized + PartialEq {
     fn truthy() -> Self;
