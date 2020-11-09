@@ -481,7 +481,7 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
 
     /// Sum all lanes together, wrapping the result if it can't fit in `T`
     fn wrapping_sum(self) -> Self::Element;
-    /// Multiple all lanes together, wrapping the result if it can't fit in `T`
+    /// Multiply all lanes together, wrapping the result if it can't fit in `T`
     fn wrapping_product(self) -> Self::Element;
 }
 
@@ -592,13 +592,13 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         self.mul_add(m, -s)
     }
 
-    /// Fused negated multiple-add
+    /// Fused negated multiply-add
     #[inline(always)]
     fn nmul_add(self, m: Self, a: Self) -> Self {
         self.mul_add(-m, a)
     }
 
-    /// Fused negated multiple-subtract
+    /// Fused negated multiply-subtract
     #[inline(always)]
     fn nmul_sub(self, m: Self, s: Self) -> Self {
         self.nmul_add(m, -s)
