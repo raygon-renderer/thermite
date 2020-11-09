@@ -185,26 +185,26 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
 
     #[inline]
     fn powi(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
-        let mut res = Self::Vf::one();
+        let zero_i = Vi32::<S>::zero();
+        let one_i = Vi32::<S>::one();
+        let one = Self::Vf::one();
 
-        x = e.is_negative().select(Self::Vf::one() / x, x);
+        let mut res = one;
+
+        x = e.is_negative().select(one / x, x);
         e = e.abs();
 
-        let zero = Vi32::<S>::zero();
-        let one = Vi32::<S>::one();
-
         loop {
-            res = (e & one).ne(zero).select(res * x, res);
+            // TODO: Maybe try to optimize out the compare on platforms that support blendv,
+            // since blendv only cares about the highest bit
+            res = (e & one_i).ne(zero_i).select(res * x, res);
 
             e >>= 1;
+            x *= x;
 
-            let fin = e.eq(zero);
-
-            if fin.all() {
+            if e.eq(zero_i).all() {
                 break;
             }
-
-            x = fin.select(x, x * x); // x *= fin.select(1.0, x)
         }
 
         res

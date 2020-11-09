@@ -1,5 +1,9 @@
 use crate::*;
 
+// All of these polynomials use Estrin's scheme to reduce the
+// dependency chain length and encourage instruction-level parallelism, which has
+// the potential to improve performance despite the powers of X being required upfront
+
 #[inline(always)]
 pub fn poly_2<S: Simd, V: SimdFloatVector<S>>(x: V, x2: V, c0: V, c1: V, c2: V) -> V {
     x2.mul_add(c2, x.mul_add(c1, c0))
