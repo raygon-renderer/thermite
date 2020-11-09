@@ -152,8 +152,16 @@
 <span id="151">151</span>
 <span id="152">152</span>
 <span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
+
+<span class="comment">// All of these polynomials use Estrin&#39;s scheme to reduce the</span>
+<span class="comment">// dependency chain length and encourage instruction-level parallelism, which has</span>
+<span class="comment">// the potential to improve performance despite the powers of X being required upfront</span>
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">poly_2</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>(<span class="ident">x</span>: <span class="ident">V</span>, <span class="ident">x2</span>: <span class="ident">V</span>, <span class="ident">c0</span>: <span class="ident">V</span>, <span class="ident">c1</span>: <span class="ident">V</span>, <span class="ident">c2</span>: <span class="ident">V</span>) <span class="op">-&gt;</span> <span class="ident">V</span> {
