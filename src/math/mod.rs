@@ -19,6 +19,14 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// to improve performance while maintaining precision
     fn lerp(self, a: Self, b: Self) -> Self;
 
+    /// Returns the floating-point remainder of `self / y` (rounded towards zero)
+    fn fmod(self, y: Self) -> Self;
+
+    /// Computes `sqrt(x * x + y * y)` for each element of the vector, but can be more precise with values around zero.
+    ///
+    /// NOTE: This is not higher-performance than the naive version, only slightly more precise.
+    fn hypot(self, y: Self) -> Self;
+
     /// Computes the sine of a vector.
     fn sin(self) -> Self;
     /// Computes the cosine of a vector.
@@ -103,6 +111,12 @@ where
         self.mul_add(b - a, a)
     }
 
+    #[inline(always)]
+    fn fmod(self, y: Self) -> Self {
+        self % y // Already implemented with operator overloads anyway
+    }
+
+    #[inline] fn hypot(self, y: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot(self, y) }
     #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
     #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
     #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
@@ -136,17 +150,34 @@ where
 pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     type Vf: SimdFloatVector<S, Element = Self>;
 
-    #[inline]
+    #[inline(always)]
+    fn hypot(x: Self::Vf, y: Self::Vf) -> Self::Vf {
+        let one = Self::Vf::one();
+        let zero = Self::Vf::zero();
+
+        let x = x.abs();
+        let y = y.abs();
+
+        let min = x.min(y);
+        let max = x.max(y);
+        let t = min / max;
+
+        let ret = max * t.mul_add(t, one).sqrt();
+
+        min.eq(zero).select(max, ret)
+    }
+
+    #[inline(always)]
     fn sin(x: Self::Vf) -> Self::Vf {
         Self::sin_cos(x).0
     }
 
-    #[inline]
+    #[inline(always)]
     fn cos(x: Self::Vf) -> Self::Vf {
         Self::sin_cos(x).1
     }
 
-    #[inline]
+    #[inline(always)]
     fn tan(x: Self::Vf) -> Self::Vf {
         let (s, c) = Self::sin_cos(x);
         s / c
@@ -177,13 +208,15 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
     fn exph(x: Self::Vf) -> Self::Vf;
     fn exp2(x: Self::Vf) -> Self::Vf;
     fn exp10(x: Self::Vf) -> Self::Vf;
+
+    #[inline(always)]
     fn exp_m1(x: Self::Vf) -> Self::Vf {
         Self::exp(x) - Self::Vf::one()
     }
 
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
 
-    #[inline]
+    #[inline(always)]
     fn powi(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
         let zero_i = Vi32::<S>::zero();
         let one_i = Vi32::<S>::one();
