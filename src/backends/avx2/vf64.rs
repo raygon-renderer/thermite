@@ -363,7 +363,7 @@ impl SimdVector<AVX2> for f64x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
-        self - ((self / rhs).trunc() * rhs)
+        (self / rhs).trunc().nmul_add(rhs, self)
     }
 }
 
