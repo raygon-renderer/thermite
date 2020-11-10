@@ -509,6 +509,11 @@
 <span id="508">508</span>
 <span id="509">509</span>
 <span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -621,11 +626,13 @@
     <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
     <span class="doccomment">/// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.</span>
     <span class="kw">fn</span> <span class="ident">smoothstep</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
     <span class="doccomment">/// Calculates a [sigmoid-like 5th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#5th-order_equation).</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
     <span class="doccomment">/// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.</span>
     <span class="kw">fn</span> <span class="ident">smootherstep</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
     <span class="doccomment">/// Calculates a [signmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
@@ -649,6 +656,9 @@
     <span class="kw">fn</span> <span class="ident">hermitev</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes the n-th degree Jacobi polynomial via the 3-term recurrence relation.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// At the special case where α and β are both zero, the Jacobi polynomial reduces to a</span>
+    <span class="doccomment">/// Legendre polynomial, and if α and β are both constant zero LLVM can optimize out expressions that rely on those.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.</span>
     <span class="kw">fn</span> <span class="ident">jacobi</span>(<span class="self">self</span>, <span class="ident">alpha</span>: <span class="self">Self</span>, <span class="ident">beta</span>: <span class="self">Self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
