@@ -149,8 +149,8 @@ impl SimdMask<AVX1> for i64x8<AVX1> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new((
-            _mm256_blendv_epi8(f.value.0, t.value.0, self.value.0),
-            _mm256_blendv_epi8(f.value.1, t.value.1, self.value.1),
+            _mm256_blendv_epi64x(f.value.0, t.value.0, self.value.0),
+            _mm256_blendv_epi64x(f.value.1, t.value.1, self.value.1),
         ))
     }
 }

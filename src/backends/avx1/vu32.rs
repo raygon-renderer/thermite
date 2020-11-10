@@ -141,7 +141,7 @@ impl Eq for u32x8<AVX1> {}
 impl SimdMask<AVX1> for u32x8<AVX1> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
-        Self::new(_mm256_blendv_epi8(f.value, t.value, self.value))
+        Self::new(_mm256_blendv_epi32x(f.value, t.value, self.value))
     }
 }
 
