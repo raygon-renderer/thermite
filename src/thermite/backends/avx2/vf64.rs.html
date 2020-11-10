@@ -681,24 +681,8 @@
 <span id="680">680</span>
 <span id="681">681</span>
 <span id="682">682</span>
-<span id="683">683</span>
-<span id="684">684</span>
-<span id="685">685</span>
-<span id="686">686</span>
-<span id="687">687</span>
-<span id="688">688</span>
-<span id="689">689</span>
-<span id="690">690</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-
-<span class="macro">decl</span><span class="macro">!</span>(<span class="ident">f64x8</span>: <span class="ident">f64</span> <span class="op">=&gt;</span> (<span class="ident">__m256d</span>, <span class="ident">__m256d</span>));
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_setzero_pd</span>(), <span class="ident">_mm256_setzero_pd</span>()) })
-    }
-}
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">log_reduce_pd_avx2</span> {

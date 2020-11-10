@@ -531,8 +531,8 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_blendv</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="self">Self</span>, <span class="ident">f</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_blendv_epi8</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
-            <span class="ident">_mm256_blendv_epi8</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+            <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">f</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">t</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
         ))
     }
 }

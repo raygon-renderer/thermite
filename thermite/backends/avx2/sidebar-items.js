@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["AVX2",""],["f32x8",""],["f64x8",""],["i16x8",""],["i32x8",""],["i64x8",""],["u32x8",""],["u64x8",""]]});
+initSidebarItems({"struct":[["AVX2",""],["i16x8",""]]});

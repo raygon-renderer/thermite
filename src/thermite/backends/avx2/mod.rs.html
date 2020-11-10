@@ -69,6 +69,8 @@
 <span id="68">68</span>
 <span id="69">69</span>
 <span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -95,6 +97,8 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod</span> <span class="ident">polyfills</span>;
 
 <span class="kw">use</span> <span class="ident">polyfills</span>::<span class="kw-2">*</span>;
+
+<span class="kw">use</span> <span class="kw">super</span>::<span class="ident">avx1</span>::{<span class="ident">f32x8</span>, <span class="ident">f64x8</span>, <span class="ident">i32x8</span>, <span class="ident">i64x8</span>, <span class="ident">u32x8</span>, <span class="ident">u64x8</span>};
 
 <span class="kw">mod</span> <span class="ident">vf32</span>;
 <span class="kw">mod</span> <span class="ident">vf64</span>;
