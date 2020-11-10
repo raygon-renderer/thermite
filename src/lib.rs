@@ -329,23 +329,6 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
 /// Defines a mask type for results and selects
 #[doc(hidden)]
 pub trait SimdMask<S: Simd + ?Sized>: SimdVectorBase<S> + SimdBitwise<S> {
-    /// Returns true if **all** lanes are non-zero
-    #[inline(always)]
-    unsafe fn _mm_all(self) -> bool {
-        self.bitmask() == Self::FULL_BITMASK
-    }
-    /// Returns true if **any** lanes are non-zero
-    #[inline(always)]
-    unsafe fn _mm_any(self) -> bool {
-        self.bitmask() != 0
-    }
-
-    /// Returns true if **none** of the lanes are non-zero (all zero)
-    #[inline(always)]
-    unsafe fn _mm_none(self) -> bool {
-        !self._mm_any()
-    }
-
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         (self & t) | self.and_not(f)

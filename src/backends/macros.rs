@@ -80,8 +80,10 @@ macro_rules! decl {
                 self
             }
 
-            pub(crate) unsafe fn zip<F>(a: Self, b: Self, f: F) -> Self
-            where F: Fn($ety, $ety) -> $ety {
+            pub(crate) unsafe fn zip<F, V>(a: Self, b: V, f: F) -> Self
+            where F: Fn($ety, <V as SimdVectorBase<S>>::Element) -> $ety,
+                Self: SimdVectorBase<S>,
+                  V: SimdVectorBase<S> {
                 let mut out = Self::default();
                 for i in 0..Self::NUM_ELEMENTS {
                     *transmute::<&mut _, *mut $ety>(&mut out).add(i) =

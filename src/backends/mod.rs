@@ -1,6 +1,7 @@
 #[macro_use]
 mod macros;
 
+pub mod avx1;
 pub mod avx2;
 //pub mod sse2;
 

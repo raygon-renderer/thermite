@@ -8,7 +8,7 @@ impl<S: Simd> Default for u64x8<S> {
     }
 }
 
-impl SimdVectorBase<AVX2> for u64x8<AVX2> {
+impl SimdVectorBase<AVX1> for u64x8<AVX1> {
     type Element = u64;
 
     const ALIGNMENT: usize = mem::align_of::<__m256i>(); // allow half-alignment
@@ -41,61 +41,20 @@ impl SimdVectorBase<AVX2> for u64x8<AVX2> {
     }
 
     #[inline]
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx")]
     unsafe fn extract_unchecked(self, index: usize) -> Self::Element {
         *transmute::<&_, *const Self::Element>(&self).add(index)
     }
 
     #[inline]
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx")]
     unsafe fn replace_unchecked(mut self, index: usize, value: Self::Element) -> Self {
         *transmute::<&mut _, *mut Self::Element>(&mut self).add(index) = value;
         self
     }
-
-    #[inline(always)]
-    unsafe fn gather(base_ptr: *const Self::Element, indices: Vi32) -> Self {
-        let low_indices = _mm256_castsi256_si128(indices.value);
-        let high_indices = _mm256_extracti128_si256(indices.value, 1);
-
-        Self::new((
-            _mm256_i32gather_epi64(base_ptr as _, low_indices, mem::size_of::<Self::Element>() as _),
-            _mm256_i32gather_epi64(base_ptr as _, high_indices, mem::size_of::<Self::Element>() as _),
-        ))
-    }
-
-    #[inline(always)]
-    unsafe fn gather_masked(
-        base_ptr: *const Self::Element,
-        indices: Vi32,
-        mask: Mask<AVX2, Self>,
-        default: Self,
-    ) -> Self {
-        let low_indices = _mm256_castsi256_si128(indices.value);
-        let high_indices = _mm256_extracti128_si256(indices.value, 1);
-
-        let mask = mask.value();
-
-        Self::new((
-            _mm256_mask_i32gather_epi64(
-                default.value.0,
-                base_ptr as _,
-                low_indices,
-                mask.value.0,
-                mem::size_of::<Self::Element>() as _,
-            ),
-            _mm256_mask_i32gather_epi64(
-                default.value.1,
-                base_ptr as _,
-                high_indices,
-                mask.value.1,
-                mem::size_of::<Self::Element>() as _,
-            ),
-        ))
-    }
 }
 
-impl SimdBitwise<AVX2> for u64x8<AVX2> {
+impl SimdBitwise<AVX1> for u64x8<AVX1> {
     fn and_not(self, other: Self) -> Self {
         unsafe {
             Self::new((
@@ -125,24 +84,24 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_bitand(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_and_si256(self.value.0, rhs.value.0),
-            _mm256_and_si256(self.value.1, rhs.value.1),
+            _mm256_and_si256x(self.value.0, rhs.value.0),
+            _mm256_and_si256x(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_bitor(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_or_si256(self.value.0, rhs.value.0),
-            _mm256_or_si256(self.value.1, rhs.value.1),
+            _mm256_or_si256x(self.value.0, rhs.value.0),
+            _mm256_or_si256x(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_xor_si256(self.value.0, rhs.value.0),
-            _mm256_xor_si256(self.value.1, rhs.value.1),
+            _mm256_xor_si256x(self.value.0, rhs.value.0),
+            _mm256_xor_si256x(self.value.1, rhs.value.1),
         ))
     }
 
@@ -189,19 +148,19 @@ impl SimdBitwise<AVX2> for u64x8<AVX2> {
     }
 }
 
-impl PartialEq<Self> for u64x8<AVX2> {
+impl PartialEq<Self> for u64x8<AVX1> {
     fn eq(&self, other: &Self) -> bool {
-        <Self as SimdVector<AVX2>>::eq(*self, *other).all()
+        <Self as SimdVector<AVX1>>::eq(*self, *other).all()
     }
 
     fn ne(&self, other: &Self) -> bool {
-        <Self as SimdVector<AVX2>>::ne(*self, *other).any()
+        <Self as SimdVector<AVX1>>::ne(*self, *other).any()
     }
 }
 
-impl Eq for u64x8<AVX2> {}
+impl Eq for u64x8<AVX1> {}
 
-impl SimdMask<AVX2> for u64x8<AVX2> {
+impl SimdMask<AVX1> for u64x8<AVX1> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new((
@@ -211,7 +170,7 @@ impl SimdMask<AVX2> for u64x8<AVX2> {
     }
 }
 
-impl SimdVector<AVX2> for u64x8<AVX2> {
+impl SimdVector<AVX1> for u64x8<AVX1> {
     #[inline(always)]
     fn zero() -> Self {
         unsafe { Self::new((_mm256_setzero_si256(), _mm256_setzero_si256())) }
@@ -243,7 +202,7 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn eq(self, other: Self) -> Mask<AVX2, Self> {
+    fn eq(self, other: Self) -> Mask<AVX1, Self> {
         Mask::new(Self::new(unsafe {
             (
                 _mm256_cmpeq_epi64(self.value.0, other.value.0),
@@ -253,7 +212,7 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn gt(self, other: Self) -> Mask<AVX2, Self> {
+    fn gt(self, other: Self) -> Mask<AVX1, Self> {
         Mask::new(Self::new(unsafe {
             (
                 _mm256_cmpgt_epi64(self.value.0, other.value.0),
@@ -263,7 +222,7 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn ge(self, other: Self) -> Mask<AVX2, Self> {
+    fn ge(self, other: Self) -> Mask<AVX1, Self> {
         self.gt(other) ^ self.eq(other)
     }
 
@@ -302,7 +261,7 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     }
 }
 
-impl SimdIntVector<AVX2> for u64x8<AVX2> {
+impl SimdIntVector<AVX1> for u64x8<AVX1> {
     #[inline(always)]
     fn saturating_add(self, rhs: Self) -> Self {
         rhs + self.min(!rhs)
@@ -324,11 +283,11 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
     }
 }
 
-impl_ops!(@UNARY u64x8 AVX2 => Not::not);
-impl_ops!(@BINARY u64x8 AVX2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
-impl_ops!(@SHIFTS u64x8 AVX2 => Shr::shr, Shl::shl);
+impl_ops!(@UNARY u64x8 AVX1 => Not::not);
+impl_ops!(@BINARY u64x8 AVX1 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+impl_ops!(@SHIFTS u64x8 AVX1 => Shr::shr, Shl::shl);
 
-impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
+impl SimdCastFrom<AVX1, Vu32> for u64x8<AVX1> {
     fn from_cast(from: Vu32) -> Self {
         Self::new(unsafe {
             (
@@ -339,162 +298,68 @@ impl SimdCastFrom<AVX2, Vu32> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, Vu32>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX1, Vu32>) -> Mask<AVX1, Self> {
         Self::from_cast(from.value()).ne(Self::zero())
     }
 }
 
-impl SimdCastFrom<AVX2, Vf32> for u64x8<AVX2> {
+impl SimdCastFrom<AVX1, Vf32> for u64x8<AVX1> {
     fn from_cast(from: Vf32) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f32 => u64);
+        decl_brute_force_convert!(#[target_feature(enable = "avx")] f32 => u64);
         unsafe { do_convert(from) }
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, Vf32>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX1, Vf32>) -> Mask<AVX1, Self> {
         Self::from_cast(from.value().into_bits()).ne(Self::zero())
     }
 }
 
-impl SimdCastFrom<AVX2, Vi32> for u64x8<AVX2> {
+impl SimdCastFrom<AVX1, Vi32> for u64x8<AVX1> {
     fn from_cast(from: Vi32) -> Self {
         // zero extend
         from.cast_to::<Vu32>().cast()
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, Vi32>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX1, Vi32>) -> Mask<AVX1, Self> {
         Self::from_cast(from.value()).ne(Self::zero())
     }
 }
 
-impl SimdCastFrom<AVX2, Vf64> for u64x8<AVX2> {
+impl SimdCastFrom<AVX1, Vf64> for u64x8<AVX1> {
     fn from_cast(from: Vf64) -> Self {
-        decl_brute_force_convert!(#[target_feature(enable = "avx2")] f64 => u64);
+        decl_brute_force_convert!(#[target_feature(enable = "avx")] f64 => u64);
         unsafe { do_convert(from) }
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, Vf64>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX1, Vf64>) -> Mask<AVX1, Self> {
         // zero-cost transmute for same-width
         Mask::new(from.value().into_bits())
     }
 }
 
-impl SimdCastFrom<AVX2, Vi64> for u64x8<AVX2> {
+impl SimdCastFrom<AVX1, Vi64> for u64x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vi64) -> Self {
         Self::new(from.value)
     }
 
     #[inline(always)]
-    fn from_cast_mask(from: Mask<AVX2, Vi64>) -> Mask<AVX2, Self> {
+    fn from_cast_mask(from: Mask<AVX1, Vi64>) -> Mask<AVX1, Self> {
         Mask::new(Self::new(from.value().value))
     }
 }
 
 /////////////////////////////////////
 
-impl SimdPtrInternal<AVX2, Vi32> for u64x8<AVX2> {
-    #[inline(always)]
-    unsafe fn _mm_gather(self) -> Vi32 {
-        let low = _mm256_i64gather_epi32(ptr::null(), self.value.0, 1);
-        let high = _mm256_i64gather_epi32(ptr::null(), self.value.1, 1);
+impl SimdPtrInternal<AVX1, Vi32> for u64x8<AVX1> {}
 
-        Vi32::new(_mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1))
-    }
+impl SimdPtrInternal<AVX1, Vu32> for u64x8<AVX1> {}
 
-    #[inline(always)]
-    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vi32>, default: Vi32) -> Vi32 {
-        let mask = mask.value();
-        let mask_low = _mm256_castsi256_si128(mask.value);
-        let mask_high = _mm256_extracti128_si256(mask.value, 1);
+impl SimdPtrInternal<AVX1, Vf32> for u64x8<AVX1> {}
 
-        let default_low = _mm256_castsi256_si128(default.value);
-        let default_high = _mm256_extracti128_si256(default.value, 1);
+impl SimdPtrInternal<AVX1, Vf64> for u64x8<AVX1> {}
 
-        let low = _mm256_mask_i64gather_epi32(default_low, ptr::null(), self.value.0, mask_low, 1);
-        let high = _mm256_mask_i64gather_epi32(default_high, ptr::null(), self.value.1, mask_high, 1);
-
-        Vi32::new(_mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1))
-    }
-}
-
-impl SimdPtrInternal<AVX2, Vu32> for u64x8<AVX2> {
-    #[inline(always)]
-    unsafe fn _mm_gather(self) -> Vu32 {
-        <Self as SimdPtrInternal<AVX2, Vi32>>::_mm_gather(self).into_bits()
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu32>, default: Vu32) -> Vu32 {
-        // just load as Vi32 and transmute
-        self._mm_gather_masked(mask.cast_to::<Vi32>(), default.cast())
-            .into_bits()
-    }
-}
-
-impl SimdPtrInternal<AVX2, Vf32> for u64x8<AVX2> {
-    #[inline(always)]
-    unsafe fn _mm_gather(self) -> Vf32 {
-        let low = _mm256_i64gather_ps(ptr::null(), self.value.0, 1);
-        let high = _mm256_i64gather_ps(ptr::null(), self.value.1, 1);
-
-        Vf32::new(_mm256_insertf128_ps(_mm256_castps128_ps256(low), high, 1))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf32>, default: Vf32) -> Vf32 {
-        let mask = mask.value();
-        let mask_low = _mm256_castps256_ps128(mask.value);
-        let mask_high = _mm256_extractf128_ps(mask.value, 1);
-
-        let default_low = _mm256_castps256_ps128(default.value);
-        let default_high = _mm256_extractf128_ps(default.value, 1);
-
-        let low = _mm256_mask_i64gather_ps(default_low, ptr::null(), self.value.0, mask_low, 1);
-        let high = _mm256_mask_i64gather_ps(default_high, ptr::null(), self.value.1, mask_high, 1);
-
-        Vf32::new(_mm256_insertf128_ps(_mm256_castps128_ps256(low), high, 1))
-    }
-}
-
-impl SimdPtrInternal<AVX2, Vf64> for u64x8<AVX2> {
-    #[inline(always)]
-    unsafe fn _mm_gather(self) -> Vf64 {
-        Vf64::new((
-            _mm256_i64gather_pd(ptr::null(), self.value.0, 1),
-            _mm256_i64gather_pd(ptr::null(), self.value.1, 1),
-        ))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vf64>, default: Vf64) -> Vf64 {
-        let mask = mask.value();
-
-        Vf64::new((
-            _mm256_mask_i64gather_pd(default.value.0, ptr::null(), self.value.0, mask.value.0, 1),
-            _mm256_mask_i64gather_pd(default.value.1, ptr::null(), self.value.1, mask.value.1, 1),
-        ))
-    }
-}
-
-impl SimdPtrInternal<AVX2, Vu64> for u64x8<AVX2> {
-    #[inline(always)]
-    unsafe fn _mm_gather(self) -> Vu64 {
-        Vu64::new((
-            _mm256_i64gather_epi64(ptr::null(), self.value.0, 1),
-            _mm256_i64gather_epi64(ptr::null(), self.value.1, 1),
-        ))
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_gather_masked(self, mask: Mask<AVX2, Vu64>, default: Vu64) -> Vu64 {
-        let mask = mask.value();
-
-        Vu64::new((
-            _mm256_mask_i64gather_epi64(default.value.0, ptr::null(), self.value.0, mask.value.0, 1),
-            _mm256_mask_i64gather_epi64(default.value.1, ptr::null(), self.value.1, mask.value.1, 1),
-        ))
-    }
-}
+impl SimdPtrInternal<AVX1, Vu64> for u64x8<AVX1> {}

@@ -221,7 +221,7 @@ where
     /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn all(self) -> bool {
-        unsafe { self.value()._mm_all() }
+        self.bitmask().all()
     }
 
     /// Returns `true` if any lanes are truthy
@@ -230,7 +230,7 @@ where
     /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn any(self) -> bool {
-        unsafe { self.value()._mm_any() }
+        self.bitmask().any()
     }
 
     /// Returns `true` if all lanes are falsey
@@ -239,7 +239,7 @@ where
     /// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.
     #[inline(always)]
     pub fn none(self) -> bool {
-        unsafe { self.value()._mm_none() }
+        self.bitmask().none()
     }
 
     /// Counts the number of truthy lanes
