@@ -109,11 +109,13 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
     fn smoothstep(self) -> Self;
+
     /// Calculates a [sigmoid-like 5th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#5th-order_equation).
     ///
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
     fn smootherstep(self) -> Self;
+
     /// Calculates a [signmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).
     ///
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
@@ -137,6 +139,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     fn hermitev(self, n: S::Vu32) -> Self;
 
     /// Computes the n-th degree Jacobi polynomial via the 3-term recurrence relation.
+    ///
+    /// At the special case where α and β are both zero, the Jacobi polynomial reduces to a
+    /// Legendre polynomial, and if α and β are both constant zero LLVM can optimize out expressions that rely on those.
     ///
     /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
     fn jacobi(self, alpha: Self, beta: Self, n: u32) -> Self;
