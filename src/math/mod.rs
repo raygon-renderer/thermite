@@ -99,6 +99,22 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
 
     /// Finds the previous representable float moving downwards to negative infinity
     fn prev_float(self) -> Self;
+
+    /// Calculates a [sigmoid-like 3rd-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#3rd-order_equation).
+    ///
+    /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
+    /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
+    fn smoothstep(self) -> Self;
+    /// Calculates a [sigmoid-like 5th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#5th-order_equation).
+    ///
+    /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
+    /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
+    fn smootherstep(self) -> Self;
+    /// Calculates a [signmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).
+    ///
+    /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
+    /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
+    fn smootheststep(self) -> Self;
 }
 
 #[rustfmt::skip]
@@ -190,10 +206,13 @@ where
     #[inline] fn erfinv(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv(self) }
     #[inline] fn next_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float(self) }
     #[inline] fn prev_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float(self) }
+    #[inline] fn smoothstep(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep(self) }
+    #[inline] fn smootherstep(self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootherstep(self) }
+    #[inline] fn smootheststep(self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootheststep(self) }
 }
 
 #[doc(hidden)]
-pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
+pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> + From<i16> {
     type Vf: SimdFloatVector<S, Element = Self>;
 
     #[inline(always)]
@@ -255,6 +274,37 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
 
     fn next_float(x: Self::Vf) -> Self::Vf;
     fn prev_float(x: Self::Vf) -> Self::Vf;
+
+    #[inline(always)]
+    fn smoothstep(x: Self::Vf) -> Self::Vf {
+        // use integer coefficients to ensure as-accurate-as-possible casts to f32 or f64
+        x * x * x.nmul_add(Self::Vf::splat_any(2i16), Self::Vf::splat_any(3i16))
+    }
+
+    #[inline(always)]
+    fn smootherstep(x: Self::Vf) -> Self::Vf {
+        let c3 = Self::Vf::splat_any(10i16);
+        let c4 = Self::Vf::splat_any(-15i16);
+        let c5 = Self::Vf::splat_any(6i16);
+
+        // Use Estrin's scheme here without c0-c2
+        let x2 = x * x;
+        let x4 = x2 * x2;
+
+        x4.mul_add(x.mul_add(c5, c4), x2 * x * c3)
+    }
+
+    #[inline(always)]
+    fn smootheststep(x: Self::Vf) -> Self::Vf {
+        let c4 = Self::Vf::splat_any(35i16);
+        let c5 = Self::Vf::splat_any(-84i16);
+        let c6 = Self::Vf::splat_any(70i16);
+        let c7 = Self::Vf::splat_any(-20i16);
+
+        let x2 = x * x;
+
+        x2 * x2 * x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4))
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
