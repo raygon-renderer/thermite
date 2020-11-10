@@ -1021,6 +1021,13 @@
 <span id="1020">1020</span>
 <span id="1021">1021</span>
 <span id="1022">1022</span>
+<span id="1023">1023</span>
+<span id="1024">1024</span>
+<span id="1025">1025</span>
+<span id="1026">1026</span>
+<span id="1027">1027</span>
+<span id="1028">1028</span>
+<span id="1029">1029</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1031,6 +1038,13 @@
     <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span><span class="op">&gt;</span>,
 {
     <span class="kw">type</span> <span class="ident">Vf</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vf64</span>;
+
+    <span class="kw">const</span> <span class="ident">__EPSILON</span>: <span class="self">Self</span> <span class="op">=</span> <span class="ident">f64</span>::<span class="ident">EPSILON</span>;
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">from_u32</span>(<span class="ident">x</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="ident">x</span> <span class="kw">as</span> <span class="ident">f64</span>
+    }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sin_cos</span>(<span class="ident">xx</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> (<span class="self">Self</span>::<span class="ident">Vf</span>, <span class="self">Self</span>::<span class="ident">Vf</span>) {
