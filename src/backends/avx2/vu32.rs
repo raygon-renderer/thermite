@@ -285,7 +285,7 @@ impl SimdCastFrom<AVX2, Vi32> for u32x8<AVX2> {
 impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf32) -> Self {
-        Self::new(unsafe { _mm256_cvtps_epu32(from.value) })
+        Self::new(unsafe { _mm256_cvtps_epu32x(from.value) })
     }
 
     #[inline(always)]
@@ -299,8 +299,8 @@ impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
         Self::new(unsafe {
-            let low = _mm256_cvtpd_epu32(from.value.0);
-            let high = _mm256_cvtpd_epu32(from.value.1);
+            let low = _mm256_cvtpd_epu32x(from.value.0);
+            let high = _mm256_cvtpd_epu32x(from.value.1);
 
             _mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1)
         })

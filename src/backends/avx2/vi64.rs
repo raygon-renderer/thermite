@@ -310,8 +310,8 @@ impl SimdIntVector<AVX2> for i64x8<AVX2> {
     fn saturating_add(self, rhs: Self) -> Self {
         Self::new(unsafe {
             (
-                _mm256_adds_epi64(self.value.0, rhs.value.0),
-                _mm256_adds_epi64(self.value.1, rhs.value.1),
+                _mm256_adds_epi64x(self.value.0, rhs.value.0),
+                _mm256_adds_epi64x(self.value.1, rhs.value.1),
             )
         })
     }
@@ -320,8 +320,8 @@ impl SimdIntVector<AVX2> for i64x8<AVX2> {
     fn saturating_sub(self, rhs: Self) -> Self {
         Self::new(unsafe {
             (
-                _mm256_subs_epi64(self.value.0, rhs.value.0),
-                _mm256_subs_epi64(self.value.1, rhs.value.1),
+                _mm256_subs_epi64x(self.value.0, rhs.value.0),
+                _mm256_subs_epi64x(self.value.1, rhs.value.1),
             )
         })
     }
@@ -350,7 +350,7 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
 
     #[inline(always)]
     fn abs(self) -> Self {
-        Self::new(unsafe { (_mm256_abs_epi64(self.value.0), _mm256_abs_epi64(self.value.1)) })
+        Self::new(unsafe { (_mm256_abs_epi64x(self.value.0), _mm256_abs_epi64x(self.value.1)) })
     }
 
     #[inline(always)]
@@ -425,7 +425,7 @@ impl SimdCastFrom<AVX2, Vu64> for i64x8<AVX2> {
 impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
-        Self::new(unsafe { (_mm256_cvtpd_epi64(from.value.0), _mm256_cvtpd_epi64(from.value.1)) })
+        Self::new(unsafe { (_mm256_cvtpd_epi64x(from.value.0), _mm256_cvtpd_epi64x(from.value.1)) })
     }
 
     #[inline(always)]

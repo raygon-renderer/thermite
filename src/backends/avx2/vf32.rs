@@ -508,7 +508,7 @@ impl SimdCastFrom<AVX2, Vi32> for f32x8<AVX2> {
 impl SimdCastFrom<AVX2, Vu32> for f32x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
-        Self::new(unsafe { _mm256_cvtepu32_ps(from.value) })
+        Self::new(unsafe { _mm256_cvtepu32_psx(from.value) })
     }
 
     #[inline(always)]

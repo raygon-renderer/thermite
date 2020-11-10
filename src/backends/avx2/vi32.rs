@@ -261,12 +261,12 @@ impl SimdFromBits<AVX2, Vu32> for i32x8<AVX2> {
 impl SimdIntVector<AVX2> for i32x8<AVX2> {
     #[inline(always)]
     fn saturating_add(self, rhs: Self) -> Self {
-        Self::new(unsafe { _mm256_adds_epi32(self.value, rhs.value) })
+        Self::new(unsafe { _mm256_adds_epi32x(self.value, rhs.value) })
     }
 
     #[inline(always)]
     fn saturating_sub(self, rhs: Self) -> Self {
-        Self::new(unsafe { _mm256_subs_epi32(self.value, rhs.value) })
+        Self::new(unsafe { _mm256_subs_epi32x(self.value, rhs.value) })
     }
 
     #[inline(always)]

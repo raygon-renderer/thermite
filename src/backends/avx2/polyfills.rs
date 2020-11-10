@@ -1,7 +1,9 @@
 use super::*;
 
+use crate::backends::avx1::polyfills::{_mm256_blendv_epi32x, _mm256_blendv_epi64x};
+
 #[inline(always)]
-pub unsafe fn _mm256_cvtepu32_ps(x: __m256i) -> __m256 {
+pub unsafe fn _mm256_cvtepu32_psx(x: __m256i) -> __m256 {
     let ymm0 = x;
     let ymm1 = _mm256_set1_epi32(0x4B000000u32 as i32);
     let ymm1 = _mm256_blend_epi16(ymm0, ymm1, 170);
@@ -16,14 +18,14 @@ pub unsafe fn _mm256_cvtepu32_ps(x: __m256i) -> __m256 {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epi64_limited(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epi64x_limited(x: __m256d) -> __m256i {
     // https://stackoverflow.com/a/41148578/2083075
     let m = _mm256_set1_pd(transmute::<u64, i64>(0x0018000000000000) as f64);
     _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epu64_limited(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epu64x_limited(x: __m256d) -> __m256i {
     // https://stackoverflow.com/a/41148578/2083075
     let m = _mm256_set1_pd(transmute::<u64, i64>(0x0010000000000000) as f64);
     _mm256_xor_si256(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
@@ -32,7 +34,7 @@ pub unsafe fn _mm256_cvtpd_epu64_limited(x: __m256d) -> __m256i {
 // https://stackoverflow.com/a/41223013/2083075
 #[inline(always)]
 #[rustfmt::skip]
-pub unsafe fn _mm256_cvtepu64_pd(v: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepu64_pdx(v: __m256i) -> __m256d {
     let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000);  // 2^52        encoded as floating-point
     let magic_i_hi32 = _mm256_set1_epi64x(0x4530000000000000);  // 2^84        encoded as floating-point
     let magic_i_all  = _mm256_set1_epi64x(0x4530000000100000);  // 2^84 + 2^52 encoded as floating-point
@@ -48,7 +50,7 @@ pub unsafe fn _mm256_cvtepu64_pd(v: __m256i) -> __m256d {
 // https://stackoverflow.com/a/41223013/2083075
 #[inline(always)]
 #[rustfmt::skip]
-pub unsafe fn _mm256_cvtepi64_pd(v: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepi64_pdx(v: __m256i) -> __m256d {
     let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000); // 2^52               encoded as floating-point
     let magic_i_hi32 = _mm256_set1_epi64x(0x4530000080000000); // 2^84 + 2^63        encoded as floating-point
     let magic_i_all  = _mm256_set1_epi64x(0x4530000080100000); // 2^84 + 2^63 + 2^52 encoded as floating-point
@@ -62,90 +64,58 @@ pub unsafe fn _mm256_cvtepi64_pd(v: __m256i) -> __m256d {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_adds_epi32(lhs: __m256i, rhs: __m256i) -> __m256i {
+pub unsafe fn _mm256_adds_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
     let res = _mm256_add_epi32(lhs, rhs);
 
-    // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
-    let saturated = _mm256_blendv_ps(
-        _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
-        _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
-        _mm256_castsi256_ps(res),
-    );
-
-    let overflow = _mm256_xor_si256(rhs, _mm256_cmpgt_epi32(lhs, res));
-
-    _mm256_castps_si256(_mm256_blendv_ps(
-        _mm256_castsi256_ps(res),
-        saturated,
-        _mm256_castsi256_ps(overflow),
-    ))
+    _mm256_blendv_epi32x(
+        res,
+        // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
+        _mm256_blendv_epi64x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
+        _mm256_xor_si256(rhs, _mm256_cmpgt_epi32(lhs, res)),
+    )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_adds_epi64(lhs: __m256i, rhs: __m256i) -> __m256i {
+pub unsafe fn _mm256_adds_epi64x(lhs: __m256i, rhs: __m256i) -> __m256i {
     let res = _mm256_add_epi64(lhs, rhs);
 
-    let saturated = _mm256_blendv_pd(
-        _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN)),
-        _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MAX)),
-        _mm256_castsi256_pd(res),
-    );
-
-    let overflow = _mm256_xor_si256(rhs, _mm256_cmpgt_epi64(lhs, res));
-
-    _mm256_castpd_si256(_mm256_blendv_pd(
-        _mm256_castsi256_pd(res),
-        saturated,
-        _mm256_castsi256_pd(overflow),
-    ))
+    _mm256_blendv_epi64x(
+        res,
+        _mm256_blendv_epi64x(_mm256_set1_epi64x(i64::MIN), _mm256_set1_epi64x(i64::MAX), res),
+        _mm256_xor_si256(rhs, _mm256_cmpgt_epi64(lhs, res)),
+    )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_subs_epi32(lhs: __m256i, rhs: __m256i) -> __m256i {
+pub unsafe fn _mm256_subs_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
     let res = _mm256_sub_epi32(lhs, rhs);
 
-    let overflow = _mm256_xor_si256(
-        _mm256_cmpgt_epi32(rhs, _mm256_setzero_si256()),
-        _mm256_cmpgt_epi32(lhs, res),
-    );
-
-    let saturated = _mm256_blendv_ps(
-        _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
-        _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
-        _mm256_castsi256_ps(res),
-    );
-
-    _mm256_castps_si256(_mm256_blendv_ps(
-        _mm256_castsi256_ps(res),
-        saturated,
-        _mm256_castsi256_ps(overflow),
-    ))
+    _mm256_blendv_epi32x(
+        res,
+        _mm256_blendv_epi32x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
+        _mm256_xor_si256(
+            _mm256_cmpgt_epi32(rhs, _mm256_setzero_si256()),
+            _mm256_cmpgt_epi32(lhs, res),
+        ),
+    )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_subs_epi64(lhs: __m256i, rhs: __m256i) -> __m256i {
+pub unsafe fn _mm256_subs_epi64x(lhs: __m256i, rhs: __m256i) -> __m256i {
     let res = _mm256_sub_epi64(lhs, rhs);
 
-    let overflow = _mm256_xor_si256(
-        _mm256_cmpgt_epi64(rhs, _mm256_setzero_si256()),
-        _mm256_cmpgt_epi64(lhs, res),
-    );
-
-    let saturated = _mm256_blendv_pd(
-        _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN)),
-        _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MAX)),
-        _mm256_castsi256_pd(res),
-    );
-
-    _mm256_castpd_si256(_mm256_blendv_pd(
-        _mm256_castsi256_pd(res),
-        saturated,
-        _mm256_castsi256_pd(overflow),
-    ))
+    _mm256_blendv_epi64x(
+        res,
+        _mm256_blendv_epi64x(_mm256_set1_epi64x(i64::MIN), _mm256_set1_epi64x(i64::MAX), res),
+        _mm256_xor_si256(
+            _mm256_cmpgt_epi64(rhs, _mm256_setzero_si256()),
+            _mm256_cmpgt_epi64(lhs, res),
+        ),
+    )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_abs_epi64(x: __m256i) -> __m256i {
+pub unsafe fn _mm256_abs_epi64x(x: __m256i) -> __m256i {
     let should_negate = _mm256_xor_si256(_mm256_cmpgt_epi64(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
 
     _mm256_add_epi64(
@@ -165,7 +135,7 @@ pub unsafe fn _mm256_cvtps_epi64(x: __m128) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epi64(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epi64x(x: __m256d) -> __m256i {
     let low = _mm256_castpd256_pd128(x);
     let high = _mm256_extractf128_pd(x, 1);
 
@@ -178,7 +148,7 @@ pub unsafe fn _mm256_cvtpd_epi64(x: __m256d) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtps_epu32(x: __m256) -> __m256i {
+pub unsafe fn _mm256_cvtps_epu32x(x: __m256) -> __m256i {
     // TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -> u32x4)`, but it's not ideal and
     // produces different results from `f32 as u32` with negaitve values and values larger than some value
     let xmm0 = x;
@@ -195,7 +165,7 @@ pub unsafe fn _mm256_cvtps_epu32(x: __m256) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epu32(ymm0: __m256d) -> __m128i {
+pub unsafe fn _mm256_cvtpd_epu32x(ymm0: __m256d) -> __m128i {
     let ymm1 = _mm256_set1_pd(f64::from_bits(0x41e0000000000000));
     let ymm2 = _mm256_cmp_pd(ymm0, ymm1, _CMP_LT_OQ);
     let xmm2 = _mm256_castpd256_pd128(ymm2); // lower half of ymm2

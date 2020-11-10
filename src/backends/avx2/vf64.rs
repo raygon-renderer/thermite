@@ -456,8 +456,8 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     unsafe fn to_int_fast(self) -> Self::Vi {
         Vi64::new(unsafe {
             (
-                _mm256_cvtpd_epi64_limited(self.value.0),
-                _mm256_cvtpd_epi64_limited(self.value.1),
+                _mm256_cvtpd_epi64x_limited(self.value.0),
+                _mm256_cvtpd_epi64x_limited(self.value.1),
             )
         })
     }
@@ -466,8 +466,8 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     unsafe fn to_uint_fast(self) -> Self::Vu {
         Vu64::new(unsafe {
             (
-                _mm256_cvtpd_epu64_limited(self.value.0),
-                _mm256_cvtpd_epu64_limited(self.value.1),
+                _mm256_cvtpd_epu64x_limited(self.value.0),
+                _mm256_cvtpd_epu64x_limited(self.value.1),
             )
         })
     }
@@ -661,7 +661,7 @@ impl SimdCastFrom<AVX2, Vf32> for f64x8<AVX2> {
 impl SimdCastFrom<AVX2, Vu64> for f64x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
-        Self::new(unsafe { (_mm256_cvtepu64_pd(from.value.0), _mm256_cvtepu64_pd(from.value.1)) })
+        Self::new(unsafe { (_mm256_cvtepu64_pdx(from.value.0), _mm256_cvtepu64_pdx(from.value.1)) })
     }
 
     #[inline(always)]
@@ -672,7 +672,7 @@ impl SimdCastFrom<AVX2, Vu64> for f64x8<AVX2> {
 
 impl SimdCastFrom<AVX2, Vi64> for f64x8<AVX2> {
     fn from_cast(from: Vi64) -> Self {
-        Self::new(unsafe { (_mm256_cvtepi64_pd(from.value.0), _mm256_cvtepi64_pd(from.value.1)) })
+        Self::new(unsafe { (_mm256_cvtepi64_pdx(from.value.0), _mm256_cvtepi64_pdx(from.value.1)) })
     }
 
     #[inline(always)]
