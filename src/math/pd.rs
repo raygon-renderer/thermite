@@ -639,6 +639,32 @@ where
 
         p0 * y
     }
+
+    #[inline(always)]
+    fn next_float(x: Self::Vf) -> Self::Vf {
+        let i1 = Vu64::<S>::one();
+
+        let v = x.eq(Vf64::<S>::neg_zero()).select(Vf64::<S>::zero(), x);
+
+        let bits = v.into_bits();
+        x.eq(Vf64::<S>::infinity()).select(
+            x,
+            Vf64::<S>::from_bits(v.ge(Vf64::<S>::zero()).select(bits + i1, bits - i1)),
+        )
+    }
+
+    #[inline(always)]
+    fn prev_float(x: Self::Vf) -> Self::Vf {
+        let i1 = Vu64::<S>::one();
+
+        let v = x.eq(Vf64::<S>::zero()).select(Vf64::<S>::neg_zero(), x);
+
+        let bits = v.into_bits();
+        x.eq(Vf64::<S>::neg_infinity()).select(
+            x,
+            Vf64::<S>::from_bits(v.gt(Vf64::<S>::zero()).select(bits - i1, bits + i1)),
+        )
+    }
 }
 
 #[inline(always)]

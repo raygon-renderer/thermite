@@ -6,7 +6,7 @@ mod common;
 mod pd;
 mod ps;
 
-//TODO: Gamma function, beta function
+//TODO: tgamma function, beta function, cbrt, j0, y0
 
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
@@ -93,6 +93,12 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     fn erf(self) -> Self;
     /// Computes the inverse error function for each value in a vector
     fn erfinv(self) -> Self;
+
+    /// Finds the next representable float moving upwards to positive infinity
+    fn next_float(self) -> Self;
+
+    /// Finds the previous representable float moving downwards to negative infinity
+    fn prev_float(self) -> Self;
 }
 
 #[rustfmt::skip]
@@ -182,6 +188,8 @@ where
     #[inline] fn log10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self) }
     #[inline] fn erf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self) }
     #[inline] fn erfinv(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv(self) }
+    #[inline] fn next_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float(self) }
+    #[inline] fn prev_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float(self) }
 }
 
 #[doc(hidden)]
@@ -244,6 +252,9 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> {
 
     fn erf(x: Self::Vf) -> Self::Vf;
     fn erfinv(x: Self::Vf) -> Self::Vf;
+
+    fn next_float(x: Self::Vf) -> Self::Vf;
+    fn prev_float(x: Self::Vf) -> Self::Vf;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

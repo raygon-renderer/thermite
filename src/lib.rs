@@ -633,7 +633,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         Self::one() / self
     }
 
-    #[inline]
+    #[inline(always)]
     fn approx_eq(self, other: Self, tolerance: Self) -> Mask<S, Self> {
         (self - other).abs().lt(tolerance)
     }
@@ -666,6 +666,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     fn is_subnormal(self) -> Mask<S, Self>;
 
+    #[inline(always)]
     fn is_zero_or_subnormal(self) -> Mask<S, Self> {
         self.is_subnormal() | self.eq(Self::zero())
     }
