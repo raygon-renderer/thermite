@@ -367,36 +367,6 @@
 <span id="366">366</span>
 <span id="367">367</span>
 <span id="368">368</span>
-<span id="369">369</span>
-<span id="370">370</span>
-<span id="371">371</span>
-<span id="372">372</span>
-<span id="373">373</span>
-<span id="374">374</span>
-<span id="375">375</span>
-<span id="376">376</span>
-<span id="377">377</span>
-<span id="378">378</span>
-<span id="379">379</span>
-<span id="380">380</span>
-<span id="381">381</span>
-<span id="382">382</span>
-<span id="383">383</span>
-<span id="384">384</span>
-<span id="385">385</span>
-<span id="386">386</span>
-<span id="387">387</span>
-<span id="388">388</span>
-<span id="389">389</span>
-<span id="390">390</span>
-<span id="391">391</span>
-<span id="392">392</span>
-<span id="393">393</span>
-<span id="394">394</span>
-<span id="395">395</span>
-<span id="396">396</span>
-<span id="397">397</span>
-<span id="398">398</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -708,21 +678,7 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
-            <span class="comment">// TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -&gt; u32x4)`, but it&#39;s not ideal and</span>
-            <span class="comment">// produces different results from `f32 as u32` with negaitve values and values larger than some value</span>
-            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">from</span>.<span class="ident">value</span>;
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_ps</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x4f000000</span>));
-            <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_cmp_ps</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="ident">xmm1</span>, <span class="ident">_CMP_LT_OQ</span>);
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_sub_ps</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_cvtps_epi32</span>(<span class="ident">xmm1</span>);
-            <span class="kw">let</span> <span class="ident">xmm3</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>(<span class="number">0x80000000u32</span> <span class="kw">as</span> <span class="ident">i32</span>);
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_xor_si256</span>(<span class="ident">xmm1</span>, <span class="ident">xmm3</span>);
-            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_cvtps_epi32</span>(<span class="ident">xmm0</span>);
-            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_blendv_ps</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="ident">xmm1</span>), <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">xmm0</span>), <span class="ident">xmm2</span>);
-
-            <span class="ident">_mm256_castps_si256</span>(<span class="ident">xmm0</span>)
-        })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_cvtps_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -735,25 +691,9 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">cvtpd_epu32</span>(<span class="ident">ymm0</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m128i</span> {
-            <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x41e0000000000000</span>));
-            <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_cmp_pd</span>(<span class="ident">ymm0</span>, <span class="ident">ymm1</span>, <span class="ident">_CMP_LT_OQ</span>);
-            <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">ymm2</span>); <span class="comment">// lower half of ymm2</span>
-            <span class="kw">let</span> <span class="ident">xmm3</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_pd</span>(<span class="ident">ymm2</span>, <span class="number">1</span>);
-            <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm_packs_epi32</span>(<span class="ident">_mm_castpd_si128</span>(<span class="ident">xmm2</span>), <span class="ident">_mm_castpd_si128</span>(<span class="ident">xmm3</span>));
-            <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_sub_pd</span>(<span class="ident">ymm0</span>, <span class="ident">ymm1</span>);
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_cvttpd_epi32</span>(<span class="ident">ymm1</span>);
-            <span class="kw">let</span> <span class="ident">xmm3</span> <span class="op">=</span> <span class="ident">_mm_set1_ps</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x80000000</span>));
-            <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_xor_ps</span>(<span class="ident">_mm_castsi128_ps</span>(<span class="ident">xmm1</span>), <span class="ident">xmm3</span>);
-            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_cvttpd_epi32</span>(<span class="ident">ymm0</span>);
-            <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm_blendv_ps</span>(<span class="ident">xmm1</span>, <span class="ident">_mm_castsi128_ps</span>(<span class="ident">xmm0</span>), <span class="ident">_mm_castsi128_ps</span>(<span class="ident">xmm2</span>));
-
-            <span class="ident">_mm_castps_si128</span>(<span class="ident">xmm0</span>)
-        }
-
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
-            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>);
-            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>);
+            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>);
+            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>);
 
             <span class="ident">_mm256_inserti128_si256</span>(<span class="ident">_mm256_castsi128_si256</span>(<span class="ident">low</span>), <span class="ident">high</span>, <span class="number">1</span>)
         })
