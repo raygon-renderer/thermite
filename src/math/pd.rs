@@ -8,6 +8,13 @@ where
 {
     type Vf = <S as Simd>::Vf64;
 
+    const __EPSILON: Self = f64::EPSILON;
+
+    #[inline(always)]
+    fn from_u32(x: u32) -> Self {
+        x as f64
+    }
+
     #[inline(always)]
     fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);

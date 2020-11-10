@@ -79,21 +79,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents via repeated squaring
     fn powiv(self, e: S::Vi32) -> Self;
     /// Computes `x^e` where `x` is `self` and `e` is a signed integer
+    ///
+    /// **NOTE**: Given a constant `e`, LLVM will happily unroll the inner loop
     fn powi(self, e: i32) -> Self;
-
-    /// Computes the physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
-    /// `H_n(x)` where `x` is `self` and `n` is an unsigned integer representing the polynomial degree.
-    ///
-    /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermite(self, n: u32) -> Self;
-
-    /// Computes the physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
-    /// `H_n(x)` where `x` is `self` and `n` is a vector of unsigned integers representing the polynomial degree.
-    ///
-    /// The polynomial is calculated independenty per-lane with the given degree in `n`.
-    ///
-    /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermitev(self, n: S::Vu32) -> Self;
 
     /// Computes the natural logarithm of a vector.
     fn ln(self) -> Self;
@@ -131,6 +119,27 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
     fn smootheststep(self) -> Self;
+
+    /// Computes the n-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
+    /// `H_n(x)` where `x` is `self` and `n` is an unsigned integer representing the polynomial degree.
+    ///
+    /// This uses the recurrence relation to compute the polynomial iteratively.
+    ///
+    /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
+    fn hermite(self, n: u32) -> Self;
+
+    /// Computes the n-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
+    /// `H_n(x)` where `x` is `self` and `n` is a vector of unsigned integers representing the polynomial degree.
+    ///
+    /// The polynomial is calculated independenty per-lane with the given degree in `n`.
+    ///
+    /// This uses the recurrence relation to compute the polynomial iteratively.
+    fn hermitev(self, n: S::Vu32) -> Self;
+
+    /// Computes the n-th degree Jacobi polynomial via the 3-term recurrence relation.
+    ///
+    /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
+    fn jacobi(self, alpha: Self, beta: Self, n: u32) -> Self;
 }
 
 #[rustfmt::skip]
@@ -291,6 +300,11 @@ where
         min.eq(Self::zero()).select(max, ret)
     }
 
+    #[inline]
+    fn jacobi(self, alpha: Self, beta: Self, n: u32) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi(self, alpha, beta, n)
+    }
+
     #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
     #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
     #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
@@ -325,8 +339,14 @@ where
 }
 
 #[doc(hidden)]
-pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> + From<i16> {
+pub trait SimdVectorizedMathInternal<S: Simd>:
+    SimdElement + From<f32> + From<i16> + Add<Self, Output = Self> + Mul<Self, Output = Self> + PartialOrd
+{
     type Vf: SimdFloatVector<S, Element = Self>;
+
+    const __EPSILON: Self;
+
+    fn from_u32(x: u32) -> Self;
 
     #[inline(always)]
     fn sin(x: Self::Vf) -> Self::Vf {
@@ -417,6 +437,66 @@ pub trait SimdVectorizedMathInternal<S: Simd>: SimdElement + From<f32> + From<i1
         let x2 = x * x;
 
         x2 * x2 * x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4))
+    }
+
+    // TODO: Find more places to optimize
+    #[inline(always)]
+    fn jacobi(x: Self::Vf, alpha: Self::Vf, beta: Self::Vf, n: u32) -> Self::Vf {
+        /*
+            This implementation is a little weird since I wanted to keep it generic, but all casts
+            from integers should be const-folded
+        */
+
+        let one = Self::Vf::one();
+
+        let mut y0 = one;
+
+        if unlikely!(n == 0) {
+            return y0;
+        }
+
+        let half = Self::Vf::splat_any(0.5);
+        let two = Self::Vf::splat_any(2);
+        let neg_two = Self::Vf::splat_any(-2);
+
+        let alpha_p_beta = alpha + beta;
+        let alpha2 = alpha * alpha;
+        let beta2 = beta * beta;
+        let alpha1 = alpha - one;
+        let beta1 = beta - one;
+        let alpha2beta2 = alpha2 - beta2;
+
+        //let mut y1 = alpha + one + half * (alpha_p_beta + two) * (x - one);
+        let mut y1 = half * (x.mul_add(alpha, alpha) + x.mul_sub(beta, beta) + x + x);
+
+        let mut yk = y1;
+        let mut k = Self::from_u32(2);
+
+        let k_max = Self::from_u32(n) * (Self::from_u32(1) + Self::__EPSILON);
+
+        while k < k_max {
+            let kf = Self::Vf::splat(k);
+            let kf2 = two * kf;
+
+            let k_alpha_p_beta = kf + alpha_p_beta;
+            let k2_alpha_p_beta = kf2 + alpha_p_beta;
+
+            let k2_alpha_p_beta_m2 = k2_alpha_p_beta - two;
+
+            let denom = kf2 * k_alpha_p_beta * k2_alpha_p_beta_m2;
+            let t0 = x.mul_add(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
+            let gamma1 = k2_alpha_p_beta.mul_sub(t0, t0);
+            let gamma0 = neg_two * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
+
+            yk = gamma1.mul_add(y1, gamma0 * y0) / denom;
+
+            y0 = y1;
+            y1 = yk;
+
+            k = k + Self::from_u32(1);
+        }
+
+        yk
     }
 }
 
