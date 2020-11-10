@@ -1,13 +1,5 @@
 use super::*;
 
-decl!(u32x8: u32 => __m256i);
-impl<S: Simd> Default for u32x8<S> {
-    #[inline(always)]
-    fn default() -> Self {
-        Self::new(unsafe { _mm256_setzero_si256() })
-    }
-}
-
 #[rustfmt::skip]
 macro_rules! log_reduce_epu32_avx2 {
     ($value:expr; $op:ident) => {unsafe {

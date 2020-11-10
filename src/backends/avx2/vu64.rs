@@ -1,13 +1,5 @@
 use super::*;
 
-decl!(u64x8: u64 => (__m256i, __m256i));
-impl<S: Simd> Default for u64x8<S> {
-    #[inline(always)]
-    fn default() -> Self {
-        Self::new(unsafe { (_mm256_setzero_si256(), _mm256_setzero_si256()) })
-    }
-}
-
 impl SimdVectorBase<AVX2> for u64x8<AVX2> {
     type Element = u64;
 
