@@ -77,7 +77,23 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
     /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents via repeated squaring
-    fn powi(self, e: S::Vi32) -> Self;
+    fn powiv(self, e: S::Vi32) -> Self;
+    /// Computes `x^e` where `x` is `self` and `e` is a signed integer
+    fn powi(self, e: i32) -> Self;
+
+    /// Computes the physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
+    /// `H_n(x)` where `x` is `self` and `n` is an unsigned integer representing the polynomial degree.
+    ///
+    /// This uses the recurrence relation to compute the polynomial iteratively.
+    fn hermite(self, n: u32) -> Self;
+
+    /// Computes the physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
+    /// `H_n(x)` where `x` is `self` and `n` is a vector of unsigned integers representing the polynomial degree.
+    ///
+    /// The polynomial is calculated independenty per-lane with the given degree in `n`.
+    ///
+    /// This uses the recurrence relation to compute the polynomial iteratively.
+    fn hermitev(self, n: S::Vu32) -> Self;
 
     /// Computes the natural logarithm of a vector.
     fn ln(self) -> Self;
@@ -139,7 +155,31 @@ where
     }
 
     #[inline(always)]
-    fn powi(self, mut e: S::Vi32) -> Self {
+    fn powi(self, mut e: i32) -> Self {
+        let one = Self::one();
+
+        let mut x = self;
+        let mut res = one;
+
+        if e < 0 {
+            x = one / x;
+            e = -e;
+        }
+
+        while e != 0 {
+            if e & 1 != 0 {
+                res *= x;
+            }
+
+            e >>= 1;
+            x *= x;
+        }
+
+        res
+    }
+
+    #[inline(always)]
+    fn powiv(self, mut e: S::Vi32) -> Self {
         let zero_i = Vi32::<S>::zero();
         let one_i = Vi32::<S>::one();
         let one = Self::one();
@@ -162,6 +202,81 @@ where
                 return res;
             }
         }
+    }
+
+    #[inline(always)]
+    fn hermite(self, mut n: u32) -> Self {
+        let one = Self::one();
+        let mut p0 = one;
+
+        if unlikely!(n == 0) {
+            return p0;
+        }
+
+        let x = self;
+
+        let mut p1 = x + x; // 2 * x
+
+        let mut c = 1;
+        let mut cf = one;
+
+        while c < n {
+            // swap p0, p1
+            let tmp = p0;
+            p0 = p1;
+            p1 = tmp;
+
+            let next0 = x.mul_sub(p0, cf * p1);
+
+            p1 = next0 + next0; // 2 * next0
+
+            c += 1;
+            cf += one;
+        }
+
+        p1
+    }
+
+    #[inline(always)]
+    fn hermitev(self, mut n: S::Vu32) -> Self {
+        let x = self;
+
+        let one = Self::one();
+        let i1 = Vu32::<S>::one();
+        let n_is_zero = n.eq(Vu32::<S>::zero());
+
+        let mut c = i1;
+
+        // count `n = c.to_float()` separately to avoid expensive converting every iteration
+        let mut cf = one;
+
+        n -= i1; // decrement this to be able to use greater-than instead of greater-than-or-equal
+
+        let mut p0 = one;
+        let mut p1 = x + x; // 2 * x
+
+        loop {
+            let fin = c.gt(n) | n_is_zero;
+
+            if fin.all() {
+                break;
+            }
+
+            // swap p0, p1
+            let tmp = p0;
+            p0 = p1;
+            p1 = tmp;
+
+            let next0 = x.mul_sub(p0, cf * p1);
+            let next = next0 + next0; // 2 * next0
+
+            p1 = fin.select(p1, next);
+
+            c += i1;
+            cf += one;
+        }
+
+        p1
     }
 
     #[inline(always)]
