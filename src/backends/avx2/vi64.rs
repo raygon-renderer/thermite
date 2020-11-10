@@ -337,61 +337,20 @@ impl SimdFromBits<AVX2, Vu64> for i64x8<AVX2> {
 impl SimdIntVector<AVX2> for i64x8<AVX2> {
     #[inline(always)]
     fn saturating_add(self, rhs: Self) -> Self {
-        #[inline(always)]
-        unsafe fn _mm_saturating_add(lhs: __m256i, rhs: __m256i) -> __m256i {
-            let res = _mm256_add_epi64(lhs, rhs);
-
-            let saturated = _mm256_blendv_pd(
-                _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN)),
-                _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MAX)),
-                _mm256_castsi256_pd(res),
-            );
-
-            let overflow = _mm256_xor_si256(rhs, _mm256_cmpgt_epi64(lhs, res));
-
-            _mm256_castpd_si256(_mm256_blendv_pd(
-                _mm256_castsi256_pd(res),
-                saturated,
-                _mm256_castsi256_pd(overflow),
-            ))
-        }
-
         Self::new(unsafe {
             (
-                _mm_saturating_add(self.value.0, rhs.value.0),
-                _mm_saturating_add(self.value.1, rhs.value.1),
+                _mm256_adds_epi64(self.value.0, rhs.value.0),
+                _mm256_adds_epi64(self.value.1, rhs.value.1),
             )
         })
     }
 
     #[inline(always)]
     fn saturating_sub(self, rhs: Self) -> Self {
-        #[inline(always)]
-        unsafe fn _mm_saturating_sub(lhs: __m256i, rhs: __m256i) -> __m256i {
-            let res = _mm256_sub_epi64(lhs, rhs);
-
-            let overflow = _mm256_xor_si256(
-                _mm256_cmpgt_epi64(rhs, _mm256_setzero_si256()),
-                _mm256_cmpgt_epi64(lhs, res),
-            );
-
-            let saturated = _mm256_blendv_pd(
-                _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN)),
-                _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MAX)),
-                _mm256_castsi256_pd(res),
-            );
-
-            _mm256_castpd_si256(_mm256_blendv_pd(
-                _mm256_castsi256_pd(res),
-                saturated,
-                _mm256_castsi256_pd(overflow),
-            ))
-        }
-
         Self::new(unsafe {
             (
-                _mm_saturating_sub(self.value.0, rhs.value.0),
-                _mm_saturating_sub(self.value.1, rhs.value.1),
+                _mm256_subs_epi64(self.value.0, rhs.value.0),
+                _mm256_subs_epi64(self.value.1, rhs.value.1),
             )
         })
     }
@@ -420,20 +379,7 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
 
     #[inline(always)]
     fn abs(self) -> Self {
-        Self::new(unsafe {
-            #[inline(always)]
-            unsafe fn _mm256_abs_epi64(x: __m256i) -> __m256i {
-                let should_negate =
-                    _mm256_xor_si256(_mm256_cmpgt_epi64(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
-
-                _mm256_add_epi64(
-                    _mm256_xor_si256(should_negate, x),
-                    _mm256_and_si256(should_negate, _mm256_set1_epi64x(1)),
-                )
-            }
-
-            (_mm256_abs_epi64(self.value.0), _mm256_abs_epi64(self.value.1))
-        })
+        Self::new(unsafe { (_mm256_abs_epi64(self.value.0), _mm256_abs_epi64(self.value.1)) })
     }
 
     #[inline(always)]
@@ -454,16 +400,7 @@ impl SimdCastFrom<AVX2, Vf32> for i64x8<AVX2> {
             let low = _mm256_castps256_ps128(from.value);
             let high = _mm256_extractf128_ps(from.value, 1);
 
-            let x0 = _mm_cvttss_si64(low);
-            let x1 = _mm_cvttss_si64(_mm_permute_ps(low, 1));
-            let x2 = _mm_cvttss_si64(_mm_permute_ps(low, 2));
-            let x3 = _mm_cvttss_si64(_mm_permute_ps(low, 3));
-            let x4 = _mm_cvttss_si64(high);
-            let x5 = _mm_cvttss_si64(_mm_permute_ps(high, 1));
-            let x6 = _mm_cvttss_si64(_mm_permute_ps(high, 2));
-            let x7 = _mm_cvttss_si64(_mm_permute_ps(high, 3));
-
-            (_mm256_setr_epi64x(x0, x1, x2, x3), _mm256_setr_epi64x(x4, x5, x6, x7))
+            (_mm256_cvtps_epi64(low), _mm256_cvtps_epi64(high))
         })
     }
 
@@ -517,20 +454,7 @@ impl SimdCastFrom<AVX2, Vu64> for i64x8<AVX2> {
 impl SimdCastFrom<AVX2, Vf64> for i64x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
-        #[inline(always)]
-        unsafe fn _cvtpd_epi64(x: __m256d) -> __m256i {
-            let low = _mm256_castpd256_pd128(x);
-            let high = _mm256_extractf128_pd(x, 1);
-
-            let x0 = _mm_cvttsd_si64(low);
-            let x1 = _mm_cvttsd_si64(_mm_permute_pd(low, 1));
-            let x2 = _mm_cvttsd_si64(high);
-            let x3 = _mm_cvttsd_si64(_mm_permute_pd(high, 1));
-
-            _mm256_setr_epi64x(x0, x1, x2, x3)
-        }
-
-        Self::new(unsafe { (_cvtpd_epi64(from.value.0), _cvtpd_epi64(from.value.1)) })
+        Self::new(unsafe { (_mm256_cvtpd_epi64(from.value.0), _mm256_cvtpd_epi64(from.value.1)) })
     }
 
     #[inline(always)]

@@ -282,50 +282,14 @@ impl SimdFromBits<AVX2, Vu32> for i32x8<AVX2> {
 }
 
 impl SimdIntVector<AVX2> for i32x8<AVX2> {
-    #[inline]
+    #[inline(always)]
     fn saturating_add(self, rhs: Self) -> Self {
-        unsafe {
-            let res = _mm256_add_epi32(self.value, rhs.value);
-
-            // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
-            let saturated = _mm256_blendv_ps(
-                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
-                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
-                _mm256_castsi256_ps(res),
-            );
-
-            let overflow = _mm256_xor_si256(rhs.value, _mm256_cmpgt_epi32(self.value, res));
-
-            Self::new(_mm256_castps_si256(_mm256_blendv_ps(
-                _mm256_castsi256_ps(res),
-                saturated,
-                _mm256_castsi256_ps(overflow),
-            )))
-        }
+        Self::new(unsafe { _mm256_adds_epi32(self.value, rhs.value) })
     }
 
-    #[inline]
+    #[inline(always)]
     fn saturating_sub(self, rhs: Self) -> Self {
-        unsafe {
-            let res = _mm256_sub_epi32(self.value, rhs.value);
-
-            let overflow = _mm256_xor_si256(
-                _mm256_cmpgt_epi32(rhs.value, _mm256_setzero_si256()),
-                _mm256_cmpgt_epi32(self.value, res),
-            );
-
-            let saturated = _mm256_blendv_ps(
-                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MIN)),
-                _mm256_castsi256_ps(_mm256_set1_epi32(i32::MAX)),
-                _mm256_castsi256_ps(res),
-            );
-
-            Self::new(_mm256_castps_si256(_mm256_blendv_ps(
-                _mm256_castsi256_ps(res),
-                saturated,
-                _mm256_castsi256_ps(overflow),
-            )))
-        }
+        Self::new(unsafe { _mm256_subs_epi32(self.value, rhs.value) })
     }
 
     #[inline(always)]

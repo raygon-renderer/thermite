@@ -308,21 +308,7 @@ impl SimdCastFrom<AVX2, Vi32> for u32x8<AVX2> {
 impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf32) -> Self {
-        Self::new(unsafe {
-            // TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -> u32x4)`, but it's not ideal and
-            // produces different results from `f32 as u32` with negaitve values and values larger than some value
-            let xmm0 = from.value;
-            let xmm1 = _mm256_set1_ps(f32::from_bits(0x4f000000));
-            let xmm2 = _mm256_cmp_ps(from.value, xmm1, _CMP_LT_OQ);
-            let xmm1 = _mm256_sub_ps(xmm0, xmm1);
-            let xmm1 = _mm256_cvtps_epi32(xmm1);
-            let xmm3 = _mm256_set1_epi32(0x80000000u32 as i32);
-            let xmm1 = _mm256_xor_si256(xmm1, xmm3);
-            let xmm0 = _mm256_cvtps_epi32(xmm0);
-            let xmm0 = _mm256_blendv_ps(_mm256_castsi256_ps(xmm1), _mm256_castsi256_ps(xmm0), xmm2);
-
-            _mm256_castps_si256(xmm0)
-        })
+        Self::new(unsafe { _mm256_cvtps_epu32(from.value) })
     }
 
     #[inline(always)]
@@ -335,25 +321,9 @@ impl SimdCastFrom<AVX2, Vf32> for u32x8<AVX2> {
 impl SimdCastFrom<AVX2, Vf64> for u32x8<AVX2> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
-        unsafe fn cvtpd_epu32(ymm0: __m256d) -> __m128i {
-            let ymm1 = _mm256_set1_pd(f64::from_bits(0x41e0000000000000));
-            let ymm2 = _mm256_cmp_pd(ymm0, ymm1, _CMP_LT_OQ);
-            let xmm2 = _mm256_castpd256_pd128(ymm2); // lower half of ymm2
-            let xmm3 = _mm256_extractf128_pd(ymm2, 1);
-            let xmm2 = _mm_packs_epi32(_mm_castpd_si128(xmm2), _mm_castpd_si128(xmm3));
-            let ymm1 = _mm256_sub_pd(ymm0, ymm1);
-            let xmm1 = _mm256_cvttpd_epi32(ymm1);
-            let xmm3 = _mm_set1_ps(f32::from_bits(0x80000000));
-            let xmm1 = _mm_xor_ps(_mm_castsi128_ps(xmm1), xmm3);
-            let xmm0 = _mm256_cvttpd_epi32(ymm0);
-            let xmm0 = _mm_blendv_ps(xmm1, _mm_castsi128_ps(xmm0), _mm_castsi128_ps(xmm2));
-
-            _mm_castps_si128(xmm0)
-        }
-
         Self::new(unsafe {
-            let low = cvtpd_epu32(from.value.0);
-            let high = cvtpd_epu32(from.value.1);
+            let low = _mm256_cvtpd_epu32(from.value.0);
+            let high = _mm256_cvtpd_epu32(from.value.1);
 
             _mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1)
         })

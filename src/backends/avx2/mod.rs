@@ -20,6 +20,10 @@ use half::f16;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AVX2;
 
+pub(crate) mod polyfills;
+
+use polyfills::*;
+
 mod vf32;
 mod vf64;
 mod vi16;
