@@ -266,6 +266,56 @@
 <span id="265">265</span>
 <span id="266">266</span>
 <span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -368,6 +418,22 @@
 
     <span class="doccomment">/// Finds the previous representable float moving downwards to negative infinity</span>
     <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Calculates a [sigmoid-like 3rd-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#3rd-order_equation).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
+    <span class="doccomment">/// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.</span>
+    <span class="kw">fn</span> <span class="ident">smoothstep</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="doccomment">/// Calculates a [sigmoid-like 5th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#5th-order_equation).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
+    <span class="doccomment">/// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.</span>
+    <span class="kw">fn</span> <span class="ident">smootherstep</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="doccomment">/// Calculates a [signmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance</span>
+    <span class="doccomment">/// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.</span>
+    <span class="kw">fn</span> <span class="ident">smootheststep</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 }
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
@@ -459,10 +525,13 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="self">self</span>)           <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">erfinv</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>)       <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">next_float</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>)       <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">prev_float</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">smoothstep</span>(<span class="self">self</span>)       <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">smoothstep</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">smootherstep</span>(<span class="self">self</span>)     <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">smootherstep</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">smootheststep</span>(<span class="self">self</span>)    <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">smootheststep</span>(<span class="self">self</span>) }
 }
 
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdElement</span> <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">f32</span><span class="op">&gt;</span> {
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdElement</span> <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">f32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">i16</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Vf</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -524,6 +593,37 @@
 
     <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
     <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">smoothstep</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="comment">// use integer coefficients to ensure as-accurate-as-possible casts to f32 or f64</span>
+        <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>.<span class="ident">nmul_add</span>(<span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">2i16</span>), <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">3i16</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">smootherstep</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">c3</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">10i16</span>);
+        <span class="kw">let</span> <span class="ident">c4</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="op">-</span><span class="number">15i16</span>);
+        <span class="kw">let</span> <span class="ident">c5</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">6i16</span>);
+
+        <span class="comment">// Use Estrin&#39;s scheme here without c0-c2</span>
+        <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+        <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
+
+        <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c5</span>, <span class="ident">c4</span>), <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">c3</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">smootheststep</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">c4</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">35i16</span>);
+        <span class="kw">let</span> <span class="ident">c5</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="op">-</span><span class="number">84i16</span>);
+        <span class="kw">let</span> <span class="ident">c6</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">70i16</span>);
+        <span class="kw">let</span> <span class="ident">c7</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="op">-</span><span class="number">20i16</span>);
+
+        <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+
+        <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c7</span>, <span class="ident">c6</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c5</span>, <span class="ident">c4</span>))
+    }
 }
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
