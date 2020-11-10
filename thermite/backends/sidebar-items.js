@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["avx2",""]]});
+initSidebarItems({"mod":[["avx1",""],["avx2",""]]});

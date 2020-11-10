@@ -138,6 +138,8 @@
 <span id="137">137</span>
 <span id="138">138</span>
 <span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_ops</span> {
     (@<span class="ident">UNARY</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">is</span>:<span class="ident">ident</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
@@ -221,8 +223,10 @@
                 <span class="self">self</span>
             }
 
-            <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">zip</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">b</span>: <span class="self">Self</span>, <span class="ident">f</span>: <span class="ident">F</span>) <span class="op">-&gt;</span> <span class="self">Self</span>
-            <span class="kw">where</span> <span class="ident">F</span>: <span class="ident">Fn</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span>, <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span>) <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span> {
+            <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">zip</span><span class="op">&lt;</span><span class="ident">F</span>, <span class="ident">V</span><span class="op">&gt;</span>(<span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">b</span>: <span class="ident">V</span>, <span class="ident">f</span>: <span class="ident">F</span>) <span class="op">-&gt;</span> <span class="self">Self</span>
+            <span class="kw">where</span> <span class="ident">F</span>: <span class="ident">Fn</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span>, <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span>,
+                <span class="self">Self</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+                  <span class="ident">V</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
                 <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">out</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">default</span>();
                 <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
                     <span class="kw-2">*</span><span class="ident">transmute</span>::<span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw">_</span>, <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ety</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">out</span>).<span class="ident">add</span>(<span class="ident">i</span>) <span class="op">=</span>

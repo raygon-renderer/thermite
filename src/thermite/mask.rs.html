@@ -602,7 +602,7 @@
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_all</span>() }
+        <span class="self">self</span>.<span class="ident">bitmask</span>().<span class="ident">all</span>()
     }
 
     <span class="doccomment">/// Returns `true` if any lanes are truthy</span>
@@ -611,7 +611,7 @@
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_any</span>() }
+        <span class="self">self</span>.<span class="ident">bitmask</span>().<span class="ident">any</span>()
     }
 
     <span class="doccomment">/// Returns `true` if all lanes are falsey</span>
@@ -620,7 +620,7 @@
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_none</span>() }
+        <span class="self">self</span>.<span class="ident">bitmask</span>().<span class="ident">none</span>()
     }
 
     <span class="doccomment">/// Counts the number of truthy lanes</span>
