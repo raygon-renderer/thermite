@@ -250,15 +250,13 @@ where
         // count `n = c.to_float()` separately to avoid expensive converting every iteration
         let mut cf = one;
 
-        n -= i1; // decrement this to be able to use greater-than instead of greater-than-or-equal
-
         let mut p0 = one;
         let mut p1 = x + x; // 2 * x
 
         loop {
-            let fin = c.gt(n) | n_is_zero;
+            let cont = c.lt(n);
 
-            if fin.all() {
+            if cont.none() {
                 break;
             }
 
@@ -270,13 +268,13 @@ where
             let next0 = x.mul_sub(p0, cf * p1);
             let next = next0 + next0; // 2 * next0
 
-            p1 = fin.select(p1, next);
+            p1 = cont.select(next, p1);
 
             c += i1;
             cf += one;
         }
 
-        p1
+        n_is_zero.select(one, p1)
     }
 
     #[inline(always)]
