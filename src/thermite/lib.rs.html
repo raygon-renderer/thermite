@@ -760,6 +760,7 @@
 <span id="759">759</span>
 <span id="760">760</span>
 <span id="761">761</span>
+<span id="762">762</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1396,7 +1397,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
         <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>
     }
 
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">approx_eq</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>, <span class="ident">tolerance</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         (<span class="self">self</span> <span class="op">-</span> <span class="ident">other</span>).<span class="ident">abs</span>().<span class="ident">lt</span>(<span class="ident">tolerance</span>)
     }
@@ -1429,6 +1430,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
     <span class="kw">fn</span> <span class="ident">is_subnormal</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>;
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_zero_or_subnormal</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         <span class="self">self</span>.<span class="ident">is_subnormal</span>() <span class="op">|</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
     }

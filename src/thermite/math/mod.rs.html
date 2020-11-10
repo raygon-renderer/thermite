@@ -255,6 +255,17 @@
 <span id="254">254</span>
 <span id="255">255</span>
 <span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -264,7 +275,7 @@
 <span class="kw">mod</span> <span class="ident">pd</span>;
 <span class="kw">mod</span> <span class="ident">ps</span>;
 
-<span class="comment">//TODO: Gamma function, beta function</span>
+<span class="comment">//TODO: tgamma function, beta function, cbrt, j0, y0</span>
 
 <span class="doccomment">/// Set of vectorized special functions optimized for both single and double precision</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
@@ -351,6 +362,12 @@
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="doccomment">/// Computes the inverse error function for each value in a vector</span>
     <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Finds the next representable float moving upwards to positive infinity</span>
+    <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Finds the previous representable float moving downwards to negative infinity</span>
+    <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 }
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
@@ -440,6 +457,8 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">log10</span>(<span class="self">self</span>)            <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">log10</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">erf</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">erf</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="self">self</span>)           <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">erfinv</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>)       <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">next_float</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>)       <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">prev_float</span>(<span class="self">self</span>) }
 }
 
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
@@ -502,6 +521,9 @@
 
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
     <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
+
+    <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
+    <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 }
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
