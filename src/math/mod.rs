@@ -539,7 +539,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         let half = Self::Vf::splat_any(0.5);
         let two = Self::Vf::splat_any(2);
-        let neg_two = Self::Vf::splat_any(-2);
 
         let alpha_p_beta = alpha + beta;
         let alpha2 = alpha * alpha;
@@ -568,9 +567,9 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             let denom = kf2 * k_alpha_p_beta * k2_alpha_p_beta_m2;
             let t0 = x.mul_add(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
             let gamma1 = k2_alpha_p_beta.mul_sub(t0, t0);
-            let gamma0 = neg_two * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
+            let gamma0 = two * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
 
-            yk = gamma1.mul_add(y1, gamma0 * y0) / denom;
+            yk = gamma1.mul_sub(y1, gamma0 * y0) / denom;
 
             y0 = y1;
             y1 = yk;
