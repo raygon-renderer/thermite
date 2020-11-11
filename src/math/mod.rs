@@ -145,6 +145,24 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     ///
     /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
     fn jacobi(self, alpha: Self, beta: Self, n: u32) -> Self;
+
+    /// Computes the m-th derivative of an n-th degree Jacobi polynomial
+    ///
+    /// A the special case where α and β are both zero, the Jacobi polynomial reduces to a
+    /// Legendre polynomial.
+    ///
+    /// **NOTE**: Given constant α, β or `n`, LLVM will happily optimize those away and unroll loops.
+    fn jacobi_d(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
+
+    /// Computes the m-th associated n-th degree Legendre polynomial,
+    /// where m=0 signifies the regular n-th degree Legendre polynomial.
+    ///
+    /// If `m` is odd, the input is only valid between -1 and 1
+    ///
+    /// **NOTE**: Given constant `n` and/or `m`, LLVM will happily unroll and optimize inner loops.
+    ///
+    /// Internally, this is computed with [`jacobi_d`](#tymethod.jacobi_d)
+    fn legendre_p(self, n: u32, m: u32) -> Self;
 }
 
 #[rustfmt::skip]
@@ -310,6 +328,15 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi(self, alpha, beta, n)
     }
 
+    #[inline]
+    fn jacobi_d(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi_d(self, alpha, beta, n, m)
+    }
+
+    fn legendre_p(self, n: u32, m: u32) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre_p(self, n, m)
+    }
+
     #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self) }
     #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self) }
     #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self) }
@@ -444,7 +471,57 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         x2 * x2 * x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4))
     }
 
-    // TODO: Find more places to optimize
+    #[inline(always)]
+    fn legendre_p(x: Self::Vf, n: u32, m: u32) -> Self::Vf {
+        let zero = Self::Vf::zero();
+        let one = Self::Vf::one();
+
+        let jacobi = Self::jacobi_d(x, zero, zero, n, m);
+
+        if m == 0 {
+            return jacobi;
+        }
+
+        let t0 = (-1i16).pow(m);
+
+        let x12 = Self::Vf::splat_any(t0) * x.nmul_add(x, one); // (-1)^m * (1 - x^2)
+
+        if m & 1 == 0 {
+            jacobi * x12.powi((m >> 1) as i32)
+        } else {
+            let x12a = x12.abs();
+            let res = jacobi * x12a.powi(m as i32).sqrt().copysign(x12);
+
+            x12a.le(one).select(res, Self::Vf::nan())
+        }
+    }
+
+    #[inline(always)]
+    fn jacobi_d(x: Self::Vf, alpha: Self::Vf, beta: Self::Vf, n: u32, m: u32) -> Self::Vf {
+        if unlikely!(m > n) {
+            return Self::Vf::zero();
+        }
+
+        let one = Self::Vf::one();
+
+        let half = Self::Vf::splat_any(0.5);
+        let mut scale = one;
+        let mut jf = one;
+        let nf = Self::Vf::splat(Self::from_u32(n));
+
+        let t0 = half * (nf + alpha + beta);
+
+        for j in 0..m {
+            scale *= half.mul_add(jf, t0);
+            jf += one;
+        }
+
+        let mf = Self::Vf::splat(Self::from_u32(m));
+
+        scale * Self::jacobi(x, alpha + mf, beta + mf, n - m)
+    }
+
+    // TODO: Find more places to optimize and reduce error
     #[inline(always)]
     fn jacobi(x: Self::Vf, alpha: Self::Vf, beta: Self::Vf, n: u32) -> Self::Vf {
         /*
