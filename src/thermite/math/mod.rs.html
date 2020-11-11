@@ -514,6 +514,83 @@
 <span id="513">513</span>
 <span id="514">514</span>
 <span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -662,6 +739,24 @@
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.</span>
     <span class="kw">fn</span> <span class="ident">jacobi</span>(<span class="self">self</span>, <span class="ident">alpha</span>: <span class="self">Self</span>, <span class="ident">beta</span>: <span class="self">Self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Computes the m-th derivative of an n-th degree Jacobi polynomial</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// A the special case where α and β are both zero, the Jacobi polynomial reduces to a</span>
+    <span class="doccomment">/// Legendre polynomial.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: Given constant α, β or `n`, LLVM will happily optimize those away and unroll loops.</span>
+    <span class="kw">fn</span> <span class="ident">jacobi_d</span>(<span class="self">self</span>, <span class="ident">alpha</span>: <span class="self">Self</span>, <span class="ident">beta</span>: <span class="self">Self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Computes the m-th associated n-th degree Legendre polynomial,</span>
+    <span class="doccomment">/// where m=0 signifies the regular n-th degree Legendre polynomial.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If `m` is odd, the input is only valid between -1 and 1</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: Given constant `n` and/or `m`, LLVM will happily unroll and optimize inner loops.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Internally, this is computed with [`jacobi_d`](#tymethod.jacobi_d)</span>
+    <span class="kw">fn</span> <span class="ident">legendre_p</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 }
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
@@ -827,6 +922,15 @@
         <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">jacobi</span>(<span class="self">self</span>, <span class="ident">alpha</span>, <span class="ident">beta</span>, <span class="ident">n</span>)
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="kw">fn</span> <span class="ident">jacobi_d</span>(<span class="self">self</span>, <span class="ident">alpha</span>: <span class="self">Self</span>, <span class="ident">beta</span>: <span class="self">Self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">jacobi_d</span>(<span class="self">self</span>, <span class="ident">alpha</span>, <span class="ident">beta</span>, <span class="ident">n</span>, <span class="ident">m</span>)
+    }
+
+    <span class="kw">fn</span> <span class="ident">legendre_p</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">legendre_p</span>(<span class="self">self</span>, <span class="ident">n</span>, <span class="ident">m</span>)
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">sin</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">sin</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">cos</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">cos</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">tan</span>(<span class="self">self</span>)              <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">tan</span>(<span class="self">self</span>) }
@@ -961,7 +1065,57 @@
         <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c7</span>, <span class="ident">c6</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c5</span>, <span class="ident">c4</span>))
     }
 
-    <span class="comment">// TODO: Find more places to optimize</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">legendre_p</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>();
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
+
+        <span class="kw">let</span> <span class="ident">jacobi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">jacobi_d</span>(<span class="ident">x</span>, <span class="ident">zero</span>, <span class="ident">zero</span>, <span class="ident">n</span>, <span class="ident">m</span>);
+
+        <span class="kw">if</span> <span class="ident">m</span> <span class="op">==</span> <span class="number">0</span> {
+            <span class="kw">return</span> <span class="ident">jacobi</span>;
+        }
+
+        <span class="kw">let</span> <span class="ident">t0</span> <span class="op">=</span> (<span class="op">-</span><span class="number">1i16</span>).<span class="ident">pow</span>(<span class="ident">m</span>);
+
+        <span class="kw">let</span> <span class="ident">x12</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="ident">t0</span>) <span class="op">*</span> <span class="ident">x</span>.<span class="ident">nmul_add</span>(<span class="ident">x</span>, <span class="ident">one</span>); <span class="comment">// (-1)^m * (1 - x^2)</span>
+
+        <span class="kw">if</span> <span class="ident">m</span> <span class="op">&amp;</span> <span class="number">1</span> <span class="op">==</span> <span class="number">0</span> {
+            <span class="ident">jacobi</span> <span class="op">*</span> <span class="ident">x12</span>.<span class="ident">powi</span>((<span class="ident">m</span> <span class="op">&gt;&gt;</span> <span class="number">1</span>) <span class="kw">as</span> <span class="ident">i32</span>)
+        } <span class="kw">else</span> {
+            <span class="kw">let</span> <span class="ident">x12a</span> <span class="op">=</span> <span class="ident">x12</span>.<span class="ident">abs</span>();
+            <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">jacobi</span> <span class="op">*</span> <span class="ident">x12a</span>.<span class="ident">powi</span>(<span class="ident">m</span> <span class="kw">as</span> <span class="ident">i32</span>).<span class="ident">sqrt</span>().<span class="ident">copysign</span>(<span class="ident">x12</span>);
+
+            <span class="ident">x12a</span>.<span class="ident">le</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">res</span>, <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">nan</span>())
+        }
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">jacobi_d</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">alpha</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">beta</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">m</span> <span class="op">&gt;</span> <span class="ident">n</span>) {
+            <span class="kw">return</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>();
+        }
+
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
+
+        <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">0.5</span>);
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">scale</span> <span class="op">=</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">jf</span> <span class="op">=</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="ident">nf</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">from_u32</span>(<span class="ident">n</span>));
+
+        <span class="kw">let</span> <span class="ident">t0</span> <span class="op">=</span> <span class="ident">half</span> <span class="op">*</span> (<span class="ident">nf</span> <span class="op">+</span> <span class="ident">alpha</span> <span class="op">+</span> <span class="ident">beta</span>);
+
+        <span class="kw">for</span> <span class="ident">j</span> <span class="kw">in</span> <span class="number">0</span>..<span class="ident">m</span> {
+            <span class="ident">scale</span> <span class="op">*=</span> <span class="ident">half</span>.<span class="ident">mul_add</span>(<span class="ident">jf</span>, <span class="ident">t0</span>);
+            <span class="ident">jf</span> <span class="op">+=</span> <span class="ident">one</span>;
+        }
+
+        <span class="kw">let</span> <span class="ident">mf</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">from_u32</span>(<span class="ident">m</span>));
+
+        <span class="ident">scale</span> <span class="op">*</span> <span class="self">Self</span>::<span class="ident">jacobi</span>(<span class="ident">x</span>, <span class="ident">alpha</span> <span class="op">+</span> <span class="ident">mf</span>, <span class="ident">beta</span> <span class="op">+</span> <span class="ident">mf</span>, <span class="ident">n</span> <span class="op">-</span> <span class="ident">m</span>)
+    }
+
+    <span class="comment">// TODO: Find more places to optimize and reduce error</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">jacobi</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">alpha</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">beta</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="comment">/*

@@ -632,7 +632,7 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vf32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_cvtps_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_cvtps_epu32x</span>(<span class="ident">from</span>.<span class="ident">value</span>) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -646,8 +646,8 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
-            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>);
-            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>);
+            <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>);
+            <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_cvtpd_epu32x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>);
 
             <span class="ident">_mm256_inserti128_si256</span>(<span class="ident">_mm256_castsi128_si256</span>(<span class="ident">low</span>), <span class="ident">high</span>, <span class="number">1</span>)
         })

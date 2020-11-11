@@ -1140,8 +1140,8 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">to_int_fast</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vi</span> {
         <span class="ident">Vi64</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
             (
-                <span class="ident">_mm256_cvtpd_epi64_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
-                <span class="ident">_mm256_cvtpd_epi64_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+                <span class="ident">_mm256_cvtpd_epi64x_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_cvtpd_epi64x_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         })
     }
@@ -1150,8 +1150,8 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">to_uint_fast</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vu</span> {
         <span class="ident">Vu64</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
             (
-                <span class="ident">_mm256_cvtpd_epu64_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
-                <span class="ident">_mm256_cvtpd_epu64_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+                <span class="ident">_mm256_cvtpd_epu64x_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_cvtpd_epu64x_limited</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         })
     }
@@ -1345,7 +1345,7 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtepu64_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtepu64_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtepu64_pdx</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtepu64_pdx</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1356,7 +1356,7 @@
 
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="ident">Vi64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vi64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtepi64_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtepi64_pd</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtepi64_pdx</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtepi64_pdx</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
