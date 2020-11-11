@@ -412,18 +412,25 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn max_element(self) -> Self::Element;
 
     fn eq(self, other: Self) -> Mask<S, Self>;
+    fn gt(self, other: Self) -> Mask<S, Self>;
+
+    #[inline(always)]
     fn ne(self, other: Self) -> Mask<S, Self> {
         !self.eq(other)
     }
+    #[inline(always)]
     fn lt(self, other: Self) -> Mask<S, Self> {
         other.gt(self)
     }
+    #[inline(always)]
     fn le(self, other: Self) -> Mask<S, Self> {
         other.ge(self)
     }
 
-    fn gt(self, other: Self) -> Mask<S, Self>;
-    fn ge(self, other: Self) -> Mask<S, Self>;
+    #[inline(always)]
+    fn ge(self, other: Self) -> Mask<S, Self> {
+        self.gt(other) ^ self.eq(other)
+    }
 
     #[doc(hidden)]
     unsafe fn _mm_add(self, rhs: Self) -> Self;
