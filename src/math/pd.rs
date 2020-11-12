@@ -547,38 +547,25 @@ where
     #[rustfmt::skip]
     #[inline(always)]
     fn erf(x: Self::Vf) -> Self::Vf {
-        // https://www.desmos.com/calculator/06q98crjp0
-        let a0 = Vf64::<S>::one();
-        let a1 = Vf64::<S>::splat(0.141047395888);
-        let a2 = Vf64::<S>::splat(0.0895246554342);
-        let a3 = Vf64::<S>::splat(0.024538446357);
-        let a4 = Vf64::<S>::splat(0.00339526031482);
-        let a5 = Vf64::<S>::splat(0.00127101693092);
-        let a6 = Vf64::<S>::splat(0.000343596421733);
-        let a7 = Vf64::<S>::splat(-0.0000282694821623);
-        let a8 = Vf64::<S>::splat(0.0000153312079619);
-        let a9 = Vf64::<S>::splat(0.00000806034527525);
-        let a10 = Vf64::<S>::splat(-0.00000491119825703);
-        let a11 = Vf64::<S>::splat(0.00000190850200269);
-        let a12 = Vf64::<S>::splat(-4.5433487004e-7);
-        let a13 = Vf64::<S>::splat(7.5111413853e-8);
-        let a14 = Vf64::<S>::splat(-7.4944859806e-9);
-        let a15 = Vf64::<S>::splat(3.8381832932e-10);
+        let p0 = Vf64::<S>::splat(5.55923013010394962768e4);
+        let p1 = Vf64::<S>::splat(7.00332514112805075473e3);
+        let p2 = Vf64::<S>::splat(2.23200534594684319226e3);
+        let p3 = Vf64::<S>::splat(9.00260197203842689217e1);
+        let p4 = Vf64::<S>::splat(9.60497373987051638749e0);
 
-        let b = a0 - (a0 - x.abs()); // crush denormals
-        let b2 = b * b;
-        let b4 = b2 * b2;
+        let q0 = Vf64::<S>::splat(4.92673942608635921086e4);
+        let q1 = Vf64::<S>::splat(2.26290000613890934246e4);
+        let q2 = Vf64::<S>::splat(4.59432382970980127987e3);
+        let q3 = Vf64::<S>::splat(5.21357949780152679795e2);
+        let q4 = Vf64::<S>::splat(3.35617141647503099647e1);
+        let q5 = Vf64::<S>::splat(1.00000000000000000000e0);
 
-        let r = poly_15(
-            b, b2, b4, b4 * b4,
-            a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15,
-        );
+        let z1 = x * x;
+        let z2 = z1 * z1;
+        let z4 = z2 * z2;
 
-        let r2 = r * r;
-        let r4 = r2 * r2;
-        let r8 = r4 * r4;
-
-        (a0 - a0 / r8).copysign(x)
+        x * poly_4(z1, z2, z4, p0, p1, p2, p3, p4) /
+            poly_5(z1, z2, z4, q0, q1, q2, q3, q4, q5)
     }
 
     #[inline(always)]

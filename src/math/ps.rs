@@ -559,27 +559,19 @@ where
 
     #[inline(always)]
     fn erf(x: Self::Vf) -> Self::Vf {
-        /* Abramowitz and Stegun, 7.1.28. */
-        let a0 = Vf32::<S>::one();
-        let a1 = Vf32::<S>::splat(0.0705230784);
-        let a2 = Vf32::<S>::splat(0.0422820123);
-        let a3 = Vf32::<S>::splat(0.0092705272);
-        let a4 = Vf32::<S>::splat(0.0001520143);
-        let a5 = Vf32::<S>::splat(0.0002765672);
-        let a6 = Vf32::<S>::splat(0.0000430638);
+        let c0 = Vf32::<S>::splat(1.128379165726710e+0);
+        let c1 = Vf32::<S>::splat(-3.761262582423300e-1);
+        let c2 = Vf32::<S>::splat(1.128358514861418e-1);
+        let c3 = Vf32::<S>::splat(-2.685381193529856e-2);
+        let c4 = Vf32::<S>::splat(5.188327685732524e-3);
+        let c5 = Vf32::<S>::splat(-8.010193625184903e-4);
+        let c6 = Vf32::<S>::splat(7.853861353153693e-5);
 
-        let b = a0 - (a0 - x.abs()); // crush denormals
-        let b2 = b * b;
-        let b4 = b2 * b2;
+        let z1 = x * x;
+        let z2 = z1 * z1;
+        let z4 = z2 * z2;
 
-        let r = poly_6(b, b2, b4, a0, a1, a2, a3, a4, a5, a6);
-
-        let r2 = r * r;
-        let r4 = r2 * r2;
-        let r8 = r4 * r4;
-        let r16 = r8 * r8;
-
-        (a0 - a0 / r16).copysign(x)
+        x * poly_6(z1, z2, z4, c0, c1, c2, c3, c4, c5, c6)
     }
 
     #[inline(always)]
