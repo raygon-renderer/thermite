@@ -595,15 +595,15 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         let jacobi = Self::jacobi_d(x, zero, zero, n, m);
 
-        let t0 = (-1i16).pow(m);
-
-        let x12 = Self::Vf::splat_any(t0) * x.nmul_add(x, one); // (-1)^m * (1 - x^2)
+        let x12 = x.nmul_add(x, one); // (1 - x^2)
 
         if m & 1 == 0 {
             jacobi * x12.powi((m >> 1) as i32)
         } else {
             let x12a = x12.abs();
-            let res = jacobi * x12a.powi(m as i32).sqrt().copysign(x12);
+
+            // negate sign for odd powers (-1)^m
+            let res = -jacobi * x12a.powi(m as i32).sqrt();
 
             x12a.le(one).select(res, Self::Vf::nan())
         }
