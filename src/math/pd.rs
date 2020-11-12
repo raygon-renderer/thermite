@@ -577,49 +577,51 @@ where
         let w = -a.nmul_add(a, one).ln();
 
         let mut p0 = {
-            // https://www.desmos.com/calculator/06q98crjp0
-            // TODO: Increase to 13?
-            let c0 = Vf64::<S>::splat(1.50140935129);
-            let c1 = Vf64::<S>::splat(0.246640278996);
-            let c2 = Vf64::<S>::splat(-0.00417730548583);
-            let c3 = Vf64::<S>::splat(-0.00125266932566);
-            let c4 = Vf64::<S>::splat(0.00021832997994);
-            let c5 = Vf64::<S>::splat(-0.00000488118158479);
-            let c6 = Vf64::<S>::splat(-0.0000032971414425);
-            let c7 = Vf64::<S>::splat(5.6978210432e-7);
-            let c8 = Vf64::<S>::splat(6.435368102e-8);
-            let c9 = Vf64::<S>::splat(9.7659875934e-9);
-            let c10 = Vf64::<S>::splat(6.7370001038e-9);
-            let c11 = Vf64::<S>::splat(1.1765533188e-9);
-            let c12 = Vf64::<S>::splat(6.4996699923e-11);
+            // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
+            let c0 = Vf64::<S>::splat(1.501409350414994);
+            let c1 = Vf64::<S>::splat(0.2466402709383954);
+            let c2 = Vf64::<S>::splat(-0.0041773392840529855);
+            let c3 = Vf64::<S>::splat(-0.001252754693878528);
+            let c4 = Vf64::<S>::splat(0.00021818504236422313);
+            let c5 = Vf64::<S>::splat(-0.000005055953518603739);
+            let c6 = Vf64::<S>::splat(-0.000003451228003698613);
+            let c7 = Vf64::<S>::splat(4.691555466910589e-7);
+            let c8 = Vf64::<S>::splat(1.565009183876413e-8);
+            let c9 = Vf64::<S>::splat(-7.498144332533493e-9);
+            let c10 = Vf64::<S>::splat(2.378447620687541e-9);
+            let c11 = Vf64::<S>::splat(4.340759057762667e-10);
+            let c12 = Vf64::<S>::splat(-1.1526825105953649e-11);
+            let c13 = Vf64::<S>::splat(-3.605158594283844e-12);
 
             let w1 = w - Vf64::<S>::splat(2.5);
             let w2 = w1 * w1;
             let w4 = w2 * w2;
             let w8 = w4 * w4;
 
-            poly_12(w1, w2, w4, w8, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12)
+            poly_13(
+                w1, w2, w4, w8, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
+            )
         };
 
         let w_big = w.ge(Vf64::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if unlikely!(w_big.any()) {
-            let c0 = Vf64::<S>::splat(3.05596299225);
-            let c1 = Vf64::<S>::splat(2.48600156101);
-            let c2 = Vf64::<S>::splat(4.49503793389);
-            let c3 = Vf64::<S>::splat(8.08173608956);
-            let c4 = Vf64::<S>::splat(9.59962183284);
-            let c5 = Vf64::<S>::splat(7.71451614152);
-            let c6 = Vf64::<S>::splat(4.10730178764);
-            let c7 = Vf64::<S>::splat(1.22408705176);
-            let c8 = Vf64::<S>::splat(-0.0243566098554);
-            let c9 = Vf64::<S>::splat(-0.217358699758);
-            let c10 = Vf64::<S>::splat(-0.113869576373);
-            let c11 = Vf64::<S>::splat(-0.0338146066555);
-            let c12 = Vf64::<S>::splat(-0.00648455409479);
-            let c13 = Vf64::<S>::splat(-0.000799937382768);
-            let c14 = Vf64::<S>::splat(-0.0000582036485279);
-            let c15 = Vf64::<S>::splat(-0.00000190953540332);
+            let c0 = Vf64::<S>::splat(2.914513093490991);
+            let c1 = Vf64::<S>::splat(1.5466942804733321);
+            let c2 = Vf64::<S>::splat(1.5950004257395263);
+            let c3 = Vf64::<S>::splat(2.559965578101086);
+            let c4 = Vf64::<S>::splat(2.3489887347568135);
+            let c5 = Vf64::<S>::splat(0.7600225853251197);
+            let c6 = Vf64::<S>::splat(-0.9258061028319879);
+            let c7 = Vf64::<S>::splat(-1.574375166164548);
+            let c8 = Vf64::<S>::splat(-1.2294848322739875);
+            let c9 = Vf64::<S>::splat(-0.6192716293714041);
+            let c10 = Vf64::<S>::splat(-0.21681459128064842);
+            let c11 = Vf64::<S>::splat(-0.05369968979686224);
+            let c12 = Vf64::<S>::splat(-0.009288117987439485);
+            let c13 = Vf64::<S>::splat(-0.0010722580888930223);
+            let c14 = Vf64::<S>::splat(-0.00007449590390143766);
+            let c15 = Vf64::<S>::splat(-0.0000023620166848468398);
 
             let w1 = w.sqrt() - Vf64::<S>::splat(3.0);
             let w2 = w1 * w1;
