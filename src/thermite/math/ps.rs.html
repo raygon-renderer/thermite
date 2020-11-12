@@ -886,14 +886,6 @@
 <span id="885">885</span>
 <span id="886">886</span>
 <span id="887">887</span>
-<span id="888">888</span>
-<span id="889">889</span>
-<span id="890">890</span>
-<span id="891">891</span>
-<span id="892">892</span>
-<span id="893">893</span>
-<span id="894">894</span>
-<span id="895">895</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1456,27 +1448,19 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="comment">/* Abramowitz and Stegun, 7.1.28. */</span>
-        <span class="kw">let</span> <span class="ident">a0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">a1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0705230784</span>);
-        <span class="kw">let</span> <span class="ident">a2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0422820123</span>);
-        <span class="kw">let</span> <span class="ident">a3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0092705272</span>);
-        <span class="kw">let</span> <span class="ident">a4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0001520143</span>);
-        <span class="kw">let</span> <span class="ident">a5</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0002765672</span>);
-        <span class="kw">let</span> <span class="ident">a6</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0000430638</span>);
+        <span class="kw">let</span> <span class="ident">c0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.128379165726710e+0</span>);
+        <span class="kw">let</span> <span class="ident">c1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.761262582423300e-1</span>);
+        <span class="kw">let</span> <span class="ident">c2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.128358514861418e-1</span>);
+        <span class="kw">let</span> <span class="ident">c3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.685381193529856e-2</span>);
+        <span class="kw">let</span> <span class="ident">c4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.188327685732524e-3</span>);
+        <span class="kw">let</span> <span class="ident">c5</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">8.010193625184903e-4</span>);
+        <span class="kw">let</span> <span class="ident">c6</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.853861353153693e-5</span>);
 
-        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">a0</span> <span class="op">-</span> (<span class="ident">a0</span> <span class="op">-</span> <span class="ident">x</span>.<span class="ident">abs</span>()); <span class="comment">// crush denormals</span>
-        <span class="kw">let</span> <span class="ident">b2</span> <span class="op">=</span> <span class="ident">b</span> <span class="op">*</span> <span class="ident">b</span>;
-        <span class="kw">let</span> <span class="ident">b4</span> <span class="op">=</span> <span class="ident">b2</span> <span class="op">*</span> <span class="ident">b2</span>;
+        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+        <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">z1</span> <span class="op">*</span> <span class="ident">z1</span>;
+        <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
 
-        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">poly_6</span>(<span class="ident">b</span>, <span class="ident">b2</span>, <span class="ident">b4</span>, <span class="ident">a0</span>, <span class="ident">a1</span>, <span class="ident">a2</span>, <span class="ident">a3</span>, <span class="ident">a4</span>, <span class="ident">a5</span>, <span class="ident">a6</span>);
-
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">r</span> <span class="op">*</span> <span class="ident">r</span>;
-        <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">r2</span> <span class="op">*</span> <span class="ident">r2</span>;
-        <span class="kw">let</span> <span class="ident">r8</span> <span class="op">=</span> <span class="ident">r4</span> <span class="op">*</span> <span class="ident">r4</span>;
-        <span class="kw">let</span> <span class="ident">r16</span> <span class="op">=</span> <span class="ident">r8</span> <span class="op">*</span> <span class="ident">r8</span>;
-
-        (<span class="ident">a0</span> <span class="op">-</span> <span class="ident">a0</span> <span class="op">/</span> <span class="ident">r16</span>).<span class="ident">copysign</span>(<span class="ident">x</span>)
+        <span class="ident">x</span> <span class="op">*</span> <span class="ident">poly_6</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">c0</span>, <span class="ident">c1</span>, <span class="ident">c2</span>, <span class="ident">c3</span>, <span class="ident">c4</span>, <span class="ident">c5</span>, <span class="ident">c6</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

@@ -1020,19 +1020,6 @@
 <span id="1019">1019</span>
 <span id="1020">1020</span>
 <span id="1021">1021</span>
-<span id="1022">1022</span>
-<span id="1023">1023</span>
-<span id="1024">1024</span>
-<span id="1025">1025</span>
-<span id="1026">1026</span>
-<span id="1027">1027</span>
-<span id="1028">1028</span>
-<span id="1029">1029</span>
-<span id="1030">1030</span>
-<span id="1031">1031</span>
-<span id="1032">1032</span>
-<span id="1033">1033</span>
-<span id="1034">1034</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1583,38 +1570,25 @@
     <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="comment">// https://www.desmos.com/calculator/06q98crjp0</span>
-        <span class="kw">let</span> <span class="ident">a0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">a1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.141047395888</span>);
-        <span class="kw">let</span> <span class="ident">a2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0895246554342</span>);
-        <span class="kw">let</span> <span class="ident">a3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.024538446357</span>);
-        <span class="kw">let</span> <span class="ident">a4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00339526031482</span>);
-        <span class="kw">let</span> <span class="ident">a5</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00127101693092</span>);
-        <span class="kw">let</span> <span class="ident">a6</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.000343596421733</span>);
-        <span class="kw">let</span> <span class="ident">a7</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.0000282694821623</span>);
-        <span class="kw">let</span> <span class="ident">a8</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0000153312079619</span>);
-        <span class="kw">let</span> <span class="ident">a9</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00000806034527525</span>);
-        <span class="kw">let</span> <span class="ident">a10</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.00000491119825703</span>);
-        <span class="kw">let</span> <span class="ident">a11</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00000190850200269</span>);
-        <span class="kw">let</span> <span class="ident">a12</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.5433487004e-7</span>);
-        <span class="kw">let</span> <span class="ident">a13</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.5111413853e-8</span>);
-        <span class="kw">let</span> <span class="ident">a14</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">7.4944859806e-9</span>);
-        <span class="kw">let</span> <span class="ident">a15</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.8381832932e-10</span>);
+        <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.55923013010394962768e4</span>);
+        <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.00332514112805075473e3</span>);
+        <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.23200534594684319226e3</span>);
+        <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">9.00260197203842689217e1</span>);
+        <span class="kw">let</span> <span class="ident">p4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">9.60497373987051638749e0</span>);
 
-        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">a0</span> <span class="op">-</span> (<span class="ident">a0</span> <span class="op">-</span> <span class="ident">x</span>.<span class="ident">abs</span>()); <span class="comment">// crush denormals</span>
-        <span class="kw">let</span> <span class="ident">b2</span> <span class="op">=</span> <span class="ident">b</span> <span class="op">*</span> <span class="ident">b</span>;
-        <span class="kw">let</span> <span class="ident">b4</span> <span class="op">=</span> <span class="ident">b2</span> <span class="op">*</span> <span class="ident">b2</span>;
+        <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.92673942608635921086e4</span>);
+        <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.26290000613890934246e4</span>);
+        <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.59432382970980127987e3</span>);
+        <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.21357949780152679795e2</span>);
+        <span class="kw">let</span> <span class="ident">q4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.35617141647503099647e1</span>);
+        <span class="kw">let</span> <span class="ident">q5</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.00000000000000000000e0</span>);
 
-        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">poly_15</span>(
-            <span class="ident">b</span>, <span class="ident">b2</span>, <span class="ident">b4</span>, <span class="ident">b4</span> <span class="op">*</span> <span class="ident">b4</span>,
-            <span class="ident">a0</span>, <span class="ident">a1</span>, <span class="ident">a2</span>, <span class="ident">a3</span>, <span class="ident">a4</span>, <span class="ident">a5</span>, <span class="ident">a6</span>, <span class="ident">a7</span>, <span class="ident">a8</span>, <span class="ident">a9</span>, <span class="ident">a10</span>, <span class="ident">a11</span>, <span class="ident">a12</span>, <span class="ident">a13</span>, <span class="ident">a14</span>, <span class="ident">a15</span>,
-        );
+        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+        <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">z1</span> <span class="op">*</span> <span class="ident">z1</span>;
+        <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
 
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">r</span> <span class="op">*</span> <span class="ident">r</span>;
-        <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">r2</span> <span class="op">*</span> <span class="ident">r2</span>;
-        <span class="kw">let</span> <span class="ident">r8</span> <span class="op">=</span> <span class="ident">r4</span> <span class="op">*</span> <span class="ident">r4</span>;
-
-        (<span class="ident">a0</span> <span class="op">-</span> <span class="ident">a0</span> <span class="op">/</span> <span class="ident">r8</span>).<span class="ident">copysign</span>(<span class="ident">x</span>)
+        <span class="ident">x</span> <span class="op">*</span> <span class="ident">poly_4</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>, <span class="ident">p4</span>) <span class="op">/</span>
+            <span class="ident">poly_5</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>, <span class="ident">q4</span>, <span class="ident">q5</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
