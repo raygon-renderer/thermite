@@ -74,6 +74,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// special implementation that is more accurate if the numbr if closer to zero.
     fn exp_m1(self) -> Self;
 
+    /// Computes the cubic-root of each lane in a vector.
+    fn cbrt(self) -> Self;
+
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
     /// Computes `x^e` where `x` is `self` and `e` is a vector of integer exponents via repeated squaring
@@ -357,6 +360,7 @@ where
     #[inline] fn exp2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self) }
     #[inline] fn exp10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10(self) }
     #[inline] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1(self) }
+    #[inline] fn cbrt(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt(self) }
     #[inline] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e) }
     #[inline] fn ln(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self) }
     #[inline] fn ln_1p(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p(self) }
@@ -434,6 +438,8 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn exp_m1(x: Self::Vf) -> Self::Vf {
         Self::exp(x) - Self::Vf::one()
     }
+
+    fn cbrt(x: Self::Vf) -> Self::Vf;
 
     fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
 

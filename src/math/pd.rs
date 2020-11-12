@@ -346,6 +346,12 @@ where
         exp_d_internal::<S>(x, ExpMode::Expm1)
     }
 
+    fn cbrt(x: Self::Vf) -> Self::Vf {
+        let b1 = Vu32::<S>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
+        let b2 = Vu32::<S>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
+        unimplemented!()
+    }
+
     #[inline(always)]
     fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants

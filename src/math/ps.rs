@@ -365,6 +365,48 @@ where
     }
 
     #[inline(always)]
+    fn cbrt(x: Self::Vf) -> Self::Vf {
+        let b1 = Vu32::<S>::splat(709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
+        let b2 = Vu32::<S>::splat(642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
+        let m = Vu32::<S>::splat(0x7fffffff); // u32::MAX >> 1
+
+        let x1p24 = x * Vf32::<S>::splat(f32::from_bits(0x4b800000)); // 0x1p24f === 2 ^ 24
+
+        let hx0 = x.into_bits() & m;
+
+        let x_small = hx0.lt(Vu32::<S>::splat(0x00800000));
+
+        let xs = x_small.select(x1p24, x);
+        let b = x_small.select(b2, b1);
+
+        let mut ui = xs.into_bits();
+        let mut hx = ui & m;
+
+        // "fast" integer division `hx / 3`
+        let hx_j = <Vu64<S> as SimdCastFrom<S, Vu32<S>>>::from_cast(hx) * Vu64::<S>::splat(0xAAAAAAAB);
+        let hx_3 = <Vu32<S> as SimdCastFrom<S, Vu64<S>>>::from_cast(hx_j >> 33);
+
+        hx = hx_3 + b;
+
+        ui &= Vu32::<S>::splat(0x80000000);
+        ui |= hx;
+
+        let mut t = Vf32::<S>::from_bits(ui);
+
+        let two = Vf32::<S>::splat(2.0);
+
+        for _ in 0..2 {
+            let t3 = t * t * t;
+            t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+        }
+
+        // cbrt(NaN,INF) is itself
+        hx0.gt(Vu32::<S>::splat(0x7f800000))
+            // cbrt(+-0) is itself
+            .select(x + x, hx0.eq(Vu32::<S>::zero()).select(x, t))
+    }
+
+    #[inline(always)]
     fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
