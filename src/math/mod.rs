@@ -333,6 +333,7 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi_d(self, alpha, beta, n, m)
     }
 
+    #[inline]
     fn legendre_p(self, n: u32, m: u32) -> Self {
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre_p(self, n, m)
     }
@@ -372,13 +373,20 @@ where
 
 #[doc(hidden)]
 pub trait SimdVectorizedMathInternal<S: Simd>:
-    SimdElement + From<f32> + From<i16> + Add<Self, Output = Self> + Mul<Self, Output = Self> + PartialOrd
+    SimdElement
+    + From<f32>
+    + From<i16>
+    + Add<Self, Output = Self>
+    + Mul<Self, Output = Self>
+    + Div<Self, Output = Self>
+    + PartialOrd
 {
     type Vf: SimdFloatVector<S, Element = Self>;
 
     const __EPSILON: Self;
 
     fn from_u32(x: u32) -> Self;
+    fn from_i32(x: i32) -> Self;
 
     #[inline(always)]
     fn sin(x: Self::Vf) -> Self::Vf {
@@ -471,16 +479,121 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         x2 * x2 * x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4))
     }
 
+    // TODO: Add some associated forms?
+    /// This is split into its own function to avoid direct recursion within `legendre_p`,
+    /// as that will prevent loop unrolling or inlining and optimization at all.
+    #[inline(always)]
+    fn hardcoded_legendre_p(x: Self::Vf, n: u32) -> Self::Vf {
+        macro_rules! c {
+            ($n:expr, $d:expr) => {
+                Self::Vf::splat(Self::from_i32($n) / Self::from_i32($d))
+            };
+        }
+
+        let x2 = x * x;
+        let x4 = x2 * x2;
+        let x8 = x4 * x4;
+
+        // hand-tuned Estrin's scheme polynomials
+        match n {
+            2 => x2.mul_add(c!(3, 2), c!(-1, 2)),
+            3 => x * x2.mul_add(c!(5, 2), c!(-3, 2)),
+            4 => x4.mul_add(c!(35, 8), x2.mul_add(c!(-15, 4), c!(3, 8))),
+            5 => x * x4.mul_add(c!(63, 8), x2.mul_add(c!(-35, 4), c!(15, 8))),
+            6 => x4.mul_add(
+                x2.mul_add(c!(231, 16), c!(-315, 16)),
+                x2.mul_add(c!(105, 16), c!(-5, 16)),
+            ),
+            7 => {
+                x * x4.mul_add(
+                    x2.mul_add(c!(429, 16), c!(-693, 16)),
+                    x2.mul_add(c!(315, 16), c!(-35, 16)),
+                )
+            }
+            8 => x8.mul_add(
+                c!(6435, 128),
+                x4.mul_add(
+                    x2.mul_add(c!(-3003, 32), c!(3465, 64)),
+                    x2.mul_add(c!(-315, 32), c!(35, 128)),
+                ),
+            ),
+            9 => {
+                x * x8.mul_add(
+                    c!(12155, 128),
+                    x4.mul_add(
+                        x2.mul_add(c!(-6435, 32), c!(9009, 64)),
+                        x2.mul_add(c!(-1155, 32), c!(315, 128)),
+                    ),
+                )
+            }
+            10 => x8.mul_add(
+                x2.mul_add(c!(46189, 256), c!(-109395, 256)),
+                x4.mul_add(
+                    x2.mul_add(c!(45045, 128), c!(-15015, 128)),
+                    x2.mul_add(c!(3465, 256), c!(-63, 256)),
+                ),
+            ),
+            11 => {
+                x * x8.mul_add(
+                    x2.mul_add(c!(88179, 256), c!(-230945, 256)),
+                    x4.mul_add(
+                        x2.mul_add(c!(109395, 128), c!(-45045, 128)),
+                        x2.mul_add(c!(15015, 256), c!(-693, 256)),
+                    ),
+                )
+            }
+            12 => x8.mul_add(
+                x4.mul_add(c!(676039, 1024), x2.mul_add(c!(-969969, 512), c!(2078505, 1024))),
+                x4.mul_add(
+                    x2.mul_add(c!(-255255, 256), c!(225225, 1024)),
+                    x2.mul_add(c!(-9009, 512), c!(231, 1024)),
+                ),
+            ),
+            13 => {
+                x * x8.mul_add(
+                    x4.mul_add(c!(1300075, 1024), x2.mul_add(c!(-2028117, 512), c!(4849845, 1024))),
+                    x4.mul_add(
+                        x2.mul_add(c!(-692835, 256), c!(765765, 1024)),
+                        x2.mul_add(c!(-45045, 512), c!(3003, 1024)),
+                    ),
+                )
+            }
+            _ => unsafe { std::hint::unreachable_unchecked() },
+        }
+    }
+
     #[inline(always)]
     fn legendre_p(x: Self::Vf, n: u32, m: u32) -> Self::Vf {
         let zero = Self::Vf::zero();
         let one = Self::Vf::one();
 
-        let jacobi = Self::jacobi_d(x, zero, zero, n, m);
+        match (n, m) {
+            (0, 0) => return one,
+            (1, 0) => return x,
+            (n, 0) if n <= 13 => return Self::hardcoded_legendre_p(x, n),
+            (n, 0) => {
+                let mut k = 14; // set to max degree hard-coded + 1
 
-        if m == 0 {
-            return jacobi;
+                // these should inline
+                let mut p0 = Self::hardcoded_legendre_p(x, k - 2);
+                let mut p1 = Self::hardcoded_legendre_p(x, k - 1);
+
+                while k <= n {
+                    let nf = Self::Vf::splat(Self::from_u32(k));
+
+                    let tmp = p1;
+                    p1 = x.mul_sub((nf + nf).mul_sub(p1, p1), nf.mul_sub(p0, p0)) / nf;
+                    p0 = tmp;
+
+                    k += 1;
+                }
+
+                return p1;
+            }
+            _ => {}
         }
+
+        let jacobi = Self::jacobi_d(x, zero, zero, n, m);
 
         let t0 = (-1i16).pow(m);
 

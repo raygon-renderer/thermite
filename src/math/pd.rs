@@ -16,6 +16,11 @@ where
     }
 
     #[inline(always)]
+    fn from_i32(x: i32) -> Self {
+        x as f64
+    }
+
+    #[inline(always)]
     fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
