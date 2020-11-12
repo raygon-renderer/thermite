@@ -590,6 +590,119 @@
 <span id="589">589</span>
 <span id="590">590</span>
 <span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
+<span id="608">608</span>
+<span id="609">609</span>
+<span id="610">610</span>
+<span id="611">611</span>
+<span id="612">612</span>
+<span id="613">613</span>
+<span id="614">614</span>
+<span id="615">615</span>
+<span id="616">616</span>
+<span id="617">617</span>
+<span id="618">618</span>
+<span id="619">619</span>
+<span id="620">620</span>
+<span id="621">621</span>
+<span id="622">622</span>
+<span id="623">623</span>
+<span id="624">624</span>
+<span id="625">625</span>
+<span id="626">626</span>
+<span id="627">627</span>
+<span id="628">628</span>
+<span id="629">629</span>
+<span id="630">630</span>
+<span id="631">631</span>
+<span id="632">632</span>
+<span id="633">633</span>
+<span id="634">634</span>
+<span id="635">635</span>
+<span id="636">636</span>
+<span id="637">637</span>
+<span id="638">638</span>
+<span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
+<span id="646">646</span>
+<span id="647">647</span>
+<span id="648">648</span>
+<span id="649">649</span>
+<span id="650">650</span>
+<span id="651">651</span>
+<span id="652">652</span>
+<span id="653">653</span>
+<span id="654">654</span>
+<span id="655">655</span>
+<span id="656">656</span>
+<span id="657">657</span>
+<span id="658">658</span>
+<span id="659">659</span>
+<span id="660">660</span>
+<span id="661">661</span>
+<span id="662">662</span>
+<span id="663">663</span>
+<span id="664">664</span>
+<span id="665">665</span>
+<span id="666">666</span>
+<span id="667">667</span>
+<span id="668">668</span>
+<span id="669">669</span>
+<span id="670">670</span>
+<span id="671">671</span>
+<span id="672">672</span>
+<span id="673">673</span>
+<span id="674">674</span>
+<span id="675">675</span>
+<span id="676">676</span>
+<span id="677">677</span>
+<span id="678">678</span>
+<span id="679">679</span>
+<span id="680">680</span>
+<span id="681">681</span>
+<span id="682">682</span>
+<span id="683">683</span>
+<span id="684">684</span>
+<span id="685">685</span>
+<span id="686">686</span>
+<span id="687">687</span>
+<span id="688">688</span>
+<span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -926,6 +1039,7 @@
         <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">jacobi_d</span>(<span class="self">self</span>, <span class="ident">alpha</span>, <span class="ident">beta</span>, <span class="ident">n</span>, <span class="ident">m</span>)
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">fn</span> <span class="ident">legendre_p</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">legendre_p</span>(<span class="self">self</span>, <span class="ident">n</span>, <span class="ident">m</span>)
     }
@@ -965,13 +1079,20 @@
 
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>:
-    <span class="ident">SimdElement</span> <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">f32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">i16</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Add</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Mul</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">PartialOrd</span>
+    <span class="ident">SimdElement</span>
+    <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">f32</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">From</span><span class="op">&lt;</span><span class="ident">i16</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Add</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Mul</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+    <span class="op">+</span> <span class="ident">PartialOrd</span>
 {
     <span class="kw">type</span> <span class="ident">Vf</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="kw">const</span> <span class="ident">__EPSILON</span>: <span class="self">Self</span>;
 
     <span class="kw">fn</span> <span class="ident">from_u32</span>(<span class="ident">x</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">from_i32</span>(<span class="ident">x</span>: <span class="ident">i32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sin</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
@@ -1064,16 +1185,121 @@
         <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c7</span>, <span class="ident">c6</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c5</span>, <span class="ident">c4</span>))
     }
 
+    <span class="comment">// TODO: Add some associated forms?</span>
+    <span class="doccomment">/// This is split into its own function to avoid direct recursion within `legendre_p`,</span>
+    <span class="doccomment">/// as that will prevent loop unrolling or inlining and optimization at all.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">hardcoded_legendre_p</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">c</span> {
+            (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">n</span>:<span class="ident">expr</span>, <span class="macro-nonterminal">$</span><span class="macro-nonterminal">d</span>:<span class="ident">expr</span>) <span class="op">=&gt;</span> {
+                <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">from_i32</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">n</span>) <span class="op">/</span> <span class="self">Self</span>::<span class="ident">from_i32</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">d</span>))
+            };
+        }
+
+        <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+        <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
+        <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
+
+        <span class="comment">// hand-tuned Estrin&#39;s scheme polynomials</span>
+        <span class="kw">match</span> <span class="ident">n</span> {
+            <span class="number">2</span> <span class="op">=&gt;</span> <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">3</span>, <span class="number">2</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">1</span>, <span class="number">2</span>)),
+            <span class="number">3</span> <span class="op">=&gt;</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">5</span>, <span class="number">2</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">3</span>, <span class="number">2</span>)),
+            <span class="number">4</span> <span class="op">=&gt;</span> <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">35</span>, <span class="number">8</span>), <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">15</span>, <span class="number">4</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">3</span>, <span class="number">8</span>))),
+            <span class="number">5</span> <span class="op">=&gt;</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">63</span>, <span class="number">8</span>), <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">35</span>, <span class="number">4</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">15</span>, <span class="number">8</span>))),
+            <span class="number">6</span> <span class="op">=&gt;</span> <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">231</span>, <span class="number">16</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">315</span>, <span class="number">16</span>)),
+                <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">105</span>, <span class="number">16</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">5</span>, <span class="number">16</span>)),
+            ),
+            <span class="number">7</span> <span class="op">=&gt;</span> {
+                <span class="ident">x</span> <span class="op">*</span> <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">429</span>, <span class="number">16</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">693</span>, <span class="number">16</span>)),
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">315</span>, <span class="number">16</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">35</span>, <span class="number">16</span>)),
+                )
+            }
+            <span class="number">8</span> <span class="op">=&gt;</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                <span class="macro">c</span><span class="macro">!</span>(<span class="number">6435</span>, <span class="number">128</span>),
+                <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">3003</span>, <span class="number">32</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">3465</span>, <span class="number">64</span>)),
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">315</span>, <span class="number">32</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">35</span>, <span class="number">128</span>)),
+                ),
+            ),
+            <span class="number">9</span> <span class="op">=&gt;</span> {
+                <span class="ident">x</span> <span class="op">*</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                    <span class="macro">c</span><span class="macro">!</span>(<span class="number">12155</span>, <span class="number">128</span>),
+                    <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">6435</span>, <span class="number">32</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">9009</span>, <span class="number">64</span>)),
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">1155</span>, <span class="number">32</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">315</span>, <span class="number">128</span>)),
+                    ),
+                )
+            }
+            <span class="number">10</span> <span class="op">=&gt;</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">46189</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">109395</span>, <span class="number">256</span>)),
+                <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">45045</span>, <span class="number">128</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">15015</span>, <span class="number">128</span>)),
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">3465</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">63</span>, <span class="number">256</span>)),
+                ),
+            ),
+            <span class="number">11</span> <span class="op">=&gt;</span> {
+                <span class="ident">x</span> <span class="op">*</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">88179</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">230945</span>, <span class="number">256</span>)),
+                    <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">109395</span>, <span class="number">128</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">45045</span>, <span class="number">128</span>)),
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">15015</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">693</span>, <span class="number">256</span>)),
+                    ),
+                )
+            }
+            <span class="number">12</span> <span class="op">=&gt;</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">676039</span>, <span class="number">1024</span>), <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">969969</span>, <span class="number">512</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">2078505</span>, <span class="number">1024</span>))),
+                <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">255255</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">225225</span>, <span class="number">1024</span>)),
+                    <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">9009</span>, <span class="number">512</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">231</span>, <span class="number">1024</span>)),
+                ),
+            ),
+            <span class="number">13</span> <span class="op">=&gt;</span> {
+                <span class="ident">x</span> <span class="op">*</span> <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+                    <span class="ident">x4</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="number">1300075</span>, <span class="number">1024</span>), <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">2028117</span>, <span class="number">512</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">4849845</span>, <span class="number">1024</span>))),
+                    <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">692835</span>, <span class="number">256</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">765765</span>, <span class="number">1024</span>)),
+                        <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="macro">c</span><span class="macro">!</span>(<span class="op">-</span><span class="number">45045</span>, <span class="number">512</span>), <span class="macro">c</span><span class="macro">!</span>(<span class="number">3003</span>, <span class="number">1024</span>)),
+                    ),
+                )
+            }
+            <span class="kw">_</span> <span class="op">=&gt;</span> <span class="kw">unsafe</span> { <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>() },
+        }
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">legendre_p</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
 
-        <span class="kw">let</span> <span class="ident">jacobi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">jacobi_d</span>(<span class="ident">x</span>, <span class="ident">zero</span>, <span class="ident">zero</span>, <span class="ident">n</span>, <span class="ident">m</span>);
+        <span class="kw">match</span> (<span class="ident">n</span>, <span class="ident">m</span>) {
+            (<span class="number">0</span>, <span class="number">0</span>) <span class="op">=&gt;</span> <span class="kw">return</span> <span class="ident">one</span>,
+            (<span class="number">1</span>, <span class="number">0</span>) <span class="op">=&gt;</span> <span class="kw">return</span> <span class="ident">x</span>,
+            (<span class="ident">n</span>, <span class="number">0</span>) <span class="kw">if</span> <span class="ident">n</span> <span class="op">&lt;=</span> <span class="number">13</span> <span class="op">=&gt;</span> <span class="kw">return</span> <span class="self">Self</span>::<span class="ident">hardcoded_legendre_p</span>(<span class="ident">x</span>, <span class="ident">n</span>),
+            (<span class="ident">n</span>, <span class="number">0</span>) <span class="op">=&gt;</span> {
+                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">k</span> <span class="op">=</span> <span class="number">14</span>; <span class="comment">// set to max degree hard-coded + 1</span>
 
-        <span class="kw">if</span> <span class="ident">m</span> <span class="op">==</span> <span class="number">0</span> {
-            <span class="kw">return</span> <span class="ident">jacobi</span>;
+                <span class="comment">// these should inline</span>
+                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">hardcoded_legendre_p</span>(<span class="ident">x</span>, <span class="ident">k</span> <span class="op">-</span> <span class="number">2</span>);
+                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p1</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">hardcoded_legendre_p</span>(<span class="ident">x</span>, <span class="ident">k</span> <span class="op">-</span> <span class="number">1</span>);
+
+                <span class="kw">while</span> <span class="ident">k</span> <span class="op">&lt;=</span> <span class="ident">n</span> {
+                    <span class="kw">let</span> <span class="ident">nf</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">from_u32</span>(<span class="ident">k</span>));
+
+                    <span class="kw">let</span> <span class="ident">tmp</span> <span class="op">=</span> <span class="ident">p1</span>;
+                    <span class="ident">p1</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">mul_sub</span>((<span class="ident">nf</span> <span class="op">+</span> <span class="ident">nf</span>).<span class="ident">mul_sub</span>(<span class="ident">p1</span>, <span class="ident">p1</span>), <span class="ident">nf</span>.<span class="ident">mul_sub</span>(<span class="ident">p0</span>, <span class="ident">p0</span>)) <span class="op">/</span> <span class="ident">nf</span>;
+                    <span class="ident">p0</span> <span class="op">=</span> <span class="ident">tmp</span>;
+
+                    <span class="ident">k</span> <span class="op">+=</span> <span class="number">1</span>;
+                }
+
+                <span class="kw">return</span> <span class="ident">p1</span>;
+            }
+            <span class="kw">_</span> <span class="op">=&gt;</span> {}
         }
+
+        <span class="kw">let</span> <span class="ident">jacobi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">jacobi_d</span>(<span class="ident">x</span>, <span class="ident">zero</span>, <span class="ident">zero</span>, <span class="ident">n</span>, <span class="ident">m</span>);
 
         <span class="kw">let</span> <span class="ident">t0</span> <span class="op">=</span> (<span class="op">-</span><span class="number">1i16</span>).<span class="ident">pow</span>(<span class="ident">m</span>);
 
