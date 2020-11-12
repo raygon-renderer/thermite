@@ -347,9 +347,57 @@ where
     }
 
     fn cbrt(x: Self::Vf) -> Self::Vf {
-        let b1 = Vu32::<S>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
-        let b2 = Vu32::<S>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
-        unimplemented!()
+        let b1 = Vu64::<S>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
+        let b2 = Vu64::<S>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
+        let m = Vu64::<S>::splat(0x7fffffff); // u32::MAX >> 1
+
+        let p0 = Vf64::<S>::splat(1.87595182427177009643); /* 0x3ffe03e6, 0x0f61e692 */
+        let p1 = Vf64::<S>::splat(-1.88497979543377169875); /* 0xbffe28e0, 0x92f02420 */
+        let p2 = Vf64::<S>::splat(1.621429720105354466140); /* 0x3ff9f160, 0x4a49d6c2 */
+        let p3 = Vf64::<S>::splat(-0.758397934778766047437); /* 0xbfe844cb, 0xbee751d9 */
+        let p4 = Vf64::<S>::splat(0.145996192886612446982); /* 0x3fc2b000, 0xd4e4edd7 */
+
+        let x1p54 = x * Vf64::<S>::splat(f64::from_bits(0x4350000000000000)); // 0x1p54 === 2 ^ 54
+
+        let hx0 = (x.into_bits() >> 32) & m;
+
+        let x_small = hx0.lt(Vu64::<S>::splat(0x00100000));
+
+        let xs = x_small.select(x1p54, x); // note that this upcasts
+        let b = x_small.select(b2, b1);
+
+        let mut ui = xs.into_bits();
+        let mut hx = (ui >> 32) & m;
+
+        // TODO: Improve performance here with 128-bit multiply or something
+        let hx_3 = hx / Vu64::<S>::splat(3);
+
+        hx = hx_3 + b;
+
+        ui &= Vu64::<S>::splat(1 << 63);
+        ui |= hx << 32;
+
+        let mut t = Vf64::<S>::from_bits(ui);
+
+        let r = (t * t) * (t / x);
+        let r2 = r * r;
+
+        t *= poly_4(r, r2, r2 * r2, p0, p1, p2, p3, p4);
+
+        ui = t.into_bits();
+        ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
+        t = Vf64::<S>::from_bits(ui);
+
+        // original form, 5 simple ops, 2 divisions
+        //let r = ((x / (t * t)) - t) / ((t + t) + (x / (t * t)));
+
+        // fast form, 3 simple ops, 1 division, 1 fma
+        let t3 = t * t * t;
+        let r = (x - t3) / Vf64::<S>::splat(2.0).mul_add(t3, x);
+
+        t = r.mul_add(t, t);
+
+        (hx0.gt(Vu64::<S>::splat(0x7f800000)) | hx0.eq(Vu64::<S>::zero())).select(x, t)
     }
 
     #[inline(always)]

@@ -395,15 +395,16 @@ where
 
         let two = Vf32::<S>::splat(2.0);
 
+        // couple iterations of Newton's method
+        // This isn't perfect, as it's only limited to single-precision,
+        // but the fused multiply-adds helps
         for _ in 0..2 {
             let t3 = t * t * t;
             t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
         }
 
-        // cbrt(NaN,INF) is itself
-        hx0.gt(Vu32::<S>::splat(0x7f800000))
-            // cbrt(+-0) is itself
-            .select(x + x, hx0.eq(Vu32::<S>::zero()).select(x, t))
+        // cbrt(NaN,INF,+-0) is itself
+        (hx0.gt(Vu32::<S>::splat(0x7f800000)) | hx0.eq(Vu32::<S>::zero())).select(x, t)
     }
 
     #[inline(always)]
