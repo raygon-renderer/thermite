@@ -886,6 +886,48 @@
 <span id="885">885</span>
 <span id="886">886</span>
 <span id="887">887</span>
+<span id="888">888</span>
+<span id="889">889</span>
+<span id="890">890</span>
+<span id="891">891</span>
+<span id="892">892</span>
+<span id="893">893</span>
+<span id="894">894</span>
+<span id="895">895</span>
+<span id="896">896</span>
+<span id="897">897</span>
+<span id="898">898</span>
+<span id="899">899</span>
+<span id="900">900</span>
+<span id="901">901</span>
+<span id="902">902</span>
+<span id="903">903</span>
+<span id="904">904</span>
+<span id="905">905</span>
+<span id="906">906</span>
+<span id="907">907</span>
+<span id="908">908</span>
+<span id="909">909</span>
+<span id="910">910</span>
+<span id="911">911</span>
+<span id="912">912</span>
+<span id="913">913</span>
+<span id="914">914</span>
+<span id="915">915</span>
+<span id="916">916</span>
+<span id="917">917</span>
+<span id="918">918</span>
+<span id="919">919</span>
+<span id="920">920</span>
+<span id="921">921</span>
+<span id="922">922</span>
+<span id="923">923</span>
+<span id="924">924</span>
+<span id="925">925</span>
+<span id="926">926</span>
+<span id="927">927</span>
+<span id="928">928</span>
+<span id="929">929</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1251,6 +1293,48 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">exp_m1</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="ident">exp_f_internal</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="ident">ExpMode</span>::<span class="ident">Expm1</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">b1</span> <span class="op">=</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">709958130</span>); <span class="comment">// B1 = (127-127.0/3-0.03306235651)*2**23</span>
+        <span class="kw">let</span> <span class="ident">b2</span> <span class="op">=</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">642849266</span>); <span class="comment">// B2 = (127-127.0/3-24/3-0.03306235651)*2**23</span>
+        <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x7fffffff</span>); <span class="comment">// u32::MAX &gt;&gt; 1</span>
+
+        <span class="kw">let</span> <span class="ident">x1p24</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x4b800000</span>)); <span class="comment">// 0x1p24f === 2 ^ 24</span>
+
+        <span class="kw">let</span> <span class="ident">hx0</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">into_bits</span>() <span class="op">&amp;</span> <span class="ident">m</span>;
+
+        <span class="kw">let</span> <span class="ident">x_small</span> <span class="op">=</span> <span class="ident">hx0</span>.<span class="ident">lt</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x00800000</span>));
+
+        <span class="kw">let</span> <span class="ident">xs</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">select</span>(<span class="ident">x1p24</span>, <span class="ident">x</span>);
+        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">select</span>(<span class="ident">b2</span>, <span class="ident">b1</span>);
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">ui</span> <span class="op">=</span> <span class="ident">xs</span>.<span class="ident">into_bits</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">hx</span> <span class="op">=</span> <span class="ident">ui</span> <span class="op">&amp;</span> <span class="ident">m</span>;
+
+        <span class="comment">// &quot;fast&quot; integer division `hx / 3`</span>
+        <span class="kw">let</span> <span class="ident">hx_j</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">hx</span>) <span class="op">*</span> <span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0xAAAAAAAB</span>);
+        <span class="kw">let</span> <span class="ident">hx_3</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">hx_j</span> <span class="op">&gt;&gt;</span> <span class="number">33</span>);
+
+        <span class="ident">hx</span> <span class="op">=</span> <span class="ident">hx_3</span> <span class="op">+</span> <span class="ident">b</span>;
+
+        <span class="ident">ui</span> <span class="op">&amp;=</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x80000000</span>);
+        <span class="ident">ui</span> <span class="op">|=</span> <span class="ident">hx</span>;
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">t</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">ui</span>);
+
+        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>);
+
+        <span class="kw">for</span> <span class="kw">_</span> <span class="kw">in</span> <span class="number">0</span>..<span class="number">2</span> {
+            <span class="kw">let</span> <span class="ident">t3</span> <span class="op">=</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span>;
+            <span class="ident">t</span> <span class="op">*=</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>, <span class="ident">t3</span>) <span class="op">/</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">t3</span>, <span class="ident">x</span>); <span class="comment">// try to use extended precision where possible</span>
+        }
+
+        <span class="comment">// cbrt(NaN,INF) is itself</span>
+        <span class="ident">hx0</span>.<span class="ident">gt</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x7f800000</span>))
+            <span class="comment">// cbrt(+-0) is itself</span>
+            .<span class="ident">select</span>(<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>, <span class="ident">hx0</span>.<span class="ident">eq</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">t</span>))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

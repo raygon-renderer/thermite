@@ -699,6 +699,12 @@
 <span id="698">698</span>
 <span id="699">699</span>
 <span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
+<span id="705">705</span>
+<span id="706">706</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -775,6 +781,9 @@
     <span class="doccomment">/// Exponential function minus one, `e^(self) - 1.0`,</span>
     <span class="doccomment">/// special implementation that is more accurate if the numbr if closer to zero.</span>
     <span class="kw">fn</span> <span class="ident">exp_m1</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Computes the cubic-root of each lane in a vector.</span>
+    <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents</span>
     <span class="kw">fn</span> <span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
@@ -1059,6 +1068,7 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">exp2</span>(<span class="self">self</span>)             <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">exp2</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">exp10</span>(<span class="self">self</span>)            <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">exp10</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">exp_m1</span>(<span class="self">self</span>)           <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">exp_m1</span>(<span class="self">self</span>) }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>)             <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">cbrt</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>)    <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">e</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">ln</span>(<span class="self">self</span>)               <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">ln</span>(<span class="self">self</span>) }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">ln_1p</span>(<span class="self">self</span>)            <span class="op">-&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">ln_1p</span>(<span class="self">self</span>) }
@@ -1136,6 +1146,8 @@
     <span class="kw">fn</span> <span class="ident">exp_m1</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="self">Self</span>::<span class="ident">exp</span>(<span class="ident">x</span>) <span class="op">-</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>()
     }
+
+    <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
     <span class="kw">fn</span> <span class="ident">powf</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">e</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
