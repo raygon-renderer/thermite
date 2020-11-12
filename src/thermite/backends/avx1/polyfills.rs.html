@@ -265,6 +265,46 @@
 <span id="264">264</span>
 <span id="265">265</span>
 <span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -323,7 +363,7 @@
 
 <span class="comment">// AVX1 version</span>
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_ps</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_psx</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256</span> {
     <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_si128</span>(<span class="ident">ymm0</span>);
 
     <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_srli_epi32</span>(<span class="ident">xmm0</span>, <span class="number">16</span>);
@@ -344,14 +384,14 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
     <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0018000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
     <span class="ident">_mm256_sub_epi64</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu64_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
     <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0010000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
     <span class="ident">_mm256_xor_si256x</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
@@ -367,7 +407,7 @@
 <span class="comment">// https://stackoverflow.com/a/41223013/2083075</span>
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu64_pd</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
     <span class="kw">let</span> <span class="ident">magic_i_lo</span>   <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4330000000000000</span>);  <span class="comment">// 2^52        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_hi32</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000000000000</span>);  <span class="comment">// 2^84        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_all</span>  <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000000100000</span>);  <span class="comment">// 2^84 + 2^52 encoded as floating-point</span>
@@ -383,7 +423,7 @@
 <span class="comment">// https://stackoverflow.com/a/41223013/2083075</span>
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepi64_pd</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepi64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
     <span class="kw">let</span> <span class="ident">magic_i_lo</span>   <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4330000000000000</span>); <span class="comment">// 2^52               encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_hi32</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000080000000</span>); <span class="comment">// 2^84 + 2^63        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_all</span>  <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000080100000</span>); <span class="comment">// 2^84 + 2^63 + 2^52 encoded as floating-point</span>
@@ -397,59 +437,59 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi32</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi32</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi32x</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi32x</span>(
         <span class="ident">res</span>,
         <span class="comment">// cheeky hack relying on only the highest significant bit, which is the effective &quot;sign&quot; bit</span>
         <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
-        <span class="ident">_mm256_xor_si256x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_cmpgt_epi32</span>(<span class="ident">lhs</span>, <span class="ident">res</span>)),
+        <span class="ident">_mm256_xor_si256x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_cmpgt_epi32x</span>(<span class="ident">lhs</span>, <span class="ident">res</span>)),
     )
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi64</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64x</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi64x</span>(
         <span class="ident">res</span>,
         <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">_mm256_set1_epi64x</span>(<span class="ident">i64</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi64x</span>(<span class="ident">i64</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
-        <span class="ident">_mm256_xor_si256x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">lhs</span>, <span class="ident">res</span>)),
+        <span class="ident">_mm256_xor_si256x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_cmpgt_epi64x</span>(<span class="ident">lhs</span>, <span class="ident">res</span>)),
     )
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi32</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi32</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi32x</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi32x</span>(
         <span class="ident">res</span>,
         <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
         <span class="ident">_mm256_xor_si256x</span>(
-            <span class="ident">_mm256_cmpgt_epi32</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_setzero_si256</span>()),
-            <span class="ident">_mm256_cmpgt_epi32</span>(<span class="ident">lhs</span>, <span class="ident">res</span>),
+            <span class="ident">_mm256_cmpgt_epi32x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_setzero_si256</span>()),
+            <span class="ident">_mm256_cmpgt_epi32x</span>(<span class="ident">lhs</span>, <span class="ident">res</span>),
         ),
     )
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi64</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi64</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi64x</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi64x</span>(
         <span class="ident">res</span>,
         <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">_mm256_set1_epi64x</span>(<span class="ident">i64</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi64x</span>(<span class="ident">i64</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
         <span class="ident">_mm256_xor_si256x</span>(
-            <span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_setzero_si256</span>()),
-            <span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">lhs</span>, <span class="ident">res</span>),
+            <span class="ident">_mm256_cmpgt_epi64x</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_setzero_si256</span>()),
+            <span class="ident">_mm256_cmpgt_epi64x</span>(<span class="ident">lhs</span>, <span class="ident">res</span>),
         ),
     )
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">should_negate</span> <span class="op">=</span> <span class="ident">_mm256_xor_si256x</span>(<span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">x</span>, <span class="ident">_mm256_setzero_si256</span>()), <span class="ident">_mm256_set1_epi64x</span>(<span class="op">-</span><span class="number">1</span>));
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">should_negate</span> <span class="op">=</span> <span class="ident">_mm256_xor_si256x</span>(<span class="ident">_mm256_cmpgt_epi64x</span>(<span class="ident">x</span>, <span class="ident">_mm256_setzero_si256</span>()), <span class="ident">_mm256_set1_epi64x</span>(<span class="op">-</span><span class="number">1</span>));
 
     <span class="ident">_mm256_add_epi64</span>(
         <span class="ident">_mm256_xor_si256x</span>(<span class="ident">should_negate</span>, <span class="ident">x</span>),
@@ -458,7 +498,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epi64</span>(<span class="ident">x</span>: <span class="ident">__m128</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m128</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">x0</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">x</span>);
     <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">_mm_permute_ps</span>(<span class="ident">x</span>, <span class="number">1</span>));
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">_mm_permute_ps</span>(<span class="ident">x</span>, <span class="number">2</span>));
@@ -468,7 +508,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">x</span>);
     <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_pd</span>(<span class="ident">x</span>, <span class="number">1</span>);
 
@@ -481,9 +521,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epu32</span>(<span class="ident">x</span>: <span class="ident">__m256</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-    <span class="comment">// TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -&gt; u32x4)`, but it&#39;s not ideal and</span>
-    <span class="comment">// produces different results from `f32 as u32` with negaitve values and values larger than some value</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epu32x</span>(<span class="ident">x</span>: <span class="ident">__m256</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">x</span>;
     <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_ps</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0x4f000000</span>));
     <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_cmp_ps</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>, <span class="ident">_CMP_LT_OQ</span>);
@@ -498,7 +536,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu32</span>(<span class="ident">ymm0</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m128i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu32x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m128i</span> {
     <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x41e0000000000000</span>));
     <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_cmp_pd</span>(<span class="ident">ymm0</span>, <span class="ident">ymm1</span>, <span class="ident">_CMP_LT_OQ</span>);
     <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">ymm2</span>); <span class="comment">// lower half of ymm2</span>
@@ -531,6 +569,48 @@
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_andnot_si256x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
     <span class="ident">_mm256_castps_si256</span>(<span class="ident">_mm256_andnot_ps</span>(<span class="ident">_mm256_castsi256_ps</span>(<span class="ident">a</span>), <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">b</span>)))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_sll_epi32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m128i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> (<span class="ident">low</span>, <span class="ident">high</span>) <span class="op">=</span> <span class="ident">split_si256</span>(<span class="ident">a</span>);
+    <span class="ident">recombine_si256</span>(<span class="ident">_mm_sll_epi32</span>(<span class="ident">low</span>, <span class="ident">b</span>), <span class="ident">_mm_sll_epi32</span>(<span class="ident">high</span>, <span class="ident">b</span>))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_sll_epi64x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m128i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> (<span class="ident">low</span>, <span class="ident">high</span>) <span class="op">=</span> <span class="ident">split_si256</span>(<span class="ident">a</span>);
+    <span class="ident">recombine_si256</span>(<span class="ident">_mm_sll_epi64</span>(<span class="ident">low</span>, <span class="ident">b</span>), <span class="ident">_mm_sll_epi64</span>(<span class="ident">high</span>, <span class="ident">b</span>))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_srl_epi32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m128i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> (<span class="ident">low</span>, <span class="ident">high</span>) <span class="op">=</span> <span class="ident">split_si256</span>(<span class="ident">a</span>);
+    <span class="ident">recombine_si256</span>(<span class="ident">_mm_srl_epi32</span>(<span class="ident">low</span>, <span class="ident">b</span>), <span class="ident">_mm_srl_epi32</span>(<span class="ident">high</span>, <span class="ident">b</span>))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_srl_epi64x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m128i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> (<span class="ident">low</span>, <span class="ident">high</span>) <span class="op">=</span> <span class="ident">split_si256</span>(<span class="ident">a</span>);
+    <span class="ident">recombine_si256</span>(<span class="ident">_mm_srl_epi64</span>(<span class="ident">low</span>, <span class="ident">b</span>), <span class="ident">_mm_srl_epi64</span>(<span class="ident">high</span>, <span class="ident">b</span>))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_mullo_epi64x</span>(<span class="ident">xmm0</span>: <span class="ident">__m128i</span>, <span class="ident">xmm1</span>: <span class="ident">__m128i</span>) <span class="op">-&gt;</span> <span class="ident">__m128i</span> {
+    <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm_srli_epi64</span>(<span class="ident">xmm1</span>, <span class="number">32</span>);
+    <span class="kw">let</span> <span class="ident">xmm3</span> <span class="op">=</span> <span class="ident">_mm_srli_epi64</span>(<span class="ident">xmm2</span>, <span class="number">32</span>);
+
+    <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm_mul_epu32</span>(<span class="ident">xmm0</span>, <span class="ident">xmm2</span>);
+    <span class="kw">let</span> <span class="ident">xmm3</span> <span class="op">=</span> <span class="ident">_mm_mul_epu32</span>(<span class="ident">xmm1</span>, <span class="ident">xmm3</span>);
+
+    <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm_add_epi64</span>(<span class="ident">xmm2</span>, <span class="ident">xmm3</span>);
+    <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm_slli_epi64</span>(<span class="ident">xmm2</span>, <span class="number">32</span>);
+
+    <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm_mul_epu32</span>(<span class="ident">xmm1</span>, <span class="ident">xmm0</span>);
+
+    <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm_add_epi64</span>(<span class="ident">xmm0</span>, <span class="ident">xmm2</span>);
+
+    <span class="ident">xmm0</span>
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../../";window.currentCrate = "thermite";</script><script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script><script defer src="../../../../search-index.js"></script></body></html>

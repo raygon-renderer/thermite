@@ -390,6 +390,7 @@
 <span id="389">389</span>
 <span id="390">390</span>
 <span id="391">391</span>
+<span id="392">392</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -560,6 +561,11 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">index</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">unsafe</span> { <span class="self">Self</span>::<span class="ident">new</span>((<span class="ident">_mm256_setr_epi64x</span>(<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>), <span class="ident">_mm256_setr_epi64x</span>(<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>))) }
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">min_value</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">i64</span>::<span class="ident">MIN</span>)
     }
@@ -600,32 +606,28 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">ge</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">gt</span>(<span class="ident">other</span>) <span class="op">^</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="ident">other</span>)
-    }
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_add</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_add_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
-            <span class="ident">_mm256_add_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            <span class="ident">_mm256_add_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
+            <span class="ident">_mm256_add_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
         ))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_sub</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_sub_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
-            <span class="ident">_mm256_sub_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            <span class="ident">_mm256_sub_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
+            <span class="ident">_mm256_sub_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
         ))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_mul</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>((
-            <span class="ident">_mm256_mullo_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
-            <span class="ident">_mm256_mullo_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
-        ))
+        <span class="macro">todo</span><span class="macro">!</span>()
+        <span class="comment">//Self::new((</span>
+        <span class="comment">//    _mm256_mullo_epi64x(self.value.0, rhs.value.0),</span>
+        <span class="comment">//    _mm256_mullo_epi64x(self.value.1, rhs.value.1),</span>
+        <span class="comment">//))</span>
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -658,8 +660,8 @@
     <span class="kw">fn</span> <span class="ident">saturating_add</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
             (
-                <span class="ident">_mm256_adds_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
-                <span class="ident">_mm256_adds_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
+                <span class="ident">_mm256_adds_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_adds_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         })
     }
@@ -668,8 +670,8 @@
     <span class="kw">fn</span> <span class="ident">saturating_sub</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
             (
-                <span class="ident">_mm256_subs_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
-                <span class="ident">_mm256_subs_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
+                <span class="ident">_mm256_subs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_subs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">rhs</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         })
     }
@@ -698,7 +700,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_abs_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_abs_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_abs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_abs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -719,7 +721,7 @@
             <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_castps256_ps128</span>(<span class="ident">from</span>.<span class="ident">value</span>);
             <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_ps</span>(<span class="ident">from</span>.<span class="ident">value</span>, <span class="number">1</span>);
 
-            (<span class="ident">_mm256_cvtps_epi64</span>(<span class="ident">low</span>), <span class="ident">_mm256_cvtps_epi64</span>(<span class="ident">high</span>))
+            (<span class="ident">_mm256_cvtps_epi64x</span>(<span class="ident">low</span>), <span class="ident">_mm256_cvtps_epi64x</span>(<span class="ident">high</span>))
         })
     }
 
@@ -773,7 +775,7 @@
 <span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtpd_epi64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtpd_epi64</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

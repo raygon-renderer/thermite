@@ -751,6 +751,12 @@
 <span id="750">750</span>
 <span id="751">751</span>
 <span id="752">752</span>
+<span id="753">753</span>
+<span id="754">754</span>
+<span id="755">755</span>
+<span id="756">756</span>
+<span id="757">757</span>
+<span id="758">758</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1142,6 +1148,12 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 {
     <span class="kw">fn</span> <span class="ident">zero</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">one</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Returns a vector where the first lane is zero,</span>
+    <span class="doccomment">/// and each subsequent lane is one plus the previous lane.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// `[0, 1, 2, 3, 4, 5, 6, 7, ...]`</span>
+    <span class="kw">fn</span> <span class="ident">index</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Maximum representable valid value</span>
     <span class="kw">fn</span> <span class="ident">min_value</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;

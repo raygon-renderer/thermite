@@ -372,7 +372,7 @@
         <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>;
 
         <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm256_castsi256_si128</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>);
-        <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_extracti128_si256</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>, <span class="number">1</span>);
+        <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_si256</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">value</span>, <span class="number">1</span>);
         <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
         <span class="kw">let</span> <span class="ident">xmm1</span> <span class="op">=</span> <span class="ident">_mm_shuffle_epi32</span>(<span class="ident">xmm0</span>, <span class="number">78</span>);
         <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="ident">xmm0</span>, <span class="ident">xmm1</span>);
@@ -475,12 +475,12 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shli</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sll_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sll_epi32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shri</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_srl_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_srl_epi32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
     }
 }
 
@@ -512,6 +512,11 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">one</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">splat</span>(<span class="number">1</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">index</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">unsafe</span> { <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_setr_epi32</span>(<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>)) }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -552,11 +557,6 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">gt</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_cmpgt_epi32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">other</span>.<span class="ident">value</span>) }))
-    }
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">ge</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">gt</span>(<span class="ident">other</span>) <span class="op">^</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="ident">other</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -602,12 +602,12 @@
 <span class="kw">impl</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">saturating_add</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_adds_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">rhs</span>.<span class="ident">value</span>) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_adds_epi32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">rhs</span>.<span class="ident">value</span>) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">saturating_sub</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_subs_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">rhs</span>.<span class="ident">value</span>) })
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_subs_epi32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">rhs</span>.<span class="ident">value</span>) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

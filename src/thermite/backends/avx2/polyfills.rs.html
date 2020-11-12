@@ -181,6 +181,23 @@
 <span id="180">180</span>
 <span id="181">181</span>
 <span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -363,6 +380,23 @@
     <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">_mm_blendv_ps</span>(<span class="ident">xmm1</span>, <span class="ident">_mm_castsi128_ps</span>(<span class="ident">xmm0</span>), <span class="ident">_mm_castsi128_ps</span>(<span class="ident">xmm2</span>));
 
     <span class="ident">_mm_castps_si128</span>(<span class="ident">xmm0</span>)
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullo_epi64x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">ymm1</span>, <span class="number">32</span>);
+    <span class="kw">let</span> <span class="ident">ymm3</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">ymm0</span>, <span class="number">32</span>);
+
+    <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_mul_epu32</span>(<span class="ident">ymm2</span>, <span class="ident">ymm0</span>);
+    <span class="kw">let</span> <span class="ident">ymm3</span> <span class="op">=</span> <span class="ident">_mm256_mul_epu32</span>(<span class="ident">ymm1</span>, <span class="ident">ymm3</span>);
+
+    <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64</span>(<span class="ident">ymm3</span>, <span class="ident">ymm2</span>);
+    <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_slli_epi64</span>(<span class="ident">ymm2</span>, <span class="number">32</span>);
+
+    <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="ident">_mm256_mul_epu32</span>(<span class="ident">ymm1</span>, <span class="ident">ymm0</span>);
+    <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64</span>(<span class="ident">ymm0</span>, <span class="ident">ymm2</span>);
+
+    <span class="ident">ymm0</span>
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../../";window.currentCrate = "thermite";</script><script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script><script defer src="../../../../search-index.js"></script></body></html>
