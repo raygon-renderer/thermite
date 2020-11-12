@@ -167,6 +167,11 @@ impl SimdVector<AVX1> for i64x8<AVX1> {
     }
 
     #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new((_mm256_setr_epi64x(0, 1, 2, 3), _mm256_setr_epi64x(4, 5, 6, 7))) }
+    }
+
+    #[inline(always)]
     fn min_value() -> Self {
         Self::splat(i64::MIN)
     }
@@ -207,32 +212,28 @@ impl SimdVector<AVX1> for i64x8<AVX1> {
     }
 
     #[inline(always)]
-    fn ge(self, other: Self) -> Mask<AVX1, Self> {
-        self.gt(other) ^ self.eq(other)
-    }
-
-    #[inline(always)]
     unsafe fn _mm_add(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_add_epi32(self.value.0, rhs.value.0),
-            _mm256_add_epi32(self.value.1, rhs.value.1),
+            _mm256_add_epi64x(self.value.0, rhs.value.0),
+            _mm256_add_epi64x(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_sub(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_sub_epi32(self.value.0, rhs.value.0),
-            _mm256_sub_epi32(self.value.1, rhs.value.1),
+            _mm256_sub_epi64x(self.value.0, rhs.value.0),
+            _mm256_sub_epi64x(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_mul(self, rhs: Self) -> Self {
-        Self::new((
-            _mm256_mullo_epi32(self.value.0, rhs.value.0),
-            _mm256_mullo_epi32(self.value.1, rhs.value.1),
-        ))
+        todo!()
+        //Self::new((
+        //    _mm256_mullo_epi64x(self.value.0, rhs.value.0),
+        //    _mm256_mullo_epi64x(self.value.1, rhs.value.1),
+        //))
     }
 
     #[inline(always)]
@@ -265,8 +266,8 @@ impl SimdIntVector<AVX1> for i64x8<AVX1> {
     fn saturating_add(self, rhs: Self) -> Self {
         Self::new(unsafe {
             (
-                _mm256_adds_epi64(self.value.0, rhs.value.0),
-                _mm256_adds_epi64(self.value.1, rhs.value.1),
+                _mm256_adds_epi64x(self.value.0, rhs.value.0),
+                _mm256_adds_epi64x(self.value.1, rhs.value.1),
             )
         })
     }
@@ -275,8 +276,8 @@ impl SimdIntVector<AVX1> for i64x8<AVX1> {
     fn saturating_sub(self, rhs: Self) -> Self {
         Self::new(unsafe {
             (
-                _mm256_subs_epi64(self.value.0, rhs.value.0),
-                _mm256_subs_epi64(self.value.1, rhs.value.1),
+                _mm256_subs_epi64x(self.value.0, rhs.value.0),
+                _mm256_subs_epi64x(self.value.1, rhs.value.1),
             )
         })
     }
@@ -305,7 +306,7 @@ impl SimdSignedVector<AVX1> for i64x8<AVX1> {
 
     #[inline(always)]
     fn abs(self) -> Self {
-        Self::new(unsafe { (_mm256_abs_epi64(self.value.0), _mm256_abs_epi64(self.value.1)) })
+        Self::new(unsafe { (_mm256_abs_epi64x(self.value.0), _mm256_abs_epi64x(self.value.1)) })
     }
 
     #[inline(always)]
@@ -326,7 +327,7 @@ impl SimdCastFrom<AVX1, Vf32> for i64x8<AVX1> {
             let low = _mm256_castps256_ps128(from.value);
             let high = _mm256_extractf128_ps(from.value, 1);
 
-            (_mm256_cvtps_epi64(low), _mm256_cvtps_epi64(high))
+            (_mm256_cvtps_epi64x(low), _mm256_cvtps_epi64x(high))
         })
     }
 
@@ -380,7 +381,7 @@ impl SimdCastFrom<AVX1, Vu64> for i64x8<AVX1> {
 impl SimdCastFrom<AVX1, Vf64> for i64x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
-        Self::new(unsafe { (_mm256_cvtpd_epi64(from.value.0), _mm256_cvtpd_epi64(from.value.1)) })
+        Self::new(unsafe { (_mm256_cvtpd_epi64x(from.value.0), _mm256_cvtpd_epi64x(from.value.1)) })
     }
 
     #[inline(always)]

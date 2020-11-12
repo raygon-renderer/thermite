@@ -14,7 +14,7 @@ macro_rules! log_reduce_epu32_avx1 {
         let ymm0 = $value;
 
         let xmm0 = _mm256_castsi256_si128($value);
-        let xmm1 = _mm256_extracti128_si256($value, 1);
+        let xmm1 = _mm256_extractf128_si256($value, 1);
         let xmm0 = $op(xmm0, xmm1);
         let xmm1 = _mm_shuffle_epi32(xmm0, 78);
         let xmm0 = $op(xmm0, xmm1);
@@ -157,6 +157,11 @@ impl SimdVector<AVX1> for u32x8<AVX1> {
     }
 
     #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new(_mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7)) }
+    }
+
+    #[inline(always)]
     fn min(self, other: Self) -> Self {
         Self::new(unsafe { _mm256_min_epu32(self.value, other.value) })
     }
@@ -194,11 +199,6 @@ impl SimdVector<AVX1> for u32x8<AVX1> {
     #[inline(always)]
     fn gt(self, other: Self) -> Mask<AVX1, Self> {
         Mask::new(Self::new(unsafe { _mm256_cmpgt_epi32(self.value, other.value) }))
-    }
-
-    #[inline(always)]
-    fn ge(self, other: Self) -> Mask<AVX1, Self> {
-        self.gt(other) ^ self.eq(other)
     }
 
     #[inline(always)]
@@ -268,7 +268,7 @@ impl SimdCastFrom<AVX1, Vi32> for u32x8<AVX1> {
 impl SimdCastFrom<AVX1, Vf32> for u32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vf32) -> Self {
-        Self::new(unsafe { _mm256_cvtps_epu32(from.value) })
+        Self::new(unsafe { _mm256_cvtps_epu32x(from.value) })
     }
 
     #[inline(always)]
@@ -282,8 +282,8 @@ impl SimdCastFrom<AVX1, Vf64> for u32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
         Self::new(unsafe {
-            let low = _mm256_cvtpd_epu32(from.value.0);
-            let high = _mm256_cvtpd_epu32(from.value.1);
+            let low = _mm256_cvtpd_epu32x(from.value.0);
+            let high = _mm256_cvtpd_epu32x(from.value.1);
 
             _mm256_inserti128_si256(_mm256_castsi128_si256(low), high, 1)
         })

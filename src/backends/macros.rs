@@ -80,6 +80,7 @@ macro_rules! decl {
                 self
             }
 
+            #[inline(always)]
             pub(crate) unsafe fn zip<F, V>(a: Self, b: V, f: F) -> Self
             where F: Fn($ety, <V as SimdVectorBase<S>>::Element) -> $ety,
                 Self: SimdVectorBase<S>,

@@ -180,3 +180,20 @@ pub unsafe fn _mm256_cvtpd_epu32x(ymm0: __m256d) -> __m128i {
 
     _mm_castps_si128(xmm0)
 }
+
+#[inline(always)]
+pub unsafe fn _mm256_mullo_epi64x(ymm0: __m256i, ymm1: __m256i) -> __m256i {
+    let ymm2 = _mm256_srli_epi64(ymm1, 32);
+    let ymm3 = _mm256_srli_epi64(ymm0, 32);
+
+    let ymm2 = _mm256_mul_epu32(ymm2, ymm0);
+    let ymm3 = _mm256_mul_epu32(ymm1, ymm3);
+
+    let ymm2 = _mm256_add_epi64(ymm3, ymm2);
+    let ymm2 = _mm256_slli_epi64(ymm2, 32);
+
+    let ymm0 = _mm256_mul_epu32(ymm1, ymm0);
+    let ymm0 = _mm256_add_epi64(ymm0, ymm2);
+
+    ymm0
+}

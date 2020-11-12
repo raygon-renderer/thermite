@@ -28,7 +28,9 @@ use polyfills::*;
 mod vf32;
 mod vf64;
 mod vi32;
+mod vi32_2;
 mod vi64;
+//mod vi64_2;
 mod vu32;
 mod vu64;
 

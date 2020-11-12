@@ -55,7 +55,7 @@ pub unsafe fn _mm256_or_si256x(ymm0: __m256i, ymm1: __m256i) -> __m256i {
 
 // AVX1 version
 #[inline(always)]
-pub unsafe fn _mm256_cvtepu32_ps(ymm0: __m256i) -> __m256 {
+pub unsafe fn _mm256_cvtepu32_psx(ymm0: __m256i) -> __m256 {
     let xmm0 = _mm256_castsi256_si128(ymm0);
 
     let xmm1 = _mm_srli_epi32(xmm0, 16);
@@ -76,14 +76,14 @@ pub unsafe fn _mm256_cvtepu32_ps(ymm0: __m256i) -> __m256 {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epi64_limited(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epi64x_limited(x: __m256d) -> __m256i {
     // https://stackoverflow.com/a/41148578/2083075
     let m = _mm256_set1_pd(transmute::<u64, i64>(0x0018000000000000) as f64);
     _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epu64_limited(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epu64x_limited(x: __m256d) -> __m256i {
     // https://stackoverflow.com/a/41148578/2083075
     let m = _mm256_set1_pd(transmute::<u64, i64>(0x0010000000000000) as f64);
     _mm256_xor_si256x(_mm256_castpd_si256(_mm256_add_pd(x, m)), _mm256_castpd_si256(m))
@@ -99,7 +99,7 @@ unsafe fn _mm256_srli32_epi64x(ymm0: __m256i) -> __m256i {
 // https://stackoverflow.com/a/41223013/2083075
 #[inline(always)]
 #[rustfmt::skip]
-pub unsafe fn _mm256_cvtepu64_pd(v: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepu64_pdx(v: __m256i) -> __m256d {
     let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000);  // 2^52        encoded as floating-point
     let magic_i_hi32 = _mm256_set1_epi64x(0x4530000000000000);  // 2^84        encoded as floating-point
     let magic_i_all  = _mm256_set1_epi64x(0x4530000000100000);  // 2^84 + 2^52 encoded as floating-point
@@ -115,7 +115,7 @@ pub unsafe fn _mm256_cvtepu64_pd(v: __m256i) -> __m256d {
 // https://stackoverflow.com/a/41223013/2083075
 #[inline(always)]
 #[rustfmt::skip]
-pub unsafe fn _mm256_cvtepi64_pd(v: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepi64_pdx(v: __m256i) -> __m256d {
     let magic_i_lo   = _mm256_set1_epi64x(0x4330000000000000); // 2^52               encoded as floating-point
     let magic_i_hi32 = _mm256_set1_epi64x(0x4530000080000000); // 2^84 + 2^63        encoded as floating-point
     let magic_i_all  = _mm256_set1_epi64x(0x4530000080100000); // 2^84 + 2^63 + 2^52 encoded as floating-point
@@ -129,59 +129,59 @@ pub unsafe fn _mm256_cvtepi64_pd(v: __m256i) -> __m256d {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_adds_epi32(lhs: __m256i, rhs: __m256i) -> __m256i {
-    let res = _mm256_add_epi32(lhs, rhs);
+pub unsafe fn _mm256_adds_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
+    let res = _mm256_add_epi32x(lhs, rhs);
 
     _mm256_blendv_epi32x(
         res,
         // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
         _mm256_blendv_epi32x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
-        _mm256_xor_si256x(rhs, _mm256_cmpgt_epi32(lhs, res)),
+        _mm256_xor_si256x(rhs, _mm256_cmpgt_epi32x(lhs, res)),
     )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_adds_epi64(lhs: __m256i, rhs: __m256i) -> __m256i {
-    let res = _mm256_add_epi64(lhs, rhs);
+pub unsafe fn _mm256_adds_epi64x(lhs: __m256i, rhs: __m256i) -> __m256i {
+    let res = _mm256_add_epi64x(lhs, rhs);
 
     _mm256_blendv_epi64x(
         res,
         _mm256_blendv_epi64x(_mm256_set1_epi64x(i64::MIN), _mm256_set1_epi64x(i64::MAX), res),
-        _mm256_xor_si256x(rhs, _mm256_cmpgt_epi64(lhs, res)),
+        _mm256_xor_si256x(rhs, _mm256_cmpgt_epi64x(lhs, res)),
     )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_subs_epi32(lhs: __m256i, rhs: __m256i) -> __m256i {
-    let res = _mm256_sub_epi32(lhs, rhs);
+pub unsafe fn _mm256_subs_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
+    let res = _mm256_sub_epi32x(lhs, rhs);
 
     _mm256_blendv_epi32x(
         res,
         _mm256_blendv_epi32x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
         _mm256_xor_si256x(
-            _mm256_cmpgt_epi32(rhs, _mm256_setzero_si256()),
-            _mm256_cmpgt_epi32(lhs, res),
+            _mm256_cmpgt_epi32x(rhs, _mm256_setzero_si256()),
+            _mm256_cmpgt_epi32x(lhs, res),
         ),
     )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_subs_epi64(lhs: __m256i, rhs: __m256i) -> __m256i {
-    let res = _mm256_sub_epi64(lhs, rhs);
+pub unsafe fn _mm256_subs_epi64x(lhs: __m256i, rhs: __m256i) -> __m256i {
+    let res = _mm256_sub_epi64x(lhs, rhs);
 
     _mm256_blendv_epi64x(
         res,
         _mm256_blendv_epi64x(_mm256_set1_epi64x(i64::MIN), _mm256_set1_epi64x(i64::MAX), res),
         _mm256_xor_si256x(
-            _mm256_cmpgt_epi64(rhs, _mm256_setzero_si256()),
-            _mm256_cmpgt_epi64(lhs, res),
+            _mm256_cmpgt_epi64x(rhs, _mm256_setzero_si256()),
+            _mm256_cmpgt_epi64x(lhs, res),
         ),
     )
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_abs_epi64(x: __m256i) -> __m256i {
-    let should_negate = _mm256_xor_si256x(_mm256_cmpgt_epi64(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
+pub unsafe fn _mm256_abs_epi64x(x: __m256i) -> __m256i {
+    let should_negate = _mm256_xor_si256x(_mm256_cmpgt_epi64x(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
 
     _mm256_add_epi64(
         _mm256_xor_si256x(should_negate, x),
@@ -190,7 +190,7 @@ pub unsafe fn _mm256_abs_epi64(x: __m256i) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtps_epi64(x: __m128) -> __m256i {
+pub unsafe fn _mm256_cvtps_epi64x(x: __m128) -> __m256i {
     let x0 = _mm_cvttss_si64(x);
     let x1 = _mm_cvttss_si64(_mm_permute_ps(x, 1));
     let x2 = _mm_cvttss_si64(_mm_permute_ps(x, 2));
@@ -200,7 +200,7 @@ pub unsafe fn _mm256_cvtps_epi64(x: __m128) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epi64(x: __m256d) -> __m256i {
+pub unsafe fn _mm256_cvtpd_epi64x(x: __m256d) -> __m256i {
     let low = _mm256_castpd256_pd128(x);
     let high = _mm256_extractf128_pd(x, 1);
 
@@ -213,9 +213,7 @@ pub unsafe fn _mm256_cvtpd_epi64(x: __m256d) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtps_epu32(x: __m256) -> __m256i {
-    // TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -> u32x4)`, but it's not ideal and
-    // produces different results from `f32 as u32` with negaitve values and values larger than some value
+pub unsafe fn _mm256_cvtps_epu32x(x: __m256) -> __m256i {
     let xmm0 = x;
     let xmm1 = _mm256_set1_ps(f32::from_bits(0x4f000000));
     let xmm2 = _mm256_cmp_ps(xmm0, xmm1, _CMP_LT_OQ);
@@ -230,7 +228,7 @@ pub unsafe fn _mm256_cvtps_epu32(x: __m256) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_cvtpd_epu32(ymm0: __m256d) -> __m128i {
+pub unsafe fn _mm256_cvtpd_epu32x(ymm0: __m256d) -> __m128i {
     let ymm1 = _mm256_set1_pd(f64::from_bits(0x41e0000000000000));
     let ymm2 = _mm256_cmp_pd(ymm0, ymm1, _CMP_LT_OQ);
     let xmm2 = _mm256_castpd256_pd128(ymm2); // lower half of ymm2
@@ -263,4 +261,46 @@ decl_split_integer!(@BINARY add_epi32, sub_epi32, mullo_epi32, add_epi64, sub_ep
 #[inline(always)]
 pub unsafe fn _mm256_andnot_si256x(a: __m256i, b: __m256i) -> __m256i {
     _mm256_castps_si256(_mm256_andnot_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_sll_epi32x(a: __m256i, b: __m128i) -> __m256i {
+    let (low, high) = split_si256(a);
+    recombine_si256(_mm_sll_epi32(low, b), _mm_sll_epi32(high, b))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_sll_epi64x(a: __m256i, b: __m128i) -> __m256i {
+    let (low, high) = split_si256(a);
+    recombine_si256(_mm_sll_epi64(low, b), _mm_sll_epi64(high, b))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_srl_epi32x(a: __m256i, b: __m128i) -> __m256i {
+    let (low, high) = split_si256(a);
+    recombine_si256(_mm_srl_epi32(low, b), _mm_srl_epi32(high, b))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_srl_epi64x(a: __m256i, b: __m128i) -> __m256i {
+    let (low, high) = split_si256(a);
+    recombine_si256(_mm_srl_epi64(low, b), _mm_srl_epi64(high, b))
+}
+
+#[inline(always)]
+pub unsafe fn _mm_mullo_epi64x(xmm0: __m128i, xmm1: __m128i) -> __m128i {
+    let xmm2 = _mm_srli_epi64(xmm1, 32);
+    let xmm3 = _mm_srli_epi64(xmm2, 32);
+
+    let xmm2 = _mm_mul_epu32(xmm0, xmm2);
+    let xmm3 = _mm_mul_epu32(xmm1, xmm3);
+
+    let xmm2 = _mm_add_epi64(xmm2, xmm3);
+    let xmm2 = _mm_slli_epi64(xmm2, 32);
+
+    let xmm0 = _mm_mul_epu32(xmm1, xmm0);
+
+    let xmm0 = _mm_add_epi64(xmm0, xmm2);
+
+    xmm0
 }

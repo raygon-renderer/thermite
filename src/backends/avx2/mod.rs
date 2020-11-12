@@ -17,14 +17,11 @@ use std::arch::x86_64::*;
 
 use half::f16;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AVX2;
-
 pub(crate) mod polyfills;
 
 use polyfills::*;
 
-use super::avx1::{f32x8, f64x8, i32x8, i64x8, u32x8, u64x8};
+use super::avx1::{f32x8, f64x8};
 
 mod vf32;
 mod vf64;
@@ -49,6 +46,9 @@ type Vu32 = u32x8<AVX2>;
 type Vu64 = u64x8<AVX2>;
 type Vf32 = f32x8<AVX2>;
 type Vf64 = f64x8<AVX2>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AVX2;
 
 impl Simd for AVX2 {
     type Vi32 = Vi32;

@@ -389,6 +389,12 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn zero() -> Self;
     fn one() -> Self;
 
+    /// Returns a vector where the first lane is zero,
+    /// and each subsequent lane is one plus the previous lane.
+    ///
+    /// `[0, 1, 2, 3, 4, 5, 6, 7, ...]`
+    fn index() -> Self;
+
     /// Maximum representable valid value
     fn min_value() -> Self;
     /// Minimum representable valid value (may be negative)

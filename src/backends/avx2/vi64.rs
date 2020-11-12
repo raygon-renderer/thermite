@@ -1,5 +1,13 @@
 use super::*;
 
+decl!(i64x8: i64 => (__m256i, __m256i));
+impl<S: Simd> Default for i64x8<S> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new(unsafe { (_mm256_setzero_si256(), _mm256_setzero_si256()) })
+    }
+}
+
 impl SimdVectorBase<AVX2> for i64x8<AVX2> {
     type Element = i64;
 
@@ -212,6 +220,11 @@ impl SimdVector<AVX2> for i64x8<AVX2> {
     }
 
     #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new((_mm256_setr_epi64x(0, 1, 2, 3), _mm256_setr_epi64x(4, 5, 6, 7))) }
+    }
+
+    #[inline(always)]
     fn min_value() -> Self {
         Self::splat(i64::MIN)
     }
@@ -259,24 +272,24 @@ impl SimdVector<AVX2> for i64x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_add(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_add_epi32(self.value.0, rhs.value.0),
-            _mm256_add_epi32(self.value.1, rhs.value.1),
+            _mm256_add_epi64(self.value.0, rhs.value.0),
+            _mm256_add_epi64(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_sub(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_sub_epi32(self.value.0, rhs.value.0),
-            _mm256_sub_epi32(self.value.1, rhs.value.1),
+            _mm256_sub_epi64(self.value.0, rhs.value.0),
+            _mm256_sub_epi64(self.value.1, rhs.value.1),
         ))
     }
 
     #[inline(always)]
     unsafe fn _mm_mul(self, rhs: Self) -> Self {
         Self::new((
-            _mm256_mullo_epi32(self.value.0, rhs.value.0),
-            _mm256_mullo_epi32(self.value.1, rhs.value.1),
+            _mm256_mullo_epi64x(self.value.0, rhs.value.0),
+            _mm256_mullo_epi64x(self.value.1, rhs.value.1),
         ))
     }
 

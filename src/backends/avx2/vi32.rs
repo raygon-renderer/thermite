@@ -1,5 +1,13 @@
 use super::*;
 
+decl!(i32x8: i32 => __m256i);
+impl<S: Simd> Default for i32x8<S> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new(unsafe { _mm256_setzero_si256() })
+    }
+}
+
 #[rustfmt::skip]
 macro_rules! log_reduce_epi32_avx2 {
     ($value:expr; $op:ident) => {unsafe {
@@ -171,6 +179,11 @@ impl SimdVector<AVX2> for i32x8<AVX2> {
     #[inline(always)]
     fn one() -> Self {
         Self::splat(1)
+    }
+
+    #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new(_mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7)) }
     }
 
     #[inline(always)]

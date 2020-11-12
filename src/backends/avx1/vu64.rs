@@ -182,6 +182,11 @@ impl SimdVector<AVX1> for u64x8<AVX1> {
     }
 
     #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new((_mm256_setr_epi64x(0, 1, 2, 3), _mm256_setr_epi64x(4, 5, 6, 7))) }
+    }
+
+    #[inline(always)]
     fn min_value() -> Self {
         Self::splat(u64::MIN)
     }
@@ -219,11 +224,6 @@ impl SimdVector<AVX1> for u64x8<AVX1> {
                 _mm256_cmpgt_epi64(self.value.1, other.value.1),
             )
         }))
-    }
-
-    #[inline(always)]
-    fn ge(self, other: Self) -> Mask<AVX1, Self> {
-        self.gt(other) ^ self.eq(other)
     }
 
     #[inline(always)]

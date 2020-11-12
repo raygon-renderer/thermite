@@ -123,7 +123,7 @@ impl SimdBitwise<AVX1> for f32x8<AVX1> {
 
     #[inline(always)]
     unsafe fn _mm_shli(self, count: u32) -> Self {
-        Self::new(_mm256_castsi256_ps(_mm256_sll_epi32(
+        Self::new(_mm256_castsi256_ps(_mm256_sll_epi32x(
             _mm256_castps_si256(self.value),
             _mm_setr_epi32(count as i32, 0, 0, 0),
         )))
@@ -131,7 +131,7 @@ impl SimdBitwise<AVX1> for f32x8<AVX1> {
 
     #[inline(always)]
     unsafe fn _mm_shri(self, count: u32) -> Self {
-        Self::new(_mm256_castsi256_ps(_mm256_srl_epi32(
+        Self::new(_mm256_castsi256_ps(_mm256_srl_epi32x(
             _mm256_castps_si256(self.value),
             _mm_setr_epi32(count as i32, 0, 0, 0),
         )))
@@ -164,6 +164,11 @@ impl SimdVector<AVX1> for f32x8<AVX1> {
     #[inline(always)]
     fn one() -> Self {
         Self::splat(1.0)
+    }
+
+    #[inline(always)]
+    fn index() -> Self {
+        unsafe { Self::new(_mm256_setr_ps(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)) }
     }
 
     #[inline(always)]
@@ -491,7 +496,7 @@ impl SimdCastFrom<AVX1, Vi32> for f32x8<AVX1> {
 impl SimdCastFrom<AVX1, Vu32> for f32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
-        Self::new(unsafe { _mm256_cvtepu32_ps(from.value) })
+        Self::new(unsafe { _mm256_cvtepu32_psx(from.value) })
     }
 
     #[inline(always)]
