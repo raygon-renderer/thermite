@@ -206,6 +206,21 @@ impl SimdMask<AVX2> for i64x8<AVX2> {
             _mm256_blendv_epi8(f.value.1, t.value.1, self.value.1),
         ))
     }
+
+    #[inline(always)]
+    unsafe fn _mm_all(self) -> bool {
+        _mm256_movemask_epi8(_mm256_and_si256(self.value.0, self.value.1)) == -1
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_any(self) -> bool {
+        _mm256_movemask_epi8(_mm256_or_si256(self.value.0, self.value.1)) != 0
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_none(self) -> bool {
+        _mm256_movemask_epi8(_mm256_or_si256(self.value.0, self.value.1)) == 0
+    }
 }
 
 impl SimdVector<AVX2> for i64x8<AVX2> {
