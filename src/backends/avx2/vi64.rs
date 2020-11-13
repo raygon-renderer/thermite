@@ -310,12 +310,24 @@ impl SimdVector<AVX2> for i64x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_div(self, rhs: Self) -> Self {
-        Self::zip(self, rhs, Div::div)
+        rhs.eq(Self::zero()).select(
+            Self::zero(),
+            Self::zip(self, rhs, |lhs, rhs| match lhs.checked_div(rhs) {
+                Some(value) => value,
+                _ => std::hint::unreachable_unchecked(),
+            }),
+        )
     }
 
     #[inline(always)]
     unsafe fn _mm_rem(self, rhs: Self) -> Self {
-        Self::zip(self, rhs, Rem::rem)
+        rhs.eq(Self::zero()).select(
+            Self::zero(),
+            Self::zip(self, rhs, |lhs, rhs| match lhs.checked_rem(rhs) {
+                Some(value) => value,
+                _ => std::hint::unreachable_unchecked(),
+            }),
+        )
     }
 }
 
