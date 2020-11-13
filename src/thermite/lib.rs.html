@@ -757,6 +757,15 @@
 <span id="756">756</span>
 <span id="757">757</span>
 <span id="758">758</span>
+<span id="759">759</span>
+<span id="760">760</span>
+<span id="761">761</span>
+<span id="762">762</span>
+<span id="763">763</span>
+<span id="764">764</span>
+<span id="765">765</span>
+<span id="766">766</span>
+<span id="767">767</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1237,6 +1246,15 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">fn</span> <span class="ident">wrapping_sum</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
     <span class="doccomment">/// Multiply all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
     <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
+
+    <span class="doccomment">/// For some vectors, this can provide a significant</span>
+    <span class="doccomment">/// speedup when the divisor is const, as LLVM and Thermite can</span>
+    <span class="doccomment">/// generate a fixed sequence of instructions to optimally perform the division.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">div_const</span>(<span class="self">self</span>, <span class="ident">divisor</span>: <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// terrible default implementation</span>
+        <span class="self">self</span> <span class="op">/</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">divisor</span>)
+    }
 }
 
 <span class="doccomment">/// Signed SIMD vector, with negative numbers</span>

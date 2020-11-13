@@ -357,6 +357,13 @@
 <span id="356">356</span>
 <span id="357">357</span>
 <span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -636,6 +643,13 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span> {
         <span class="macro">log_reduce_epu32_avx2</span><span class="macro">!</span>(<span class="self">self</span>.<span class="ident">value</span>; <span class="ident">_mm_mullo_epi32</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">div_const</span>(<span class="self">self</span>, <span class="ident">divisor</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> (<span class="ident">magic</span>, <span class="ident">more</span>) <span class="op">=</span> <span class="kw">crate</span>::<span class="ident">backends</span>::<span class="ident">common</span>::<span class="ident">gen_u32</span>(<span class="ident">divisor</span>);
+
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_div_epu32x</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">magic</span>, <span class="ident">more</span>) })
     }
 }
 
