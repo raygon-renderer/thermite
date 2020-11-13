@@ -364,6 +364,33 @@
 <span id="363">363</span>
 <span id="364">364</span>
 <span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -535,6 +562,21 @@
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_blendv</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="self">Self</span>, <span class="ident">f</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_blendv_epi8</span>(<span class="ident">f</span>.<span class="ident">value</span>, <span class="ident">t</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>))
     }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">==</span> <span class="op">-</span><span class="number">1</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">!=</span> <span class="number">0</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">==</span> <span class="number">0</span>
+    }
 }
 
 <span class="kw">impl</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
@@ -615,12 +657,24 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_div</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">zip</span>(<span class="self">self</span>, <span class="ident">rhs</span>, <span class="ident">Div</span>::<span class="ident">div</span>)
+        <span class="ident">rhs</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(
+            <span class="self">Self</span>::<span class="ident">zero</span>(),
+            <span class="self">Self</span>::<span class="ident">zip</span>(<span class="self">self</span>, <span class="ident">rhs</span>, <span class="op">|</span><span class="ident">lhs</span>, <span class="ident">rhs</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">lhs</span>.<span class="ident">checked_div</span>(<span class="ident">rhs</span>) {
+                <span class="prelude-val">Some</span>(<span class="ident">value</span>) <span class="op">=&gt;</span> <span class="ident">value</span>,
+                <span class="kw">_</span> <span class="op">=&gt;</span> <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>(),
+            }),
+        )
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_rem</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">zip</span>(<span class="self">self</span>, <span class="ident">rhs</span>, <span class="ident">Rem</span>::<span class="ident">rem</span>)
+        <span class="ident">rhs</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(
+            <span class="self">Self</span>::<span class="ident">zero</span>(),
+            <span class="self">Self</span>::<span class="ident">zip</span>(<span class="self">self</span>, <span class="ident">rhs</span>, <span class="op">|</span><span class="ident">lhs</span>, <span class="ident">rhs</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">lhs</span>.<span class="ident">checked_rem</span>(<span class="ident">rhs</span>) {
+                <span class="prelude-val">Some</span>(<span class="ident">value</span>) <span class="op">=&gt;</span> <span class="ident">value</span>,
+                <span class="kw">_</span> <span class="op">=&gt;</span> <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>(),
+            }),
+        )
     }
 }
 
