@@ -277,6 +277,13 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {
     fn wrapping_product(self) -> Self::Element {
         log_reduce_epu32_avx2!(self.value; _mm_mullo_epi32)
     }
+
+    #[inline(always)]
+    fn div_const(self, divisor: u32) -> Self {
+        let (magic, more) = crate::backends::common::gen_u32(divisor);
+
+        Self::new(unsafe { _mm256_div_epu32x(self.value, magic, more) })
+    }
 }
 
 impl_ops!(@UNARY  u32x8 AVX2 => Not::not);

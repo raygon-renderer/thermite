@@ -19,6 +19,7 @@ use half::f16;
 
 pub(crate) mod polyfills;
 
+use super::polyfills::*;
 use polyfills::*;
 
 use super::avx1::{f32x8, f64x8};

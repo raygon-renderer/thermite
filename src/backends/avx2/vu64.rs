@@ -327,6 +327,18 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
         // TODO: Replace with log-reduce
         unsafe { self.reduce2(|prod, x| x.wrapping_mul(prod)) }
     }
+
+    #[inline(always)]
+    fn div_const(self, divisor: u64) -> Self {
+        let (magic, more) = crate::backends::common::gen_u64(divisor);
+
+        Self::new(unsafe {
+            (
+                _mm256_div_epu64x(self.value.0, magic, more),
+                _mm256_div_epu64x(self.value.1, magic, more),
+            )
+        })
+    }
 }
 
 impl_ops!(@UNARY u64x8 AVX2 => Not::not);

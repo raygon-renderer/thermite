@@ -1,6 +1,9 @@
 #[macro_use]
 mod macros;
 
+pub mod common;
+pub mod polyfills;
+
 pub mod avx1;
 pub mod avx2;
 //pub mod sse41;

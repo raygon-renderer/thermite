@@ -197,3 +197,103 @@ pub unsafe fn _mm256_mullo_epi64x(ymm0: __m256i, ymm1: __m256i) -> __m256i {
 
     ymm0
 }
+
+pub use divider::*;
+pub mod divider {
+    use super::*;
+
+    // libdivide.h - Optimized integer division
+    // https://libdivide.com
+    //
+    // Copyright (C) 2010 - 2019 ridiculous_fish, <libdivide@ridiculousfish.com>
+    // Copyright (C) 2016 - 2019 Kim Walisch, <kim.walisch@gmail.com>
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub unsafe fn _mm256_mullhi_epu64x(x: __m256i, y: __m256i) -> __m256i {
+        let lomask  = _mm256_set1_epi64x(0xffffffff);
+        let xh      = _mm256_shuffle_epi32(x, 0xB1);    // x0l, x0h, x1l, x1h
+        let yh      = _mm256_shuffle_epi32(y, 0xB1);    // y0l, y0h, y1l, y1h
+        let w0      = _mm256_mul_epu32(x, y);           // x0l*y0l, x1l*y1l
+        let w1      = _mm256_mul_epu32(x, yh);          // x0l*y0h, x1l*y1h
+        let w2      = _mm256_mul_epu32(xh, y);          // x0h*y0l, x1h*y0l
+        let w3      = _mm256_mul_epu32(xh, yh);         // x0h*y0h, x1h*y1h
+        let w0h     = _mm256_srli_epi64(w0, 32);
+        let s1      = _mm256_add_epi64(w1, w0h);
+        let s1l     = _mm256_and_si256(s1, lomask);
+        let s1h     = _mm256_srli_epi64(s1, 32);
+        let s2      = _mm256_add_epi64(w2, s1l);
+        let s2h     = _mm256_srli_epi64(s2, 32);
+        let mut hi  = _mm256_add_epi64(w3, s1h);
+                hi  = _mm256_add_epi64(hi, s2h);
+
+        hi
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_mullhi_epu32x(a: __m256i, b: __m256i) -> __m256i {
+        let hi_product_0Z2Z = _mm256_srli_epi64(_mm256_mul_epu32(a, b), 32);
+        let a1X3X = _mm256_srli_epi64(a, 32);
+        let mask = _mm256_set_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
+        let hi_product_Z1Z3 = _mm256_and_si256(_mm256_mul_epu32(a1X3X, b), mask);
+        _mm256_or_si256(hi_product_0Z2Z, hi_product_Z1Z3)
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_mullhi_epi32x(a: __m256i, b: __m256i) -> __m256i {
+        let hi_product_0Z2Z = _mm256_srli_epi64(_mm256_mul_epi32(a, b), 32);
+        let a1X3X = _mm256_srli_epi64(a, 32);
+        let mask = _mm256_set_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
+        let hi_product_Z1Z3 = _mm256_and_si256(_mm256_mul_epi32(a1X3X, b), mask);
+        _mm256_or_si256(hi_product_0Z2Z, hi_product_Z1Z3)
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_signbits_epi64x(v: __m256i) -> __m256i {
+        _mm256_srai_epi32(_mm256_shuffle_epi32(v, _mm_shuffle(3, 3, 1, 1)), 31)
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_mullhi_epi64x(x: __m256i, y: __m256i) -> __m256i {
+        let p = _mm256_mullhi_epu64x(x, y);
+        let t1 = _mm256_and_si256(_mm256_signbits_epi64x(x), y);
+        let t2 = _mm256_and_si256(_mm256_signbits_epi64x(y), x);
+        _mm256_sub_epi64(_mm256_sub_epi64(p, t1), t2)
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_div_epu32x(numers: __m256i, magic: u32, more: u8) -> __m256i {
+        if magic == 0 {
+            return _mm256_srli_epi32(numers, more as i32);
+        }
+
+        let q = _mm256_mullhi_epu32x(numers, _mm256_set1_epi32(magic as i32));
+
+        if more & 0x40 != 0 {
+            _mm256_srli_epi32(
+                _mm256_add_epi32(_mm256_srli_epi32(_mm256_sub_epi32(numers, q), 1), q),
+                (more & 0x1F) as i32,
+            )
+        } else {
+            _mm256_srli_epi32(q, more as i32)
+        }
+    }
+
+    #[inline(always)]
+    pub unsafe fn _mm256_div_epu64x(numers: __m256i, magic: u64, more: u8) -> __m256i {
+        if magic == 0 {
+            return _mm256_srli_epi64(numers, more as i32);
+        }
+
+        let q = _mm256_mullhi_epu64x(numers, _mm256_set1_epi64x(magic as i64));
+
+        if more & 0x40 != 0 {
+            _mm256_srli_epi64(
+                _mm256_add_epi64(_mm256_srli_epi64(_mm256_sub_epi64(numers, q), 1), q),
+                (more & 0x3F) as i32,
+            )
+        } else {
+            _mm256_srli_epi64(q, more as i32)
+        }
+    }
+}

@@ -369,10 +369,7 @@ where
         let mut ui = xs.into_bits();
         let mut hx = (ui >> 32) & m;
 
-        // TODO: Improve performance here with 128-bit multiply or something
-        let hx_3 = hx / Vu64::<S>::splat(3);
-
-        hx = hx_3 + b;
+        hx = hx.div_const(3) + b;
 
         ui &= Vu64::<S>::splat(1 << 63);
         ui |= hx << 32;

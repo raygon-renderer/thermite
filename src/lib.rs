@@ -477,6 +477,15 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     fn wrapping_sum(self) -> Self::Element;
     /// Multiply all lanes together, wrapping the result if it can't fit in `T`
     fn wrapping_product(self) -> Self::Element;
+
+    /// For some vectors, this can provide a significant
+    /// speedup when the divisor is const, as LLVM and Thermite can
+    /// generate a fixed sequence of instructions to optimally perform the division.
+    #[inline(always)]
+    fn div_const(self, divisor: Self::Element) -> Self {
+        // terrible default implementation
+        self / Self::splat(divisor)
+    }
 }
 
 /// Signed SIMD vector, with negative numbers
