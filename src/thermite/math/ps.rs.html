@@ -909,26 +909,6 @@
 <span id="908">908</span>
 <span id="909">909</span>
 <span id="910">910</span>
-<span id="911">911</span>
-<span id="912">912</span>
-<span id="913">913</span>
-<span id="914">914</span>
-<span id="915">915</span>
-<span id="916">916</span>
-<span id="917">917</span>
-<span id="918">918</span>
-<span id="919">919</span>
-<span id="920">920</span>
-<span id="921">921</span>
-<span id="922">922</span>
-<span id="923">923</span>
-<span id="924">924</span>
-<span id="925">925</span>
-<span id="926">926</span>
-<span id="927">927</span>
-<span id="928">928</span>
-<span id="929">929</span>
-<span id="930">930</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1002,10 +982,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sinh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.66667160211E-1</span>);
-        <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.33028376239E-3</span>);
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.03721912945E-4</span>);
-
         <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">abs</span>();
 
         <span class="kw">let</span> <span class="ident">x_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">le</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>());
@@ -1018,6 +994,10 @@
 
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+            <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.66667160211E-1</span>);
+            <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.33028376239E-3</span>);
+            <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.03721912945E-4</span>);
+
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_2</span>(<span class="ident">x2</span>, <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
@@ -1035,12 +1015,6 @@
     <span class="kw">fn</span> <span class="ident">tanh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
 
-        <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.33332819422E-1</span>);
-        <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.33314422036E-1</span>);
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.37397155531E-2</span>);
-        <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.06390887954E-2</span>);
-        <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.70498872745E-3</span>);
-
         <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">abs</span>();
         <span class="kw">let</span> <span class="ident">x_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">le</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.625</span>));
 
@@ -1052,6 +1026,12 @@
 
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+            <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.33332819422E-1</span>);
+            <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.33314422036E-1</span>);
+            <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.37397155531E-2</span>);
+            <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.06390887954E-2</span>);
+            <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.70498872745E-3</span>);
+
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
@@ -1162,11 +1142,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">asinh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.6666288134E-1</span>);
-        <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.4847586088E-2</span>);
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.2699340972E-2</span>);
-        <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0122003309E-2</span>);
-
         <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">abs</span>();
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x0</span> <span class="op">*</span> <span class="ident">x0</span>;
 
@@ -1179,6 +1154,11 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+            <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.6666288134E-1</span>);
+            <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.4847586088E-2</span>);
+            <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.2699340972E-2</span>);
+            <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0122003309E-2</span>);
+
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_3</span>(<span class="ident">x2</span>, <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>, <span class="ident">r3</span>).<span class="ident">mul_add</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
@@ -1195,12 +1175,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">acosh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.4142135263E0</span>);
-        <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.1784741703E-1</span>);
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.6454905019E-2</span>);
-        <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">7.5272886713E-3</span>);
-        <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.7596881071E-3</span>);
-
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
 
         <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">x0</span> <span class="op">-</span> <span class="ident">one</span>;
@@ -1216,6 +1190,12 @@
 
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+            <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.4142135263E0</span>);
+            <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.1784741703E-1</span>);
+            <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.6454905019E-2</span>);
+            <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">7.5272886713E-3</span>);
+            <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.7596881071E-3</span>);
+
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x1</span> <span class="op">*</span> <span class="ident">x1</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">sqrt</span>() <span class="op">*</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">r0</span>, <span class="ident">r1</span>, <span class="ident">r2</span>, <span class="ident">r3</span>, <span class="ident">r4</span>);
@@ -1236,12 +1216,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">atanh</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.33337300303E-1</span>);
-        <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.99782164500E-1</span>);
-        <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.46691431730E-1</span>);
-        <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.24370301058E-2</span>);
-        <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.81740078349E-1</span>);
-
         <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">abs</span>();
 
         <span class="kw">let</span> <span class="ident">x_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>));
@@ -1252,6 +1226,12 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+            <span class="kw">let</span> <span class="ident">r0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.33337300303E-1</span>);
+            <span class="kw">let</span> <span class="ident">r1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.99782164500E-1</span>);
+            <span class="kw">let</span> <span class="ident">r2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.46691431730E-1</span>);
+            <span class="kw">let</span> <span class="ident">r3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.24370301058E-2</span>);
+            <span class="kw">let</span> <span class="ident">r4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.81740078349E-1</span>);
+
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
             <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
@@ -1534,19 +1514,15 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">c0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.128379165726710e+0</span>);
-        <span class="kw">let</span> <span class="ident">c1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.761262582423300e-1</span>);
-        <span class="kw">let</span> <span class="ident">c2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.128358514861418e-1</span>);
-        <span class="kw">let</span> <span class="ident">c3</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.685381193529856e-2</span>);
-        <span class="kw">let</span> <span class="ident">c4</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.188327685732524e-3</span>);
-        <span class="kw">let</span> <span class="ident">c5</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">8.010193625184903e-4</span>);
-        <span class="kw">let</span> <span class="ident">c6</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.853861353153693e-5</span>);
-
-        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-        <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">z1</span> <span class="op">*</span> <span class="ident">z1</span>;
-        <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
-
-        <span class="ident">x</span> <span class="op">*</span> <span class="ident">poly_6</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">c0</span>, <span class="ident">c1</span>, <span class="ident">c2</span>, <span class="ident">c3</span>, <span class="ident">c4</span>, <span class="ident">c5</span>, <span class="ident">c6</span>)
+        <span class="ident">x</span> <span class="op">*</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>).<span class="ident">poly</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">1.128379165726710e+0</span>,
+            <span class="op">-</span><span class="number">3.761262582423300e-1</span>,
+            <span class="number">1.128358514861418e-1</span>,
+            <span class="op">-</span><span class="number">2.685381193529856e-2</span>,
+            <span class="number">5.188327685732524e-3</span>,
+            <span class="op">-</span><span class="number">8.010193625184903e-4</span>,
+            <span class="number">7.853861353153693e-5</span>,
+        ])
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1561,49 +1537,33 @@
 
         <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span><span class="ident">a</span>.<span class="ident">nmul_add</span>(<span class="ident">a</span>, <span class="ident">one</span>).<span class="ident">ln</span>();
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> {
-            <span class="kw">let</span> <span class="ident">p0low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.50140941</span>);
-            <span class="kw">let</span> <span class="ident">p1low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.246640727</span>);
-            <span class="kw">let</span> <span class="ident">p2low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.00417768164</span>);
-            <span class="kw">let</span> <span class="ident">p3low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.00125372503</span>);
-            <span class="kw">let</span> <span class="ident">p4low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00021858087</span>);
-            <span class="kw">let</span> <span class="ident">p5low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.39150654e-06</span>);
-            <span class="kw">let</span> <span class="ident">p6low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.5233877e-06</span>);
-            <span class="kw">let</span> <span class="ident">p7low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.43273939e-07</span>);
-            <span class="kw">let</span> <span class="ident">p8low</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.81022636e-08</span>);
-
-            <span class="kw">let</span> <span class="ident">w1</span> <span class="op">=</span> <span class="ident">w</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.5</span>);
-            <span class="kw">let</span> <span class="ident">w2</span> <span class="op">=</span> <span class="ident">w1</span> <span class="op">*</span> <span class="ident">w1</span>;
-            <span class="kw">let</span> <span class="ident">w4</span> <span class="op">=</span> <span class="ident">w2</span> <span class="op">*</span> <span class="ident">w2</span>;
-            <span class="kw">let</span> <span class="ident">w8</span> <span class="op">=</span> <span class="ident">w4</span> <span class="op">*</span> <span class="ident">w4</span>;
-
-            <span class="ident">poly_8</span>(
-                <span class="ident">w1</span>, <span class="ident">w2</span>, <span class="ident">w4</span>, <span class="ident">w8</span>, <span class="ident">p0low</span>, <span class="ident">p1low</span>, <span class="ident">p2low</span>, <span class="ident">p3low</span>, <span class="ident">p4low</span>, <span class="ident">p5low</span>, <span class="ident">p6low</span>, <span class="ident">p7low</span>, <span class="ident">p8low</span>,
-            )
-        };
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> (<span class="ident">w</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.5</span>)).<span class="ident">poly</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">1.50140941</span>,
+            <span class="number">0.246640727</span>,
+            <span class="op">-</span><span class="number">0.00417768164</span>,
+            <span class="op">-</span><span class="number">0.00125372503</span>,
+            <span class="number">0.00021858087</span>,
+            <span class="op">-</span><span class="number">4.39150654e-06</span>,
+            <span class="op">-</span><span class="number">3.5233877e-06</span>,
+            <span class="number">3.43273939e-07</span>,
+            <span class="number">2.81022636e-08</span>,
+        ]);
 
         <span class="kw">let</span> <span class="ident">w_big</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">ge</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.0</span>)); <span class="comment">// at around |x| &gt; 0.99662533231, so unlikely</span>
 
         <span class="comment">// avoids a costly sqrt and polynomial if false</span>
         <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">w_big</span>.<span class="ident">any</span>()) {
-            <span class="kw">let</span> <span class="ident">p0high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.83297682</span>);
-            <span class="kw">let</span> <span class="ident">p1high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.00167406</span>);
-            <span class="kw">let</span> <span class="ident">p2high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00943887047</span>);
-            <span class="kw">let</span> <span class="ident">p3high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.0076224613</span>);
-            <span class="kw">let</span> <span class="ident">p4high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00573950773</span>);
-            <span class="kw">let</span> <span class="ident">p5high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.00367342844</span>);
-            <span class="kw">let</span> <span class="ident">p6high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00134934322</span>);
-            <span class="kw">let</span> <span class="ident">p7high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.000100950558</span>);
-            <span class="kw">let</span> <span class="ident">p8high</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">0.000200214257</span>);
-
-            <span class="kw">let</span> <span class="ident">w1</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">sqrt</span>() <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.0</span>);
-            <span class="kw">let</span> <span class="ident">w2</span> <span class="op">=</span> <span class="ident">w1</span> <span class="op">*</span> <span class="ident">w1</span>;
-            <span class="kw">let</span> <span class="ident">w4</span> <span class="op">=</span> <span class="ident">w2</span> <span class="op">*</span> <span class="ident">w2</span>;
-            <span class="kw">let</span> <span class="ident">w8</span> <span class="op">=</span> <span class="ident">w4</span> <span class="op">*</span> <span class="ident">w4</span>;
-
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">poly_8</span>(
-                <span class="ident">w1</span>, <span class="ident">w2</span>, <span class="ident">w4</span>, <span class="ident">w8</span>, <span class="ident">p0high</span>, <span class="ident">p1high</span>, <span class="ident">p2high</span>, <span class="ident">p3high</span>, <span class="ident">p4high</span>, <span class="ident">p5high</span>, <span class="ident">p6high</span>, <span class="ident">p7high</span>, <span class="ident">p8high</span>,
-            );
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p1</span> <span class="op">=</span> (<span class="ident">w</span>.<span class="ident">sqrt</span>() <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.0</span>)).<span class="ident">poly</span>(<span class="kw-2">&amp;</span>[
+                <span class="number">2.83297682</span>,
+                <span class="number">1.00167406</span>,
+                <span class="number">0.00943887047</span>,
+                <span class="op">-</span><span class="number">0.0076224613</span>,
+                <span class="number">0.00573950773</span>,
+                <span class="op">-</span><span class="number">0.00367342844</span>,
+                <span class="number">0.00134934322</span>,
+                <span class="number">0.000100950558</span>,
+                <span class="op">-</span><span class="number">0.000200214257</span>,
+            ]);
 
             <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">eq</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x == 1) = inf</span>
             <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">gt</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x &gt; 1) = NaN</span>

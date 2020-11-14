@@ -188,6 +188,25 @@
 <span id="187">187</span>
 <span id="188">188</span>
 <span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
@@ -320,6 +339,25 @@
     <span class="ident">x8</span>.<span class="ident">mul_add</span>(
         <span class="ident">x4</span>.<span class="ident">mul_add</span>(
             <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c13</span>, <span class="ident">c12</span>),
+            <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c11</span>, <span class="ident">c10</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c9</span>, <span class="ident">c8</span>)),
+        ),
+        <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+            <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c7</span>, <span class="ident">c6</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c5</span>, <span class="ident">c4</span>)),
+            <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c3</span>, <span class="ident">c2</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c1</span>, <span class="ident">c0</span>)),
+        ),
+    )
+}
+
+<span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">poly_14</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>(
+    <span class="ident">x</span>: <span class="ident">V</span>, <span class="ident">x2</span>: <span class="ident">V</span>, <span class="ident">x4</span>: <span class="ident">V</span>, <span class="ident">x8</span>: <span class="ident">V</span>,
+    <span class="ident">c0</span>: <span class="ident">V</span>, <span class="ident">c1</span>: <span class="ident">V</span>, <span class="ident">c2</span>: <span class="ident">V</span>, <span class="ident">c3</span>: <span class="ident">V</span>, <span class="ident">c4</span>: <span class="ident">V</span>, <span class="ident">c5</span>: <span class="ident">V</span>, <span class="ident">c6</span>: <span class="ident">V</span>, <span class="ident">c7</span>: <span class="ident">V</span>, <span class="ident">c8</span>: <span class="ident">V</span>, <span class="ident">c9</span>: <span class="ident">V</span>, <span class="ident">c10</span>: <span class="ident">V</span>, <span class="ident">c11</span>: <span class="ident">V</span>, <span class="ident">c12</span>: <span class="ident">V</span>, <span class="ident">c13</span>: <span class="ident">V</span>, <span class="ident">c14</span>: <span class="ident">V</span>
+) <span class="op">-&gt;</span> <span class="ident">V</span> {
+    <span class="comment">// (((C0+C1x) + (C2+C3x)x2) + ((C4+C5x) + (C6+C7x)x2)x4) + (((C8+C9x) + (C10+C11x)x2) + ((C12+C13x) + C14*x2)x4)x8</span>
+    <span class="ident">x8</span>.<span class="ident">mul_add</span>(
+        <span class="ident">x4</span>.<span class="ident">mul_add</span>(
+            <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">c14</span>, <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c13</span>, <span class="ident">c12</span>)),
             <span class="ident">x2</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c11</span>, <span class="ident">c10</span>), <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">c9</span>, <span class="ident">c8</span>)),
         ),
         <span class="ident">x4</span>.<span class="ident">mul_add</span>(
