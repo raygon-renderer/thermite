@@ -11,8 +11,6 @@ impl<S: Simd> Default for i64x8<S> {
 impl SimdVectorBase<AVX1> for i64x8<AVX1> {
     type Element = i64;
 
-    const ALIGNMENT: usize = mem::align_of::<__m256i>();
-
     #[inline(always)]
     fn splat(value: Self::Element) -> Self {
         Self::new(unsafe { (_mm256_set1_epi64x(value), _mm256_set1_epi64x(value)) })

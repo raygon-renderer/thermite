@@ -25,8 +25,6 @@ macro_rules! log_reduce_pd_avx1 {
 impl SimdVectorBase<AVX1> for f64x8<AVX1> {
     type Element = f64;
 
-    const ALIGNMENT: usize = mem::align_of::<__m256d>(); // allow half-alignment
-
     #[inline(always)]
     fn splat(value: Self::Element) -> Self {
         Self::new(unsafe { (_mm256_set1_pd(value), _mm256_set1_pd(value)) })
