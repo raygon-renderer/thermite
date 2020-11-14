@@ -70,10 +70,6 @@ where
 
     #[inline(always)]
     fn sinh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(1.66667160211E-1);
-        let r1 = Vf32::<S>::splat(8.33028376239E-3);
-        let r2 = Vf32::<S>::splat(2.03721912945E-4);
-
         let x = x0.abs();
 
         let x_small = x.le(Vf32::<S>::one());
@@ -86,6 +82,10 @@ where
 
         // if any are small
         if bitmask.any() {
+            let r0 = Vf32::<S>::splat(1.66667160211E-1);
+            let r1 = Vf32::<S>::splat(8.33028376239E-3);
+            let r2 = Vf32::<S>::splat(2.03721912945E-4);
+
             let x2 = x * x;
             y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
         }
@@ -103,12 +103,6 @@ where
     fn tanh(x0: Self::Vf) -> Self::Vf {
         let one = Vf32::<S>::one();
 
-        let r0 = Vf32::<S>::splat(-3.33332819422E-1);
-        let r1 = Vf32::<S>::splat(1.33314422036E-1);
-        let r2 = Vf32::<S>::splat(-5.37397155531E-2);
-        let r3 = Vf32::<S>::splat(2.06390887954E-2);
-        let r4 = Vf32::<S>::splat(-5.70498872745E-3);
-
         let x = x0.abs();
         let x_small = x.le(Vf32::<S>::splat(0.625));
 
@@ -120,6 +114,12 @@ where
 
         // if any are small
         if bitmask.any() {
+            let r0 = Vf32::<S>::splat(-3.33332819422E-1);
+            let r1 = Vf32::<S>::splat(1.33314422036E-1);
+            let r2 = Vf32::<S>::splat(-5.37397155531E-2);
+            let r3 = Vf32::<S>::splat(2.06390887954E-2);
+            let r4 = Vf32::<S>::splat(-5.70498872745E-3);
+
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -230,11 +230,6 @@ where
 
     #[inline(always)]
     fn asinh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(-1.6666288134E-1);
-        let r1 = Vf32::<S>::splat(7.4847586088E-2);
-        let r2 = Vf32::<S>::splat(-4.2699340972E-2);
-        let r3 = Vf32::<S>::splat(2.0122003309E-2);
-
         let x = x0.abs();
         let x2 = x0 * x0;
 
@@ -247,6 +242,11 @@ where
         let bitmask = x_small.bitmask();
 
         if bitmask.any() {
+            let r0 = Vf32::<S>::splat(-1.6666288134E-1);
+            let r1 = Vf32::<S>::splat(7.4847586088E-2);
+            let r2 = Vf32::<S>::splat(-4.2699340972E-2);
+            let r3 = Vf32::<S>::splat(2.0122003309E-2);
+
             y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_add(x2 * x, x);
         }
 
@@ -263,12 +263,6 @@ where
 
     #[inline(always)]
     fn acosh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(1.4142135263E0);
-        let r1 = Vf32::<S>::splat(-1.1784741703E-1);
-        let r2 = Vf32::<S>::splat(2.6454905019E-2);
-        let r3 = Vf32::<S>::splat(-7.5272886713E-3);
-        let r4 = Vf32::<S>::splat(1.7596881071E-3);
-
         let one = Vf32::<S>::one();
 
         let x1 = x0 - one;
@@ -284,6 +278,12 @@ where
 
         // if any are small
         if bitmask.any() {
+            let r0 = Vf32::<S>::splat(1.4142135263E0);
+            let r1 = Vf32::<S>::splat(-1.1784741703E-1);
+            let r2 = Vf32::<S>::splat(2.6454905019E-2);
+            let r3 = Vf32::<S>::splat(-7.5272886713E-3);
+            let r4 = Vf32::<S>::splat(1.7596881071E-3);
+
             let x2 = x1 * x1;
             let x4 = x2 * x2;
             y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
@@ -304,12 +304,6 @@ where
 
     #[inline(always)]
     fn atanh(x0: Self::Vf) -> Self::Vf {
-        let r0 = Vf32::<S>::splat(3.33337300303E-1);
-        let r1 = Vf32::<S>::splat(1.99782164500E-1);
-        let r2 = Vf32::<S>::splat(1.46691431730E-1);
-        let r3 = Vf32::<S>::splat(8.24370301058E-2);
-        let r4 = Vf32::<S>::splat(1.81740078349E-1);
-
         let x = x0.abs();
 
         let x_small = x.lt(Vf32::<S>::splat(0.5));
@@ -320,6 +314,12 @@ where
         let bitmask = x_small.bitmask();
 
         if bitmask.any() {
+            let r0 = Vf32::<S>::splat(3.33337300303E-1);
+            let r1 = Vf32::<S>::splat(1.99782164500E-1);
+            let r2 = Vf32::<S>::splat(1.46691431730E-1);
+            let r3 = Vf32::<S>::splat(8.24370301058E-2);
+            let r4 = Vf32::<S>::splat(1.81740078349E-1);
+
             let x2 = x * x;
             let x4 = x2 * x2;
             let x8 = x4 * x4;
@@ -602,19 +602,15 @@ where
 
     #[inline(always)]
     fn erf(x: Self::Vf) -> Self::Vf {
-        let c0 = Vf32::<S>::splat(1.128379165726710e+0);
-        let c1 = Vf32::<S>::splat(-3.761262582423300e-1);
-        let c2 = Vf32::<S>::splat(1.128358514861418e-1);
-        let c3 = Vf32::<S>::splat(-2.685381193529856e-2);
-        let c4 = Vf32::<S>::splat(5.188327685732524e-3);
-        let c5 = Vf32::<S>::splat(-8.010193625184903e-4);
-        let c6 = Vf32::<S>::splat(7.853861353153693e-5);
-
-        let z1 = x * x;
-        let z2 = z1 * z1;
-        let z4 = z2 * z2;
-
-        x * poly_6(z1, z2, z4, c0, c1, c2, c3, c4, c5, c6)
+        x * (x * x).poly(&[
+            1.128379165726710e+0,
+            -3.761262582423300e-1,
+            1.128358514861418e-1,
+            -2.685381193529856e-2,
+            5.188327685732524e-3,
+            -8.010193625184903e-4,
+            7.853861353153693e-5,
+        ])
     }
 
     #[inline(always)]
@@ -629,49 +625,33 @@ where
 
         let w = -a.nmul_add(a, one).ln();
 
-        let mut p0 = {
-            let p0low = Vf32::<S>::splat(1.50140941);
-            let p1low = Vf32::<S>::splat(0.246640727);
-            let p2low = Vf32::<S>::splat(-0.00417768164);
-            let p3low = Vf32::<S>::splat(-0.00125372503);
-            let p4low = Vf32::<S>::splat(0.00021858087);
-            let p5low = Vf32::<S>::splat(-4.39150654e-06);
-            let p6low = Vf32::<S>::splat(-3.5233877e-06);
-            let p7low = Vf32::<S>::splat(3.43273939e-07);
-            let p8low = Vf32::<S>::splat(2.81022636e-08);
-
-            let w1 = w - Vf32::<S>::splat(2.5);
-            let w2 = w1 * w1;
-            let w4 = w2 * w2;
-            let w8 = w4 * w4;
-
-            poly_8(
-                w1, w2, w4, w8, p0low, p1low, p2low, p3low, p4low, p5low, p6low, p7low, p8low,
-            )
-        };
+        let mut p0 = (w - Vf32::<S>::splat(2.5)).poly(&[
+            1.50140941,
+            0.246640727,
+            -0.00417768164,
+            -0.00125372503,
+            0.00021858087,
+            -4.39150654e-06,
+            -3.5233877e-06,
+            3.43273939e-07,
+            2.81022636e-08,
+        ]);
 
         let w_big = w.ge(Vf32::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         // avoids a costly sqrt and polynomial if false
         if unlikely!(w_big.any()) {
-            let p0high = Vf32::<S>::splat(2.83297682);
-            let p1high = Vf32::<S>::splat(1.00167406);
-            let p2high = Vf32::<S>::splat(0.00943887047);
-            let p3high = Vf32::<S>::splat(-0.0076224613);
-            let p4high = Vf32::<S>::splat(0.00573950773);
-            let p5high = Vf32::<S>::splat(-0.00367342844);
-            let p6high = Vf32::<S>::splat(0.00134934322);
-            let p7high = Vf32::<S>::splat(0.000100950558);
-            let p8high = Vf32::<S>::splat(-0.000200214257);
-
-            let w1 = w.sqrt() - Vf32::<S>::splat(3.0);
-            let w2 = w1 * w1;
-            let w4 = w2 * w2;
-            let w8 = w4 * w4;
-
-            let mut p1 = poly_8(
-                w1, w2, w4, w8, p0high, p1high, p2high, p3high, p4high, p5high, p6high, p7high, p8high,
-            );
+            let mut p1 = (w.sqrt() - Vf32::<S>::splat(3.0)).poly(&[
+                2.83297682,
+                1.00167406,
+                0.00943887047,
+                -0.0076224613,
+                0.00573950773,
+                -0.00367342844,
+                0.00134934322,
+                0.000100950558,
+                -0.000200214257,
+            ]);
 
             p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfinv(x == 1) = inf
             p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfinv(x > 1) = NaN

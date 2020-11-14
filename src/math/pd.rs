@@ -102,15 +102,6 @@ where
     fn sinh(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
-        let p0 = Vf64::<S>::splat(-3.51754964808151394800E5);
-        let p1 = Vf64::<S>::splat(-1.15614435765005216044E4);
-        let p2 = Vf64::<S>::splat(-1.63725857525983828727E2);
-        let p3 = Vf64::<S>::splat(-7.89474443963537015605E-1);
-        let q0 = Vf64::<S>::splat(-2.11052978884890840399E6);
-        let q1 = Vf64::<S>::splat(3.61578279834431989373E4);
-        let q2 = Vf64::<S>::splat(-2.77711081420602794433E2);
-        let q3 = one;
-
         let x = x0.abs();
 
         let x_small = x.le(one);
@@ -123,6 +114,15 @@ where
 
         // if any are small
         if bitmask.any() {
+            let p0 = Vf64::<S>::splat(-3.51754964808151394800E5);
+            let p1 = Vf64::<S>::splat(-1.15614435765005216044E4);
+            let p2 = Vf64::<S>::splat(-1.63725857525983828727E2);
+            let p3 = Vf64::<S>::splat(-7.89474443963537015605E-1);
+            let q0 = Vf64::<S>::splat(-2.11052978884890840399E6);
+            let q1 = Vf64::<S>::splat(3.61578279834431989373E4);
+            let q2 = Vf64::<S>::splat(-2.77711081420602794433E2);
+            let q3 = one;
+
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -143,14 +143,6 @@ where
     fn tanh(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
-        let p0 = Vf64::<S>::splat(-1.61468768441708447952E3);
-        let p1 = Vf64::<S>::splat(-9.92877231001918586564E1);
-        let p2 = Vf64::<S>::splat(-9.64399179425052238628E-1);
-        let q0 = Vf64::<S>::splat(4.84406305325125486048E3);
-        let q1 = Vf64::<S>::splat(2.23548839060100448583E3);
-        let q2 = Vf64::<S>::splat(1.12811678491632931402E2);
-        let q3 = one;
-
         let x = x0.abs();
 
         let x_small = x.le(Vf64::<S>::splat(0.625));
@@ -163,6 +155,14 @@ where
 
         // if any are small
         if bitmask.any() {
+            let p0 = Vf64::<S>::splat(-1.61468768441708447952E3);
+            let p1 = Vf64::<S>::splat(-9.92877231001918586564E1);
+            let p2 = Vf64::<S>::splat(-9.64399179425052238628E-1);
+            let q0 = Vf64::<S>::splat(4.84406305325125486048E3);
+            let q1 = Vf64::<S>::splat(2.23548839060100448583E3);
+            let q2 = Vf64::<S>::splat(1.12811678491632931402E2);
+            let q3 = one;
+
             let x2 = x * x;
             let x4 = x2 * x2;
 
@@ -188,17 +188,6 @@ where
     fn asinh(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
-        let p0 = Vf64::<S>::splat(-5.56682227230859640450E0);
-        let p1 = Vf64::<S>::splat(-9.09030533308377316566E0);
-        let p2 = Vf64::<S>::splat(-4.37390226194356683570E0);
-        let p3 = Vf64::<S>::splat(-5.91750212056387121207E-1);
-        let p4 = Vf64::<S>::splat(-4.33231683752342103572E-3);
-        let q0 = Vf64::<S>::splat(3.34009336338516356383E1);
-        let q1 = Vf64::<S>::splat(6.95722521337257608734E1);
-        let q2 = Vf64::<S>::splat(4.86042483805291788324E1);
-        let q3 = Vf64::<S>::splat(1.28757002067426453537E1);
-        let q4 = one;
-
         let x = x0.abs();
         let x2 = x0 * x0;
 
@@ -211,6 +200,17 @@ where
         let bitmask = x_small.bitmask();
 
         if bitmask.any() {
+            let p0 = Vf64::<S>::splat(-5.56682227230859640450E0);
+            let p1 = Vf64::<S>::splat(-9.09030533308377316566E0);
+            let p2 = Vf64::<S>::splat(-4.37390226194356683570E0);
+            let p3 = Vf64::<S>::splat(-5.91750212056387121207E-1);
+            let p4 = Vf64::<S>::splat(-4.33231683752342103572E-3);
+            let q0 = Vf64::<S>::splat(3.34009336338516356383E1);
+            let q1 = Vf64::<S>::splat(6.95722521337257608734E1);
+            let q2 = Vf64::<S>::splat(4.86042483805291788324E1);
+            let q3 = Vf64::<S>::splat(1.28757002067426453537E1);
+            let q4 = one;
+
             let x4 = x2 * x2;
             let x8 = x4 * x4;
 
@@ -233,18 +233,6 @@ where
     fn acosh(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
-        let p0 = Vf64::<S>::splat(1.10855947270161294369E5);
-        let p1 = Vf64::<S>::splat(1.08102874834699867335E5);
-        let p2 = Vf64::<S>::splat(3.43989375926195455866E4);
-        let p3 = Vf64::<S>::splat(3.94726656571334401102E3);
-        let p4 = Vf64::<S>::splat(1.18801130533544501356E2);
-        let q0 = Vf64::<S>::splat(7.83869920495893927727E4);
-        let q1 = Vf64::<S>::splat(8.29725251988426222434E4);
-        let q2 = Vf64::<S>::splat(2.97683430363289370382E4);
-        let q3 = Vf64::<S>::splat(4.15352677227719831579E3);
-        let q4 = Vf64::<S>::splat(1.86145380837903397292E2);
-        let q5 = one;
-
         let x1 = x0 - one;
 
         let is_undef = x0.lt(one);
@@ -257,6 +245,18 @@ where
         let bitmask = x_small.bitmask();
 
         if bitmask.any() {
+            let p0 = Vf64::<S>::splat(1.10855947270161294369E5);
+            let p1 = Vf64::<S>::splat(1.08102874834699867335E5);
+            let p2 = Vf64::<S>::splat(3.43989375926195455866E4);
+            let p3 = Vf64::<S>::splat(3.94726656571334401102E3);
+            let p4 = Vf64::<S>::splat(1.18801130533544501356E2);
+            let q0 = Vf64::<S>::splat(7.83869920495893927727E4);
+            let q1 = Vf64::<S>::splat(8.29725251988426222434E4);
+            let q2 = Vf64::<S>::splat(2.97683430363289370382E4);
+            let q3 = Vf64::<S>::splat(4.15352677227719831579E3);
+            let q4 = Vf64::<S>::splat(1.86145380837903397292E2);
+            let q5 = one;
+
             let x2 = x1 * x1;
             let x4 = x2 * x2;
 
@@ -280,18 +280,6 @@ where
         let one = Vf64::<S>::one();
         let half = Vf64::<S>::splat(0.5);
 
-        let p0 = Vf64::<S>::splat(-3.09092539379866942570E1);
-        let p1 = Vf64::<S>::splat(6.54566728676544377376E1);
-        let p2 = Vf64::<S>::splat(-4.61252884198732692637E1);
-        let p3 = Vf64::<S>::splat(1.20426861384072379242E1);
-        let p4 = Vf64::<S>::splat(-8.54074331929669305196E-1);
-        let q0 = Vf64::<S>::splat(-9.27277618139601130017E1);
-        let q1 = Vf64::<S>::splat(2.52006675691344555838E2);
-        let q2 = Vf64::<S>::splat(-2.49839401325893582852E2);
-        let q3 = Vf64::<S>::splat(1.08938092147140262656E2);
-        let q4 = Vf64::<S>::splat(-1.95638849376911654834E1);
-        let q5 = one;
-
         let x = x0.abs();
 
         let x_small = x.lt(half);
@@ -302,6 +290,18 @@ where
         let bitmask = x_small.bitmask();
 
         if bitmask.any() {
+            let p0 = Vf64::<S>::splat(-3.09092539379866942570E1);
+            let p1 = Vf64::<S>::splat(6.54566728676544377376E1);
+            let p2 = Vf64::<S>::splat(-4.61252884198732692637E1);
+            let p3 = Vf64::<S>::splat(1.20426861384072379242E1);
+            let p4 = Vf64::<S>::splat(-8.54074331929669305196E-1);
+            let q0 = Vf64::<S>::splat(-9.27277618139601130017E1);
+            let q1 = Vf64::<S>::splat(2.52006675691344555838E2);
+            let q2 = Vf64::<S>::splat(-2.49839401325893582852E2);
+            let q3 = Vf64::<S>::splat(1.08938092147140262656E2);
+            let q4 = Vf64::<S>::splat(-1.95638849376911654834E1);
+            let q5 = one;
+
             let x2 = x * x;
             let x4 = x2 * x2;
             let x8 = x4 * x4;
@@ -351,12 +351,6 @@ where
         let b2 = Vu64::<S>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
         let m = Vu64::<S>::splat(0x7fffffff); // u32::MAX >> 1
 
-        let p0 = Vf64::<S>::splat(1.87595182427177009643); /* 0x3ffe03e6, 0x0f61e692 */
-        let p1 = Vf64::<S>::splat(-1.88497979543377169875); /* 0xbffe28e0, 0x92f02420 */
-        let p2 = Vf64::<S>::splat(1.621429720105354466140); /* 0x3ff9f160, 0x4a49d6c2 */
-        let p3 = Vf64::<S>::splat(-0.758397934778766047437); /* 0xbfe844cb, 0xbee751d9 */
-        let p4 = Vf64::<S>::splat(0.145996192886612446982); /* 0x3fc2b000, 0xd4e4edd7 */
-
         let x1p54 = x * Vf64::<S>::splat(f64::from_bits(0x4350000000000000)); // 0x1p54 === 2 ^ 54
 
         let hx0 = (x.into_bits() >> 32) & m;
@@ -379,7 +373,13 @@ where
         let r = (t * t) * (t / x);
         let r2 = r * r;
 
-        t *= poly_4(r, r2, r2 * r2, p0, p1, p2, p3, p4);
+        t *= r.poly(&[
+            1.87595182427177009643,   /* 0x3ffe03e6, 0x0f61e692 */
+            -1.88497979543377169875,  /* 0xbffe28e0, 0x92f02420 */
+            1.621429720105354466140,  /* 0x3ff9f160, 0x4a49d6c2 */
+            -0.758397934778766047437, /* 0xbfe844cb, 0xbee751d9 */
+            0.145996192886612446982,  /* 0x3fc2b000, 0xd4e4edd7 */
+        ]);
 
         ui = t.into_bits();
         ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
@@ -419,20 +419,6 @@ where
         let q3logl = Vf64::<S>::splat(2.2176239823732856465394E2);
         let q4logl = Vf64::<S>::splat(8.3047565967967209469434E1);
         let q5logl = Vf64::<S>::splat(1.5062909083469192043167E1);
-
-        // Taylor coefficients for exp function, 1/n!
-        let p2 = Vf64::<S>::splat(1.0 / 2.0);
-        let p3 = Vf64::<S>::splat(1.0 / 6.0);
-        let p4 = Vf64::<S>::splat(1.0 / 24.0);
-        let p5 = Vf64::<S>::splat(1.0 / 120.0);
-        let p6 = Vf64::<S>::splat(1.0 / 720.0);
-        let p7 = Vf64::<S>::splat(1.0 / 5040.0);
-        let p8 = Vf64::<S>::splat(1.0 / 40320.0);
-        let p9 = Vf64::<S>::splat(1.0 / 362880.0);
-        let p10 = Vf64::<S>::splat(1.0 / 3628800.0);
-        let p11 = Vf64::<S>::splat(1.0 / 39916800.0);
-        let p12 = Vf64::<S>::splat(1.0 / 479001600.0);
-        let p13 = Vf64::<S>::splat(1.0 / 6227020800.0);
 
         let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
@@ -490,14 +476,23 @@ where
         // high precision multiplication not needed here because abs(e3) <= 1
         x = e3.nmul_add(ln2, x); // x -= e3 * VM_LN2;
 
-        let x2 = x * x;
-        let x4 = x2 * x2;
-        let x8 = x4 * x4;
-
-        // poly_13m + 1
-        let mut z = poly_13(
-            x, x2, x4, x8, one, one, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13,
-        );
+        // poly_13m + 1, Taylor coefficients for exp function, 1/n!
+        let mut z = x.poly(&[
+            1.0, // + 1
+            1.0 / 1.0,
+            1.0 / 2.0,
+            1.0 / 6.0,
+            1.0 / 24.0,
+            1.0 / 120.0,
+            1.0 / 720.0,
+            1.0 / 5040.0,
+            1.0 / 40320.0,
+            1.0 / 362880.0,
+            1.0 / 3628800.0,
+            1.0 / 39916800.0,
+            1.0 / 479001600.0,
+            1.0 / 6227020800.0,
+        ]);
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
@@ -627,61 +622,45 @@ where
 
         let w = -a.nmul_add(a, one).ln();
 
-        let mut p0 = {
-            // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-            let c0 = Vf64::<S>::splat(1.501409350414994);
-            let c1 = Vf64::<S>::splat(0.2466402709383954);
-            let c2 = Vf64::<S>::splat(-0.0041773392840529855);
-            let c3 = Vf64::<S>::splat(-0.001252754693878528);
-            let c4 = Vf64::<S>::splat(0.00021818504236422313);
-            let c5 = Vf64::<S>::splat(-0.000005055953518603739);
-            let c6 = Vf64::<S>::splat(-0.000003451228003698613);
-            let c7 = Vf64::<S>::splat(4.691555466910589e-7);
-            let c8 = Vf64::<S>::splat(1.565009183876413e-8);
-            let c9 = Vf64::<S>::splat(-7.498144332533493e-9);
-            let c10 = Vf64::<S>::splat(2.378447620687541e-9);
-            let c11 = Vf64::<S>::splat(4.340759057762667e-10);
-            let c12 = Vf64::<S>::splat(-1.1526825105953649e-11);
-            let c13 = Vf64::<S>::splat(-3.605158594283844e-12);
-
-            let w1 = w - Vf64::<S>::splat(2.5);
-            let w2 = w1 * w1;
-            let w4 = w2 * w2;
-            let w8 = w4 * w4;
-
-            poly_13(
-                w1, w2, w4, w8, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
-            )
-        };
+        // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
+        let mut p0 = (w - Vf64::<S>::splat(2.5)).poly(&[
+            1.501409350414994,
+            0.2466402709383954,
+            -0.0041773392840529855,
+            -0.001252754693878528,
+            0.00021818504236422313,
+            -0.000005055953518603739,
+            -0.000003451228003698613,
+            4.691555466910589e-7,
+            1.565009183876413e-8,
+            -7.498144332533493e-9,
+            2.378447620687541e-9,
+            4.340759057762667e-10,
+            -1.1526825105953649e-11,
+            -3.605158594283844e-12,
+        ]);
 
         let w_big = w.ge(Vf64::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if unlikely!(w_big.any()) {
-            let c0 = Vf64::<S>::splat(2.914513093490991);
-            let c1 = Vf64::<S>::splat(1.5466942804733321);
-            let c2 = Vf64::<S>::splat(1.5950004257395263);
-            let c3 = Vf64::<S>::splat(2.559965578101086);
-            let c4 = Vf64::<S>::splat(2.3489887347568135);
-            let c5 = Vf64::<S>::splat(0.7600225853251197);
-            let c6 = Vf64::<S>::splat(-0.9258061028319879);
-            let c7 = Vf64::<S>::splat(-1.574375166164548);
-            let c8 = Vf64::<S>::splat(-1.2294848322739875);
-            let c9 = Vf64::<S>::splat(-0.6192716293714041);
-            let c10 = Vf64::<S>::splat(-0.21681459128064842);
-            let c11 = Vf64::<S>::splat(-0.05369968979686224);
-            let c12 = Vf64::<S>::splat(-0.009288117987439485);
-            let c13 = Vf64::<S>::splat(-0.0010722580888930223);
-            let c14 = Vf64::<S>::splat(-0.00007449590390143766);
-            let c15 = Vf64::<S>::splat(-0.0000023620166848468398);
-
-            let w1 = w.sqrt() - Vf64::<S>::splat(3.0);
-            let w2 = w1 * w1;
-            let w4 = w2 * w2;
-            let w8 = w4 * w4;
-
-            let mut p1 = poly_15(
-                w1, w2, w4, w8, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15,
-            );
+            let mut p1 = (w.sqrt() - Vf64::<S>::splat(3.0)).poly(&[
+                2.914513093490991,
+                1.5466942804733321,
+                1.5950004257395263,
+                2.559965578101086,
+                2.3489887347568135,
+                0.7600225853251197,
+                -0.9258061028319879,
+                -1.574375166164548,
+                -1.2294848322739875,
+                -0.6192716293714041,
+                -0.21681459128064842,
+                -0.05369968979686224,
+                -0.009288117987439485,
+                -0.0010722580888930223,
+                -0.00007449590390143766,
+                -0.0000023620166848468398,
+            ]);
 
             p1 = a.eq(one).select(Vf64::<S>::infinity(), p1); // erfinv(x == 1) = inf
             p1 = a.gt(one).select(Vf64::<S>::nan(), p1); // erfinv(x > 1) = NaN
@@ -886,26 +865,6 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
 
 #[inline(always)]
 fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
-    let r4asin = Vf64::<S>::splat(2.967721961301243206100E-3);
-    let r3asin = Vf64::<S>::splat(-5.634242780008963776856E-1);
-    let r2asin = Vf64::<S>::splat(6.968710824104713396794E0);
-    let r1asin = Vf64::<S>::splat(-2.556901049652824852289E1);
-    let r0asin = Vf64::<S>::splat(2.853665548261061424989E1);
-    let s3asin = Vf64::<S>::splat(-2.194779531642920639778E1);
-    let s2asin = Vf64::<S>::splat(1.470656354026814941758E2);
-    let s1asin = Vf64::<S>::splat(-3.838770957603691357202E2);
-    let s0asin = Vf64::<S>::splat(3.424398657913078477438E2);
-    let p5asin = Vf64::<S>::splat(4.253011369004428248960E-3);
-    let p4asin = Vf64::<S>::splat(-6.019598008014123785661E-1);
-    let p3asin = Vf64::<S>::splat(5.444622390564711410273E0);
-    let p2asin = Vf64::<S>::splat(-1.626247967210700244449E1);
-    let p1asin = Vf64::<S>::splat(1.956261983317594739197E1);
-    let p0asin = Vf64::<S>::splat(-8.198089802484824371615E0);
-    let q4asin = Vf64::<S>::splat(-1.474091372988853791896E1);
-    let q3asin = Vf64::<S>::splat(7.049610280856842141659E1);
-    let q2asin = Vf64::<S>::splat(-1.471791292232726029859E2);
-    let q1asin = Vf64::<S>::splat(1.395105614657485689735E2);
-    let q0asin = Vf64::<S>::splat(-4.918853881490881290097E1);
     let one = Vf64::<S>::one();
 
     let xa = x.abs();
@@ -930,12 +889,34 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
 
     // if not all are big (if any are small)
     if !bitmask.all() {
+        let p5asin = Vf64::<S>::splat(4.253011369004428248960E-3);
+        let p4asin = Vf64::<S>::splat(-6.019598008014123785661E-1);
+        let p3asin = Vf64::<S>::splat(5.444622390564711410273E0);
+        let p2asin = Vf64::<S>::splat(-1.626247967210700244449E1);
+        let p1asin = Vf64::<S>::splat(1.956261983317594739197E1);
+        let p0asin = Vf64::<S>::splat(-8.198089802484824371615E0);
+        let q4asin = Vf64::<S>::splat(-1.474091372988853791896E1);
+        let q3asin = Vf64::<S>::splat(7.049610280856842141659E1);
+        let q2asin = Vf64::<S>::splat(-1.471791292232726029859E2);
+        let q1asin = Vf64::<S>::splat(1.395105614657485689735E2);
+        let q0asin = Vf64::<S>::splat(-4.918853881490881290097E1);
+
         px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
         qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
     }
 
     // if any are big
     if bitmask.any() {
+        let r4asin = Vf64::<S>::splat(2.967721961301243206100E-3);
+        let r3asin = Vf64::<S>::splat(-5.634242780008963776856E-1);
+        let r2asin = Vf64::<S>::splat(6.968710824104713396794E0);
+        let r1asin = Vf64::<S>::splat(-2.556901049652824852289E1);
+        let r0asin = Vf64::<S>::splat(2.853665548261061424989E1);
+        let s3asin = Vf64::<S>::splat(-2.194779531642920639778E1);
+        let s2asin = Vf64::<S>::splat(1.470656354026814941758E2);
+        let s1asin = Vf64::<S>::splat(-3.838770957603691357202E2);
+        let s0asin = Vf64::<S>::splat(3.424398657913078477438E2);
+
         rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
         sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
         xb = (x1 + x1).sqrt();
@@ -974,23 +955,6 @@ fn pow2n_d<S: Simd>(n: Vf64<S>) -> Vf64<S> {
 fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
     let zero = Vf64::<S>::zero();
     let one = Vf64::<S>::one();
-
-    // Taylor coefficients, 1/n!
-    // Not using minimax approximation because we prioritize precision close to x = 0
-    let p0 = zero;
-    let p1 = one;
-    let p2 = Vf64::<S>::splat(1.0 / 2.0);
-    let p3 = Vf64::<S>::splat(1.0 / 6.0);
-    let p4 = Vf64::<S>::splat(1.0 / 24.0);
-    let p5 = Vf64::<S>::splat(1.0 / 120.0);
-    let p6 = Vf64::<S>::splat(1.0 / 720.0);
-    let p7 = Vf64::<S>::splat(1.0 / 5040.0);
-    let p8 = Vf64::<S>::splat(1.0 / 40320.0);
-    let p9 = Vf64::<S>::splat(1.0 / 362880.0);
-    let p10 = Vf64::<S>::splat(1.0 / 3628800.0);
-    let p11 = Vf64::<S>::splat(1.0 / 39916800.0);
-    let p12 = Vf64::<S>::splat(1.0 / 479001600.0);
-    let p13 = Vf64::<S>::splat(1.0 / 6227020800.0);
 
     let mut x = x0;
     let mut r;
@@ -1035,13 +999,24 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         }
     }
 
-    let x2 = x * x;
-    let x4 = x2 * x2;
-    let x8 = x4 * x4;
-
-    let mut z = poly_13(
-        x, x2, x4, x8, p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13,
-    );
+    // Taylor coefficients, 1/n!
+    // Not using minimax approximation because we prioritize precision close to x = 0
+    let mut z = x.poly(&[
+        0.0,
+        1.0 / 1.0,
+        1.0 / 2.0,
+        1.0 / 6.0,
+        1.0 / 24.0,
+        1.0 / 120.0,
+        1.0 / 720.0,
+        1.0 / 5040.0,
+        1.0 / 40320.0,
+        1.0 / 362880.0,
+        1.0 / 3628800.0,
+        1.0 / 39916800.0,
+        1.0 / 479001600.0,
+        1.0 / 6227020800.0,
+    ]);
 
     let n2 = pow2n_d::<S>(r);
 
