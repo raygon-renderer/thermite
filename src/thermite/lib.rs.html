@@ -1467,12 +1467,12 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_finite</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="op">!</span>(<span class="self">self</span>.<span class="ident">is_nan</span>() <span class="op">|</span> <span class="self">self</span>.<span class="ident">is_infinite</span>())
+        <span class="self">self</span>.<span class="ident">abs</span>().<span class="ident">lt</span>(<span class="self">Self</span>::<span class="ident">infinity</span>())
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">is_infinite</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">infinity</span>()) <span class="op">|</span> <span class="self">self</span>.<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">neg_infinity</span>())
+        <span class="self">self</span>.<span class="ident">abs</span>().<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">infinity</span>())
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

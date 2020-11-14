@@ -555,17 +555,6 @@
 <span id="554">554</span>
 <span id="555">555</span>
 <span id="556">556</span>
-<span id="557">557</span>
-<span id="558">558</span>
-<span id="559">559</span>
-<span id="560">560</span>
-<span id="561">561</span>
-<span id="562">562</span>
-<span id="563">563</span>
-<span id="564">564</span>
-<span id="565">565</span>
-<span id="566">566</span>
-<span id="567">567</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1035,17 +1024,6 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">recepr</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_rcp_ps</span>(<span class="self">self</span>.<span class="ident">value</span>) })
-    }
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">is_infinite</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        (<span class="self">self</span> <span class="op">&lt;&lt;</span> <span class="number">1</span>).<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0xFF000000</span>)))
-    }
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">is_finite</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">tmp</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">f32</span>::<span class="ident">from_bits</span>(<span class="number">0xFF000000</span>));
-        ((<span class="self">self</span> <span class="op">&lt;&lt;</span> <span class="number">1</span>) <span class="op">&amp;</span> <span class="ident">tmp</span>).<span class="ident">ne</span>(<span class="ident">tmp</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
