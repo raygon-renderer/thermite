@@ -31,7 +31,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             },
             vec![(
                 0.5,
-                (0..10000)
+                (0..10004)
                     .into_iter()
                     .map(|x| (x as f32).sqrt().sin())
                     .collect::<Vec<f32>>(),
