@@ -499,6 +499,9 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// For some vectors, this can provide a significant
     /// speedup when the divisor is const, as LLVM and Thermite can
     /// generate a fixed sequence of instructions to optimally perform the division.
+    ///
+    /// **WARNING**: If the input divisor is not constant, or you do not have optimization levels set correctly,
+    /// this will be quite slow.
     #[inline(always)]
     fn div_const(self, divisor: Self::Element) -> Self {
         // terrible default implementation

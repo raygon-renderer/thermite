@@ -27,6 +27,20 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// NOTE: This is not higher-performance than the naive version, only slightly more precise.
     fn hypot(self, y: Self) -> Self;
 
+    /// Computes the sum `Σ(coefficients[i] * x^i)` from `i=0` to `coefficients.len()`
+    ///
+    /// **NOTE**: This has the potential to inline and unroll the inner loop for constant input
+    fn poly(self, coefficients: &[Self::Element]) -> Self;
+
+    /// Computes the sum `Σ(f(i)*x^i)` from `i=0` to `n`
+    ///
+    /// **NOTE**: This has the potential to inline and unroll the inner loop for constant input. For
+    /// best results with dynamic input, try to precompute the input function, as it will allow for better
+    /// cache utilization and lessen register pressure.
+    fn poly_f<F>(self, n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self;
+
     /// Computes the sine of a vector.
     fn sin(self) -> Self;
     /// Computes the cosine of a vector.
@@ -324,6 +338,75 @@ where
         let ret = max * t.mul_add(t, Self::one()).sqrt();
 
         min.eq(Self::zero()).select(max, ret)
+    }
+
+    #[inline(always)]
+    fn poly_f<F>(self, n: usize, mut c: F) -> Self
+    where
+        F: FnMut(usize) -> Self
+    {
+        use common::*;
+
+        macro_rules! poly {
+            ($name:ident($($pows:ident),*; $j:ident + $c:ident[$($coeff:expr),*])) => {{
+                $name($($pows,)* $($c($j + $coeff)),*)
+            }};
+        }
+
+        // max degree of hard-coded polynomials + 1 for c0
+        const MAX_DEGREE_P0: usize = 14;
+
+        // fast path for very small input that doesn't require any real computation
+        match n {
+            0 => return Self::zero(),
+            1 => return c(0),
+            2 => return poly_1(self, c(0), c(1)),
+            _ => {}
+        }
+
+        let factor = self.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
+
+        let mut sum = Self::zero();
+        let mut mul = Self::one();
+
+        let mut j = 0;
+
+        let x = self;
+        let x2 = x * x;
+        let x4 = x2 * x2;
+        let x8 = x4 * x4;
+
+        while j < n {
+            let y = match (n - j) {
+                0  => Self::zero(),
+                1  => c(j),
+                2  => poly!(poly_1 (x;              j + c[0, 1])),
+                3  => poly!(poly_2 (x, x2;          j + c[0, 1, 2])),
+                4  => poly!(poly_3 (x, x2;          j + c[0, 1, 2, 3])),
+                5  => poly!(poly_4 (x, x2, x4;      j + c[0, 1, 2, 3, 4])),
+                6  => poly!(poly_5 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5])),
+                7  => poly!(poly_6 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6])),
+                8  => poly!(poly_7 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6, 7])),
+                9  => poly!(poly_8 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8])),
+                10 => poly!(poly_9 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])),
+                11 => poly!(poly_10(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
+                12 => poly!(poly_11(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+                13 => poly!(poly_12(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
+                _  => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
+            };
+
+            sum = mul.mul_add(y, sum);
+
+            mul *= factor;
+            j += MAX_DEGREE_P0;
+        }
+
+        sum
+    }
+
+    #[inline(always)]
+    fn poly(self, c: &[Self::Element]) -> Self {
+        self.poly_f(c.len(), |i| unsafe { Self::splat(*c.get_unchecked(i)) } )
     }
 
     #[inline]
