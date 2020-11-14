@@ -347,21 +347,43 @@ where
     {
         use common::*;
 
-        macro_rules! poly {
-            ($name:ident($($pows:ident),*; $j:ident + $c:ident[$($coeff:expr),*])) => {{
-                $name($($pows,)* $($c($j + $coeff)),*)
-            }};
-        }
-
         // max degree of hard-coded polynomials + 1 for c0
         const MAX_DEGREE_P0: usize = 16;
 
-        // fast path for very small input that doesn't require any real computation
-        match n {
-            0 => return Self::zero(),
-            1 => return c(0),
-            2 => return poly_1(self, c(0), c(1)),
-            _ => {}
+        let x = self;
+
+        // fast path for small input
+        if n <= MAX_DEGREE_P0 {
+            return if n < 5 {
+                match n {
+                    0 => Self::zero(),
+                    1 => c(0),
+                    2 => poly_1(x, c(0), c(1)),
+                    3 => poly_2(x, x * x, c(0), c(1), c(2)),
+                    4 => poly_3(x, x * x, c(0), c(1), c(2), c(3)),
+                    _ => unsafe { std::hint::unreachable_unchecked() }
+                }
+            } else {
+                let x2 = x * x;
+                let x4 = x2 * x2;
+                let x8 = x4 * x4;
+
+                match n {
+                    5 =>  poly_4 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4)),
+                    6 =>  poly_5 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5)),
+                    7 =>  poly_6 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5), c(6)),
+                    8 =>  poly_7 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7)),
+                    9 =>  poly_8 (x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8)),
+                    10 => poly_9 (x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9)),
+                    11 => poly_10(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10)),
+                    12 => poly_11(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11)),
+                    13 => poly_12(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12)),
+                    14 => poly_13(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13)),
+                    15 => poly_14(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14)),
+                    16 => poly_15(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14), c(15)),
+                    _ => unsafe { std::hint::unreachable_unchecked() }
+                }
+            };
         }
 
         let factor = self.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
@@ -371,12 +393,17 @@ where
 
         let mut j = 0;
 
-        let x = self;
         let x2 = x * x;
         let x4 = x2 * x2;
         let x8 = x4 * x4;
 
         while j < n {
+            macro_rules! poly {
+                ($name:ident($($pows:ident),*; $j:ident + $c:ident[$($coeff:expr),*])) => {{
+                    $name($($pows,)* $($c($j + $coeff)),*)
+                }};
+            }
+
             let y = match (n - j) {
                 0  => Self::zero(),
                 1  => c(j),
