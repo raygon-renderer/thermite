@@ -677,12 +677,12 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
 
     #[inline(always)]
     fn is_finite(self) -> Mask<S, Self> {
-        !(self.is_nan() | self.is_infinite())
+        self.abs().lt(Self::infinity())
     }
 
     #[inline(always)]
     fn is_infinite(self) -> Mask<S, Self> {
-        self.eq(Self::infinity()) | self.eq(Self::neg_infinity())
+        self.abs().eq(Self::infinity())
     }
 
     #[inline(always)]

@@ -563,17 +563,6 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn is_infinite(self) -> Mask<AVX2, Self> {
-        (self << 1).eq(Self::splat(f64::from_bits(0xFFE0000000000000)))
-    }
-
-    #[inline(always)]
-    fn is_finite(self) -> Mask<AVX2, Self> {
-        let tmp = Self::splat(f64::from_bits(0xFFE0000000000000));
-        ((self << 1) & tmp).ne(tmp)
-    }
-
-    #[inline(always)]
     fn is_subnormal(self) -> Mask<AVX2, Self> {
         let m: Self = Self::splat(f64::from_bits(0xFFE0000000000000));
         let u: Self = self << 1;
