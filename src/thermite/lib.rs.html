@@ -784,6 +784,9 @@
 <span id="783">783</span>
 <span id="784">784</span>
 <span id="785">785</span>
+<span id="786">786</span>
+<span id="787">787</span>
+<span id="788">788</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1286,6 +1289,9 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// For some vectors, this can provide a significant</span>
     <span class="doccomment">/// speedup when the divisor is const, as LLVM and Thermite can</span>
     <span class="doccomment">/// generate a fixed sequence of instructions to optimally perform the division.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **WARNING**: If the input divisor is not constant, or you do not have optimization levels set correctly,</span>
+    <span class="doccomment">/// this will be quite slow.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">div_const</span>(<span class="self">self</span>, <span class="ident">divisor</span>: <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="comment">// terrible default implementation</span>
