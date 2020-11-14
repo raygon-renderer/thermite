@@ -760,14 +760,11 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         z = z.mul_add(n2, n2); // (z + 1.0f) * n2
     }
 
-    let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite().cast_to();
+    let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite();
 
     if likely!(in_range.all()) {
         return z;
     }
-
-    let sign_bit_mask = (x0 & Vf32::<S>::neg_zero()).into_bits().ne(Vu32::<S>::zero());
-    let is_nan = x0.is_nan();
 
     let underflow_value = if mode == ExpMode::Expm1 {
         Vf32::<S>::neg_one()
@@ -775,9 +772,9 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         Vf32::<S>::zero()
     };
 
-    r = sign_bit_mask.select(underflow_value, Vf32::<S>::infinity());
+    r = x0.is_negative().select(underflow_value, Vf32::<S>::infinity());
     z = in_range.select(z, r);
-    z = is_nan.select(x0, z);
+    z = x0.is_nan().select(x0, z);
 
     z
 }

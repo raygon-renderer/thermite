@@ -1026,14 +1026,11 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         z = z.mul_add(n2, n2); // (z + 1.0f) * n2
     }
 
-    let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite().cast_to();
+    let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite();
 
     if likely!(in_range.all()) {
         return z;
     }
-
-    let sign_bit_mask = (x0 & Vf64::<S>::neg_zero()).into_bits().ne(Vu64::<S>::zero());
-    let is_nan = x0.is_nan();
 
     let underflow_value = if mode == ExpMode::Expm1 {
         Vf64::<S>::neg_one()
@@ -1041,9 +1038,9 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         Vf64::<S>::zero()
     };
 
-    r = sign_bit_mask.select(underflow_value, Vf64::<S>::infinity());
+    r = x0.is_negative().select(underflow_value, Vf64::<S>::infinity());
     z = in_range.select(z, r);
-    z = is_nan.select(x0, z);
+    z = x0.is_nan().select(x0, z);
 
     z
 }
