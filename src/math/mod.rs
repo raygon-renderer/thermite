@@ -392,47 +392,44 @@ where
             }};
         }
 
-        let factor = self.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
+        let xmd = self.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
 
         let mut sum = Self::zero();
         let mut mul = Self::one();
-
-        let mut j = 0;
 
         let x2 = x * x;
         let x4 = x2 * x2;
         let x8 = x4 * x4;
 
-        // very tight loop for majority
-        let limit = n - MAX_DEGREE_P0 + 1;
-        while j < limit {
-            sum = mul.mul_add(poly!(poly_15(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])), sum);
-            mul *= factor;
-            j += MAX_DEGREE_P0;
+        // Use a hybrid Estrin/Horner algorithm
+        let mut j = n;
+        while j >= MAX_DEGREE_P0 {
+            j -= MAX_DEGREE_P0;
+            sum = sum.mul_add(xmd, poly!(poly_15(x, x2, x4, x8; j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])));
         }
 
         // handle remaining powers
-        let y = match (n - j) {
+        let (rmx, res) = match j {
             0  => return sum,
-            1  => c(j),
-            2  => poly!(poly_1 (x;              j + c[0, 1])),
-            3  => poly!(poly_2 (x, x2;          j + c[0, 1, 2])),
-            4  => poly!(poly_3 (x, x2;          j + c[0, 1, 2, 3])),
-            5  => poly!(poly_4 (x, x2, x4;      j + c[0, 1, 2, 3, 4])),
-            6  => poly!(poly_5 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5])),
-            7  => poly!(poly_6 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6])),
-            8  => poly!(poly_7 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6, 7])),
-            9  => poly!(poly_8 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8])),
-            10 => poly!(poly_9 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])),
-            11 => poly!(poly_10(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
-            12 => poly!(poly_11(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
-            13 => poly!(poly_12(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
-            14 => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
-            15 => poly!(poly_14(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])),
-            _ => unsafe { std::hint::unreachable_unchecked() }
+            1  => (x,                                  c(0)),
+            2  => (x2,          poly_1 (x,             c(0), c(1))),
+            3  => (x2*x,        poly_2 (x, x2,         c(0), c(1), c(2))),
+            4  => (x4,          poly_3 (x, x2,         c(0), c(1), c(2), c(3))),
+            5  => (x4*x,        poly_4 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4))),
+            6  => (x4*x2,       poly_5 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5))),
+            7  => (x4*x2*x,     poly_6 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5), c(6))),
+            8  => (x8,          poly_7 (x, x2, x4,     c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7))),
+            9  => (x8*x,        poly_8 (x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8))),
+            10 => (x8*x2,       poly_9 (x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9))),
+            11 => (x8*x2*x,     poly_10(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10))),
+            12 => (x8*x4,       poly_11(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11))),
+            13 => (x8*x4*x,     poly_12(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12))),
+            14 => (x8*x4*x2,    poly_13(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13))),
+            15 => (x8*x4*x2*x,  poly_14(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14))),
+            _  => unsafe { std::hint::unreachable_unchecked() }
         };
 
-        mul.mul_add(y, sum)
+        sum.mul_add(rmx, res)
     }
 
     #[inline(always)]
