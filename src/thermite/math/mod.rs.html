@@ -790,6 +790,33 @@
 <span id="789">789</span>
 <span id="790">790</span>
 <span id="791">791</span>
+<span id="792">792</span>
+<span id="793">793</span>
+<span id="794">794</span>
+<span id="795">795</span>
+<span id="796">796</span>
+<span id="797">797</span>
+<span id="798">798</span>
+<span id="799">799</span>
+<span id="800">800</span>
+<span id="801">801</span>
+<span id="802">802</span>
+<span id="803">803</span>
+<span id="804">804</span>
+<span id="805">805</span>
+<span id="806">806</span>
+<span id="807">807</span>
+<span id="808">808</span>
+<span id="809">809</span>
+<span id="810">810</span>
+<span id="811">811</span>
+<span id="812">812</span>
+<span id="813">813</span>
+<span id="814">814</span>
+<span id="815">815</span>
+<span id="816">816</span>
+<span id="817">817</span>
+<span id="818">818</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -1140,21 +1167,43 @@
     {
         <span class="kw">use</span> <span class="ident">common</span>::<span class="kw-2">*</span>;
 
-        <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">poly</span> {
-            (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span>($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">pows</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>; <span class="macro-nonterminal">$</span><span class="macro-nonterminal">j</span>:<span class="ident">ident</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">c</span>:<span class="ident">ident</span>[$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">coeff</span>:<span class="ident">expr</span>),<span class="kw-2">*</span>])) <span class="op">=&gt;</span> {{
-                <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">pows</span>,)<span class="op">*</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">c</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">j</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">coeff</span>)),<span class="kw-2">*</span>)
-            }};
-        }
-
         <span class="comment">// max degree of hard-coded polynomials + 1 for c0</span>
         <span class="kw">const</span> <span class="ident">MAX_DEGREE_P0</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">16</span>;
 
-        <span class="comment">// fast path for very small input that doesn&#39;t require any real computation</span>
-        <span class="kw">match</span> <span class="ident">n</span> {
-            <span class="number">0</span> <span class="op">=&gt;</span> <span class="kw">return</span> <span class="self">Self</span>::<span class="ident">zero</span>(),
-            <span class="number">1</span> <span class="op">=&gt;</span> <span class="kw">return</span> <span class="ident">c</span>(<span class="number">0</span>),
-            <span class="number">2</span> <span class="op">=&gt;</span> <span class="kw">return</span> <span class="ident">poly_1</span>(<span class="self">self</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>)),
-            <span class="kw">_</span> <span class="op">=&gt;</span> {}
+        <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="self">self</span>;
+
+        <span class="comment">// fast path for small input</span>
+        <span class="kw">if</span> <span class="ident">n</span> <span class="op">&lt;=</span> <span class="ident">MAX_DEGREE_P0</span> {
+            <span class="kw">return</span> <span class="kw">if</span> <span class="ident">n</span> <span class="op">&lt;</span> <span class="number">5</span> {
+                <span class="kw">match</span> <span class="ident">n</span> {
+                    <span class="number">0</span> <span class="op">=&gt;</span> <span class="self">Self</span>::<span class="ident">zero</span>(),
+                    <span class="number">1</span> <span class="op">=&gt;</span> <span class="ident">c</span>(<span class="number">0</span>),
+                    <span class="number">2</span> <span class="op">=&gt;</span> <span class="ident">poly_1</span>(<span class="ident">x</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>)),
+                    <span class="number">3</span> <span class="op">=&gt;</span> <span class="ident">poly_2</span>(<span class="ident">x</span>, <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>)),
+                    <span class="number">4</span> <span class="op">=&gt;</span> <span class="ident">poly_3</span>(<span class="ident">x</span>, <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>)),
+                    <span class="kw">_</span> <span class="op">=&gt;</span> <span class="kw">unsafe</span> { <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>() }
+                }
+            } <span class="kw">else</span> {
+                <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+                <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
+                <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
+
+                <span class="kw">match</span> <span class="ident">n</span> {
+                    <span class="number">5</span> <span class="op">=&gt;</span>  <span class="ident">poly_4</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>,     <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>)),
+                    <span class="number">6</span> <span class="op">=&gt;</span>  <span class="ident">poly_5</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>,     <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>)),
+                    <span class="number">7</span> <span class="op">=&gt;</span>  <span class="ident">poly_6</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>,     <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>)),
+                    <span class="number">8</span> <span class="op">=&gt;</span>  <span class="ident">poly_7</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>,     <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>)),
+                    <span class="number">9</span> <span class="op">=&gt;</span>  <span class="ident">poly_8</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>)),
+                    <span class="number">10</span> <span class="op">=&gt;</span> <span class="ident">poly_9</span> (<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>)),
+                    <span class="number">11</span> <span class="op">=&gt;</span> <span class="ident">poly_10</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>)),
+                    <span class="number">12</span> <span class="op">=&gt;</span> <span class="ident">poly_11</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>), <span class="ident">c</span>(<span class="number">11</span>)),
+                    <span class="number">13</span> <span class="op">=&gt;</span> <span class="ident">poly_12</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>), <span class="ident">c</span>(<span class="number">11</span>), <span class="ident">c</span>(<span class="number">12</span>)),
+                    <span class="number">14</span> <span class="op">=&gt;</span> <span class="ident">poly_13</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>), <span class="ident">c</span>(<span class="number">11</span>), <span class="ident">c</span>(<span class="number">12</span>), <span class="ident">c</span>(<span class="number">13</span>)),
+                    <span class="number">15</span> <span class="op">=&gt;</span> <span class="ident">poly_14</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>), <span class="ident">c</span>(<span class="number">11</span>), <span class="ident">c</span>(<span class="number">12</span>), <span class="ident">c</span>(<span class="number">13</span>), <span class="ident">c</span>(<span class="number">14</span>)),
+                    <span class="number">16</span> <span class="op">=&gt;</span> <span class="ident">poly_15</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">c</span>(<span class="number">0</span>), <span class="ident">c</span>(<span class="number">1</span>), <span class="ident">c</span>(<span class="number">2</span>), <span class="ident">c</span>(<span class="number">3</span>), <span class="ident">c</span>(<span class="number">4</span>), <span class="ident">c</span>(<span class="number">5</span>), <span class="ident">c</span>(<span class="number">6</span>), <span class="ident">c</span>(<span class="number">7</span>), <span class="ident">c</span>(<span class="number">8</span>), <span class="ident">c</span>(<span class="number">9</span>), <span class="ident">c</span>(<span class="number">10</span>), <span class="ident">c</span>(<span class="number">11</span>), <span class="ident">c</span>(<span class="number">12</span>), <span class="ident">c</span>(<span class="number">13</span>), <span class="ident">c</span>(<span class="number">14</span>), <span class="ident">c</span>(<span class="number">15</span>)),
+                    <span class="kw">_</span> <span class="op">=&gt;</span> <span class="kw">unsafe</span> { <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>() }
+                }
+            };
         }
 
         <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">powi</span>(<span class="ident">MAX_DEGREE_P0</span> <span class="kw">as</span> <span class="ident">i32</span>); <span class="comment">// hopefully inlined</span>
@@ -1164,12 +1213,17 @@
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">j</span> <span class="op">=</span> <span class="number">0</span>;
 
-        <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="self">self</span>;
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
         <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
         <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
 
         <span class="kw">while</span> <span class="ident">j</span> <span class="op">&lt;</span> <span class="ident">n</span> {
+            <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">poly</span> {
+                (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span>($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">pows</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>; <span class="macro-nonterminal">$</span><span class="macro-nonterminal">j</span>:<span class="ident">ident</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">c</span>:<span class="ident">ident</span>[$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">coeff</span>:<span class="ident">expr</span>),<span class="kw-2">*</span>])) <span class="op">=&gt;</span> {{
+                    <span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">pows</span>,)<span class="op">*</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">c</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">j</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">coeff</span>)),<span class="kw-2">*</span>)
+                }};
+            }
+
             <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="kw">match</span> (<span class="ident">n</span> <span class="op">-</span> <span class="ident">j</span>) {
                 <span class="number">0</span>  <span class="op">=&gt;</span> <span class="self">Self</span>::<span class="ident">zero</span>(),
                 <span class="number">1</span>  <span class="op">=&gt;</span> <span class="ident">c</span>(<span class="ident">j</span>),
