@@ -19,7 +19,15 @@ fn criterion_benchmark(c: &mut Criterion) {
             |b, (x, poly)| {
                 let x = Vf32::splat(*x);
 
-                b.iter(|| x.poly(poly));
+                b.iter(move || {
+                    #[inline]
+                    #[target_feature(enable = "avx2,fma")]
+                    unsafe fn do_algorithm(x: Vf32, poly: &[f32]) -> Vf32 {
+                        x.poly(poly)
+                    }
+
+                    unsafe { do_algorithm(x, poly) }
+                });
             },
             vec![(
                 0.5,
@@ -33,11 +41,17 @@ fn criterion_benchmark(c: &mut Criterion) {
             let x = Vf32::splat(*x);
 
             b.iter(move || {
-                let mut res = Vf32::one();
-                for coeff in poly.iter().rev() {
-                    res = res.mul_add(x, Vf32::splat(*coeff));
+                #[inline]
+                #[target_feature(enable = "avx2,fma")]
+                unsafe fn do_algorithm(x: Vf32, poly: &[f32]) -> Vf32 {
+                    let mut res = Vf32::one();
+                    for coeff in poly.iter().rev() {
+                        res = res.mul_add(x, Vf32::splat(*coeff));
+                    }
+                    res
                 }
-                res
+
+                unsafe { do_algorithm(x, poly) }
             })
         }),
     );
