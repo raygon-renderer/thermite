@@ -354,7 +354,7 @@ where
         }
 
         // max degree of hard-coded polynomials + 1 for c0
-        const MAX_DEGREE_P0: usize = 14;
+        const MAX_DEGREE_P0: usize = 16;
 
         // fast path for very small input that doesn't require any real computation
         match n {
@@ -392,7 +392,9 @@ where
                 11 => poly!(poly_10(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
                 12 => poly!(poly_11(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
                 13 => poly!(poly_12(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
-                _  => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
+                14 => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
+                15 => poly!(poly_14(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])),
+                _  => poly!(poly_15(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])),
             };
 
             sum = mul.mul_add(y, sum);

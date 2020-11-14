@@ -140,6 +140,25 @@ pub fn poly_13<S: Simd, V: SimdFloatVector<S>>(
 
 #[rustfmt::skip]
 #[inline(always)]
+pub fn poly_14<S: Simd, V: SimdFloatVector<S>>(
+    x: V, x2: V, x4: V, x8: V,
+    c0: V, c1: V, c2: V, c3: V, c4: V, c5: V, c6: V, c7: V, c8: V, c9: V, c10: V, c11: V, c12: V, c13: V, c14: V
+) -> V {
+    // (((C0+C1x) + (C2+C3x)x2) + ((C4+C5x) + (C6+C7x)x2)x4) + (((C8+C9x) + (C10+C11x)x2) + ((C12+C13x) + C14*x2)x4)x8
+    x8.mul_add(
+        x4.mul_add(
+            x2.mul_add(c14, x.mul_add(c13, c12)),
+            x2.mul_add(x.mul_add(c11, c10), x.mul_add(c9, c8)),
+        ),
+        x4.mul_add(
+            x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4)),
+            x2.mul_add(x.mul_add(c3, c2), x.mul_add(c1, c0)),
+        ),
+    )
+}
+
+#[rustfmt::skip]
+#[inline(always)]
 pub fn poly_15<S: Simd, V: SimdFloatVector<S>>(
     x: V, x2: V, x4: V, x8: V,
     c0: V, c1: V, c2: V, c3: V, c4: V, c5: V, c6: V, c7: V, c8: V, c9: V, c10: V, c11: V, c12: V, c13: V, c14: V, c15: V
