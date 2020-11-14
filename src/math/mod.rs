@@ -386,6 +386,12 @@ where
             };
         }
 
+        macro_rules! poly {
+            ($name:ident($($pows:ident),*; $j:ident + $c:ident[$($coeff:expr),*])) => {{
+                $name($($pows,)* $($c($j + $coeff)),*)
+            }};
+        }
+
         let factor = self.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
 
         let mut sum = Self::zero();
@@ -397,40 +403,36 @@ where
         let x4 = x2 * x2;
         let x8 = x4 * x4;
 
-        while j < n {
-            macro_rules! poly {
-                ($name:ident($($pows:ident),*; $j:ident + $c:ident[$($coeff:expr),*])) => {{
-                    $name($($pows,)* $($c($j + $coeff)),*)
-                }};
-            }
-
-            let y = match (n - j) {
-                0  => Self::zero(),
-                1  => c(j),
-                2  => poly!(poly_1 (x;              j + c[0, 1])),
-                3  => poly!(poly_2 (x, x2;          j + c[0, 1, 2])),
-                4  => poly!(poly_3 (x, x2;          j + c[0, 1, 2, 3])),
-                5  => poly!(poly_4 (x, x2, x4;      j + c[0, 1, 2, 3, 4])),
-                6  => poly!(poly_5 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5])),
-                7  => poly!(poly_6 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6])),
-                8  => poly!(poly_7 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6, 7])),
-                9  => poly!(poly_8 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8])),
-                10 => poly!(poly_9 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])),
-                11 => poly!(poly_10(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
-                12 => poly!(poly_11(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
-                13 => poly!(poly_12(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
-                14 => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
-                15 => poly!(poly_14(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])),
-                _  => poly!(poly_15(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])),
-            };
-
-            sum = mul.mul_add(y, sum);
-
+        // very tight loop for majority
+        let limit = n - MAX_DEGREE_P0 + 1;
+        while j < limit {
+            sum = mul.mul_add(poly!(poly_15(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])), sum);
             mul *= factor;
             j += MAX_DEGREE_P0;
         }
 
-        sum
+        // handle remaining powers
+        let y = match (n - j) {
+            0  => return sum,
+            1  => c(j),
+            2  => poly!(poly_1 (x;              j + c[0, 1])),
+            3  => poly!(poly_2 (x, x2;          j + c[0, 1, 2])),
+            4  => poly!(poly_3 (x, x2;          j + c[0, 1, 2, 3])),
+            5  => poly!(poly_4 (x, x2, x4;      j + c[0, 1, 2, 3, 4])),
+            6  => poly!(poly_5 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5])),
+            7  => poly!(poly_6 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6])),
+            8  => poly!(poly_7 (x, x2, x4;      j + c[0, 1, 2, 3, 4, 5, 6, 7])),
+            9  => poly!(poly_8 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8])),
+            10 => poly!(poly_9 (x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])),
+            11 => poly!(poly_10(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
+            12 => poly!(poly_11(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            13 => poly!(poly_12(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
+            14 => poly!(poly_13(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])),
+            15 => poly!(poly_14(x, x2, x4, x8;  j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])),
+            _ => unsafe { std::hint::unreachable_unchecked() }
+        };
+
+        mul.mul_add(y, sum)
     }
 
     #[inline(always)]
