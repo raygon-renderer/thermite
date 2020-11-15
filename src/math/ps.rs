@@ -718,13 +718,6 @@ where
                 }
             }
 
-            let mut v = z.extract(0);
-            let mut r = 1.0;
-            while v < 0.0 {
-                r /= v;
-                v += 1.0;
-            }
-
             let mut mod_z = z;
             let mut is_neg = mod_z.is_negative();
 
