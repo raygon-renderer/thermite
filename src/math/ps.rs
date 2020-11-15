@@ -696,12 +696,12 @@ where
         let quarter = Vf32::<S>::splat(0.25);
         let pi = Vf32::<S>::splat(PI);
 
-        let le0 = z.le(zero);
+        let is_neg = z.le(zero);
         let mut reflected = Mask::falsey();
 
         let mut res = one;
 
-        'goto_positive: while le0.any() {
+        'goto_positive: while is_neg.any() {
             reflected = z.le(Vf32::<S>::splat(-20.0));
 
             let refl_bitmask = reflected.bitmask();
@@ -719,7 +719,7 @@ where
             }
 
             let mut mod_z = z;
-            let mut is_neg = mod_z.is_negative();
+            let mut is_neg = is_neg;
 
             // recursively apply Γ(z+1)/z
             while is_neg.any() {
@@ -734,7 +734,31 @@ where
             break 'goto_positive;
         }
 
+        // label
         //positive:
+
+        // Integers
+
+        let zf = z.floor();
+        let z_int = zf.eq(z);
+        let mut fact_res = one;
+
+        if unlikely!(z_int.any()) {
+            let mut j = one;
+            let mut k = j.lt(zf);
+
+            while k.any() {
+                fact_res = k.select(fact_res * j, fact_res);
+                j += one;
+                k = j.lt(zf);
+            }
+
+            if z_int.all() {
+                return fact_res;
+            }
+        }
+
+        // Tiny
 
         let cbrt_epsilon = Vf32::<S>::splat(0.0049215666011518482998719164346805794944150447839903);
         let euler = Vf32::<S>::splat(5.772156649015328606065120900824024310e-01);
@@ -777,7 +801,7 @@ where
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
 
-        res *= tiny.select(tiny_res, normal_res);
+        res = z_int.select(fact_res, res * tiny.select(tiny_res, normal_res));
 
         reflected.select(-pi / res, res)
     }
