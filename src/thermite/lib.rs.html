@@ -862,6 +862,18 @@
 <span id="861">861</span>
 <span id="862">862</span>
 <span id="863">863</span>
+<span id="864">864</span>
+<span id="865">865</span>
+<span id="866">866</span>
+<span id="867">867</span>
+<span id="868">868</span>
+<span id="869">869</span>
+<span id="870">870</span>
+<span id="871">871</span>
+<span id="872">872</span>
+<span id="873">873</span>
+<span id="874">874</span>
+<span id="875">875</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1668,10 +1680,22 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 {
 }
 
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
+<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SimdInstructionSet</span> {
+    <span class="ident">SSE2</span>,
+    <span class="ident">SSE41</span>,
+    <span class="ident">AVX</span>,
+    <span class="ident">AVX2</span>,
+    <span class="ident">AVX512F</span>,
+    <span class="ident">AVX512FBW</span>,
+}
+
 <span class="doccomment">/// SIMD Instruction set, contains all types</span>
 <span class="doccomment">///</span>
 <span class="doccomment">///</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> {
+    <span class="kw">const</span> <span class="ident">INSTRSET</span>: <span class="ident">SimdInstructionSet</span>;
+
     <span class="comment">//type Vi8: SimdIntVector&lt;Self, Element = i8&gt; + SimdSignedVector&lt;Self, i8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vi16: SimdIntVector&lt;Self, Element = i16&gt; + SimdSignedVector&lt;Self, i16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
     <span class="doccomment">/// 32-bit signed integer vector</span>

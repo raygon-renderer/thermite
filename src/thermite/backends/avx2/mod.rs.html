@@ -72,6 +72,8 @@
 <span id="71">71</span>
 <span id="72">72</span>
 <span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -127,6 +129,8 @@
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">AVX2</span>;
 
 <span class="kw">impl</span> <span class="ident">Simd</span> <span class="kw">for</span> <span class="ident">AVX2</span> {
+    <span class="kw">const</span> <span class="ident">INSTRSET</span>: <span class="ident">SimdInstructionSet</span> <span class="op">=</span> <span class="ident">SimdInstructionSet</span>::<span class="ident">AVX2</span>;
+
     <span class="kw">type</span> <span class="ident">Vi32</span> <span class="op">=</span> <span class="ident">Vi32</span>;
     <span class="kw">type</span> <span class="ident">Vi64</span> <span class="op">=</span> <span class="ident">Vi64</span>;
     <span class="kw">type</span> <span class="ident">Vu32</span> <span class="op">=</span> <span class="ident">Vu32</span>;
