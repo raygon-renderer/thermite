@@ -115,6 +115,8 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes the inverse error function for each value in a vector
     fn erfinv(self) -> Self;
 
+    fn tgamma(self) -> Self;
+
     /// Finds the next representable float moving upwards to positive infinity
     fn next_float(self) -> Self;
 
@@ -596,6 +598,8 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     fn next_float(x: Self::Vf) -> Self::Vf;
     fn prev_float(x: Self::Vf) -> Self::Vf;
+
+    fn tgamma(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
     fn smoothstep(x: Self::Vf) -> Self::Vf {

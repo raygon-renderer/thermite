@@ -687,6 +687,91 @@ where
             Vf32::<S>::from_bits(v.gt(Vf32::<S>::zero()).select(bits - i1, bits + i1)),
         )
     }
+
+    #[inline(always)]
+    fn tgamma(mut z: Self::Vf) -> Self::Vf {
+        let zero = Vf32::<S>::zero();
+        let one = Vf32::<S>::one();
+        let half = Vf32::<S>::splat(0.5);
+        let quarter = Vf32::<S>::splat(0.25);
+        let pi = Vf32::<S>::splat(PI);
+
+        let le0 = z.le(zero);
+
+        let mut res = one;
+
+        'goto_positive: while le0.any() {
+            let reflected = z.le(Vf32::<S>::splat(-20.0));
+
+            let refl_bitmask = reflected.bitmask();
+            let mut refl_res = unsafe { Vf32::<S>::undefined() };
+
+            // sine is expensive, so branch for it
+            if refl_bitmask.any() {
+                // TODO: Improve error around zero
+                refl_res = -pi / z * (z * pi).sin();
+
+                // powi is also kind of expensive down below, so skip that if not needed
+                if refl_bitmask.all() {
+                    break 'goto_positive;
+                }
+            }
+
+            let p = z.floor();
+
+            res = z.powiv(unsafe { p.to_int_fast() });
+            z = le0.select(reflected.select(-z, z - p), z);
+
+            res = le0.select(reflected.select(refl_res, res), one);
+
+            break 'goto_positive;
+        }
+
+        //positive:
+
+        let cbrt_epsilon = Vf32::<S>::splat(0.0049215666011518482998719164346805794944150447839903);
+        let euler = Vf32::<S>::splat(5.772156649015328606065120900824024310e-01);
+        let tiny = z.lt(cbrt_epsilon);
+        let tiny_res = one / z - euler;
+
+        // Full
+
+        let n0 = Vf32::<S>::splat(58.52061591769095910314047740215847630266);
+        let n1 = Vf32::<S>::splat(182.5248962595894264831189414768236280862);
+        let n2 = Vf32::<S>::splat(211.0971093028510041839168287718170827259);
+        let n3 = Vf32::<S>::splat(112.2526547883668146736465390902227161763);
+        let n4 = Vf32::<S>::splat(27.5192015197455403062503721613097825345);
+        let n5 = Vf32::<S>::splat(2.50662858515256974113978724717473206342);
+
+        let d0 = zero;
+        let d1 = Vf32::<S>::splat(24.0);
+        let d2 = Vf32::<S>::splat(50.0);
+        let d3 = Vf32::<S>::splat(35.0);
+        let d4 = Vf32::<S>::splat(10.0);
+        let d5 = one;
+
+        let g = Vf32::<S>::splat(1.428456135094165802001953125);
+
+        let z2 = z * z;
+        let z4 = z2 * z2;
+
+        let mut lanczos_sum = poly_5(z, z2, z4, n0, n1, n2, n3, n4, n5) / poly_5(z, z2, z4, d0, d1, d2, d3, d4, d5);
+
+        let zgh = z + g - Vf32::<S>::splat(0.5);
+        let lzgh = zgh.ln();
+
+        // (z * lzfg) > ln(f32::MAX)
+        let very_large = (z * lzgh).gt(Vf32::<S>::splat(
+            88.722839053130621324601674778549183073943430402325230485234240247,
+        ));
+
+        // only compute powf once
+        let h = zgh.powf(very_large.select(z.mul_sub(half, quarter), z - half));
+
+        let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
+
+        res * tiny.select(tiny_res, normal_res)
+    }
 }
 
 #[inline(always)]

@@ -696,6 +696,10 @@ where
             Vf64::<S>::from_bits(v.gt(Vf64::<S>::zero()).select(bits - i1, bits + i1)),
         )
     }
+
+    fn tgamma(x: Self::Vf) -> Self::Vf {
+        unimplemented!()
+    }
 }
 
 #[inline(always)]
