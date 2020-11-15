@@ -17,13 +17,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = Vf32::splat(*x) + Vf32::index();
+                let x = black_box(Vf32::splat(*x) + Vf32::index());
                 b.iter(|| x.exp())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = Vf64::splat(*x as f64) + Vf64::index();
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
             b.iter(|| x.exp())
         })
         .with_function("scalar-ps", |b, x| {
@@ -37,7 +37,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -52,7 +52,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -63,13 +63,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = Vf32::splat(*x) + Vf32::index();
+                let x = black_box(Vf32::splat(*x) + Vf32::index());
                 b.iter(|| x.ln())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = Vf64::splat(*x as f64) + Vf64::index();
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
             b.iter(|| x.ln())
         })
         .with_function("scalar-ps", |b, x| {
@@ -83,7 +83,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -98,7 +98,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -109,13 +109,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = Vf32::splat(*x) + Vf32::index();
+                let x = black_box(Vf32::splat(*x) + Vf32::index());
                 b.iter(|| x.cbrt())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = Vf64::splat(*x as f64) + Vf64::index();
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
             b.iter(|| x.cbrt())
         })
         .with_function("scalar-ps", |b, x| {
@@ -129,7 +129,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -144,7 +144,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            (Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -155,13 +155,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = Vf32::splat(*x) + Vf32::index();
+                let x = black_box(Vf32::splat(*x) + Vf32::index()0;
                 b.iter(|| x.sin_cos())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = Vf64::splat(*x as f64) + Vf64::index();
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::index()0;
             b.iter(|| x.sin_cos())
         })
         .with_function("scalar-ps", |b, x| {
@@ -178,7 +178,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 (s, c)
             }
             let mut xs = [0.0; 8];
-            (Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -196,7 +196,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 (s, c)
             }
             let mut xs = [0.0; 8];
-            (Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -207,7 +207,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| b.iter(|| Vf32::splat(*x).tgamma()),
-            vec![-25.43, -4.83, 0.53, 20.3],
+            vec![-25.43, -4.83, 0.53, 20.3, 4.0, 20.0],
         )
         .with_function("libm", |b, x| {
             #[inline]
@@ -220,7 +220,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            Vf32::splat(*x).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x)).store_unaligned(&mut xs);
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
     );
