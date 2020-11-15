@@ -100,11 +100,11 @@ impl SimdBitwise<SSE41> for i32x4<SSE41> {
 
     #[inline(always)]
     unsafe fn _mm_shli(self, count: u32) -> Self {
-        Self::new(_mm_sll_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+        Self::new(_mm_sll_epi32(self.value, _mm_cvtsi32_si128(count as i32)))
     }
 
     #[inline(always)]
     unsafe fn _mm_shri(self, count: u32) -> Self {
-        Self::new(_mm_srl_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+        Self::new(_mm_srl_epi32(self.value, _mm_cvtsi32_si128(count as i32)))
     }
 }

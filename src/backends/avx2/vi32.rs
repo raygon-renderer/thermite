@@ -142,12 +142,12 @@ impl SimdBitwise<AVX2> for i32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_shli(self, count: u32) -> Self {
-        Self::new(_mm256_sll_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+        Self::new(_mm256_sll_epi32(self.value, _mm_cvtsi32_si128(count as i32)))
     }
 
     #[inline(always)]
     unsafe fn _mm_shri(self, count: u32) -> Self {
-        Self::new(_mm256_srl_epi32(self.value, _mm_setr_epi32(count as i32, 0, 0, 0)))
+        Self::new(_mm256_srl_epi32(self.value, _mm_cvtsi32_si128(count as i32)))
     }
 }
 

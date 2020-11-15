@@ -129,13 +129,13 @@ impl SimdBitwise<AVX1> for i64x8<AVX1> {
 
     #[inline(always)]
     unsafe fn _mm_shli(self, count: u32) -> Self {
-        let count = _mm_setr_epi32(count as i32, 0, 0, 0);
+        let count = _mm_cvtsi32_si128(count as i32);
         self.mapv(|a, _| _mm_sll_epi64(a, count))
     }
 
     #[inline(always)]
     unsafe fn _mm_shri(self, count: u32) -> Self {
-        let count = _mm_setr_epi32(count as i32, 0, 0, 0);
+        let count = _mm_cvtsi32_si128(count as i32);
         self.mapv(|a, _| _mm_srl_epi64(a, count))
     }
 }
