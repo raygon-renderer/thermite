@@ -536,12 +536,12 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shli</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sll_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_sll_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>)))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shri</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">u32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_srl_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_setr_epi32</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)))
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_srl_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">count</span> <span class="kw">as</span> <span class="ident">i32</span>)))
     }
 }
 
