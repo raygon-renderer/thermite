@@ -696,7 +696,9 @@ where
         let quarter = Vf32::<S>::splat(0.25);
         let pi = Vf32::<S>::splat(PI);
 
-        let is_neg = z.le(zero);
+        let orig_z = z;
+
+        let is_neg = z.is_negative();
         let mut reflected = Mask::falsey();
 
         let mut res = one;
@@ -743,7 +745,9 @@ where
         let z_int = zf.eq(z);
         let mut fact_res = one;
 
-        if unlikely!(z_int.any()) {
+        let bitmask = z_int.bitmask();
+
+        if unlikely!(bitmask.any()) {
             let mut j = one;
             let mut k = j.lt(zf);
 
@@ -753,7 +757,12 @@ where
                 k = j.lt(zf);
             }
 
-            if z_int.all() {
+            // Γ(-int) = NaN for poles
+            fact_res = is_neg.select(Vf32::<S>::nan(), fact_res);
+            // approaching zero from either side results in +/- infinity
+            fact_res = orig_z.eq(zero).select(Vf32::<S>::infinity().copysign(orig_z), fact_res);
+
+            if bitmask.all() {
                 return fact_res;
             }
         }
