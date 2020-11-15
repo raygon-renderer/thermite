@@ -1000,6 +1000,30 @@
 <span id="999"> 999</span>
 <span id="1000">1000</span>
 <span id="1001">1001</span>
+<span id="1002">1002</span>
+<span id="1003">1003</span>
+<span id="1004">1004</span>
+<span id="1005">1005</span>
+<span id="1006">1006</span>
+<span id="1007">1007</span>
+<span id="1008">1008</span>
+<span id="1009">1009</span>
+<span id="1010">1010</span>
+<span id="1011">1011</span>
+<span id="1012">1012</span>
+<span id="1013">1013</span>
+<span id="1014">1014</span>
+<span id="1015">1015</span>
+<span id="1016">1016</span>
+<span id="1017">1017</span>
+<span id="1018">1018</span>
+<span id="1019">1019</span>
+<span id="1020">1020</span>
+<span id="1021">1021</span>
+<span id="1022">1022</span>
+<span id="1023">1023</span>
+<span id="1024">1024</span>
+<span id="1025">1025</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1699,12 +1723,12 @@
         <span class="kw">let</span> <span class="ident">quarter</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>);
         <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">PI</span>);
 
-        <span class="kw">let</span> <span class="ident">le0</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">le</span>(<span class="ident">zero</span>);
+        <span class="kw">let</span> <span class="ident">is_neg</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">le</span>(<span class="ident">zero</span>);
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">reflected</span> <span class="op">=</span> <span class="ident">Mask</span>::<span class="ident">falsey</span>();
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">one</span>;
 
-        <span class="lifetime">&#39;goto_positive</span>: <span class="kw">while</span> <span class="ident">le0</span>.<span class="ident">any</span>() {
+        <span class="lifetime">&#39;goto_positive</span>: <span class="kw">while</span> <span class="ident">is_neg</span>.<span class="ident">any</span>() {
             <span class="ident">reflected</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">le</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">20.0</span>));
 
             <span class="kw">let</span> <span class="ident">refl_bitmask</span> <span class="op">=</span> <span class="ident">reflected</span>.<span class="ident">bitmask</span>();
@@ -1722,7 +1746,7 @@
             }
 
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mod_z</span> <span class="op">=</span> <span class="ident">z</span>;
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">is_neg</span> <span class="op">=</span> <span class="ident">mod_z</span>.<span class="ident">is_negative</span>();
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">is_neg</span> <span class="op">=</span> <span class="ident">is_neg</span>;
 
             <span class="comment">// recursively apply Γ(z+1)/z</span>
             <span class="kw">while</span> <span class="ident">is_neg</span>.<span class="ident">any</span>() {
@@ -1737,7 +1761,31 @@
             <span class="kw">break</span> <span class="lifetime">&#39;goto_positive</span>;
         }
 
+        <span class="comment">// label</span>
         <span class="comment">//positive:</span>
+
+        <span class="comment">// Integers</span>
+
+        <span class="kw">let</span> <span class="ident">zf</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">floor</span>();
+        <span class="kw">let</span> <span class="ident">z_int</span> <span class="op">=</span> <span class="ident">zf</span>.<span class="ident">eq</span>(<span class="ident">z</span>);
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">fact_res</span> <span class="op">=</span> <span class="ident">one</span>;
+
+        <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">z_int</span>.<span class="ident">any</span>()) {
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">j</span> <span class="op">=</span> <span class="ident">one</span>;
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">k</span> <span class="op">=</span> <span class="ident">j</span>.<span class="ident">lt</span>(<span class="ident">zf</span>);
+
+            <span class="kw">while</span> <span class="ident">k</span>.<span class="ident">any</span>() {
+                <span class="ident">fact_res</span> <span class="op">=</span> <span class="ident">k</span>.<span class="ident">select</span>(<span class="ident">fact_res</span> <span class="op">*</span> <span class="ident">j</span>, <span class="ident">fact_res</span>);
+                <span class="ident">j</span> <span class="op">+=</span> <span class="ident">one</span>;
+                <span class="ident">k</span> <span class="op">=</span> <span class="ident">j</span>.<span class="ident">lt</span>(<span class="ident">zf</span>);
+            }
+
+            <span class="kw">if</span> <span class="ident">z_int</span>.<span class="ident">all</span>() {
+                <span class="kw">return</span> <span class="ident">fact_res</span>;
+            }
+        }
+
+        <span class="comment">// Tiny</span>
 
         <span class="kw">let</span> <span class="ident">cbrt_epsilon</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.0049215666011518482998719164346805794944150447839903</span>);
         <span class="kw">let</span> <span class="ident">euler</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.772156649015328606065120900824024310e-01</span>);
@@ -1780,7 +1828,7 @@
 
         <span class="kw">let</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>) <span class="op">/</span> <span class="ident">zgh</span>.<span class="ident">exp</span>();
 
-        <span class="ident">res</span> <span class="op">*=</span> <span class="ident">tiny</span>.<span class="ident">select</span>(<span class="ident">tiny_res</span>, <span class="ident">normal_res</span>);
+        <span class="ident">res</span> <span class="op">=</span> <span class="ident">z_int</span>.<span class="ident">select</span>(<span class="ident">fact_res</span>, <span class="ident">res</span> <span class="op">*</span> <span class="ident">tiny</span>.<span class="ident">select</span>(<span class="ident">tiny_res</span>, <span class="ident">normal_res</span>));
 
         <span class="ident">reflected</span>.<span class="ident">select</span>(<span class="op">-</span><span class="ident">pi</span> <span class="op">/</span> <span class="ident">res</span>, <span class="ident">res</span>)
     }
