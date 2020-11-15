@@ -569,7 +569,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cast_to</span><span class="op">&lt;</span><span class="ident">U</span>: <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;&gt;</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cast_to</span><span class="op">&lt;</span><span class="ident">U</span>: <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;&gt;</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span> {
         <span class="ident">U</span>::<span class="ident">from_cast_mask</span>(<span class="self">self</span>)
     }
 

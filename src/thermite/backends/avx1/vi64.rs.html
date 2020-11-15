@@ -710,7 +710,7 @@
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="ident">i64x8</span> <span class="ident">AVX1</span> <span class="op">=&gt;</span> <span class="ident">Add</span>::<span class="ident">add</span>, <span class="ident">Sub</span>::<span class="ident">sub</span>, <span class="ident">Mul</span>::<span class="ident">mul</span>, <span class="ident">Div</span>::<span class="ident">div</span>, <span class="ident">Rem</span>::<span class="ident">rem</span>);
 <span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">SHIFTS</span> <span class="ident">i64x8</span> <span class="ident">AVX1</span> <span class="op">=&gt;</span> <span class="ident">Shr</span>::<span class="ident">shr</span>, <span class="ident">Shl</span>::<span class="ident">shl</span>);
 
-<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vf32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vf32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
@@ -727,7 +727,7 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vi32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vi32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vi32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
@@ -744,7 +744,7 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vu32</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="comment">// zero extend</span>
@@ -757,7 +757,7 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vu64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vu64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">from</span>.<span class="ident">value</span>)
@@ -768,7 +768,7 @@
     }
 }
 
-<span class="kw">impl</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+<span class="kw">impl</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">AVX1</span>, <span class="ident">Vf64</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_cast</span>(<span class="ident">from</span>: <span class="ident">Vf64</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">from</span>.<span class="ident">value</span>.<span class="number">1</span>)) })

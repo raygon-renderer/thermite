@@ -970,7 +970,7 @@
         <span class="kw">let</span> <span class="ident">sin1</span> <span class="op">=</span> <span class="ident">swap</span>.<span class="ident">select</span>(<span class="ident">c</span>, <span class="ident">s</span>);
         <span class="kw">let</span> <span class="ident">cos1</span> <span class="op">=</span> <span class="ident">swap</span>.<span class="ident">select</span>(<span class="ident">s</span>, <span class="ident">c</span>);
 
-        <span class="kw">let</span> <span class="ident">signsin</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>((<span class="ident">q</span> <span class="op">&lt;&lt;</span> <span class="number">30</span>) <span class="op">^</span> <span class="ident">xx</span>.<span class="ident">into_bits</span>());
+        <span class="kw">let</span> <span class="ident">signsin</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">q</span> <span class="op">&lt;&lt;</span> <span class="number">30</span>) <span class="op">^</span> <span class="ident">xx</span>;
         <span class="kw">let</span> <span class="ident">signcos</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(((<span class="ident">q</span> <span class="op">+</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()) <span class="op">&amp;</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2</span>)) <span class="op">&lt;&lt;</span> <span class="number">30</span>);
 
         <span class="comment">// combine signs</span>
@@ -1292,8 +1292,8 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">hx</span> <span class="op">=</span> <span class="ident">ui</span> <span class="op">&amp;</span> <span class="ident">m</span>;
 
         <span class="comment">// &quot;fast&quot; integer division `hx / 3`</span>
-        <span class="comment">//let hx_j = &lt;Vu64&lt;S&gt; as SimdCastFrom&lt;S, Vu32&lt;S&gt;&gt;&gt;::from_cast(hx) * Vu64::&lt;S&gt;::splat(0xAAAAAAAB);</span>
-        <span class="comment">//let hx_3 = &lt;Vu32&lt;S&gt; as SimdCastFrom&lt;S, Vu64&lt;S&gt;&gt;&gt;::from_cast(hx_j &gt;&gt; 33);</span>
+        <span class="comment">//let hx_j = &lt;Vu64&lt;S&gt; as SimdFromCast&lt;S, Vu32&lt;S&gt;&gt;&gt;::from_cast(hx) * Vu64::&lt;S&gt;::splat(0xAAAAAAAB);</span>
+        <span class="comment">//let hx_3 = &lt;Vu32&lt;S&gt; as SimdFromCast&lt;S, Vu64&lt;S&gt;&gt;&gt;::from_cast(hx_j &gt;&gt; 33);</span>
 
         <span class="ident">hx</span> <span class="op">=</span> <span class="ident">hx</span>.<span class="ident">div_const</span>(<span class="number">3</span>) <span class="op">+</span> <span class="ident">b</span>;
 
@@ -1377,7 +1377,7 @@
         );
         <span class="ident">lg1</span> <span class="op">*=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>;
 
-        <span class="kw">let</span> <span class="ident">ef</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">exponent</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x1</span>)) <span class="op">+</span> (<span class="ident">blend</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>);
+        <span class="kw">let</span> <span class="ident">ef</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">exponent</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x1</span>)) <span class="op">+</span> (<span class="ident">blend</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>);
 
         <span class="comment">// multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log</span>
         <span class="kw">let</span> <span class="ident">e1</span> <span class="op">=</span> (<span class="ident">ef</span> <span class="op">*</span> <span class="ident">y</span>).<span class="ident">round</span>();
@@ -1764,7 +1764,7 @@
     <span class="ident">e</span> <span class="op">+=</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">blend</span>.<span class="ident">value</span>().<span class="ident">into_bits</span>() <span class="op">&amp;</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()); <span class="comment">// conditional (signed) addition</span>
 
     <span class="comment">// TODO: Fix this cast when the type inference bug hits stable</span>
-    <span class="kw">let</span> <span class="ident">fe</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdCastFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">e</span>);
+    <span class="kw">let</span> <span class="ident">fe</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">e</span>);
 
     <span class="kw">let</span> <span class="ident">xp1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">-</span> <span class="ident">one</span>;
 
