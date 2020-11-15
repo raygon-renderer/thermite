@@ -49,6 +49,8 @@ type Vf32 = f32x8<AVX1>;
 type Vf64 = f64x8<AVX1>;
 
 impl Simd for AVX1 {
+    const INSTRSET: SimdInstructionSet = SimdInstructionSet::AVX;
+
     type Vi32 = Vi32;
     type Vi64 = Vi64;
     type Vu32 = Vu32;

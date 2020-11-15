@@ -52,6 +52,8 @@ type Vf64 = f64x8<AVX2>;
 pub struct AVX2;
 
 impl Simd for AVX2 {
+    const INSTRSET: SimdInstructionSet = SimdInstructionSet::AVX2;
+
     type Vi32 = Vi32;
     type Vi64 = Vi64;
     type Vu32 = Vu32;

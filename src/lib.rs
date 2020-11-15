@@ -803,10 +803,22 @@ where
 {
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SimdInstructionSet {
+    SSE2,
+    SSE41,
+    AVX,
+    AVX2,
+    AVX512F,
+    AVX512FBW,
+}
+
 /// SIMD Instruction set, contains all types
 ///
 ///
 pub trait Simd: Debug + Send + Sync + Clone + Copy {
+    const INSTRSET: SimdInstructionSet;
+
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vi16: SimdIntVector<Self, Element = i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     /// 32-bit signed integer vector
