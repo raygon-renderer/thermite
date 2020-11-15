@@ -72,7 +72,7 @@ where
         let sin1 = swap.select(c, s);
         let cos1 = swap.select(s, c);
 
-        let signsin = Vf64::<S>::from_bits((q << 62) ^ xx.into_bits());
+        let signsin = Vf64::<S>::from_bits((q << 62)) ^ xx;
         let signcos = Vf64::<S>::from_bits(((q + Vu64::<S>::one()) & Vu64::<S>::splat(2)) << 62);
 
         // combine signs
