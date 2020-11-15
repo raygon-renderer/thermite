@@ -728,8 +728,8 @@ where
                 is_neg = mod_z.is_negative();
             }
 
-            z = le0.select(reflected.select(-z, mod_z), z);
-            res = le0.select(reflected.select(refl_res, res), one);
+            z = reflected.select(-z, mod_z);
+            res = reflected.select(refl_res, res);
 
             break 'goto_positive;
         }
