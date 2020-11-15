@@ -29,7 +29,13 @@ use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 ///
 /// This should handle extending bits correctly
 pub trait SimdFromCast<S: Simd, FROM>: Sized {
+    /// Casts one vector to another, performing proper numeric conversions on each element.
+    ///
+    /// This is equivalent to the `as` keyword in Rust, but for SIMD vectors.
     fn from_cast(from: FROM) -> Self;
+
+    /// Casts one mask to another, not caring about the value types,
+    /// but rather expanding or truncating the mask bits as efficiently as possible.
     fn from_cast_mask(from: Mask<S, FROM>) -> Mask<S, Self>;
 }
 
@@ -47,7 +53,13 @@ impl<S: Simd, T> SimdFromCast<S, T> for T {
 
 /// Describes casting to one SIMD vector type from another
 pub trait SimdCastTo<S: Simd, TO>: Sized {
+    /// Casts one vector to another, performing proper numeric conversions on each element.
+    ///
+    /// This is equivalent to the `as` keyword in Rust, but for SIMD vectors.
     fn cast(self) -> TO;
+
+    /// Casts one mask to another, not caring about the value types,
+    /// but rather expanding or truncating the mask bits as efficiently as possible.
     fn cast_mask(mask: Mask<S, Self>) -> Mask<S, TO>;
 }
 
@@ -105,16 +117,18 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
 
     /// Size of element type in bytes
     const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
-    const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / 4;
+    const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / std::mem::size_of::<i32>();
     const ALIGNMENT: usize = std::mem::align_of::<Self>();
 
+    /// Creates a new vector with all lanes set to the given value
     fn splat(value: Self::Element) -> Self;
 
-    /// Possibly returns a vector containing undefined or uninitialized data
+    /// Returns a vector containing possibly undefined or uninitialized data
     unsafe fn undefined() -> Self {
         Self::default()
     }
 
+    /// Same as `splat`, but is more convenient for initializing with data that can be converted into the element type.
     #[inline(always)]
     fn splat_any(value: impl Into<Self::Element>) -> Self {
         Self::splat(value.into())
@@ -126,21 +140,37 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         SimdBuffer::alloc(count)
     }
 
+    /// Extracts an element at the given lane index.
+    ///
+    /// **WARNING**: Will panic if the index is not less than `NUM_ELEMENTS`
     #[inline]
     fn extract(self, index: usize) -> Self::Element {
         assert!(index < Self::NUM_ELEMENTS);
         unsafe { self.extract_unchecked(index) }
     }
 
+    /// Returns a new vector with the given value at the given lane index.
+    ///
+    /// **WARNING**: Will panic if the index if not less than `NUM_ELEMENTS`
     #[inline]
     fn replace(self, index: usize, value: Self::Element) -> Self {
         assert!(index < Self::NUM_ELEMENTS);
         unsafe { self.replace_unchecked(index, value) }
     }
 
+    /// Extracts an element at the given lane index.
+    ///
+    /// **WARNING**: Will result in undefined behavior if the index is not less than `NUM_ELEMENTS`
     unsafe fn extract_unchecked(self, index: usize) -> Self::Element;
+
+    /// Returns a new vector with the given value at the given lane index.
+    ///
+    /// **WARNING**: Will result in undefined behavior if the index is not less than `NUM_ELEMENTS`
     unsafe fn replace_unchecked(self, index: usize, value: Self::Element) -> Self;
 
+    /// Loads a vector from a slice that has an alignment of at least `Self::ALIGNMENT`
+    ///
+    /// **WARNING**: Will panic if the slice is not properly aligned or is not long enough.
     #[inline]
     fn load_aligned(src: &[Self::Element]) -> Self {
         assert!(src.len() >= Self::NUM_ELEMENTS);
@@ -153,12 +183,18 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         unsafe { Self::load_aligned_unchecked(load_ptr) }
     }
 
+    /// Loads a vector from a slice
+    ///
+    /// **WARNING**: Will panic if the slice is not long enough.
     #[inline]
     fn load_unaligned(src: &[Self::Element]) -> Self {
         assert!(src.len() >= Self::NUM_ELEMENTS);
         unsafe { Self::load_unaligned_unchecked(src.as_ptr()) }
     }
 
+    /// Stores a vector into a slice with an alignment of at least `Self::ALIGNMENT`
+    ///
+    /// **WARNING**: Will panic if the target slice is not properly aligned or is not long enough.
     #[inline]
     fn store_aligned(self, dst: &mut [Self::Element]) {
         assert!(dst.len() >= Self::NUM_ELEMENTS);
@@ -171,22 +207,36 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         unsafe { self.store_aligned_unchecked(store_ptr) };
     }
 
+    /// Stores a vector into a slice.
+    ///
+    /// **WARNING**: Will panic if the slice is not long enough.
     #[inline]
     fn store_unaligned(self, dst: &mut [Self::Element]) {
         assert!(dst.len() >= Self::NUM_ELEMENTS);
         unsafe { self.store_unaligned_unchecked(dst.as_mut_ptr()) };
     }
 
+    /// Loads a vector from the given aligned address.
+    ///
+    /// **WARNING**: Will cause undefined behavior if the pointer is not properly aligned or does
+    /// not point to a valid address range.
     #[inline(always)]
     unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self {
         Self::load_unaligned_unchecked(src)
     }
 
+    /// Stores a vector to the given aligned address.
+    ///
+    /// **WARNING**: Will cause undefined behavior if the pointer is not properly aligned or does
+    /// not point to a valid address range.
     #[inline(always)]
     unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element) {
         self.store_unaligned_unchecked(dst);
     }
 
+    /// Loads a vector from a given address (does not have to be aligned).
+    ///
+    /// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.
     #[inline(always)]
     unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
         let mut target = mem::MaybeUninit::uninit();
@@ -194,21 +244,39 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         target.assume_init()
     }
 
+    /// Stores a vector to a given address (does not have to be aligned).
+    ///
+    /// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.
     #[inline(always)]
     unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
         ptr::copy_nonoverlapping(&self as *const Self, dst as *mut Self, 1);
     }
 
+    /// Loads values from arbitrary addresses in memory based on offsets from a base address.
+    ///
+    /// Computes the source address for each element by: `src = base_ptr + indices * size_of::<Element>()`
+    ///
+    /// **WARNING**: Will cause undefined behavior if any of the source addresses are not valid.
     #[inline(always)]
     unsafe fn gather(base_ptr: *const Self::Element, indices: S::Vi32) -> Self {
         Self::gather_masked(base_ptr, indices, Mask::truthy(), Self::default())
     }
 
+    /// Stores values to arbitrary addresses in memory based on offsets from a base address.
+    ///
+    /// Computes the destination address for each element by: `dst = base_ptr + indices * size_of::<Element>()`
+    ///
+    /// **WARNING**: Will cause undefined behavior if any of the destination addresses are not valid.
     #[inline(always)]
     unsafe fn scatter(self, base_ptr: *mut Self::Element, indices: S::Vi32) {
         self.scatter_masked(base_ptr, indices, Mask::truthy())
     }
 
+    /// Like `Self::gather`, but individual lanes are loaded based on the corresponding lane of the mask.
+    /// If the mask lane is truthy, the source lane is loaded, otherwise it's given the lane value from `default`.
+    ///
+    /// Lanes with a falsey mask value do not load, and does not cause undefined behavior
+    /// if the source address is invalid for that lane.
     #[inline(always)]
     unsafe fn gather_masked(
         base_ptr: *const Self::Element,
@@ -225,6 +293,11 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         res
     }
 
+    /// Like `self.scatter()`, but individual lanes are stored based on the corresponding lane of the mask.
+    /// If the mask lane is truthy, the destination lane is written to, otherwise it is a no-op.
+    ///
+    /// Lanes with a falsey mask value are not written to, and does not cause undefined behavior
+    /// if the destination address is invalid for that lane.
     #[inline(always)]
     unsafe fn scatter_masked(self, base_ptr: *mut Self::Element, indices: S::Vi32, mask: Mask<S, Self>) {
         for i in 0..Self::NUM_ELEMENTS {
@@ -295,8 +368,10 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     //fn reduce_or(self) -> Self::Element;
     //fn reduce_xor(self) -> Self::Element;
 
+    /// Bitmask corresponding to all lanes of the mask being truthy.
     const FULL_BITMASK: u16;
 
+    /// Returns an integer where each bit corresponds to the binary truthy-ness of each lane from the mask.
     fn bitmask(self) -> u16;
 
     #[doc(hidden)]
