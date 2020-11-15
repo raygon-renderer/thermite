@@ -44,6 +44,7 @@ panic = 'abort'     # Very few functions in Thermite panic, but aborting will av
 * When reusing masks for `all`/`any`/`none` queries, consider using the bitmask directly to avoid recomputing.
 * Avoid casting between differently-sized types in hot loops.
 * Avoid extracting and replacing elements.
+* LLVM will inline many math functions and const-eval as much as possible, but only if it was called in the same instruction-set context.
 
 # Cargo `--features`
 
