@@ -155,13 +155,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = black_box(Vf32::splat(*x) + Vf32::index()0;
+                let x = black_box(Vf32::splat(*x) + Vf32::index());
                 b.iter(|| x.sin_cos())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = black_box(Vf64::splat(*x as f64) + Vf64::index()0;
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
             b.iter(|| x.sin_cos())
         })
         .with_function("scalar-ps", |b, x| {
