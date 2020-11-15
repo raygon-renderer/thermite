@@ -697,8 +697,148 @@ where
         )
     }
 
-    fn tgamma(x: Self::Vf) -> Self::Vf {
-        unimplemented!()
+    #[inline(always)]
+    fn tgamma(mut z: Self::Vf) -> Self::Vf {
+        let zero = Vf64::<S>::zero();
+        let one = Vf64::<S>::one();
+        let half = Vf64::<S>::splat(0.5);
+        let quarter = Vf64::<S>::splat(0.25);
+        let pi = Vf64::<S>::splat(PI);
+
+        let orig_z = z;
+
+        let is_neg = z.is_negative();
+        let mut reflected = Mask::falsey();
+
+        let mut res = one;
+
+        'goto_positive: while is_neg.any() {
+            reflected = z.le(Vf64::<S>::splat(-20.0));
+
+            let refl_bitmask = reflected.bitmask();
+            let mut refl_res = unsafe { Vf64::<S>::undefined() };
+
+            // sine is expensive, so branch for it
+            if refl_bitmask.any() {
+                // TODO: Improve error around zero
+                refl_res = z * (z * pi).sin();
+
+                // powi is also kind of expensive down below, so skip that if not needed
+                if refl_bitmask.all() {
+                    break 'goto_positive;
+                }
+            }
+
+            let mut mod_z = z;
+            let mut is_neg = is_neg;
+
+            // recursively apply Γ(z+1)/z
+            while is_neg.any() {
+                res = is_neg.select(res / mod_z, res);
+                mod_z = is_neg.select(mod_z + one, mod_z);
+                is_neg = mod_z.is_negative();
+            }
+
+            z = reflected.select(-z, mod_z);
+            res = reflected.select(refl_res, res);
+
+            break 'goto_positive;
+        }
+
+        // label
+        //positive:
+
+        // Integers
+
+        let zf = z.floor();
+        let z_int = zf.eq(z);
+        let mut fact_res = one;
+
+        let bitmask = z_int.bitmask();
+
+        if unlikely!(bitmask.any()) {
+            let mut j = one;
+            let mut k = j.lt(zf);
+
+            while k.any() {
+                fact_res = k.select(fact_res * j, fact_res);
+                j += one;
+                k = j.lt(zf);
+            }
+
+            // Γ(-int) = NaN for poles
+            fact_res = is_neg.select(Vf64::<S>::nan(), fact_res);
+            // approaching zero from either side results in +/- infinity
+            fact_res = orig_z.eq(zero).select(Vf64::<S>::infinity().copysign(orig_z), fact_res);
+
+            if bitmask.all() {
+                return fact_res;
+            }
+        }
+
+        // Tiny
+
+        let sqrt_epsilon = Vf64::<S>::splat(0.1490116119384765625e-7);
+        let euler = Vf64::<S>::splat(5.772156649015328606065120900824024310e-01);
+        let tiny = z.lt(sqrt_epsilon);
+        let tiny_res = one / z - euler;
+
+        // Full
+
+        let n00 = Vf64::<S>::splat(23531376880.41075968857200767445163675473);
+        let n01 = Vf64::<S>::splat(42919803642.64909876895789904700198885093);
+        let n02 = Vf64::<S>::splat(35711959237.35566804944018545154716670596);
+        let n03 = Vf64::<S>::splat(17921034426.03720969991975575445893111267);
+        let n04 = Vf64::<S>::splat(6039542586.352028005064291644307297921070);
+        let n05 = Vf64::<S>::splat(1439720407.311721673663223072794912393972);
+        let n06 = Vf64::<S>::splat(248874557.8620541565114603864132294232163);
+        let n07 = Vf64::<S>::splat(31426415.58540019438061423162831820536287);
+        let n08 = Vf64::<S>::splat(2876370.628935372441225409051620849613599);
+        let n09 = Vf64::<S>::splat(186056.2653952234950402949897160456992822);
+        let n10 = Vf64::<S>::splat(8071.672002365816210638002902272250613822);
+        let n11 = Vf64::<S>::splat(210.8242777515793458725097339207133627117);
+        let n12 = Vf64::<S>::splat(2.506628274631000270164908177133837338626);
+
+        let d01 = Vf64::<S>::splat(39916800.0);
+        let d02 = Vf64::<S>::splat(120543840.0);
+        let d03 = Vf64::<S>::splat(150917976.0);
+        let d04 = Vf64::<S>::splat(105258076.0);
+        let d05 = Vf64::<S>::splat(45995730.0);
+        let d06 = Vf64::<S>::splat(13339535.0);
+        let d07 = Vf64::<S>::splat(2637558.0);
+        let d08 = Vf64::<S>::splat(357423.0);
+        let d09 = Vf64::<S>::splat(32670.0);
+        let d10 = Vf64::<S>::splat(1925.0);
+        let d11 = Vf64::<S>::splat(66.0);
+
+        let gh = Vf64::<S>::splat(6.024680040776729583740234375 - 0.5);
+
+        let z2 = z * z;
+        let z4 = z2 * z2;
+        let z8 = z4 * z4;
+
+        let lanczos_sum = poly_12(
+            z, z2, z4, z8, n00, n01, n02, n03, n04, n05, n06, n07, n08, n09, n10, n11, n12,
+        ) / poly_12(
+            z, z2, z4, z8, zero, d01, d02, d03, d04, d05, d06, d07, d08, d09, d10, d11, one,
+        );
+
+        let zgh = z + gh;
+        let lzgh = zgh.ln();
+
+        // (z * lzfg) > ln(f64::MAX)
+        let very_large = (z * lzgh).gt(Vf64::<S>::splat(
+            709.78271289338399672769243071670056097572649130589734950577761613,
+        ));
+
+        // only compute powf once
+        let h = zgh.powf(very_large.select(z.mul_sub(half, quarter), z - half));
+
+        let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
+
+        res *= tiny.select(tiny_res, normal_res);
+
+        reflected.select(-pi / res, z_int.select(fact_res, res))
     }
 }
 

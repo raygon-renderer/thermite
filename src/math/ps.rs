@@ -769,9 +769,9 @@ where
 
         // Tiny
 
-        let cbrt_epsilon = Vf32::<S>::splat(0.0049215666011518482998719164346805794944150447839903);
+        let sqrt_epsilon = Vf32::<S>::splat(0.00034526698300124390839884978618400831996329879769945);
         let euler = Vf32::<S>::splat(5.772156649015328606065120900824024310e-01);
-        let tiny = z.lt(cbrt_epsilon);
+        let tiny = z.lt(sqrt_epsilon);
         let tiny_res = one / z - euler;
 
         // Full
@@ -783,21 +783,19 @@ where
         let n4 = Vf32::<S>::splat(27.5192015197455403062503721613097825345);
         let n5 = Vf32::<S>::splat(2.50662858515256974113978724717473206342);
 
-        let d0 = zero;
         let d1 = Vf32::<S>::splat(24.0);
         let d2 = Vf32::<S>::splat(50.0);
         let d3 = Vf32::<S>::splat(35.0);
         let d4 = Vf32::<S>::splat(10.0);
-        let d5 = one;
 
-        let g = Vf32::<S>::splat(1.428456135094165802001953125);
+        let gh = Vf32::<S>::splat(1.428456135094165802001953125 - 0.5);
 
         let z2 = z * z;
         let z4 = z2 * z2;
 
-        let mut lanczos_sum = poly_5(z, z2, z4, n0, n1, n2, n3, n4, n5) / poly_5(z, z2, z4, d0, d1, d2, d3, d4, d5);
+        let lanczos_sum = poly_5(z, z2, z4, n0, n1, n2, n3, n4, n5) / poly_5(z, z2, z4, zero, d1, d2, d3, d4, one);
 
-        let zgh = z + g - Vf32::<S>::splat(0.5);
+        let zgh = z + gh;
         let lzgh = zgh.ln();
 
         // (z * lzfg) > ln(f32::MAX)
@@ -810,9 +808,9 @@ where
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
 
-        res = z_int.select(fact_res, res * tiny.select(tiny_res, normal_res));
+        res *= tiny.select(tiny_res, normal_res);
 
-        reflected.select(-pi / res, res)
+        reflected.select(-pi / res, z_int.select(fact_res, res))
     }
 }
 
