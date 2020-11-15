@@ -697,11 +697,12 @@ where
         let pi = Vf32::<S>::splat(PI);
 
         let le0 = z.le(zero);
+        let mut reflected = Mask::falsey();
 
         let mut res = one;
 
         'goto_positive: while le0.any() {
-            let reflected = z.le(Vf32::<S>::splat(-20.0));
+            reflected = z.le(Vf32::<S>::splat(-20.0));
 
             let refl_bitmask = reflected.bitmask();
             let mut refl_res = unsafe { Vf32::<S>::undefined() };
@@ -709,7 +710,7 @@ where
             // sine is expensive, so branch for it
             if refl_bitmask.any() {
                 // TODO: Improve error around zero
-                refl_res = -pi / z * (z * pi).sin();
+                refl_res = z * (z * pi).sin();
 
                 // powi is also kind of expensive down below, so skip that if not needed
                 if refl_bitmask.all() {
@@ -717,11 +718,24 @@ where
                 }
             }
 
-            let p = z.floor();
+            let mut v = z.extract(0);
+            let mut r = 1.0;
+            while v < 0.0 {
+                r /= v;
+                v += 1.0;
+            }
 
-            res = z.powiv(unsafe { p.to_int_fast() });
-            z = le0.select(reflected.select(-z, z - p), z);
+            let mut mod_z = z;
+            let mut is_neg = mod_z.is_negative();
 
+            // recursively apply Γ(z+1)/z
+            while is_neg.any() {
+                res = is_neg.select(res / mod_z, res);
+                mod_z = is_neg.select(mod_z + one, mod_z);
+                is_neg = mod_z.is_negative();
+            }
+
+            z = le0.select(reflected.select(-z, mod_z), z);
             res = le0.select(reflected.select(refl_res, res), one);
 
             break 'goto_positive;
@@ -770,7 +784,9 @@ where
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
 
-        res * tiny.select(tiny_res, normal_res)
+        res *= tiny.select(tiny_res, normal_res);
+
+        reflected.select(-pi / res, res)
     }
 }
 
