@@ -1000,13 +1000,6 @@
 <span id="999"> 999</span>
 <span id="1000">1000</span>
 <span id="1001">1001</span>
-<span id="1002">1002</span>
-<span id="1003">1003</span>
-<span id="1004">1004</span>
-<span id="1005">1005</span>
-<span id="1006">1006</span>
-<span id="1007">1007</span>
-<span id="1008">1008</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1726,13 +1719,6 @@
                 <span class="kw">if</span> <span class="ident">refl_bitmask</span>.<span class="ident">all</span>() {
                     <span class="kw">break</span> <span class="lifetime">&#39;goto_positive</span>;
                 }
-            }
-
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">v</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">extract</span>(<span class="number">0</span>);
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">r</span> <span class="op">=</span> <span class="number">1.0</span>;
-            <span class="kw">while</span> <span class="ident">v</span> <span class="op">&lt;</span> <span class="number">0.0</span> {
-                <span class="ident">r</span> <span class="op">/=</span> <span class="ident">v</span>;
-                <span class="ident">v</span> <span class="op">+=</span> <span class="number">1.0</span>;
             }
 
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mod_z</span> <span class="op">=</span> <span class="ident">z</span>;
