@@ -441,7 +441,7 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
 
     #[inline]
     #[target_feature(enable = "avx2")]
-    unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self {
+    unsafe fn load_f16_unaligned_unchecked(src: *const f16) -> Self {
         let mut dst = mem::MaybeUninit::uninit();
         for i in 0..Self::NUM_ELEMENTS {
             *(dst.as_mut_ptr() as *mut Self::Element).add(i) = (*src.add(i)).to_f64();
@@ -451,7 +451,7 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
 
     #[inline]
     #[target_feature(enable = "avx2")]
-    unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16) {
+    unsafe fn store_f16_unaligned_unchecked(&self, dst: *mut f16) {
         for i in 0..Self::NUM_ELEMENTS {
             *dst.add(i) = f16::from_f64(self.extract_unchecked(i));
         }

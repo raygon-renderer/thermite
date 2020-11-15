@@ -564,19 +564,19 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     fn nan() -> Self;
 
     /// Load half-precision floats and up-convert them into `Self`
-    fn load_half_unaligned(src: &[f16]) -> Self {
+    fn load_f16_unaligned(src: &[f16]) -> Self {
         assert!(src.len() >= Self::NUM_ELEMENTS);
-        unsafe { Self::load_half_unaligned_unchecked(src.as_ptr()) }
+        unsafe { Self::load_f16_unaligned_unchecked(src.as_ptr()) }
     }
 
     /// Down-convert `self` into half-precision and store
-    fn store_half_unaligned(&self, dst: &mut [f16]) {
+    fn store_f16_unaligned(&self, dst: &mut [f16]) {
         assert!(dst.len() >= Self::NUM_ELEMENTS);
-        unsafe { self.store_half_unaligned_unchecked(dst.as_mut_ptr()) };
+        unsafe { self.store_f16_unaligned_unchecked(dst.as_mut_ptr()) };
     }
 
-    unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self;
-    unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16);
+    unsafe fn load_f16_unaligned_unchecked(src: *const f16) -> Self;
+    unsafe fn store_f16_unaligned_unchecked(&self, dst: *mut f16);
 
     /// Can convert to a signed integer faster than a regular `cast`, but may not provide
     /// correct results above a certain range.

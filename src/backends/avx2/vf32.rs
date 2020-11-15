@@ -353,14 +353,14 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
 
     #[cfg(feature = "nightly")]
     #[inline(always)]
-    unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self {
+    unsafe fn load_f16_unaligned_unchecked(src: *const f16) -> Self {
         Self::new(_mm256_cvtph_ps(_mm_loadu_si128(src as *const _)))
     }
 
     #[cfg(not(feature = "nightly"))]
     #[inline]
     #[target_feature(enable = "avx2")]
-    unsafe fn load_half_unaligned_unchecked(src: *const f16) -> Self {
+    unsafe fn load_f16_unaligned_unchecked(src: *const f16) -> Self {
         let mut dst = mem::MaybeUninit::uninit();
         for i in 0..Self::NUM_ELEMENTS {
             *(dst.as_mut_ptr() as *mut Self::Element).add(i) = (*src.add(i)).to_f32();
@@ -370,7 +370,7 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
 
     #[cfg(feature = "nightly")]
     #[inline(always)]
-    unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16) {
+    unsafe fn store_f16_unaligned_unchecked(&self, dst: *mut f16) {
         let mut dst_vec = _mm256_cvtps_ph(self.value, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
         ptr::copy_nonoverlapping(&dst_vec as *const __m128i as *const f16, dst, Self::NUM_ELEMENTS);
     }
@@ -378,7 +378,7 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     #[cfg(not(feature = "nightly"))]
     #[inline]
     #[target_feature(enable = "avx2")]
-    unsafe fn store_half_unaligned_unchecked(&self, dst: *mut f16) {
+    unsafe fn store_f16_unaligned_unchecked(&self, dst: *mut f16) {
         for i in 0..Self::NUM_ELEMENTS {
             *dst.add(i) = f16::from_f32(self.extract_unchecked(i));
         }
