@@ -17,26 +17,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                #[inline]
-                #[target_feature(enable = "avx2,fma")]
-                unsafe fn do_algorithm(x: Vf32) -> Vf32 {
-                    x.exp()
-                }
-
                 let x = Vf32::splat(*x) + Vf32::index();
-                b.iter(|| unsafe { do_algorithm(x) })
+                b.iter(|| x.exp())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            #[inline]
-            #[target_feature(enable = "avx2,fma")]
-            unsafe fn do_algorithm(x: Vf64) -> Vf64 {
-                x.exp()
-            }
-
             let x = Vf64::splat(*x as f64) + Vf64::index();
-            b.iter(|| unsafe { do_algorithm(x) })
+            b.iter(|| x.exp())
         })
         .with_function("scalar-ps", |b, x| {
             #[inline]
@@ -75,26 +63,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                #[inline]
-                #[target_feature(enable = "avx2,fma")]
-                unsafe fn do_algorithm(x: Vf32) -> Vf32 {
-                    x.ln()
-                }
-
                 let x = Vf32::splat(*x) + Vf32::index();
-                b.iter(|| unsafe { do_algorithm(x) })
+                b.iter(|| x.ln())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            #[inline]
-            #[target_feature(enable = "avx2,fma")]
-            unsafe fn do_algorithm(x: Vf64) -> Vf64 {
-                x.ln()
-            }
-
             let x = Vf64::splat(*x as f64) + Vf64::index();
-            b.iter(|| unsafe { do_algorithm(x) })
+            b.iter(|| x.ln())
         })
         .with_function("scalar-ps", |b, x| {
             #[inline]
@@ -133,26 +109,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                #[inline]
-                #[target_feature(enable = "avx2,fma")]
-                unsafe fn do_algorithm(x: Vf32) -> Vf32 {
-                    x.cbrt()
-                }
-
                 let x = Vf32::splat(*x) + Vf32::index();
-                b.iter(|| unsafe { do_algorithm(x) })
+                b.iter(|| x.cbrt())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            #[inline]
-            #[target_feature(enable = "avx2,fma")]
-            unsafe fn do_algorithm(x: Vf64) -> Vf64 {
-                x.cbrt()
-            }
-
             let x = Vf64::splat(*x as f64) + Vf64::index();
-            b.iter(|| unsafe { do_algorithm(x) })
+            b.iter(|| x.cbrt())
         })
         .with_function("scalar-ps", |b, x| {
             #[inline]
@@ -191,26 +155,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                #[inline]
-                #[target_feature(enable = "avx2,fma")]
-                unsafe fn do_algorithm(x: Vf32) -> (Vf32, Vf32) {
-                    x.sin_cos()
-                }
-
                 let x = Vf32::splat(*x) + Vf32::index();
-                b.iter(|| unsafe { do_algorithm(x) })
+                b.iter(|| x.sin_cos())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            #[inline]
-            #[target_feature(enable = "avx2,fma")]
-            unsafe fn do_algorithm(x: Vf64) -> (Vf64, Vf64) {
-                x.sin_cos()
-            }
-
             let x = Vf64::splat(*x as f64) + Vf64::index();
-            b.iter(|| unsafe { do_algorithm(x) })
+            b.iter(|| x.sin_cos())
         })
         .with_function("scalar-ps", |b, x| {
             #[inline]
@@ -251,18 +203,34 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     c.bench(
+        "tgamma",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, x| b.iter(|| Vf32::splat(*x).tgamma()),
+            vec![-25.43, -4.83, 0.53, 20.3],
+        )
+        .with_function("libm", |b, x| {
+            #[inline]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f32; 8]) -> [f32; 8] {
+                for i in 0..8 {
+                    x[i] = libm::tgammaf(x[i]);
+                }
+                x
+            }
+
+            let mut xs = [0.0; 8];
+            Vf32::splat(*x).store_unaligned(&mut xs);
+            b.iter(|| unsafe { do_algorithm(xs) })
+        }),
+    );
+
+    c.bench(
         "large_poly_eval",
         ParameterizedBenchmark::new(
             "thermite",
             |b, (x, poly)| {
-                #[inline]
-                #[target_feature(enable = "avx2,fma")]
-                unsafe fn do_algorithm(x: Vf32, poly: &[f32]) -> Vf32 {
-                    x.poly(poly)
-                }
-
-                let x = Vf32::splat(*x);
-                b.iter(move || unsafe { do_algorithm(x, poly) });
+                b.iter(move || Vf32::splat(*x).poly(poly));
             },
             vec![(
                 1.001,
@@ -282,9 +250,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 }
                 res
             }
-
-            let x = Vf32::splat(*x);
-            b.iter(move || unsafe { do_algorithm(x, poly) })
+            b.iter(move || unsafe { do_algorithm(Vf32::splat(*x), poly) })
         }),
     );
 }
