@@ -383,8 +383,8 @@ where
         let mut hx = ui & m;
 
         // "fast" integer division `hx / 3`
-        //let hx_j = <Vu64<S> as SimdCastFrom<S, Vu32<S>>>::from_cast(hx) * Vu64::<S>::splat(0xAAAAAAAB);
-        //let hx_3 = <Vu32<S> as SimdCastFrom<S, Vu64<S>>>::from_cast(hx_j >> 33);
+        //let hx_j = <Vu64<S> as SimdFromCast<S, Vu32<S>>>::from_cast(hx) * Vu64::<S>::splat(0xAAAAAAAB);
+        //let hx_3 = <Vu32<S> as SimdFromCast<S, Vu64<S>>>::from_cast(hx_j >> 33);
 
         hx = hx.div_const(3) + b;
 
@@ -468,7 +468,7 @@ where
         );
         lg1 *= x2 * x;
 
-        let ef = <Vf32<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(exponent::<S>(x1)) + (blend.value() & one);
+        let ef = <Vf32<S> as SimdFromCast<S, Vi32<S>>>::from_cast(exponent::<S>(x1)) + (blend.value() & one);
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
@@ -855,7 +855,7 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     e += Vi32::<S>::from_bits(blend.value().into_bits() & Vu32::<S>::one()); // conditional (signed) addition
 
     // TODO: Fix this cast when the type inference bug hits stable
-    let fe = <Vf32<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(e);
+    let fe = <Vf32<S> as SimdFromCast<S, Vi32<S>>>::from_cast(e);
 
     let xp1 = x - one;
 

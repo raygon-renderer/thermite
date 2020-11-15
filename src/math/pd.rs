@@ -707,7 +707,7 @@ fn fraction2<S: Simd>(x: Vf64<S>) -> Vf64<S> {
 #[inline(always)]
 fn exponent<S: Simd>(x: Vf64<S>) -> Vi32<S> {
     // shift out sign, extract exp, subtract bias
-    Vi32::<S>::from_bits(<Vu32<S> as SimdCastFrom<S, Vu64<S>>>::from_cast(
+    Vi32::<S>::from_bits(<Vu32<S> as SimdFromCast<S, Vu64<S>>>::from_cast(
         (x.into_bits() << 1) >> 53,
     )) - Vi32::<S>::splat(0x3FF)
 }
@@ -742,7 +742,7 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     let x1 = if p1 { x0 + one } else { x0 };
 
     let mut x = fraction2::<S>(x1);
-    let mut fe = <Vf64<S> as SimdCastFrom<S, Vi32<S>>>::from_cast(exponent::<S>(x1));
+    let mut fe = <Vf64<S> as SimdFromCast<S, Vi32<S>>>::from_cast(exponent::<S>(x1));
 
     let blend = x.gt(Vf64::<S>::splat(SQRT_2 * 0.5));
 

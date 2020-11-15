@@ -188,7 +188,7 @@ where
     }
 
     #[inline(always)]
-    pub fn cast_to<U: SimdCastFrom<S, V>>(self) -> Mask<S, U> {
+    pub fn cast_to<U: SimdFromCast<S, V>>(self) -> Mask<S, U> {
         U::from_cast_mask(self)
     }
 

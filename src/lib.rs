@@ -28,12 +28,12 @@ use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 /// Describes casting from one SIMD vector type to another
 ///
 /// This should handle extending bits correctly
-pub trait SimdCastFrom<S: Simd, FROM>: Sized {
+pub trait SimdFromCast<S: Simd, FROM>: Sized {
     fn from_cast(from: FROM) -> Self;
     fn from_cast_mask(from: Mask<S, FROM>) -> Mask<S, Self>;
 }
 
-impl<S: Simd, T> SimdCastFrom<S, T> for T {
+impl<S: Simd, T> SimdFromCast<S, T> for T {
     #[inline(always)]
     fn from_cast(from: T) -> T {
         from
@@ -53,7 +53,7 @@ pub trait SimdCastTo<S: Simd, TO>: Sized {
 
 impl<S: Simd, FROM, TO> SimdCastTo<S, TO> for FROM
 where
-    TO: SimdCastFrom<S, FROM>,
+    TO: SimdFromCast<S, FROM>,
 {
     #[inline(always)]
     fn cast(self) -> TO {
@@ -70,27 +70,27 @@ where
 /// List of valid casts between SIMD types in an instruction set
 pub trait SimdCasts<S: Simd + ?Sized>:
     Sized
-    + SimdCastFrom<S, S::Vi32>
-    + SimdCastFrom<S, S::Vu32>
-    + SimdCastFrom<S, S::Vu64>
-    + SimdCastFrom<S, S::Vf32>
-    + SimdCastFrom<S, S::Vf64>
-    + SimdCastFrom<S, S::Vi64>
+    + SimdFromCast<S, S::Vi32>
+    + SimdFromCast<S, S::Vu32>
+    + SimdFromCast<S, S::Vu64>
+    + SimdFromCast<S, S::Vf32>
+    + SimdFromCast<S, S::Vf64>
+    + SimdFromCast<S, S::Vi64>
 {
     #[inline(always)]
-    fn cast_to<T: SimdCastFrom<S, Self>>(self) -> T {
+    fn cast_to<T: SimdFromCast<S, Self>>(self) -> T {
         self.cast()
     }
 }
 
 impl<S: Simd + ?Sized, T> SimdCasts<S> for T where
     T: Sized
-        + SimdCastFrom<S, S::Vi32>
-        + SimdCastFrom<S, S::Vu32>
-        + SimdCastFrom<S, S::Vu64>
-        + SimdCastFrom<S, S::Vf32>
-        + SimdCastFrom<S, S::Vf64>
-        + SimdCastFrom<S, S::Vi64>
+        + SimdFromCast<S, S::Vi32>
+        + SimdFromCast<S, S::Vu32>
+        + SimdFromCast<S, S::Vu64>
+        + SimdFromCast<S, S::Vf32>
+        + SimdFromCast<S, S::Vf64>
+        + SimdFromCast<S, S::Vi64>
 {
 }
 

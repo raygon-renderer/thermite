@@ -546,7 +546,7 @@ impl_ops!(@UNARY f64x8 AVX1 => Not::not, Neg::neg);
 impl_ops!(@BINARY f64x8 AVX1 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS f64x8 AVX1 => Shr::shr, Shl::shl);
 
-impl SimdCastFrom<AVX1, Vi32> for f64x8<AVX1> {
+impl SimdFromCast<AVX1, Vi32> for f64x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vi32) -> Self {
         Self::new(unsafe {
@@ -563,7 +563,7 @@ impl SimdCastFrom<AVX1, Vi32> for f64x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vu32> for f64x8<AVX1> {
+impl SimdFromCast<AVX1, Vu32> for f64x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
         Self::new(unsafe {
@@ -600,7 +600,7 @@ impl SimdCastFrom<AVX1, Vu32> for f64x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vf32> for f64x8<AVX1> {
+impl SimdFromCast<AVX1, Vf32> for f64x8<AVX1> {
     fn from_cast(from: Vf32) -> Self {
         Self::new(unsafe {
             (
@@ -617,7 +617,7 @@ impl SimdCastFrom<AVX1, Vf32> for f64x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vu64> for f64x8<AVX1> {
+impl SimdFromCast<AVX1, Vu64> for f64x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
         Self::new(unsafe { (_mm256_cvtepu64_pdx(from.value.0), _mm256_cvtepu64_pdx(from.value.1)) })
@@ -629,7 +629,7 @@ impl SimdCastFrom<AVX1, Vu64> for f64x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vi64> for f64x8<AVX1> {
+impl SimdFromCast<AVX1, Vi64> for f64x8<AVX1> {
     fn from_cast(from: Vi64) -> Self {
         Self::new(unsafe { (_mm256_cvtepi64_pdx(from.value.0), _mm256_cvtepi64_pdx(from.value.1)) })
     }

@@ -289,7 +289,7 @@ impl_ops!(@UNARY i32x8 AVX1 => Not::not, Neg::neg);
 impl_ops!(@BINARY i32x8 AVX1 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS i32x8 AVX1 => Shr::shr, Shl::shl);
 
-impl SimdCastFrom<AVX1, Vf32> for i32x8<AVX1> {
+impl SimdFromCast<AVX1, Vf32> for i32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vf32) -> Self {
         Self::new(unsafe { _mm256_cvttps_epi32(from.value) })
@@ -301,7 +301,7 @@ impl SimdCastFrom<AVX1, Vf32> for i32x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vu32> for i32x8<AVX1> {
+impl SimdFromCast<AVX1, Vu32> for i32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vu32) -> Self {
         Self::new(from.value)
@@ -313,7 +313,7 @@ impl SimdCastFrom<AVX1, Vu32> for i32x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vu64> for i32x8<AVX1> {
+impl SimdFromCast<AVX1, Vu64> for i32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vu64) -> Self {
         Self::from_bits(from.cast()) // truncate
@@ -325,7 +325,7 @@ impl SimdCastFrom<AVX1, Vu64> for i32x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vf64> for i32x8<AVX1> {
+impl SimdFromCast<AVX1, Vf64> for i32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vf64) -> Self {
         Self::new(unsafe {
@@ -343,7 +343,7 @@ impl SimdCastFrom<AVX1, Vf64> for i32x8<AVX1> {
     }
 }
 
-impl SimdCastFrom<AVX1, Vi64> for i32x8<AVX1> {
+impl SimdFromCast<AVX1, Vi64> for i32x8<AVX1> {
     #[inline(always)]
     fn from_cast(from: Vi64) -> Self {
         Self::from_bits(from.into_bits().cast()) // truncate

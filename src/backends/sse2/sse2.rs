@@ -588,7 +588,7 @@ impl_ops!(@BINARY i32x4 SSE2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem
 impl_ops!(@UNARY f32x4 SSE2 => Not::not, Neg::neg);
 impl_ops!(@BINARY f32x4 SSE2 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 
-impl SimdCastFrom<SSE2, i32x4<SSE2>> for f32x4<SSE2> {
+impl SimdFromCast<SSE2, i32x4<SSE2>> for f32x4<SSE2> {
     #[inline(always)]
     fn from_cast(from: i32x4<SSE2>) -> Self {
         Self::new(unsafe { _mm_cvtepi32_ps(from.value) })
@@ -600,7 +600,7 @@ impl SimdCastFrom<SSE2, i32x4<SSE2>> for f32x4<SSE2> {
     }
 }
 
-impl SimdCastFrom<SSE2, f32x4<SSE2>> for i32x4<SSE2> {
+impl SimdFromCast<SSE2, f32x4<SSE2>> for i32x4<SSE2> {
     #[inline(always)]
     fn from_cast(from: f32x4<SSE2>) -> Self {
         Self::new(unsafe { _mm_cvttps_epi32(from.value) })
