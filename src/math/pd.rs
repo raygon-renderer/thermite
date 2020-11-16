@@ -1,4 +1,4 @@
-use super::{common::*, *};
+use super::{poly::*, *};
 
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
 

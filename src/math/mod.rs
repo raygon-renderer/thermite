@@ -2,7 +2,9 @@
 
 use crate::*;
 
-mod common;
+pub mod complex;
+pub mod poly;
+
 mod pd;
 mod ps;
 
@@ -447,7 +449,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     where
         F: FnMut(usize) -> Self::Vf
     {
-        use common::*;
+        use poly::*;
 
         // max degree of hard-coded polynomials + 1 for c0
         const MAX_DEGREE_P0: usize = 16;

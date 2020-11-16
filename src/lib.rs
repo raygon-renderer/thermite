@@ -20,7 +20,7 @@ pub use self::pointer::{AssociatedVector, VPtr};
 mod mask;
 pub use mask::{BitMask, Mask};
 
-mod math;
+pub mod math;
 pub use math::SimdVectorizedMath;
 
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};

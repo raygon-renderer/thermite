@@ -1,8 +1,17 @@
-use crate::*;
+/*!
+Optimized fixed-degree polynomial evaluation
 
-// All of these polynomials use Estrin's scheme to reduce the
-// dependency chain length and encourage instruction-level parallelism, which has
-// the potential to improve performance despite the powers of X being required upfront
+All of these polynomials use Estrin's scheme to reduce the dependency chain length
+and encourage instruction-level parallelism, which has the potential to improve
+performance despite the powers of X being required upfront.
+
+Powers of x are required, rather than computed internally, so they could be reused
+between multiple polynomials.
+
+Unless you are micro-optimizing, it's recommended to use `SimdVectorizedMath::poly` or `poly_f`
+*/
+
+use crate::*;
 
 #[inline(always)]
 pub fn poly_1<S: Simd, V: SimdFloatVector<S>>(x: V, c0: V, c1: V) -> V {
