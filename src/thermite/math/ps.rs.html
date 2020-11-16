@@ -1032,6 +1032,9 @@
 <span id="1031">1031</span>
 <span id="1032">1032</span>
 <span id="1033">1033</span>
+<span id="1034">1034</span>
+<span id="1035">1035</span>
+<span id="1036">1036</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1752,6 +1755,9 @@
                 <span class="comment">// one extra instruction than the raw call to `all` again, and since z &lt;= -20 is so rare,</span>
                 <span class="comment">// that extra instruction is not worth it.</span>
                 <span class="kw">if</span> <span class="ident">reflected</span>.<span class="ident">all</span>() {
+                    <span class="ident">res</span> <span class="op">=</span> <span class="ident">refl_res</span>;
+                    <span class="ident">z</span> <span class="op">=</span> <span class="op">-</span><span class="ident">z</span>;
+
                     <span class="kw">break</span> <span class="lifetime">&#39;goto_positive</span>;
                 }
             }
