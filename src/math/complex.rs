@@ -1,11 +1,4 @@
-/*!
-Complex Number Vectors
-
-Unlike most of Thermite, this is an AoS structure of variable length.
-
-However, it's still recommended to store your data as SoA, and only use this to
-process in chunks within your algorithms.
-*/
+//! Complex Number Vectors
 
 use crate::*;
 
