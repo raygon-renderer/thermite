@@ -717,6 +717,9 @@ where
                 // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
                 // that extra instruction is not worth it.
                 if reflected.all() {
+                    res = refl_res;
+                    z = -z;
+
                     break 'goto_positive;
                 }
             }
