@@ -706,16 +706,17 @@ where
         'goto_positive: while is_neg.any() {
             reflected = z.le(Vf32::<S>::splat(-20.0));
 
-            let refl_bitmask = reflected.bitmask();
             let mut refl_res = unsafe { Vf32::<S>::undefined() };
 
-            // sine is expensive, so branch for it
-            if refl_bitmask.any() {
-                // TODO: Improve error around zero
+            // sine is expensive, so branch for it.
+            if unlikely!(reflected.any()) {
+                // TODO: Improve error around integers
                 refl_res = z * (z * pi).sin();
 
-                // powi is also kind of expensive down below, so skip that if not needed
-                if refl_bitmask.all() {
+                // NOTE: I chose not to use a bitmask here, because some bitmasks can be
+                // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
+                // that extra instruction is not worth it.
+                if reflected.all() {
                     break 'goto_positive;
                 }
             }

@@ -6,7 +6,7 @@ mod common;
 mod pd;
 mod ps;
 
-//TODO: tgamma function, beta function, cbrt, j0, y0
+//TODO: beta function, j0, y0
 
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
