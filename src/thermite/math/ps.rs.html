@@ -1031,6 +1031,7 @@
 <span id="1030">1030</span>
 <span id="1031">1031</span>
 <span id="1032">1032</span>
+<span id="1033">1033</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">common</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1740,16 +1741,17 @@
         <span class="lifetime">&#39;goto_positive</span>: <span class="kw">while</span> <span class="ident">is_neg</span>.<span class="ident">any</span>() {
             <span class="ident">reflected</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">le</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">20.0</span>));
 
-            <span class="kw">let</span> <span class="ident">refl_bitmask</span> <span class="op">=</span> <span class="ident">reflected</span>.<span class="ident">bitmask</span>();
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">refl_res</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">undefined</span>() };
 
-            <span class="comment">// sine is expensive, so branch for it</span>
-            <span class="kw">if</span> <span class="ident">refl_bitmask</span>.<span class="ident">any</span>() {
-                <span class="comment">// TODO: Improve error around zero</span>
+            <span class="comment">// sine is expensive, so branch for it.</span>
+            <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">reflected</span>.<span class="ident">any</span>()) {
+                <span class="comment">// TODO: Improve error around integers</span>
                 <span class="ident">refl_res</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin</span>();
 
-                <span class="comment">// powi is also kind of expensive down below, so skip that if not needed</span>
-                <span class="kw">if</span> <span class="ident">refl_bitmask</span>.<span class="ident">all</span>() {
+                <span class="comment">// NOTE: I chose not to use a bitmask here, because some bitmasks can be</span>
+                <span class="comment">// one extra instruction than the raw call to `all` again, and since z &lt;= -20 is so rare,</span>
+                <span class="comment">// that extra instruction is not worth it.</span>
+                <span class="kw">if</span> <span class="ident">reflected</span>.<span class="ident">all</span>() {
                     <span class="kw">break</span> <span class="lifetime">&#39;goto_positive</span>;
                 }
             }
