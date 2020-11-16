@@ -3,6 +3,8 @@
 use crate::*;
 
 pub mod complex;
+#[cfg(feature = "nightly")]
+pub mod hyperdual;
 pub mod poly;
 
 mod pd;
