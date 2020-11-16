@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["complex","Complex Number Vectors"],["poly","Optimized fixed-degree polynomial evaluation"]],"trait":[["SimdVectorizedMath","Set of vectorized special functions optimized for both single and double precision"]]});

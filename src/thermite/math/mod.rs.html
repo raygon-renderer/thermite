@@ -852,12 +852,16 @@
 <span id="851">851</span>
 <span id="852">852</span>
 <span id="853">853</span>
+<span id="854">854</span>
+<span id="855">855</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
-<span class="kw">mod</span> <span class="ident">common</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">complex</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">poly</span>;
+
 <span class="kw">mod</span> <span class="ident">pd</span>;
 <span class="kw">mod</span> <span class="ident">ps</span>;
 
@@ -1302,7 +1306,7 @@
     <span class="kw">where</span>
         <span class="ident">F</span>: <span class="ident">FnMut</span>(<span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>
     {
-        <span class="kw">use</span> <span class="ident">common</span>::<span class="kw-2">*</span>;
+        <span class="kw">use</span> <span class="ident">poly</span>::<span class="kw-2">*</span>;
 
         <span class="comment">// max degree of hard-coded polynomials + 1 for c0</span>
         <span class="kw">const</span> <span class="ident">MAX_DEGREE_P0</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="number">16</span>;
