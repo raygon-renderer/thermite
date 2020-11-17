@@ -873,3 +873,7 @@ pub type Vf64<S> = <S as Simd>::Vf64;
 
 pub type Vusize<S> = <S as Simd>::Vusize;
 pub type Visize<S> = <S as Simd>::Visize;
+
+// Re-exported for procedural macro
+#[doc(hidden)]
+pub use std::hint::unreachable_unchecked;
