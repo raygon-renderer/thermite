@@ -187,7 +187,7 @@ impl SimdVector<AVX1> for f64x8<AVX1> {
     }
 
     #[inline(always)]
-    fn index() -> Self {
+    fn indexed() -> Self {
         unsafe { Self::new((_mm256_setr_pd(0.0, 1.0, 2.0, 3.0), _mm256_setr_pd(4.0, 5.0, 6.0, 7.0))) }
     }
 

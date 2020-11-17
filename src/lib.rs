@@ -384,9 +384,9 @@ pub trait SimdBitwise<S: Simd + ?Sized>:
     unsafe fn _mm_bitxor(self, rhs: Self) -> Self;
 
     #[doc(hidden)]
-    unsafe fn _mm_shr(self, count: S::Vu32) -> Self;
+    unsafe fn _mm_shr(self, count: Vu32<S>) -> Self;
     #[doc(hidden)]
-    unsafe fn _mm_shl(self, count: S::Vu32) -> Self;
+    unsafe fn _mm_shl(self, count: Vu32<S>) -> Self;
 
     #[doc(hidden)]
     #[inline(always)]
@@ -486,7 +486,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
     /// and each subsequent lane is one plus the previous lane.
     ///
     /// `[0, 1, 2, 3, 4, 5, 6, 7, ...]`
-    fn index() -> Self;
+    fn indexed() -> Self;
 
     /// Maximum representable valid value
     fn min_value() -> Self;

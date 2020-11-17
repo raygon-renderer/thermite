@@ -218,9 +218,13 @@ where
     /// Creates a wide SIMD mask from a single-bit bitmask
     #[inline(always)]
     pub fn from_bitmask(bitmask: u16) -> Self {
+        // Stable Rust is having a brain aneurysm on this and won't do `<<` for some reason. Nightly works fine.
+        //let mask = Vu32::<S>::one() << Vu32::<S>::indexed();
+        let mask: Vu32<S> = unsafe { <Vu32<S> as SimdBitwise<S>>::_mm_shr(S::Vu32::one(), S::Vu32::indexed()) };
+
         // TODO: Optimize casts for non-32-bit types
-        (S::Vu32::splat(bitmask as u32) & (S::Vu32::one() << S::Vu32::index()))
-            .ne(S::Vu32::zero())
+        (Vu32::<S>::splat(bitmask as u32) & mask)
+            .ne(Vu32::<S>::zero())
             .cast_to()
     }
 
