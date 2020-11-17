@@ -215,6 +215,15 @@ where
         }
     }
 
+    /// Creates a wide SIMD mask from a single-bit bitmask
+    #[inline(always)]
+    pub fn from_bitmask(bitmask: u16) -> Self {
+        // TODO: Optimize casts for non-32-bit types
+        (S::Vu32::splat(bitmask as u32) & (S::Vu32::one() << S::Vu32::index()))
+            .ne(S::Vu32::zero())
+            .cast_to()
+    }
+
     /// Returns `true` if all lanes are truthy
     ///
     /// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,
