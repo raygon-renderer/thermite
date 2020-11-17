@@ -13,6 +13,7 @@ use syn::{
 // TODO: Add more
 static BACKENDS: &[(&str, &str)] = &[("AVX2", "avx2,fma")];
 
+/// Generates monomorphized backend `target_feature` function calls to the annotated function or `impl` block.
 #[proc_macro_attribute]
 pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let attr = syn::parse_macro_input!(attr as AttributeArgs);

@@ -1,5 +1,4 @@
 use thermite::*;
-use thermite_dispatch::dispatch;
 
 /// Test doc
 #[inline(always)]
