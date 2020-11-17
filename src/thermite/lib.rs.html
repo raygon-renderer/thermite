@@ -1261,9 +1261,9 @@ where
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_bitxor</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shr</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_shl</span>(<span class="self">self</span>, <span class="ident">count</span>: <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1363,7 +1363,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// and each subsequent lane is one plus the previous lane.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// `[0, 1, 2, 3, 4, 5, 6, 7, ...]`</span>
-    <span class="kw">fn</span> <span class="ident">index</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">indexed</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Maximum representable valid value</span>
     <span class="kw">fn</span> <span class="ident">min_value</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;

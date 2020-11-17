@@ -557,7 +557,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">index</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">indexed</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
         <span class="kw">unsafe</span> { <span class="self">Self</span>::<span class="ident">new</span>((<span class="ident">_mm256_setr_epi64x</span>(<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>), <span class="ident">_mm256_setr_epi64x</span>(<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>))) }
     }
 
