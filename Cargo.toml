@@ -38,3 +38,8 @@ codegen-units = 1
 [[bench]]
 name = "main"
 harness = false
+
+[workspace]
+members = [
+    "./", "./dispatch"
+]
