@@ -1,5 +1,5 @@
-#![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics, const_generics))]
-#![allow(unused_imports, non_camel_case_types, non_snake_case, incomplete_features)]
+#![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics, min_const_generics))]
+#![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
 #[macro_use]
 mod macros;

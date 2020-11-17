@@ -24,6 +24,7 @@ mod divider {
         (res, rem as u32)
     }
 
+    #[inline(always)]
     pub const fn gen_u32(d: u32) -> (u32, u8) {
         if d == 0 {
             return (0, 32); // shift to zero
