@@ -104,18 +104,6 @@ fn gen_function(attr: AttributeArgs, item: ItemFn) -> TokenStream {
 
     let ref mut branches = Vec::new();
 
-    let safe_inner = if unsafety.is_some() {
-        quote! { #block }
-    } else {
-        quote! {
-            #[inline(always)]
-            #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #block
-
-            // call safe inner function
-            #ident #tf (#(#forward_args,)*)
-        }
-    };
-
     for (backend, instrset) in BACKENDS {
         let backend = quote::format_ident!("{}", backend);
 
@@ -123,7 +111,13 @@ fn gen_function(attr: AttributeArgs, item: ItemFn) -> TokenStream {
             ::thermite::SimdInstructionSet::#backend => {
                 #[inline]
                 #[target_feature(enable = #instrset)]
-                #asyncness unsafe fn __dispatch #impl_generics(#inputs) #output #where_clause { #safe_inner }
+                #asyncness unsafe fn __dispatch #impl_generics(#inputs) #output #where_clause {
+                    #[inline(always)]
+                    #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #block
+
+                    // call named inner function
+                    #ident #tf (#(#forward_args,)*)
+                }
 
                 unsafe { __dispatch #tf (#(#forward_args,)*) }
             }
