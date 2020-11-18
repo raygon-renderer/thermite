@@ -6,32 +6,63 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use syn::{
-    AttributeArgs, FnArg, GenericArgument, GenericParam, Ident, Item, ItemFn, ItemImpl, Lifetime, Lit, Meta,
-    NestedMeta, Pat, PatType, PathArguments, Signature, Type,
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    Attribute, AttributeArgs, FnArg, GenericArgument, GenericParam, Ident, Item, ItemFn, ItemImpl, Lifetime, Lit, Meta,
+    NestedMeta, Pat, PatType, PathArguments, Signature, Token, Type,
 };
 
 // TODO: Add more
-static BACKENDS: &[(&str, &str)] = &[("AVX2", "avx2,fma")];
+static BACKENDS: &[(&str, &str)] = &[("AVX", "avx,fma"), ("AVX2", "avx2,fma")];
+
+type PunctuatedAttributes = Punctuated<NestedMeta, Token![,]>;
+
+struct DispatchAttributes {
+    pub attributes: PunctuatedAttributes,
+}
+
+impl Parse for DispatchAttributes {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(DispatchAttributes {
+            attributes: Punctuated::parse_terminated(input)?,
+        })
+    }
+}
 
 /// Generates monomorphized backend `target_feature` function calls to the annotated function or `impl` block.
 #[proc_macro_attribute]
 pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let attr = syn::parse_macro_input!(attr as AttributeArgs);
+    let attr = syn::parse_macro_input!(attr as DispatchAttributes);
     let item = syn::parse_macro_input!(item as Item);
 
     proc_macro::TokenStream::from(match item {
-        Item::Fn(fn_item) => gen_function(attr, fn_item),
+        Item::Fn(fn_item) => gen_function(attr.attributes, fn_item),
+        Item::Impl(impl_block) => gen_impl_block(attr.attributes, impl_block),
         _ => unimplemented!(),
     })
 }
 
-fn gen_function(attr: AttributeArgs, item: ItemFn) -> TokenStream {
-    let mut simd = None;
+fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
+    quote! {}
+}
 
-    for attr in &attr {
+fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
+    let default_simd = quote::format_ident!("S");
+    let mut simd = quote! { #default_simd };
+    let mut thermite = quote! { ::thermite };
+
+    for attr in attr.iter() {
         match attr {
             NestedMeta::Meta(Meta::Path(path)) => {
-                simd = Some(path);
+                simd = quote! { #path };
+            }
+            NestedMeta::Meta(Meta::NameValue(nv)) if nv.path.is_ident("thermite") => {
+                let lit = match nv.lit {
+                    Lit::Str(ref s) => s.value(),
+                    _ => panic!("Invalid thermite path: {:?}", nv.lit.span()),
+                };
+                let path = quote::format_ident!("{}", lit);
+                thermite = quote! { #path };
             }
             _ => {}
         }
@@ -89,7 +120,6 @@ fn gen_function(attr: AttributeArgs, item: ItemFn) -> TokenStream {
                         _ => {}
                     }
                 }
-
                 quote! { #lf }
             }
             GenericParam::Const(c) => {
@@ -99,41 +129,43 @@ fn gen_function(attr: AttributeArgs, item: ItemFn) -> TokenStream {
         });
     }
 
-    let tf = quote! {
-        ::<#(#forward_tys),*>
+    // TODO: Test if inner function must always be redeclared
+    let inner = quote! {
+        #[inline(always)]
+        #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #block
     };
 
-    let ref mut branches = Vec::new();
+    let tf = quote! { ::<#(#forward_tys),*> };
+
+    let mut branches = Vec::new();
 
     for (backend, instrset) in BACKENDS {
+        let dispatch_ident = quote::format_ident!("__dispatch_{}", backend.to_lowercase());
         let backend = quote::format_ident!("{}", backend);
 
         branches.push(quote! {
-            ::thermite::SimdInstructionSet::#backend => {
+            #thermite::SimdInstructionSet::#backend => {
                 #[inline]
                 #[target_feature(enable = #instrset)]
-                #asyncness unsafe fn __dispatch #impl_generics(#inputs) #output #where_clause {
-                    #[inline(always)]
-                    #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #block
-
+                #asyncness unsafe fn #dispatch_ident #impl_generics(#inputs) #output #where_clause {
                     // call named inner function
                     #ident #tf (#(#forward_args,)*)
                 }
 
-                unsafe { __dispatch #tf (#(#forward_args,)*) }
+                unsafe { #dispatch_ident #tf (#(#forward_args,)*) }
             }
         });
     }
 
-    let body = quote! {
-        match <#simd as ::thermite::Simd>::INSTRSET {
-            #(#branches,)*
-            _ => unsafe { ::thermite::unreachable_unchecked() }
-        }
-    };
-
     quote! {
-        #(#fn_attrs)* #vis #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause { #body }
+        #(#fn_attrs)* #vis #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause {
+            #inner
+
+            match <#simd as #thermite::Simd>::INSTRSET {
+                #(#branches,)*
+                _ => unsafe { #thermite::unreachable_unchecked() }
+            }
+        }
     }
 }
 
