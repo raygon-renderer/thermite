@@ -220,7 +220,7 @@ where
     pub fn from_bitmask(bitmask: u16) -> Self {
         // Stable Rust is having a brain aneurysm on this and won't do `<<` for some reason. Nightly works fine.
         //let mask = Vu32::<S>::one() << Vu32::<S>::indexed();
-        let mask: Vu32<S> = unsafe { <Vu32<S> as SimdBitwise<S>>::_mm_shr(S::Vu32::one(), S::Vu32::indexed()) };
+        let mask: Vu32<S> = <Vu32<S> as Shr<Vu32<S>>>::shr(Vu32::<S>::one(), Vu32::<S>::indexed());
 
         // TODO: Optimize casts for non-32-bit types
         (Vu32::<S>::splat(bitmask as u32) & mask)
