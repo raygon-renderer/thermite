@@ -8,8 +8,10 @@ use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    Attribute, AttributeArgs, FnArg, GenericArgument, GenericParam, Ident, Item, ItemFn, ItemImpl, Lifetime, Lit, Meta,
-    NestedMeta, Pat, PatType, PathArguments, Signature, Token, Type,
+    visit_mut::VisitMut,
+    Attribute, AttributeArgs, ConstParam, FnArg, GenericArgument, GenericParam, Ident, ImplItem, ImplItemMethod, Item,
+    ItemFn, ItemImpl, Lifetime, Lit, Meta, NestedMeta, Pat, PatType, PathArguments, Receiver, Signature, Token, Type,
+    TypeParam,
 };
 
 // TODO: Add more
@@ -42,11 +44,7 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
     })
 }
 
-fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
-    quote! {}
-}
-
-fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
+fn parse_attr(attr: PunctuatedAttributes) -> (TokenStream, TokenStream) {
     let default_simd = quote::format_ident!("S");
     let mut simd = quote! { #default_simd };
     let mut thermite = quote! { ::thermite };
@@ -67,6 +65,208 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
             _ => {}
         }
     }
+
+    (simd, thermite)
+}
+
+fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
+    let (simd, thermite) = parse_attr(attr);
+
+    let ItemImpl {
+        attrs,
+        defaultness,
+        unsafety,
+        impl_token,
+        generics,
+        trait_,
+        self_ty,
+        items,
+        ..
+    } = &item;
+
+    let mut impl_lifetimes = Vec::new();
+    let mut impl_generics_not_lifetimes = Vec::new();
+
+    for g in generics.params.iter() {
+        match g {
+            GenericParam::Lifetime(lf) => impl_lifetimes.push(&lf.lifetime),
+            _ => impl_generics_not_lifetimes.push(g),
+        }
+    }
+
+    let (impl_generics, _, where_clause) = generics.split_for_impl();
+
+    let items = items.iter().map(|item| {
+        match item {
+            ImplItem::Method(method) => {
+                let ImplItemMethod {
+                    attrs: fn_attrs,
+                    vis,
+                    defaultness,
+                    sig,
+                    block,
+                } = method;
+
+                let Signature {
+                    asyncness,
+                    unsafety,
+                    abi,
+                    ident,
+                    generics: fn_generics,
+                    inputs,
+                    output,
+                    ..
+                } = sig;
+
+                let mut lifetimes = impl_lifetimes.clone();
+                let mut impl_generics_not_lifetimes = impl_generics_not_lifetimes.clone();
+
+                for g in fn_generics.params.iter() {
+                    match g {
+                        GenericParam::Lifetime(lf) => lifetimes.push(&lf.lifetime),
+                        _ => impl_generics_not_lifetimes.push(g),
+                    }
+                }
+
+                let ref where_clause = generics
+                    .where_clause.as_ref()
+                    .into_iter()
+                    .chain(fn_generics.where_clause.as_ref().into_iter())
+                    .map(|wc| wc.predicates.clone().into_iter())
+                    .flatten().collect::<Vec<_>>();
+
+                let forward_args_inner = forward_args(inputs.iter(), true);
+                let forward_args_outer = forward_args(inputs.iter(), false);
+
+                let tf = {
+                    let lifetimes = lifetimes.iter().filter_map(|lf| {
+                        for arg in inputs.iter() {
+                            match arg {
+                                FnArg::Typed(ty) if is_late_bound(lf, &ty.ty) => return None,
+                                _ => {}
+                            }
+                        }
+
+                        Some(quote! { #lf })
+                    });
+
+                    let generics = impl_generics_not_lifetimes.iter().map(|g| {
+                        match g {
+                            GenericParam::Type(TypeParam { ident, ..}) | GenericParam::Const(ConstParam { ident, ..}) => quote! { #ident },
+                            _ => unimplemented!()
+                        }
+                    });
+
+                    quote! {
+                        ::< #(#lifetimes,)* #(#generics,)* >
+                    }
+                };
+
+                let ref renamed_inputs: Vec<_> = inputs.iter().map(|input| {
+                    match input {
+                        FnArg::Receiver(rcv) => {
+                            let Receiver { attrs, reference, mutability, .. } = rcv;
+
+                            let reference = match reference {
+                                Some((_, lf)) => quote! { & #lf #mutability },
+                                None => quote! {}
+                            };
+
+                            quote! { #(#attrs)* __self: #reference #self_ty }
+                        }
+                        _ => quote! { #input }
+                    }
+                }).collect();
+
+                let mut block = block.clone();
+
+                // Replace all occurrences of `self` with `__self`
+                SelfVisitor.visit_block_mut(&mut block);
+
+                let inner = quote! {
+                    #[inline(always)]
+                    #unsafety fn #ident< #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >(#(#renamed_inputs,)*) #output where #(#where_clause,)* #block
+                };
+
+                let branches = BACKENDS.iter().map(|(backend, instrset)| {
+                    let dispatch_ident = quote::format_ident!("__dispatch_{}", backend.to_lowercase());
+                    let backend = quote::format_ident!("{}", backend);
+
+                    quote! {
+                        #thermite::SimdInstructionSet::#backend => {
+                            #[inline]
+                            #[target_feature(enable = #instrset)]
+                            #asyncness unsafe fn #dispatch_ident < #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >
+                            (#(#renamed_inputs,)*) #output where #(#where_clause,)* {
+                                // call named inner function
+                                #ident #tf (#(#forward_args_inner,)*)
+                            }
+
+                            unsafe { #dispatch_ident #tf (#(#forward_args_outer,)*) }
+                        }
+                    }
+                });
+
+                let (fn_impl_generics, _, fn_where_clause) = fn_generics.split_for_impl();
+
+                quote! {
+                    #(#fn_attrs)* #vis #unsafety fn #ident #fn_impl_generics(#inputs) #output #fn_where_clause {
+                        #inner
+                        match <#simd as #thermite::Simd>::INSTRSET {
+                            #(#branches)*
+                            _ => unsafe { #thermite::unreachable_unchecked() }
+                        }
+                    }
+                }
+            }
+            _ => quote! { #item }, // verbatim
+        }
+    });
+
+    let res = match trait_ {
+        Some((bang, name, for_)) => quote! {
+            #defaultness #unsafety #impl_token #impl_generics #bang #name #for_ #self_ty #where_clause {
+                #(#items)*
+            }
+        },
+        None => quote! {
+            #defaultness #unsafety #impl_token #impl_generics #self_ty #where_clause {
+                #(#items)*
+            }
+        },
+    };
+
+    res
+}
+
+fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, inner: bool) -> Vec<TokenStream> {
+    let mut forward_args = Vec::new();
+
+    for input in inputs {
+        forward_args.push(match input {
+            FnArg::Typed(arg) => {
+                if let Pat::Ident(ref param) = *arg.pat {
+                    let ref ident = param.ident;
+                    quote! { #ident }
+                } else {
+                    unimplemented!()
+                }
+            }
+            FnArg::Receiver(rcv) => {
+                if inner {
+                    quote! { __self }
+                } else {
+                    quote! { self }
+                }
+            }
+        })
+    }
+
+    forward_args
+}
+
+fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
+    let (simd, thermite) = parse_attr(attr);
 
     let ItemFn {
         sig,
@@ -89,22 +289,9 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
     // let this handle half of the work
     let (impl_generics, _, where_clause) = generics.split_for_impl();
 
-    let ref mut forward_args = Vec::new();
-    let ref mut forward_tys = Vec::new();
+    let ref mut forward_args = forward_args(inputs.iter(), false);
 
-    for input in inputs.iter() {
-        forward_args.push(match input {
-            FnArg::Typed(arg) => {
-                if let Pat::Ident(ref param) = *arg.pat {
-                    let ref ident = param.ident;
-                    quote! { #ident }
-                } else {
-                    unimplemented!()
-                }
-            }
-            _ => unimplemented!(),
-        });
-    }
+    let ref mut forward_tys = Vec::new();
 
     // Accumulate generic names for forwarding, with the exception of late-bound lifetimes
     'forwarding_tys: for generic in generics.params.iter() {
@@ -170,10 +357,13 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
 }
 
 struct SelfVisitor;
-
-impl syn::visit_mut::VisitMut for SelfVisitor {
+impl VisitMut for SelfVisitor {
     fn visit_ident_mut(&mut self, i: &mut Ident) {
-        println!("{:?}", i);
+        if i == "self" {
+            let span = i.span();
+            *i = quote::format_ident!("__self");
+            i.set_span(span);
+        }
     }
 }
 
