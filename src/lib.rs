@@ -34,6 +34,9 @@ pub trait SimdVectorizedMath<S: Simd> {}
 #[cfg(not(feature = "math"))]
 impl<S: Simd, T> SimdVectorizedMath<S> for T where T: SimdFloatVector<S> {}
 
+#[cfg(feature = "rng")]
+pub mod rng;
+
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
@@ -844,7 +847,7 @@ pub enum SimdInstructionSet {
 /// SIMD Instruction set, contains all types
 ///
 ///
-pub trait Simd: Debug + Send + Sync + Clone + Copy {
+pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     const INSTRSET: SimdInstructionSet;
 
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
