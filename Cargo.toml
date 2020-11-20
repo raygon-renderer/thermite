@@ -24,6 +24,8 @@ half = "1.6.0"
 criterion = "0.3"
 libm = "0.2.1"
 plotly = "0.6.0"
+rand = "0.7.3"
+rand_xoshiro = "0.4.0"
 
 [profile.dev]
 opt-level = 2
