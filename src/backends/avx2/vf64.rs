@@ -30,14 +30,25 @@ impl SimdVectorBase<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn load_aligned_unchecked(ptr: *const Self::Element) -> Self {
-        Self::new((_mm256_load_pd(ptr), _mm256_load_pd(ptr.add(Self::NUM_ELEMENTS))))
+    unsafe fn load_aligned_unchecked(src: *const Self::Element) -> Self {
+        Self::new((_mm256_load_pd(src), _mm256_load_pd(src.add(Self::NUM_ELEMENTS / 2))))
     }
 
     #[inline(always)]
-    unsafe fn store_aligned_unchecked(self, ptr: *mut Self::Element) {
-        _mm256_store_pd(ptr, self.value.0);
-        _mm256_store_pd(ptr.add(Self::NUM_ELEMENTS), self.value.1);
+    unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
+        Self::new((_mm256_loadu_pd(src), _mm256_loadu_pd(src.add(Self::NUM_ELEMENTS / 2))))
+    }
+
+    #[inline(always)]
+    unsafe fn store_aligned_unchecked(self, dst: *mut Self::Element) {
+        _mm256_store_pd(dst, self.value.0);
+        _mm256_store_pd(dst.add(Self::NUM_ELEMENTS / 2), self.value.1);
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
+        _mm256_storeu_pd(dst, self.value.0);
+        _mm256_storeu_pd(dst.add(Self::NUM_ELEMENTS / 2), self.value.1);
     }
 
     #[inline]

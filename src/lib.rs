@@ -253,9 +253,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     /// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.
     #[inline(always)]
     unsafe fn load_unaligned_unchecked(src: *const Self::Element) -> Self {
-        let mut target = mem::MaybeUninit::uninit();
-        ptr::copy_nonoverlapping(src as *const Self, target.as_mut_ptr(), 1);
-        target.assume_init()
+        (src as *const Self).read_unaligned()
     }
 
     /// Stores a vector to a given address (does not have to be aligned).
@@ -263,7 +261,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     /// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.
     #[inline(always)]
     unsafe fn store_unaligned_unchecked(self, dst: *mut Self::Element) {
-        ptr::copy_nonoverlapping(&self as *const Self, dst as *mut Self, 1);
+        (dst as *mut Self).write_unaligned(self)
     }
 
     /// Loads values from arbitrary addresses in memory based on offsets from a base address.
