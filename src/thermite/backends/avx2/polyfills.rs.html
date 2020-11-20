@@ -1,4 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source to the Rust file `src/backends/avx2/polyfills.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>polyfills.rs.html -- source</title><link rel="stylesheet" type="text/css" href="../../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../../ayu.css" disabled ><script src="../../../../storage.js"></script><noscript><link rel="stylesheet" href="../../../../noscript.css"></noscript><link rel="shortcut icon" href="../../../../favicon.ico"><style type="text/css">#crate-search{background-image:url("../../../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><span class="help-button">?</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source to the Rust file `src/backends/avx2/polyfills.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>polyfills.rs.html -- source</title><link rel="stylesheet" type="text/css" href="../../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../../../ayu.css" disabled ><script src="../../../../storage.js"></script><noscript><link rel="stylesheet" href="../../../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../../../favicon.svg">
+<link rel="alternate icon" type="image/png" href="../../../../favicon-16x16.png">
+<link rel="alternate icon" type="image/png" href="../../../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><span class="help-button">?</span>
                 <a id="settings-menu" href="../../../../settings.html"><img src="../../../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
@@ -304,7 +306,7 @@
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">backends</span>::<span class="ident">avx1</span>::<span class="ident">polyfills</span>::{<span class="ident">_mm256_blendv_epi32x</span>, <span class="ident">_mm256_blendv_epi64x</span>};
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_psx</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_psx</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256</span> {
     <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="ident">x</span>;
     <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>(<span class="number">0x4B000000u32</span> <span class="kw">as</span> <span class="ident">i32</span>);
     <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_blend_epi16</span>(<span class="ident">ymm0</span>, <span class="ident">ymm1</span>, <span class="number">170</span>);
@@ -319,14 +321,14 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
     <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0018000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
     <span class="ident">_mm256_sub_epi64</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu64x_limited</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="comment">// https://stackoverflow.com/a/41148578/2083075</span>
     <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">transmute</span>::<span class="op">&lt;</span><span class="ident">u64</span>, <span class="ident">i64</span><span class="op">&gt;</span>(<span class="number">0x0010000000000000</span>) <span class="kw">as</span> <span class="ident">f64</span>);
     <span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_add_pd</span>(<span class="ident">x</span>, <span class="ident">m</span>)), <span class="ident">_mm256_castpd_si256</span>(<span class="ident">m</span>))
@@ -335,7 +337,7 @@
 <span class="comment">// https://stackoverflow.com/a/41223013/2083075</span>
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256d</span> {
     <span class="kw">let</span> <span class="ident">magic_i_lo</span>   <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4330000000000000</span>);  <span class="comment">// 2^52        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_hi32</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000000000000</span>);  <span class="comment">// 2^84        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_all</span>  <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000000100000</span>);  <span class="comment">// 2^84 + 2^52 encoded as floating-point</span>
@@ -351,7 +353,7 @@
 <span class="comment">// https://stackoverflow.com/a/41223013/2083075</span>
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepi64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256d</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepi64_pdx</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256d</span> {
     <span class="kw">let</span> <span class="ident">magic_i_lo</span>   <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4330000000000000</span>); <span class="comment">// 2^52               encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_hi32</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000080000000</span>); <span class="comment">// 2^84 + 2^63        encoded as floating-point</span>
     <span class="kw">let</span> <span class="ident">magic_i_all</span>  <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0x4530000080100000</span>); <span class="comment">// 2^84 + 2^63 + 2^52 encoded as floating-point</span>
@@ -365,7 +367,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi32</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi32x</span>(
@@ -377,7 +379,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_adds_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi64x</span>(
@@ -388,7 +390,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi32x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi32</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi32x</span>(
@@ -402,7 +404,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_subs_epi64x</span>(<span class="ident">lhs</span>: <span class="ident">__m256i</span>, <span class="ident">rhs</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi64</span>(<span class="ident">lhs</span>, <span class="ident">rhs</span>);
 
     <span class="ident">_mm256_blendv_epi64x</span>(
@@ -416,7 +418,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">should_negate</span> <span class="op">=</span> <span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">x</span>, <span class="ident">_mm256_setzero_si256</span>()), <span class="ident">_mm256_set1_epi64x</span>(<span class="op">-</span><span class="number">1</span>));
 
     <span class="ident">_mm256_add_epi64</span>(
@@ -426,7 +428,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epi64</span>(<span class="ident">x</span>: <span class="ident">__m128</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epi64</span>(<span class="ident">x</span>: <span class="ident">__m128</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">x0</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">x</span>);
     <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">_mm_permute_ps</span>(<span class="ident">x</span>, <span class="number">1</span>));
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">_mm_cvttss_si64</span>(<span class="ident">_mm_permute_ps</span>(<span class="ident">x</span>, <span class="number">2</span>));
@@ -436,7 +438,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256d</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">low</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">x</span>);
     <span class="kw">let</span> <span class="ident">high</span> <span class="op">=</span> <span class="ident">_mm256_extractf128_pd</span>(<span class="ident">x</span>, <span class="number">1</span>);
 
@@ -449,7 +451,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epu32x</span>(<span class="ident">x</span>: <span class="ident">__m256</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtps_epu32x</span>(<span class="ident">x</span>: <span class="ident">__m256</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="comment">// TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -&gt; u32x4)`, but it&#39;s not ideal and</span>
     <span class="comment">// produces different results from `f32 as u32` with negaitve values and values larger than some value</span>
     <span class="kw">let</span> <span class="ident">xmm0</span> <span class="op">=</span> <span class="ident">x</span>;
@@ -466,7 +468,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu32x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256d</span>) <span class="op">-&gt;</span> <span class="ident">__m128i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtpd_epu32x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256d</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m128i</span> {
     <span class="kw">let</span> <span class="ident">ymm1</span> <span class="op">=</span> <span class="ident">_mm256_set1_pd</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x41e0000000000000</span>));
     <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_cmp_pd</span>(<span class="ident">ymm0</span>, <span class="ident">ymm1</span>, <span class="ident">_CMP_LT_OQ</span>);
     <span class="kw">let</span> <span class="ident">xmm2</span> <span class="op">=</span> <span class="ident">_mm256_castpd256_pd128</span>(<span class="ident">ymm2</span>); <span class="comment">// lower half of ymm2</span>
@@ -483,7 +485,7 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullo_epi64x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullo_epi64x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">ymm2</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">ymm1</span>, <span class="number">32</span>);
     <span class="kw">let</span> <span class="ident">ymm3</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">ymm0</span>, <span class="number">32</span>);
 
@@ -511,7 +513,7 @@
 
     <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>, <span class="ident">y</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>, <span class="ident">y</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">lomask</span>  <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">0xffffffff</span>);
         <span class="kw">let</span> <span class="ident">xh</span>      <span class="op">=</span> <span class="ident">_mm256_shuffle_epi32</span>(<span class="ident">x</span>, <span class="number">0xB1</span>);    <span class="comment">// x0l, x0h, x1l, x1h</span>
         <span class="kw">let</span> <span class="ident">yh</span>      <span class="op">=</span> <span class="ident">_mm256_shuffle_epi32</span>(<span class="ident">y</span>, <span class="number">0xB1</span>);    <span class="comment">// y0l, y0h, y1l, y1h</span>
@@ -532,7 +534,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epu32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epu32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">hi_product_0Z2Z</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">_mm256_mul_epu32</span>(<span class="ident">a</span>, <span class="ident">b</span>), <span class="number">32</span>);
         <span class="kw">let</span> <span class="ident">a1X3X</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">a</span>, <span class="number">32</span>);
         <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">_mm256_set_epi32</span>(<span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>);
@@ -541,7 +543,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epi32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epi32x</span>(<span class="ident">a</span>: <span class="ident">__m256i</span>, <span class="ident">b</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">hi_product_0Z2Z</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">_mm256_mul_epi32</span>(<span class="ident">a</span>, <span class="ident">b</span>), <span class="number">32</span>);
         <span class="kw">let</span> <span class="ident">a1X3X</span> <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">a</span>, <span class="number">32</span>);
         <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">_mm256_set_epi32</span>(<span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>, <span class="op">-</span><span class="number">1</span>, <span class="number">0</span>);
@@ -550,12 +552,12 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="ident">_mm256_srai_epi32</span>(<span class="ident">_mm256_shuffle_epi32</span>(<span class="ident">v</span>, <span class="ident">_mm_shuffle</span>(<span class="number">3</span>, <span class="number">3</span>, <span class="number">1</span>, <span class="number">1</span>)), <span class="number">31</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>, <span class="ident">y</span>: <span class="ident">__m256i</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_mullhi_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>, <span class="ident">y</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">x</span>, <span class="ident">y</span>);
         <span class="kw">let</span> <span class="ident">t1</span> <span class="op">=</span> <span class="ident">_mm256_and_si256</span>(<span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">x</span>), <span class="ident">y</span>);
         <span class="kw">let</span> <span class="ident">t2</span> <span class="op">=</span> <span class="ident">_mm256_and_si256</span>(<span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">y</span>), <span class="ident">x</span>);
@@ -563,14 +565,14 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu32x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">magic</span>: <span class="ident">u32</span>, <span class="ident">more</span>: <span class="ident">u8</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-        <span class="kw">if</span> <span class="ident">magic</span> <span class="op">==</span> <span class="number">0</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu32x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">magic</span>: <span class="ident">u32</span>, <span class="ident">more</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+        <span class="kw">if</span> <span class="ident">magic</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
             <span class="kw">return</span> <span class="ident">_mm256_srli_epi32</span>(<span class="ident">numers</span>, <span class="ident">more</span> <span class="kw">as</span> <span class="ident">i32</span>);
         }
 
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu32x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi32</span>(<span class="ident">magic</span> <span class="kw">as</span> <span class="ident">i32</span>));
 
-        <span class="kw">if</span> <span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!=</span> <span class="number">0</span> {
+        <span class="kw">if</span> <span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!</span><span class="op">=</span> <span class="number">0</span> {
             <span class="ident">_mm256_srli_epi32</span>(
                 <span class="ident">_mm256_add_epi32</span>(<span class="ident">_mm256_srli_epi32</span>(<span class="ident">_mm256_sub_epi32</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
                 (<span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x1F</span>) <span class="kw">as</span> <span class="ident">i32</span>,
@@ -581,14 +583,14 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu64x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">magic</span>: <span class="ident">u64</span>, <span class="ident">more</span>: <span class="ident">u8</span>) <span class="op">-&gt;</span> <span class="ident">__m256i</span> {
-        <span class="kw">if</span> <span class="ident">magic</span> <span class="op">==</span> <span class="number">0</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu64x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">magic</span>: <span class="ident">u64</span>, <span class="ident">more</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+        <span class="kw">if</span> <span class="ident">magic</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
             <span class="kw">return</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">numers</span>, <span class="ident">more</span> <span class="kw">as</span> <span class="ident">i32</span>);
         }
 
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi64x</span>(<span class="ident">magic</span> <span class="kw">as</span> <span class="ident">i64</span>));
 
-        <span class="kw">if</span> <span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!=</span> <span class="number">0</span> {
+        <span class="kw">if</span> <span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!</span><span class="op">=</span> <span class="number">0</span> {
             <span class="ident">_mm256_srli_epi64</span>(
                 <span class="ident">_mm256_add_epi64</span>(<span class="ident">_mm256_srli_epi64</span>(<span class="ident">_mm256_sub_epi64</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
                 (<span class="ident">more</span> <span class="op">&amp;</span> <span class="number">0x3F</span>) <span class="kw">as</span> <span class="ident">i32</span>,

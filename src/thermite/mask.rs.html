@@ -1,4 +1,6 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source to the Rust file `src/mask.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>mask.rs.html -- source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script src="../../storage.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="shortcut icon" href="../../favicon.ico"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><span class="help-button">?</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source to the Rust file `src/mask.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>mask.rs.html -- source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script src="../../storage.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><span class="help-button">?</span>
                 <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
@@ -408,7 +410,7 @@
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Clone</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">clone</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">clone</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw-2">*</span><span class="self">self</span>
     }
 }
@@ -417,13 +419,13 @@
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">PartialEq</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>]</span>
-    <span class="kw">fn</span> <span class="ident">eq</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">==</span> <span class="ident">other</span>.<span class="ident">mask</span>
+    <span class="kw">fn</span> <span class="ident">eq</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span><span class="op">=</span> <span class="ident">other</span>.<span class="ident">mask</span>
     }
 
     <span class="attribute">#[<span class="ident">inline</span>]</span>
-    <span class="kw">fn</span> <span class="ident">ne</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">!=</span> <span class="ident">other</span>.<span class="ident">mask</span>
+    <span class="kw">fn</span> <span class="ident">ne</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">!</span><span class="op">=</span> <span class="ident">other</span>.<span class="ident">mask</span>
     }
 }
 
@@ -435,16 +437,16 @@
 {
     <span class="doccomment">/// Create a bitmask for this vector type of all true bits</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span> {
-            <span class="ident">mask</span>: <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span>,
+            <span class="ident">mask</span>: <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">FULL_BITMASK</span>,
             <span class="ident">vec</span>: <span class="ident">PhantomData</span>,
         }
     }
 
     <span class="doccomment">/// Create a bitmask with all false bits</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span> {
             <span class="ident">mask</span>: <span class="number">0</span>,
             <span class="ident">vec</span>: <span class="ident">PhantomData</span>,
@@ -452,37 +454,37 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">raw</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u16</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">raw</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">u16</span> {
         <span class="self">self</span>.<span class="ident">mask</span>
     }
 
     <span class="doccomment">/// Return true if all lanes for this vector type are set to true</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">==</span> <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span><span class="op">=</span> <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">FULL_BITMASK</span>
     }
 
     <span class="doccomment">/// Return true if any lane for this vector type is set to true</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">!=</span> <span class="number">0</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">!</span><span class="op">=</span> <span class="number">0</span>
     }
 
     <span class="doccomment">/// Return true if no lanes for this vector type are set to true</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="op">!</span><span class="self">self</span>.<span class="ident">any</span>()
     }
 
     <span class="doccomment">/// Count the number of set bits</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u32</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">u32</span> {
         <span class="self">self</span>.<span class="ident">mask</span>.<span class="ident">count_ones</span>()
     }
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Debug</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">fmt</span>::<span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
+    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">fmt</span>::<span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
         <span class="macro">write</span><span class="macro">!</span>(<span class="ident">f</span>, <span class="string">&quot;Bitmask({:b})&quot;</span>, <span class="self">self</span>.<span class="ident">mask</span>)
     }
 }
@@ -494,17 +496,17 @@
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">not</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span> (<span class="op">!</span><span class="self">self</span>.<span class="ident">mask</span>) <span class="op">&amp;</span> <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span>::<span class="ident">FULL_BITMASK</span>;
+    <span class="kw">fn</span> <span class="ident">not</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span> (<span class="op">!</span><span class="self">self</span>.<span class="ident">mask</span>) <span class="op">&amp;</span> <span class="op">&lt;</span><span class="ident">V</span> <span class="kw">as</span> <span class="ident">SimdBitwise</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">FULL_BITMASK</span>;
         <span class="self">self</span>
     }
 }
 
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_bitmask_ops</span> {
-    (@<span class="ident">BINARY</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
+    (@<span class="ident">BINARY</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
             <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
                 <span class="self">self</span>.<span class="ident">mask</span> <span class="op">=</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="ident">mask</span>, <span class="ident">rhs</span>.<span class="ident">mask</span>);
                 <span class="self">self</span>
             }
@@ -523,7 +525,7 @@
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
-    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">fmt</span>::<span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
+    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">fmt</span>::<span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">t</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">debug_tuple</span>(<span class="string">&quot;Mask&quot;</span>);
         <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
             <span class="ident">t</span>.<span class="ident">field</span>(<span class="kw">unsafe</span> { <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) });
@@ -537,19 +539,19 @@
     <span class="ident">V</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">falsey</span>()
     }
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">value</span>: <span class="ident">V</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">value</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>(<span class="ident">value</span>, <span class="ident">PhantomData</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">value</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">V</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">value</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">V</span> {
         <span class="self">self</span>.<span class="number">0</span>
     }
 }
@@ -560,13 +562,13 @@
 {
     <span class="doccomment">/// Mask vector containing all true/non-zero lanes.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">truthy</span>()))
     }
 
     <span class="doccomment">/// Mask vector containing all zero/false lanes.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">falsey</span>()))
     }
 }
@@ -577,12 +579,12 @@
 {
     <span class="doccomment">/// Creates a mask from a value. Any non-zero lanes are considered truthy.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_value</span>(<span class="ident">v</span>: <span class="ident">V</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_value</span>(<span class="ident">v</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="ident">v</span>.<span class="ident">ne</span>(<span class="ident">V</span>::<span class="ident">zero</span>())
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cast_to</span><span class="op">&lt;</span><span class="ident">U</span>: <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;&gt;</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cast_to</span><span class="op">&lt;</span><span class="ident">U</span>: <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span> {
         <span class="ident">U</span>::<span class="ident">from_cast_mask</span>(<span class="self">self</span>)
     }
 
@@ -594,7 +596,7 @@
 
     <span class="doccomment">/// Computes `!self &amp; other` for each lane of the mask.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">and_not</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">and_not</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="number">0</span>.<span class="ident">and_not</span>(<span class="ident">other</span>.<span class="number">0</span>))
     }
 
@@ -602,7 +604,7 @@
     <span class="doccomment">///</span>
     <span class="doccomment">/// The can be useful for reusing a mask value for branching</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bitmask</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bitmask</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">BitMask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> {
         <span class="ident">BitMask</span> {
             <span class="ident">mask</span>: <span class="self">self</span>.<span class="number">0</span>.<span class="ident">bitmask</span>(),
             <span class="ident">vec</span>: <span class="ident">PhantomData</span>,
@@ -611,10 +613,10 @@
 
     <span class="doccomment">/// Creates a wide SIMD mask from a single-bit bitmask</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_bitmask</span>(<span class="ident">bitmask</span>: <span class="ident">u16</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_bitmask</span>(<span class="ident">bitmask</span>: <span class="ident">u16</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// Stable Rust is having a brain aneurysm on this and won&#39;t do `&lt;&lt;` for some reason. Nightly works fine.</span>
         <span class="comment">//let mask = Vu32::&lt;S&gt;::one() &lt;&lt; Vu32::&lt;S&gt;::indexed();</span>
-        <span class="kw">let</span> <span class="ident">mask</span>: <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">Shr</span><span class="op">&lt;</span><span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span>::<span class="ident">shr</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>(), <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">indexed</span>());
+        <span class="kw">let</span> <span class="ident">mask</span>: <span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">Shr</span><span class="op">&lt;</span><span class="ident">Vu32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">shr</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>(), <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">indexed</span>());
 
         <span class="comment">// TODO: Optimize casts for non-32-bit types</span>
         (<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">bitmask</span> <span class="kw">as</span> <span class="ident">u32</span>) <span class="op">&amp;</span> <span class="ident">mask</span>)
@@ -627,7 +629,7 @@
     <span class="doccomment">/// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,</span>
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">all</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_all</span>() }
     }
 
@@ -636,7 +638,7 @@
     <span class="doccomment">/// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,</span>
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">any</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_any</span>() }
     }
 
@@ -645,19 +647,19 @@
     <span class="doccomment">/// **NOTE**: If you wish to use the same mask for multiply calls to all/any/none,</span>
     <span class="doccomment">/// consider using `bitmask()` instead to precompute the bitmask and reuse its methods.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">none</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">_mm_none</span>() }
     }
 
     <span class="doccomment">/// Counts the number of truthy lanes</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">u32</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">count</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">u32</span> {
         <span class="self">self</span>.<span class="ident">bitmask</span>().<span class="ident">count</span>()
     }
 
     <span class="doccomment">/// For each lane, selects from `t` if the mask lane is truthy, or `f` is falsey</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">select</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="ident">U</span>, <span class="ident">f</span>: <span class="ident">U</span>) <span class="op">-&gt;</span> <span class="ident">U</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">select</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="ident">U</span>, <span class="ident">f</span>: <span class="ident">U</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">U</span>
     <span class="kw">where</span>
         <span class="ident">V</span>: <span class="ident">SimdCastTo</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">U</span><span class="op">&gt;</span>,
         <span class="ident">U</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
@@ -673,12 +675,12 @@
     <span class="kw">type</span> <span class="ident">Element</span> <span class="op">=</span> <span class="ident">bool</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">splat</span>(<span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">splat</span>(<span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="ident">value</span>)))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_aligned_unchecked</span>(<span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_aligned_unchecked</span>(<span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">default</span>();
         <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
             <span class="ident">mask</span> <span class="op">=</span> <span class="ident">mask</span>.<span class="ident">replace_unchecked</span>(<span class="ident">i</span>, <span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="kw-2">*</span><span class="ident">ptr</span>.<span class="ident">add</span>(<span class="ident">i</span>)));
@@ -696,7 +698,7 @@
     <span class="comment">// The aligned versions of these two are scalar, so just call those</span>
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">load_aligned_unchecked</span>(<span class="ident">src</span>)
     }
 
@@ -706,27 +708,27 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">extract_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">extract_unchecked</span>(<span class="ident">index</span>) <span class="op">!=</span> <span class="ident">Truthy</span>::<span class="ident">falsey</span>()
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">extract_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">value</span>().<span class="ident">extract_unchecked</span>(<span class="ident">index</span>) <span class="op">!</span><span class="op">=</span> <span class="ident">Truthy</span>::<span class="ident">falsey</span>()
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">replace_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>, <span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">replace_unchecked</span>(<span class="self">self</span>, <span class="ident">index</span>: <span class="ident">usize</span>, <span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="ident">value</span>().<span class="ident">replace_unchecked</span>(<span class="ident">index</span>, <span class="ident">Truthy</span>::<span class="ident">from_bool</span>(<span class="ident">value</span>)))
     }
 }
 
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_ops</span> {
-    (@<span class="ident">UNARY</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="op">*</span> ) <span class="op">=&gt;</span> {$(
+    (@<span class="ident">UNARY</span> <span class="op">=</span><span class="op">&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="op">*</span> ) <span class="op">=</span><span class="op">&gt;</span> {$(
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="kw">for</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">where</span> <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
             <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="self">Self</span>::<span class="ident">new</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>)) }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">Self</span>::<span class="ident">new</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>)) }
         }
     )<span class="kw-2">*</span>};
-    (@<span class="ident">BINARY</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="op">*</span> ) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
+    (@<span class="ident">BINARY</span> <span class="op">=</span><span class="op">&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="op">*</span> ) <span class="op">=</span><span class="op">&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">where</span> <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
             <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="self">Self</span>::<span class="ident">new</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="number">0</span>)) }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">Self</span>::<span class="ident">new</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>, <span class="ident">rhs</span>.<span class="number">0</span>)) }
         }
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span><span class="op">&gt;</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">where</span> <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">_assign</span><span class="op">&gt;</span>](<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) {
@@ -734,10 +736,10 @@
             }
         }
     )<span class="kw-2">*</span>}};
-    (@<span class="ident">SHIFTS</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
+    (@<span class="ident">SHIFTS</span> <span class="op">=</span><span class="op">&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>:<span class="ident">ident</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>, <span class="ident">U</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">where</span> <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="ident">U</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="ident">V</span><span class="op">&gt;</span> {
             <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="ident">U</span>) <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>, <span class="ident">rhs</span>).<span class="ident">ne</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">falsey</span>())) }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="ident">U</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span>::<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>(<span class="self">self</span>.<span class="number">0</span>, <span class="ident">rhs</span>).<span class="ident">ne</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">Truthy</span>::<span class="ident">falsey</span>())) }
         }
         <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>, <span class="ident">U</span><span class="op">&gt;</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">where</span> <span class="ident">V</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span> <span class="ident">Assign</span><span class="op">&gt;</span>]<span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span> <span class="op">+</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op_trait</span><span class="op">&lt;</span><span class="ident">U</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="ident">V</span><span class="op">&gt;</span> {
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span> <span class="ident">_assign</span><span class="op">&gt;</span>](<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">rhs</span>: <span class="ident">U</span>) {
@@ -747,42 +749,42 @@
     )<span class="kw-2">*</span>}};
 }
 
-<span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">UNARY</span> <span class="op">=&gt;</span> <span class="ident">Not</span>::<span class="ident">not</span>);
-<span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="op">=&gt;</span> <span class="ident">BitAnd</span>::<span class="ident">bitand</span>, <span class="ident">BitOr</span>::<span class="ident">bitor</span>, <span class="ident">BitXor</span>::<span class="ident">bitxor</span>);
+<span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">UNARY</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">Not</span>::<span class="ident">not</span>);
+<span class="macro">impl_ops</span><span class="macro">!</span>(@<span class="ident">BINARY</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">BitAnd</span>::<span class="ident">bitand</span>, <span class="ident">BitOr</span>::<span class="ident">bitor</span>, <span class="ident">BitXor</span>::<span class="ident">bitxor</span>);
 
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Truthy</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">PartialEq</span> {
-    <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
-    <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">from_bool</span>(<span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">from_bool</span>(<span class="ident">value</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">if</span> <span class="ident">value</span> { <span class="self">Self</span>::<span class="ident">truthy</span>() } <span class="kw">else</span> { <span class="self">Self</span>::<span class="ident">falsey</span>() }
     }
 }
 
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">decl_truthy</span> {
-    (@<span class="ident">INT</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {$(
+    (@<span class="ident">INT</span> <span class="op">=</span><span class="op">&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {$(
         <span class="kw">impl</span> <span class="ident">Truthy</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> {
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">!</span><span class="number">0</span> }
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> {  <span class="number">0</span> }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">!</span><span class="number">0</span> }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> {  <span class="number">0</span> }
         }
     )<span class="kw-2">*</span>};
-    (@<span class="ident">FLOAT</span> <span class="op">=&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=&gt;</span> {$(
+    (@<span class="ident">FLOAT</span> <span class="op">=</span><span class="op">&gt;</span> $(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {$(
         <span class="kw">impl</span> <span class="ident">Truthy</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> {
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="op">!</span><span class="number">0</span>) }
-            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>( <span class="number">0</span>) }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="op">!</span><span class="number">0</span>) }
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> { <span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>( <span class="number">0</span>) }
         }
     )<span class="kw-2">*</span>};
 }
 
-<span class="macro">decl_truthy</span><span class="macro">!</span>(@<span class="ident">INT</span> <span class="op">=&gt;</span> <span class="ident">i8</span>, <span class="ident">i16</span>, <span class="ident">i32</span>, <span class="ident">i64</span>, <span class="ident">isize</span>, <span class="ident">u8</span>, <span class="ident">u16</span>, <span class="ident">u32</span>, <span class="ident">u64</span>, <span class="ident">usize</span>);
-<span class="macro">decl_truthy</span><span class="macro">!</span>(@<span class="ident">FLOAT</span> <span class="op">=&gt;</span> <span class="ident">f32</span>, <span class="ident">f64</span>);
+<span class="macro">decl_truthy</span><span class="macro">!</span>(@<span class="ident">INT</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">i8</span>, <span class="ident">i16</span>, <span class="ident">i32</span>, <span class="ident">i64</span>, <span class="ident">isize</span>, <span class="ident">u8</span>, <span class="ident">u16</span>, <span class="ident">u32</span>, <span class="ident">u64</span>, <span class="ident">usize</span>);
+<span class="macro">decl_truthy</span><span class="macro">!</span>(@<span class="ident">FLOAT</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">f32</span>, <span class="ident">f64</span>);
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
 <span class="kw">impl</span> <span class="ident">Truthy</span> <span class="kw">for</span> <span class="ident">bool</span> {
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="bool-val">true</span> }
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-&gt;</span> <span class="self">Self</span> { <span class="bool-val">false</span> }
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">truthy</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="bool-val">true</span> }
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">falsey</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="bool-val">false</span> }
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../";window.currentCrate = "thermite";</script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
