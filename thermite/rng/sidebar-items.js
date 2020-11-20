@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["pcg32",""]],"trait":[["SimdRng",""]]});
+initSidebarItems({"mod":[["pcg32",""],["xoshiro",""]],"trait":[["SimdRng",""]]});
