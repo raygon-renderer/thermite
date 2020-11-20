@@ -22,8 +22,17 @@ pub use self::pointer::{AssociatedVector, VPtr};
 mod mask;
 pub use mask::{BitMask, Mask};
 
+#[cfg(feature = "math")]
 pub mod math;
+#[cfg(feature = "math")]
 pub use math::SimdVectorizedMath;
+
+#[cfg(not(feature = "math"))]
+/// "math" features is disabled. This trait is empty.
+pub trait SimdVectorizedMath<S: Simd> {}
+
+#[cfg(not(feature = "math"))]
+impl<S: Simd, T> SimdVectorizedMath<S> for T where T: SimdFloatVector<S> {}
 
 use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 

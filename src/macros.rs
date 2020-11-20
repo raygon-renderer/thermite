@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 #[cfg(feature = "nightly")]
 pub use std::intrinsics::{likely, unlikely};
 
