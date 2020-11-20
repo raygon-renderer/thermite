@@ -4,7 +4,7 @@ use crate::*;
 
 use super::SimdRng;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SplitMix64<S: Simd> {
     x: Vu64<S>,
 }
@@ -12,6 +12,7 @@ pub struct SplitMix64<S: Simd> {
 const PHI: u64 = 0x9e3779b97f4a7c15;
 
 impl<S: Simd> SplitMix64<S> {
+    #[inline(always)]
     pub fn new(seed: Vu64<S>) -> Self {
         SplitMix64 { x: seed }
     }
@@ -45,9 +46,10 @@ impl<S: Simd> SimdRng<S> for SplitMix64<S> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Xoshiro128Plus<S: Simd> {
-    state: [Vu64<S>; 2],
+    s0: Vu64<S>,
+    s1: Vu64<S>,
 }
 
 impl<S: Simd> Xoshiro128Plus<S> {
@@ -55,7 +57,8 @@ impl<S: Simd> Xoshiro128Plus<S> {
     pub fn new(seed: Vu64<S>) -> Self {
         let mut rng = SplitMix64::<S>::new(seed);
         Xoshiro128Plus {
-            state: [rng.next_u64(), rng.next_u64()],
+            s0: rng.next_u64(),
+            s1: rng.next_u64(),
         }
     }
 }
@@ -68,20 +71,17 @@ impl<S: Simd> SimdRng<S> for Xoshiro128Plus<S> {
 
     #[inline(always)]
     fn next_u64(&mut self) -> Vu64<S> {
-        let [mut s0, mut s1] = self.state;
+        let result = self.s0 + self.s1;
 
-        let result = s0 + s1;
-
-        s1 ^= s0;
-        s0 = s0.rol(24) ^ s1 ^ (s1 << 16);
-        s1 = s1.rol(37);
-        self.state = [s0, s1];
+        self.s1 ^= self.s0;
+        self.s0 = self.s0.rol(24) ^ self.s1 ^ (self.s1 << 16);
+        self.s1 = self.s1.rol(37);
 
         result
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Xoshiro256Plus<S: Simd> {
     state: [Vu64<S>; 4],
 }
