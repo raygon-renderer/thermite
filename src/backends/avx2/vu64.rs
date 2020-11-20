@@ -364,6 +364,16 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
             )
         })
     }
+
+    #[inline(always)]
+    fn rolv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
+    }
+
+    #[inline(always)]
+    fn rorv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
+    }
 }
 
 impl_ops!(@UNARY u64x8 AVX2 => Not::not);

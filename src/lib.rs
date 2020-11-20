@@ -584,6 +584,23 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
         // terrible default implementation
         self / Self::splat(divisor)
     }
+
+    /// Rotates the bits in each lane to the left (towards HSB) by the number of bits specified in `cnt`
+    #[inline(always)]
+    fn rol(self, cnt: u32) -> Self {
+        (self << cnt) | (self >> ((Self::ELEMENT_SIZE as u32 * 8) - cnt))
+    }
+
+    /// Rotates the bits in each lane to the right (towards LSB) by the number of bits specified in `cnt`
+    #[inline(always)]
+    fn ror(self, cnt: u32) -> Self {
+        (self >> cnt) | (self << ((Self::ELEMENT_SIZE as u32 * 8) - cnt))
+    }
+
+    /// Rotates the bits in each lane to the left (towards HSB) by the number of bits specified in the corresponding lane of `cnt`
+    fn rolv(self, cnt: S::Vu32) -> Self;
+    /// Rotates the bits in each lane to the right (towards LSB) by the number of bits specified in the corresponding lane of `cnt`
+    fn rorv(self, cnt: S::Vu32) -> Self;
 }
 
 /// Signed SIMD vector, with negative numbers

@@ -289,6 +289,16 @@ impl SimdIntVector<AVX1> for i64x8<AVX1> {
         // TODO: Replace with log-reduce
         unsafe { self.reduce2(|prod, x| x.wrapping_mul(prod)) }
     }
+
+    #[inline(always)]
+    fn rolv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
+    }
+
+    #[inline(always)]
+    fn rorv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
+    }
 }
 
 impl SimdSignedVector<AVX1> for i64x8<AVX1> {

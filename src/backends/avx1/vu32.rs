@@ -247,6 +247,16 @@ impl SimdIntVector<AVX1> for u32x8<AVX1> {
     fn wrapping_product(self) -> Self::Element {
         log_reduce_epu32_avx1!(self.value; _mm_mullo_epi32)
     }
+
+    #[inline(always)]
+    fn rolv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
+    }
+
+    #[inline(always)]
+    fn rorv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
+    }
 }
 
 impl_ops!(@UNARY  u32x8 AVX1 => Not::not);

@@ -318,6 +318,16 @@ impl SimdIntVector<AVX2> for i32x8<AVX2> {
     fn wrapping_product(self) -> Self::Element {
         log_reduce_epi32_avx2!(self.value; _mm_mullo_epi32)
     }
+
+    #[inline(always)]
+    fn rolv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
+    }
+
+    #[inline(always)]
+    fn rorv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
+    }
 }
 
 impl SimdSignedVector<AVX2> for i32x8<AVX2> {

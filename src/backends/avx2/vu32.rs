@@ -311,6 +311,16 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {
 
         Self::new(unsafe { _mm256_div_epu32x(self.value, magic, more) })
     }
+
+    #[inline(always)]
+    fn rolv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
+    }
+
+    #[inline(always)]
+    fn rorv(self, cnt: Vu32) -> Self {
+        unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
+    }
 }
 
 impl_ops!(@UNARY  u32x8 AVX2 => Not::not);
