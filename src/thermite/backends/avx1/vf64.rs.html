@@ -642,6 +642,17 @@
 <span id="639">639</span>
 <span id="640">640</span>
 <span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
+<span id="646">646</span>
+<span id="647">647</span>
+<span id="648">648</span>
+<span id="649">649</span>
+<span id="650">650</span>
+<span id="651">651</span>
+<span id="652">652</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -681,14 +692,25 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_aligned_unchecked</span>(<span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>((<span class="ident">_mm256_load_pd</span>(<span class="ident">ptr</span>), <span class="ident">_mm256_load_pd</span>(<span class="ident">ptr</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span>))))
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_aligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>((<span class="ident">_mm256_load_pd</span>(<span class="ident">src</span>), <span class="ident">_mm256_load_pd</span>(<span class="ident">src</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> <span class="op">/</span> <span class="number">2</span>))))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_aligned_unchecked</span>(<span class="self">self</span>, <span class="ident">ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
-        <span class="ident">_mm256_store_pd</span>(<span class="ident">ptr</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>);
-        <span class="ident">_mm256_store_pd</span>(<span class="ident">ptr</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span>), <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>);
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>((<span class="ident">_mm256_loadu_pd</span>(<span class="ident">src</span>), <span class="ident">_mm256_loadu_pd</span>(<span class="ident">src</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> <span class="op">/</span> <span class="number">2</span>))))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_aligned_unchecked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
+        <span class="ident">_mm256_store_pd</span>(<span class="ident">dst</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>);
+        <span class="ident">_mm256_store_pd</span>(<span class="ident">dst</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> <span class="op">/</span> <span class="number">2</span>), <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>);
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_unaligned_unchecked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
+        <span class="ident">_mm256_storeu_pd</span>(<span class="ident">dst</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>);
+        <span class="ident">_mm256_storeu_pd</span>(<span class="ident">dst</span>.<span class="ident">add</span>(<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> <span class="op">/</span> <span class="number">2</span>), <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>);
     }
 
     <span class="attribute">#[<span class="ident">inline</span>]</span>

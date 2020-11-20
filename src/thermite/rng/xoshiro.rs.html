@@ -130,7 +130,7 @@
 
 <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">SimdRng</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">SplitMix64</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> {
     <span class="ident">x</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 }
@@ -138,6 +138,7 @@
 <span class="kw">const</span> <span class="ident">PHI</span>: <span class="ident">u64</span> <span class="op">=</span> <span class="number">0x9e3779b97f4a7c15</span>;
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SplitMix64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">seed</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="ident">SplitMix64</span> { <span class="ident">x</span>: <span class="ident">seed</span> }
     }
@@ -171,9 +172,10 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Xoshiro128Plus</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> {
-    <span class="ident">state</span>: [<span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>; <span class="number">2</span>],
+    <span class="ident">s0</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
+    <span class="ident">s1</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">Xoshiro128Plus</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
@@ -181,7 +183,8 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">seed</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">rng</span> <span class="op">=</span> <span class="ident">SplitMix64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">new</span>(<span class="ident">seed</span>);
         <span class="ident">Xoshiro128Plus</span> {
-            <span class="ident">state</span>: [<span class="ident">rng</span>.<span class="ident">next_u64</span>(), <span class="ident">rng</span>.<span class="ident">next_u64</span>()],
+            <span class="ident">s0</span>: <span class="ident">rng</span>.<span class="ident">next_u64</span>(),
+            <span class="ident">s1</span>: <span class="ident">rng</span>.<span class="ident">next_u64</span>(),
         }
     }
 }
@@ -194,20 +197,17 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">next_u64</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> [<span class="kw-2">mut</span> <span class="ident">s0</span>, <span class="kw-2">mut</span> <span class="ident">s1</span>] <span class="op">=</span> <span class="self">self</span>.<span class="ident">state</span>;
+        <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">s0</span> <span class="op">+</span> <span class="self">self</span>.<span class="ident">s1</span>;
 
-        <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">s0</span> <span class="op">+</span> <span class="ident">s1</span>;
-
-        <span class="ident">s1</span> <span class="op">^</span><span class="op">=</span> <span class="ident">s0</span>;
-        <span class="ident">s0</span> <span class="op">=</span> <span class="ident">s0</span>.<span class="ident">rol</span>(<span class="number">24</span>) <span class="op">^</span> <span class="ident">s1</span> <span class="op">^</span> (<span class="ident">s1</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">16</span>);
-        <span class="ident">s1</span> <span class="op">=</span> <span class="ident">s1</span>.<span class="ident">rol</span>(<span class="number">37</span>);
-        <span class="self">self</span>.<span class="ident">state</span> <span class="op">=</span> [<span class="ident">s0</span>, <span class="ident">s1</span>];
+        <span class="self">self</span>.<span class="ident">s1</span> <span class="op">^</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">s0</span>;
+        <span class="self">self</span>.<span class="ident">s0</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">s0</span>.<span class="ident">rol</span>(<span class="number">24</span>) <span class="op">^</span> <span class="self">self</span>.<span class="ident">s1</span> <span class="op">^</span> (<span class="self">self</span>.<span class="ident">s1</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">16</span>);
+        <span class="self">self</span>.<span class="ident">s1</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">s1</span>.<span class="ident">rol</span>(<span class="number">37</span>);
 
         <span class="ident">result</span>
     }
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Xoshiro256Plus</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> {
     <span class="ident">state</span>: [<span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>; <span class="number">4</span>],
 }

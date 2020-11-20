@@ -909,8 +909,6 @@
 <span id="906">906</span>
 <span id="907">907</span>
 <span id="908">908</span>
-<span id="909">909</span>
-<span id="910">910</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1167,9 +1165,7 @@
     <span class="doccomment">/// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">target</span> <span class="op">=</span> <span class="ident">mem</span>::<span class="ident">MaybeUninit</span>::<span class="ident">uninit</span>();
-        <span class="ident">ptr</span>::<span class="ident">copy_nonoverlapping</span>(<span class="ident">src</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>, <span class="ident">target</span>.<span class="ident">as_mut_ptr</span>(), <span class="number">1</span>);
-        <span class="ident">target</span>.<span class="ident">assume_init</span>()
+        (<span class="ident">src</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>).<span class="ident">read_unaligned</span>()
     }
 
     <span class="doccomment">/// Stores a vector to a given address (does not have to be aligned).</span>
@@ -1177,7 +1173,7 @@
     <span class="doccomment">/// **WARNING**: Will cause undefined behavior if the pointer does not point to a valid address range.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_unaligned_unchecked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>) {
-        <span class="ident">ptr</span>::<span class="ident">copy_nonoverlapping</span>(<span class="kw-2">&amp;</span><span class="self">self</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>, <span class="ident">dst</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>, <span class="number">1</span>);
+        (<span class="ident">dst</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>).<span class="ident">write_unaligned</span>(<span class="self">self</span>)
     }
 
     <span class="doccomment">/// Loads values from arbitrary addresses in memory based on offsets from a base address.</span>

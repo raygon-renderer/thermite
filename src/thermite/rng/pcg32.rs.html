@@ -62,7 +62,7 @@
 <span class="kw">const</span> <span class="ident">PCG32_DEFAULT_STREAM</span>: <span class="ident">u64</span> <span class="op">=</span> <span class="number">0xda3e39cb94b95bdb</span>;
 <span class="kw">const</span> <span class="ident">PCG32_MULT</span>: <span class="ident">u64</span> <span class="op">=</span> <span class="number">0x5851f42d4c957f2d</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">PCG32</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> {
     <span class="ident">state</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
     <span class="ident">inc</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
