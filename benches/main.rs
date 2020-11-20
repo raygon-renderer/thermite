@@ -4,12 +4,14 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Parameter
 
 use thermite::*;
 
-type Vf32 = <thermite::backends::AVX2 as Simd>::Vf32;
-type Vf64 = <thermite::backends::AVX2 as Simd>::Vf64;
-type Vi32 = <thermite::backends::AVX2 as Simd>::Vi32;
-type Vu64 = <thermite::backends::AVX2 as Simd>::Vu64;
-type Vu32 = <thermite::backends::AVX2 as Simd>::Vu32;
-type Vi64 = <thermite::backends::AVX2 as Simd>::Vi64;
+use thermite::backends::AVX2;
+
+type Vf32 = <AVX2 as Simd>::Vf32;
+type Vf64 = <AVX2 as Simd>::Vf64;
+type Vi32 = <AVX2 as Simd>::Vi32;
+type Vu64 = <AVX2 as Simd>::Vu64;
+type Vu32 = <AVX2 as Simd>::Vu32;
+type Vi64 = <AVX2 as Simd>::Vi64;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench(
@@ -17,13 +19,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = black_box(Vf32::splat(*x) + Vf32::index());
+                let x = black_box(Vf32::splat(*x) + Vf32::indexed());
                 b.iter(|| x.exp())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
             b.iter(|| x.exp())
         })
         .with_function("scalar-ps", |b, x| {
@@ -37,7 +39,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -52,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -63,13 +65,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = black_box(Vf32::splat(*x) + Vf32::index());
+                let x = black_box(Vf32::splat(*x) + Vf32::indexed());
                 b.iter(|| x.ln())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
             b.iter(|| x.ln())
         })
         .with_function("scalar-ps", |b, x| {
@@ -83,7 +85,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -98,7 +100,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -109,13 +111,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = black_box(Vf32::splat(*x) + Vf32::index());
+                let x = black_box(Vf32::splat(*x) + Vf32::indexed());
                 b.iter(|| x.cbrt())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
             b.iter(|| x.cbrt())
         })
         .with_function("scalar-ps", |b, x| {
@@ -129,7 +131,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -144,7 +146,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut xs = [0.0; 8];
-            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -155,13 +157,13 @@ fn criterion_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "thermite-ps",
             |b, x| {
-                let x = black_box(Vf32::splat(*x) + Vf32::index());
+                let x = black_box(Vf32::splat(*x) + Vf32::indexed());
                 b.iter(|| x.sin_cos())
             },
             vec![0.5],
         )
         .with_function("thermite-pd", |b, x| {
-            let x = black_box(Vf64::splat(*x as f64) + Vf64::index());
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
             b.iter(|| x.sin_cos())
         })
         .with_function("scalar-ps", |b, x| {
@@ -178,7 +180,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 (s, c)
             }
             let mut xs = [0.0; 8];
-            black_box(Vf32::splat(*x) + Vf32::index()).store_unaligned(&mut xs);
+            black_box(Vf32::splat(*x) + Vf32::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         })
@@ -196,7 +198,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 (s, c)
             }
             let mut xs = [0.0; 8];
-            black_box(Vf64::splat(*x as f64) + Vf64::index()).store_unaligned(&mut xs);
+            black_box(Vf64::splat(*x as f64) + Vf64::indexed()).store_unaligned(&mut xs);
 
             b.iter(|| unsafe { do_algorithm(xs) })
         }),
@@ -266,6 +268,134 @@ fn criterion_benchmark(c: &mut Criterion) {
                 res
             }
             b.iter(move || unsafe { do_algorithm(Vf32::splat(*x), poly) })
+        }),
+    );
+
+    c.bench(
+        "rng_gen2",
+        ParameterizedBenchmark::new(
+            "thermite",
+            |b, len| {
+                use thermite::rng::{xoshiro::Xoshiro128Plus, SimdRng};
+
+                #[inline]
+                #[target_feature(enable = "avx2,fma")]
+                unsafe fn do_algorithm(mut rng: Xoshiro128Plus<AVX2>, dst: &mut Vf64, iterations: usize) {
+                    for _ in 0..iterations {
+                        *dst = (*dst + rng.next_f64()) * Vf64::splat(0.5);
+                    }
+                }
+
+                let rng: Xoshiro128Plus<AVX2> = Xoshiro128Plus::<AVX2>::new(Vu64::indexed());
+
+                b.iter_with_setup(
+                    || rng.clone(),
+                    |rng| unsafe {
+                        let mut out = Vf64::zero();
+                        do_algorithm(rng, &mut out, *len);
+                        out
+                    },
+                );
+            },
+            vec![1 << 8, 1 << 10, 1 << 12, 1 << 14],
+        )
+        .with_function("rand", |b, len| {
+            use rand::{Rng, SeedableRng};
+            use rand_xoshiro::Xoshiro128Plus;
+
+            let rngs = unsafe {
+                let mut rngs = std::mem::MaybeUninit::<[Xoshiro128Plus; 8]>::uninit();
+
+                for i in 0..8 {
+                    (rngs.as_mut_ptr() as *mut Xoshiro128Plus)
+                        .add(i)
+                        .write(Xoshiro128Plus::seed_from_u64(i as u64));
+                }
+
+                rngs.assume_init()
+            };
+
+            #[inline]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut rngs: [Xoshiro128Plus; 8], buf: &mut [f64; 8], iterations: usize) {
+                for _ in 0..iterations {
+                    for (dst, rng) in buf.iter_mut().zip(rngs.iter_mut()) {
+                        *dst = (*dst + rng.gen::<f64>()) * 0.5;
+                    }
+                }
+            }
+
+            b.iter_with_setup(
+                || rngs.clone(),
+                |rngs| unsafe {
+                    let mut out = [0.0; 8];
+                    do_algorithm(rngs, &mut out, *len);
+                    out
+                },
+            );
+        }),
+    );
+
+    c.bench(
+        "rng_gen",
+        ParameterizedBenchmark::new(
+            "thermite",
+            |b, len| {
+                use thermite::rng::{xoshiro::Xoshiro128Plus, SimdRng};
+
+                #[inline]
+                #[target_feature(enable = "avx2,fma")]
+                unsafe fn do_algorithm(mut rng: Xoshiro128Plus<AVX2>, buf: &mut [f64]) {
+                    for chunk in buf.chunks_exact_mut(Vf64::NUM_ELEMENTS) {
+                        rng.next_f64().store_unaligned_unchecked(chunk.as_mut_ptr());
+                    }
+                }
+
+                let rng: Xoshiro128Plus<AVX2> = Xoshiro128Plus::<AVX2>::new(Vu64::indexed());
+
+                b.iter_with_large_setup(
+                    move || (vec![0.0; *len], rng.clone()),
+                    |(mut buf, rng)| unsafe {
+                        do_algorithm(rng, &mut buf);
+                        return buf;
+                    },
+                )
+            },
+            vec![1usize << 8, 1 << 10, 1 << 12, 1 << 14],
+        )
+        .with_function("rand", |b, len| {
+            use rand::{Rng, SeedableRng};
+            use rand_xoshiro::Xoshiro128Plus;
+
+            #[inline]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut rngs: [Xoshiro128Plus; 8], buf: &mut [f64]) {
+                for chunk in buf.chunks_exact_mut(8) {
+                    for (res, rng) in chunk.iter_mut().zip(rngs.iter_mut()) {
+                        *res = rng.gen();
+                    }
+                }
+            }
+
+            let rngs = unsafe {
+                let mut rngs = std::mem::MaybeUninit::<[Xoshiro128Plus; 8]>::uninit();
+
+                for i in 0..8 {
+                    (rngs.as_mut_ptr() as *mut Xoshiro128Plus)
+                        .add(i)
+                        .write(Xoshiro128Plus::seed_from_u64(i as u64));
+                }
+
+                rngs.assume_init()
+            };
+
+            b.iter_with_large_setup(
+                || (vec![0.0; *len], rngs.clone()),
+                |(mut buf, rngs)| unsafe {
+                    do_algorithm(rngs, &mut buf);
+                    return buf;
+                },
+            )
         }),
     );
 }
