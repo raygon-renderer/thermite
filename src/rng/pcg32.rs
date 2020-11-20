@@ -10,8 +10,8 @@ const PCG32_MULT: u64 = 0x5851f42d4c957f2d;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PCG32<S: Simd> {
-    state: S::Vu64,
-    inc: S::Vu64,
+    state: Vu64<S>,
+    inc: Vu64<S>,
 }
 
 impl<S: Simd> PCG32<S> {
