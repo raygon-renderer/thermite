@@ -3,19 +3,28 @@ Thermite SIMD: Melt your CPU
 
 Thermite is a WIP SIMD library focused on providing portable SIMD acceleratation of SoA (Structure of Arrays) algorithms, using consistent-length SIMD vectors for lockstep iteration and computation.
 
-Partially inspired by SIMDeez, Thermite supports static compilation to many instruction sets and runtime selection of the most performant instruction set, allowing you to write a single algorithm once and have it work on hardware ranging from early 2000s CPUs with only SSE2 all this way to modern cutting-edge CPUs with AVX2 and even AVX512.
+# Motivation and Goals
 
-However, unlike SIMDeez, all vectors within a supported instruction set have the same length, so you don't have to worry about how to handle **8** `u16` values alongside **4** `f32` values, if your data contains only **4** `u16` and **4** `f32`. In Thermite, there is only `Vu16` and `Vf32`, and they are the same length, allowing for easy loading and interop with other data types.
+While working on Raygon renderer, I decided that I needed a state of the art high-performance SIMD vector library focused on faciliating SoA (Structure of Arrays) algorithms. Unfortunately, SIMDeez was not an option as it did not provide consistent-length vectors nor all the built-in functionality I've come to rely on. Alternatively, `packed_simd` was nightly-only and relied on the somewhat naive LLVM "platform intrinsics". I briefly explored the `Faster` library, as it did focus on SoA, but the iterator-based API was unsatisfactory and awkward to use.
 
-Furthermore, unlike `packed_simd`, Thermite compiles on Stable Rust, though there is a `nightly` feature flag for hardware-accelerated half-precision float conversions. (It's currently marked unstable for some reason).
+Therefore, the only solution was to write my own, and thus Thermite was born.
 
-Thermite also provides a set of high-performance vectorized special math functions that can take advantage of all instruction sets, with specialized versions for single and double precision floats.
+TODO: Goals
 
-# Motivation
+# Features
 
-TODO
+* SSE2, SSE 4.1, AVX, AVX2 backends, with planned support for scalar, AVX512, WASM SIMD and ARM NEON backends.
+* Extensive built-in vectorized math library.
+* Compile-time monomorphisation with runtime selection
+    * Aided by a `#[dispatch]` procedural macro to reduce bloat.
+* Zero runtime overhead.
+* Operator overloading on vector types.
+* Abstracts over vector length, giving the same length to all vectors of an instruction set.
+* Provides fast polyfills where necessary to provide the same API across all instruction sets.
+* Highly optimized value cast routines between vector types where possible.
+* Dedicated mask wrapper type with low-cost bitwise vector conversions built-in.
 
-# Optimization Setup
+# Optimized Project Setup
 
 For optimal performance, ensure you `Cargo.toml` profiles looks something like this:
 ```toml
@@ -32,7 +41,7 @@ incremental = false # Release builds will take longer to compile, but inter-crat
 panic = 'abort'     # Very few functions in Thermite panic, but aborting will avoid the unwind mechanism overhead
 ```
 
-# Usage Notes
+# Misc. Usage Notes
 
 * Vectors with 64-bit elements are approximately 2-4x slower than 32-bit vectors.
 * Integer vectors are 2x slower on SSE2/AVX1, but nominal on SSE4.1 and AVX2. This compounds the first point.
@@ -48,10 +57,18 @@ panic = 'abort'     # Very few functions in Thermite panic, but aborting will av
 
 # Cargo `--features`
 
-### `alloc`
+### `alloc` (enabled by default)
 
 The `alloc` feature enables aligned allocation of buffers suitable to reading/writing to with SIMD.
 
 ### `nightly`
 
 The `nightly` feature enables nightly-only optimizations such as accelerated half-precision encoding/decoding.
+
+### `math` (enabled by default)
+
+Enables the vectorized math modules
+
+### `rng`
+
+Enables the vectorized random number modules
