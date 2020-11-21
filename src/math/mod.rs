@@ -141,7 +141,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
     fn smootherstep(self) -> Self;
 
-    /// Calculates a [signmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).
+    /// Calculates a [sigmoid-like 7th-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#7th-order_equation).
     ///
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
