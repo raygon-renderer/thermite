@@ -408,7 +408,7 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
-        self ^ Self::neg_one() + Self::one()
+        (self ^ Self::neg_one()) + Self::one()
     }
 }
 

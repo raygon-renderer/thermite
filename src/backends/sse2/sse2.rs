@@ -432,7 +432,7 @@ impl SimdSignedVector<SSE2> for i32x4<SSE2> {
 
     #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
-        self ^ Self::neg_one() + Self::one()
+        (self ^ Self::neg_one()) + Self::one()
     }
 }
 
