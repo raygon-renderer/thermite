@@ -114,6 +114,8 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// Computes the base-10 logarithm of a vector
     fn log10(self) -> Self;
 
+    //fn log2_int(self) -> Vu32<S>;
+
     /// Computes the error function for each value in a vector
     fn erf(self) -> Self;
     /// Computes the inverse error function for each value in a vector

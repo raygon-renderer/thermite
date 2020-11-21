@@ -611,6 +611,30 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     fn rolv(self, cnt: S::Vu32) -> Self;
     /// Rotates the bits in each lane to the right (towards LSB) by the number of bits specified in the corresponding lane of `cnt`
     fn rorv(self, cnt: S::Vu32) -> Self;
+
+    fn count_bits(self) -> Self {
+        todo!()
+    }
+
+    fn reverse_bits(self) -> Self {
+        todo!()
+    }
+
+    fn leading_zeroes(self) -> Self {
+        todo!()
+    }
+
+    fn trailing_zeroes(self) -> Self {
+        todo!()
+    }
+
+    fn leading_ones(self) -> Self {
+        todo!()
+    }
+
+    fn trailing_ones(self) -> Self {
+        todo!()
+    }
 }
 
 /// Signed SIMD vector, with negative numbers

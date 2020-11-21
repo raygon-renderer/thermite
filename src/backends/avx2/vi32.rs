@@ -328,6 +328,11 @@ impl SimdIntVector<AVX2> for i32x8<AVX2> {
     fn rorv(self, cnt: Vu32) -> Self {
         unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
     }
+
+    #[inline(always)]
+    fn reverse_bits(self) -> Self {
+        Self::from_bits(self.into_bits().reverse_bits())
+    }
 }
 
 impl SimdSignedVector<AVX2> for i32x8<AVX2> {
