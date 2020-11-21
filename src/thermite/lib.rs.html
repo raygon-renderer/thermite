@@ -909,6 +909,30 @@
 <span id="906">906</span>
 <span id="907">907</span>
 <span id="908">908</span>
+<span id="909">909</span>
+<span id="910">910</span>
+<span id="911">911</span>
+<span id="912">912</span>
+<span id="913">913</span>
+<span id="914">914</span>
+<span id="915">915</span>
+<span id="916">916</span>
+<span id="917">917</span>
+<span id="918">918</span>
+<span id="919">919</span>
+<span id="920">920</span>
+<span id="921">921</span>
+<span id="922">922</span>
+<span id="923">923</span>
+<span id="924">924</span>
+<span id="925">925</span>
+<span id="926">926</span>
+<span id="927">927</span>
+<span id="928">928</span>
+<span id="929">929</span>
+<span id="930">930</span>
+<span id="931">931</span>
+<span id="932">932</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1523,6 +1547,30 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">fn</span> <span class="ident">rolv</span>(<span class="self">self</span>, <span class="ident">cnt</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="doccomment">/// Rotates the bits in each lane to the right (towards LSB) by the number of bits specified in the corresponding lane of `cnt`</span>
     <span class="kw">fn</span> <span class="ident">rorv</span>(<span class="self">self</span>, <span class="ident">cnt</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+
+    <span class="kw">fn</span> <span class="ident">count_bits</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">reverse_bits</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">leading_zeroes</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">trailing_zeroes</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">leading_ones</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
+
+    <span class="kw">fn</span> <span class="ident">trailing_ones</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="macro">todo</span><span class="macro">!</span>()
+    }
 }
 
 <span class="doccomment">/// Signed SIMD vector, with negative numbers</span>
