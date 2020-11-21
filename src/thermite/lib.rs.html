@@ -939,6 +939,24 @@
 <span id="936">936</span>
 <span id="937">937</span>
 <span id="938">938</span>
+<span id="939">939</span>
+<span id="940">940</span>
+<span id="941">941</span>
+<span id="942">942</span>
+<span id="943">943</span>
+<span id="944">944</span>
+<span id="945">945</span>
+<span id="946">946</span>
+<span id="947">947</span>
+<span id="948">948</span>
+<span id="949">949</span>
+<span id="950">950</span>
+<span id="951">951</span>
+<span id="952">952</span>
+<span id="953">953</span>
+<span id="954">954</span>
+<span id="955">955</span>
+<span id="956">956</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1585,6 +1603,24 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     }
 }
 
+<span class="doccomment">/// Unsigned SIMD vector</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="doccomment">/// Returns `floor(log2(x)) + 1`</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">log2p1</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">next_power_of_two_m1</span>().<span class="ident">count_ones</span>()
+    }
+
+    <span class="doccomment">/// Returns a mask wherein if a lane was a power of two, the corresponding mask lane will be truthy</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">is_power_of_two</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        (<span class="self">self</span> <span class="op">&amp;</span> (<span class="self">self</span> <span class="op">-</span> <span class="self">Self</span>::<span class="ident">one</span>())).<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
+    }
+
+    <span class="doccomment">/// Returns `next_power_of_two(x) - 1`</span>
+    <span class="kw">fn</span> <span class="ident">next_power_of_two_m1</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+}
+
 <span class="doccomment">/// Signed SIMD vector, with negative numbers</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Neg</span><span class="op">&lt;</span><span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {
     <span class="kw">fn</span> <span class="ident">neg_one</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -1837,9 +1873,9 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="comment">//type Vu8: SimdIntVector&lt;Self, Element = u8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vu16: SimdIntVector&lt;Self, Element = u16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
     <span class="doccomment">/// 32-bit unsigned integer vector</span>
-    <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
     <span class="doccomment">/// 64-bit unsigned integer vector</span>
-    <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// Single-precision 32-bit floating point vector</span>
     <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu32</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>

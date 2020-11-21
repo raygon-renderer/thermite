@@ -369,6 +369,18 @@
 <span id="366">366</span>
 <span id="367">367</span>
 <span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -658,6 +670,18 @@
 
     <span class="kw">fn</span> <span class="ident">trailing_zeros</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="macro">unimplemented</span><span class="macro">!</span>()
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">next_power_of_two_m1</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">1</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">2</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">4</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">8</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">16</span>);
+        <span class="self">self</span>
     }
 }
 

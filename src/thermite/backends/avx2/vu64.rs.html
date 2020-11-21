@@ -595,6 +595,12 @@
 <span id="592">592</span>
 <span id="593">593</span>
 <span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1000,19 +1006,25 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">leading_zeros</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">ELEMENT_SIZE</span> <span class="kw">as</span> <span class="ident">u64</span> <span class="op">*</span> <span class="number">8</span>) <span class="op">-</span> <span class="self">self</span>.<span class="ident">log2p1</span>()
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">trailing_zeros</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="ident">Vi64</span>::<span class="ident">from_bits</span>(<span class="self">self</span>).<span class="ident">trailing_zeros</span>().<span class="ident">into_bits</span>()
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">next_power_of_two_m1</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">1</span>);
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">2</span>);
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">4</span>);
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">8</span>);
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">16</span>);
         <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">32</span>);
-
-        <span class="self">Self</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">ELEMENT_SIZE</span> <span class="kw">as</span> <span class="ident">u64</span> <span class="op">*</span> <span class="number">8</span>) <span class="op">-</span> <span class="self">self</span>.<span class="ident">count_ones</span>()
-    }
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">trailing_zeros</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="ident">Vi64</span>::<span class="ident">from_bits</span>(<span class="self">self</span>).<span class="ident">trailing_zeros</span>().<span class="ident">into_bits</span>()
+        <span class="self">self</span>
     }
 }
 
