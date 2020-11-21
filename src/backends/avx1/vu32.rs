@@ -257,6 +257,36 @@ impl SimdIntVector<AVX1> for u32x8<AVX1> {
     fn rorv(self, cnt: Vu32) -> Self {
         unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
     }
+
+    #[inline(always)]
+    fn reverse_bits(self) -> Self {
+        let y0 = Vu32::splat(0x55555555);
+        let y1 = Vu32::splat(0x33333333);
+        let y2 = Vu32::splat(0x0f0f0f0f);
+        let y3 = Vu32::splat(0x00ff00ff);
+
+        let mut x = self;
+
+        x = (((x >> 1) & y0) | ((x & y0) << 1));
+        x = (((x >> 2) & y1) | ((x & y1) << 2));
+        x = (((x >> 4) & y2) | ((x & y2) << 4));
+        x = (((x >> 8) & y3) | ((x & y3) << 8));
+        x = ((x >> 16) | (x << 16));
+
+        x
+    }
+
+    fn count_ones(self) -> Self {
+        unimplemented!()
+    }
+
+    fn leading_zeros(self) -> Self {
+        unimplemented!()
+    }
+
+    fn trailing_zeros(self) -> Self {
+        unimplemented!()
+    }
 }
 
 impl_ops!(@UNARY  u32x8 AVX1 => Not::not);

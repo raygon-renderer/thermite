@@ -339,6 +339,27 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {
 
         x
     }
+
+    #[inline(always)]
+    fn count_ones(self) -> Self {
+        Self::new(unsafe { _mm256_popcnt_epi32x(self.value) })
+    }
+
+    #[inline(always)]
+    fn leading_zeros(mut self) -> Self {
+        self |= (self >> 1);
+        self |= (self >> 2);
+        self |= (self >> 4);
+        self |= (self >> 8);
+        self |= (self >> 16);
+
+        Self::splat(Self::ELEMENT_SIZE as u32 * 8) - self.count_ones()
+    }
+
+    #[inline(always)]
+    fn trailing_zeros(self) -> Self {
+        Vi32::from_bits(self).trailing_zeros().into_bits()
+    }
 }
 
 impl_ops!(@UNARY  u32x8 AVX2 => Not::not);

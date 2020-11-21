@@ -388,6 +388,21 @@ impl SimdIntVector<AVX2> for i64x8<AVX2> {
     fn reverse_bits(self) -> Self {
         Self::from_bits(self.into_bits().reverse_bits())
     }
+
+    #[inline(always)]
+    fn count_ones(self) -> Self {
+        Self::from_bits(self.into_bits().count_ones())
+    }
+
+    #[inline(always)]
+    fn leading_zeros(self) -> Self {
+        Self::from_bits(self.into_bits().leading_zeros())
+    }
+
+    #[inline(always)]
+    fn trailing_zeros(self) -> Self {
+        ((self & -self) - Self::one()).count_ones()
+    }
 }
 
 impl SimdSignedVector<AVX2> for i64x8<AVX2> {

@@ -299,6 +299,23 @@ impl SimdIntVector<AVX1> for i64x8<AVX1> {
     fn rorv(self, cnt: Vu32) -> Self {
         unsafe { Self::zip(self, cnt, |x, r| x.rotate_right(r)) }
     }
+
+    #[inline(always)]
+    fn reverse_bits(self) -> Self {
+        Self::from_bits(self.into_bits().reverse_bits())
+    }
+
+    fn count_ones(self) -> Self {
+        unimplemented!()
+    }
+
+    fn leading_zeros(self) -> Self {
+        unimplemented!()
+    }
+
+    fn trailing_zeros(self) -> Self {
+        unimplemented!()
+    }
 }
 
 impl SimdSignedVector<AVX1> for i64x8<AVX1> {

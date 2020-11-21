@@ -612,28 +612,34 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// Rotates the bits in each lane to the right (towards LSB) by the number of bits specified in the corresponding lane of `cnt`
     fn rorv(self, cnt: S::Vu32) -> Self;
 
-    fn count_bits(self) -> Self {
-        todo!()
+    /// Reverses the bits of each lane in the vector.
+    fn reverse_bits(self) -> Self;
+
+    /// Counts the number of 1 bits in each lane of the vector.
+    fn count_ones(self) -> Self;
+
+    /// Counts the number of 0 bits in each lane of the vector.
+    #[inline(always)]
+    fn count_zeros(self) -> Self {
+        (!self).count_ones()
     }
 
-    fn reverse_bits(self) -> Self {
-        todo!()
-    }
+    /// Counts the number of leading zeros in each lane of the vector.
+    fn leading_zeros(self) -> Self;
 
-    fn leading_zeroes(self) -> Self {
-        todo!()
-    }
+    /// Counts the number of trailing zeros in each lane of the vector.
+    fn trailing_zeros(self) -> Self;
 
-    fn trailing_zeroes(self) -> Self {
-        todo!()
-    }
-
+    /// Counts the number of leading ones in each lane of the vector.
+    #[inline(always)]
     fn leading_ones(self) -> Self {
-        todo!()
+        (!self).leading_zeros()
     }
 
+    /// Counts the number of trailing ones in each lane of the vector.
+    #[inline(always)]
     fn trailing_ones(self) -> Self {
-        todo!()
+        (!self).trailing_zeros()
     }
 }
 

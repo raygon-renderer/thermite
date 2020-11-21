@@ -198,6 +198,34 @@ pub unsafe fn _mm256_mullo_epi64x(ymm0: __m256i, ymm1: __m256i) -> __m256i {
     ymm0
 }
 
+// https://arxiv.org/pdf/1611.07612.pdf
+#[inline(always)]
+pub unsafe fn _mm256_popcnt_epi8x(v: __m256i) -> __m256i {
+    let lookup = _mm256_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+    );
+    let low_mask = _mm256_set1_epi8(0x0f);
+    let lo = _mm256_and_si256(v, low_mask);
+    let hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
+    let popcnt1 = _mm256_shuffle_epi8(lookup, lo);
+    let popcnt2 = _mm256_shuffle_epi8(lookup, hi);
+    _mm256_add_epi8(popcnt1, popcnt2)
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_popcnt_epi64x(v: __m256i) -> __m256i {
+    _mm256_sad_epu8(_mm256_popcnt_epi8x(v), _mm256_setzero_si256())
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_popcnt_epi32x(v: __m256i) -> __m256i {
+    // https://stackoverflow.com/a/51106873/2083075
+    _mm256_madd_epi16(
+        _mm256_maddubs_epi16(_mm256_popcnt_epi8x(v), _mm256_set1_epi8(1)),
+        _mm256_set1_epi16(1),
+    )
+}
+
 pub use divider::*;
 pub mod divider {
     use super::*;
