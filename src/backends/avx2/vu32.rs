@@ -347,18 +347,24 @@ impl SimdIntVector<AVX2> for u32x8<AVX2> {
 
     #[inline(always)]
     fn leading_zeros(mut self) -> Self {
-        self |= (self >> 1);
-        self |= (self >> 2);
-        self |= (self >> 4);
-        self |= (self >> 8);
-        self |= (self >> 16);
-
-        Self::splat(Self::ELEMENT_SIZE as u32 * 8) - self.count_ones()
+        Self::splat(Self::ELEMENT_SIZE as u32 * 8) - self.log2p1()
     }
 
     #[inline(always)]
     fn trailing_zeros(self) -> Self {
         Vi32::from_bits(self).trailing_zeros().into_bits()
+    }
+}
+
+impl SimdUnsignedIntVector<AVX2> for u32x8<AVX2> {
+    #[inline(always)]
+    fn next_power_of_two_m1(mut self) -> Self {
+        self |= (self >> 1);
+        self |= (self >> 2);
+        self |= (self >> 4);
+        self |= (self >> 8);
+        self |= (self >> 16);
+        self
     }
 }
 

@@ -56,3 +56,51 @@ fn test_tzc_64bit() {
         }
     }
 }
+
+#[test]
+fn test_tzc_32bit() {
+    for i in -1000..1000 {
+        let x = Vi32::splat(i) * (Vi32::indexed() + Vi32::one());
+
+        let bits = x.trailing_zeros();
+
+        for j in 0..Vi32::NUM_ELEMENTS {
+            let x = x.extract(j);
+            let b = bits.extract(j) as u32;
+
+            assert_eq!(x.trailing_zeros(), b, "0b{:b} {} == {}", x, x.trailing_zeros(), b);
+        }
+    }
+}
+
+#[test]
+fn test_lzc_64bit() {
+    for i in -1000..1000 {
+        let x = Vi64::splat(i) * (Vi64::indexed() + Vi64::one());
+
+        let bits = x.leading_zeros();
+
+        for j in 0..Vi64::NUM_ELEMENTS {
+            let x = x.extract(j);
+            let b = bits.extract(j) as u32;
+
+            assert_eq!(x.leading_zeros(), b, "0b{:b} {} == {}", x, x.leading_zeros(), b);
+        }
+    }
+}
+
+#[test]
+fn test_lzc_32bit() {
+    for i in -1000..1000 {
+        let x = Vi32::splat(i) * (Vi32::indexed() + Vi32::one());
+
+        let bits = x.leading_zeros();
+
+        for j in 0..Vi32::NUM_ELEMENTS {
+            let x = x.extract(j);
+            let b = bits.extract(j) as u32;
+
+            assert_eq!(x.leading_zeros(), b, "0b{:b} {} == {}", x, x.leading_zeros(), b);
+        }
+    }
+}

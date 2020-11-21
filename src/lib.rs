@@ -643,6 +643,24 @@ pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     }
 }
 
+/// Unsigned SIMD vector
+pub trait SimdUnsignedIntVector<S: Simd + ?Sized>: SimdIntVector<S> {
+    /// Returns `floor(log2(x)) + 1`
+    #[inline(always)]
+    fn log2p1(self) -> Self {
+        self.next_power_of_two_m1().count_ones()
+    }
+
+    /// Returns a mask wherein if a lane was a power of two, the corresponding mask lane will be truthy
+    #[inline(always)]
+    fn is_power_of_two(self) -> Mask<S, Self> {
+        (self & (self - Self::one())).eq(Self::zero())
+    }
+
+    /// Returns `next_power_of_two(x) - 1`
+    fn next_power_of_two_m1(self) -> Self;
+}
+
 /// Signed SIMD vector, with negative numbers
 pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self> {
     fn neg_one() -> Self;
@@ -895,9 +913,9 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     /// 32-bit unsigned integer vector
-    type Vu32: SimdIntVector<Self, Element = u32>;
+    type Vu32: SimdIntVector<Self, Element = u32> + SimdUnsignedIntVector<Self>;
     /// 64-bit unsigned integer vector
-    type Vu64: SimdIntVector<Self, Element = u64>;
+    type Vu64: SimdIntVector<Self, Element = u64> + SimdUnsignedIntVector<Self>;
 
     /// Single-precision 32-bit floating point vector
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>

@@ -323,6 +323,19 @@ impl SimdIntVector<AVX1> for u64x8<AVX1> {
     }
 }
 
+impl SimdUnsignedIntVector<AVX1> for u64x8<AVX1> {
+    #[inline(always)]
+    fn next_power_of_two_m1(mut self) -> Self {
+        self |= (self >> 1);
+        self |= (self >> 2);
+        self |= (self >> 4);
+        self |= (self >> 8);
+        self |= (self >> 16);
+        self |= (self >> 32);
+        self
+    }
+}
+
 impl_ops!(@UNARY u64x8 AVX1 => Not::not);
 impl_ops!(@BINARY u64x8 AVX1 => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem, BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 impl_ops!(@SHIFTS u64x8 AVX1 => Shr::shr, Shl::shl);
