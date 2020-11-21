@@ -300,6 +300,34 @@
 <span id="297">297</span>
 <span id="298">298</span>
 <span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -499,6 +527,34 @@
     <span class="kw">let</span> <span class="ident">ymm0</span> <span class="op">=</span> <span class="ident">_mm256_add_epi64</span>(<span class="ident">ymm0</span>, <span class="ident">ymm2</span>);
 
     <span class="ident">ymm0</span>
+}
+
+<span class="comment">// https://arxiv.org/pdf/1611.07612.pdf</span>
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_popcnt_epi8x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="kw">let</span> <span class="ident">lookup</span> <span class="op">=</span> <span class="ident">_mm256_setr_epi8</span>(
+        <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">3</span>, <span class="number">4</span>,
+    );
+    <span class="kw">let</span> <span class="ident">low_mask</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi8</span>(<span class="number">0x0f</span>);
+    <span class="kw">let</span> <span class="ident">lo</span> <span class="op">=</span> <span class="ident">_mm256_and_si256</span>(<span class="ident">v</span>, <span class="ident">low_mask</span>);
+    <span class="kw">let</span> <span class="ident">hi</span> <span class="op">=</span> <span class="ident">_mm256_and_si256</span>(<span class="ident">_mm256_srli_epi32</span>(<span class="ident">v</span>, <span class="number">4</span>), <span class="ident">low_mask</span>);
+    <span class="kw">let</span> <span class="ident">popcnt1</span> <span class="op">=</span> <span class="ident">_mm256_shuffle_epi8</span>(<span class="ident">lookup</span>, <span class="ident">lo</span>);
+    <span class="kw">let</span> <span class="ident">popcnt2</span> <span class="op">=</span> <span class="ident">_mm256_shuffle_epi8</span>(<span class="ident">lookup</span>, <span class="ident">hi</span>);
+    <span class="ident">_mm256_add_epi8</span>(<span class="ident">popcnt1</span>, <span class="ident">popcnt2</span>)
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_popcnt_epi64x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="ident">_mm256_sad_epu8</span>(<span class="ident">_mm256_popcnt_epi8x</span>(<span class="ident">v</span>), <span class="ident">_mm256_setzero_si256</span>())
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_popcnt_epi32x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="comment">// https://stackoverflow.com/a/51106873/2083075</span>
+    <span class="ident">_mm256_madd_epi16</span>(
+        <span class="ident">_mm256_maddubs_epi16</span>(<span class="ident">_mm256_popcnt_epi8x</span>(<span class="ident">v</span>), <span class="ident">_mm256_set1_epi8</span>(<span class="number">1</span>)),
+        <span class="ident">_mm256_set1_epi16</span>(<span class="number">1</span>),
+    )
 }
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">divider</span>::<span class="kw-2">*</span>;

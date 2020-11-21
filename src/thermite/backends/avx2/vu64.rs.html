@@ -573,6 +573,28 @@
 <span id="570">570</span>
 <span id="571">571</span>
 <span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -969,6 +991,28 @@
         <span class="ident">x</span> <span class="op">=</span> ((<span class="ident">x</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">32</span>) <span class="op">|</span> (<span class="ident">x</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">32</span>));
 
         <span class="ident">x</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">count_ones</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_popcnt_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_popcnt_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">leading_zeros</span>(<span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">1</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">2</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">4</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">8</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">16</span>);
+        <span class="self">self</span> <span class="op">|</span><span class="op">=</span> (<span class="self">self</span> <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">32</span>);
+
+        <span class="self">Self</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">ELEMENT_SIZE</span> <span class="kw">as</span> <span class="ident">u64</span> <span class="op">*</span> <span class="number">8</span>) <span class="op">-</span> <span class="self">self</span>.<span class="ident">count_ones</span>()
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">trailing_zeros</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="ident">Vi64</span>::<span class="ident">from_bits</span>(<span class="self">self</span>).<span class="ident">trailing_zeros</span>().<span class="ident">into_bits</span>()
     }
 }
 
