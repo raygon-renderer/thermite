@@ -328,6 +328,8 @@
 <span id="325">325</span>
 <span id="326">326</span>
 <span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -446,13 +448,15 @@
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
-    <span class="kw">let</span> <span class="ident">should_negate</span> <span class="op">=</span> <span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_cmpgt_epi64</span>(<span class="ident">x</span>, <span class="ident">_mm256_setzero_si256</span>()), <span class="ident">_mm256_set1_epi64x</span>(<span class="op">-</span><span class="number">1</span>));
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="ident">_mm256_srai_epi32</span>(<span class="ident">_mm256_shuffle_epi32</span>(<span class="ident">v</span>, <span class="ident">_mm_shuffle</span>(<span class="number">3</span>, <span class="number">3</span>, <span class="number">1</span>, <span class="number">1</span>)), <span class="number">31</span>)
+}
 
-    <span class="ident">_mm256_add_epi64</span>(
-        <span class="ident">_mm256_xor_si256</span>(<span class="ident">should_negate</span>, <span class="ident">x</span>),
-        <span class="ident">_mm256_and_si256</span>(<span class="ident">should_negate</span>, <span class="ident">_mm256_set1_epi64x</span>(<span class="number">1</span>)),
-    )
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_abs_epi64x</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="comment">// https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs</span>
+    <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">_mm256_signbits_epi64x</span>(<span class="ident">x</span>);
+    <span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_add_epi64</span>(<span class="ident">x</span>, <span class="ident">mask</span>), <span class="ident">mask</span>)
 }
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

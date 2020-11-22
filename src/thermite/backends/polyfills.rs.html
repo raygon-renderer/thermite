@@ -5,20 +5,10 @@
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
-<span id="5">5</span>
-<span id="6">6</span>
-<span id="7">7</span>
-<span id="8">8</span>
-<span id="9">9</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">_mm_shuffle</span>(<span class="ident">w</span>: <span class="ident">i32</span>, <span class="ident">z</span>: <span class="ident">i32</span>, <span class="ident">y</span>: <span class="ident">i32</span>, <span class="ident">x</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">i32</span> {
-    (<span class="ident">z</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">6</span>) <span class="op">|</span> (<span class="ident">y</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">4</span>) <span class="op">|</span> (<span class="ident">x</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">2</span>) <span class="op">|</span> <span class="ident">w</span>
-}
-
-<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-<span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">_mm256_shuffle</span>(<span class="ident">d</span>: <span class="ident">i32</span>, <span class="ident">c</span>: <span class="ident">i32</span>, <span class="ident">b</span>: <span class="ident">i32</span>, <span class="ident">a</span>: <span class="ident">i32</span>, <span class="ident">w</span>: <span class="ident">i32</span>, <span class="ident">z</span>: <span class="ident">i32</span>, <span class="ident">y</span>: <span class="ident">i32</span>, <span class="ident">x</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">i32</span> {
-    <span class="ident">_mm_shuffle</span>(<span class="ident">w</span>, <span class="ident">z</span>, <span class="ident">y</span>, <span class="ident">x</span>) <span class="op">|</span> (<span class="ident">_mm_shuffle</span>(<span class="ident">d</span> <span class="op">-</span> <span class="number">4</span>, <span class="ident">c</span> <span class="op">-</span> <span class="number">4</span>, <span class="ident">b</span> <span class="op">-</span> <span class="number">4</span>, <span class="ident">a</span> <span class="op">-</span> <span class="number">4</span>) <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">8</span>)
+    (<span class="ident">w</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">6</span>) <span class="op">|</span> (<span class="ident">z</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">4</span>) <span class="op">|</span> (<span class="ident">y</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">2</span>) <span class="op">|</span> <span class="ident">x</span>
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../";window.currentCrate = "thermite";</script><script src="../../../main.js"></script><script src="../../../source-script.js"></script><script src="../../../source-files.js"></script><script defer src="../../../search-index.js"></script></body></html>
