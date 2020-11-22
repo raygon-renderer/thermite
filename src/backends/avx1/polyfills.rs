@@ -24,7 +24,7 @@ unsafe fn recombine_si256(xmm0: __m128i, xmm1: __m128i) -> __m256i {
 pub unsafe fn _mm256_blendv_epi32x(ymm0: __m256i, ymm1: __m256i, mask: __m256i) -> __m256i {
     _mm256_castps_si256(_mm256_blendv_ps(
         _mm256_castsi256_ps(ymm0),
-        _mm256_castsi256_ps(ymm0),
+        _mm256_castsi256_ps(ymm1),
         _mm256_castsi256_ps(mask),
     ))
 }
@@ -33,7 +33,7 @@ pub unsafe fn _mm256_blendv_epi32x(ymm0: __m256i, ymm1: __m256i, mask: __m256i) 
 pub unsafe fn _mm256_blendv_epi64x(ymm0: __m256i, ymm1: __m256i, mask: __m256i) -> __m256i {
     _mm256_castpd_si256(_mm256_blendv_pd(
         _mm256_castsi256_pd(ymm0),
-        _mm256_castsi256_pd(ymm0),
+        _mm256_castsi256_pd(ymm1),
         _mm256_castsi256_pd(mask),
     ))
 }
