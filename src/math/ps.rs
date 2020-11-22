@@ -223,7 +223,7 @@ where
 
         re = swap_xy.select(Vf32::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
-        re = x.is_negative().select(Vf32::<S>::splat(PI) - re, re); // also for x = -0.
+        re = x.select_negative(Vf32::<S>::splat(PI) - re, re); // also for x = -0.
 
         re
     }
@@ -898,7 +898,7 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         Vf32::<S>::zero()
     };
 
-    r = x0.is_negative().select(underflow_value, Vf32::<S>::infinity());
+    r = x0.select_negative(underflow_value, Vf32::<S>::infinity());
     z = in_range.select(z, r);
     z = x0.is_nan().select(x0, z);
 

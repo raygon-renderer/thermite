@@ -448,6 +448,17 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
     }
 
     #[inline(always)]
+    fn select_negative(self, neg: Self, pos: Self) -> Self {
+        // Uses the HSB (which is only set if negative) to select values
+        Self::new(unsafe {
+            (
+                _mm256_blendv_epi64x(pos.value.0, neg.value.0, self.value.0),
+                _mm256_blendv_epi64x(pos.value.1, neg.value.1, self.value.1),
+            )
+        })
+    }
+
+    #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
         (self ^ Self::neg_one()) + Self::one()
     }

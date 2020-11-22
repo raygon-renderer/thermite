@@ -1006,7 +1006,7 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
         re = swapxy.select(Vf64::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,0) = 0 by convention
                                                 // also for x = -0.
-        re = x.is_negative().select(Vf64::<S>::splat(PI) - re, re);
+        re = x.select_negative(Vf64::<S>::splat(PI) - re, re);
     }
 
     re.combine_sign(y)
@@ -1083,7 +1083,7 @@ fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let frac_pi_2 = Vf64::<S>::splat(FRAC_PI_2);
 
     if acos {
-        let z1 = x.is_negative().select(Vf64::<S>::splat(PI) - z1, z1);
+        let z1 = x.select_negative(Vf64::<S>::splat(PI) - z1, z1);
         let z2 = frac_pi_2 - z2.combine_sign(x);
         is_big.select(z1, z2)
     } else {
@@ -1187,7 +1187,7 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         Vf64::<S>::zero()
     };
 
-    r = x0.is_negative().select(underflow_value, Vf64::<S>::infinity());
+    r = x0.select_negative(underflow_value, Vf64::<S>::infinity());
     z = in_range.select(z, r);
     z = x0.is_nan().select(x0, z);
 

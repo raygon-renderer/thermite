@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::backends::avx1::polyfills::{_mm256_blendv_epi32x, _mm256_blendv_epi64x};
+pub use crate::backends::avx1::polyfills::{_mm256_blendv_epi32x, _mm256_blendv_epi64x};
 
 #[inline(always)]
 pub unsafe fn _mm256_cvtepu32_psx(x: __m256i) -> __m256 {

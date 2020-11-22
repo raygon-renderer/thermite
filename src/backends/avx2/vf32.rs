@@ -320,6 +320,11 @@ impl SimdSignedVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn select_negative(self, neg: Self, pos: Self) -> Self {
+        unsafe { self._mm_blendv(neg, pos) }
+    }
+
+    #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
         // Xor sign bit using -0.0 as a shorthand for the sign bit
         self ^ Self::neg_zero()

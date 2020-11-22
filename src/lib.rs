@@ -698,6 +698,16 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
         self.lt(Self::zero())
     }
 
+    /// On platforms with true "select" instructions, they often only check the HSB,
+    /// which happens to correspond to the "sign" bit for both floats and twos-compliment integers,
+    /// so we can save a `cmpgt(self, zero)` by calling this
+    ///
+    /// On platforms without true "select" instructions, this falls back to `self.is_negative().select(neg, pos)`
+    #[inline(always)]
+    fn select_negative(self, neg: Self, pos: Self) -> Self {
+        self.is_negative().select(neg, pos)
+    }
+
     #[doc(hidden)]
     unsafe fn _mm_neg(self) -> Self;
 }
