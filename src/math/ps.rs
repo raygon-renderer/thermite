@@ -382,11 +382,8 @@ where
         let mut ui = xs.into_bits();
         let mut hx = ui & m;
 
-        // "fast" integer division `hx / 3`
-        //let hx_j = <Vu64<S> as SimdFromCast<S, Vu32<S>>>::from_cast(hx) * Vu64::<S>::splat(0xAAAAAAAB);
-        //let hx_3 = <Vu32<S> as SimdFromCast<S, Vu64<S>>>::from_cast(hx_j >> 33);
-
-        hx = hx.div_const(3) + b;
+        // TODO: Fix this when stable isn't broken
+        hx = <Vu32<S> as Div<Divider<u32>>>::div(hx, Divider::u32(3)) + b;
 
         ui &= Vu32::<S>::splat(0x80000000);
         ui |= hx;

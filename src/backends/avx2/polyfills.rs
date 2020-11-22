@@ -279,11 +279,6 @@ pub mod divider {
     }
 
     #[inline(always)]
-    pub unsafe fn _mm256_signbits_epi64x(v: __m256i) -> __m256i {
-        _mm256_srai_epi32(_mm256_shuffle_epi32(v, _mm_shuffle(3, 3, 1, 1)), 31)
-    }
-
-    #[inline(always)]
     pub unsafe fn _mm256_mullhi_epi64x(x: __m256i, y: __m256i) -> __m256i {
         let p = _mm256_mullhi_epu64x(x, y);
         let t1 = _mm256_and_si256(_mm256_signbits_epi64x(x), y);
@@ -292,38 +287,38 @@ pub mod divider {
     }
 
     #[inline(always)]
-    pub unsafe fn _mm256_div_epu32x(numers: __m256i, magic: u32, more: u8) -> __m256i {
-        if magic == 0 {
-            return _mm256_srli_epi32(numers, more as i32);
+    pub unsafe fn _mm256_div_epu32x(numers: __m256i, multiplier: u32, shift: u8) -> __m256i {
+        if multiplier == 0 {
+            return _mm256_srli_epi32(numers, shift as i32);
         }
 
-        let q = _mm256_mullhi_epu32x(numers, _mm256_set1_epi32(magic as i32));
+        let q = _mm256_mullhi_epu32x(numers, _mm256_set1_epi32(multiplier as i32));
 
-        if more & 0x40 != 0 {
+        if shift & 0x40 != 0 {
             _mm256_srli_epi32(
                 _mm256_add_epi32(_mm256_srli_epi32(_mm256_sub_epi32(numers, q), 1), q),
-                (more & 0x1F) as i32,
+                (shift & 0x1F) as i32,
             )
         } else {
-            _mm256_srli_epi32(q, more as i32)
+            _mm256_srli_epi32(q, shift as i32)
         }
     }
 
     #[inline(always)]
-    pub unsafe fn _mm256_div_epu64x(numers: __m256i, magic: u64, more: u8) -> __m256i {
-        if magic == 0 {
-            return _mm256_srli_epi64(numers, more as i32);
+    pub unsafe fn _mm256_div_epu64x(numers: __m256i, multiplier: u64, shift: u8) -> __m256i {
+        if multiplier == 0 {
+            return _mm256_srli_epi64(numers, shift as i32);
         }
 
-        let q = _mm256_mullhi_epu64x(numers, _mm256_set1_epi64x(magic as i64));
+        let q = _mm256_mullhi_epu64x(numers, _mm256_set1_epi64x(multiplier as i64));
 
-        if more & 0x40 != 0 {
+        if shift & 0x40 != 0 {
             _mm256_srli_epi64(
                 _mm256_add_epi64(_mm256_srli_epi64(_mm256_sub_epi64(numers, q), 1), q),
-                (more & 0x3F) as i32,
+                (shift & 0x3F) as i32,
             )
         } else {
-            _mm256_srli_epi64(q, more as i32)
+            _mm256_srli_epi64(q, shift as i32)
         }
     }
 }

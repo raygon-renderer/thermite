@@ -289,6 +289,14 @@ impl SimdIntVector<AVX1> for u32x8<AVX1> {
     }
 }
 
+impl Div<Divider<u32>> for u32x8<AVX1> {
+    type Output = Self;
+
+    fn div(self, rhs: Divider<u32>) -> Self {
+        unimplemented!()
+    }
+}
+
 impl SimdUnsignedIntVector<AVX1> for u32x8<AVX1> {
     #[inline(always)]
     fn next_power_of_two_m1(mut self) -> Self {

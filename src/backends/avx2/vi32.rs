@@ -350,6 +350,14 @@ impl SimdIntVector<AVX2> for i32x8<AVX2> {
     }
 }
 
+impl Div<Divider<i32>> for i32x8<AVX2> {
+    type Output = Self;
+
+    fn div(self, rhs: Divider<i32>) -> Self {
+        unimplemented!()
+    }
+}
+
 impl SimdSignedVector<AVX2> for i32x8<AVX2> {
     #[inline(always)]
     fn neg_one() -> Self {

@@ -354,18 +354,6 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
     }
 
     #[inline(always)]
-    fn div_const(self, divisor: u64) -> Self {
-        let (magic, more) = crate::backends::common::gen_u64(divisor);
-
-        Self::new(unsafe {
-            (
-                _mm256_div_epu64x(self.value.0, magic, more),
-                _mm256_div_epu64x(self.value.1, magic, more),
-            )
-        })
-    }
-
-    #[inline(always)]
     fn rolv(self, cnt: Vu32) -> Self {
         unsafe { Self::zip(self, cnt, |x, r| x.rotate_left(r)) }
     }
@@ -408,6 +396,23 @@ impl SimdIntVector<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     fn trailing_zeros(self) -> Self {
         Vi64::from_bits(self).trailing_zeros().into_bits()
+    }
+}
+
+impl Div<Divider<u64>> for u64x8<AVX2> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: Divider<u64>) -> Self {
+        let multiplier = rhs.multiplier();
+        let shift = rhs.shift();
+
+        Self::new(unsafe {
+            (
+                _mm256_div_epu64x(self.value.0, multiplier, shift),
+                _mm256_div_epu64x(self.value.1, multiplier, shift),
+            )
+        })
     }
 }
 

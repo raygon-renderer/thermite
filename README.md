@@ -46,7 +46,7 @@ panic = 'abort'     # Very few functions in Thermite panic, but aborting will av
 * Vectors with 64-bit elements are approximately 2-4x slower than 32-bit vectors.
 * Integer vectors are 2x slower on SSE2/AVX1, but nominal on SSE4.1 and AVX2. This compounds the first point.
 * Casting floats to signed integers is faster than to unsigned integers.
-* Equal-size Signed and and Unsigned integer vectors can be cast between each other at zero cost.
+* Equal-size Signed and Unsigned integer vectors can be cast between each other at zero cost.
 * Operations mixing float and integer types can incur a 1-cycle penalty on most modern CPUs.
 * Integer division currently can only be done with a scalar fallback, so it's not recommended.
 * Dividing integer vectors by constant uniform divisors should use `SimdIntVector::div_const`

@@ -363,7 +363,8 @@ where
         let mut ui = xs.into_bits();
         let mut hx = (ui >> 32) & m;
 
-        hx = hx.div_const(3) + b;
+        // TODO: Fix this when stable isn't broken
+        hx = <Vu64<S> as Div<Divider<u64>>>::div(hx, Divider::u64(3)) + b;
 
         ui &= Vu64::<S>::splat(1 << 63);
         ui |= hx << 32;

@@ -15,6 +15,9 @@ pub use buffer::SimdBuffer;
 
 pub mod backends;
 
+mod divider;
+pub use divider::Divider;
+
 mod pointer;
 use self::pointer::*;
 pub use self::pointer::{AssociatedVector, VPtr};
@@ -571,29 +574,21 @@ pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     }
 }
 
+pub trait SimdIntegerDivision<E>: Sized + Div<Divider<E>, Output = Self> {}
+
+impl<T, E> SimdIntegerDivision<E> for T where T: Sized + Div<Divider<E>, Output = Self> {}
+
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {
     /// Saturating addition, will not wrap
-    fn saturating_add(self, _rhs: Self) -> Self;
+    fn saturating_add(self, rhs: Self) -> Self;
     /// Saturating subtraction, will not wrap
-    fn saturating_sub(self, _rhs: Self) -> Self;
+    fn saturating_sub(self, rhs: Self) -> Self;
 
     /// Sum all lanes together, wrapping the result if it can't fit in `T`
     fn wrapping_sum(self) -> Self::Element;
     /// Multiply all lanes together, wrapping the result if it can't fit in `T`
     fn wrapping_product(self) -> Self::Element;
-
-    /// For some vectors, this can provide a significant
-    /// speedup when the divisor is const, as LLVM and Thermite can
-    /// generate a fixed sequence of instructions to optimally perform the division.
-    ///
-    /// **WARNING**: If the input divisor is not constant, or you do not have optimization levels set correctly,
-    /// this will be quite slow.
-    #[inline(always)]
-    fn div_const(self, divisor: Self::Element) -> Self {
-        // terrible default implementation
-        self / Self::splat(divisor)
-    }
 
     /// Rotates the bits in each lane to the left (towards HSB) by the number of bits specified in `cnt`
     #[inline(always)]
@@ -901,21 +896,23 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     /// 32-bit signed integer vector
     type Vi32: SimdIntVector<Self, Element = i32>
         + SimdSignedVector<Self>
+        + SimdIntegerDivision<i32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>;
 
     /// 64-bit signed integer vector
     type Vi64: SimdIntVector<Self, Element = i64>
         + SimdSignedVector<Self>
+        + SimdIntegerDivision<i64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>;
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
     /// 32-bit unsigned integer vector
-    type Vu32: SimdIntVector<Self, Element = u32> + SimdUnsignedIntVector<Self>;
+    type Vu32: SimdIntVector<Self, Element = u32> + SimdUnsignedIntVector<Self> + SimdIntegerDivision<u32>;
     /// 64-bit unsigned integer vector
-    type Vu64: SimdIntVector<Self, Element = u64> + SimdUnsignedIntVector<Self>;
+    type Vu64: SimdIntVector<Self, Element = u64> + SimdUnsignedIntVector<Self> + SimdIntegerDivision<u64>;
 
     /// Single-precision 32-bit floating point vector
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
