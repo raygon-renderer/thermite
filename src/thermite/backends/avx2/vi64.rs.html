@@ -513,6 +513,24 @@
 <span id="510">510</span>
 <span id="511">511</span>
 <span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -942,7 +960,25 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { (<span class="ident">_mm256_abs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>), <span class="ident">_mm256_abs_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>)) })
+        <span class="comment">// https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs</span>
+        <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">is_negative</span>().<span class="ident">value</span>();
+        (<span class="self">self</span> <span class="op">+</span> <span class="ident">mask</span>) <span class="op">^</span> <span class="ident">mask</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">is_positive</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="op">!</span><span class="self">self</span>.<span class="ident">is_negative</span>()
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">is_negative</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            (
+                <span class="comment">// each of these is 2 cycles versus 6 cycles to xor+cmpgt</span>
+                <span class="ident">_mm256_signbits_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_signbits_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            )
+        }))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

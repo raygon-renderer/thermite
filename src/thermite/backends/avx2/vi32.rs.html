@@ -452,6 +452,18 @@
 <span id="449">449</span>
 <span id="450">450</span>
 <span id="451">451</span>
+<span id="452">452</span>
+<span id="453">453</span>
+<span id="454">454</span>
+<span id="455">455</span>
+<span id="456">456</span>
+<span id="457">457</span>
+<span id="458">458</span>
+<span id="459">459</span>
+<span id="460">460</span>
+<span id="461">461</span>
+<span id="462">462</span>
+<span id="463">463</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -827,6 +839,18 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_abs_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>) })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">is_positive</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="op">!</span><span class="self">self</span>.<span class="ident">is_negative</span>()
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">is_negative</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="comment">// get sign bit in all lanes by shifting it 31 bits</span>
+        <span class="comment">// this is faster than the xor+cmpgt required to compare it to zero</span>
+        <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_srai_epi32</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="number">31</span>) }))
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
