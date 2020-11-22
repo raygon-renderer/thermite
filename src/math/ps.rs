@@ -932,7 +932,7 @@ fn asin_f_internal<S: Simd>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     let z1 = z + z;
 
     if acos {
-        let z1 = x.is_positive().select(Vf32::<S>::splat(PI) - z1, z1);
+        let z1 = x.select_negative(Vf32::<S>::splat(PI) - z1, z1);
         let z2 = Vf32::<S>::splat(FRAC_PI_2) - z.combine_sign(x);
 
         is_big.select(z1, z2)
