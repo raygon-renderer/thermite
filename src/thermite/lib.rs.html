@@ -954,6 +954,25 @@
 <span id="951">951</span>
 <span id="952">952</span>
 <span id="953">953</span>
+<span id="954">954</span>
+<span id="955">955</span>
+<span id="956">956</span>
+<span id="957">957</span>
+<span id="958">958</span>
+<span id="959">959</span>
+<span id="960">960</span>
+<span id="961">961</span>
+<span id="962">962</span>
+<span id="963">963</span>
+<span id="964">964</span>
+<span id="965">965</span>
+<span id="966">966</span>
+<span id="967">967</span>
+<span id="968">968</span>
+<span id="969">969</span>
+<span id="970">970</span>
+<span id="971">971</span>
+<span id="972">972</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1531,6 +1550,9 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     }
 }
 
+<span class="doccomment">/// Specialized integer division by [`Divider`]s</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// This primarily exists as an operator overload hack because Rust pre 1.49.0 is broken</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">E</span><span class="op">&gt;</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span> <span class="ident">T</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
@@ -1844,13 +1866,18 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
 <span class="doccomment">/// SIMD Instruction set, contains all types</span>
 <span class="doccomment">///</span>
-<span class="doccomment">///</span>
+<span class="doccomment">/// Take your time to look through this. All trait bounds contain methods and associated values which</span>
+<span class="doccomment">/// encapsulate all functionality for this crate.</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">PartialEq</span> <span class="op">+</span> <span class="ident">Eq</span> {
     <span class="kw">const</span> <span class="ident">INSTRSET</span>: <span class="ident">SimdInstructionSet</span>;
 
     <span class="comment">//type Vi8: SimdIntVector&lt;Self, Element = i8&gt; + SimdSignedVector&lt;Self, i8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vi16: SimdIntVector&lt;Self, Element = i16&gt; + SimdSignedVector&lt;Self, i16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
+
     <span class="doccomment">/// 32-bit signed integer vector</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// The From/Into bits traits allow it to be cast to `Vu32` at zero-cost. Some methods, such as those in</span>
+    <span class="doccomment">/// [`SimdUnsignedIntVector`], are only available in unsigned vectors.</span>
     <span class="kw">type</span> <span class="ident">Vi32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">i32</span><span class="op">&gt;</span>
@@ -1858,6 +1885,9 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// 64-bit signed integer vector</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// The From/Into bits traits allow it to be cast to `Vu64` at zero-cost. Some methods, such as those in</span>
+    <span class="doccomment">/// [`SimdUnsignedIntVector`], are only available in unsigned vectors.</span>
     <span class="kw">type</span> <span class="ident">Vi64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">i64</span><span class="op">&gt;</span>
@@ -1866,17 +1896,25 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
     <span class="comment">//type Vu8: SimdIntVector&lt;Self, Element = u8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vu16: SimdIntVector&lt;Self, Element = u16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
+
     <span class="doccomment">/// 32-bit unsigned integer vector</span>
     <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>;
     <span class="doccomment">/// 64-bit unsigned integer vector</span>
     <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">u64</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// Single-precision 32-bit floating point vector</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note that these already implement bitwise operations between each other, but it is possible to</span>
+    <span class="doccomment">/// cast to `Vu32` at zero-cost using the From/Into bits traits.</span>
     <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu32</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+
     <span class="doccomment">/// Double-precision 64-bit floating point vector</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note that these already implement bitwise operations between each other, but it is possible to</span>
+    <span class="doccomment">/// cast to `Vu64` at zero-cost using the From/Into bits traits.</span>
     <span class="kw">type</span> <span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu64</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>

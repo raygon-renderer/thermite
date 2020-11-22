@@ -860,7 +860,22 @@
 <span id="857">857</span>
 <span id="858">858</span>
 <span id="859">859</span>
+<span id="860">860</span>
+<span id="861">861</span>
+<span id="862">862</span>
+<span id="863">863</span>
+<span id="864">864</span>
+<span id="865">865</span>
+<span id="866">866</span>
+<span id="867">867</span>
+<span id="868">868</span>
+<span id="869">869</span>
+<span id="870">870</span>
+<span id="871">871</span>
+<span id="872">872</span>
 </pre><div class="example-wrap"><pre class="rust ">
+<span class="doccomment">//! Vectorized Math Library</span>
+
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
@@ -979,17 +994,28 @@
 
     <span class="comment">//fn log2_int(self) -&gt; Vu32&lt;S&gt;;</span>
 
-    <span class="doccomment">/// Computes the error function for each value in a vector</span>
+    <span class="doccomment">/// Computes the error function for each value in a vector.</span>
     <span class="kw">fn</span> <span class="ident">erf</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
-    <span class="doccomment">/// Computes the inverse error function for each value in a vector</span>
+    <span class="doccomment">/// Computes the inverse error function for each value in a vector.</span>
     <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
+    <span class="doccomment">/// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This implementation uses a few different behaviors to ensure the greatest precision where possible.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// * For non-integer positive inputs, it uses the Lanczos approximation.</span>
+    <span class="doccomment">/// * For small non-integer negative inputs, it uses the recursive identity `Γ(z)=Γ(z+1)/z` until `z` is positive.</span>
+    <span class="doccomment">/// * For large non-integer negative inputs, it uses the reflection formula `-π/(Γ(z)sin(πz)z)`.</span>
+    <span class="doccomment">/// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.</span>
+    <span class="doccomment">/// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// NOTE: The Gamma function is not defined for negative integers.</span>
     <span class="kw">fn</span> <span class="ident">tgamma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    <span class="doccomment">/// Finds the next representable float moving upwards to positive infinity</span>
+    <span class="doccomment">/// Finds the next representable float moving upwards to positive infinity.</span>
     <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    <span class="doccomment">/// Finds the previous representable float moving downwards to negative infinity</span>
+    <span class="doccomment">/// Finds the previous representable float moving downwards to negative infinity.</span>
     <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Calculates a [sigmoid-like 3rd-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#3rd-order_equation).</span>
