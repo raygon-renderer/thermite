@@ -973,6 +973,16 @@
 <span id="970">970</span>
 <span id="971">971</span>
 <span id="972">972</span>
+<span id="973">973</span>
+<span id="974">974</span>
+<span id="975">975</span>
+<span id="976">976</span>
+<span id="977">977</span>
+<span id="978">978</span>
+<span id="979">979</span>
+<span id="980">980</span>
+<span id="981">981</span>
+<span id="982">982</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1672,6 +1682,16 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">fn</span> <span class="ident">is_negative</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         <span class="comment">// TODO: Specialize these to get sign bit (if available)</span>
         <span class="self">self</span>.<span class="ident">lt</span>(<span class="self">Self</span>::<span class="ident">zero</span>())
+    }
+
+    <span class="doccomment">/// On platforms with true &quot;select&quot; instructions, they often only check the HSB,</span>
+    <span class="doccomment">/// which happens to correspond to the &quot;sign&quot; bit for both floats and twos-compliment integers,</span>
+    <span class="doccomment">/// so we can save a `cmpgt(self, zero)` by calling this</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// On platforms without true &quot;select&quot; instructions, this falls back to `self.is_negative().select(neg, pos)`</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">select_negative</span>(<span class="self">self</span>, <span class="ident">neg</span>: <span class="self">Self</span>, <span class="ident">pos</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">is_negative</span>().<span class="ident">select</span>(<span class="ident">neg</span>, <span class="ident">pos</span>)
     }
 
     <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>

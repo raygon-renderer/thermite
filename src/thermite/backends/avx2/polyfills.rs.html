@@ -321,7 +321,7 @@
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
-<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">backends</span>::<span class="ident">avx1</span>::<span class="ident">polyfills</span>::{<span class="ident">_mm256_blendv_epi32x</span>, <span class="ident">_mm256_blendv_epi64x</span>};
+<span class="kw">pub</span> <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">backends</span>::<span class="ident">avx1</span>::<span class="ident">polyfills</span>::{<span class="ident">_mm256_blendv_epi32x</span>, <span class="ident">_mm256_blendv_epi64x</span>};
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_psx</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256</span> {

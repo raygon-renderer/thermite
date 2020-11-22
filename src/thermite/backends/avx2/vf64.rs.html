@@ -688,6 +688,11 @@
 <span id="685">685</span>
 <span id="686">686</span>
 <span id="687">687</span>
+<span id="688">688</span>
+<span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1107,6 +1112,11 @@
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// clear sign bit</span>
         <span class="self">self</span> <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x7fffffffffffffff</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">select_negative</span>(<span class="self">self</span>, <span class="ident">neg</span>: <span class="self">Self</span>, <span class="ident">pos</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">_mm_blendv</span>(<span class="ident">neg</span>, <span class="ident">pos</span>) }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

@@ -334,7 +334,7 @@
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>, <span class="ident">mask</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="ident">_mm256_castps_si256</span>(<span class="ident">_mm256_blendv_ps</span>(
         <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">ymm0</span>),
-        <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">ymm0</span>),
+        <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">ymm1</span>),
         <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">mask</span>),
     ))
 }
@@ -343,7 +343,7 @@
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>, <span class="ident">mask</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_blendv_pd</span>(
         <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">ymm0</span>),
-        <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">ymm0</span>),
+        <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">ymm1</span>),
         <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">mask</span>),
     ))
 }

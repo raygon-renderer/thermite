@@ -531,6 +531,17 @@
 <span id="528">528</span>
 <span id="529">529</span>
 <span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -979,6 +990,17 @@
                 <span class="ident">_mm256_signbits_epi64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         }))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">select_negative</span>(<span class="self">self</span>, <span class="ident">neg</span>: <span class="self">Self</span>, <span class="ident">pos</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// Uses the HSB (which is only set if negative) to select values</span>
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
+            (
+                <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">pos</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">neg</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">pos</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">neg</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>),
+            )
+        })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
