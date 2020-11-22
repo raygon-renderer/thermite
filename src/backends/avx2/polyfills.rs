@@ -115,13 +115,15 @@ pub unsafe fn _mm256_subs_epi64x(lhs: __m256i, rhs: __m256i) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_abs_epi64x(x: __m256i) -> __m256i {
-    let should_negate = _mm256_xor_si256(_mm256_cmpgt_epi64(x, _mm256_setzero_si256()), _mm256_set1_epi64x(-1));
+pub unsafe fn _mm256_signbits_epi64x(v: __m256i) -> __m256i {
+    _mm256_srai_epi32(_mm256_shuffle_epi32(v, _mm_shuffle(3, 3, 1, 1)), 31)
+}
 
-    _mm256_add_epi64(
-        _mm256_xor_si256(should_negate, x),
-        _mm256_and_si256(should_negate, _mm256_set1_epi64x(1)),
-    )
+#[inline(always)]
+pub unsafe fn _mm256_abs_epi64x(x: __m256i) -> __m256i {
+    // https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
+    let mask = _mm256_signbits_epi64x(x);
+    _mm256_xor_si256(_mm256_add_epi64(x, mask), mask)
 }
 
 #[inline(always)]
