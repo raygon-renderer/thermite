@@ -1969,7 +1969,7 @@
     <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">+</span> <span class="ident">z</span>;
 
     <span class="kw">if</span> <span class="ident">acos</span> {
-        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">is_positive</span>().<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">PI</span>) <span class="op">-</span> <span class="ident">z1</span>, <span class="ident">z1</span>);
+        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">select_negative</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">PI</span>) <span class="op">-</span> <span class="ident">z1</span>, <span class="ident">z1</span>);
         <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_PI_2</span>) <span class="op">-</span> <span class="ident">z</span>.<span class="ident">combine_sign</span>(<span class="ident">x</span>);
 
         <span class="ident">is_big</span>.<span class="ident">select</span>(<span class="ident">z1</span>, <span class="ident">z2</span>)
