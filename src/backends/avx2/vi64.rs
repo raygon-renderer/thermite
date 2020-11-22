@@ -426,7 +426,25 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
 
     #[inline(always)]
     fn abs(self) -> Self {
-        Self::new(unsafe { (_mm256_abs_epi64x(self.value.0), _mm256_abs_epi64x(self.value.1)) })
+        // https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
+        let mask = self.is_negative().value();
+        (self + mask) ^ mask
+    }
+
+    #[inline(always)]
+    fn is_positive(self) -> Mask<AVX2, Self> {
+        !self.is_negative()
+    }
+
+    #[inline(always)]
+    fn is_negative(self) -> Mask<AVX2, Self> {
+        Mask::new(Self::new(unsafe {
+            (
+                // each of these is 2 cycles versus 6 cycles to xor+cmpgt
+                _mm256_signbits_epi64x(self.value.0),
+                _mm256_signbits_epi64x(self.value.1),
+            )
+        }))
     }
 
     #[inline(always)]

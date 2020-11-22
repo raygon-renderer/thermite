@@ -120,13 +120,6 @@ pub unsafe fn _mm256_signbits_epi64x(v: __m256i) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_abs_epi64x(x: __m256i) -> __m256i {
-    // https://graphics.stanford.edu/~seander/bithacks.html#IntegerAbs
-    let mask = _mm256_signbits_epi64x(x);
-    _mm256_xor_si256(_mm256_add_epi64(x, mask), mask)
-}
-
-#[inline(always)]
 pub unsafe fn _mm256_cvtps_epi64(x: __m128) -> __m256i {
     let x0 = _mm_cvttss_si64(x);
     let x1 = _mm_cvttss_si64(_mm_permute_ps(x, 1));

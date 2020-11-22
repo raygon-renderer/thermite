@@ -375,6 +375,18 @@ impl SimdSignedVector<AVX2> for i32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn is_positive(self) -> Mask<AVX2, Self> {
+        !self.is_negative()
+    }
+
+    #[inline(always)]
+    fn is_negative(self) -> Mask<AVX2, Self> {
+        // get sign bit in all lanes by shifting it 31 bits
+        // this is faster than the xor+cmpgt required to compare it to zero
+        Mask::new(Self::new(unsafe { _mm256_srai_epi32(self.value, 31) }))
+    }
+
+    #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
         Self::new(_mm256_sign_epi32(self.value, _mm256_set1_epi32(-1)))
     }
