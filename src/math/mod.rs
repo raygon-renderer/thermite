@@ -1,3 +1,5 @@
+//! Vectorized Math Library
+
 #![allow(unused)]
 
 use crate::*;
@@ -116,17 +118,28 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
 
     //fn log2_int(self) -> Vu32<S>;
 
-    /// Computes the error function for each value in a vector
+    /// Computes the error function for each value in a vector.
     fn erf(self) -> Self;
-    /// Computes the inverse error function for each value in a vector
+    /// Computes the inverse error function for each value in a vector.
     fn erfinv(self) -> Self;
 
+    /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
+    ///
+    /// This implementation uses a few different behaviors to ensure the greatest precision where possible.
+    ///
+    /// * For non-integer positive inputs, it uses the Lanczos approximation.
+    /// * For small non-integer negative inputs, it uses the recursive identity `Γ(z)=Γ(z+1)/z` until `z` is positive.
+    /// * For large non-integer negative inputs, it uses the reflection formula `-π/(Γ(z)sin(πz)z)`.
+    /// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.
+    /// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).
+    ///
+    /// NOTE: The Gamma function is not defined for negative integers.
     fn tgamma(self) -> Self;
 
-    /// Finds the next representable float moving upwards to positive infinity
+    /// Finds the next representable float moving upwards to positive infinity.
     fn next_float(self) -> Self;
 
-    /// Finds the previous representable float moving downwards to negative infinity
+    /// Finds the previous representable float moving downwards to negative infinity.
     fn prev_float(self) -> Self;
 
     /// Calculates a [sigmoid-like 3rd-order interpolation function](https://en.wikipedia.org/wiki/Smoothstep#3rd-order_equation).

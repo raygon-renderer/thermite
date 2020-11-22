@@ -574,6 +574,9 @@ pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     }
 }
 
+/// Specialized integer division by [`Divider`]s
+///
+/// This primarily exists as an operator overload hack because Rust pre 1.49.0 is broken
 pub trait SimdIntegerDivision<E>: Sized + Div<Divider<E>, Output = Self> {}
 
 impl<T, E> SimdIntegerDivision<E> for T where T: Sized + Div<Divider<E>, Output = Self> {}
@@ -887,13 +890,18 @@ pub enum SimdInstructionSet {
 
 /// SIMD Instruction set, contains all types
 ///
-///
+/// Take your time to look through this. All trait bounds contain methods and associated values which
+/// encapsulate all functionality for this crate.
 pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     const INSTRSET: SimdInstructionSet;
 
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vi16: SimdIntVector<Self, Element = i16> + SimdSignedVector<Self, i16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
+
     /// 32-bit signed integer vector
+    ///
+    /// The From/Into bits traits allow it to be cast to `Vu32` at zero-cost. Some methods, such as those in
+    /// [`SimdUnsignedIntVector`], are only available in unsigned vectors.
     type Vi32: SimdIntVector<Self, Element = i32>
         + SimdSignedVector<Self>
         + SimdIntegerDivision<i32>
@@ -901,6 +909,9 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
         + SimdFromBits<Self, Self::Vu32>;
 
     /// 64-bit signed integer vector
+    ///
+    /// The From/Into bits traits allow it to be cast to `Vu64` at zero-cost. Some methods, such as those in
+    /// [`SimdUnsignedIntVector`], are only available in unsigned vectors.
     type Vi64: SimdIntVector<Self, Element = i64>
         + SimdSignedVector<Self>
         + SimdIntegerDivision<i64>
@@ -909,17 +920,25 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
 
     //type Vu8: SimdIntVector<Self, Element = u8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
     //type Vu16: SimdIntVector<Self, Element = u16> + SimdMasked<Self, u16, Mask = Self::Vm16>;
+
     /// 32-bit unsigned integer vector
     type Vu32: SimdIntVector<Self, Element = u32> + SimdUnsignedIntVector<Self> + SimdIntegerDivision<u32>;
     /// 64-bit unsigned integer vector
     type Vu64: SimdIntVector<Self, Element = u64> + SimdUnsignedIntVector<Self> + SimdIntegerDivision<u64>;
 
     /// Single-precision 32-bit floating point vector
+    ///
+    /// Note that these already implement bitwise operations between each other, but it is possible to
+    /// cast to `Vu32` at zero-cost using the From/Into bits traits.
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>
         + SimdVectorizedMath<Self>;
+
     /// Double-precision 64-bit floating point vector
+    ///
+    /// Note that these already implement bitwise operations between each other, but it is possible to
+    /// cast to `Vu64` at zero-cost using the From/Into bits traits.
     type Vf64: SimdFloatVector<Self, Element = f64, Vu = Self::Vu64, Vi = Self::Vi64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>
