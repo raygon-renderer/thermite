@@ -954,9 +954,6 @@
 <span id="951">951</span>
 <span id="952">952</span>
 <span id="953">953</span>
-<span id="954">954</span>
-<span id="955">955</span>
-<span id="956">956</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -974,6 +971,9 @@
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">buffer</span>::<span class="ident">SimdBuffer</span>;
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">backends</span>;
+
+<span class="kw">mod</span> <span class="ident">divider</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">divider</span>::<span class="ident">Divider</span>;
 
 <span class="kw">mod</span> <span class="ident">pointer</span>;
 <span class="kw">use</span> <span class="self">self</span>::<span class="ident">pointer</span>::<span class="kw-2">*</span>;
@@ -1531,29 +1531,21 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     }
 }
 
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">E</span><span class="op">&gt;</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span> <span class="ident">T</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
+
 <span class="doccomment">/// Integer SIMD vectors</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Eq</span> {
     <span class="doccomment">/// Saturating addition, will not wrap</span>
-    <span class="kw">fn</span> <span class="ident">saturating_add</span>(<span class="self">self</span>, <span class="ident">_rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">saturating_add</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="doccomment">/// Saturating subtraction, will not wrap</span>
-    <span class="kw">fn</span> <span class="ident">saturating_sub</span>(<span class="self">self</span>, <span class="ident">_rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">saturating_sub</span>(<span class="self">self</span>, <span class="ident">rhs</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Sum all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
     <span class="kw">fn</span> <span class="ident">wrapping_sum</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
     <span class="doccomment">/// Multiply all lanes together, wrapping the result if it can&#39;t fit in `T`</span>
     <span class="kw">fn</span> <span class="ident">wrapping_product</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Element</span>;
-
-    <span class="doccomment">/// For some vectors, this can provide a significant</span>
-    <span class="doccomment">/// speedup when the divisor is const, as LLVM and Thermite can</span>
-    <span class="doccomment">/// generate a fixed sequence of instructions to optimally perform the division.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// **WARNING**: If the input divisor is not constant, or you do not have optimization levels set correctly,</span>
-    <span class="doccomment">/// this will be quite slow.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">div_const</span>(<span class="self">self</span>, <span class="ident">divisor</span>: <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="comment">// terrible default implementation</span>
-        <span class="self">self</span> <span class="op">/</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">divisor</span>)
-    }
 
     <span class="doccomment">/// Rotates the bits in each lane to the left (towards HSB) by the number of bits specified in `cnt`</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1861,21 +1853,23 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// 32-bit signed integer vector</span>
     <span class="kw">type</span> <span class="ident">Vi32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">i32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// 64-bit signed integer vector</span>
     <span class="kw">type</span> <span class="ident">Vi64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">i64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">i64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>;
 
     <span class="comment">//type Vu8: SimdIntVector&lt;Self, Element = u8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
     <span class="comment">//type Vu16: SimdIntVector&lt;Self, Element = u16&gt; + SimdMasked&lt;Self, u16, Mask = Self::Vm16&gt;;</span>
     <span class="doccomment">/// 32-bit unsigned integer vector</span>
-    <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vu32</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>;
     <span class="doccomment">/// 64-bit unsigned integer vector</span>
-    <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vu64</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdUnsignedIntVector</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">u64</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// Single-precision 32-bit floating point vector</span>
     <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu32</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
