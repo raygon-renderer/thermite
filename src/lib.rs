@@ -128,6 +128,47 @@ pub trait SimdElement: mask::Truthy + Clone + Debug + Copy + Default + Send + Sy
 
 impl<T> SimdElement for T where T: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
 
+/// Helper trait for constant vector shuffles
+pub trait SimdShuffleIndices {
+    const INDICES: &'static [usize];
+}
+
+/// Shuffles the elements in one or two vectors into a new vector given the indices provided.
+///
+/// Under the hood this generates an anonymous struct implementing [`SimdShuffleIndices`],
+/// then calls [`SimdVectorBase::shuffle`] on a vector or two. Shuffles will be monomorphized to generate
+/// ideal code wherever possible.
+///
+/// The length of the indices array is not checked at compile-time, but will panic at runtime
+/// if incorrect or if any of the elements are out of bounds for the vectors.
+///
+/// You can use a crate such as [`no-panic`](https://crates.io/crates/no-panic) to statically ensure
+/// all the indices are valid. `no-panic` checks at link-time, so branches pruned via dead-code removal
+/// will not contribute, allowing you to do things like:
+///
+/// ```ignore
+/// match Vf32::NUM_ELEMENTS {
+///     4 => shuffle!(x, y, [6, 2, 1, 7]),
+///     8 => shuffle!(x, y, [5, 6, 10, 9, 2, 8, 6, 4]),
+///     _ => unimplemented!(),
+/// }
+/// ```
+#[macro_export]
+macro_rules! shuffle {
+    ($a:expr, $b:expr, [$($idx:expr),*]) => {{
+        ($a).shuffle($b, {
+            struct __Indices;
+            impl $crate::SimdShuffleIndices for __Indices {
+                const INDICES: &'static [usize] = &[$($idx),*];
+            }
+            __Indices
+        })
+    }};
+    ($a:expr, [$($idx:expr),*]) => {
+        shuffle!($a, $a, [$($idx),*])
+    };
+}
+
 /// Basic shared vector interface
 pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Send + Sync {
     type Element: SimdElement;
@@ -141,6 +182,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     fn splat(value: Self::Element) -> Self;
 
     /// Returns a vector containing possibly undefined or uninitialized data
+    #[inline(always)]
     unsafe fn undefined() -> Self {
         Self::default()
     }
@@ -150,6 +192,28 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     fn splat_any(value: impl Into<Self::Element>) -> Self {
         Self::splat(value.into())
     }
+
+    /// Shuffles a vector based on the static indices provided in `INDICES`
+    ///
+    /// See the [`shuffle!`] macro for more information.
+    ///
+    /// **NOTE**: This method will panic if the indices are the incorrect length or out of bounds.
+    #[inline(always)]
+    fn shuffle<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self {
+        assert!(
+            INDICES::INDICES.len() == Self::NUM_ELEMENTS
+                && INDICES::INDICES.iter().all(|i| *i < Self::NUM_ELEMENTS * 2)
+        );
+        unsafe { self.shuffle_unchecked(b, indices) }
+    }
+
+    /// Shuffles a vector based on the static indices provided in `INDICES`
+    ///
+    /// See the [`shuffle!`] macro for more information.
+    ///
+    /// **NOTE**: Calling this with invalid indices (incorrect length or out-of-bounds values)
+    /// will result in undefined behavior
+    unsafe fn shuffle_unchecked<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self;
 
     #[inline(always)]
     #[cfg(feature = "alloc")]

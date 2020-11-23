@@ -320,6 +320,11 @@ where
     unsafe fn replace_unchecked(self, index: usize, value: bool) -> Self {
         Self::new(self.value().replace_unchecked(index, Truthy::from_bool(value)))
     }
+
+    #[inline(always)]
+    unsafe fn shuffle_unchecked<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self {
+        Self::new(self.value().shuffle_unchecked(b.value(), indices))
+    }
 }
 
 macro_rules! impl_ops {

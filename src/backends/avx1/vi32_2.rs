@@ -46,16 +46,5 @@ impl SimdVectorBase<AVX1> for i32x8<AVX1> {
         _mm_storeu_si128(dst.add(1), self.value[1]);
     }
 
-    #[inline]
-    #[target_feature(enable = "avx")]
-    unsafe fn extract_unchecked(self, index: usize) -> Self::Element {
-        *transmute::<&_, *const Self::Element>(&self).add(index)
-    }
-
-    #[inline]
-    #[target_feature(enable = "avx")]
-    unsafe fn replace_unchecked(mut self, index: usize, value: Self::Element) -> Self {
-        *transmute::<&mut _, *mut Self::Element>(&mut self).add(index) = value;
-        self
-    }
+    decl_base_common!(#[target_feature(enable = "avx,fma")] i32x8: i32 => __m256i);
 }

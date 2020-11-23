@@ -53,6 +53,41 @@ macro_rules! impl_ops {
     )*}};
 }
 
+macro_rules! decl_base_common {
+    (#[$meta:meta] $name:ident: $ety:ty => $ty:ty) => {
+        #[inline]
+        #[$meta]
+        unsafe fn extract_unchecked(self, index: usize) -> Self::Element {
+            *transmute::<&_, *const Self::Element>(&self).add(index)
+        }
+
+        #[inline]
+        #[$meta]
+        unsafe fn replace_unchecked(mut self, index: usize, value: Self::Element) -> Self {
+            *transmute::<&mut _, *mut Self::Element>(&mut self).add(index) = value;
+            self
+        }
+
+        #[inline]
+        #[$meta]
+        unsafe fn shuffle_unchecked<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self {
+            let mut dst = Self::undefined();
+            for i in 0..Self::NUM_ELEMENTS {
+                let idx = *INDICES::INDICES.get_unchecked(i);
+                dst = dst.replace_unchecked(
+                    i,
+                    if idx < Self::NUM_ELEMENTS {
+                        self.extract_unchecked(idx)
+                    } else {
+                        b.extract_unchecked(idx - Self::NUM_ELEMENTS)
+                    },
+                );
+            }
+            dst
+        }
+    };
+}
+
 macro_rules! decl {
     ($($name:ident: $ety:ty => $ty:ty),*) => {$(
         #[derive(Clone, Copy)]
