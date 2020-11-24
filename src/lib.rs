@@ -193,7 +193,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         Self::splat(value.into())
     }
 
-    /// Shuffles a vector based on the static indices provided in `INDICES`
+    /// Shuffles between two vectors based on the static indices provided in `INDICES`
     ///
     /// See the [`shuffle!`] macro for more information.
     ///
@@ -207,13 +207,38 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         unsafe { self.shuffle_unchecked(b, indices) }
     }
 
-    /// Shuffles a vector based on the static indices provided in `INDICES`
+    /// Shuffles between two vectors based on the static indices provided in `INDICES`
     ///
     /// See the [`shuffle!`] macro for more information.
     ///
     /// **NOTE**: Calling this with invalid indices (incorrect length or out-of-bounds values)
     /// will result in undefined behavior
     unsafe fn shuffle_unchecked<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self;
+
+    /// Shuffles between two vectors based on the dynamic indices provided.
+    ///
+    /// This differs from the [`shuffle!`] macro and [`shuffle`] methods in that these indices can
+    /// indeed be dynamic, at the cost of performance.
+    ///
+    /// **NOTE**: This method will panic if the indices are the incorrect length or out of bounds.
+    #[inline(always)]
+    fn shuffle_dyn(self, b: Self, indices: &[usize]) -> Self {
+        assert!(indices.len() == Self::NUM_ELEMENTS);
+        unsafe {
+            let mut res = Self::undefined();
+            for i in 0..Self::NUM_ELEMENTS {
+                let idx = *indices.get_unchecked(i);
+                res = res.replace_unchecked(i, {
+                    if idx < Self::NUM_ELEMENTS {
+                        self.extract(idx)
+                    } else {
+                        b.extract(idx - Self::NUM_ELEMENTS)
+                    }
+                });
+            }
+            res
+        }
+    }
 
     #[inline(always)]
     #[cfg(feature = "alloc")]
