@@ -8,6 +8,8 @@
 
 #![allow(unused)]
 
+use std::ops::Deref;
+
 macro_rules! decl_div_half {
     ($($t:ty => $dt:ty),*) => {
         paste::paste! {$(
@@ -38,6 +40,15 @@ pub struct BranchfreeDivider<T>(Divider<T>);
 impl<T: Copy> Clone for BranchfreeDivider<T> {
     fn clone(&self) -> Self {
         *self
+    }
+}
+
+impl<T> Deref for BranchfreeDivider<T> {
+    type Target = Divider<T>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
