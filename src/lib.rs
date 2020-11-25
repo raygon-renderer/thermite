@@ -16,7 +16,7 @@ pub use buffer::SimdBuffer;
 pub mod backends;
 
 mod divider;
-pub use divider::Divider;
+pub use divider::*;
 
 mod pointer;
 use self::pointer::*;
