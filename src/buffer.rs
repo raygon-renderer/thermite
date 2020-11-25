@@ -58,30 +58,12 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
     }
 
     /// Gathers values from the buffer using more efficient instructions where possible
-    ///
-    /// Out-of-bounds indices will return default values in the vector, rather than panicing or segfaulting.
-    ///
-    /// However, if the length of the buffer itself exceeds `i32::MAX` elements, the function will panic, as it uses signed 32-bit offsets
-    /// for the gather instruction.
-    ///
-    /// If your buffer is expected to be larger than `i32::MAX` elements, use `VPtr` instead.
     #[inline(always)]
-    pub fn gather_checked(&self, indices: S::Vu32) -> V
+    pub fn gather(&self, indices: S::Vu32) -> V
     where
         V: SimdVector<S>,
     {
-        let s = self.as_slice();
-
-        assert!(s.len() <= (i32::MAX as usize));
-
-        unsafe {
-            V::gather_masked(
-                s.as_ptr(),
-                indices.cast(),
-                indices.lt(S::Vu32::splat(s.len() as u32)).cast_to(),
-                V::default(),
-            )
-        }
+        V::gather(self.as_slice(), indices.cast())
     }
 
     /// Fills the buffer with vectors using aligned stores

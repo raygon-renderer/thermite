@@ -376,24 +376,14 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
         (dst as *mut Self).write_unaligned(self)
     }
 
-    /// Loads values from arbitrary addresses in memory based on offsets from a base address.
-    ///
-    /// Computes the source address for each element by: `src = base_ptr + indices * size_of::<Element>()`
-    ///
-    /// **WARNING**: Will cause undefined behavior if any of the source addresses are not valid.
     #[inline(always)]
-    unsafe fn gather(base_ptr: *const Self::Element, indices: S::Vi32) -> Self {
-        Self::gather_masked(base_ptr, indices, Mask::truthy(), Self::default())
+    unsafe fn gather_unchecked(src: *const Self::Element, indices: S::Vi32) -> Self {
+        Self::gather_masked_unchecked(src, indices, Mask::truthy(), Self::default())
     }
 
-    /// Stores values to arbitrary addresses in memory based on offsets from a base address.
-    ///
-    /// Computes the destination address for each element by: `dst = base_ptr + indices * size_of::<Element>()`
-    ///
-    /// **WARNING**: Will cause undefined behavior if any of the destination addresses are not valid.
     #[inline(always)]
-    unsafe fn scatter(self, base_ptr: *mut Self::Element, indices: S::Vi32) {
-        self.scatter_masked(base_ptr, indices, Mask::truthy())
+    unsafe fn scatter_unchecked(self, dst: *mut Self::Element, indices: S::Vi32) {
+        self.scatter_masked_unchecked(dst, indices, Mask::truthy())
     }
 
     /// Like `Self::gather`, but individual lanes are loaded based on the corresponding lane of the mask.
@@ -402,7 +392,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     /// Lanes with a falsey mask value do not load, and does not cause undefined behavior
     /// if the source address is invalid for that lane.
     #[inline(always)]
-    unsafe fn gather_masked(
+    unsafe fn gather_masked_unchecked(
         base_ptr: *const Self::Element,
         indices: S::Vi32,
         mask: Mask<S, Self>,
@@ -423,7 +413,7 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     /// Lanes with a falsey mask value are not written to, and does not cause undefined behavior
     /// if the destination address is invalid for that lane.
     #[inline(always)]
-    unsafe fn scatter_masked(self, base_ptr: *mut Self::Element, indices: S::Vi32, mask: Mask<S, Self>) {
+    unsafe fn scatter_masked_unchecked(self, base_ptr: *mut Self::Element, indices: S::Vi32, mask: Mask<S, Self>) {
         for i in 0..Self::NUM_ELEMENTS {
             if mask.extract_unchecked(i) {
                 base_ptr
@@ -603,6 +593,42 @@ pub trait SimdVector<S: Simd + ?Sized>:
     + RemAssign<Self>
     + PartialEq
 {
+    /// Loads values from arbitrary addresses in memory based on offsets from a base address.
+    #[inline(always)]
+    fn gather(src: &[Self::Element], indices: S::Vu32) -> Self {
+        Self::gather_masked(src, indices, Mask::truthy(), Self::default())
+    }
+
+    /// Stores values to arbitrary addresses in memory based on offsets from a base address.
+    #[inline(always)]
+    fn scatter(self, dst: &mut [Self::Element], indices: S::Vu32) {
+        self.scatter_masked(dst, indices, Mask::truthy())
+    }
+
+    #[inline(always)]
+    fn gather_masked(src: &[Self::Element], indices: S::Vu32, mask: Mask<S, Self>, default: Self) -> Self {
+        // check that all indices are within the bounds of the target slice AND within i32::MAX
+        let in_bounds: Mask<S, Self> = indices
+            .lt(Vu32::<S>::splat(src.len().min(i32::MAX as usize) as u32))
+            .cast_to();
+        // if not included in the mask, it's allowed anyway
+        assert!((in_bounds | !mask).all());
+
+        unsafe { Self::gather_masked_unchecked(src.as_ptr(), indices.cast(), mask, default) }
+    }
+
+    #[inline(always)]
+    fn scatter_masked(self, dst: &mut [Self::Element], indices: S::Vu32, mask: Mask<S, Self>) {
+        // check that all indices are within the bounds of the target slice AND within i32::MAX
+        let in_bounds: Mask<S, Self> = indices
+            .lt(Vu32::<S>::splat(dst.len().min(i32::MAX as usize) as u32))
+            .cast_to();
+        // if not included in the mask, it's allowed anyway
+        assert!((in_bounds | !mask).all());
+
+        unsafe { self.scatter_masked_unchecked(dst.as_mut_ptr(), indices.cast(), mask) }
+    }
+
     fn zero() -> Self;
     fn one() -> Self;
 

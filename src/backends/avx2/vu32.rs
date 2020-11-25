@@ -61,7 +61,7 @@ impl SimdVectorBase<AVX2> for u32x8<AVX2> {
     decl_base_common!(#[target_feature(enable = "avx2,fma")] u32x8: u32 => __m256i);
 
     #[inline(always)]
-    unsafe fn gather(base_ptr: *const Self::Element, indices: Vi32) -> Self {
+    unsafe fn gather_unchecked(base_ptr: *const Self::Element, indices: Vi32) -> Self {
         Self::new(_mm256_i32gather_epi32(
             base_ptr as _,
             indices.value,
@@ -70,7 +70,7 @@ impl SimdVectorBase<AVX2> for u32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn gather_masked(
+    unsafe fn gather_masked_unchecked(
         base_ptr: *const Self::Element,
         indices: Vi32,
         mask: Mask<AVX2, Self>,
