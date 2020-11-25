@@ -27,12 +27,23 @@ macro_rules! decl_div_half {
 
 decl_div_half!(u64 => u128, u32 => u64, u16 => u32, u8 => u16);
 
+/// Divider recommended for constant divisors.
+///
+/// When using constant divisors, divisions using this can remove extra branches
+/// and generate ideal integer division code.
+///
+/// However, when used with dynamic input, the extra branches can be expensive,
+/// therefore it is recommended to use the branchfree alternative for dynamic divisors.
 #[repr(C, packed)]
 pub struct Divider<T> {
     multiplier: T,
     shift: u8,
 }
 
+/// Divider without branching, useful for dynamic divisors.
+///
+/// However, when used with constant input, this may perform extra unnecessary work that could
+/// be removed in the branching [`Divider`]
 #[repr(transparent)]
 #[derive(Copy, PartialEq)]
 pub struct BranchfreeDivider<T>(Divider<T>);
@@ -99,12 +110,22 @@ impl_shift_mask!(u8, u16, u32, u64);
 macro_rules! impl_unsigned_divider {
     ($($t:ty => $dt:ty),*) => {
         paste::paste! {$(
+            impl BranchfreeDivider<$t> {
+                /// See docs for [`BranchfreeDivider`] and [`Divider`]
+                #[inline(always)]
+                pub const fn [<$t>](d: $t) -> Self {
+                    Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
             impl Divider<$t> {
+                /// See docs for [`Divider`]
                 #[inline(always)]
                 pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
                 }
 
+                /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline]
                 pub const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
                     let mut divider = Self::[<$t _internal>](d, true);
@@ -164,12 +185,22 @@ macro_rules! impl_unsigned_divider {
 macro_rules! impl_signed_divider {
     ($($t:ty => $ut:ty => $udt:ty),*) => {
         paste::paste!{$(
+            impl BranchfreeDivider<$t> {
+                /// See docs for [`BranchfreeDivider`] and [`Divider`]
+                #[inline(always)]
+                pub const fn [<$t>](d: $t) -> Self {
+                    Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
             impl Divider<$t> {
+                /// See docs for [`Divider`]
                 #[inline(always)]
                 const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
                 }
 
+                /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline]
                 const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
                     let mut divider = Self::[<$t _internal>](d, true);
