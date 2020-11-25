@@ -212,12 +212,12 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     /// See the [`shuffle!`] macro for more information.
     ///
     /// **NOTE**: Calling this with invalid indices (incorrect length or out-of-bounds values)
-    /// will result in undefined behavior
+    /// will result in undefined behavior.
     unsafe fn shuffle_unchecked<INDICES: SimdShuffleIndices>(self, b: Self, indices: INDICES) -> Self;
 
     /// Shuffles between two vectors based on the dynamic indices provided.
     ///
-    /// This differs from the [`shuffle!`] macro and [`shuffle`] methods in that these indices can
+    /// This differs from the [`shuffle!`] macro and [`Self::shuffle`] methods in that these indices can
     /// indeed be dynamic, at the cost of performance.
     ///
     /// **NOTE**: This method will panic if the indices are the incorrect length or out of bounds.
@@ -238,6 +238,26 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
             }
             res
         }
+    }
+
+    /// Like [`Self::shuffle_dyn`], but does not check for valid indices or input length.
+    ///
+    /// **NOTE**: Calling this with invalid indices (incorrect length or out-of-bounds values)
+    /// will result in undefined behavior.
+    #[inline(always)]
+    unsafe fn shuffle_dyn_unchecked(self, b: Self, indices: &[usize]) -> Self {
+        let mut res = Self::undefined();
+        for i in 0..Self::NUM_ELEMENTS {
+            let idx = *indices.get_unchecked(i);
+            res = res.replace_unchecked(i, {
+                if idx < Self::NUM_ELEMENTS {
+                    self.extract_unchecked(idx)
+                } else {
+                    b.extract_unchecked(idx - Self::NUM_ELEMENTS)
+                }
+            });
+        }
+        res
     }
 
     #[inline(always)]
