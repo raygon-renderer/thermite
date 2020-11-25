@@ -608,7 +608,7 @@
     <span class="macro">decl_base_common</span><span class="macro">!</span>(<span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> <span class="string">&quot;avx2,fma&quot;</span>)]</span> <span class="ident">f32x8</span>: <span class="ident">f32</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">__m256</span>);
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather</span>(<span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_unchecked</span>(<span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_i32gather_ps</span>(
             <span class="ident">base_ptr</span> <span class="kw">as</span> <span class="kw">_</span>,
             <span class="ident">indices</span>.<span class="ident">value</span>,
@@ -617,7 +617,7 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked</span>(
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked_unchecked</span>(
         <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>,
         <span class="ident">indices</span>: <span class="ident">Vi32</span>,
         <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span>,

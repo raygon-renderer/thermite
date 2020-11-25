@@ -1092,6 +1092,32 @@
 <span id="1089">1089</span>
 <span id="1090">1090</span>
 <span id="1091">1091</span>
+<span id="1092">1092</span>
+<span id="1093">1093</span>
+<span id="1094">1094</span>
+<span id="1095">1095</span>
+<span id="1096">1096</span>
+<span id="1097">1097</span>
+<span id="1098">1098</span>
+<span id="1099">1099</span>
+<span id="1100">1100</span>
+<span id="1101">1101</span>
+<span id="1102">1102</span>
+<span id="1103">1103</span>
+<span id="1104">1104</span>
+<span id="1105">1105</span>
+<span id="1106">1106</span>
+<span id="1107">1107</span>
+<span id="1108">1108</span>
+<span id="1109">1109</span>
+<span id="1110">1110</span>
+<span id="1111">1111</span>
+<span id="1112">1112</span>
+<span id="1113">1113</span>
+<span id="1114">1114</span>
+<span id="1115">1115</span>
+<span id="1116">1116</span>
+<span id="1117">1117</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -1471,24 +1497,14 @@
         (<span class="ident">dst</span> <span class="kw">as</span> <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>).<span class="ident">write_unaligned</span>(<span class="self">self</span>)
     }
 
-    <span class="doccomment">/// Loads values from arbitrary addresses in memory based on offsets from a base address.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Computes the source address for each element by: `src = base_ptr + indices * size_of::&lt;Element&gt;()`</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// **WARNING**: Will cause undefined behavior if any of the source addresses are not valid.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather</span>(<span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">gather_masked</span>(<span class="ident">base_ptr</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>(), <span class="self">Self</span>::<span class="ident">default</span>())
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">gather_masked_unchecked</span>(<span class="ident">src</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>(), <span class="self">Self</span>::<span class="ident">default</span>())
     }
 
-    <span class="doccomment">/// Stores values to arbitrary addresses in memory based on offsets from a base address.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Computes the destination address for each element by: `dst = base_ptr + indices * size_of::&lt;Element&gt;()`</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// **WARNING**: Will cause undefined behavior if any of the destination addresses are not valid.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter</span>(<span class="self">self</span>, <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) {
-        <span class="self">self</span>.<span class="ident">scatter_masked</span>(<span class="ident">base_ptr</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>())
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter_unchecked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) {
+        <span class="self">self</span>.<span class="ident">scatter_masked_unchecked</span>(<span class="ident">dst</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>())
     }
 
     <span class="doccomment">/// Like `Self::gather`, but individual lanes are loaded based on the corresponding lane of the mask.</span>
@@ -1497,7 +1513,7 @@
     <span class="doccomment">/// Lanes with a falsey mask value do not load, and does not cause undefined behavior</span>
     <span class="doccomment">/// if the source address is invalid for that lane.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked</span>(
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">gather_masked_unchecked</span>(
         <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="self">Self</span>::<span class="ident">Element</span>,
         <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>,
         <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>,
@@ -1518,7 +1534,7 @@
     <span class="doccomment">/// Lanes with a falsey mask value are not written to, and does not cause undefined behavior</span>
     <span class="doccomment">/// if the destination address is invalid for that lane.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter_masked</span>(<span class="self">self</span>, <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>) {
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">scatter_masked_unchecked</span>(<span class="self">self</span>, <span class="ident">base_ptr</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="self">Self</span>::<span class="ident">Element</span>, <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>) {
         <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
             <span class="kw">if</span> <span class="ident">mask</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>) {
                 <span class="ident">base_ptr</span>
@@ -1698,6 +1714,42 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="op">+</span> <span class="ident">RemAssign</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
     <span class="op">+</span> <span class="ident">PartialEq</span>
 {
+    <span class="doccomment">/// Loads values from arbitrary addresses in memory based on offsets from a base address.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">gather</span>(<span class="ident">src</span>: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::<span class="ident">Element</span>], <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">gather_masked</span>(<span class="ident">src</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>(), <span class="self">Self</span>::<span class="ident">default</span>())
+    }
+
+    <span class="doccomment">/// Stores values to arbitrary addresses in memory based on offsets from a base address.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">scatter</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> [<span class="self">Self</span>::<span class="ident">Element</span>], <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>) {
+        <span class="self">self</span>.<span class="ident">scatter_masked</span>(<span class="ident">dst</span>, <span class="ident">indices</span>, <span class="ident">Mask</span>::<span class="ident">truthy</span>())
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">gather_masked</span>(<span class="ident">src</span>: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::<span class="ident">Element</span>], <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>, <span class="ident">default</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// check that all indices are within the bounds of the target slice AND within i32::MAX</span>
+        <span class="kw">let</span> <span class="ident">in_bounds</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">indices</span>
+            .<span class="ident">lt</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">src</span>.<span class="ident">len</span>().<span class="ident">min</span>(<span class="ident">i32</span>::<span class="ident">MAX</span> <span class="kw">as</span> <span class="ident">usize</span>) <span class="kw">as</span> <span class="ident">u32</span>))
+            .<span class="ident">cast_to</span>();
+        <span class="comment">// if not included in the mask, it&#39;s allowed anyway</span>
+        <span class="macro">assert</span><span class="macro">!</span>((<span class="ident">in_bounds</span> <span class="op">|</span> <span class="op">!</span><span class="ident">mask</span>).<span class="ident">all</span>());
+
+        <span class="kw">unsafe</span> { <span class="self">Self</span>::<span class="ident">gather_masked_unchecked</span>(<span class="ident">src</span>.<span class="ident">as_ptr</span>(), <span class="ident">indices</span>.<span class="ident">cast</span>(), <span class="ident">mask</span>, <span class="ident">default</span>) }
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">scatter_masked</span>(<span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> [<span class="self">Self</span>::<span class="ident">Element</span>], <span class="ident">indices</span>: <span class="ident">S</span>::<span class="ident">Vu32</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>) {
+        <span class="comment">// check that all indices are within the bounds of the target slice AND within i32::MAX</span>
+        <span class="kw">let</span> <span class="ident">in_bounds</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">indices</span>
+            .<span class="ident">lt</span>(<span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">dst</span>.<span class="ident">len</span>().<span class="ident">min</span>(<span class="ident">i32</span>::<span class="ident">MAX</span> <span class="kw">as</span> <span class="ident">usize</span>) <span class="kw">as</span> <span class="ident">u32</span>))
+            .<span class="ident">cast_to</span>();
+        <span class="comment">// if not included in the mask, it&#39;s allowed anyway</span>
+        <span class="macro">assert</span><span class="macro">!</span>((<span class="ident">in_bounds</span> <span class="op">|</span> <span class="op">!</span><span class="ident">mask</span>).<span class="ident">all</span>());
+
+        <span class="kw">unsafe</span> { <span class="self">self</span>.<span class="ident">scatter_masked_unchecked</span>(<span class="ident">dst</span>.<span class="ident">as_mut_ptr</span>(), <span class="ident">indices</span>.<span class="ident">cast</span>(), <span class="ident">mask</span>) }
+    }
+
     <span class="kw">fn</span> <span class="ident">zero</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">one</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 

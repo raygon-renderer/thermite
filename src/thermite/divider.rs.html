@@ -244,6 +244,37 @@
 <span id="241">241</span>
 <span id="242">242</span>
 <span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="comment">// Derived from:</span>
 <span class="comment">//</span>
@@ -274,12 +305,23 @@
 
 <span class="macro">decl_div_half</span><span class="macro">!</span>(<span class="ident">u64</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">u128</span>, <span class="ident">u32</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">u64</span>, <span class="ident">u16</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">u32</span>, <span class="ident">u8</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">u16</span>);
 
+<span class="doccomment">/// Divider recommended for constant divisors.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// When using constant divisors, divisions using this can remove extra branches</span>
+<span class="doccomment">/// and generate ideal integer division code.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// However, when used with dynamic input, the extra branches can be expensive,</span>
+<span class="doccomment">/// therefore it is recommended to use the branchfree alternative for dynamic divisors.</span>
 <span class="attribute">#[<span class="ident">repr</span>(<span class="ident">C</span>, <span class="ident">packed</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> {
     <span class="ident">multiplier</span>: <span class="ident">T</span>,
     <span class="ident">shift</span>: <span class="ident">u8</span>,
 }
 
+<span class="doccomment">/// Divider without branching, useful for dynamic divisors.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// However, when used with constant input, this may perform extra unnecessary work that could</span>
+<span class="doccomment">/// be removed in the branching [`Divider`]</span>
 <span class="attribute">#[<span class="ident">repr</span>(<span class="ident">transparent</span>)]</span>
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Copy</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>(<span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>);
@@ -346,12 +388,22 @@
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_unsigned_divider</span> {
     ($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>:<span class="ident">ty</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">dt</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {
         <span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span> {$(
+            <span class="kw">impl</span> <span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
+                <span class="doccomment">/// See docs for [`BranchfreeDivider`] and [`Divider`]</span>
+                <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+                <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+                    <span class="ident">Divider</span>::<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_branchfree</span><span class="op">&gt;</span>](<span class="ident">d</span>)
+                }
+            }
+
             <span class="kw">impl</span> <span class="ident">Divider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
+                <span class="doccomment">/// See docs for [`Divider`]</span>
                 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
                 <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
                     <span class="self">Self</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_internal</span><span class="op">&gt;</span>](<span class="ident">d</span>, <span class="bool-val">false</span>)
                 }
 
+                <span class="doccomment">/// See docs for [`BranchfreeDivider`] and [`Divider`]</span>
                 <span class="attribute">#[<span class="ident">inline</span>]</span>
                 <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_branchfree</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
                     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">divider</span> <span class="op">=</span> <span class="self">Self</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_internal</span><span class="op">&gt;</span>](<span class="ident">d</span>, <span class="bool-val">true</span>);
@@ -411,12 +463,22 @@
 <span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_signed_divider</span> {
     ($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>:<span class="ident">ty</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ut</span>:<span class="ident">ty</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">udt</span>:<span class="ident">ty</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {
         <span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span>{$(
+            <span class="kw">impl</span> <span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
+                <span class="doccomment">/// See docs for [`BranchfreeDivider`] and [`Divider`]</span>
+                <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+                <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+                    <span class="ident">Divider</span>::<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_branchfree</span><span class="op">&gt;</span>](<span class="ident">d</span>)
+                }
+            }
+
             <span class="kw">impl</span> <span class="ident">Divider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
+                <span class="doccomment">/// See docs for [`Divider`]</span>
                 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
                 <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
                     <span class="self">Self</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_internal</span><span class="op">&gt;</span>](<span class="ident">d</span>, <span class="bool-val">false</span>)
                 }
 
+                <span class="doccomment">/// See docs for [`BranchfreeDivider`] and [`Divider`]</span>
                 <span class="attribute">#[<span class="ident">inline</span>]</span>
                 <span class="kw">const</span> <span class="kw">fn</span> [<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_branchfree</span><span class="op">&gt;</span>](<span class="ident">d</span>: <span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span><span class="op">&gt;</span> {
                     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">divider</span> <span class="op">=</span> <span class="self">Self</span>::[<span class="op">&lt;</span><span class="macro-nonterminal">$</span><span class="macro-nonterminal">t</span> <span class="ident">_internal</span><span class="op">&gt;</span>](<span class="ident">d</span>, <span class="bool-val">true</span>);
