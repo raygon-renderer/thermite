@@ -15,8 +15,12 @@ use syn::{
     WherePredicate,
 };
 
-// TODO: Add more
-static BACKENDS: &[(&str, &str)] = &[("AVX", "avx,fma"), ("AVX2", "avx2,fma")];
+static BACKENDS: &[(&str, &str)] = &[
+    ("SSE2", "sse2"),
+    ("SSE41", "sse4.1"),
+    ("AVX", "avx"),
+    ("AVX2", "avx2,fma"),
+];
 
 type PunctuatedAttributes = Punctuated<NestedMeta, Token![,]>;
 
