@@ -2,16 +2,16 @@
 
 extern crate proc_macro;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     visit_mut::VisitMut,
-    Attribute, AttributeArgs, ConstParam, FnArg, GenericArgument, GenericParam, Ident, ImplItem, ImplItemMethod, Item,
-    ItemFn, ItemImpl, Lifetime, Lit, Meta, NestedMeta, Pat, PatType, PathArguments, Receiver, Signature, Token, Type,
-    TypeParam,
+    Attribute, AttributeArgs, ConstParam, Expr, ExprCall, ExprPath, FnArg, GenericArgument, GenericMethodArgument,
+    GenericParam, Ident, ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemTrait, Lifetime, Lit, Meta, NestedMeta,
+    Pat, PatType, Path, PathArguments, PathSegment, QSelf, Receiver, Signature, Token, Type, TypeParam,
 };
 
 // TODO: Add more
@@ -40,7 +40,8 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
     proc_macro::TokenStream::from(match item {
         Item::Fn(fn_item) => gen_function(attr.attributes, fn_item),
         Item::Impl(impl_block) => gen_impl_block(attr.attributes, impl_block),
-        _ => unimplemented!(),
+        Item::Trait(trait_item) => gen_trait_def(attr.attributes, trait_item),
+        _ => unimplemented!("#[dispatch] is only supported on naked functions, impl blocks or trait defintions!"),
     })
 }
 
@@ -69,7 +70,156 @@ fn parse_attr(attr: PunctuatedAttributes) -> (TokenStream, TokenStream) {
     (simd, thermite)
 }
 
-fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
+struct SelfTraitVisitor {
+    depth: u32,
+    method: Ident,
+    self_ty: Box<Type>,
+    trait_: Path,
+    qself: QSelf,
+    self_arg: Expr,
+}
+
+impl SelfTraitVisitor {
+    fn new(trait_: Path, self_ty: Box<Type>, method: Ident) -> SelfTraitVisitor {
+        let qself = QSelf {
+            lt_token: Token![<](Span::call_site()),
+            ty: self_ty.clone(),
+            position: trait_.segments.len(),
+            as_token: Some(Token![as](Span::call_site())),
+            gt_token: Token![>](Span::call_site()),
+        };
+
+        SelfTraitVisitor {
+            depth: 0,
+            method,
+            self_ty,
+            trait_,
+            qself,
+            self_arg: Expr::Path(ExprPath {
+                attrs: Vec::new(),
+                qself: None,
+                path: Path {
+                    leading_colon: None,
+                    segments: {
+                        let mut segments = Punctuated::new();
+                        segments.push(PathSegment {
+                            ident: quote::format_ident!("self"),
+                            arguments: PathArguments::None,
+                        });
+                        segments
+                    },
+                },
+            }),
+        }
+    }
+}
+
+impl VisitMut for SelfTraitVisitor {
+    // TODO: Avoid cloning as much
+    fn visit_expr_mut(&mut self, i: &mut Expr) {
+        if self.depth == 0 {
+            match i {
+                Expr::MethodCall(m) if m.method == self.method => match &mut *m.receiver {
+                    Expr::Path(p) if p.path.is_ident("self") => {
+                        let mut path = self.trait_.clone();
+                        path.segments.push(PathSegment {
+                            ident: m.method.clone(),
+                            arguments: match &m.turbofish {
+                                None => PathArguments::None,
+                                Some(tf) => {
+                                    let mut generic_args = Punctuated::new();
+
+                                    for arg in tf.args.iter() {
+                                        generic_args.push(match arg {
+                                            GenericMethodArgument::Const(c) => GenericArgument::Const(c.clone()),
+                                            GenericMethodArgument::Type(ty) => GenericArgument::Type(ty.clone()),
+                                        });
+                                    }
+
+                                    PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                                        colon2_token: Some(Token![::](Span::call_site())),
+                                        lt_token: Token![<](Span::call_site()),
+                                        args: generic_args,
+                                        gt_token: Token![>](Span::call_site()),
+                                    })
+                                }
+                            },
+                        });
+
+                        let call_attrs = std::mem::replace(&mut m.attrs, Vec::new());
+                        let path_attrs = std::mem::replace(&mut p.attrs, Vec::new());
+
+                        *i = Expr::Call(ExprCall {
+                            attrs: call_attrs,
+                            func: Box::new(Expr::Path(ExprPath {
+                                attrs: path_attrs,
+                                qself: Some(self.qself.clone()),
+                                path,
+                            })),
+                            paren_token: m.paren_token.clone(),
+                            args: {
+                                let mut args = Punctuated::new();
+                                args.push(self.self_arg.clone()); // insert self first
+                                for arg in m.args.iter() {
+                                    args.push(arg.clone());
+                                }
+                                args
+                            },
+                        });
+                    }
+                    _ => {}
+                },
+                Expr::Call(c) => match &mut *c.func {
+                    Expr::Path(p) if p.path.segments.len() == 2 => {
+                        if p.path.segments.first().unwrap().ident == "Self"
+                            && p.path.segments.last().unwrap().ident == self.method
+                        {
+                            p.qself = Some(self.qself.clone());
+                            // start off new path with trait_
+                            let old_path = std::mem::replace(&mut p.path, self.trait_.clone());
+                            // skip 1st `Self` segment, then append the rest
+                            for segment in old_path.segments.into_iter().skip(1) {
+                                p.path.segments.push(segment);
+                            }
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+
+        syn::visit_mut::visit_expr_mut(self, i);
+    }
+
+    // Ensure that we don't rewrite non-associated scopes by tracking when we enter and leave them.
+
+    fn visit_item_fn_mut(&mut self, i: &mut syn::ItemFn) {
+        self.depth += 1;
+        syn::visit_mut::visit_item_fn_mut(self, i);
+        self.depth -= 1;
+    }
+
+    fn visit_impl_item_method_mut(&mut self, i: &mut syn::ImplItemMethod) {
+        self.depth += 1;
+        syn::visit_mut::visit_impl_item_method_mut(self, i);
+        self.depth -= 1;
+    }
+
+    fn visit_expr_closure_mut(&mut self, i: &mut syn::ExprClosure) {
+        self.depth += 1;
+        syn::visit_mut::visit_expr_closure_mut(self, i);
+        self.depth -= 1;
+    }
+
+    fn visit_trait_item_method_mut(&mut self, i: &mut syn::TraitItemMethod) {
+        self.depth += 1;
+        syn::visit_mut::visit_trait_item_method_mut(self, i);
+        self.depth -= 1;
+    }
+}
+
+fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenStream {
     let (simd, thermite) = parse_attr(attr);
 
     let ItemImpl {
@@ -82,8 +232,31 @@ fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
         self_ty,
         items,
         ..
-    } = &item;
+    } = &mut item_impl;
 
+    for item in items {
+        match item {
+            ImplItem::Method(m) => {
+                if let Some((_, path, _)) = trait_ {
+                    SelfTraitVisitor::new(path.clone(), self_ty.clone(), m.sig.ident.clone())
+                        .visit_block_mut(&mut m.block);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let res = quote! {};
+
+    quote! { #item_impl }
+}
+
+fn gen_trait_def(attrs: PunctuatedAttributes, trait_item: ItemTrait) -> TokenStream {
+    quote! { #trait_item }
+}
+
+/*
+fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
     let mut impl_lifetimes = Vec::new();
     let mut impl_generics_not_lifetimes = Vec::new();
 
@@ -117,6 +290,8 @@ fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
                     output,
                     ..
                 } = sig;
+
+                println!("{:?}", block);
 
                 let mut lifetimes = impl_lifetimes.clone();
                 let mut impl_generics_not_lifetimes = impl_generics_not_lifetimes.clone();
@@ -185,7 +360,11 @@ fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
 
                 let inner = quote! {
                     #[inline(always)]
-                    #unsafety fn #ident< #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >(#(#renamed_inputs,)*) #output where #(#where_clause,)* #block
+                    #unsafety fn #ident< #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >(#(#renamed_inputs,)*) #output where #(#where_clause,)* {
+                        //type __SELF = #self_ty;
+
+                        #block
+                    }
                 };
 
                 let branches = BACKENDS.iter().map(|(backend, instrset)| {
@@ -238,25 +417,20 @@ fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
 
     res
 }
+*/
 
 fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, inner: bool) -> Vec<TokenStream> {
     let mut forward_args = Vec::new();
 
     for input in inputs {
         forward_args.push(match input {
+            FnArg::Receiver(rcv) => quote! { self },
             FnArg::Typed(arg) => {
                 if let Pat::Ident(ref param) = *arg.pat {
                     let ref ident = param.ident;
                     quote! { #ident }
                 } else {
                     unimplemented!()
-                }
-            }
-            FnArg::Receiver(rcv) => {
-                if inner {
-                    quote! { __self }
-                } else {
-                    quote! { self }
                 }
             }
         })
@@ -352,17 +526,6 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
                 #(#branches,)*
                 _ => unsafe { #thermite::unreachable_unchecked() }
             }
-        }
-    }
-}
-
-struct SelfVisitor;
-impl VisitMut for SelfVisitor {
-    fn visit_ident_mut(&mut self, i: &mut Ident) {
-        if i == "self" {
-            let span = i.span();
-            *i = quote::format_ident!("__self");
-            i.set_span(span);
         }
     }
 }
