@@ -14,6 +14,7 @@ pub struct PCG32<S: Simd> {
     inc: Vu64<S>,
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> PCG32<S> {
     #[inline(always)]
     pub fn new(seed: Vu64<S>) -> Self {
@@ -26,7 +27,7 @@ impl<S: Simd> PCG32<S> {
     }
 }
 
-// TODO: #[dispatch]
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> SimdRng<S> for PCG32<S> {
     #[inline]
     fn reseed(&mut self, seed: Vu64<S>) {

@@ -11,6 +11,7 @@ pub struct Hyperdual<S: Simd, V: SimdFloatVector<S>, const N: usize> {
     _simd: PhantomData<S>,
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N> {
     #[inline(always)]
     pub fn new(re: V, du: [V; N]) -> Self {
@@ -57,6 +58,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N>
 where
     V: SimdVectorizedMath<S>,
@@ -176,6 +178,7 @@ where
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Add<Self> for Hyperdual<S, V, N> {
     type Output = Self;
 
@@ -189,6 +192,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Add<Self> for Hyperdual<S, 
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Sub<Self> for Hyperdual<S, V, N> {
     type Output = Self;
 
@@ -202,6 +206,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Sub<Self> for Hyperdual<S, 
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Mul<Self> for Hyperdual<S, V, N> {
     type Output = Self;
 
@@ -215,6 +220,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Mul<Self> for Hyperdual<S, 
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Div<Self> for Hyperdual<S, V, N> {
     type Output = Self;
 

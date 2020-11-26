@@ -11,6 +11,7 @@ pub struct Complex<S: Simd, V: SimdFloatVector<S>> {
     _simd: PhantomData<S>,
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V> {
     #[inline(always)]
     pub fn new(re: V, im: V) -> Self {
@@ -52,6 +53,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V>
 where
     V: SimdVectorizedMath<S>,
@@ -381,6 +383,7 @@ where
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Add<Self> for Complex<S, V> {
     type Output = Self;
 
@@ -390,6 +393,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Add<Self> for Complex<S, V> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Sub<Self> for Complex<S, V> {
     type Output = Self;
 
@@ -399,6 +403,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Sub<Self> for Complex<S, V> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Mul<Self> for Complex<S, V> {
     type Output = Self;
 
@@ -411,6 +416,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Mul<Self> for Complex<S, V> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Div<Self> for Complex<S, V>
 where
     V: SimdVectorizedMath<S>,
@@ -426,6 +432,7 @@ where
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd, V: SimdFloatVector<S>> Neg for Complex<S, V> {
     type Output = Self;
 

@@ -18,6 +18,7 @@ impl<S: Simd> SplitMix64<S> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> SimdRng<S> for SplitMix64<S> {
     #[inline(always)]
     fn reseed(&mut self, seed: Vu64<S>) {
@@ -52,6 +53,7 @@ pub struct Xoshiro128Plus<S: Simd> {
     s1: Vu64<S>,
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> Xoshiro128Plus<S> {
     #[inline(always)]
     pub fn new(seed: Vu64<S>) -> Self {
@@ -63,6 +65,7 @@ impl<S: Simd> Xoshiro128Plus<S> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> SimdRng<S> for Xoshiro128Plus<S> {
     #[inline(always)]
     fn reseed(&mut self, seed: Vu64<S>) {
@@ -86,6 +89,7 @@ pub struct Xoshiro256Plus<S: Simd> {
     state: [Vu64<S>; 4],
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> Xoshiro256Plus<S> {
     #[inline(always)]
     pub fn new(seed: Vu64<S>) -> Self {
@@ -96,6 +100,7 @@ impl<S: Simd> Xoshiro256Plus<S> {
     }
 }
 
+#[dispatch(S, thermite = "crate")]
 impl<S: Simd> SimdRng<S> for Xoshiro256Plus<S> {
     #[inline(always)]
     fn reseed(&mut self, seed: Vu64<S>) {
