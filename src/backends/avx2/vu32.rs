@@ -120,12 +120,12 @@ impl SimdBitwise<AVX2> for u32x8<AVX2> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shr(self, count: Vu32) -> Self {
         Self::new(_mm256_srlv_epi32(self.value, count.value))
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: u32x8<AVX2>) -> Self {
+    unsafe fn _mm_shl(self, count: Vu32) -> Self {
         Self::new(_mm256_sllv_epi32(self.value, count.value))
     }
 
@@ -160,7 +160,7 @@ impl SimdMask<AVX2> for u32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_all(self) -> bool {
-        _mm256_movemask_epi8(self.value) == -1
+        _mm256_movemask_epi8(self.value) as u32 == u32::MAX
     }
 
     #[inline(always)]

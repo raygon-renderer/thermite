@@ -95,12 +95,12 @@ impl SimdBitwise<AVX1> for u32x8<AVX1> {
     }
 
     #[inline(always)]
-    unsafe fn _mm_shr(self, count: u32x8<AVX1>) -> Self {
+    unsafe fn _mm_shr(self, count: Vu32) -> Self {
         Self::new(_mm256_srlv_epi32(self.value, count.value))
     }
 
     #[inline(always)]
-    unsafe fn _mm_shl(self, count: u32x8<AVX1>) -> Self {
+    unsafe fn _mm_shl(self, count: Vu32) -> Self {
         Self::new(_mm256_sllv_epi32(self.value, count.value))
     }
 

@@ -160,7 +160,7 @@ impl SimdMask<AVX2> for i32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_all(self) -> bool {
-        _mm256_movemask_epi8(self.value) == -1
+        _mm256_movemask_epi8(self.value) as u32 == u32::MAX
     }
 
     #[inline(always)]
