@@ -328,6 +328,8 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
                 ..
             } = &*sig;
 
+            let helper_trait_name = quote::format_ident!("__DispatchHelper_{}", ident);
+
             let mut decl_sig = sig.clone();
             DemutSelfVisitor.visit_signature_mut(&mut decl_sig);
 
@@ -360,7 +362,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
 
             // define the dispatch trait
             let dispatch_trait = quote! {
-                unsafe trait __DispatchHelper #impl_generics #extra_bounds #where_clause {
+                unsafe trait #helper_trait_name #impl_generics #extra_bounds #where_clause {
                     #defaultness #decl_sig;
                     #(#branch_defs)*
                 }
@@ -380,14 +382,14 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
                     #[inline]
                     #[target_feature(enable = #instrset)]
                     #asyncness unsafe #abi fn #dispatch_ident #fn_impl_generics(#inputs) #output #fn_where_clause {
-                        <Self as __DispatchHelper #type_generics>::#ident #tf(#(#forward_args,)*)
+                        <Self as #helper_trait_name #type_generics>::#ident #tf(#(#forward_args,)*)
                     }
                 }
             });
 
             // impl Dispatch trait. We can copy the entire function definition here, which makes it really easy
             let dispatch_impl = quote! {
-                unsafe impl #impl_generics __DispatchHelper #type_generics for #self_ty #where_clause {
+                unsafe impl #impl_generics #helper_trait_name #type_generics for #self_ty #where_clause {
                     #[inline(always)]
                     #defaultness #sig #block
                     #(#branch_impls)*
@@ -401,7 +403,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
 
                 quote! {
                     #thermite::SimdInstructionSet::#backend => unsafe {
-                        <Self as __DispatchHelper #type_generics>::#dispatch_ident #tf(#(#forward_args,)*)
+                        <Self as #helper_trait_name #type_generics>::#dispatch_ident #tf(#(#forward_args,)*)
                     }
                 }
             });
