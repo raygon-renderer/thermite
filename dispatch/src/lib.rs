@@ -82,11 +82,11 @@ struct SelfTraitVisitor {
 impl SelfTraitVisitor {
     fn new(trait_: Path, self_ty: Box<Type>, method: Ident) -> SelfTraitVisitor {
         let qself = QSelf {
-            lt_token: Token![<](Span::call_site()),
+            lt_token: Default::default(),
             ty: self_ty.clone(),
             position: trait_.segments.len(),
-            as_token: Some(Token![as](Span::call_site())),
-            gt_token: Token![>](Span::call_site()),
+            as_token: Some(Default::default()),
+            gt_token: Default::default(),
         };
 
         SelfTraitVisitor {
@@ -124,23 +124,24 @@ impl VisitMut for SelfTraitVisitor {
                         let mut path = self.trait_.clone();
                         path.segments.push(PathSegment {
                             ident: m.method.clone(),
-                            arguments: match &m.turbofish {
+                            arguments: match &mut m.turbofish {
                                 None => PathArguments::None,
                                 Some(tf) => {
                                     let mut generic_args = Punctuated::new();
+                                    let method_args = std::mem::replace(&mut tf.args, Punctuated::new());
 
-                                    for arg in tf.args.iter() {
+                                    for arg in method_args.into_iter() {
                                         generic_args.push(match arg {
-                                            GenericMethodArgument::Const(c) => GenericArgument::Const(c.clone()),
-                                            GenericMethodArgument::Type(ty) => GenericArgument::Type(ty.clone()),
+                                            GenericMethodArgument::Const(c) => GenericArgument::Const(c),
+                                            GenericMethodArgument::Type(ty) => GenericArgument::Type(ty),
                                         });
                                     }
 
                                     PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-                                        colon2_token: Some(Token![::](Span::call_site())),
-                                        lt_token: Token![<](Span::call_site()),
+                                        colon2_token: Some(Default::default()),
+                                        lt_token: Default::default(),
                                         args: generic_args,
-                                        gt_token: Token![>](Span::call_site()),
+                                        gt_token: Default::default(),
                                     })
                                 }
                             },
