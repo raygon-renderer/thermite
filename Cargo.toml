@@ -9,11 +9,12 @@ documentation = "https://raygon-renderer.github.io/thermite/"
 edition = "2018"
 
 [features]
-default = ["alloc", "math", "rng"]
+default = ["alloc", "math", "rng", "emulate_fma"]
 alloc = []
 nightly = []
 math = []
 rng = []
+emulate_fma = []
 
 [dependencies]
 thermite-dispatch = { path = "./dispatch" }

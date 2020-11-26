@@ -72,3 +72,12 @@ Enables the vectorized math modules
 ### `rng`
 
 Enables the vectorized random number modules
+
+### `emulate_fma`
+
+Real fused multiply-add instructions are only enabled for AVX2 platforms. However, as FMA is used not only for performance but for its extended precision, falling back to a split multiply and addition will incur two rounding errors, and may be unacceptable for
+some applications. Therefore, the `emulate_fma` Cargo feature will enable a slower but more accurate implementation on older platforms.
+
+For single-precision floats, this is easiest done by simply casting it to double-precision, doing seperate multiply and additions, then casting back. For double-precision, it will use an infinite-precision implementation based on libm.
+
+On SSE2 platforms, double-precision may fallback to scalar ops, as the effort needed to make it branchless will be more expensive than not. As of writing this, it has not been implemented, so benchmarks will reveal what is needed later.
