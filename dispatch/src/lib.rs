@@ -11,7 +11,8 @@ use syn::{
     visit_mut::VisitMut,
     Attribute, AttributeArgs, ConstParam, Expr, ExprCall, ExprPath, FnArg, GenericArgument, GenericMethodArgument,
     GenericParam, Ident, ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemTrait, Lifetime, Lit, Meta, NestedMeta,
-    Pat, PatType, Path, PathArguments, PathSegment, QSelf, Receiver, Signature, Token, Type, TypeParam,
+    Pat, PatType, Path, PathArguments, PathSegment, QSelf, Receiver, ReturnType, Signature, Token, Type, TypeParam,
+    WherePredicate,
 };
 
 // TODO: Add more
@@ -70,15 +71,40 @@ fn parse_attr(attr: PunctuatedAttributes) -> (TokenStream, TokenStream) {
     (simd, thermite)
 }
 
-struct SelfItemArgVisitor {
+struct TypeVisitor {
     self_ty: Box<Type>,
 }
 
-impl VisitMut for SelfItemArgVisitor {
-    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
-        println!("{:?}", i);
+impl VisitMut for TypeVisitor {
+    fn visit_type_mut(&mut self, i: &mut Type) {
+        match i {
+            Type::Path(p) if p.qself.is_none() => {
+                if p.path.is_ident("Self") {
+                    *i = (*self.self_ty).clone();
+                } else if p.path.segments.len() > 1 {
+                    let first = p.path.segments.first_mut();
+                    if first.map(|s| s.ident == "Self") == Some(true) {
+                        let mut path = Punctuated::new();
+                        let old_path = std::mem::replace(&mut p.path.segments, Punctuated::new());
+                        for segment in old_path.into_iter().skip(1) {
+                            path.push(segment);
+                        }
+                        p.path.segments = path;
+                        p.path.leading_colon = Some(Default::default());
+                        p.qself = Some(QSelf {
+                            lt_token: Default::default(),
+                            ty: self.self_ty.clone(),
+                            position: 0,
+                            as_token: None,
+                            gt_token: Default::default(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
 
-        syn::visit_mut::visit_fn_arg_mut(self, i);
+        syn::visit_mut::visit_type_mut(self, i);
     }
 }
 
@@ -262,7 +288,26 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
         ..
     } = &mut item_impl;
 
+    let mut tyv = TypeVisitor {
+        self_ty: self_ty.clone(),
+    };
+
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+
+    let extra_bounds = where_clause.map(|wc| {
+        let mut extra_bounds = Vec::new();
+
+        for pred in wc.predicates.iter() {
+            match pred {
+                WherePredicate::Type(ty) if ty.bounded_ty == **self_ty => extra_bounds.push(&ty.bounds),
+                _ => {}
+            }
+        }
+
+        quote! {
+            : #(#extra_bounds +)*
+        }
+    });
 
     let items = items.iter_mut().map(|mut item| match item {
         ImplItem::Method(ImplItemMethod {
@@ -286,6 +331,14 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
             let mut decl_sig = sig.clone();
             DemutSelfVisitor.visit_signature_mut(&mut decl_sig);
 
+            tyv.visit_return_type_mut(&mut decl_sig.output);
+            for arg in decl_sig.inputs.iter_mut() {
+                tyv.visit_fn_arg_mut(arg);
+            }
+            if let Some(where_clause) = &mut decl_sig.generics.where_clause {
+                tyv.visit_where_clause_mut(where_clause);
+            }
+
             // If a trait implementation, disambiguate all calls to self. or Self:: to refer to the parent trait
             if let Some((_, trait_, _)) = &trait_ {
                 SelfTraitVisitor::new(trait_.clone(), self_ty.clone(), sig.ident.clone()).visit_block_mut(block);
@@ -297,15 +350,17 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
             let branch_defs = BACKENDS.iter().map(|(backend, instrset)| {
                 let dispatch_ident = format_backend(backend);
                 let inputs = &decl_sig.inputs;
+                let output = &decl_sig.output;
+                let where_clause = &decl_sig.generics.where_clause;
 
                 quote! {
-                    #asyncness unsafe #abi fn #dispatch_ident #fn_impl_generics(#inputs) #output #fn_where_clause;
+                    #asyncness unsafe #abi fn #dispatch_ident #fn_impl_generics(#inputs) #output #where_clause;
                 }
             });
 
             // define the dispatch trait
             let dispatch_trait = quote! {
-                unsafe trait __DispatchHelper #impl_generics {
+                unsafe trait __DispatchHelper #impl_generics #extra_bounds #where_clause {
                     #defaultness #decl_sig;
                     #(#branch_defs)*
                 }
@@ -352,7 +407,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
             });
 
             // define final function defintion, block, and match statement
-            quote! {
+            let res = quote! {
                 #(#fn_attrs)* #defaultness #sig {
                     #dispatch_trait
                     #dispatch_impl
@@ -362,7 +417,9 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
                         _ => unsafe { #thermite::unreachable_unchecked() }
                     }
                 }
-            }
+            };
+
+            res
         }
         _ => quote! { #item }, // unchanged
     });
