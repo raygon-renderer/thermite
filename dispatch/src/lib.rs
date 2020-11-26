@@ -70,6 +70,18 @@ fn parse_attr(attr: PunctuatedAttributes) -> (TokenStream, TokenStream) {
     (simd, thermite)
 }
 
+struct SelfItemArgVisitor {
+    self_ty: Box<Type>,
+}
+
+impl VisitMut for SelfItemArgVisitor {
+    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
+        println!("{:?}", i);
+
+        syn::visit_mut::visit_fn_arg_mut(self, i);
+    }
+}
+
 struct SelfTraitVisitor {
     depth: u32,
     method: Ident,
@@ -220,6 +232,21 @@ impl VisitMut for SelfTraitVisitor {
     }
 }
 
+struct DemutSelfVisitor;
+
+impl VisitMut for DemutSelfVisitor {
+    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
+        match i {
+            FnArg::Receiver(rcv) if rcv.reference.is_none() => {
+                rcv.mutability = None;
+            }
+            _ => {}
+        }
+
+        syn::visit_mut::visit_fn_arg_mut(self, i);
+    }
+}
+
 fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenStream {
     let (simd, thermite) = parse_attr(attr);
 
@@ -235,177 +262,114 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
         ..
     } = &mut item_impl;
 
-    for item in items {
-        match item {
-            ImplItem::Method(m) => {
-                if let Some((_, path, _)) = trait_ {
-                    SelfTraitVisitor::new(path.clone(), self_ty.clone(), m.sig.ident.clone())
-                        .visit_block_mut(&mut m.block);
-                }
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
+
+    let items = items.iter_mut().map(|mut item| match item {
+        ImplItem::Method(ImplItemMethod {
+            attrs: fn_attrs,
+            vis,
+            defaultness,
+            sig,
+            block,
+        }) => {
+            let Signature {
+                asyncness,
+                unsafety,
+                abi,
+                ident,
+                generics: fn_generics,
+                inputs,
+                output,
+                ..
+            } = &*sig;
+
+            let mut decl_sig = sig.clone();
+            DemutSelfVisitor.visit_signature_mut(&mut decl_sig);
+
+            // If a trait implementation, disambiguate all calls to self. or Self:: to refer to the parent trait
+            if let Some((_, trait_, _)) = &trait_ {
+                SelfTraitVisitor::new(trait_.clone(), self_ty.clone(), sig.ident.clone()).visit_block_mut(block);
             }
-            _ => {}
-        }
-    }
 
-    let res = quote! {};
+            let (fn_impl_generics, _, fn_where_clause) = fn_generics.split_for_impl();
 
-    quote! { #item_impl }
-}
-
-fn gen_trait_def(attrs: PunctuatedAttributes, trait_item: ItemTrait) -> TokenStream {
-    quote! { #trait_item }
-}
-
-/*
-fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
-    let mut impl_lifetimes = Vec::new();
-    let mut impl_generics_not_lifetimes = Vec::new();
-
-    for g in generics.params.iter() {
-        match g {
-            GenericParam::Lifetime(lf) => impl_lifetimes.push(&lf.lifetime),
-            _ => impl_generics_not_lifetimes.push(g),
-        }
-    }
-
-    let (impl_generics, _, where_clause) = generics.split_for_impl();
-
-    let items = items.iter().map(|item| {
-        match item {
-            ImplItem::Method(method) => {
-                let ImplItemMethod {
-                    attrs: fn_attrs,
-                    vis,
-                    defaultness,
-                    sig,
-                    block,
-                } = method;
-
-                let Signature {
-                    asyncness,
-                    unsafety,
-                    abi,
-                    ident,
-                    generics: fn_generics,
-                    inputs,
-                    output,
-                    ..
-                } = sig;
-
-                println!("{:?}", block);
-
-                let mut lifetimes = impl_lifetimes.clone();
-                let mut impl_generics_not_lifetimes = impl_generics_not_lifetimes.clone();
-
-                for g in fn_generics.params.iter() {
-                    match g {
-                        GenericParam::Lifetime(lf) => lifetimes.push(&lf.lifetime),
-                        _ => impl_generics_not_lifetimes.push(g),
-                    }
-                }
-
-                let ref where_clause = generics
-                    .where_clause.as_ref()
-                    .into_iter()
-                    .chain(fn_generics.where_clause.as_ref().into_iter())
-                    .map(|wc| wc.predicates.clone().into_iter())
-                    .flatten().collect::<Vec<_>>();
-
-                let forward_args_inner = forward_args(inputs.iter(), true);
-                let forward_args_outer = forward_args(inputs.iter(), false);
-
-                let tf = {
-                    let lifetimes = lifetimes.iter().filter_map(|lf| {
-                        for arg in inputs.iter() {
-                            match arg {
-                                FnArg::Typed(ty) if is_late_bound(lf, &ty.ty) => return None,
-                                _ => {}
-                            }
-                        }
-
-                        Some(quote! { #lf })
-                    });
-
-                    let generics = impl_generics_not_lifetimes.iter().map(|g| {
-                        match g {
-                            GenericParam::Type(TypeParam { ident, ..}) | GenericParam::Const(ConstParam { ident, ..}) => quote! { #ident },
-                            _ => unimplemented!()
-                        }
-                    });
-
-                    quote! {
-                        ::< #(#lifetimes,)* #(#generics,)* >
-                    }
-                };
-
-                let ref renamed_inputs: Vec<_> = inputs.iter().map(|input| {
-                    match input {
-                        FnArg::Receiver(rcv) => {
-                            let Receiver { attrs, reference, mutability, .. } = rcv;
-
-                            let reference = match reference {
-                                Some((_, lf)) => quote! { & #lf #mutability },
-                                None => quote! {}
-                            };
-
-                            quote! { #(#attrs)* __self: #reference #self_ty }
-                        }
-                        _ => quote! { #input }
-                    }
-                }).collect();
-
-                let mut block = block.clone();
-
-                // Replace all occurrences of `self` with `__self`
-                SelfVisitor.visit_block_mut(&mut block);
-
-                let inner = quote! {
-                    #[inline(always)]
-                    #unsafety fn #ident< #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >(#(#renamed_inputs,)*) #output where #(#where_clause,)* {
-                        //type __SELF = #self_ty;
-
-                        #block
-                    }
-                };
-
-                let branches = BACKENDS.iter().map(|(backend, instrset)| {
-                    let dispatch_ident = quote::format_ident!("__dispatch_{}", backend.to_lowercase());
-                    let backend = quote::format_ident!("{}", backend);
-
-                    quote! {
-                        #thermite::SimdInstructionSet::#backend => {
-                            #[inline]
-                            #[target_feature(enable = #instrset)]
-                            #asyncness unsafe fn #dispatch_ident < #(#lifetimes,)* #(#impl_generics_not_lifetimes,)* >
-                            (#(#renamed_inputs,)*) #output where #(#where_clause,)* {
-                                // call named inner function
-                                #ident #tf (#(#forward_args_inner,)*)
-                            }
-
-                            unsafe { #dispatch_ident #tf (#(#forward_args_outer,)*) }
-                        }
-                    }
-                });
-
-                let (fn_impl_generics, _, fn_where_clause) = fn_generics.split_for_impl();
+            // define the instrset branch functions for the dispatch trait
+            let branch_defs = BACKENDS.iter().map(|(backend, instrset)| {
+                let dispatch_ident = format_backend(backend);
+                let inputs = &decl_sig.inputs;
 
                 quote! {
-                    #(#fn_attrs)* #vis #unsafety fn #ident #fn_impl_generics(#inputs) #output #fn_where_clause {
-                        #inner
-                        match <#simd as #thermite::Simd>::INSTRSET {
-                            #(#branches)*
-                            _ => unsafe { #thermite::unreachable_unchecked() }
-                        }
+                    #asyncness unsafe #abi fn #dispatch_ident #fn_impl_generics(#inputs) #output #fn_where_clause;
+                }
+            });
+
+            // define the dispatch trait
+            let dispatch_trait = quote! {
+                unsafe trait __DispatchHelper #impl_generics {
+                    #defaultness #decl_sig;
+                    #(#branch_defs)*
+                }
+            };
+
+            // format args for forwarding
+            let ref mut forward_args = forward_args(inputs.iter(), false);
+            let ref mut forward_tys = forward_tys(fn_generics.params.iter(), inputs.iter());
+
+            let tf = quote! { ::<#(#forward_tys),*> };
+
+            // impl instrset methods
+            let branch_impls = BACKENDS.iter().map(|(backend, instrset)| {
+                let dispatch_ident = format_backend(backend);
+
+                quote! {
+                    #[inline]
+                    #[target_feature(enable = #instrset)]
+                    #asyncness unsafe #abi fn #dispatch_ident #fn_impl_generics(#inputs) #output #fn_where_clause {
+                        <Self as __DispatchHelper #type_generics>::#ident #tf(#(#forward_args,)*)
+                    }
+                }
+            });
+
+            // impl Dispatch trait. We can copy the entire function definition here, which makes it really easy
+            let dispatch_impl = quote! {
+                unsafe impl #impl_generics __DispatchHelper #type_generics for #self_ty #where_clause {
+                    #[inline(always)]
+                    #defaultness #sig #block
+                    #(#branch_impls)*
+                }
+            };
+
+            // Define the match branches and calls to the dispatch functions
+            let branches = BACKENDS.iter().map(|(backend, instrset)| {
+                let dispatch_ident = format_backend(backend);
+                let backend = quote::format_ident!("{}", backend);
+
+                quote! {
+                    #thermite::SimdInstructionSet::#backend => unsafe {
+                        <Self as __DispatchHelper #type_generics>::#dispatch_ident #tf(#(#forward_args,)*)
+                    }
+                }
+            });
+
+            // define final function defintion, block, and match statement
+            quote! {
+                #(#fn_attrs)* #defaultness #sig {
+                    #dispatch_trait
+                    #dispatch_impl
+
+                    match <#simd as #thermite::Simd>::INSTRSET {
+                        #(#branches)*
+                        _ => unsafe { #thermite::unreachable_unchecked() }
                     }
                 }
             }
-            _ => quote! { #item }, // verbatim
         }
+        _ => quote! { #item }, // unchanged
     });
 
-    let res = match trait_ {
-        Some((bang, name, for_)) => quote! {
-            #defaultness #unsafety #impl_token #impl_generics #bang #name #for_ #self_ty #where_clause {
+    match &trait_ {
+        Some((bang, trait_, for_)) => quote! {
+            #defaultness #unsafety #impl_token #impl_generics #bang #trait_ #for_ #self_ty #where_clause {
                 #(#items)*
             }
         },
@@ -414,11 +378,48 @@ fn gen_impl_block(attr: PunctuatedAttributes, item: ItemImpl) -> TokenStream {
                 #(#items)*
             }
         },
-    };
-
-    res
+    }
 }
-*/
+
+fn gen_trait_def(attrs: PunctuatedAttributes, trait_item: ItemTrait) -> TokenStream {
+    quote! { #trait_item }
+}
+
+fn format_backend(backend: &str) -> Ident {
+    quote::format_ident!("__dispatch_{}", backend.to_lowercase())
+}
+
+/// Accumulate generic names for forwarding, with the exception of late-bound lifetimes
+fn forward_tys<'a>(
+    fn_generics: impl IntoIterator<Item = &'a GenericParam>,
+    inputs: impl IntoIterator<Item = &'a FnArg> + Clone,
+) -> Vec<TokenStream> {
+    let mut forward_tys = Vec::new();
+
+    'forwarding_tys: for generic in fn_generics.into_iter() {
+        forward_tys.push(match generic {
+            GenericParam::Type(ty) => {
+                let ref ident = ty.ident;
+                quote! { #ident }
+            }
+            GenericParam::Lifetime(lf) => {
+                for arg in inputs.clone().into_iter() {
+                    match arg {
+                        FnArg::Typed(ty) if is_late_bound(&lf.lifetime, &*ty.ty) => continue 'forwarding_tys,
+                        _ => {}
+                    }
+                }
+                quote! { #lf }
+            }
+            GenericParam::Const(c) => {
+                let ref ident = c.ident;
+                quote! { #ident }
+            }
+        });
+    }
+
+    forward_tys
+}
 
 fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, inner: bool) -> Vec<TokenStream> {
     let mut forward_args = Vec::new();
@@ -466,30 +467,7 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
 
     let ref mut forward_args = forward_args(inputs.iter(), false);
 
-    let ref mut forward_tys = Vec::new();
-
-    // Accumulate generic names for forwarding, with the exception of late-bound lifetimes
-    'forwarding_tys: for generic in generics.params.iter() {
-        forward_tys.push(match generic {
-            GenericParam::Type(ty) => {
-                let ref ident = ty.ident;
-                quote! { #ident }
-            }
-            GenericParam::Lifetime(lf) => {
-                for arg in inputs.iter() {
-                    match arg {
-                        FnArg::Typed(ty) if is_late_bound(&lf.lifetime, &*ty.ty) => continue 'forwarding_tys,
-                        _ => {}
-                    }
-                }
-                quote! { #lf }
-            }
-            GenericParam::Const(c) => {
-                let ref ident = c.ident;
-                quote! { #ident }
-            }
-        });
-    }
+    let ref mut forward_tys = forward_tys(generics.params.iter(), inputs.iter());
 
     // TODO: Test if inner function must always be redeclared
     let inner = quote! {
@@ -502,7 +480,7 @@ fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
     let mut branches = Vec::new();
 
     for (backend, instrset) in BACKENDS {
-        let dispatch_ident = quote::format_ident!("__dispatch_{}", backend.to_lowercase());
+        let dispatch_ident = format_backend(backend);
         let backend = quote::format_ident!("{}", backend);
 
         branches.push(quote! {
