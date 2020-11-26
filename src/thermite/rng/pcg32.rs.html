@@ -51,6 +51,7 @@
 <span id="48">48</span>
 <span id="49">49</span>
 <span id="50">50</span>
+<span id="51">51</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -68,6 +69,7 @@
     <span class="ident">inc</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 }
 
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">PCG32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">seed</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
@@ -80,7 +82,7 @@
     }
 }
 
-<span class="comment">// TODO: #[dispatch]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SimdRng</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">PCG32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">fn</span> <span class="ident">reseed</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">seed</span>: <span class="ident">Vu64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) {
