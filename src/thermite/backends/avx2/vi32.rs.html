@@ -622,7 +622,7 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_all</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">=</span><span class="op">=</span> <span class="op">-</span><span class="number">1</span>
+        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="kw">as</span> <span class="ident">u32</span> <span class="op">=</span><span class="op">=</span> <span class="ident">u32</span>::<span class="ident">MAX</span>
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
