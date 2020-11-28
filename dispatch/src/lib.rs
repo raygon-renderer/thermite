@@ -414,7 +414,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
 
             // define final function defintion, block, and match statement
             let res = quote! {
-                #(#fn_attrs)* #defaultness #sig {
+                #(#fn_attrs)* #vis #defaultness #sig {
                     #dispatch_trait
                     #dispatch_impl
 
