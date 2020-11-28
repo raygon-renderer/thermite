@@ -366,6 +366,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
 
             // define the dispatch trait
             let dispatch_trait = quote! {
+                #[allow(non_camel_case_types)]
                 unsafe trait #helper_trait_name #impl_generics #extra_bounds #where_clause {
                     #defaultness #decl_sig;
                     #(#branch_defs)*
@@ -414,6 +415,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
 
             // define final function defintion, block, and match statement
             let res = quote! {
+                #[allow(unused_mut)]
                 #(#fn_attrs)* #vis #defaultness #sig {
                     #dispatch_trait
                     #dispatch_impl
