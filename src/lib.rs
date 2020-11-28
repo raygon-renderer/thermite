@@ -942,7 +942,9 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         self.sqrt().recepr()
     }
 
-    /// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible
+    /// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible.
+    ///
+    /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
     #[inline(always)]
     fn rsqrt_precise(self) -> Self {
         Self::one() / self.sqrt()
@@ -951,6 +953,14 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// Computes the approximate reciprocal/inverse of each value
     #[inline(always)]
     fn recepr(self) -> Self {
+        Self::one() / self
+    }
+
+    /// A more precise `1 / x` variation, which may use faster instructions where possible.
+    ///
+    /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
+    #[inline(always)]
+    fn recepr_precise(self) -> Self {
         Self::one() / self
     }
 
