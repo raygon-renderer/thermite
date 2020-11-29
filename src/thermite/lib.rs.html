@@ -1128,6 +1128,24 @@
 <span id="1125">1125</span>
 <span id="1126">1126</span>
 <span id="1127">1127</span>
+<span id="1128">1128</span>
+<span id="1129">1129</span>
+<span id="1130">1130</span>
+<span id="1131">1131</span>
+<span id="1132">1132</span>
+<span id="1133">1133</span>
+<span id="1134">1134</span>
+<span id="1135">1135</span>
+<span id="1136">1136</span>
+<span id="1137">1137</span>
+<span id="1138">1138</span>
+<span id="1139">1139</span>
+<span id="1140">1140</span>
+<span id="1141">1141</span>
+<span id="1142">1142</span>
+<span id="1143">1143</span>
+<span id="1144">1144</span>
+<span id="1145">1145</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
@@ -2164,14 +2182,32 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 {
 }
 
+<span class="doccomment">/// Enum of supported instruction sets</span>
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SimdInstructionSet</span> {
     <span class="ident">SSE2</span>,
     <span class="ident">SSE41</span>,
     <span class="ident">AVX</span>,
     <span class="ident">AVX2</span>,
-    <span class="ident">AVX512F</span>,
-    <span class="ident">AVX512FBW</span>,
+    <span class="comment">//AVX512F,</span>
+    <span class="comment">//AVX512FBW,</span>
+}
+
+<span class="kw">impl</span> <span class="ident">SimdInstructionSet</span> {
+    <span class="doccomment">/// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.</span>
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">has_true_fma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="kw">match</span> <span class="self">self</span> {
+            <span class="comment">//SimdInstructionSet::AVX512F | SimdInstructionSet::AVX512FBW |</span>
+            <span class="ident">SimdInstructionSet</span>::<span class="ident">AVX2</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">true</span>,
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
+        }
+    }
+
+    <span class="doccomment">/// On older platforms, fused multiply-add instructions can be emulated (expensively),</span>
+    <span class="doccomment">/// but only if the `&quot;emulate_fma&quot;` Cargo feature is enabled.</span>
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">has_emulated_fma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="op">!</span><span class="self">self</span>.<span class="ident">has_true_fma</span>() <span class="op">&amp;&amp;</span> <span class="macro">cfg</span><span class="macro">!</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;emulate_fma&quot;</span>)
+    }
 }
 
 <span class="doccomment">/// SIMD Instruction set, contains all types</span>
