@@ -1033,14 +1033,32 @@ where
 {
 }
 
+/// Enum of supported instruction sets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimdInstructionSet {
     SSE2,
     SSE41,
     AVX,
     AVX2,
-    AVX512F,
-    AVX512FBW,
+    //AVX512F,
+    //AVX512FBW,
+}
+
+impl SimdInstructionSet {
+    /// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.
+    pub const fn has_true_fma(self) -> bool {
+        match self {
+            //SimdInstructionSet::AVX512F | SimdInstructionSet::AVX512FBW |
+            SimdInstructionSet::AVX2 => true,
+            _ => false,
+        }
+    }
+
+    /// On older platforms, fused multiply-add instructions can be emulated (expensively),
+    /// but only if the `"emulate_fma"` Cargo feature is enabled.
+    pub const fn has_emulated_fma(self) -> bool {
+        !self.has_true_fma() && cfg!(feature = "emulate_fma")
+    }
 }
 
 /// SIMD Instruction set, contains all types
