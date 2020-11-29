@@ -458,13 +458,13 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    fn recepr(self) -> Self {
+    fn rcp(self) -> Self {
         Self::new(unsafe { _mm256_rcp_ps(self.value) })
     }
 
     #[inline(always)]
-    fn recepr_precise(self) -> Self {
-        let rcp = self.recepr();
+    fn rcp_precise(self) -> Self {
+        let rcp = self.rcp();
 
         // one iteration of Newton's method
         rcp * self.nmul_add(rcp, Self::splat(2.0))

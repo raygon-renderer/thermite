@@ -436,7 +436,7 @@ impl SimdFloatVector<AVX1> for f32x8<AVX1> {
     }
 
     #[inline(always)]
-    fn recepr(self) -> Self {
+    fn rcp(self) -> Self {
         Self::new(unsafe { _mm256_rcp_ps(self.value) })
     }
 

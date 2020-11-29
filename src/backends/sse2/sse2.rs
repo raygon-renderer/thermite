@@ -577,7 +577,7 @@ impl SimdFloatVector<SSE2> for f32x4<SSE2> {
     }
 
     #[inline(always)]
-    fn recepr(self) -> Self {
+    fn rcp(self) -> Self {
         Self::new(unsafe { _mm_rcp_ps(self.value) })
     }
 }
