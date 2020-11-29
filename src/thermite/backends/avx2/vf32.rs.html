@@ -1020,13 +1020,13 @@
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">recepr</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">rcp</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_rcp_ps</span>(<span class="self">self</span>.<span class="ident">value</span>) })
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">recepr_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="ident">rcp</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">recepr</span>();
+    <span class="kw">fn</span> <span class="ident">rcp_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> <span class="ident">rcp</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">rcp</span>();
 
         <span class="comment">// one iteration of Newton&#39;s method</span>
         <span class="ident">rcp</span> <span class="op">*</span> <span class="self">self</span>.<span class="ident">nmul_add</span>(<span class="ident">rcp</span>, <span class="self">Self</span>::<span class="ident">splat</span>(<span class="number">2.0</span>))

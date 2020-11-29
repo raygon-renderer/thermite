@@ -2088,7 +2088,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// Compute the approximate reciprocal of the square root `(1 / sqrt(x))`</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">rsqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">sqrt</span>().<span class="ident">recepr</span>()
+        <span class="self">self</span>.<span class="ident">sqrt</span>().<span class="ident">rcp</span>()
     }
 
     <span class="doccomment">/// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible.</span>
@@ -2101,7 +2101,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
     <span class="doccomment">/// Computes the approximate reciprocal/inverse of each value</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">recepr</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">rcp</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>
     }
 
@@ -2109,7 +2109,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: This is still an approximation, but uses Newton&#39;s method to improve accuracy.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">recepr_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">rcp_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>
     }
 
