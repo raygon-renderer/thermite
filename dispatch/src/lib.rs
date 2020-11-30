@@ -10,9 +10,9 @@ use syn::{
     punctuated::Punctuated,
     visit_mut::VisitMut,
     Attribute, AttributeArgs, ConstParam, Expr, ExprCall, ExprPath, FnArg, GenericArgument, GenericMethodArgument,
-    GenericParam, Ident, ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemTrait, Lifetime, Lit, Meta, NestedMeta,
-    Pat, PatType, Path, PathArguments, PathSegment, QSelf, Receiver, ReturnType, Signature, Token, Type, TypeParam,
-    WherePredicate,
+    GenericParam, Ident, ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, ItemMod, ItemTrait, Lifetime, Lit, Meta,
+    NestedMeta, Pat, PatType, Path, PathArguments, PathSegment, QSelf, Receiver, ReturnType, Signature, Token, Type,
+    TypeParam, WherePredicate,
 };
 
 static BACKENDS: &[(&str, &str)] = &[
@@ -43,14 +43,15 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
     let item = syn::parse_macro_input!(item as Item);
 
     proc_macro::TokenStream::from(match item {
-        Item::Fn(fn_item) => gen_function(attr.attributes, fn_item),
-        Item::Impl(impl_block) => gen_impl_block(attr.attributes, impl_block),
-        Item::Trait(trait_item) => gen_trait_def(attr.attributes, trait_item),
+        Item::Fn(fn_item) => gen_function(&attr.attributes, &fn_item),
+        Item::Impl(impl_block) => gen_impl_block(&attr.attributes, impl_block),
+        Item::Trait(trait_item) => gen_trait_def(&attr.attributes, trait_item),
+        Item::Mod(module) => gen_mod_def(&attr.attributes, &module),
         _ => unimplemented!("#[dispatch] is only supported on naked functions, impl blocks or trait defintions!"),
     })
 }
 
-fn parse_attr(attr: PunctuatedAttributes) -> (TokenStream, TokenStream) {
+fn parse_attr(attr: &PunctuatedAttributes) -> (TokenStream, TokenStream) {
     let default_simd = quote::format_ident!("S");
     let mut simd = quote! { #default_simd };
     let mut thermite = quote! { ::thermite };
@@ -277,7 +278,34 @@ impl VisitMut for DemutSelfVisitor {
     }
 }
 
-fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenStream {
+fn gen_mod_def(attr: &PunctuatedAttributes, mod_item: &ItemMod) -> TokenStream {
+    let ItemMod {
+        attrs,
+        vis,
+        mod_token,
+        ident,
+        content,
+        semi,
+    } = mod_item;
+
+    let content = content.as_ref().map(|(_, items)| {
+        let items = items.iter().map(|item| match item {
+            Item::Fn(fn_item) => gen_function(attr, fn_item),
+            Item::Impl(impl_block) => gen_impl_block(attr, impl_block.clone()),
+            Item::Trait(trait_item) => gen_trait_def(attr, trait_item.clone()),
+            Item::Mod(module) => gen_mod_def(attr, module),
+            _ => quote! { #item },
+        });
+
+        quote! { { #(#items)* } }
+    });
+
+    quote! {
+        #(#attrs)* #vis #mod_token #ident #content #semi
+    }
+}
+
+fn gen_impl_block(attr: &PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenStream {
     let (simd, thermite) = parse_attr(attr);
 
     let ItemImpl {
@@ -446,7 +474,7 @@ fn gen_impl_block(attr: PunctuatedAttributes, mut item_impl: ItemImpl) -> TokenS
     }
 }
 
-fn gen_trait_def(attrs: PunctuatedAttributes, trait_item: ItemTrait) -> TokenStream {
+fn gen_trait_def(attrs: &PunctuatedAttributes, trait_item: ItemTrait) -> TokenStream {
     quote! { #trait_item }
 }
 
@@ -506,7 +534,7 @@ fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, inner: bool) ->
     forward_args
 }
 
-fn gen_function(attr: PunctuatedAttributes, item: ItemFn) -> TokenStream {
+fn gen_function(attr: &PunctuatedAttributes, item: &ItemFn) -> TokenStream {
     let (simd, thermite) = parse_attr(attr);
 
     let ItemFn {
