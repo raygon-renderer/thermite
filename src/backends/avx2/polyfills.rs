@@ -44,7 +44,7 @@ pub unsafe fn _mm256_cvtepu64_pdx(v: __m256i) -> __m256d {
     let mut v_hi     = _mm256_srli_epi64(v, 32);                              // Extract the 32 most significant bits of v
             v_hi     = _mm256_xor_si256(v_hi, magic_i_hi32);                  // Blend v_hi with 0x45300000
     let     v_hi_dbl = _mm256_sub_pd(_mm256_castsi256_pd(v_hi), magic_d_all); // Compute in double precision:
-                        _mm256_add_pd(v_hi_dbl, _mm256_castsi256_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
+                       _mm256_add_pd(v_hi_dbl, _mm256_castsi256_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
 }
 
 // https://stackoverflow.com/a/41223013/2083075
@@ -69,8 +69,7 @@ pub unsafe fn _mm256_adds_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
 
     _mm256_blendv_epi32x(
         res,
-        // cheeky hack relying on only the highest significant bit, which is the effective "sign" bit
-        _mm256_blendv_epi64x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
+        _mm256_blendv_epi32x(_mm256_set1_epi32(i32::MIN), _mm256_set1_epi32(i32::MAX), res),
         _mm256_xor_si256(rhs, _mm256_cmpgt_epi32(lhs, res)),
     )
 }
