@@ -11,32 +11,33 @@ use std::{
 
 /// Aligned SIMD vector storage
 #[repr(transparent)]
-pub struct SimdBuffer<S: Simd, V: SimdVectorBase<S>> {
+pub struct VectorBuffer<S: Simd, V: SimdVectorBase<S>> {
     buffer: *mut [V::Element],
 }
 
-impl<S: Simd, V: SimdVectorBase<S>> Deref for SimdBuffer<S, V> {
+impl<S: Simd, V: SimdVectorBase<S>> Deref for VectorBuffer<S, V> {
     type Target = [V::Element];
+
     #[inline]
     fn deref(&self) -> &Self::Target {
         self.as_slice()
     }
 }
 
-impl<S: Simd, V: SimdVectorBase<S>> DerefMut for SimdBuffer<S, V> {
+impl<S: Simd, V: SimdVectorBase<S>> DerefMut for VectorBuffer<S, V> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_slice()
     }
 }
 
-impl<S: Simd, V: SimdVectorBase<S>> fmt::Debug for SimdBuffer<S, V> {
+impl<S: Simd, V: SimdVectorBase<S>> fmt::Debug for VectorBuffer<S, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_vector_slice().fmt(f)
     }
 }
 
-impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
+impl<S: Simd, V: SimdVectorBase<S>> VectorBuffer<S, V> {
     /// Allocates a new SIMD-aligned element buffer and zeroes the elements.
     ///
     /// Due to the alignment, it will round up the number of elements to the nearest multiple of `V::NUM_ELEMENTS`,
@@ -48,7 +49,7 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
             let count = (count + V::NUM_ELEMENTS - 1) & (-(V::NUM_ELEMENTS as isize) as usize);
 
             // allocate zeroed buffer. All SIMD types are valid when zeroed
-            SimdBuffer {
+            VectorBuffer {
                 buffer: ptr::slice_from_raw_parts_mut(
                     alloc::alloc::alloc_zeroed(Self::layout(count)) as *mut V::Element,
                     count,
@@ -134,10 +135,10 @@ impl<S: Simd, V: SimdVectorBase<S>> SimdBuffer<S, V> {
     }
 }
 
-unsafe impl<S: Simd, V: SimdVectorBase<S>> Send for SimdBuffer<S, V> {}
-unsafe impl<S: Simd, V: SimdVectorBase<S>> Sync for SimdBuffer<S, V> {}
+unsafe impl<S: Simd, V: SimdVectorBase<S>> Send for VectorBuffer<S, V> {}
+unsafe impl<S: Simd, V: SimdVectorBase<S>> Sync for VectorBuffer<S, V> {}
 
-impl<S: Simd, V: SimdVectorBase<S>> Drop for SimdBuffer<S, V> {
+impl<S: Simd, V: SimdVectorBase<S>> Drop for VectorBuffer<S, V> {
     fn drop(&mut self) {
         unsafe { dealloc(self.buffer as *mut u8, Self::layout(self.len())) }
     }

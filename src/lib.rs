@@ -11,7 +11,7 @@ use half::f16;
 #[cfg(feature = "alloc")]
 mod buffer;
 #[cfg(feature = "alloc")]
-pub use buffer::SimdBuffer;
+pub use buffer::VectorBuffer;
 
 pub mod backends;
 
@@ -262,8 +262,8 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
 
     #[inline(always)]
     #[cfg(feature = "alloc")]
-    fn alloc(count: usize) -> SimdBuffer<S, Self> {
-        SimdBuffer::alloc(count)
+    fn alloc(count: usize) -> VectorBuffer<S, Self> {
+        VectorBuffer::alloc(count)
     }
 
     /// Extracts an element at the given lane index.
