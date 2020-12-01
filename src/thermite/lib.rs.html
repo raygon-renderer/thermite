@@ -1146,7 +1146,13 @@
 <span id="1143">1143</span>
 <span id="1144">1144</span>
 <span id="1145">1145</span>
+<span id="1146">1146</span>
+<span id="1147">1147</span>
+<span id="1148">1148</span>
+<span id="1149">1149</span>
 </pre><div class="example-wrap"><pre class="rust ">
+<span class="attribute">#![<span class="ident">no_std</span>]</span>
+<span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
 <span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
 
@@ -1156,6 +1162,8 @@
 <span class="kw">mod</span> <span class="ident">macros</span>;
 
 <span class="kw">use</span> <span class="ident">half</span>::<span class="ident">f16</span>;
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">arch</span>;
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
 <span class="kw">mod</span> <span class="ident">buffer</span>;
@@ -1189,7 +1197,7 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;rng&quot;</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">rng</span>;
 
-<span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
+<span class="kw">use</span> <span class="ident">core</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
 
 <span class="doccomment">/// Describes casting from one SIMD vector type to another</span>
 <span class="doccomment">///</span>
@@ -1323,9 +1331,9 @@
     <span class="kw">type</span> <span class="ident">Element</span>: <span class="ident">SimdElement</span>;
 
     <span class="doccomment">/// Size of element type in bytes</span>
-    <span class="kw">const</span> <span class="ident">ELEMENT_SIZE</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>();
-    <span class="kw">const</span> <span class="ident">NUM_ELEMENTS</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>() <span class="op">/</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">i32</span><span class="op">&gt;</span>();
-    <span class="kw">const</span> <span class="ident">ALIGNMENT</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">align_of</span>::<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>();
+    <span class="kw">const</span> <span class="ident">ELEMENT_SIZE</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>();
+    <span class="kw">const</span> <span class="ident">NUM_ELEMENTS</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">S</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>() <span class="op">/</span> <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">i32</span><span class="op">&gt;</span>();
+    <span class="kw">const</span> <span class="ident">ALIGNMENT</span>: <span class="ident">usize</span> <span class="op">=</span> <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">align_of</span>::<span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>();
 
     <span class="doccomment">/// Creates a new vector with all lanes set to the given value</span>
     <span class="kw">fn</span> <span class="ident">splat</span>(<span class="ident">value</span>: <span class="self">Self</span>::<span class="ident">Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -1846,7 +1854,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">B</span><span class="op">&gt;</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">into_bits</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">B</span> {
-        <span class="kw">unsafe</span> { <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">transmute_copy</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) }
+        <span class="kw">unsafe</span> { <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">transmute_copy</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) }
     }
 }
 
@@ -1854,7 +1862,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">B</span><span class="op">&gt;</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">from_bits</span>(<span class="ident">bits</span>: <span class="ident">B</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">unsafe</span> { <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">transmute_copy</span>(<span class="kw-2">&amp;</span><span class="ident">bits</span>) }
+        <span class="kw">unsafe</span> { <span class="ident">core</span>::<span class="ident">mem</span>::<span class="ident">transmute_copy</span>(<span class="kw-2">&amp;</span><span class="ident">bits</span>) }
     }
 }
 
@@ -2291,6 +2299,6 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
 <span class="comment">// Re-exported for procedural macro</span>
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>;
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../";window.currentCrate = "thermite";</script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>

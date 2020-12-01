@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["arch",""],["avx1",""],["avx2",""],["polyfills",""],["sse2",""],["sse42",""]]});
+initSidebarItems({"mod":[["avx1",""],["avx2",""],["polyfills",""],["sse2",""],["sse42",""]]});

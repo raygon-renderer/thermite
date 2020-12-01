@@ -24,14 +24,14 @@
 
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
-<span class="kw">use</span> <span class="ident">std</span>::{
+<span class="kw">use</span> <span class="ident">core</span>::{
     <span class="ident">fmt</span>,
     <span class="ident">marker</span>::<span class="ident">PhantomData</span>,
     <span class="ident">mem</span>::{<span class="ident">transmute</span>, <span class="ident">transmute_copy</span>},
     <span class="ident">ops</span>::<span class="kw-2">*</span>,
 };
 
-<span class="kw">use</span> <span class="kw">super</span>::<span class="ident">arch</span>::<span class="ident">sse2</span>::<span class="kw-2">*</span>;
+<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">arch</span>::<span class="ident">sse2</span>::<span class="kw-2">*</span>;
 
 <span class="kw">use</span> <span class="ident">half</span>::<span class="ident">f16</span>;
 

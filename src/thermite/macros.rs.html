@@ -45,7 +45,7 @@
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">intrinsics</span>::{<span class="ident">likely</span>, <span class="ident">unlikely</span>};
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">intrinsics</span>::{<span class="ident">likely</span>, <span class="ident">unlikely</span>};
 
 <span class="comment">// borrows technique from https://github.com/rust-lang/hashbrown/pull/209</span>
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>))]</span>
