@@ -347,6 +347,15 @@ impl Div<Divider<u32>> for u32x8<AVX2> {
     }
 }
 
+impl Div<BranchfreeDivider<u32>> for u32x8<AVX2> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: BranchfreeDivider<u32>) -> Self {
+        Self::new(unsafe { _mm256_div_epu32x_bf(self.value, rhs.multiplier(), rhs.shift()) })
+    }
+}
+
 impl SimdUnsignedIntVector<AVX2> for u32x8<AVX2> {
     #[inline(always)]
     fn next_power_of_two_m1(mut self) -> Self {

@@ -405,6 +405,23 @@ impl Div<Divider<u64>> for u64x8<AVX2> {
     }
 }
 
+impl Div<BranchfreeDivider<u64>> for u64x8<AVX2> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: BranchfreeDivider<u64>) -> Self {
+        let multiplier = rhs.multiplier();
+        let shift = rhs.shift();
+
+        Self::new(unsafe {
+            (
+                _mm256_div_epu64x_bf(self.value.0, multiplier, shift),
+                _mm256_div_epu64x_bf(self.value.1, multiplier, shift),
+            )
+        })
+    }
+}
+
 impl SimdUnsignedIntVector<AVX2> for u64x8<AVX2> {
     #[inline(always)]
     fn next_power_of_two_m1(mut self) -> Self {

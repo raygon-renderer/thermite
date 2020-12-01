@@ -716,9 +716,15 @@ pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
 /// Specialized integer division by [`Divider`]s
 ///
 /// This primarily exists as an operator overload hack because Rust pre 1.49.0 is broken
-pub trait SimdIntegerDivision<E>: Sized + Div<Divider<E>, Output = Self> {}
+pub trait SimdIntegerDivision<E>:
+    Sized + Div<Divider<E>, Output = Self> + Div<BranchfreeDivider<E>, Output = Self>
+{
+}
 
-impl<T, E> SimdIntegerDivision<E> for T where T: Sized + Div<Divider<E>, Output = Self> {}
+impl<T, E> SimdIntegerDivision<E> for T where
+    T: Sized + Div<Divider<E>, Output = Self> + Div<BranchfreeDivider<E>, Output = Self>
+{
+}
 
 /// Integer SIMD vectors
 pub trait SimdIntVector<S: Simd + ?Sized>: SimdVector<S> + Eq {

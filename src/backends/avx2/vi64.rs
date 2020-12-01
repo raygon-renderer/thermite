@@ -397,8 +397,34 @@ impl SimdIntVector<AVX2> for i64x8<AVX2> {
 impl Div<Divider<i64>> for i64x8<AVX2> {
     type Output = Self;
 
+    #[inline(always)]
     fn div(self, rhs: Divider<i64>) -> Self {
-        unimplemented!()
+        Self::new(unsafe {
+            let multiplier = rhs.multiplier();
+            let shift = rhs.shift();
+
+            (
+                _mm256_div_epi64x(self.value.0, multiplier, shift),
+                _mm256_div_epi64x(self.value.1, multiplier, shift),
+            )
+        })
+    }
+}
+
+impl Div<BranchfreeDivider<i64>> for i64x8<AVX2> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: BranchfreeDivider<i64>) -> Self {
+        Self::new(unsafe {
+            let multiplier = rhs.multiplier();
+            let shift = rhs.shift();
+
+            (
+                _mm256_div_epi64x_bf(self.value.0, multiplier, shift),
+                _mm256_div_epi64x_bf(self.value.1, multiplier, shift),
+            )
+        })
     }
 }
 
