@@ -1160,7 +1160,7 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
 <span class="kw">mod</span> <span class="ident">buffer</span>;
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">buffer</span>::<span class="ident">SimdBuffer</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">buffer</span>::<span class="ident">VectorBuffer</span>;
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">backends</span>;
 
@@ -1411,8 +1411,8 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;alloc&quot;</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">alloc</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdBuffer</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident">SimdBuffer</span>::<span class="ident">alloc</span>(<span class="ident">count</span>)
+    <span class="kw">fn</span> <span class="ident">alloc</span>(<span class="ident">count</span>: <span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">VectorBuffer</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">VectorBuffer</span>::<span class="ident">alloc</span>(<span class="ident">count</span>)
     }
 
     <span class="doccomment">/// Extracts an element at the given lane index.</span>
@@ -2186,7 +2186,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SimdInstructionSet</span> {
     <span class="ident">SSE2</span>,
-    <span class="ident">SSE41</span>,
+    <span class="ident">SSE42</span>,
     <span class="ident">AVX</span>,
     <span class="ident">AVX2</span>,
     <span class="comment">//AVX512F,</span>

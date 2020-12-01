@@ -71,8 +71,6 @@
 <span id="68">68</span>
 <span id="69">69</span>
 <span id="70">70</span>
-<span id="71">71</span>
-<span id="72">72</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -85,11 +83,7 @@
     <span class="ident">ops</span>::<span class="kw-2">*</span>,
 };
 
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>)]</span>
-<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">arch</span>::<span class="ident">x86</span>::<span class="kw-2">*</span>;
-
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>)]</span>
-<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">arch</span>::<span class="ident">x86_64</span>::<span class="kw-2">*</span>;
+<span class="kw">use</span> <span class="kw">super</span>::<span class="ident">arch</span>::<span class="ident">avx</span>::<span class="kw-2">*</span>;
 
 <span class="kw">use</span> <span class="ident">half</span>::<span class="ident">f16</span>;
 
@@ -101,50 +95,52 @@
 
 <span class="kw">use</span> <span class="ident">polyfills</span>::<span class="kw-2">*</span>;
 
-<span class="kw">mod</span> <span class="ident">vf32</span>;
-<span class="kw">mod</span> <span class="ident">vf64</span>;
-<span class="kw">mod</span> <span class="ident">vi32</span>;
-<span class="kw">mod</span> <span class="ident">vi32_2</span>;
-<span class="kw">mod</span> <span class="ident">vi64</span>;
-<span class="comment">//mod vi64_2;</span>
-<span class="kw">mod</span> <span class="ident">vu32</span>;
-<span class="kw">mod</span> <span class="ident">vu64</span>;
+<span class="comment">/*
+mod vf32;
+mod vf64;
+mod vi32;
+mod vi32_2;
+mod vi64;
+//mod vi64_2;
+mod vu32;
+mod vu64;
 
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vf32</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vf64</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vi32</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vi64</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vu32</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">vu64</span>::<span class="kw-2">*</span>;
+pub use vf32::*;
+pub use vf64::*;
+pub use vi32::*;
+pub use vi64::*;
+pub use vu32::*;
+pub use vu64::*;
 
-<span class="kw">type</span> <span class="ident">Vi32</span> <span class="op">=</span> <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
-<span class="kw">type</span> <span class="ident">Vi64</span> <span class="op">=</span> <span class="ident">i64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
-<span class="kw">type</span> <span class="ident">Vu32</span> <span class="op">=</span> <span class="ident">u32x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
-<span class="kw">type</span> <span class="ident">Vu64</span> <span class="op">=</span> <span class="ident">u64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
-<span class="kw">type</span> <span class="ident">Vf32</span> <span class="op">=</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
-<span class="kw">type</span> <span class="ident">Vf64</span> <span class="op">=</span> <span class="ident">f64x8</span><span class="op">&lt;</span><span class="ident">AVX1</span><span class="op">&gt;</span>;
+type Vi32 = i32x8&lt;AVX1&gt;;
+type Vi64 = i64x8&lt;AVX1&gt;;
+type Vu32 = u32x8&lt;AVX1&gt;;
+type Vu64 = u64x8&lt;AVX1&gt;;
+type Vf32 = f32x8&lt;AVX1&gt;;
+type Vf64 = f64x8&lt;AVX1&gt;;
 
-<span class="kw">impl</span> <span class="ident">Simd</span> <span class="kw">for</span> <span class="ident">AVX1</span> {
-    <span class="kw">const</span> <span class="ident">INSTRSET</span>: <span class="ident">SimdInstructionSet</span> <span class="op">=</span> <span class="ident">SimdInstructionSet</span>::<span class="ident">AVX</span>;
+impl Simd for AVX1 {
+    const INSTRSET: SimdInstructionSet = SimdInstructionSet::AVX;
 
-    <span class="kw">type</span> <span class="ident">Vi32</span> <span class="op">=</span> <span class="ident">Vi32</span>;
-    <span class="kw">type</span> <span class="ident">Vi64</span> <span class="op">=</span> <span class="ident">Vi64</span>;
-    <span class="kw">type</span> <span class="ident">Vu32</span> <span class="op">=</span> <span class="ident">Vu32</span>;
-    <span class="kw">type</span> <span class="ident">Vu64</span> <span class="op">=</span> <span class="ident">Vu64</span>;
-    <span class="kw">type</span> <span class="ident">Vf32</span> <span class="op">=</span> <span class="ident">Vf32</span>;
-    <span class="kw">type</span> <span class="ident">Vf64</span> <span class="op">=</span> <span class="ident">Vf64</span>;
+    type Vi32 = Vi32;
+    type Vi64 = Vi64;
+    type Vu32 = Vu32;
+    type Vu64 = Vu64;
+    type Vf32 = Vf32;
+    type Vf64 = Vf64;
 
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Vusize</span> <span class="op">=</span> <span class="ident">Vu32</span>;
+    #[cfg(target_pointer_width = &quot;32&quot;)]
+    type Vusize = Vu32;
 
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Visize</span> <span class="op">=</span> <span class="ident">Vi32</span>;
+    #[cfg(target_pointer_width = &quot;32&quot;)]
+    type Visize = Vi32;
 
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;64&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Vusize</span> <span class="op">=</span> <span class="ident">Vu64</span>;
+    #[cfg(target_pointer_width = &quot;64&quot;)]
+    type Vusize = Vu64;
 
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;64&quot;</span>)]</span>
-    <span class="kw">type</span> <span class="ident">Visize</span> <span class="op">=</span> <span class="ident">Vi64</span>;
+    #[cfg(target_pointer_width = &quot;64&quot;)]
+    type Visize = Vi64;
 }
+*/</span>
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../../";window.currentCrate = "thermite";</script><script src="../../../../main.js"></script><script src="../../../../source-script.js"></script><script src="../../../../source-files.js"></script><script defer src="../../../../search-index.js"></script></body></html>

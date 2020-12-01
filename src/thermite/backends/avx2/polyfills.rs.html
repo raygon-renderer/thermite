@@ -318,10 +318,41 @@
 <span id="315">315</span>
 <span id="316">316</span>
 <span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
-<span class="kw">pub</span> <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">backends</span>::<span class="ident">avx1</span>::<span class="ident">polyfills</span>::{<span class="ident">_mm256_blendv_epi32x</span>, <span class="ident">_mm256_blendv_epi64x</span>};
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>, <span class="ident">mask</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="ident">_mm256_castps_si256</span>(<span class="ident">_mm256_blendv_ps</span>(
+        <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">ymm0</span>),
+        <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">ymm1</span>),
+        <span class="ident">_mm256_castsi256_ps</span>(<span class="ident">mask</span>),
+    ))
+}
+
+<span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+<span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">ymm0</span>: <span class="ident">__m256i</span>, <span class="ident">ymm1</span>: <span class="ident">__m256i</span>, <span class="ident">mask</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
+    <span class="ident">_mm256_castpd_si256</span>(<span class="ident">_mm256_blendv_pd</span>(
+        <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">ymm0</span>),
+        <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">ymm1</span>),
+        <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">mask</span>),
+    ))
+}
 
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_cvtepu32_psx</span>(<span class="ident">x</span>: <span class="ident">__m256i</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256</span> {
@@ -365,7 +396,7 @@
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">v_hi</span>     <span class="op">=</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">v</span>, <span class="number">32</span>);                              <span class="comment">// Extract the 32 most significant bits of v</span>
             <span class="ident">v_hi</span>     <span class="op">=</span> <span class="ident">_mm256_xor_si256</span>(<span class="ident">v_hi</span>, <span class="ident">magic_i_hi32</span>);                  <span class="comment">// Blend v_hi with 0x45300000</span>
     <span class="kw">let</span>     <span class="ident">v_hi_dbl</span> <span class="op">=</span> <span class="ident">_mm256_sub_pd</span>(<span class="ident">_mm256_castsi256_pd</span>(<span class="ident">v_hi</span>), <span class="ident">magic_d_all</span>); <span class="comment">// Compute in double precision:</span>
-                        <span class="ident">_mm256_add_pd</span>(<span class="ident">v_hi_dbl</span>, <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">v_lo</span>))     <span class="comment">// (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!</span>
+                       <span class="ident">_mm256_add_pd</span>(<span class="ident">v_hi_dbl</span>, <span class="ident">_mm256_castsi256_pd</span>(<span class="ident">v_lo</span>))     <span class="comment">// (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!</span>
 }
 
 <span class="comment">// https://stackoverflow.com/a/41223013/2083075</span>
@@ -390,8 +421,7 @@
 
     <span class="ident">_mm256_blendv_epi32x</span>(
         <span class="ident">res</span>,
-        <span class="comment">// cheeky hack relying on only the highest significant bit, which is the effective &quot;sign&quot; bit</span>
-        <span class="ident">_mm256_blendv_epi64x</span>(<span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
+        <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MIN</span>), <span class="ident">_mm256_set1_epi32</span>(<span class="ident">i32</span>::<span class="ident">MAX</span>), <span class="ident">res</span>),
         <span class="ident">_mm256_xor_si256</span>(<span class="ident">rhs</span>, <span class="ident">_mm256_cmpgt_epi32</span>(<span class="ident">lhs</span>, <span class="ident">res</span>)),
     )
 }
