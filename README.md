@@ -1,22 +1,32 @@
 Thermite SIMD: Melt your CPU
 ============================
 
-Thermite is a WIP SIMD library focused on providing portable SIMD acceleratation of SoA (Structure of Arrays) algorithms, using consistent-length SIMD vectors for lockstep iteration and computation.
+Thermite is a WIP SIMD library focused on providing portable SIMD acceleratation of SoA (Structure of Arrays) algorithms, using consistent-length<sup>1</sup> SIMD vectors for lockstep iteration and computation.
+
+Thermite provides highly optimized **feature-rich backends** for SSE2, SSE4.2, AVX and AVX2, with planned support for AVX512, Aarch64, and WASM SIMD extensions.
+
+In addition to that, Thermite includes a highly optimized **vectorized math library** with many special math functions and algorithms, specialized for both single and double precision.
+
+<sub><small>
+<sup>1</sup> All vectors in an instruction set are the same length, regardless of size.
+</small></sub>
 
 # Motivation and Goals
 
-While working on Raygon renderer, I decided that I needed a state of the art high-performance SIMD vector library focused on faciliating SoA (Structure of Arrays) algorithms. Unfortunately, SIMDeez was not an option as it did not provide consistent-length vectors nor all the built-in functionality I've come to rely on. Alternatively, `packed_simd` was nightly-only and relied on the somewhat naive LLVM "platform intrinsics". I briefly explored the `Faster` library, as it did focus on SoA, but the iterator-based API was unsatisfactory and awkward to use.
+Thermite was conceived while working on Raygon renderer, when it was decided we needed a state of the art high-performance SIMD vector library focused on facilitating SoA algorithms. Using SIMD for AoS values was a nightmare, constantly shuffling vectors and performing unnecessary horizontal operations. We also weren't able to take advantage of AVX2 fully due to 3D vectors only using 3 or 4 lanes of a regular 128-bit register.
+
+Using SIMDeez, `faster`, or redesigning `packed_simd` were all considered, but each has their flaws. SIMDeez is rather limited in functionality, and their handling of `target_feature` leaves much to be desired. `faster` fits well into the SoA paradigm, but the iterator-based API is rather unwieldy, and it is lacking many features. `packed_simd` isn't bad, but it's also missing many features and relies on the Nightly-only `"platform-intrinsic"`s, which can produce suboptimal code in some cases.
 
 Therefore, the only solution was to write my own, and thus Thermite was born.
 
-TODO: Goals
+The primary goal of Thermite is to provide optimal codegen for every backend instruction set, and provide a consistent set of features on top of all of them, in such a way as to encourage using chunked SoA or AoSoA algorithms regardless of what data types you need. Furthermore, with the `#[dispatch]` macro, multiple instruction sets can be easily targetted within a single binary.
 
 # Features
 
-* SSE2, SSE 4.1, AVX, AVX2 backends, with planned support for scalar, AVX512, WASM SIMD and ARM NEON backends.
+* SSE2, SSE4.2, AVX, AVX2 backends, with planned support for scalar, AVX512, WASM SIMD and ARM NEON backends.
 * Extensive built-in vectorized math library.
 * Compile-time monomorphisation with runtime selection
-    * Aided by a `#[dispatch]` procedural macro to reduce bloat.
+    * Aided by a `#[dispatch]` procedural macro to ensure optimal codegen.
 * Zero runtime overhead.
 * Operator overloading on vector types.
 * Abstracts over vector length, giving the same length to all vectors of an instruction set.
