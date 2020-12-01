@@ -1150,6 +1150,12 @@
 <span id="1147">1147</span>
 <span id="1148">1148</span>
 <span id="1149">1149</span>
+<span id="1150">1150</span>
+<span id="1151">1151</span>
+<span id="1152">1152</span>
+<span id="1153">1153</span>
+<span id="1154">1154</span>
+<span id="1155">1155</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
@@ -1869,9 +1875,15 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 <span class="doccomment">/// Specialized integer division by [`Divider`]s</span>
 <span class="doccomment">///</span>
 <span class="doccomment">/// This primarily exists as an operator overload hack because Rust pre 1.49.0 is broken</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>:
+    <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+{
+}
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">E</span><span class="op">&gt;</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span> <span class="ident">T</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> {}
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">E</span><span class="op">&gt;</span> <span class="ident">SimdIntegerDivision</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span>
+    <span class="ident">T</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">Divider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="ident">BranchfreeDivider</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>, <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span><span class="op">&gt;</span>
+{
+}
 
 <span class="doccomment">/// Integer SIMD vectors</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Eq</span> {
