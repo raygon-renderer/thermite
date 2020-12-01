@@ -17,7 +17,7 @@ use syn::{
 
 static BACKENDS: &[(&str, &str)] = &[
     ("SSE2", "sse2"),
-    ("SSE41", "sse4.1"),
+    ("SSE42", "sse4.2"),
     ("AVX", "avx"),
     ("AVX2", "avx2,fma"),
 ];

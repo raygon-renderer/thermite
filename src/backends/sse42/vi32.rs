@@ -8,7 +8,7 @@ impl<S: Simd> Default for i32x4<S> {
     }
 }
 
-impl SimdVectorBase<SSE41> for i32x4<SSE41> {
+impl SimdVectorBase<SSE42> for i32x4<SSE42> {
     type Element = i32;
 
     #[inline(always)]
@@ -55,7 +55,7 @@ impl SimdVectorBase<SSE41> for i32x4<SSE41> {
     }
 }
 
-impl SimdBitwise<SSE41> for i32x4<SSE41> {
+impl SimdBitwise<SSE42> for i32x4<SSE42> {
     #[inline(always)]
     fn and_not(self, other: Self) -> Self {
         Self::new(unsafe { _mm_andnot_si128(self.value, other.value) })

@@ -1,5 +1,13 @@
 use super::*;
 
+decl!(f64x8: f64 => (__m256d, __m256d));
+impl<S: Simd> Default for f64x8<S> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new(unsafe { (_mm256_setzero_pd(), _mm256_setzero_pd()) })
+    }
+}
+
 #[rustfmt::skip]
 macro_rules! log_reduce_pd_avx2 {
     ($value:expr; $op:ident $last:ident) => {paste::paste! {unsafe {

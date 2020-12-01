@@ -1037,7 +1037,7 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimdInstructionSet {
     SSE2,
-    SSE41,
+    SSE42,
     AVX,
     AVX2,
     //AVX512F,

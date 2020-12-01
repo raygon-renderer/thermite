@@ -9,11 +9,7 @@ use std::{
     ops::*,
 };
 
-#[cfg(target_arch = "x86")]
-use std::arch::x86::*;
-
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use super::arch::sse42::*;
 
 use half::f16;
 
@@ -21,15 +17,28 @@ pub(crate) mod polyfills;
 
 use polyfills::*;
 
+/*
 //mod vf32;
 //mod vf64;
 //mod vi16;
 mod vi32;
 //mod vi64;
-//mod vu32;
+mod vu32;
 //mod vu64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SSE41;
+use vi32::i32x4;
+use vu32::u32x4;
 
-impl Simd for SSE41 {}
+pub type Vi32 = i32x4<SSE42>;
+pub type Vu32 = u32x4<SSE42>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SSE42;
+
+impl Simd for SSE42 {
+    const INSTRSET: SimdInstructionSet = SimdInstructionSet::SSE42;
+
+    type Vi32 = i32x4<SSE42>;
+    type Vu32 = u32x4<SSE42>;
+}
+*/

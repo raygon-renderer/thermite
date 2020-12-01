@@ -9,11 +9,7 @@ use std::{
     ops::*,
 };
 
-#[cfg(target_arch = "x86")]
-use std::arch::x86::*;
-
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use super::arch::avx::*;
 
 use half::f16;
 
@@ -25,6 +21,7 @@ pub(crate) mod polyfills;
 
 use polyfills::*;
 
+/*
 mod vf32;
 mod vf64;
 mod vi32;
@@ -70,3 +67,4 @@ impl Simd for AVX1 {
     #[cfg(target_pointer_width = "64")]
     type Visize = Vi64;
 }
+*/
