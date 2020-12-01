@@ -466,7 +466,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                     2 => poly_1(x, c(0), c(1)),
                     3 => poly_2(x, x * x, c(0), c(1), c(2)),
                     4 => poly_3(x, x * x, c(0), c(1), c(2), c(3)),
-                    _ => unsafe { std::hint::unreachable_unchecked() }
+                    _ => unsafe { core::hint::unreachable_unchecked() }
                 }
             } else {
                 let x2 = x * x;
@@ -486,7 +486,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                     14 => poly_13(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13)),
                     15 => poly_14(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14)),
                     16 => poly_15(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14), c(15)),
-                    _ => unsafe { std::hint::unreachable_unchecked() }
+                    _ => unsafe { core::hint::unreachable_unchecked() }
                 }
             };
         }
@@ -531,7 +531,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             13 => (x8*x4*x,     poly_12(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12))),
             14 => (x8*x4*x2,    poly_13(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13))),
             15 => (x8*x4*x2*x,  poly_14(x, x2, x4, x8, c(0), c(1), c(2), c(3), c(4), c(5), c(6), c(7), c(8), c(9), c(10), c(11), c(12), c(13), c(14))),
-            _  => unsafe { std::hint::unreachable_unchecked() }
+            _  => unsafe { core::hint::unreachable_unchecked() }
         };
 
         sum.mul_add(rmx, res)
@@ -716,7 +716,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                     ),
                 )
             }
-            _ => unsafe { std::hint::unreachable_unchecked() },
+            _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
 

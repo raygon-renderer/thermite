@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
-use std::mem;
+use core::marker::PhantomData;
+use core::mem;
 
 use super::*;
 

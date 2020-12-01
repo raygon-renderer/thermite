@@ -1,6 +1,6 @@
 use crate::*;
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 pub type DuelNumber<S, V> = Hyperdual<S, V, 1>;
 

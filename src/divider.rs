@@ -8,7 +8,7 @@
 
 #![allow(unused)]
 
-use std::ops::Deref;
+use core::ops::Deref;
 
 macro_rules! decl_div_half {
     ($($t:ty => $dt:ty),*) => {
@@ -16,7 +16,7 @@ macro_rules! decl_div_half {
             #[inline(always)]
             const fn [<div_ $dt _ $t _to_ $t>](u1: $t, u0: $t, v: $t) -> ($t, $t) {
                 let v = v as $dt;
-                let n = ((u1 as $dt) << (std::mem::size_of::<$t>() * 8)) | (u0 as $dt);
+                let n = ((u1 as $dt) << (core::mem::size_of::<$t>() * 8)) | (u0 as $dt);
                 let res = (n / v) as $t; // truncate
                 let rem = n.wrapping_sub((res as $dt).wrapping_mul(v));
                 (res, rem as $t)
@@ -98,7 +98,7 @@ pub(crate) const NEG_DIVISOR: u8 = 0x80;
 macro_rules! impl_shift_mask {
     ($($ty:ty),*) => {$(
         impl Divider<$ty> {
-            const BITS: u32 = 8 * std::mem::size_of::<$ty>() as u32;
+            const BITS: u32 = 8 * core::mem::size_of::<$ty>() as u32;
             /// !log2(N::BITS)
             pub(crate) const SHIFT_MASK: u8 = !(<$ty>::MAX << Self::BITS.trailing_zeros()) as u8;
         }

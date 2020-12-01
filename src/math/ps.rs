@@ -1,6 +1,6 @@
 use super::{poly::*, *};
 
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
 where

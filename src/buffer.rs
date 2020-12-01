@@ -3,7 +3,7 @@ extern crate alloc;
 use crate::*;
 
 use alloc::alloc::{alloc, dealloc, Layout};
-use std::{
+use core::{
     fmt, mem,
     ops::{Deref, DerefMut},
     ptr,

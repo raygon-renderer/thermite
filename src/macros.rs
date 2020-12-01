@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 #[cfg(feature = "nightly")]
-pub use std::intrinsics::{likely, unlikely};
+pub use core::intrinsics::{likely, unlikely};
 
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
 #[cfg(not(feature = "nightly"))]

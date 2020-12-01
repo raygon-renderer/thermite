@@ -1,3 +1,5 @@
+#![no_std]
+// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic
 #![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics, min_const_generics))]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
@@ -7,6 +9,8 @@ pub use thermite_dispatch::dispatch;
 mod macros;
 
 use half::f16;
+
+pub mod arch;
 
 #[cfg(feature = "alloc")]
 mod buffer;
@@ -40,7 +44,7 @@ impl<S: Simd, T> SimdVectorizedMath<S> for T where T: SimdFloatVector<S> {}
 #[cfg(feature = "rng")]
 pub mod rng;
 
-use std::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
+use core::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
 /// Describes casting from one SIMD vector type to another
 ///
@@ -174,9 +178,9 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     type Element: SimdElement;
 
     /// Size of element type in bytes
-    const ELEMENT_SIZE: usize = std::mem::size_of::<Self::Element>();
-    const NUM_ELEMENTS: usize = std::mem::size_of::<S::Vi32>() / std::mem::size_of::<i32>();
-    const ALIGNMENT: usize = std::mem::align_of::<Self>();
+    const ELEMENT_SIZE: usize = core::mem::size_of::<Self::Element>();
+    const NUM_ELEMENTS: usize = core::mem::size_of::<S::Vi32>() / core::mem::size_of::<i32>();
+    const ALIGNMENT: usize = core::mem::align_of::<Self>();
 
     /// Creates a new vector with all lanes set to the given value
     fn splat(value: Self::Element) -> Self;
@@ -697,7 +701,7 @@ pub trait SimdVector<S: Simd + ?Sized>:
 pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     #[inline(always)]
     fn into_bits(self) -> B {
-        unsafe { std::mem::transmute_copy(&self) }
+        unsafe { core::mem::transmute_copy(&self) }
     }
 }
 
@@ -705,7 +709,7 @@ pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
 pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     #[inline(always)]
     fn from_bits(bits: B) -> Self {
-        unsafe { std::mem::transmute_copy(&bits) }
+        unsafe { core::mem::transmute_copy(&bits) }
     }
 }
 
@@ -1142,4 +1146,4 @@ pub type Visize<S> = <S as Simd>::Visize;
 
 // Re-exported for procedural macro
 #[doc(hidden)]
-pub use std::hint::unreachable_unchecked;
+pub use core::hint::unreachable_unchecked;

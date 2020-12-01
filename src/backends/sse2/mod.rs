@@ -2,14 +2,14 @@
 
 use crate::*;
 
-use std::{
+use core::{
     fmt,
     marker::PhantomData,
     mem::{transmute, transmute_copy},
     ops::*,
 };
 
-use super::arch::sse2::*;
+use crate::arch::sse2::*;
 
 use half::f16;
 

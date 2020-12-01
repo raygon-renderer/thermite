@@ -1,10 +1,12 @@
+//! Organized target-feature intrinsics
+
 macro_rules! import_intrinsics {
     ($($name:ident),+) => {
         #[cfg(target_arch = "x86_64")]
-        pub use std::arch::x86_64::{$($name),+};
+        pub use core::arch::x86_64::{$($name),+};
 
         #[cfg(target_arch = "x86")]
-        pub use std::arch::x86::{$($name),+};
+        pub use core::arch::x86::{$($name),+};
     };
 }
 
@@ -41,7 +43,6 @@ pub mod sse {
 }
 
 pub mod sse2 {
-    #[doc(hidden)]
     pub use super::sse::*;
     import_intrinsics! {
         _mm_add_epi16, _mm_add_epi32, _mm_add_epi64, _mm_add_epi8, _mm_add_pd, _mm_add_sd, _mm_adds_epi16, _mm_adds_epi8,
@@ -80,7 +81,6 @@ pub mod sse2 {
 }
 
 pub mod sse3 {
-    #[doc(hidden)]
     pub use super::sse2::*;
     import_intrinsics! {
         _mm_addsub_pd, _mm_addsub_ps, _mm_hadd_pd, _mm_hadd_ps, _mm_hsub_pd, _mm_hsub_ps, _mm_lddqu_si128,
@@ -89,7 +89,6 @@ pub mod sse3 {
 }
 
 pub mod ssse3 {
-    #[doc(hidden)]
     pub use super::sse3::*;
     import_intrinsics! {
         _mm_abs_epi16, _mm_abs_epi32, _mm_abs_epi8, _mm_alignr_epi8, _mm_hadd_epi16, _mm_hadd_epi32,
@@ -99,7 +98,6 @@ pub mod ssse3 {
 }
 
 pub mod sse41 {
-    #[doc(hidden)]
     pub use super::ssse3::*;
     import_intrinsics! {
         _mm_blend_epi16, _mm_blend_pd, _mm_blend_ps, _mm_blendv_epi8, _mm_blendv_pd, _mm_blendv_ps, _mm_ceil_pd,
@@ -116,7 +114,6 @@ pub mod sse41 {
 }
 
 pub mod sse42 {
-    #[doc(hidden)]
     pub use super::sse41::*;
 
     import_intrinsics! {
@@ -126,8 +123,13 @@ pub mod sse42 {
     }
 }
 
+pub mod f16c {
+    #[cfg(feature = "nightly")]
+    import_intrinsics! { _mm256_cvtph_ps, _mm256_cvtps_ph }
+}
+
 pub mod avx {
-    #[doc(hidden)]
+    pub use super::f16c::*;
     pub use super::sse42::*;
 
     import_intrinsics! { __m256, __m256d, __m256i }
@@ -182,9 +184,7 @@ pub mod fma {
 }
 
 pub mod avx2 {
-    #[doc(hidden)]
     pub use super::avx::*;
-    #[doc(hidden)]
     pub use super::fma::*;
 
     import_intrinsics! {

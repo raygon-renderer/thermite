@@ -256,7 +256,7 @@ impl SimdVector<AVX2> for u32x8<AVX2> {
             Self::zero(),
             Self::zip(self, rhs, |lhs, rhs| match lhs.checked_div(rhs) {
                 Some(value) => value,
-                _ => std::hint::unreachable_unchecked(),
+                _ => core::hint::unreachable_unchecked(),
             }),
         )
     }
@@ -267,7 +267,7 @@ impl SimdVector<AVX2> for u32x8<AVX2> {
             Self::zero(),
             Self::zip(self, rhs, |lhs, rhs| match lhs.checked_rem(rhs) {
                 Some(value) => value,
-                _ => std::hint::unreachable_unchecked(),
+                _ => core::hint::unreachable_unchecked(),
             }),
         )
     }

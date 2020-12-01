@@ -1,6 +1,6 @@
 use crate::*;
 
-use std::fmt;
+use core::fmt;
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]

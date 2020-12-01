@@ -2,7 +2,7 @@
 
 use crate::*;
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Complex<S: Simd, V: SimdFloatVector<S>> {

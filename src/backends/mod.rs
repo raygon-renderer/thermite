@@ -1,8 +1,6 @@
 #[macro_use]
 mod macros;
 
-pub mod arch;
-
 pub mod polyfills;
 
 pub mod avx1;
