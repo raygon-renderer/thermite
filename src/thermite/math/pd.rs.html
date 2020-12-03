@@ -1828,7 +1828,7 @@
 
         <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">abs</span>();
 
-        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span><span class="ident">a</span>.<span class="ident">nmul_add</span>(<span class="ident">a</span>, <span class="ident">one</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span><span class="ident">a</span>.<span class="ident">nmul_adde</span>(<span class="ident">a</span>, <span class="ident">one</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
         <span class="comment">// https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> (<span class="ident">w</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.5</span>)).<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
