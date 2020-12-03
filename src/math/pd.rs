@@ -124,7 +124,7 @@ where
 
         // if not all are small
         if !bitmask.all() {
-            y2 = Self::exph::<P>(x);
+            y2 = x.exph_p::<P>();
             y2 -= Vf64::<S>::splat(0.25) / y2;
         }
 
@@ -164,7 +164,7 @@ where
 
         // if not all are small
         if !bitmask.all() {
-            y2 = Self::exp::<P>(x + x);
+            y2 = (x + x).exp_p::<P>();
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
 
@@ -211,10 +211,10 @@ where
         }
 
         if !bitmask.all() {
-            y2 = Self::ln::<P>((x2 + one).sqrt() + x);
+            y2 = ((x2 + one).sqrt() + x).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(Self::ln::<P>(x) + Vf64::<S>::splat(LN_2), y2);
+                y2 = x_huge.select(x.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
             }
         }
 
@@ -257,10 +257,10 @@ where
         }
 
         if !bitmask.all() {
-            y2 = Self::ln::<P>(x0.mul_sub(x0, one).sqrt() + x0);
+            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(Self::ln::<P>(x0) + Vf64::<S>::splat(LN_2), y2);
+                y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
             }
         }
 
@@ -303,7 +303,7 @@ where
         }
 
         if !bitmask.all() {
-            y2 = Self::ln::<P>((one + x) / (one - x)) * half;
+            y2 = ((one + x) / (one - x)).ln_p::<P>() * half;
 
             y2 = x
                 .gt(one)
@@ -367,7 +367,7 @@ where
         let r = (t * t) * (t / x);
         let r2 = r * r;
 
-        t *= r.poly(&[
+        t *= r.poly_p::<P>(&[
             1.87595182427177009643,   /* 0x3ffe03e6, 0x0f61e692 */
             -1.88497979543377169875,  /* 0xbffe28e0, 0x92f02420 */
             1.621429720105354466140,  /* 0x3ff9f160, 0x4a49d6c2 */
@@ -473,7 +473,7 @@ where
         x = e3.nmul_add(ln2, x); // x -= e3 * VM_LN2;
 
         // poly_13m + 1, Taylor coefficients for exp function, 1/n!
-        let mut z = x.poly(&[
+        let mut z = x.poly_p::<P>(&[
             1.0, // + 1
             1.0 / 1.0,
             1.0 / 2.0,
@@ -620,10 +620,10 @@ where
 
         let a = y.abs();
 
-        let w = -Self::ln::<P>(a.nmul_add(a, one));
+        let w = -a.nmul_add(a, one).ln_p::<P>();
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - Vf64::<S>::splat(2.5)).poly(&[
+        let mut p0 = (w - Vf64::<S>::splat(2.5)).poly_p::<P>(&[
             1.501409350414994,
             0.2466402709383954,
             -0.0041773392840529855,
@@ -643,7 +643,7 @@ where
         let w_big = w.ge(Vf64::<S>::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if unlikely!(w_big.any()) {
-            let mut p1 = (w.sqrt() - Vf64::<S>::splat(3.0)).poly(&[
+            let mut p1 = (w.sqrt() - Vf64::<S>::splat(3.0)).poly_p::<P>(&[
                 2.914513093490991,
                 1.5466942804733321,
                 1.5950004257395263,
@@ -722,7 +722,7 @@ where
             // sine is expensive, so branch for it.
             if unlikely!(reflected.any()) {
                 // TODO: Improve error around integers
-                refl_res = z * Self::sin::<P>(z * pi);
+                refl_res = z * (z * pi).sin_p::<P>();
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
                 // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
@@ -830,7 +830,7 @@ where
         );
 
         let zgh = z + gh;
-        let lzgh = Self::ln::<P>(zgh);
+        let lzgh = zgh.ln_p::<P>();
 
         // (z * lzfg) > ln(f64::MAX)
         let very_large = (z * lzgh).gt(Vf64::<S>::splat(
@@ -838,9 +838,9 @@ where
         ));
 
         // only compute powf once
-        let h = Self::powf::<P>(zgh, very_large.select(z.mul_sub(half, quarter), z - half));
+        let h = zgh.powf_p::<P>(very_large.select(z.mul_sub(half, quarter), z - half));
 
-        let normal_res = lanczos_sum * very_large.select(h * h, h) / Self::exp::<P>(zgh);
+        let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
 
         res *= tiny.select(tiny_res, normal_res);
 
@@ -1157,7 +1157,7 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
 
     // Taylor coefficients, 1/n!
     // Not using minimax approximation because we prioritize precision close to x = 0
-    let mut z = x.poly(&[
+    let mut z = x.poly_p::<P>(&[
         0.0,
         1.0 / 1.0,
         1.0 / 2.0,

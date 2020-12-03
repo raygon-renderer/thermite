@@ -13,7 +13,9 @@ pub mod poly;
 mod pd;
 mod ps;
 
-pub trait Policy {
+/// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.
+pub trait Policy: Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + core::hash::Hash {
+    /// The specific policy used. This is a constant to allow for dead-code elimination of branches.
     const POLICY: Policies;
 }
 
@@ -35,7 +37,7 @@ pub mod policies {
     }
 
     impl Policies {
-        pub const fn check_overflow(self) -> bool {
+        pub(crate) const fn check_overflow(self) -> bool {
             match self {
                 Policies::UltraPerformance => false,
                 _ => true,
@@ -82,12 +84,69 @@ use policies::*;
 
 //TODO: beta function, j0, y0
 
+/// Set of vectorized special functions allowing specific execution policies
+///
+/// Please refer to the documentation of [`SimdVectorizedMath`] for function reference and [`policies`] for an
+/// overview of available execution policies.
 pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
+    fn scale_p<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
+    fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
+    fn fmod_p<P: Policy>(self, y: Self) -> Self;
+    fn hypot_p<P: Policy>(self, y: Self) -> Self;
+    fn poly_p<P: Policy>(self, coefficients: &[Self::Element]) -> Self;
+
+    fn poly_f_p<P: Policy, F>(self, n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self;
+
+    fn sin_p<P: Policy>(self) -> Self;
+    fn cos_p<P: Policy>(self) -> Self;
+    fn tan_p<P: Policy>(self) -> Self;
+    fn sin_cos_p<P: Policy>(self) -> (Self, Self);
+    fn sinh_p<P: Policy>(self) -> Self;
+    fn cosh_p<P: Policy>(self) -> Self;
+    fn tanh_p<P: Policy>(self) -> Self;
+    fn asinh_p<P: Policy>(self) -> Self;
+    fn acosh_p<P: Policy>(self) -> Self;
+    fn atanh_p<P: Policy>(self) -> Self;
+    fn asin_p<P: Policy>(self) -> Self;
+    fn acos_p<P: Policy>(self) -> Self;
+    fn atan_p<P: Policy>(self) -> Self;
+    fn atan2_p<P: Policy>(self, x: Self) -> Self;
+    fn exp_p<P: Policy>(self) -> Self;
+    fn exph_p<P: Policy>(self) -> Self;
+    fn exp2_p<P: Policy>(self) -> Self;
+    fn exp10_p<P: Policy>(self) -> Self;
+    fn exp_m1_p<P: Policy>(self) -> Self;
     fn cbrt_p<P: Policy>(self) -> Self;
+    fn powf_p<P: Policy>(self, e: Self) -> Self;
+    fn powiv_p<P: Policy>(self, e: S::Vi32) -> Self;
+    fn powi_p<P: Policy>(self, e: i32) -> Self;
+    fn ln_p<P: Policy>(self) -> Self;
+    fn ln_1p_p<P: Policy>(self) -> Self;
+    fn log2_p<P: Policy>(self) -> Self;
+    fn log10_p<P: Policy>(self) -> Self;
+    fn erf_p<P: Policy>(self) -> Self;
+    fn erfinv_p<P: Policy>(self) -> Self;
+    fn tgamma_p<P: Policy>(self) -> Self;
+    fn next_float_p<P: Policy>(self) -> Self;
+    fn prev_float_p<P: Policy>(self) -> Self;
+    fn smoothstep_p<P: Policy>(self) -> Self;
+    fn smootherstep_p<P: Policy>(self) -> Self;
+    fn smootheststep_p<P: Policy>(self) -> Self;
+    fn hermite_p<P: Policy>(self, n: u32) -> Self;
+    fn hermitev_p<P: Policy>(self, n: S::Vu32) -> Self;
+    fn jacobi_p<P: Policy>(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
+    fn legendre_p<P: Policy>(self, n: u32, m: u32) -> Self;
 }
 
-/// Set of vectorized special functions optimized for both single and double precision
-pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
+/// Set of vectorized special functions optimized for both single and double precision.
+///
+/// To use a specific execution policy for any function listed below, simply append `_p` to the function name and provide one of
+/// the [available policies](policies) via turbofish, such as `x.sin_p::<`[`Precision`](policies::Precision)`>()`
+///
+/// The default execution policy for all functions in `SimdVectorizedMath` is [`Performance`](policies::Performance).
+pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> + SimdVectorizedMathPolicied<S> {
     /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
     fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
@@ -274,7 +333,73 @@ where
     T: SimdFloatVector<S>,
     <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
 {
-    #[inline] fn cbrt_p<P: Policy>(self) -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<P>(self) }
+    #[inline] fn scale_p<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::scale::<P>(self, in_min, in_max, out_min, out_max)
+    }
+
+    #[inline] fn lerp_p<P: Policy>(self, a: Self, b: Self)   -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lerp::<P>(self, a, b) }
+    #[inline] fn fmod_p<P: Policy>(self, y: Self)            -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::fmod::<P>(self, y) }
+    #[inline] fn hypot_p<P: Policy>(self, y: Self)           -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot::<P>(self, y) }
+    #[inline] fn powi_p<P: Policy>(self, e: i32)             -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi::<P>(self, e) }
+    #[inline] fn powiv_p<P: Policy>(self, e: S::Vi32)        -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powiv::<P>(self, e) }
+
+    #[inline] fn poly_f_p<P: Policy, F>(self, n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self,
+    {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly_f::<F, P>(self, n, f)
+    }
+
+    #[inline] fn poly_p<P: Policy>(self, coefficients: &[Self::Element]) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly::<P>(self, coefficients)
+    }
+
+    #[inline] fn hermite_p<P: Policy>(self, n: u32)                                      -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermite::<P>(self, n)
+    }
+    #[inline] fn hermitev_p<P: Policy>(self, n: S::Vu32)                                 -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermitev::<P>(self, n)
+    }
+    #[inline] fn jacobi_p<P: Policy>(self, alpha: Self, beta: Self, n: u32, m: u32)    -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi::<P>(self, alpha, beta, n, m)
+    }
+    #[inline] fn legendre_p<P: Policy>(self, n: u32, m: u32)                           -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre::<P>(self, n, m)
+    }
+
+    #[inline] fn sin_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin::<P>(self)  }
+    #[inline] fn cos_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos::<P>(self)  }
+    #[inline] fn tan_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan::<P>(self)  }
+    #[inline] fn sin_cos_p<P: Policy>(self)          -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos::<P>(self)  }
+    #[inline] fn sinh_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh::<P>(self)  }
+    #[inline] fn cosh_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh::<P>(self)  }
+    #[inline] fn tanh_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh::<P>(self)  }
+    #[inline] fn asinh_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asinh::<P>(self)  }
+    #[inline] fn acosh_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acosh::<P>(self)  }
+    #[inline] fn atanh_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atanh::<P>(self)  }
+    #[inline] fn asin_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin::<P>(self)  }
+    #[inline] fn acos_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos::<P>(self)  }
+    #[inline] fn atan_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan::<P>(self)  }
+    #[inline] fn atan2_p<P: Policy>(self, x: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2::<P>(self, x)  }
+    #[inline] fn exp_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp::<P>(self)  }
+    #[inline] fn exph_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exph::<P>(self)  }
+    #[inline] fn exp2_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2::<P>(self)  }
+    #[inline] fn exp10_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10::<P>(self)  }
+    #[inline] fn exp_m1_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1::<P>(self)  }
+    #[inline] fn cbrt_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<Precision>(self)  }
+    #[inline] fn powf_p<P: Policy>(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf::<P>(self, e)  }
+    #[inline] fn ln_p<P: Policy>(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln::<P>(self)  }
+    #[inline] fn ln_1p_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p::<P>(self)  }
+    #[inline] fn log2_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2::<P>(self)  }
+    #[inline] fn log10_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10::<P>(self)  }
+    #[inline] fn erf_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf::<P>(self)  }
+    #[inline] fn erfinv_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv::<P>(self)  }
+    #[inline] fn tgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma::<P>(self)  }
+    #[inline] fn next_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float::<P>(self)  }
+    #[inline] fn prev_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float::<P>(self)  }
+    #[inline] fn smoothstep_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep::<P>(self)  }
+    #[inline] fn smootherstep_p<P: Policy>(self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootherstep::<P>(self)  }
+    #[inline] fn smootheststep_p<P: Policy>(self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootheststep::<P>(self)  }
 }
 
 #[rustfmt::skip]
@@ -379,6 +504,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let m = out_max - out_min;
         let a = out_min;
 
+        // don't use emulated FMA for scale
         if S::INSTRSET.has_true_fma() {
             x.mul_add(m, a)
         } else {
@@ -582,7 +708,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             }};
         }
 
-        let xmd = x.powi(MAX_DEGREE_P0 as i32); // hopefully inlined
+        let xmd = x.powi_p::<P>(MAX_DEGREE_P0 as i32); // hopefully inlined
 
         let mut sum = Self::Vf::zero();
         let mut mul = Self::Vf::one();
@@ -624,7 +750,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     #[inline(always)]
     fn poly<P: Policy>(x: Self::Vf, c: &[Self]) -> Self::Vf {
-        Self::poly_f::<_, P>(x, c.len(), |i| unsafe { Self::Vf::splat(*c.get_unchecked(i)) })
+        x.poly_f_p::<P, _>(c.len(), |i| unsafe { Self::Vf::splat(*c.get_unchecked(i)) })
     }
 
     #[inline(always)]
@@ -671,7 +797,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     #[inline(always)]
     fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
-        Self::exp::<P>(x) - Self::Vf::one()
+        x.exp_p::<P>() - Self::Vf::one()
     }
 
     fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf;
@@ -841,10 +967,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let x12 = x.nmul_add(x, one); // (1 - x^2)
 
         if m & 1 == 0 {
-            jacobi * x12.powi((m >> 1) as i32)
+            jacobi * Self::powi::<P>(x12, (m >> 1) as i32)
         } else {
             // negate sign for odd powers (-1)^m
-            -jacobi * x12.powi(m as i32).sqrt()
+            -jacobi * Self::powi::<P>(x12, m as i32).sqrt()
         }
     }
 
