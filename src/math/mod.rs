@@ -488,16 +488,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         out_min: Self::Vf,
         out_max: Self::Vf,
     ) -> Self::Vf {
-        let x = ((x - in_min) / (in_max - in_min));
-        let m = out_max - out_min;
-        let a = out_min;
-
-        // don't use emulated FMA for scale
-        if S::INSTRSET.has_true_fma() {
-            x.mul_add(m, a)
-        } else {
-            x * m + a
-        }
+        ((x - in_min) / (in_max - in_min)).mul_adde(out_max - out_min, out_min)
     }
 
     #[inline(always)]
@@ -651,6 +642,18 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     where
         F: FnMut(usize) -> Self::Vf
     {
+        // Use tiny Horner's method for code size optimization
+        if P::POLICY == Policies::Size {
+            let mut idx = n - 1;
+            let mut sum = c(idx);
+
+            loop {
+                idx -= 1;
+                sum = sum.mul_adde(x, c(idx));
+                if idx == 0 { return sum; }
+            }
+        }
+
         use poly::*;
 
         // max degree of hard-coded polynomials + 1 for c0
@@ -709,7 +712,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let mut j = n;
         while j >= MAX_DEGREE_P0 {
             j -= MAX_DEGREE_P0;
-            sum = sum.mul_add(xmd, poly!(poly_15(x, x2, x4, x8; j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])));
+            sum = sum.mul_adde(xmd, poly!(poly_15(x, x2, x4, x8; j + c[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])));
         }
 
         // handle remaining powers
@@ -733,7 +736,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             _  => unsafe { core::hint::unreachable_unchecked() }
         };
 
-        sum.mul_add(rmx, res)
+        sum.mul_adde(rmx, res)
     }
 
     #[inline(always)]
