@@ -626,7 +626,7 @@ where
 
         let a = y.abs();
 
-        let w = -a.nmul_add(a, one).ln_p::<P>();
+        let w = -a.nmul_adde(a, one).ln_p::<P>();
 
         let mut p0 = (w - Vf32::<S>::splat(2.5)).poly_p::<P>(&[
             1.50140941,

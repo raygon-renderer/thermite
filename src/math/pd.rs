@@ -620,7 +620,7 @@ where
 
         let a = y.abs();
 
-        let w = -a.nmul_add(a, one).ln_p::<P>();
+        let w = -a.nmul_adde(a, one).ln_p::<P>();
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
         let mut p0 = (w - Vf64::<S>::splat(2.5)).poly_p::<P>(&[

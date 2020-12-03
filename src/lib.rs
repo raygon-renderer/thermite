@@ -942,26 +942,77 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         self.nmul_add(m, -s)
     }
 
+    /// Fused multiply-add, with *at worst* precision equal to `x * m + a`
+    #[inline(always)]
+    fn mul_adde(self, m: Self, a: Self) -> Self {
+        if S::INSTRSET.has_true_fma() {
+            self.mul_add(m, a)
+        } else {
+            self * m + a
+        }
+    }
+
+    /// Fused multiply-subtract, with *at worst* precision equal to `x * m - s`
+    #[inline(always)]
+    fn mul_sube(self, m: Self, s: Self) -> Self {
+        if S::INSTRSET.has_true_fma() {
+            self.mul_sub(m, s)
+        } else {
+            self * m - s
+        }
+    }
+
+    /// Fused negated multiply-add, with *at worst* precision equal to `a - x * m`
+    #[inline(always)]
+    fn nmul_adde(self, m: Self, a: Self) -> Self {
+        if S::INSTRSET.has_true_fma() {
+            self.nmul_add(m, a)
+        } else {
+            a - self * m
+        }
+    }
+
+    /// Fused negated multiply-subtract, with *at worst* precision equal to `-x * m - s`
+    #[inline(always)]
+    fn nmul_sube(self, m: Self, s: Self) -> Self {
+        if S::INSTRSET.has_true_fma() {
+            self.nmul_add(m, -s)
+        } else {
+            self.nmul_adde(m, -s)
+        }
+    }
+
+    /// Rounds to the nearest representable integer.
     fn round(self) -> Self;
+
+    /// Rounds upwards towards positive infinity.
     fn ceil(self) -> Self;
+
+    /// Rounds downward towards negative infinity.
     fn floor(self) -> Self;
 
+    /// Truncates any rational value towards zero
     fn trunc(self) -> Self;
 
-    #[inline]
+    /// Returns the fractional part of a number (the part between 0 and ±1)
+    #[inline(always)]
     fn fract(self) -> Self {
         self - self.trunc()
     }
 
+    /// Calculates the square-root of each element in the vector.
+    ///
+    /// **NOTE**: This operation can be quite slow, so if you only need an approximation of `sqrt(x)` consider
+    /// using `rsqrt` or `rsqrt_precise`, which compute `1/sqrt(x)`. `sqrt(x) = x/sqrt(x) ≈ x * x.rsqrt()`
     fn sqrt(self) -> Self;
 
-    /// Compute the approximate reciprocal of the square root `(1 / sqrt(x))`
+    /// Compute the approximate reciprocal of the square root `1/sqrt(x)`
     #[inline(always)]
     fn rsqrt(self) -> Self {
         self.sqrt().rcp()
     }
 
-    /// A more precise `1 / sqrt(x)` variation, which may use faster instructions where possible.
+    /// A more precise `1/sqrt(x)` variation, which may use faster instructions where possible.
     ///
     /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
     #[inline(always)]
@@ -975,7 +1026,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         Self::one() / self
     }
 
-    /// A more precise `1 / x` variation, which may use faster instructions where possible.
+    /// A more precise `1/x` variation, which may use faster instructions where possible.
     ///
     /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
     #[inline(always)]
