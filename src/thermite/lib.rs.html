@@ -1156,6 +1156,17 @@
 <span id="1153">1153</span>
 <span id="1154">1154</span>
 <span id="1155">1155</span>
+<span id="1156">1156</span>
+<span id="1157">1157</span>
+<span id="1158">1158</span>
+<span id="1159">1159</span>
+<span id="1160">1160</span>
+<span id="1161">1161</span>
+<span id="1162">1162</span>
+<span id="1163">1163</span>
+<span id="1164">1164</span>
+<span id="1165">1165</span>
+<span id="1166">1166</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
@@ -1188,10 +1199,13 @@
 <span class="kw">mod</span> <span class="ident">mask</span>;
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">mask</span>::{<span class="ident">BitMask</span>, <span class="ident">Mask</span>};
 
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">element</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">element</span>::<span class="ident">SimdElement</span>;
+
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">math</span>;
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>)]</span>
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">math</span>::<span class="ident">SimdVectorizedMath</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">math</span>::<span class="kw-2">*</span>;
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>))]</span>
 <span class="doccomment">/// &quot;math&quot; features is disabled. This trait is empty.</span>
@@ -1286,11 +1300,6 @@
 {
 }
 
-<span class="doccomment">/// Umbrella trait for SIMD vector element bounds</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdElement</span>: <span class="ident">mask</span>::<span class="ident">Truthy</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">Default</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> {}
-
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> <span class="ident">SimdElement</span> <span class="kw">for</span> <span class="ident">T</span> <span class="kw">where</span> <span class="ident">T</span>: <span class="ident">mask</span>::<span class="ident">Truthy</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">Default</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> {}
-
 <span class="doccomment">/// Helper trait for constant vector shuffles</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdShuffleIndices</span> {
     <span class="kw">const</span> <span class="ident">INDICES</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> [<span class="ident">usize</span>];
@@ -1354,6 +1363,17 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">splat_any</span>(<span class="ident">value</span>: <span class="kw">impl</span> <span class="ident">Into</span><span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Element</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">value</span>.<span class="ident">into</span>())
+    }
+
+    <span class="doccomment">/// Splats a value by casting to the element type via `value as Element`.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// This is limited to primitive numeric types.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">splat_as</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>(<span class="ident">value</span>: <span class="ident">E</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>
+    <span class="kw">where</span>
+        <span class="self">Self</span>::<span class="ident">Element</span>: <span class="ident">element</span>::<span class="ident">CastFrom</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>,
+    {
+        <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">element</span>::<span class="ident">CastFrom</span>::<span class="ident">cast_from</span>(<span class="ident">value</span>))
     }
 
     <span class="doccomment">/// Shuffles between two vectors based on the static indices provided in `INDICES`</span>
@@ -2275,7 +2295,8 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">type</span> <span class="ident">Vf32</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f32</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu32</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu32</span><span class="op">&gt;</span>
-        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdVectorizedMathPolicied</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="doccomment">/// Double-precision 64-bit floating point vector</span>
     <span class="doccomment">///</span>
@@ -2284,7 +2305,8 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">type</span> <span class="ident">Vf64</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">f64</span>, <span class="ident">Vu</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu64</span>, <span class="ident">Vi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vi64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
         <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="self">Self</span>::<span class="ident">Vu64</span><span class="op">&gt;</span>
-        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
+        <span class="op">+</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>
+        <span class="op">+</span> <span class="ident">SimdVectorizedMathPolicied</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_pointer_width</span> <span class="op">=</span> <span class="string">&quot;32&quot;</span>)]</span>
     <span class="kw">type</span> <span class="ident">Vusize</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdPointer</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">Element</span> <span class="op">=</span> <span class="ident">u32</span><span class="op">&gt;</span>;
