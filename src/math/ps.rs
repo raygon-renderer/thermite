@@ -408,9 +408,9 @@ where
             }
         }
 
-        // TODO: Handle zero in Ultra?
         if P::POLICY == Policies::UltraPerformance {
-            return t;
+            // use float cmp and blend here to avoid domain change
+            return x.eq(Vf32::<S>::zero()).select(x, t);
         }
 
         // cbrt(NaN,INF,+-0) is itself

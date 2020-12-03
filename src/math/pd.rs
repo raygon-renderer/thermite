@@ -390,6 +390,10 @@ where
 
         t = r.mul_adde(t, t);
 
+        if P::POLICY == Policies::UltraPerformance {
+            return x.eq(Vf64::<S>::zero()).select(x, t);
+        }
+
         (hx0.gt(Vu64::<S>::splat(0x7f800000)) | hx0.eq(Vu64::<S>::zero())).select(x, t)
     }
 
