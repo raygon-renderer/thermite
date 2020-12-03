@@ -1205,6 +1205,10 @@
 <span id="1202">1202</span>
 <span id="1203">1203</span>
 <span id="1204">1204</span>
+<span id="1205">1205</span>
+<span id="1206">1206</span>
+<span id="1207">1207</span>
+<span id="1208">1208</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1597,6 +1601,10 @@
         };
 
         <span class="ident">t</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">mul_adde</span>(<span class="ident">t</span>, <span class="ident">t</span>);
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+            <span class="kw">return</span> <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">t</span>);
+        }
 
         (<span class="ident">hx0</span>.<span class="ident">gt</span>(<span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x7f800000</span>)) <span class="op">|</span> <span class="ident">hx0</span>.<span class="ident">eq</span>(<span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>())).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">t</span>)
     }

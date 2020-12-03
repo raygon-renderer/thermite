@@ -1055,6 +1055,9 @@
 <span id="1052">1052</span>
 <span id="1053">1053</span>
 <span id="1054">1054</span>
+<span id="1055">1055</span>
+<span id="1056">1056</span>
+<span id="1057">1057</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1546,16 +1549,7 @@
         <span class="ident">out_min</span>: <span class="self">Self</span>::<span class="ident">Vf</span>,
         <span class="ident">out_max</span>: <span class="self">Self</span>::<span class="ident">Vf</span>,
     ) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> ((<span class="ident">x</span> <span class="op">-</span> <span class="ident">in_min</span>) <span class="op">/</span> (<span class="ident">in_max</span> <span class="op">-</span> <span class="ident">in_min</span>));
-        <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">out_max</span> <span class="op">-</span> <span class="ident">out_min</span>;
-        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">out_min</span>;
-
-        <span class="comment">// don&#39;t use emulated FMA for scale</span>
-        <span class="kw">if</span> <span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
-            <span class="ident">x</span>.<span class="ident">mul_add</span>(<span class="ident">m</span>, <span class="ident">a</span>)
-        } <span class="kw">else</span> {
-            <span class="ident">x</span> <span class="op">*</span> <span class="ident">m</span> <span class="op">+</span> <span class="ident">a</span>
-        }
+        ((<span class="ident">x</span> <span class="op">-</span> <span class="ident">in_min</span>) <span class="op">/</span> (<span class="ident">in_max</span> <span class="op">-</span> <span class="ident">in_min</span>)).<span class="ident">mul_adde</span>(<span class="ident">out_max</span> <span class="op">-</span> <span class="ident">out_min</span>, <span class="ident">out_min</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1709,6 +1703,18 @@
     <span class="kw">where</span>
         <span class="ident">F</span>: <span class="ident">FnMut</span>(<span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>
     {
+        <span class="comment">// Use tiny Horner&#39;s method for code size optimization</span>
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">Size</span> {
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">idx</span> <span class="op">=</span> <span class="ident">n</span> <span class="op">-</span> <span class="number">1</span>;
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">sum</span> <span class="op">=</span> <span class="ident">c</span>(<span class="ident">idx</span>);
+
+            <span class="kw">loop</span> {
+                <span class="ident">idx</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
+                <span class="ident">sum</span> <span class="op">=</span> <span class="ident">sum</span>.<span class="ident">mul_adde</span>(<span class="ident">x</span>, <span class="ident">c</span>(<span class="ident">idx</span>));
+                <span class="kw">if</span> <span class="ident">idx</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> { <span class="kw">return</span> <span class="ident">sum</span>; }
+            }
+        }
+
         <span class="kw">use</span> <span class="ident">poly</span>::<span class="kw-2">*</span>;
 
         <span class="comment">// max degree of hard-coded polynomials + 1 for c0</span>
@@ -1767,7 +1773,7 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">j</span> <span class="op">=</span> <span class="ident">n</span>;
         <span class="kw">while</span> <span class="ident">j</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">MAX_DEGREE_P0</span> {
             <span class="ident">j</span> <span class="op">-</span><span class="op">=</span> <span class="ident">MAX_DEGREE_P0</span>;
-            <span class="ident">sum</span> <span class="op">=</span> <span class="ident">sum</span>.<span class="ident">mul_add</span>(<span class="ident">xmd</span>, <span class="macro">poly</span><span class="macro">!</span>(<span class="ident">poly_15</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>; <span class="ident">j</span> <span class="op">+</span> <span class="ident">c</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>, <span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>, <span class="number">13</span>, <span class="number">14</span>, <span class="number">15</span>])));
+            <span class="ident">sum</span> <span class="op">=</span> <span class="ident">sum</span>.<span class="ident">mul_adde</span>(<span class="ident">xmd</span>, <span class="macro">poly</span><span class="macro">!</span>(<span class="ident">poly_15</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>; <span class="ident">j</span> <span class="op">+</span> <span class="ident">c</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">7</span>, <span class="number">8</span>, <span class="number">9</span>, <span class="number">10</span>, <span class="number">11</span>, <span class="number">12</span>, <span class="number">13</span>, <span class="number">14</span>, <span class="number">15</span>])));
         }
 
         <span class="comment">// handle remaining powers</span>
@@ -1791,7 +1797,7 @@
             <span class="kw">_</span>  <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> { <span class="ident">core</span>::<span class="ident">hint</span>::<span class="ident">unreachable_unchecked</span>() }
         };
 
-        <span class="ident">sum</span>.<span class="ident">mul_add</span>(<span class="ident">rmx</span>, <span class="ident">res</span>)
+        <span class="ident">sum</span>.<span class="ident">mul_adde</span>(<span class="ident">rmx</span>, <span class="ident">res</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
