@@ -45,6 +45,7 @@
 <span id="42">42</span>
 <span id="43">43</span>
 <span id="44">44</span>
+<span id="45">45</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
@@ -63,6 +64,7 @@
 
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod</span> <span class="ident">polyfills</span>;
 
+<span class="kw">use</span> <span class="kw">super</span>::<span class="ident">polyfills</span>::<span class="kw-2">*</span>;
 <span class="kw">use</span> <span class="ident">polyfills</span>::<span class="kw-2">*</span>;
 
 <span class="comment">/*

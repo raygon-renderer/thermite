@@ -878,8 +878,8 @@
     <span class="kw">fn</span> <span class="ident">gt</span>(<span class="self">self</span>, <span class="ident">other</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span> {
         <span class="ident">Mask</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> {
             (
-                <span class="ident">_mm256_cmpgt_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">other</span>.<span class="ident">value</span>.<span class="number">0</span>),
-                <span class="ident">_mm256_cmpgt_epi64</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">other</span>.<span class="ident">value</span>.<span class="number">1</span>),
+                <span class="ident">_mm256_cmpgt_epu64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">0</span>, <span class="ident">other</span>.<span class="ident">value</span>.<span class="number">0</span>),
+                <span class="ident">_mm256_cmpgt_epu64x</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">other</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         }))
     }
