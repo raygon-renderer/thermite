@@ -541,6 +541,26 @@ impl SimdFloatVector<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
+    fn mul_adde(self, m: Self, a: Self) -> Self {
+        self.mul_add(m, a)
+    }
+
+    #[inline(always)]
+    fn mul_sube(self, m: Self, s: Self) -> Self {
+        self.mul_sub(m, s)
+    }
+
+    #[inline(always)]
+    fn nmul_adde(self, m: Self, a: Self) -> Self {
+        self.nmul_add(m, a)
+    }
+
+    #[inline(always)]
+    fn nmul_sube(self, m: Self, s: Self) -> Self {
+        self.nmul_sub(m, s)
+    }
+
+    #[inline(always)]
     fn floor(self) -> Self {
         Self::new(unsafe { (_mm256_floor_pd(self.value.0), _mm256_floor_pd(self.value.1)) })
     }

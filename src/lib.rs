@@ -945,41 +945,25 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// Fused multiply-add, with *at worst* precision equal to `x * m + a`
     #[inline(always)]
     fn mul_adde(self, m: Self, a: Self) -> Self {
-        if S::INSTRSET.has_true_fma() {
-            self.mul_add(m, a)
-        } else {
-            self * m + a
-        }
+        self * m + a
     }
 
     /// Fused multiply-subtract, with *at worst* precision equal to `x * m - s`
     #[inline(always)]
     fn mul_sube(self, m: Self, s: Self) -> Self {
-        if S::INSTRSET.has_true_fma() {
-            self.mul_sub(m, s)
-        } else {
-            self * m - s
-        }
+        self * m - s
     }
 
     /// Fused negated multiply-add, with *at worst* precision equal to `a - x * m`
     #[inline(always)]
     fn nmul_adde(self, m: Self, a: Self) -> Self {
-        if S::INSTRSET.has_true_fma() {
-            self.nmul_add(m, a)
-        } else {
-            a - self * m
-        }
+        a - self * m
     }
 
     /// Fused negated multiply-subtract, with *at worst* precision equal to `-x * m - s`
     #[inline(always)]
     fn nmul_sube(self, m: Self, s: Self) -> Self {
-        if S::INSTRSET.has_true_fma() {
-            self.nmul_sub(m, s)
-        } else {
-            self.nmul_adde(m, -s)
-        }
+        self.nmul_adde(m, -s)
     }
 
     /// Rounds to the nearest representable integer.
