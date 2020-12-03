@@ -4,6 +4,7 @@
 
 use crate::*;
 
+pub mod compensated;
 pub mod complex;
 #[cfg(feature = "nightly")]
 pub mod hyperdual;
@@ -12,7 +13,78 @@ pub mod poly;
 mod pd;
 mod ps;
 
+pub trait Policy {
+    const POLICY: Policies;
+}
+
+/// Execution Policies (precision, performance, etc.)
+pub mod policies {
+    use super::Policy;
+
+    /// Set of policies provided for Thermite
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum Policies {
+        /// See [`UltraPerformance`]
+        UltraPerformance,
+        /// See [`Performance`]
+        Performance,
+        /// See [`Precision`]
+        Precision,
+        /// See [`Size`]
+        Size,
+    }
+
+    impl Policies {
+        pub const fn check_overflow(self) -> bool {
+            match self {
+                Policies::UltraPerformance => false,
+                _ => true,
+            }
+        }
+    }
+
+    /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct UltraPerformance;
+
+    /// Optimize for performance, ideally without losing precision.
+    ///
+    /// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath)
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Performance;
+
+    /// Optimize for precision, at the cost of performance if necessary.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Precision;
+
+    /// Optimize for code size, avoids hard-coded equations or loop unrolling.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Size;
+
+    impl Policy for UltraPerformance {
+        const POLICY: Policies = Policies::UltraPerformance;
+    }
+
+    impl Policy for Performance {
+        const POLICY: Policies = Policies::Performance;
+    }
+
+    impl Policy for Precision {
+        const POLICY: Policies = Policies::Precision;
+    }
+
+    impl Policy for Size {
+        const POLICY: Policies = Policies::Size;
+    }
+}
+
+use policies::*;
+
 //TODO: beta function, j0, y0
+
+pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
+    fn cbrt_p<P: Policy>(self) -> Self;
+}
 
 /// Set of vectorized special functions optimized for both single and double precision
 pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
@@ -176,21 +248,13 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// This uses the recurrence relation to compute the polynomial iteratively.
     fn hermitev(self, n: S::Vu32) -> Self;
 
-    /// Computes the n-th degree Jacobi polynomial via the 3-term recurrence relation.
-    ///
-    /// At the special case where α and β are both zero, the Jacobi polynomial reduces to a
-    /// Legendre polynomial, and if α and β are both constant zero LLVM can optimize out expressions that rely on those.
-    ///
-    /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
-    fn jacobi(self, alpha: Self, beta: Self, n: u32) -> Self;
-
-    /// Computes the m-th derivative of an n-th degree Jacobi polynomial
+    /// Computes the m-th derivative of the n-th degree Jacobi polynomial
     ///
     /// A the special case where α and β are both zero, the Jacobi polynomial reduces to a
     /// Legendre polynomial.
     ///
     /// **NOTE**: Given constant α, β or `n`, LLVM will happily optimize those away and unroll loops.
-    fn jacobi_d(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
+    fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
 
     /// Computes the m-th associated n-th degree Legendre polynomial,
     /// where m=0 signifies the regular n-th degree Legendre polynomial.
@@ -200,7 +264,17 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> {
     /// **NOTE**: Given constant `n` and/or `m`, LLVM will happily unroll and optimize inner loops.
     ///
     /// Internally, this is computed with [`jacobi_d`](#tymethod.jacobi_d)
-    fn legendre_p(self, n: u32, m: u32) -> Self;
+    fn legendre(self, n: u32, m: u32) -> Self;
+}
+
+#[rustfmt::skip]
+#[dispatch(S, thermite = "crate")]
+impl<S: Simd, T> SimdVectorizedMathPolicied<S> for T
+where
+    T: SimdFloatVector<S>,
+    <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
+{
+    #[inline] fn cbrt_p<P: Policy>(self) -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<P>(self) }
 }
 
 #[rustfmt::skip]
@@ -210,77 +284,73 @@ where
     T: SimdFloatVector<S>,
     <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
 {
-
     #[inline] fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::scale(self, in_min, in_max, out_min, out_max)
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::scale::<Performance>(self, in_min, in_max, out_min, out_max)
     }
 
-    #[inline] fn lerp(self, a: Self, b: Self)   -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lerp(self, a, b) }
-    #[inline] fn fmod(self, y: Self)            -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::fmod(self, y) }
-    #[inline] fn hypot(self, y: Self)           -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot(self, y) }
-    #[inline] fn powi(self, e: i32)             -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi(self, e) }
-    #[inline] fn powiv(self, e: S::Vi32)        -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powiv(self, e) }
+    #[inline] fn lerp(self, a: Self, b: Self)   -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lerp::<Performance>(self, a, b) }
+    #[inline] fn fmod(self, y: Self)            -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::fmod::<Performance>(self, y) }
+    #[inline] fn hypot(self, y: Self)           -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hypot::<Performance>(self, y) }
+    #[inline] fn powi(self, e: i32)             -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powi::<Performance>(self, e) }
+    #[inline] fn powiv(self, e: S::Vi32)        -> Self { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powiv::<Performance>(self, e) }
 
     #[inline] fn poly_f<F>(self, n: usize, f: F) -> Self
     where
         F: FnMut(usize) -> Self,
     {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly_f(self, n, f)
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly_f::<F, Performance>(self, n, f)
     }
 
     #[inline] fn poly(self, coefficients: &[Self::Element]) -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly(self, coefficients)
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly::<Performance>(self, coefficients)
     }
 
     #[inline] fn hermite(self, n: u32)                                      -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermite(self, n)
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermite::<Performance>(self, n)
     }
     #[inline] fn hermitev(self, n: S::Vu32)                                 -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermitev(self, n)
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermitev::<Performance>(self, n)
     }
-    #[inline] fn jacobi(self, alpha: Self, beta: Self, n: u32)              -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi(self, alpha, beta, n)
+    #[inline] fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32)    -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi::<Performance>(self, alpha, beta, n, m)
     }
-    #[inline] fn jacobi_d(self, alpha: Self, beta: Self, n: u32, m: u32)    -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi_d(self, alpha, beta, n, m)
-    }
-    #[inline] fn legendre_p(self, n: u32, m: u32)                           -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre_p(self, n, m)
+    #[inline] fn legendre(self, n: u32, m: u32)                           -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre::<Performance>(self, n, m)
     }
 
-    #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin(self)  }
-    #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos(self)  }
-    #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan(self)  }
-    #[inline] fn sin_cos(self)          -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos(self)  }
-    #[inline] fn sinh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh(self)  }
-    #[inline] fn cosh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh(self)  }
-    #[inline] fn tanh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh(self)  }
-    #[inline] fn asinh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asinh(self)  }
-    #[inline] fn acosh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acosh(self)  }
-    #[inline] fn atanh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atanh(self)  }
-    #[inline] fn asin(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin(self)  }
-    #[inline] fn acos(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos(self)  }
-    #[inline] fn atan(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan(self)  }
-    #[inline] fn atan2(self, x: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2(self, x)  }
-    #[inline] fn exp(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp(self)  }
-    #[inline] fn exph(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exph(self)  }
-    #[inline] fn exp2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2(self)  }
-    #[inline] fn exp10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10(self)  }
-    #[inline] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1(self)  }
-    #[inline] fn cbrt(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt(self)  }
-    #[inline] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf(self, e)  }
-    #[inline] fn ln(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln(self)  }
-    #[inline] fn ln_1p(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p(self)  }
-    #[inline] fn log2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2(self)  }
-    #[inline] fn log10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10(self)  }
-    #[inline] fn erf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf(self)  }
-    #[inline] fn erfinv(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv(self)  }
-    #[inline] fn tgamma(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma(self)  }
-    #[inline] fn next_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float(self)  }
-    #[inline] fn prev_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float(self)  }
-    #[inline] fn smoothstep(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep(self)  }
-    #[inline] fn smootherstep(self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootherstep(self)  }
-    #[inline] fn smootheststep(self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootheststep(self)  }
+    #[inline] fn sin(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin::<Performance>(self)  }
+    #[inline] fn cos(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos::<Performance>(self)  }
+    #[inline] fn tan(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan::<Performance>(self)  }
+    #[inline] fn sin_cos(self)          -> (Self, Self) { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin_cos::<Performance>(self)  }
+    #[inline] fn sinh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sinh::<Performance>(self)  }
+    #[inline] fn cosh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cosh::<Performance>(self)  }
+    #[inline] fn tanh(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tanh::<Performance>(self)  }
+    #[inline] fn asinh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asinh::<Performance>(self)  }
+    #[inline] fn acosh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acosh::<Performance>(self)  }
+    #[inline] fn atanh(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atanh::<Performance>(self)  }
+    #[inline] fn asin(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::asin::<Performance>(self)  }
+    #[inline] fn acos(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::acos::<Performance>(self)  }
+    #[inline] fn atan(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan::<Performance>(self)  }
+    #[inline] fn atan2(self, x: Self)   -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::atan2::<Performance>(self, x)  }
+    #[inline] fn exp(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp::<Performance>(self)  }
+    #[inline] fn exph(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exph::<Performance>(self)  }
+    #[inline] fn exp2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2::<Performance>(self)  }
+    #[inline] fn exp10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10::<Performance>(self)  }
+    #[inline] fn exp_m1(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1::<Performance>(self)  }
+    #[inline] fn cbrt(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<Precision>(self)  }
+    #[inline] fn powf(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf::<Performance>(self, e)  }
+    #[inline] fn ln(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln::<Performance>(self)  }
+    #[inline] fn ln_1p(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p::<Performance>(self)  }
+    #[inline] fn log2(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log2::<Performance>(self)  }
+    #[inline] fn log10(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10::<Performance>(self)  }
+    #[inline] fn erf(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf::<Performance>(self)  }
+    #[inline] fn erfinv(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv::<Performance>(self)  }
+    #[inline] fn tgamma(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma::<Performance>(self)  }
+    #[inline] fn next_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float::<Performance>(self)  }
+    #[inline] fn prev_float(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float::<Performance>(self)  }
+    #[inline] fn smoothstep(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep::<Performance>(self)  }
+    #[inline] fn smootherstep(self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootherstep::<Performance>(self)  }
+    #[inline] fn smootheststep(self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootheststep::<Performance>(self)  }
 }
 
 #[doc(hidden)]
@@ -297,26 +367,41 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     const __EPSILON: Self;
 
-    fn from_u32(x: u32) -> Self;
-    fn from_i32(x: i32) -> Self;
-
     #[inline(always)]
-    fn scale(x: Self::Vf, in_min: Self::Vf, in_max: Self::Vf, out_min: Self::Vf, out_max: Self::Vf) -> Self::Vf {
-        ((x - in_min) / (in_max - in_min)).mul_add(out_max - out_min, out_min)
+    fn scale<P: Policy>(
+        x: Self::Vf,
+        in_min: Self::Vf,
+        in_max: Self::Vf,
+        out_min: Self::Vf,
+        out_max: Self::Vf,
+    ) -> Self::Vf {
+        let x = ((x - in_min) / (in_max - in_min));
+        let m = out_max - out_min;
+        let a = out_min;
+
+        if S::INSTRSET.has_true_fma() {
+            x.mul_add(m, a)
+        } else {
+            x * m + a
+        }
     }
 
     #[inline(always)]
-    fn lerp(t: Self::Vf, a: Self::Vf, b: Self::Vf) -> Self::Vf {
-        t.mul_add(b - a, a)
+    fn lerp<P: Policy>(t: Self::Vf, a: Self::Vf, b: Self::Vf) -> Self::Vf {
+        if S::INSTRSET.has_true_fma() {
+            t.mul_add(b - a, a)
+        } else {
+            (Self::Vf::one() - t) * a + t * b
+        }
     }
 
     #[inline(always)]
-    fn fmod(x: Self::Vf, y: Self::Vf) -> Self::Vf {
+    fn fmod<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf {
         x % y // Already implemented with operator overloads anyway
     }
 
     #[inline(always)]
-    fn powi(mut x: Self::Vf, mut e: i32) -> Self::Vf {
+    fn powi<P: Policy>(mut x: Self::Vf, mut e: i32) -> Self::Vf {
         let one = Self::Vf::one();
 
         let mut res = one;
@@ -339,7 +424,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn powiv(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
+    fn powiv<P: Policy>(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
         let zero_i = Vi32::<S>::zero();
         let one_i = Vi32::<S>::one();
         let one = Self::Vf::one();
@@ -364,7 +449,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn hermite(x: Self::Vf, mut n: u32) -> Self::Vf {
+    fn hermite<P: Policy>(x: Self::Vf, mut n: u32) -> Self::Vf {
         let one = Self::Vf::one();
         let mut p0 = one;
 
@@ -395,7 +480,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn hermitev(x: Self::Vf, mut n: S::Vu32) -> Self::Vf {
+    fn hermitev<P: Policy>(x: Self::Vf, mut n: S::Vu32) -> Self::Vf {
         let one = Self::Vf::one();
         let i1 = Vu32::<S>::one();
         let n_is_zero = n.eq(Vu32::<S>::zero());
@@ -433,7 +518,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn hypot(x: Self::Vf, y: Self::Vf) -> Self::Vf {
+    fn hypot<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf {
         let x = x.abs();
         let y = y.abs();
 
@@ -448,7 +533,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     #[inline(always)]
     #[rustfmt::skip]
-    fn poly_f<F>(x: Self::Vf, n: usize, mut c: F) -> Self::Vf
+    fn poly_f<F, P: Policy>(x: Self::Vf, n: usize, mut c: F) -> Self::Vf
     where
         F: FnMut(usize) -> Self::Vf
     {
@@ -538,82 +623,82 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn poly(x: Self::Vf, c: &[Self]) -> Self::Vf {
-        x.poly_f(c.len(), |i| unsafe { Self::Vf::splat(*c.get_unchecked(i)) })
+    fn poly<P: Policy>(x: Self::Vf, c: &[Self]) -> Self::Vf {
+        Self::poly_f::<_, P>(x, c.len(), |i| unsafe { Self::Vf::splat(*c.get_unchecked(i)) })
     }
 
     #[inline(always)]
-    fn sin(x: Self::Vf) -> Self::Vf {
-        Self::sin_cos(x).0
+    fn sin<P: Policy>(x: Self::Vf) -> Self::Vf {
+        Self::sin_cos::<P>(x).0
     }
 
     #[inline(always)]
-    fn cos(x: Self::Vf) -> Self::Vf {
-        Self::sin_cos(x).1
+    fn cos<P: Policy>(x: Self::Vf) -> Self::Vf {
+        Self::sin_cos::<P>(x).1
     }
 
     #[inline(always)]
-    fn tan(x: Self::Vf) -> Self::Vf {
-        let (s, c) = Self::sin_cos(x);
+    fn tan<P: Policy>(x: Self::Vf) -> Self::Vf {
+        let (s, c) = Self::sin_cos::<P>(x);
         s / c
     }
 
-    fn sin_cos(x: Self::Vf) -> (Self::Vf, Self::Vf);
+    fn sin_cos<P: Policy>(x: Self::Vf) -> (Self::Vf, Self::Vf);
 
-    fn sinh(x: Self::Vf) -> Self::Vf;
+    fn sinh<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
-    fn cosh(x: Self::Vf) -> Self::Vf {
-        let y: Self::Vf = x.abs().exph(); // 0.5 * exp(x)
+    fn cosh<P: Policy>(x: Self::Vf) -> Self::Vf {
+        let y: Self::Vf = Self::exph::<P>(x.abs()); // 0.5 * exp(x)
         y + Self::Vf::splat_any(0.25) / y // + 0.5 * exp(-x)
     }
 
-    fn tanh(x: Self::Vf) -> Self::Vf;
+    fn tanh<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn asin(x: Self::Vf) -> Self::Vf;
-    fn acos(x: Self::Vf) -> Self::Vf;
-    fn atan(x: Self::Vf) -> Self::Vf;
-    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf;
+    fn asin<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn acos<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn atan<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn atan2<P: Policy>(y: Self::Vf, x: Self::Vf) -> Self::Vf;
 
-    fn asinh(x: Self::Vf) -> Self::Vf;
-    fn acosh(x: Self::Vf) -> Self::Vf;
-    fn atanh(x: Self::Vf) -> Self::Vf;
+    fn asinh<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn acosh<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn atanh<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn exp(x: Self::Vf) -> Self::Vf;
-    fn exph(x: Self::Vf) -> Self::Vf;
-    fn exp2(x: Self::Vf) -> Self::Vf;
-    fn exp10(x: Self::Vf) -> Self::Vf;
+    fn exp<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn exph<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn exp2<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn exp10<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
-    fn exp_m1(x: Self::Vf) -> Self::Vf {
-        Self::exp(x) - Self::Vf::one()
+    fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
+        Self::exp::<P>(x) - Self::Vf::one()
     }
 
-    fn cbrt(x: Self::Vf) -> Self::Vf;
+    fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn powf(x: Self::Vf, e: Self::Vf) -> Self::Vf;
+    fn powf<P: Policy>(x: Self::Vf, e: Self::Vf) -> Self::Vf;
 
-    fn ln(x: Self::Vf) -> Self::Vf;
-    fn ln_1p(x: Self::Vf) -> Self::Vf;
-    fn log2(x: Self::Vf) -> Self::Vf;
-    fn log10(x: Self::Vf) -> Self::Vf;
+    fn ln<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn ln_1p<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn log2<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn log10<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn erf(x: Self::Vf) -> Self::Vf;
-    fn erfinv(x: Self::Vf) -> Self::Vf;
+    fn erf<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn erfinv<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn next_float(x: Self::Vf) -> Self::Vf;
-    fn prev_float(x: Self::Vf) -> Self::Vf;
+    fn next_float<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn prev_float<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn tgamma(x: Self::Vf) -> Self::Vf;
+    fn tgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
-    fn smoothstep(x: Self::Vf) -> Self::Vf {
+    fn smoothstep<P: Policy>(x: Self::Vf) -> Self::Vf {
         // use integer coefficients to ensure as-accurate-as-possible casts to f32 or f64
         x * x * x.nmul_add(Self::Vf::splat_any(2i16), Self::Vf::splat_any(3i16))
     }
 
     #[inline(always)]
-    fn smootherstep(x: Self::Vf) -> Self::Vf {
+    fn smootherstep<P: Policy>(x: Self::Vf) -> Self::Vf {
         let c3 = Self::Vf::splat_any(10i16);
         let c4 = Self::Vf::splat_any(-15i16);
         let c5 = Self::Vf::splat_any(6i16);
@@ -626,7 +711,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn smootheststep(x: Self::Vf) -> Self::Vf {
+    fn smootheststep<P: Policy>(x: Self::Vf) -> Self::Vf {
         let c4 = Self::Vf::splat_any(35i16);
         let c5 = Self::Vf::splat_any(-84i16);
         let c6 = Self::Vf::splat_any(70i16);
@@ -641,10 +726,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     /// This is split into its own function to avoid direct recursion within `legendre_p`,
     /// as that will prevent loop unrolling or inlining and optimization at all.
     #[inline(always)]
-    fn hardcoded_legendre_p(x: Self::Vf, n: u32) -> Self::Vf {
+    fn hardcoded_legendre(x: Self::Vf, n: u32) -> Self::Vf {
         macro_rules! c {
             ($n:expr, $d:expr) => {
-                Self::Vf::splat(Self::from_i32($n) / Self::from_i32($d))
+                Self::Vf::splat(Self::cast_from($n) / Self::cast_from($d))
             };
         }
 
@@ -721,23 +806,23 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn legendre_p(x: Self::Vf, n: u32, m: u32) -> Self::Vf {
+    fn legendre<P: Policy>(x: Self::Vf, n: u32, m: u32) -> Self::Vf {
         let zero = Self::Vf::zero();
         let one = Self::Vf::one();
 
         match (n, m) {
             (0, 0) => return one,
             (1, 0) => return x,
-            (n, 0) if n <= 13 => return Self::hardcoded_legendre_p(x, n),
+            (n, 0) if n <= 13 => return Self::hardcoded_legendre(x, n),
             (n, 0) => {
                 let mut k = 14; // set to max degree hard-coded + 1
 
                 // these should inline
-                let mut p0 = Self::hardcoded_legendre_p(x, k - 2);
-                let mut p1 = Self::hardcoded_legendre_p(x, k - 1);
+                let mut p0 = Self::hardcoded_legendre(x, k - 2);
+                let mut p1 = Self::hardcoded_legendre(x, k - 1);
 
                 while k <= n {
-                    let nf = Self::Vf::splat(Self::from_u32(k));
+                    let nf = Self::Vf::splat_as::<u32>(k);
 
                     let tmp = p1;
                     p1 = x.mul_sub((nf + nf).mul_sub(p1, p1), nf.mul_sub(p0, p0)) / nf;
@@ -751,7 +836,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             _ => {}
         }
 
-        let jacobi = Self::jacobi_d(x, zero, zero, n, m);
+        let jacobi = Self::jacobi::<P>(x, zero, zero, n, m);
 
         let x12 = x.nmul_add(x, one); // (1 - x^2)
 
@@ -764,63 +849,60 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn jacobi_d(x: Self::Vf, alpha: Self::Vf, beta: Self::Vf, n: u32, m: u32) -> Self::Vf {
-        if unlikely!(m > n) {
-            return Self::Vf::zero();
-        }
-
-        let one = Self::Vf::one();
-
-        let half = Self::Vf::splat_any(0.5);
-        let mut scale = one;
-        let mut jf = one;
-        let nf = Self::Vf::splat(Self::from_u32(n));
-
-        let t0 = half * (nf + alpha + beta);
-
-        for j in 0..m {
-            scale *= half.mul_add(jf, t0);
-            jf += one;
-        }
-
-        let mf = Self::Vf::splat(Self::from_u32(m));
-
-        scale * Self::jacobi(x, alpha + mf, beta + mf, n - m)
-    }
-
-    // TODO: Find more places to optimize and reduce error
-    #[inline(always)]
-    fn jacobi(x: Self::Vf, alpha: Self::Vf, beta: Self::Vf, n: u32) -> Self::Vf {
+    fn jacobi<P: Policy>(x: Self::Vf, mut alpha: Self::Vf, mut beta: Self::Vf, mut n: u32, m: u32) -> Self::Vf {
         /*
             This implementation is a little weird since I wanted to keep it generic, but all casts
             from integers should be const-folded
         */
 
+        if unlikely!(m > n) {
+            return Self::Vf::zero();
+        }
+
         let one = Self::Vf::one();
+        let two = Self::Vf::splat_any(2);
+        let half = Self::Vf::splat_any(0.5);
+
+        let mut scale = one;
+
+        if m > 0 {
+            let mut jf = one;
+            let nf = Self::Vf::splat_as::<u32>(n);
+
+            let t0 = half * (nf + alpha + beta);
+
+            for j in 0..m {
+                scale *= half.mul_add(jf, t0);
+                jf += one;
+            }
+
+            let mf = Self::Vf::splat_as::<u32>(m);
+
+            alpha += mf;
+            beta += mf;
+            n -= m;
+        }
+
+        if unlikely!(n == 0) {
+            return scale; // scale * one
+        }
 
         let mut y0 = one;
 
-        if unlikely!(n == 0) {
-            return y0;
-        }
-
-        let half = Self::Vf::splat_any(0.5);
-        let two = Self::Vf::splat_any(2);
-
         let alpha_p_beta = alpha + beta;
-        let alpha2 = alpha * alpha;
-        let beta2 = beta * beta;
+        let alpha_sqr = alpha * alpha;
+        let beta_sqr = beta * beta;
         let alpha1 = alpha - one;
         let beta1 = beta - one;
-        let alpha2beta2 = alpha2 - beta2;
+        let alpha2beta2 = alpha_sqr - beta_sqr;
 
         //let mut y1 = alpha + one + half * (alpha_p_beta + two) * (x - one);
         let mut y1 = half * (x.mul_add(alpha, alpha) + x.mul_sub(beta, beta) + x + x);
 
         let mut yk = y1;
-        let mut k = Self::from_u32(2);
+        let mut k = Self::cast_from(2u32);
 
-        let k_max = Self::from_u32(n) * (Self::from_u32(1) + Self::__EPSILON);
+        let k_max = Self::cast_from(n) * (Self::cast_from(1u32) + Self::__EPSILON);
 
         while k < k_max {
             let kf = Self::Vf::splat(k);
@@ -841,10 +923,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             y0 = y1;
             y1 = yk;
 
-            k = k + Self::from_u32(1);
+            k = k + Self::cast_from(1u32);
         }
 
-        yk
+        scale * yk
     }
 }
 

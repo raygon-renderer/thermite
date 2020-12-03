@@ -29,10 +29,13 @@ pub use self::pointer::{AssociatedVector, VPtr};
 mod mask;
 pub use mask::{BitMask, Mask};
 
+pub mod element;
+pub use element::SimdElement;
+
 #[cfg(feature = "math")]
 pub mod math;
 #[cfg(feature = "math")]
-pub use math::SimdVectorizedMath;
+pub use math::*;
 
 #[cfg(not(feature = "math"))]
 /// "math" features is disabled. This trait is empty.
@@ -127,11 +130,6 @@ impl<S: Simd + ?Sized, T> SimdCasts<S> for T where
 {
 }
 
-/// Umbrella trait for SIMD vector element bounds
-pub trait SimdElement: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
-
-impl<T> SimdElement for T where T: mask::Truthy + Clone + Debug + Copy + Default + Send + Sync {}
-
 /// Helper trait for constant vector shuffles
 pub trait SimdShuffleIndices {
     const INDICES: &'static [usize];
@@ -195,6 +193,17 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Sen
     #[inline(always)]
     fn splat_any(value: impl Into<Self::Element>) -> Self {
         Self::splat(value.into())
+    }
+
+    /// Splats a value by casting to the element type via `value as Element`.
+    ///
+    /// This is limited to primitive numeric types.
+    #[inline(always)]
+    fn splat_as<E>(value: E) -> Self
+    where
+        Self::Element: element::CastFrom<E>,
+    {
+        Self::splat(element::CastFrom::cast_from(value))
     }
 
     /// Shuffles between two vectors based on the static indices provided in `INDICES`
@@ -1116,7 +1125,8 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>
-        + SimdVectorizedMath<Self>;
+        + SimdVectorizedMath<Self>
+        + SimdVectorizedMathPolicied<Self>;
 
     /// Double-precision 64-bit floating point vector
     ///
@@ -1125,7 +1135,8 @@ pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     type Vf64: SimdFloatVector<Self, Element = f64, Vu = Self::Vu64, Vi = Self::Vi64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>
-        + SimdVectorizedMath<Self>;
+        + SimdVectorizedMath<Self>
+        + SimdVectorizedMathPolicied<Self>;
 
     #[cfg(target_pointer_width = "32")]
     type Vusize: SimdIntVector<Self, Element = u32> + SimdPointer<Self, Element = u32>;

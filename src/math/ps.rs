@@ -11,17 +11,7 @@ where
     const __EPSILON: Self = f32::EPSILON;
 
     #[inline(always)]
-    fn from_u32(x: u32) -> Self {
-        x as f32
-    }
-
-    #[inline(always)]
-    fn from_i32(x: i32) -> Self {
-        x as f32
-    }
-
-    #[inline(always)]
-    fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+    fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         let dp1f = Vf32::<S>::splat(0.78515625 * 2.0);
         let dp2f = Vf32::<S>::splat(2.4187564849853515625E-4 * 2.0);
         let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
@@ -53,10 +43,12 @@ where
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
 
-        let overflow = q.gt(Vu32::<S>::splat(0x2000000)) & xa.is_finite().cast_to(); // q big if overflow
+        if P::POLICY.check_overflow() {
+            let overflow = q.gt(Vu32::<S>::splat(0x2000000)) & xa.is_finite().cast_to(); // q big if overflow
 
-        s = overflow.select(Vf32::<S>::zero(), s);
-        c = overflow.select(Vf32::<S>::one(), c);
+            s = overflow.select(Vf32::<S>::zero(), s);
+            c = overflow.select(Vf32::<S>::one(), c);
+        }
 
         let sin1 = swap.select(c, s);
         let cos1 = swap.select(s, c);
@@ -69,7 +61,7 @@ where
     }
 
     #[inline(always)]
-    fn sinh(x0: Self::Vf) -> Self::Vf {
+    fn sinh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let x = x0.abs();
 
         let x_small = x.le(Vf32::<S>::one());
@@ -100,7 +92,7 @@ where
     }
 
     #[inline(always)]
-    fn tanh(x0: Self::Vf) -> Self::Vf {
+    fn tanh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf32::<S>::one();
 
         let x = x0.abs();
@@ -141,17 +133,17 @@ where
     }
 
     #[inline(always)]
-    fn asin(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S>(x, false)
+    fn asin<P: Policy>(x: Self::Vf) -> Self::Vf {
+        asin_f_internal::<S, P>(x, false)
     }
 
     #[inline(always)]
-    fn acos(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S>(x, true)
+    fn acos<P: Policy>(x: Self::Vf) -> Self::Vf {
+        asin_f_internal::<S, P>(x, true)
     }
 
     #[inline(always)]
-    fn atan(y: Self::Vf) -> Self::Vf {
+    fn atan<P: Policy>(y: Self::Vf) -> Self::Vf {
         let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
         let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
         let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
@@ -181,7 +173,7 @@ where
     }
 
     #[inline(always)]
-    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
+    fn atan2<P: Policy>(y: Self::Vf, x: Self::Vf) -> Self::Vf {
         let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
         let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
         let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
@@ -197,11 +189,13 @@ where
         let mut x2 = swap_xy.select(y1, x1);
         let mut y2 = swap_xy.select(x1, y1);
 
-        let both_infinite = (x.is_infinite() & y.is_infinite());
+        if P::POLICY.check_overflow() {
+            let both_infinite = (x.is_infinite() & y.is_infinite());
 
-        if unlikely!(both_infinite.any()) {
-            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
-            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+            if unlikely!(both_infinite.any()) {
+                x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+                y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+            }
         }
 
         // x = y = 0 will produce NAN. No problem, fixed below
@@ -229,7 +223,7 @@ where
     }
 
     #[inline(always)]
-    fn asinh(x0: Self::Vf) -> Self::Vf {
+    fn asinh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let x = x0.abs();
         let x2 = x0 * x0;
 
@@ -262,7 +256,7 @@ where
     }
 
     #[inline(always)]
-    fn acosh(x0: Self::Vf) -> Self::Vf {
+    fn acosh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf32::<S>::one();
 
         let x1 = x0 - one;
@@ -303,7 +297,7 @@ where
     }
 
     #[inline(always)]
-    fn atanh(x0: Self::Vf) -> Self::Vf {
+    fn atanh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let x = x0.abs();
 
         let x_small = x.lt(Vf32::<S>::splat(0.5));
@@ -340,32 +334,32 @@ where
     }
 
     #[inline(always)]
-    fn exp(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Exp)
+    fn exp<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S, P>(x, ExpMode::Exp)
     }
 
     #[inline(always)]
-    fn exph(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Exph)
+    fn exph<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S, P>(x, ExpMode::Exph)
     }
 
     #[inline(always)]
-    fn exp2(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Pow2)
+    fn exp2<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S, P>(x, ExpMode::Pow2)
     }
 
     #[inline(always)]
-    fn exp10(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Pow10)
+    fn exp10<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S, P>(x, ExpMode::Pow10)
     }
 
     #[inline(always)]
-    fn exp_m1(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S>(x, ExpMode::Expm1)
+    fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_f_internal::<S, P>(x, ExpMode::Expm1)
     }
 
     #[inline(always)]
-    fn cbrt(x: Self::Vf) -> Self::Vf {
+    fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf {
         let b1 = Vu32::<S>::splat(709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
         let b2 = Vu32::<S>::splat(642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
         let m = Vu32::<S>::splat(0x7fffffff); // u32::MAX >> 1
@@ -392,12 +386,20 @@ where
 
         let two = Vf32::<S>::splat(2.0);
 
-        // couple iterations of Newton's method
-        // This isn't perfect, as it's only limited to single-precision,
-        // but the fused multiply-adds helps
-        for _ in 0..2 {
-            let t3 = t * t * t;
-            t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+        match P::POLICY {
+            Policies::Precision => {
+                // TODO
+            }
+            _ if S::INSTRSET.has_true_fma() => {
+                // couple iterations of Newton's method
+                // This isn't perfect, as it's only limited to single-precision,
+                // but the fused multiply-adds helps
+                for _ in 0..2 {
+                    let t3 = t * t * t;
+                    t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+                }
+            }
+            _ => {} // TODO
         }
 
         // cbrt(NaN,INF,+-0) is itself
@@ -405,7 +407,7 @@ where
     }
 
     #[inline(always)]
-    fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
+    fn powf<P: Policy>(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
@@ -508,12 +510,16 @@ where
         // biased exponent of result:
         let ej = ei + Vi32::<S>::from_bits(z.into_bits()) >> 23;
 
+        // add exponent by signed integer addition
+        let mut z = Vf32::<S>::from_bits((Vi32::<S>::from_bits(z.into_bits()) + (ei << 23)).into_bits());
+
+        if P::POLICY == Policies::UltraPerformance {
+            return z;
+        }
+
         // check exponent for overflow and underflow
         let overflow = Vf32::<S>::from_cast_mask(ej.ge(Vi32::<S>::splat(0x0FF))) | ee.gt(Vf32::<S>::splat(300.0));
         let underflow = Vf32::<S>::from_cast_mask(ej.le(Vi32::<S>::splat(0x000))) | ee.lt(Vf32::<S>::splat(-300.0));
-
-        // add exponent by signed integer addition
-        let mut z = Vf32::<S>::from_bits((Vi32::<S>::from_bits(z.into_bits()) + (ei << 23)).into_bits());
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -578,27 +584,27 @@ where
     }
 
     #[inline(always)]
-    fn ln(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S>(x, false)
+    fn ln<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S, P>(x, false)
     }
 
     #[inline(always)]
-    fn ln_1p(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S>(x, true)
+    fn ln_1p<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S, P>(x, true)
     }
 
     #[inline(always)]
-    fn log2(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(LOG2_E)
+    fn log2<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S, P>(x, false) * Vf32::<S>::splat(LOG2_E)
     }
 
     #[inline(always)]
-    fn log10(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf32::<S>::splat(LOG10_E)
+    fn log10<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_f_internal::<S, P>(x, false) * Vf32::<S>::splat(LOG10_E)
     }
 
     #[inline(always)]
-    fn erf(x: Self::Vf) -> Self::Vf {
+    fn erf<P: Policy>(x: Self::Vf) -> Self::Vf {
         x * (x * x).poly(&[
             1.128379165726710e+0,
             -3.761262582423300e-1,
@@ -611,7 +617,7 @@ where
     }
 
     #[inline(always)]
-    fn erfinv(y: Self::Vf) -> Self::Vf {
+    fn erfinv<P: Policy>(y: Self::Vf) -> Self::Vf {
         /*
             Approximating the erfinv function, Mike Giles
             https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf
@@ -650,8 +656,10 @@ where
                 -0.000200214257,
             ]);
 
-            p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfinv(x == 1) = inf
-            p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfinv(x > 1) = NaN
+            if P::POLICY == Policies::UltraPerformance {
+                p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfinv(x == 1) = inf
+                p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfinv(x > 1) = NaN
+            }
 
             p0 = w_big.select(p1, p0);
         }
@@ -660,7 +668,7 @@ where
     }
 
     #[inline(always)]
-    fn next_float(x: Self::Vf) -> Self::Vf {
+    fn next_float<P: Policy>(x: Self::Vf) -> Self::Vf {
         let i1 = Vu32::<S>::one();
 
         let v = x.eq(Vf32::<S>::neg_zero()).select(Vf32::<S>::zero(), x);
@@ -673,7 +681,7 @@ where
     }
 
     #[inline(always)]
-    fn prev_float(x: Self::Vf) -> Self::Vf {
+    fn prev_float<P: Policy>(x: Self::Vf) -> Self::Vf {
         let i1 = Vu32::<S>::one();
 
         let v = x.eq(Vf32::<S>::zero()).select(Vf32::<S>::neg_zero(), x);
@@ -686,7 +694,7 @@ where
     }
 
     #[inline(always)]
-    fn tgamma(mut z: Self::Vf) -> Self::Vf {
+    fn tgamma<P: Policy>(mut z: Self::Vf) -> Self::Vf {
         let zero = Vf32::<S>::zero();
         let one = Vf32::<S>::one();
         let half = Vf32::<S>::splat(0.5);
@@ -824,7 +832,7 @@ fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
 }
 
 #[inline(always)]
-fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
+fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     let p0expf = Vf32::<S>::splat(1.0 / 2.0);
     let p1expf = Vf32::<S>::splat(1.0 / 6.0);
     let p2expf = Vf32::<S>::splat(1.0 / 24.0);
@@ -898,15 +906,17 @@ fn exp_f_internal<S: Simd>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         Vf32::<S>::zero()
     };
 
-    r = x0.select_negative(underflow_value, Vf32::<S>::infinity());
-    z = in_range.select(z, r);
-    z = x0.is_nan().select(x0, z);
+    if P::POLICY.check_overflow() {
+        r = x0.select_negative(underflow_value, Vf32::<S>::infinity());
+        z = in_range.select(z, r);
+        z = x0.is_nan().select(x0, z);
+    }
 
     z
 }
 
 #[inline(always)]
-fn asin_f_internal<S: Simd>(x: Vf32<S>, acos: bool) -> Vf32<S> {
+fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     let p4asinf = Vf32::<S>::splat(4.2163199048E-2);
     let p3asinf = Vf32::<S>::splat(2.4181311049E-2);
     let p2asinf = Vf32::<S>::splat(4.5470025998E-2);
@@ -956,7 +966,7 @@ fn exponent<S: Simd>(x: Vf32<S>) -> Vi32<S> {
 }
 
 #[inline(always)]
-fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
+fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let ln2f_hi = Vf32::<S>::splat(0.693359375);
     let ln2f_lo = Vf32::<S>::splat(-2.12194440E-4);
     let p0logf = Vf32::<S>::splat(3.3333331174E-1);
@@ -1016,6 +1026,10 @@ fn ln_f_internal<S: Simd>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     res = fe.mul_add(ln2f_lo, res);
     res += x2.nmul_add(Vf32::<S>::splat(0.5), x);
     res = fe.mul_add(ln2f_hi, res);
+
+    if !P::POLICY.check_overflow() {
+        return res;
+    }
 
     let overflow = !x1.is_finite();
     let underflow = x1.lt(Vf32::<S>::splat(1.17549435e-38));

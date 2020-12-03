@@ -11,17 +11,7 @@ where
     const __EPSILON: Self = f64::EPSILON;
 
     #[inline(always)]
-    fn from_u32(x: u32) -> Self {
-        x as f64
-    }
-
-    #[inline(always)]
-    fn from_i32(x: i32) -> Self {
-        x as f64
-    }
-
-    #[inline(always)]
-    fn sin_cos(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+    fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
         let dp3 = Vf64::<S>::splat(3.06161699786838294307E-17 * 2.0);
@@ -64,10 +54,12 @@ where
         // swap sin and cos if odd quadrant
         let swap = (q & Vu64::<S>::one()).ne(Vu64::<S>::zero());
 
-        let overflow = y.gt(Vf64::<S>::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
+        if P::POLICY.check_overflow() {
+            let overflow = y.gt(Vf64::<S>::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
-        let s = overflow.select(zero, s);
-        let c = overflow.select(one, c);
+            let s = overflow.select(zero, s);
+            let c = overflow.select(one, c);
+        }
 
         let sin1 = swap.select(c, s);
         let cos1 = swap.select(s, c);
@@ -80,26 +72,26 @@ where
     }
 
     #[inline(always)]
-    fn asin(x: Self::Vf) -> Self::Vf {
-        asin_internal::<S>(x, false)
+    fn asin<P: Policy>(x: Self::Vf) -> Self::Vf {
+        asin_internal::<S, P>(x, false)
     }
 
     #[inline(always)]
-    fn acos(x: Self::Vf) -> Self::Vf {
-        asin_internal::<S>(x, true)
+    fn acos<P: Policy>(x: Self::Vf) -> Self::Vf {
+        asin_internal::<S, P>(x, true)
     }
 
     #[inline(always)]
-    fn atan(x: Self::Vf) -> Self::Vf {
-        atan_internal::<S>(x, unsafe { Vf64::<S>::undefined() }, false)
+    fn atan<P: Policy>(x: Self::Vf) -> Self::Vf {
+        atan_internal::<S, P>(x, unsafe { Vf64::<S>::undefined() }, false)
     }
     #[inline(always)]
-    fn atan2(y: Self::Vf, x: Self::Vf) -> Self::Vf {
-        atan_internal::<S>(y, x, true)
+    fn atan2<P: Policy>(y: Self::Vf, x: Self::Vf) -> Self::Vf {
+        atan_internal::<S, P>(y, x, true)
     }
 
     #[inline(always)]
-    fn sinh(x0: Self::Vf) -> Self::Vf {
+    fn sinh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
         let x = x0.abs();
@@ -140,7 +132,7 @@ where
     }
 
     #[inline(always)]
-    fn tanh(x0: Self::Vf) -> Self::Vf {
+    fn tanh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
         let x = x0.abs();
@@ -185,7 +177,7 @@ where
     }
 
     #[inline(always)]
-    fn asinh(x0: Self::Vf) -> Self::Vf {
+    fn asinh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
         let x = x0.abs();
@@ -230,7 +222,7 @@ where
     }
 
     #[inline(always)]
-    fn acosh(x0: Self::Vf) -> Self::Vf {
+    fn acosh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
         let x1 = x0 - one;
@@ -276,7 +268,7 @@ where
     }
 
     #[inline(always)]
-    fn atanh(x0: Self::Vf) -> Self::Vf {
+    fn atanh<P: Policy>(x0: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
         let half = Vf64::<S>::splat(0.5);
 
@@ -322,31 +314,32 @@ where
     }
 
     #[inline(always)]
-    fn exp(x: Self::Vf) -> Self::Vf {
-        exp_d_internal::<S>(x, ExpMode::Exp)
+    fn exp<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S, P>(x, ExpMode::Exp)
     }
 
     #[inline(always)]
-    fn exph(x: Self::Vf) -> Self::Vf {
-        exp_d_internal::<S>(x, ExpMode::Exph)
+    fn exph<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S, P>(x, ExpMode::Exph)
     }
 
     #[inline(always)]
-    fn exp2(x: Self::Vf) -> Self::Vf {
-        exp_d_internal::<S>(x, ExpMode::Pow2)
+    fn exp2<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S, P>(x, ExpMode::Pow2)
     }
 
     #[inline(always)]
-    fn exp10(x: Self::Vf) -> Self::Vf {
-        exp_d_internal::<S>(x, ExpMode::Pow10)
+    fn exp10<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S, P>(x, ExpMode::Pow10)
     }
 
     #[inline(always)]
-    fn exp_m1(x: Self::Vf) -> Self::Vf {
-        exp_d_internal::<S>(x, ExpMode::Expm1)
+    fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
+        exp_d_internal::<S, P>(x, ExpMode::Expm1)
     }
 
-    fn cbrt(x: Self::Vf) -> Self::Vf {
+    #[inline(always)]
+    fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf {
         let b1 = Vu64::<S>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
         let b2 = Vu64::<S>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
         let m = Vu64::<S>::splat(0x7fffffff); // u32::MAX >> 1
@@ -386,6 +379,8 @@ where
         ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
         t = Vf64::<S>::from_bits(ui);
 
+        // TODO: Policy for non-FMA handling
+
         // original form, 5 simple ops, 2 divisions
         //let r = ((x / (t * t)) - t) / ((t + t) + (x / (t * t)));
 
@@ -399,7 +394,7 @@ where
     }
 
     #[inline(always)]
-    fn powf(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
+    fn powf<P: Policy>(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
         // define constants
         let ln2d_hi = Vf64::<S>::splat(0.693145751953125); // log(2) in extra precision, high bits
         let ln2d_lo = Vf64::<S>::splat(1.42860682030941723212E-6); // low bits of log(2)
@@ -502,12 +497,16 @@ where
         // biased exponent of result:
         let ej = ei + Vi64::<S>::from_bits(z.into_bits()) >> 52;
 
+        // add exponent by integer addition
+        let mut z = Vf64::<S>::from_bits((ei.into_bits() << 52) + z.into_bits());
+
+        if !P::POLICY.check_overflow() {
+            return z;
+        }
+
         // check exponent for overflow and underflow
         let overflow = Vf64::<S>::from_cast_mask(ej.ge(Vi64::<S>::splat(0x07FF))) | ee.gt(Vf64::<S>::splat(3000.0));
         let underflow = Vf64::<S>::from_cast_mask(ej.le(Vi64::<S>::splat(0x0000))) | ee.lt(Vf64::<S>::splat(-3000.0));
-
-        // add exponent by integer addition
-        let mut z = Vf64::<S>::from_bits((ei.into_bits() << 52) + z.into_bits());
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -572,28 +571,28 @@ where
     }
 
     #[inline(always)]
-    fn ln(x: Self::Vf) -> Self::Vf {
-        ln_d_internal::<S>(x, false)
+    fn ln<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_d_internal::<S, P>(x, false)
     }
 
     #[inline(always)]
-    fn ln_1p(x: Self::Vf) -> Self::Vf {
-        ln_d_internal::<S>(x, true)
+    fn ln_1p<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_d_internal::<S, P>(x, true)
     }
 
     #[inline(always)]
-    fn log2(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf64::<S>::splat(LOG2_E)
+    fn log2<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_d_internal::<S, P>(x, false) * Vf64::<S>::splat(LOG2_E)
     }
 
     #[inline(always)]
-    fn log10(x: Self::Vf) -> Self::Vf {
-        x.ln() * Vf64::<S>::splat(LOG10_E)
+    fn log10<P: Policy>(x: Self::Vf) -> Self::Vf {
+        ln_d_internal::<S, P>(x, false) * Vf64::<S>::splat(LOG10_E)
     }
 
     #[rustfmt::skip]
     #[inline(always)]
-    fn erf(x: Self::Vf) -> Self::Vf {
+    fn erf<P: Policy>(x: Self::Vf) -> Self::Vf {
         let p0 = Vf64::<S>::splat(5.55923013010394962768e4);
         let p1 = Vf64::<S>::splat(7.00332514112805075473e3);
         let p2 = Vf64::<S>::splat(2.23200534594684319226e3);
@@ -616,7 +615,7 @@ where
     }
 
     #[inline(always)]
-    fn erfinv(y: Self::Vf) -> Self::Vf {
+    fn erfinv<P: Policy>(y: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
 
         let a = y.abs();
@@ -663,8 +662,10 @@ where
                 -0.0000023620166848468398,
             ]);
 
-            p1 = a.eq(one).select(Vf64::<S>::infinity(), p1); // erfinv(x == 1) = inf
-            p1 = a.gt(one).select(Vf64::<S>::nan(), p1); // erfinv(x > 1) = NaN
+            if P::POLICY.check_overflow() {
+                p1 = a.eq(one).select(Vf64::<S>::infinity(), p1); // erfinv(x == 1) = inf
+                p1 = a.gt(one).select(Vf64::<S>::nan(), p1); // erfinv(x > 1) = NaN
+            }
 
             p0 = w_big.select(p1, p0);
         }
@@ -673,7 +674,7 @@ where
     }
 
     #[inline(always)]
-    fn next_float(x: Self::Vf) -> Self::Vf {
+    fn next_float<P: Policy>(x: Self::Vf) -> Self::Vf {
         let i1 = Vu64::<S>::one();
 
         let v = x.eq(Vf64::<S>::neg_zero()).select(Vf64::<S>::zero(), x);
@@ -686,7 +687,7 @@ where
     }
 
     #[inline(always)]
-    fn prev_float(x: Self::Vf) -> Self::Vf {
+    fn prev_float<P: Policy>(x: Self::Vf) -> Self::Vf {
         let i1 = Vu64::<S>::one();
 
         let v = x.eq(Vf64::<S>::zero()).select(Vf64::<S>::neg_zero(), x);
@@ -699,7 +700,7 @@ where
     }
 
     #[inline(always)]
-    fn tgamma(mut z: Self::Vf) -> Self::Vf {
+    fn tgamma<P: Policy>(mut z: Self::Vf) -> Self::Vf {
         let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
         let half = Vf64::<S>::splat(0.5);
@@ -870,7 +871,7 @@ fn exponent_f<S: Simd>(x: Vf64<S>) -> Vf64<S> {
 }
 
 #[inline(always)]
-fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
+fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     let ln2_hi = Vf64::<S>::splat(0.693359375);
     let ln2_lo = Vf64::<S>::splat(-2.121944400546905827679E-4);
     let p0log = Vf64::<S>::splat(7.70838733755885391666E0);
@@ -922,6 +923,10 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     res += x2.nmul_add(Vf64::<S>::splat(0.5), x); // res += x - 0.5 * x2;
     res = fe.mul_add(ln2_hi, res); // res += fe * ln2_hi;
 
+    if !P::POLICY.check_overflow() {
+        return res;
+    }
+
     let overflow = !x1.is_finite();
     let underflow = x1.lt(Vf64::<S>::splat(2.2250738585072014E-308));
 
@@ -938,7 +943,7 @@ fn ln_d_internal<S: Simd>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
 }
 
 #[inline(always)]
-fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
+fn atan_internal<S: Simd, P: Policy>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
     let morebits = Vf64::<S>::splat(6.123233995736765886130E-17);
     let morebitso2 = Vf64::<S>::splat(6.123233995736765886130E-17 * 0.5);
     let t3po8 = Vf64::<S>::splat(SQRT_2 + 1.0);
@@ -967,12 +972,14 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
         let mut x2 = swapxy.select(y1, x1);
         let mut y2 = swapxy.select(x1, y1);
 
-        let both_inf = x.is_infinite() & y.is_infinite();
+        if P::POLICY.check_overflow() {
+            let both_inf = x.is_infinite() & y.is_infinite();
 
-        // TODO: Benchmark this branch
-        if unlikely!(both_inf.any()) {
-            x2 = both_inf.select(x2 & neg_one, x2);
-            y2 = both_inf.select(y2 & neg_one, y2);
+            // TODO: Benchmark this branch
+            if unlikely!(both_inf.any()) {
+                x2 = both_inf.select(x2 & neg_one, x2);
+                y2 = both_inf.select(y2 & neg_one, y2);
+            }
         }
 
         y2 / x2
@@ -1013,7 +1020,7 @@ fn atan_internal<S: Simd>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf64<S> {
 }
 
 #[inline(always)]
-fn asin_internal<S: Simd>(x: Vf64<S>, acos: bool) -> Vf64<S> {
+fn asin_internal<S: Simd, P: Policy>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let one = Vf64::<S>::one();
 
     let xa = x.abs();
@@ -1101,7 +1108,7 @@ fn pow2n_d<S: Simd>(n: Vf64<S>) -> Vf64<S> {
 }
 
 #[inline(always)]
-fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
+fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
     let zero = Vf64::<S>::zero();
     let one = Vf64::<S>::one();
 
@@ -1187,9 +1194,11 @@ fn exp_d_internal<S: Simd>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         Vf64::<S>::zero()
     };
 
-    r = x0.select_negative(underflow_value, Vf64::<S>::infinity());
-    z = in_range.select(z, r);
-    z = x0.is_nan().select(x0, z);
+    if P::POLICY.check_overflow() {
+        r = x0.select_negative(underflow_value, Vf64::<S>::infinity());
+        z = in_range.select(z, r);
+        z = x0.is_nan().select(x0, z);
+    }
 
     z
 }
