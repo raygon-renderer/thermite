@@ -2197,7 +2197,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">nmul_sube</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">if</span> <span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
-            <span class="self">self</span>.<span class="ident">nmul_add</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
+            <span class="self">self</span>.<span class="ident">nmul_sub</span>(<span class="ident">m</span>, <span class="ident">s</span>)
         } <span class="kw">else</span> {
             <span class="self">self</span>.<span class="ident">nmul_adde</span>(<span class="ident">m</span>, <span class="op">-</span><span class="ident">s</span>)
         }
