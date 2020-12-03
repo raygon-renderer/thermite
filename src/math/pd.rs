@@ -48,8 +48,8 @@ where
         let mut s = poly_5(x2, x4, x8, p0sin, p1sin, p2sin, p3sin, p4sin, p5sin);
         let mut c = poly_5(x2, x4, x8, p0cos, p1cos, p2cos, p3cos, p4cos, p5cos);
 
-        s = s.mul_add(x2 * x, x); // s = x + (x * x2) * s;
-        c = c.mul_add(x4, x2.nmul_add(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+        s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
+        c = c.mul_adde(x4, x2.nmul_adde(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
 
         // swap sin and cos if odd quadrant
         let swap = (q & Vu64::<S>::one()).ne(Vu64::<S>::zero());
@@ -119,7 +119,7 @@ where
             let x4 = x2 * x2;
 
             y1 = poly_3(x2, x4, p0, p1, p2, p3) / poly_3(x2, x4, q0, q1, q2, q3);
-            y1 = y1.mul_add(x * x2, x);
+            y1 = y1.mul_adde(x * x2, x);
         }
 
         // if not all are small
@@ -159,7 +159,7 @@ where
             let x4 = x2 * x2;
 
             y1 = poly_2(x2, x4, p0, p1, p2) / poly_3(x2, x4, q0, q1, q2, q3);
-            y1 = y1.mul_add(x2 * x, x);
+            y1 = y1.mul_adde(x2 * x, x);
         }
 
         // if not all are small
@@ -207,7 +207,7 @@ where
             let x8 = x4 * x4;
 
             y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_4(x2, x4, x8, q0, q1, q2, q3, q4);
-            y1 = y1.mul_add(x2 * x, x);
+            y1 = y1.mul_adde(x2 * x, x);
         }
 
         if !bitmask.all() {
@@ -257,7 +257,7 @@ where
         }
 
         if !bitmask.all() {
-            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln_p::<P>();
+            y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
                 y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
@@ -299,7 +299,7 @@ where
             let x8 = x4 * x4;
 
             y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_5(x2, x4, x8, q0, q1, q2, q3, q4, q5);
-            y1 = y1.mul_add(x2 * x, x);
+            y1 = y1.mul_adde(x2 * x, x);
         }
 
         if !bitmask.all() {
@@ -364,7 +364,7 @@ where
 
         let mut t = Vf64::<S>::from_bits(ui);
 
-        let r = (t * t) * (t / x);
+        let r = (t * t) * (t / x); // encourage ILP
         let r2 = r * r;
 
         t *= r.poly_p::<P>(&[
@@ -379,16 +379,16 @@ where
         ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
         t = Vf64::<S>::from_bits(ui);
 
-        // TODO: Policy for non-FMA handling
+        let r = if P::POLICY == Policies::Precision || !S::INSTRSET.has_true_fma() {
+            // original form, 5 simple ops, 2 divisions
+            ((x / (t * t)) - t) / ((t + t) + (x / (t * t)))
+        } else {
+            // fast form, 3 simple ops, 1 division, 1 fma
+            let t3 = t * t * t;
+            (x - t3) / Vf64::<S>::splat(2.0).mul_add(t3, x)
+        };
 
-        // original form, 5 simple ops, 2 divisions
-        //let r = ((x / (t * t)) - t) / ((t + t) + (x / (t * t)));
-
-        // fast form, 3 simple ops, 1 division, 1 fma
-        let t3 = t * t * t;
-        let r = (x - t3) / Vf64::<S>::splat(2.0).mul_add(t3, x);
-
-        t = r.mul_add(t, t);
+        t = r.mul_adde(t, t);
 
         (hx0.gt(Vu64::<S>::splat(0x7f800000)) | hx0.eq(Vu64::<S>::zero())).select(x, t)
     }
@@ -441,36 +441,36 @@ where
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
-        let yr = ef.mul_sub(y, e1); // calculate remainder yr. precision very important here
+        let yr = ef.mul_sube(y, e1); // calculate remainder yr. precision very important here
 
         // add initial terms to expansion
-        let lg = half.nmul_add(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
+        let lg = half.nmul_adde(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
 
         // calculate rounding errors in lg
         // rounding error in multiplication 0.5*x*x
-        let x2err = (half * x).mul_sub(x, half * x2);
+        let x2err = (half * x).mul_sube(x, half * x2);
 
         // rounding error in additions and subtractions
-        let lgerr = half.mul_add(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
+        let lgerr = half.mul_adde(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
 
         // extract something for the exponent
         let e2 = (lg * y * log2e).round();
 
         // subtract this from lg, with extra precision
-        let mut v = e2.nmul_add(ln2d_lo, lg.mul_sub(y, e2 * ln2d_hi));
+        let mut v = e2.nmul_adde(ln2d_lo, lg.mul_sube(y, e2 * ln2d_hi));
 
         // add remainder from ef * y
-        v = yr.mul_add(ln2, v); // v += yr * VM_LN2;
+        v = yr.mul_adde(ln2, v); // v += yr * VM_LN2;
 
         // correct for previous rounding errors
-        v = (lgerr + x2err).nmul_add(y, v); // v -= (lgerr + x2err) * y;
+        v = (lgerr + x2err).nmul_adde(y, v); // v -= (lgerr + x2err) * y;
 
         // extract something for the exponent if possible
         let mut x = v;
         let e3 = (x * log2e).round();
 
         // high precision multiplication not needed here because abs(e3) <= 1
-        x = e3.nmul_add(ln2, x); // x -= e3 * VM_LN2;
+        x = e3.nmul_adde(ln2, x); // x -= e3 * VM_LN2;
 
         // poly_13m + 1, Taylor coefficients for exp function, 1/n!
         let mut z = x.poly_p::<P>(&[
@@ -838,7 +838,7 @@ where
         ));
 
         // only compute powf once
-        let h = zgh.powf_p::<P>(very_large.select(z.mul_sub(half, quarter), z - half));
+        let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(half, quarter), z - half));
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
 
@@ -919,9 +919,9 @@ fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
 
     let mut res = px / qx;
 
-    res = fe.mul_add(ln2_lo, res); // res += fe * ln2_lo;
-    res += x2.nmul_add(Vf64::<S>::splat(0.5), x); // res += x - 0.5 * x2;
-    res = fe.mul_add(ln2_hi, res); // res += fe * ln2_hi;
+    res = fe.mul_adde(ln2_lo, res); // res += fe * ln2_lo;
+    res += x2.nmul_adde(Vf64::<S>::splat(0.5), x); // res += x - 0.5 * x2;
+    res = fe.mul_adde(ln2_hi, res); // res += fe * ln2_hi;
 
     if !P::POLICY.check_overflow() {
         return res;
@@ -1007,7 +1007,7 @@ fn atan_internal<S: Simd, P: Policy>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf6
     let qx = poly_5(zz, zz2, zz4, q0atan, q1atan, q2atan, q3atan, q4atan, one);
 
     // place additions before mul_add to lessen dependency chain
-    let mut re = (px / qx).mul_add(z * zz, z + s + fac);
+    let mut re = (px / qx).mul_adde(z * zz, z + s + fac);
 
     if atan2 {
         re = swapxy.select(Vf64::<S>::splat(FRAC_PI_2) - re, re);
@@ -1084,8 +1084,8 @@ fn asin_internal<S: Simd, P: Policy>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let y1 = vx / wx * x1;
 
     // avoid branching again for this single instruction, just do it
-    let z1 = xb.mul_add(y1, xb);
-    let z2 = xa.mul_add(y1, xa);
+    let z1 = xb.mul_adde(y1, xb);
+    let z2 = xa.mul_adde(y1, xa);
 
     let frac_pi_2 = Vf64::<S>::splat(FRAC_PI_2);
 
@@ -1126,8 +1126,8 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
 
             r = (x0 * Vf64::<S>::splat(LOG2_E)).round();
 
-            x = r.nmul_add(ln2d_hi, x); // x -= r * ln2_hi;
-            x = r.nmul_add(ln2d_lo, x); // x -= r * ln2_lo;
+            x = r.nmul_adde(ln2d_hi, x); // x -= r * ln2_hi;
+            x = r.nmul_adde(ln2d_lo, x); // x -= r * ln2_lo;
 
             if mode == ExpMode::Exph {
                 r -= one;
@@ -1149,8 +1149,8 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
 
             r = (x0 * Vf64::<S>::splat(LN_10 * LOG2_E)).round();
 
-            x = r.nmul_add(log10_2_hi, x); // x -= r * log10_2_hi;
-            x = r.nmul_add(log10_2_lo, x); // x -= r * log10_2_lo;
+            x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
+            x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
             x *= Vf64::<S>::splat(LN_10);
         }
     }
@@ -1177,9 +1177,9 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
     let n2 = pow2n_d::<S>(r);
 
     if mode == ExpMode::Expm1 {
-        z = z.mul_add(n2, n2 - one);
+        z = z.mul_adde(n2, n2 - one);
     } else {
-        z = z.mul_add(n2, n2); // (z + 1.0f) * n2
+        z = z.mul_adde(n2, n2); // (z + 1.0f) * n2
     }
 
     let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite();

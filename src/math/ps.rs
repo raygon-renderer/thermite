@@ -36,9 +36,9 @@ where
         let x3: Vf32<S> = x2 * x;
         let x4: Vf32<S> = x2 * x2;
 
-        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_add(x3, x);
+        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_adde(x3, x);
         let mut c =
-            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_add(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
+            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_adde(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
 
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
@@ -79,7 +79,7 @@ where
             let r2 = Vf32::<S>::splat(2.03721912945E-4);
 
             let x2 = x * x;
-            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_add(x2 * x, x);
+            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_adde(x2 * x, x);
         }
 
         // if not all are small
@@ -115,7 +115,7 @@ where
             let x2 = x * x;
             let x4 = x2 * x2;
 
-            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_adde(x2 * x, x);
         }
 
         // if not all are small
@@ -168,7 +168,7 @@ where
         let z2 = z * z;
 
         poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf)
-            .mul_add(z2 * z, z + s)
+            .mul_adde(z2 * z, z + s)
             .combine_sign(y)
     }
 
@@ -213,7 +213,7 @@ where
         let z = a / b;
         let z2 = z * z;
 
-        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_add(z2 * z, z + s);
+        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_adde(z2 * z, z + s);
 
         re = swap_xy.select(Vf32::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
@@ -241,7 +241,7 @@ where
             let r2 = Vf32::<S>::splat(-4.2699340972E-2);
             let r3 = Vf32::<S>::splat(2.0122003309E-2);
 
-            y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_add(x2 * x, x);
+            y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_adde(x2 * x, x);
         }
 
         if !bitmask.all() {
@@ -286,7 +286,7 @@ where
 
         // if not all are small
         if !bitmask.all() {
-            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln_p::<P>();
+            y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
 
             if x_huge.any() {
                 y2 = x_huge.select(x0.ln_p::<P>() + Vf32::<S>::splat(LN_2), y2);
@@ -318,7 +318,7 @@ where
             let x4 = x2 * x2;
             let x8 = x4 * x4;
 
-            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_add(x2 * x, x);
+            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_adde(x2 * x, x);
         }
 
         if !bitmask.all() {
@@ -384,12 +384,21 @@ where
 
         let mut t = Vf32::<S>::from_bits(ui);
 
-        let two = Vf32::<S>::splat(2.0);
+        if P::POLICY == Policies::Precision || !S::INSTRSET.has_true_fma() {
+            let mut td = t.cast_to::<Vf64<S>>();
+            let xd = x.cast_to::<Vf64<S>>();
 
-        if P::POLICY == Policies::Precision {
-            // TODO: Fallback to double-precision
-            unimplemented!()
-        } else if S::INSTRSET.has_true_fma() {
+            // First iteration accurate to 16 bits, second iteration to 47 bits.
+            for _ in 0..2 {
+                let r = td * td * td;
+                let rxd = xd + r;
+                td *= (xd + rxd) / (r + rxd);
+            }
+
+            t = <Vf32<S> as SimdFromCast<S, Vf64<S>>>::from_cast(td);
+        } else {
+            let two = Vf32::<S>::splat(2.0);
+
             // couple iterations of Newton's method
             // This isn't perfect, as it's only limited to single-precision,
             // but the fused multiply-adds helps
@@ -397,9 +406,11 @@ where
                 let t3 = t * t * t;
                 t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
             }
-        } else {
-            // TODO: Compare performance of double-precision fallback versus compensated sums/products
-            unimplemented!()
+        }
+
+        // TODO: Handle zero in Ultra?
+        if P::POLICY == Policies::UltraPerformance {
+            return t;
         }
 
         // cbrt(NaN,INF,+-0) is itself
@@ -471,37 +482,37 @@ where
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
-        let yr = ef.mul_sub(y, e1); // calculate remainder yr. precision very important here
+        let yr = ef.mul_sube(y, e1); // calculate remainder yr. precision very important here
 
         // add initial terms to expansion
-        let lg = half.nmul_add(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
+        let lg = half.nmul_adde(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
 
         // calculate rounding errors in lg
         // rounding error in multiplication 0.5*x*x
-        let x2err = (half * x).mul_sub(x, half * x2);
+        let x2err = (half * x).mul_sube(x, half * x2);
 
         // rounding error in additions and subtractions
-        let lgerr = half.mul_add(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
+        let lgerr = half.mul_adde(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
 
         // extract something for the exponent
         let e2 = (lg * y * log2e).round();
 
         // subtract this from lg, with extra precision
-        let mut v = e2.nmul_add(ln2f_lo, lg.mul_sub(y, e2 * ln2f_hi));
+        let mut v = e2.nmul_adde(ln2f_lo, lg.mul_sube(y, e2 * ln2f_hi));
 
         // correct for previous rounding errors
-        v -= (lgerr + x2err).mul_sub(y, yr * ln2);
+        v -= (lgerr + x2err).mul_sube(y, yr * ln2);
 
         // extract something for the exponent if possible
         let mut x = v;
         let e3 = (x * log2e).round();
 
         // high precision multiplication not needed here because abs(e3) <= 1
-        x = e3.nmul_add(ln2, x); // x -= e3 * float(VM_LN2);
+        x = e3.nmul_adde(ln2, x); // x -= e3 * float(VM_LN2);
 
         let x2 = x * x;
         let x4 = x2 * x2;
-        let z = poly_5(x, x2, x4, p2expf, p3expf, p4expf, p5expf, p6expf, p7expf).mul_add(x2, x + one);
+        let z = poly_5(x, x2, x4, p2expf, p3expf, p4expf, p5expf, p6expf, p7expf).mul_adde(x2, x + one);
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
@@ -813,7 +824,7 @@ where
         ));
 
         // only compute powf once
-        let h = zgh.powf_p::<P>(very_large.select(z.mul_sub(half, quarter), z - half));
+        let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(half, quarter), z - half));
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
 
@@ -884,14 +895,14 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     }
 
     let x2 = x * x;
-    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_add(x2, x);
+    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_adde(x2, x);
 
     let n2 = pow2n_f::<S>(r);
 
     if mode == ExpMode::Expm1 {
-        z = z.mul_add(n2, n2 - Vf32::<S>::one());
+        z = z.mul_adde(n2, n2 - Vf32::<S>::one());
     } else {
-        z = z.mul_add(n2, n2); // (z + 1.0f) * n2
+        z = z.mul_adde(n2, n2); // (z + 1.0f) * n2
     }
 
     let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite();
@@ -937,7 +948,7 @@ fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     let xx2 = xx * xx;
     let xx4 = xx2 * xx2;
 
-    let z = poly_4(xx, xx2, xx4, p0asinf, p1asinf, p2asinf, p3asinf, p4asinf).mul_add(x3 * x4, x4);
+    let z = poly_4(xx, xx2, xx4, p0asinf, p1asinf, p2asinf, p3asinf, p4asinf).mul_adde(x3 * x4, x4);
 
     let z1 = z + z;
 
@@ -1023,9 +1034,9 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
         p8logf,
     ) * x3;
 
-    res = fe.mul_add(ln2f_lo, res);
-    res += x2.nmul_add(Vf32::<S>::splat(0.5), x);
-    res = fe.mul_add(ln2f_hi, res);
+    res = fe.mul_adde(ln2f_lo, res);
+    res += x2.nmul_adde(Vf32::<S>::splat(0.5), x);
+    res = fe.mul_adde(ln2f_hi, res);
 
     if !P::POLICY.check_overflow() {
         return res;
