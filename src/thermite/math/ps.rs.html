@@ -1437,20 +1437,20 @@
 
         <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>);
 
-        <span class="kw">match</span> <span class="ident">P</span>::<span class="ident">POLICY</span> {
-            <span class="ident">Policies</span>::<span class="ident">Precision</span> <span class="op">=</span><span class="op">&gt;</span> {
-                <span class="comment">// TODO</span>
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">Precision</span> {
+            <span class="comment">// TODO: Fallback to double-precision</span>
+            <span class="macro">unimplemented</span><span class="macro">!</span>()
+        } <span class="kw">else</span> <span class="kw">if</span> <span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
+            <span class="comment">// couple iterations of Newton&#39;s method</span>
+            <span class="comment">// This isn&#39;t perfect, as it&#39;s only limited to single-precision,</span>
+            <span class="comment">// but the fused multiply-adds helps</span>
+            <span class="kw">for</span> <span class="kw">_</span> <span class="kw">in</span> <span class="number">0</span>..<span class="number">2</span> {
+                <span class="kw">let</span> <span class="ident">t3</span> <span class="op">=</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span>;
+                <span class="ident">t</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>, <span class="ident">t3</span>) <span class="op">/</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">t3</span>, <span class="ident">x</span>); <span class="comment">// try to use extended precision where possible</span>
             }
-            <span class="kw">_</span> <span class="kw">if</span> <span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() <span class="op">=</span><span class="op">&gt;</span> {
-                <span class="comment">// couple iterations of Newton&#39;s method</span>
-                <span class="comment">// This isn&#39;t perfect, as it&#39;s only limited to single-precision,</span>
-                <span class="comment">// but the fused multiply-adds helps</span>
-                <span class="kw">for</span> <span class="kw">_</span> <span class="kw">in</span> <span class="number">0</span>..<span class="number">2</span> {
-                    <span class="kw">let</span> <span class="ident">t3</span> <span class="op">=</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span>;
-                    <span class="ident">t</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">x</span>, <span class="ident">t3</span>) <span class="op">/</span> <span class="ident">two</span>.<span class="ident">mul_add</span>(<span class="ident">t3</span>, <span class="ident">x</span>); <span class="comment">// try to use extended precision where possible</span>
-                }
-            }
-            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {} <span class="comment">// TODO</span>
+        } <span class="kw">else</span> {
+            <span class="comment">// TODO: Compare performance of double-precision fallback versus compensated sums/products</span>
+            <span class="macro">unimplemented</span><span class="macro">!</span>()
         }
 
         <span class="comment">// cbrt(NaN,INF,+-0) is itself</span>
