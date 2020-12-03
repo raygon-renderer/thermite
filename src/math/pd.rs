@@ -124,7 +124,7 @@ where
 
         // if not all are small
         if !bitmask.all() {
-            y2 = x.exph();
+            y2 = Self::exph::<P>(x);
             y2 -= Vf64::<S>::splat(0.25) / y2;
         }
 
@@ -164,7 +164,7 @@ where
 
         // if not all are small
         if !bitmask.all() {
-            y2 = (x + x).exp();
+            y2 = Self::exp::<P>(x + x);
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
 
@@ -211,10 +211,10 @@ where
         }
 
         if !bitmask.all() {
-            y2 = ((x2 + one).sqrt() + x).ln();
+            y2 = Self::ln::<P>((x2 + one).sqrt() + x);
 
             if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x.ln() + Vf64::<S>::splat(LN_2), y2);
+                y2 = x_huge.select(Self::ln::<P>(x) + Vf64::<S>::splat(LN_2), y2);
             }
         }
 
@@ -257,10 +257,10 @@ where
         }
 
         if !bitmask.all() {
-            y2 = (x0.mul_sub(x0, one).sqrt() + x0).ln();
+            y2 = Self::ln::<P>(x0.mul_sub(x0, one).sqrt() + x0);
 
             if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x0.ln() + Vf64::<S>::splat(LN_2), y2);
+                y2 = x_huge.select(Self::ln::<P>(x0) + Vf64::<S>::splat(LN_2), y2);
             }
         }
 
@@ -303,7 +303,7 @@ where
         }
 
         if !bitmask.all() {
-            y2 = ((one + x) / (one - x)).ln() * half;
+            y2 = Self::ln::<P>((one + x) / (one - x)) * half;
 
             y2 = x
                 .gt(one)
@@ -620,7 +620,7 @@ where
 
         let a = y.abs();
 
-        let w = -a.nmul_add(a, one).ln();
+        let w = -Self::ln::<P>(a.nmul_add(a, one));
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
         let mut p0 = (w - Vf64::<S>::splat(2.5)).poly(&[
@@ -722,7 +722,7 @@ where
             // sine is expensive, so branch for it.
             if unlikely!(reflected.any()) {
                 // TODO: Improve error around integers
-                refl_res = z * (z * pi).sin();
+                refl_res = z * Self::sin::<P>(z * pi);
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
                 // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
@@ -830,7 +830,7 @@ where
         );
 
         let zgh = z + gh;
-        let lzgh = zgh.ln();
+        let lzgh = Self::ln::<P>(zgh);
 
         // (z * lzfg) > ln(f64::MAX)
         let very_large = (z * lzgh).gt(Vf64::<S>::splat(
@@ -838,9 +838,9 @@ where
         ));
 
         // only compute powf once
-        let h = zgh.powf(very_large.select(z.mul_sub(half, quarter), z - half));
+        let h = Self::powf::<P>(zgh, very_large.select(z.mul_sub(half, quarter), z - half));
 
-        let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp();
+        let normal_res = lanczos_sum * very_large.select(h * h, h) / Self::exp::<P>(zgh);
 
         res *= tiny.select(tiny_res, normal_res);
 
