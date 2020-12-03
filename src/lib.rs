@@ -976,7 +976,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     #[inline(always)]
     fn nmul_sube(self, m: Self, s: Self) -> Self {
         if S::INSTRSET.has_true_fma() {
-            self.nmul_add(m, -s)
+            self.nmul_sub(m, s)
         } else {
             self.nmul_adde(m, -s)
         }
