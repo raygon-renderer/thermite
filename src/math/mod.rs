@@ -386,7 +386,7 @@ where
     #[inline] fn exp2_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp2::<P>(self)  }
     #[inline] fn exp10_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10::<P>(self)  }
     #[inline] fn exp_m1_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1::<P>(self)  }
-    #[inline] fn cbrt_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<Precision>(self)  }
+    #[inline] fn cbrt_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<P>(self)  }
     #[inline] fn powf_p<P: Policy>(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf::<P>(self, e)  }
     #[inline] fn ln_p<P: Policy>(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln::<P>(self)  }
     #[inline] fn ln_1p_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p::<P>(self)  }
@@ -450,7 +450,7 @@ where
     #[inline(always)] fn exp2(self)             -> Self         { self.exp2_p::<Performance>() }
     #[inline(always)] fn exp10(self)            -> Self         { self.exp10_p::<Performance>() }
     #[inline(always)] fn exp_m1(self)           -> Self         { self.exp_m1_p::<Performance>() }
-    #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<Precision>() }
+    #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<Performance>() }
     #[inline(always)] fn powf(self, e: Self)    -> Self         { self.powf_p::<Performance>(e) }
     #[inline(always)] fn ln(self)               -> Self         { self.ln_p::<Performance>() }
     #[inline(always)] fn ln_1p(self)            -> Self         { self.ln_1p_p::<Performance>() }

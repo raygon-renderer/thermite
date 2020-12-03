@@ -386,20 +386,20 @@ where
 
         let two = Vf32::<S>::splat(2.0);
 
-        match P::POLICY {
-            Policies::Precision => {
-                // TODO
+        if P::POLICY == Policies::Precision {
+            // TODO: Fallback to double-precision
+            unimplemented!()
+        } else if S::INSTRSET.has_true_fma() {
+            // couple iterations of Newton's method
+            // This isn't perfect, as it's only limited to single-precision,
+            // but the fused multiply-adds helps
+            for _ in 0..2 {
+                let t3 = t * t * t;
+                t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
             }
-            _ if S::INSTRSET.has_true_fma() => {
-                // couple iterations of Newton's method
-                // This isn't perfect, as it's only limited to single-precision,
-                // but the fused multiply-adds helps
-                for _ in 0..2 {
-                    let t3 = t * t * t;
-                    t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
-                }
-            }
-            _ => {} // TODO
+        } else {
+            // TODO: Compare performance of double-precision fallback versus compensated sums/products
+            unimplemented!()
         }
 
         // cbrt(NaN,INF,+-0) is itself
