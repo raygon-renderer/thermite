@@ -263,8 +263,8 @@ impl SimdVector<AVX2> for u64x8<AVX2> {
     fn gt(self, other: Self) -> Mask<AVX2, Self> {
         Mask::new(Self::new(unsafe {
             (
-                _mm256_cmpgt_epi64(self.value.0, other.value.0),
-                _mm256_cmpgt_epi64(self.value.1, other.value.1),
+                _mm256_cmpgt_epu64x(self.value.0, other.value.0),
+                _mm256_cmpgt_epu64x(self.value.1, other.value.1),
             )
         }))
     }

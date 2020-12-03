@@ -80,6 +80,18 @@ pub unsafe fn _mm256_cvtepi64_pdx(v: __m256i) -> __m256d {
 }
 
 #[inline(always)]
+pub unsafe fn _mm256_cmpgt_epu32x(a: __m256i, b: __m256i) -> __m256i {
+    let mask = _mm256_set1_epi32(0x80000000u32 as i32);
+    _mm256_cmpgt_epi32(_mm256_xor_si256(a, mask), _mm256_xor_si256(b, mask))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_cmpgt_epu64x(a: __m256i, b: __m256i) -> __m256i {
+    let mask = _mm256_set1_epi64x(0x8000000080000000u64 as i64);
+    _mm256_cmpgt_epi64(_mm256_xor_si256(a, mask), _mm256_xor_si256(b, mask))
+}
+
+#[inline(always)]
 pub unsafe fn _mm256_adds_epi32x(lhs: __m256i, rhs: __m256i) -> __m256i {
     let res = _mm256_add_epi32(lhs, rhs);
 
