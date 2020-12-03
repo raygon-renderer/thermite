@@ -1332,7 +1332,7 @@
 
         <span class="comment">// if not all are small</span>
         <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-            <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">exph</span>();
+            <span class="ident">y2</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">exph</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>);
             <span class="ident">y2</span> <span class="op">-</span><span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>) <span class="op">/</span> <span class="ident">y2</span>;
         }
 
@@ -1372,7 +1372,7 @@
 
         <span class="comment">// if not all are small</span>
         <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-            <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>).<span class="ident">exp</span>();
+            <span class="ident">y2</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">exp</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>);
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">y2</span> <span class="op">-</span> <span class="ident">one</span>) <span class="op">/</span> (<span class="ident">y2</span> <span class="op">+</span> <span class="ident">one</span>); <span class="comment">// originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0</span>
         }
 
@@ -1419,10 +1419,10 @@
         }
 
         <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-            <span class="ident">y2</span> <span class="op">=</span> ((<span class="ident">x2</span> <span class="op">+</span> <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x</span>).<span class="ident">ln</span>();
+            <span class="ident">y2</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>((<span class="ident">x2</span> <span class="op">+</span> <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x</span>);
 
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">x_huge</span>.<span class="ident">any</span>()) {
-                <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x_huge</span>.<span class="ident">select</span>(<span class="ident">x</span>.<span class="ident">ln</span>() <span class="op">+</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>), <span class="ident">y2</span>);
+                <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x_huge</span>.<span class="ident">select</span>(<span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>) <span class="op">+</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>), <span class="ident">y2</span>);
             }
         }
 
@@ -1465,10 +1465,10 @@
         }
 
         <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-            <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x0</span>.<span class="ident">mul_sub</span>(<span class="ident">x0</span>, <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x0</span>).<span class="ident">ln</span>();
+            <span class="ident">y2</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x0</span>.<span class="ident">mul_sub</span>(<span class="ident">x0</span>, <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x0</span>);
 
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">x_huge</span>.<span class="ident">any</span>()) {
-                <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x_huge</span>.<span class="ident">select</span>(<span class="ident">x0</span>.<span class="ident">ln</span>() <span class="op">+</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>), <span class="ident">y2</span>);
+                <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x_huge</span>.<span class="ident">select</span>(<span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x0</span>) <span class="op">+</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>), <span class="ident">y2</span>);
             }
         }
 
@@ -1511,7 +1511,7 @@
         }
 
         <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-            <span class="ident">y2</span> <span class="op">=</span> ((<span class="ident">one</span> <span class="op">+</span> <span class="ident">x</span>) <span class="op">/</span> (<span class="ident">one</span> <span class="op">-</span> <span class="ident">x</span>)).<span class="ident">ln</span>() <span class="op">*</span> <span class="ident">half</span>;
+            <span class="ident">y2</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>((<span class="ident">one</span> <span class="op">+</span> <span class="ident">x</span>) <span class="op">/</span> (<span class="ident">one</span> <span class="op">-</span> <span class="ident">x</span>)) <span class="op">*</span> <span class="ident">half</span>;
 
             <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x</span>
                 .<span class="ident">gt</span>(<span class="ident">one</span>)
@@ -1828,7 +1828,7 @@
 
         <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">abs</span>();
 
-        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span><span class="ident">a</span>.<span class="ident">nmul_add</span>(<span class="ident">a</span>, <span class="ident">one</span>).<span class="ident">ln</span>();
+        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="op">-</span><span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span>.<span class="ident">nmul_add</span>(<span class="ident">a</span>, <span class="ident">one</span>));
 
         <span class="comment">// https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p0</span> <span class="op">=</span> (<span class="ident">w</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.5</span>)).<span class="ident">poly</span>(<span class="kw-2">&amp;</span>[
@@ -1930,7 +1930,7 @@
             <span class="comment">// sine is expensive, so branch for it.</span>
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">reflected</span>.<span class="ident">any</span>()) {
                 <span class="comment">// TODO: Improve error around integers</span>
-                <span class="ident">refl_res</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin</span>();
+                <span class="ident">refl_res</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> <span class="self">Self</span>::<span class="ident">sin</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>);
 
                 <span class="comment">// NOTE: I chose not to use a bitmask here, because some bitmasks can be</span>
                 <span class="comment">// one extra instruction than the raw call to `all` again, and since z &lt;= -20 is so rare,</span>
@@ -2038,7 +2038,7 @@
         );
 
         <span class="kw">let</span> <span class="ident">zgh</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>;
-        <span class="kw">let</span> <span class="ident">lzgh</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">ln</span>();
+        <span class="kw">let</span> <span class="ident">lzgh</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">zgh</span>);
 
         <span class="comment">// (z * lzfg) &gt; ln(f64::MAX)</span>
         <span class="kw">let</span> <span class="ident">very_large</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">lzgh</span>).<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(
@@ -2046,9 +2046,9 @@
         ));
 
         <span class="comment">// only compute powf once</span>
-        <span class="kw">let</span> <span class="ident">h</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">powf</span>(<span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">z</span>.<span class="ident">mul_sub</span>(<span class="ident">half</span>, <span class="ident">quarter</span>), <span class="ident">z</span> <span class="op">-</span> <span class="ident">half</span>));
+        <span class="kw">let</span> <span class="ident">h</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">powf</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">zgh</span>, <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">z</span>.<span class="ident">mul_sub</span>(<span class="ident">half</span>, <span class="ident">quarter</span>), <span class="ident">z</span> <span class="op">-</span> <span class="ident">half</span>));
 
-        <span class="kw">let</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>) <span class="op">/</span> <span class="ident">zgh</span>.<span class="ident">exp</span>();
+        <span class="kw">let</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>) <span class="op">/</span> <span class="self">Self</span>::<span class="ident">exp</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">zgh</span>);
 
         <span class="ident">res</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">tiny</span>.<span class="ident">select</span>(<span class="ident">tiny_res</span>, <span class="ident">normal_res</span>);
 
