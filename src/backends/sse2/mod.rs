@@ -15,4 +15,5 @@ use half::f16;
 
 pub(crate) mod polyfills;
 
+use super::polyfills::*;
 use polyfills::*;

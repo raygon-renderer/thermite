@@ -3,19 +3,19 @@ use super::*;
 use crate::backends::sse2::polyfills::*;
 
 #[inline(always)]
-pub unsafe fn _mm_blendv_epi32x(ymm0: __m128i, ymm1: __m128i, mask: __m128i) -> __m128i {
+pub unsafe fn _mm_blendv_epi32x(xmm0: __m128i, xmm1: __m128i, mask: __m128i) -> __m128i {
     _mm_castps_si128(_mm_blendv_ps(
-        _mm_castsi128_ps(ymm0),
-        _mm_castsi128_ps(ymm1),
+        _mm_castsi128_ps(xmm0),
+        _mm_castsi128_ps(xmm1),
         _mm_castsi128_ps(mask),
     ))
 }
 
 #[inline(always)]
-pub unsafe fn _mm_blendv_epi64x(ymm0: __m128i, ymm1: __m128i, mask: __m128i) -> __m128i {
+pub unsafe fn _mm_blendv_epi64x(xmm0: __m128i, xmm1: __m128i, mask: __m128i) -> __m128i {
     _mm_castpd_si128(_mm_blendv_pd(
-        _mm_castsi128_pd(ymm0),
-        _mm_castsi128_pd(ymm1),
+        _mm_castsi128_pd(xmm0),
+        _mm_castsi128_pd(xmm1),
         _mm_castsi128_pd(mask),
     ))
 }
@@ -81,6 +81,9 @@ pub unsafe fn _mm_cvtepi64_pdx(v: __m128i) -> __m128d {
                        _mm_add_pd(v_hi_dbl, _mm_castsi128_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
 }
 
+// NOTE: Saturated add/sub use the "sign bit" as the select bit,
+// so when porting to SSE2 it'll need to use the `signbits` methods to properly select with `_mm_blendv_epi8x`
+
 #[inline(always)]
 pub unsafe fn _mm_adds_epi64x(lhs: __m128i, rhs: __m128i) -> __m128i {
     let res = _mm_add_epi64(lhs, rhs);
@@ -100,5 +103,27 @@ pub unsafe fn _mm_adds_epi32x(lhs: __m128i, rhs: __m128i) -> __m128i {
         res,
         _mm_blendv_epi32x(_mm_set1_epi32(i32::MIN), _mm_set1_epi32(i32::MAX), res),
         _mm_xor_si128(rhs, _mm_cmpgt_epi32(lhs, res)),
+    )
+}
+
+#[inline(always)]
+pub unsafe fn _mm_subs_epi32x(lhs: __m128i, rhs: __m128i) -> __m128i {
+    let res = _mm_sub_epi32(lhs, rhs);
+
+    _mm_blendv_epi32x(
+        res,
+        _mm_blendv_epi32x(_mm_set1_epi32(i32::MIN), _mm_set1_epi32(i32::MAX), res),
+        _mm_xor_si128(_mm_cmpgt_epi32(rhs, _mm_setzero_si128()), _mm_cmpgt_epi32(lhs, res)),
+    )
+}
+
+#[inline(always)]
+pub unsafe fn _mm_subs_epi64x(lhs: __m128i, rhs: __m128i) -> __m128i {
+    let res = _mm_sub_epi64(lhs, rhs);
+
+    _mm_blendv_epi64x(
+        res,
+        _mm_blendv_epi64x(_mm_set1_epi64x(i64::MIN), _mm_set1_epi64x(i64::MAX), res),
+        _mm_xor_si128(_mm_cmpgt_epi64(rhs, _mm_setzero_si128()), _mm_cmpgt_epi64(lhs, res)),
     )
 }
