@@ -690,6 +690,26 @@
 <span id="687">687</span>
 <span id="688">688</span>
 <span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
+<span id="705">705</span>
+<span id="706">706</span>
+<span id="707">707</span>
+<span id="708">708</span>
+<span id="709">709</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1231,6 +1251,26 @@
                 <span class="ident">_mm256_fnmsub_pd</span>(<span class="self">self</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">m</span>.<span class="ident">value</span>.<span class="number">1</span>, <span class="ident">s</span>.<span class="ident">value</span>.<span class="number">1</span>),
             )
         })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">mul_adde</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">m</span>, <span class="ident">a</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">mul_sube</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">mul_sub</span>(<span class="ident">m</span>, <span class="ident">s</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">nmul_adde</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">nmul_add</span>(<span class="ident">m</span>, <span class="ident">a</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">nmul_sube</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">s</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span>.<span class="ident">nmul_sub</span>(<span class="ident">m</span>, <span class="ident">s</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
