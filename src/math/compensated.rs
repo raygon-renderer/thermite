@@ -71,3 +71,28 @@ impl<S: Simd, V: SimdFloatVector<S>> Compensated<S, V> {
         Compensated::from_parts(x, y)
     }
 }
+
+impl<S: Simd, V: SimdFloatVector<S>> Add<V> for Compensated<S, V> {
+    type Output = Self;
+
+    fn add(mut self, rhs: V) -> Self {
+        let pi = Self::sum(self.val, rhs);
+        self.val = pi.val;
+        self.err += pi.err;
+        self
+    }
+}
+
+// Accurate Floating Point Product, Stef Graillat
+//
+// https://www-pequan.lip6.fr/~graillat/papers/REC08_Paper_Graillat.pdf
+impl<S: Simd, V: SimdFloatVector<S>> Mul<V> for Compensated<S, V> {
+    type Output = Self;
+
+    fn mul(mut self, rhs: V) -> Self {
+        let pi = Self::product(self.val, rhs);
+        self.val = pi.val;
+        self.err = self.err * rhs + pi.err;
+        self
+    }
+}
