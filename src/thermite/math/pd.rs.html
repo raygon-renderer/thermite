@@ -1356,7 +1356,7 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="comment">// if any are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.51754964808151394800E5</span>);
             <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.15614435765005216044E4</span>);
             <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.63725857525983828727E2</span>);
@@ -1374,7 +1374,7 @@
         }
 
         <span class="comment">// if not all are small</span>
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">exph_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
             <span class="ident">y2</span> <span class="op">-</span><span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>) <span class="op">/</span> <span class="ident">y2</span>;
         }
@@ -1397,7 +1397,7 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="comment">// if any are small</span>
-        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.61468768441708447952E3</span>);
             <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.92877231001918586564E1</span>);
             <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.64399179425052238628E-1</span>);
@@ -1414,7 +1414,7 @@
         }
 
         <span class="comment">// if not all are small</span>
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x</span>).<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">y2</span> <span class="op">-</span> <span class="ident">one</span>) <span class="op">/</span> (<span class="ident">y2</span> <span class="op">+</span> <span class="ident">one</span>); <span class="comment">// originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0</span>
         }
@@ -1442,7 +1442,7 @@
 
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
-        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.56682227230859640450E0</span>);
             <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.09030533308377316566E0</span>);
             <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.37390226194356683570E0</span>);
@@ -1461,7 +1461,7 @@
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> ((<span class="ident">x2</span> <span class="op">+</span> <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">x_huge</span>.<span class="ident">any</span>()) {
@@ -1487,7 +1487,7 @@
 
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
-        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.10855947270161294369E5</span>);
             <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.08102874834699867335E5</span>);
             <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.43989375926195455866E4</span>);
@@ -1507,7 +1507,7 @@
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">is_undef</span>.<span class="ident">select</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">y1</span>);
         }
 
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> (<span class="ident">x0</span>.<span class="ident">mul_sube</span>(<span class="ident">x0</span>, <span class="ident">one</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="ident">x0</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">x_huge</span>.<span class="ident">any</span>()) {
@@ -1532,7 +1532,7 @@
 
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
-        <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.09092539379866942570E1</span>);
             <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.54566728676544377376E1</span>);
             <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.61252884198732692637E1</span>);
@@ -1553,7 +1553,7 @@
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
             <span class="ident">y2</span> <span class="op">=</span> ((<span class="ident">one</span> <span class="op">+</span> <span class="ident">x</span>) <span class="op">/</span> (<span class="ident">one</span> <span class="op">-</span> <span class="ident">x</span>)).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">*</span> <span class="ident">half</span>;
 
             <span class="ident">y2</span> <span class="op">=</span> <span class="ident">x</span>
@@ -2339,7 +2339,7 @@
     <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">is_big</span>.<span class="ident">bitmask</span>();
 
     <span class="comment">// if not all are big (if any are small)</span>
-    <span class="kw">if</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
+    <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
         <span class="kw">let</span> <span class="ident">p5asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.253011369004428248960E-3</span>);
         <span class="kw">let</span> <span class="ident">p4asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">6.019598008014123785661E-1</span>);
         <span class="kw">let</span> <span class="ident">p3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.444622390564711410273E0</span>);
@@ -2357,7 +2357,7 @@
     }
 
     <span class="comment">// if any are big</span>
-    <span class="kw">if</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
+    <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
         <span class="kw">let</span> <span class="ident">r4asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.967721961301243206100E-3</span>);
         <span class="kw">let</span> <span class="ident">r3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.634242780008963776856E-1</span>);
         <span class="kw">let</span> <span class="ident">r2asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.968710824104713396794E0</span>);
