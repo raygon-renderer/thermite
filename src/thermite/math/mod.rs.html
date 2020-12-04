@@ -1058,6 +1058,16 @@
 <span id="1055">1055</span>
 <span id="1056">1056</span>
 <span id="1057">1057</span>
+<span id="1058">1058</span>
+<span id="1059">1059</span>
+<span id="1060">1060</span>
+<span id="1061">1061</span>
+<span id="1062">1062</span>
+<span id="1063">1063</span>
+<span id="1064">1064</span>
+<span id="1065">1065</span>
+<span id="1066">1066</span>
+<span id="1067">1067</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1107,20 +1117,30 @@
     }
 
     <span class="doccomment">/// Optimize for performance at the cost of precision and safety (doesn&#39;t handle special cases such as NaNs or overflow).</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// On instruction sets with FMA, this usually doesn&#39;t hurt precision too much, but will still avoid overflow/underflow checking,</span>
+    <span class="doccomment">/// which can result in undefined behavior.</span>
     <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">UltraPerformance</span>;
 
     <span class="doccomment">/// Optimize for performance, ideally without losing precision.</span>
     <span class="doccomment">///</span>
-    <span class="doccomment">/// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath)</span>
+    <span class="doccomment">/// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath),</span>
+    <span class="doccomment">/// and tries to provide as much precision and performance as possible.</span>
     <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Performance</span>;
 
     <span class="doccomment">/// Optimize for precision, at the cost of performance if necessary.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// On instruction sets with FMA, performance may not be hurt too much.</span>
     <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Precision</span>;
 
     <span class="doccomment">/// Optimize for code size, avoids hard-coded equations or loop unrolling.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Performance is not a priority for this policy.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Best used in conjuction with `opt-level=z`</span>
     <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Size</span>;
 

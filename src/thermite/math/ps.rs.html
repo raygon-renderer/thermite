@@ -1059,6 +1059,28 @@
 <span id="1056">1056</span>
 <span id="1057">1057</span>
 <span id="1058">1058</span>
+<span id="1059">1059</span>
+<span id="1060">1060</span>
+<span id="1061">1061</span>
+<span id="1062">1062</span>
+<span id="1063">1063</span>
+<span id="1064">1064</span>
+<span id="1065">1065</span>
+<span id="1066">1066</span>
+<span id="1067">1067</span>
+<span id="1068">1068</span>
+<span id="1069">1069</span>
+<span id="1070">1070</span>
+<span id="1071">1071</span>
+<span id="1072">1072</span>
+<span id="1073">1073</span>
+<span id="1074">1074</span>
+<span id="1075">1075</span>
+<span id="1076">1076</span>
+<span id="1077">1077</span>
+<span id="1078">1078</span>
+<span id="1079">1079</span>
+<span id="1080">1080</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1747,10 +1769,13 @@
         <span class="kw">let</span> <span class="ident">v</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>()).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>(), <span class="ident">x</span>);
 
         <span class="kw">let</span> <span class="ident">bits</span> <span class="op">=</span> <span class="ident">v</span>.<span class="ident">into_bits</span>();
-        <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>()).<span class="ident">select</span>(
-            <span class="ident">x</span>,
-            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">ge</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>)),
-        )
+        <span class="kw">let</span> <span class="ident">finite</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">ge</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>));
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+            <span class="kw">return</span> <span class="ident">finite</span>;
+        }
+
+        <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>()).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">finite</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1760,10 +1785,13 @@
         <span class="kw">let</span> <span class="ident">v</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>(), <span class="ident">x</span>);
 
         <span class="kw">let</span> <span class="ident">bits</span> <span class="op">=</span> <span class="ident">v</span>.<span class="ident">into_bits</span>();
-        <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_infinity</span>()).<span class="ident">select</span>(
-            <span class="ident">x</span>,
-            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>)),
-        )
+        <span class="kw">let</span> <span class="ident">finite</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>));
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+            <span class="kw">return</span> <span class="ident">finite</span>;
+        }
+
+        <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_infinity</span>()).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">finite</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -1788,8 +1816,24 @@
 
             <span class="comment">// sine is expensive, so branch for it.</span>
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">reflected</span>.<span class="ident">any</span>()) {
-                <span class="comment">// TODO: Improve error around integers</span>
-                <span class="ident">refl_res</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+                <span class="ident">refl_res</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">P</span>::<span class="ident">POLICY</span> {
+                    <span class="ident">Policies</span>::<span class="ident">Precision</span> <span class="op">=</span><span class="op">&gt;</span> {
+                        <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">abs</span>();
+                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">fl</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">floor</span>();
+
+                        <span class="kw">let</span> <span class="ident">is_odd</span> <span class="op">=</span> (<span class="ident">fl</span> <span class="op">%</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>)).<span class="ident">ne</span>(<span class="ident">zero</span>);
+
+                        <span class="ident">fl</span> <span class="op">+</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// conditional add</span>
+
+                        <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// if odd -0.0 or 0.0</span>
+                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">dist</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">-</span> <span class="ident">fl</span>) <span class="op">^</span> <span class="ident">sign</span>; <span class="comment">// -(z - fl) = (fl - z) if odd</span>
+
+                        <span class="ident">dist</span> <span class="op">=</span> <span class="ident">dist</span>.<span class="ident">gt</span>(<span class="ident">half</span>).<span class="ident">select</span>(<span class="ident">one</span> <span class="op">-</span> <span class="ident">dist</span>, <span class="ident">dist</span>);
+
+                        (<span class="ident">z</span> <span class="op">^</span> <span class="ident">sign</span>) <span class="op">*</span> (<span class="ident">dist</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
+                    }
+                    <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(),
+                };
 
                 <span class="comment">// NOTE: I chose not to use a bitmask here, because some bitmasks can be</span>
                 <span class="comment">// one extra instruction than the raw call to `all` again, and since z &lt;= -20 is so rare,</span>
