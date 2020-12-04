@@ -139,6 +139,11 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn fmod_p<P: Policy>(self, y: Self) -> Self;
     fn hypot_p<P: Policy>(self, y: Self) -> Self;
     fn poly_p<P: Policy>(self, coefficients: &[Self::Element]) -> Self;
+    fn poly_rational_p<P: Policy>(
+        self,
+        numerator_coefficients: &[Self::Element],
+        denominator_coefficients: &[Self::Element],
+    ) -> Self;
 
     fn poly_f_p<P: Policy, F>(self, n: usize, f: F) -> Self
     where
@@ -213,6 +218,13 @@ pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> + SimdVectorizedMathPo
     ///
     /// **NOTE**: This has the potential to inline and unroll the inner loop for constant input
     fn poly(self, coefficients: &[Self::Element]) -> Self;
+
+    /// Computes `self.poly(numerator_coefficients) / self.poly(denominator_coefficients)` with extra precision if the policy calls for it.
+    fn poly_rational(
+        self,
+        numerator_coefficients: &[Self::Element],
+        denominator_coefficients: &[Self::Element],
+    ) -> Self;
 
     /// Computes the sum `Σ(f(i)*x^i)` from `i=0` to `n`
     ///
@@ -399,6 +411,14 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly::<P>(self, coefficients)
     }
 
+    #[inline] fn poly_rational_p<P: Policy>(
+        self,
+        numerator_coefficients: &[Self::Element],
+        denominator_coefficients: &[Self::Element],
+    ) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly_rational::<P>(self, numerator_coefficients, denominator_coefficients)
+    }
+
     #[inline] fn hermite_p<P: Policy>(self, n: u32)                                      -> Self {
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermite::<P>(self, n)
     }
@@ -468,6 +488,14 @@ where
         F: FnMut(usize) -> Self,
     {
         self.poly_f_p::<Performance, F>(n, f)
+    }
+
+    #[inline(always)] fn poly_rational(
+        self,
+        numerator_coefficients: &[Self::Element],
+        denominator_coefficients: &[Self::Element],
+    ) -> Self {
+        self.poly_rational_p::<Performance>(numerator_coefficients, denominator_coefficients)
     }
 
     #[inline(always)] fn poly(self, coefficients: &[Self::Element])             -> Self { self.poly_p::<Performance>(coefficients) }
@@ -787,6 +815,48 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     #[inline(always)]
     fn poly<P: Policy>(x: Self::Vf, c: &[Self]) -> Self::Vf {
         x.poly_f_p::<P, _>(c.len(), |i| unsafe { Self::Vf::splat(*c.get_unchecked(i)) })
+    }
+
+    #[inline(always)]
+    fn poly_rational<P: Policy>(
+        x: Self::Vf,
+        numerator_coefficients: &[Self],
+        denominator_coefficients: &[Self],
+    ) -> Self::Vf {
+        if P::POLICY.extra_precision {
+            let one = Self::Vf::one();
+            let invert = x.gt(one);
+            let bitmask = invert.bitmask();
+
+            let mut n0 = unsafe { Self::Vf::undefined() };
+            let mut n1 = unsafe { Self::Vf::undefined() };
+
+            let mut d0 = unsafe { Self::Vf::undefined() };
+            let mut d1 = unsafe { Self::Vf::undefined() };
+
+            if P::POLICY.avoid_branching || !bitmask.all() {
+                n0 = Self::poly::<P>(x, numerator_coefficients);
+                d0 = Self::poly::<P>(x, denominator_coefficients);
+            }
+
+            if P::POLICY.avoid_branching || bitmask.any() {
+                let inv = one / x;
+
+                n1 = Self::poly_f::<_, P>(inv, numerator_coefficients.len(), |i| unsafe {
+                    Self::Vf::splat(*numerator_coefficients.get_unchecked(numerator_coefficients.len() - i - 1))
+                });
+
+                d1 = Self::poly_f::<_, P>(inv, denominator_coefficients.len(), |i| unsafe {
+                    Self::Vf::splat(*denominator_coefficients.get_unchecked(denominator_coefficients.len() - i - 1))
+                });
+            }
+
+            // division is slow, but select is fast, so avoid dividing in the branches
+            // to save a division at the cost of one extra select.
+            invert.select(n1, n0) / invert.select(d1, d0)
+        } else {
+            Self::poly::<P>(x, numerator_coefficients) / Self::poly::<P>(x, denominator_coefficients)
+        }
     }
 
     #[inline(always)]
