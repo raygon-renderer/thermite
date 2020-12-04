@@ -744,7 +744,7 @@ where
                         let sign = Vf32::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
                         let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
 
-                        dist = dist.gt(half).select(one - dist, dist);
+                        dist -= one & dist.gt(half).value(); // conditional subtract
 
                         (z ^ sign) * (dist * pi).sin_p::<P>()
                     }
