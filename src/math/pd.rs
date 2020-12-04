@@ -725,8 +725,24 @@ where
 
             // sine is expensive, so branch for it.
             if unlikely!(reflected.any()) {
-                // TODO: Improve error around integers
-                refl_res = z * (z * pi).sin_p::<P>();
+                refl_res = match P::POLICY {
+                    Policies::Precision => {
+                        let z = z.abs();
+                        let mut fl = z.floor();
+
+                        let is_odd = (fl % Vf64::<S>::splat(2.0)).ne(zero);
+
+                        fl += one & is_odd.value(); // conditional add
+
+                        let sign = Vf64::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
+                        let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
+
+                        dist = dist.gt(half).select(one - dist, dist);
+
+                        (z ^ sign) * (dist * pi).sin_p::<P>()
+                    }
+                    _ => z * (z * pi).sin_p::<P>(),
+                };
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
                 // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
