@@ -46,20 +46,30 @@ pub mod policies {
     }
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
+    ///
+    /// On instruction sets with FMA, this usually doesn't hurt precision too much, but will still avoid overflow/underflow checking,
+    /// which can result in undefined behavior.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct UltraPerformance;
 
     /// Optimize for performance, ideally without losing precision.
     ///
-    /// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath)
+    /// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath),
+    /// and tries to provide as much precision and performance as possible.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Performance;
 
     /// Optimize for precision, at the cost of performance if necessary.
+    ///
+    /// On instruction sets with FMA, performance may not be hurt too much.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Precision;
 
     /// Optimize for code size, avoids hard-coded equations or loop unrolling.
+    ///
+    /// Performance is not a priority for this policy.
+    ///
+    /// Best used in conjuction with `opt-level=z`
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Size;
 
