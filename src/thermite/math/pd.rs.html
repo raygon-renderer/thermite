@@ -1248,7 +1248,6 @@
 <span id="1245">1245</span>
 <span id="1246">1246</span>
 <span id="1247">1247</span>
-<span id="1248">1248</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1306,7 +1305,7 @@
         <span class="comment">// swap sin and cos if odd quadrant</span>
         <span class="kw">let</span> <span class="ident">swap</span> <span class="op">=</span> (<span class="ident">q</span> <span class="op">&amp;</span> <span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()).<span class="ident">ne</span>(<span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>());
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">let</span> <span class="ident">overflow</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>((<span class="number">1u64</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">52</span>) <span class="kw">as</span> <span class="ident">f64</span> <span class="op">-</span> <span class="number">1.0</span>)) <span class="op">&amp;</span> <span class="ident">xa</span>.<span class="ident">is_finite</span>();
 
             <span class="kw">let</span> <span class="ident">s</span> <span class="op">=</span> <span class="ident">overflow</span>.<span class="ident">select</span>(<span class="ident">zero</span>, <span class="ident">s</span>);
@@ -1631,7 +1630,7 @@
         <span class="ident">ui</span> <span class="op">=</span> (<span class="ident">ui</span> <span class="op">+</span> <span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0x80000000</span>)) <span class="op">&amp;</span> <span class="ident">Vu64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0xffffffffc0000000</span>);
         <span class="ident">t</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">ui</span>);
 
-        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">Precision</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
+        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
             <span class="comment">// original form, 5 simple ops, 2 divisions</span>
             ((<span class="ident">x</span> <span class="op">/</span> (<span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span>)) <span class="op">-</span> <span class="ident">t</span>) <span class="op">/</span> ((<span class="ident">t</span> <span class="op">+</span> <span class="ident">t</span>) <span class="op">+</span> (<span class="ident">x</span> <span class="op">/</span> (<span class="ident">t</span> <span class="op">*</span> <span class="ident">t</span>)))
         } <span class="kw">else</span> {
@@ -1642,7 +1641,7 @@
 
         <span class="ident">t</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">mul_adde</span>(<span class="ident">t</span>, <span class="ident">t</span>);
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">return</span> <span class="ident">x</span>.<span class="ident">eq</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">x</span>, <span class="ident">t</span>);
         }
 
@@ -1756,7 +1755,7 @@
         <span class="comment">// add exponent by integer addition</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>((<span class="ident">ei</span>.<span class="ident">into_bits</span>() <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">52</span>) <span class="op">+</span> <span class="ident">z</span>.<span class="ident">into_bits</span>());
 
-        <span class="kw">if</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">return</span> <span class="ident">z</span>;
         }
 
@@ -1918,7 +1917,7 @@
                 <span class="op">-</span><span class="number">0.0000023620166848468398</span>,
             ]);
 
-            <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+            <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
                 <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">eq</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x == 1) = inf</span>
                 <span class="ident">p1</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">gt</span>(<span class="ident">one</span>).<span class="ident">select</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">p1</span>); <span class="comment">// erfinv(x &gt; 1) = NaN</span>
             }
@@ -1938,7 +1937,7 @@
         <span class="kw">let</span> <span class="ident">bits</span> <span class="op">=</span> <span class="ident">v</span>.<span class="ident">into_bits</span>();
         <span class="kw">let</span> <span class="ident">finite</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">ge</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>));
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">return</span> <span class="ident">finite</span>;
         }
 
@@ -1954,7 +1953,7 @@
         <span class="kw">let</span> <span class="ident">bits</span> <span class="op">=</span> <span class="ident">v</span>.<span class="ident">into_bits</span>();
         <span class="kw">let</span> <span class="ident">finite</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">v</span>.<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">bits</span> <span class="op">-</span> <span class="ident">i1</span>, <span class="ident">bits</span> <span class="op">+</span> <span class="ident">i1</span>));
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">UltraPerformance</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">return</span> <span class="ident">finite</span>;
         }
 
@@ -1983,23 +1982,22 @@
 
             <span class="comment">// sine is expensive, so branch for it.</span>
             <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">reflected</span>.<span class="ident">any</span>()) {
-                <span class="ident">refl_res</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">P</span>::<span class="ident">POLICY</span> {
-                    <span class="ident">Policies</span>::<span class="ident">Precision</span> <span class="op">=</span><span class="op">&gt;</span> {
-                        <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">abs</span>();
-                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">fl</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">floor</span>();
+                <span class="ident">refl_res</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> {
+                    <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">abs</span>();
+                    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">fl</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">floor</span>();
 
-                        <span class="kw">let</span> <span class="ident">is_odd</span> <span class="op">=</span> (<span class="ident">fl</span> <span class="op">%</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>)).<span class="ident">ne</span>(<span class="ident">zero</span>);
+                    <span class="kw">let</span> <span class="ident">is_odd</span> <span class="op">=</span> (<span class="ident">fl</span> <span class="op">%</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0</span>)).<span class="ident">ne</span>(<span class="ident">zero</span>);
 
-                        <span class="ident">fl</span> <span class="op">+</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// conditional add</span>
+                    <span class="ident">fl</span> <span class="op">+</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// conditional add</span>
 
-                        <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// if odd -0.0 or 0.0</span>
-                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">dist</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">-</span> <span class="ident">fl</span>) <span class="op">^</span> <span class="ident">sign</span>; <span class="comment">// -(z - fl) = (fl - z) if odd</span>
+                    <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// if odd -0.0 or 0.0</span>
+                    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">dist</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">-</span> <span class="ident">fl</span>) <span class="op">^</span> <span class="ident">sign</span>; <span class="comment">// -(z - fl) = (fl - z) if odd</span>
 
-                        <span class="ident">dist</span> <span class="op">-</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">dist</span>.<span class="ident">gt</span>(<span class="ident">half</span>).<span class="ident">value</span>(); <span class="comment">// conditional subtract</span>
+                    <span class="ident">dist</span> <span class="op">-</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">dist</span>.<span class="ident">gt</span>(<span class="ident">half</span>).<span class="ident">value</span>(); <span class="comment">// conditional subtract</span>
 
-                        (<span class="ident">z</span> <span class="op">^</span> <span class="ident">sign</span>) <span class="op">*</span> (<span class="ident">dist</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
-                    }
-                    <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(),
+                    (<span class="ident">z</span> <span class="op">^</span> <span class="ident">sign</span>) <span class="op">*</span> (<span class="ident">dist</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
+                } <span class="kw">else</span> {
+                    <span class="ident">z</span> <span class="op">*</span> (<span class="ident">z</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
                 };
 
                 <span class="comment">// NOTE: I chose not to use a bitmask here, because some bitmasks can be</span>
@@ -2107,7 +2105,7 @@
             <span class="ident">z</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">z8</span>, <span class="ident">zero</span>, <span class="ident">d01</span>, <span class="ident">d02</span>, <span class="ident">d03</span>, <span class="ident">d04</span>, <span class="ident">d05</span>, <span class="ident">d06</span>, <span class="ident">d07</span>, <span class="ident">d08</span>, <span class="ident">d09</span>, <span class="ident">d10</span>, <span class="ident">d11</span>, <span class="ident">one</span>,
         );
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span> <span class="op">=</span><span class="op">=</span> <span class="ident">Policies</span>::<span class="ident">Precision</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> {
             <span class="kw">let</span> <span class="ident">invert</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">gt</span>(<span class="ident">one</span>);
 
             <span class="kw">if</span> <span class="ident">invert</span>.<span class="ident">any</span>() {
@@ -2220,7 +2218,7 @@
     <span class="ident">res</span> <span class="op">+</span><span class="op">=</span> <span class="ident">x2</span>.<span class="ident">nmul_adde</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>), <span class="ident">x</span>); <span class="comment">// res += x - 0.5 * x2;</span>
     <span class="ident">res</span> <span class="op">=</span> <span class="ident">fe</span>.<span class="ident">mul_adde</span>(<span class="ident">ln2_hi</span>, <span class="ident">res</span>); <span class="comment">// res += fe * ln2_hi;</span>
 
-    <span class="kw">if</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+    <span class="kw">if</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
         <span class="kw">return</span> <span class="ident">res</span>;
     }
 
@@ -2269,7 +2267,7 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">swapxy</span>.<span class="ident">select</span>(<span class="ident">y1</span>, <span class="ident">x1</span>);
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">y2</span> <span class="op">=</span> <span class="ident">swapxy</span>.<span class="ident">select</span>(<span class="ident">x1</span>, <span class="ident">y1</span>);
 
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="kw">let</span> <span class="ident">both_inf</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">is_infinite</span>() <span class="op">&amp;</span> <span class="ident">y</span>.<span class="ident">is_infinite</span>();
 
             <span class="comment">// TODO: Benchmark this branch</span>
@@ -2478,7 +2476,7 @@
         <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>.<span class="ident">mul_adde</span>(<span class="ident">n2</span>, <span class="ident">n2</span>), <span class="comment">// (z + 1.0f) * n2</span>
     };
 
-    <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>() {
+    <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
         <span class="kw">let</span> <span class="ident">in_range</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">abs</span>().<span class="ident">lt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">max_x</span>)) <span class="op">&amp;</span> <span class="ident">x0</span>.<span class="ident">is_finite</span>();
 
         <span class="kw">if</span> <span class="macro">likely</span><span class="macro">!</span>(<span class="ident">in_range</span>.<span class="ident">all</span>()) {
