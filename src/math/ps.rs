@@ -15,13 +15,6 @@ where
         let dp1f = Vf32::<S>::splat(0.78515625 * 2.0);
         let dp2f = Vf32::<S>::splat(2.4187564849853515625E-4 * 2.0);
         let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
-        let p0sinf = Vf32::<S>::splat(-1.6666654611E-1);
-        let p1sinf = Vf32::<S>::splat(8.3321608736E-3);
-        let p2sinf = Vf32::<S>::splat(-1.9515295891E-4);
-        let p0cosf = Vf32::<S>::splat(4.166664568298827E-2);
-        let p1cosf = Vf32::<S>::splat(-1.388731625493765E-3);
-        let p2cosf = Vf32::<S>::splat(2.443315711809948E-5);
-
         let xa: Vf32<S> = xx.abs();
 
         let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / PI)).round();
@@ -32,13 +25,14 @@ where
         let x = y.nmul_add(dp3f, y.nmul_add(dp2f, y.nmul_add(dp1f, xa)));
 
         // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
-        let x2: Vf32<S> = x * x;
-        let x3: Vf32<S> = x2 * x;
-        let x4: Vf32<S> = x2 * x2;
+        let x2 = x * x;
+        let mut s = x2
+            .poly_p::<P>(&[-1.6666654611E-1, 8.3321608736E-3, -1.9515295891E-4])
+            .mul_adde(x2 * x, x);
 
-        let mut s = poly_2(x2, x4, p0sinf, p1sinf, p2sinf).mul_adde(x3, x);
-        let mut c =
-            poly_2(x2, x4, p0cosf, p1cosf, p2cosf).mul_adde(x4, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
+        let mut c = x2
+            .poly_p::<P>(&[4.166664568298827E-2, -1.388731625493765E-3, 2.443315711809948E-5])
+            .mul_adde(x2 * x2, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
 
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
@@ -74,12 +68,10 @@ where
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
-            let r0 = Vf32::<S>::splat(1.66667160211E-1);
-            let r1 = Vf32::<S>::splat(8.33028376239E-3);
-            let r2 = Vf32::<S>::splat(2.03721912945E-4);
-
             let x2 = x * x;
-            y1 = poly_2(x2, x2 * x2, r0, r1, r2).mul_adde(x2 * x, x);
+            y1 = x2
+                .poly_p::<P>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
+                .mul_adde(x2 * x, x);
         }
 
         // if not all are small
@@ -106,16 +98,17 @@ where
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
-            let r0 = Vf32::<S>::splat(-3.33332819422E-1);
-            let r1 = Vf32::<S>::splat(1.33314422036E-1);
-            let r2 = Vf32::<S>::splat(-5.37397155531E-2);
-            let r3 = Vf32::<S>::splat(2.06390887954E-2);
-            let r4 = Vf32::<S>::splat(-5.70498872745E-3);
-
             let x2 = x * x;
-            let x4 = x2 * x2;
 
-            y1 = poly_4(x2, x4, x4 * x4, r0, r1, r2, r3, r4).mul_adde(x2 * x, x);
+            y1 = x2
+                .poly_p::<P>(&[
+                    -3.33332819422E-1,
+                    1.33314422036E-1,
+                    -5.37397155531E-2,
+                    2.06390887954E-2,
+                    -5.70498872745E-3,
+                ])
+                .mul_adde(x2 * x, x);
         }
 
         // if not all are small
@@ -144,11 +137,6 @@ where
 
     #[inline(always)]
     fn atan<P: Policy>(y: Self::Vf) -> Self::Vf {
-        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
-        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
-        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
-        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
-
         let t = y.abs();
 
         let not_small = t.ge(Vf32::<S>::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
@@ -167,17 +155,13 @@ where
         let z = a / b;
         let z2 = z * z;
 
-        poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf)
+        z2.poly_p::<P>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s)
             .combine_sign(y)
     }
 
     #[inline(always)]
     fn atan2<P: Policy>(y: Self::Vf, x: Self::Vf) -> Self::Vf {
-        let p3atanf = Vf32::<S>::splat(8.05374449538E-2);
-        let p2atanf = Vf32::<S>::splat(-1.38776856032E-1);
-        let p1atanf = Vf32::<S>::splat(1.99777106478E-1);
-        let p0atanf = Vf32::<S>::splat(-3.33329491539E-1);
         let neg_one = Vf32::<S>::neg_one();
         let zero = Vf32::<S>::zero();
 
@@ -213,7 +197,9 @@ where
         let z = a / b;
         let z2 = z * z;
 
-        let mut re = poly_3(z2, z2 * z2, p0atanf, p1atanf, p2atanf, p3atanf).mul_adde(z2 * z, z + s);
+        let mut re = z2
+            .poly_p::<P>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .mul_adde(z2 * z, z + s);
 
         re = swap_xy.select(Vf32::<S>::splat(FRAC_PI_2) - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
@@ -236,12 +222,9 @@ where
         let bitmask = x_small.bitmask();
 
         if P::POLICY.avoid_branching || bitmask.any() {
-            let r0 = Vf32::<S>::splat(-1.6666288134E-1);
-            let r1 = Vf32::<S>::splat(7.4847586088E-2);
-            let r2 = Vf32::<S>::splat(-4.2699340972E-2);
-            let r3 = Vf32::<S>::splat(2.0122003309E-2);
-
-            y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_adde(x2 * x, x);
+            y1 = x2
+                .poly_p::<P>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
+                .mul_adde(x2 * x, x);
         }
 
         if P::POLICY.avoid_branching || !bitmask.all() {
@@ -272,15 +255,15 @@ where
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
-            let r0 = Vf32::<S>::splat(1.4142135263E0);
-            let r1 = Vf32::<S>::splat(-1.1784741703E-1);
-            let r2 = Vf32::<S>::splat(2.6454905019E-2);
-            let r3 = Vf32::<S>::splat(-7.5272886713E-3);
-            let r4 = Vf32::<S>::splat(1.7596881071E-3);
+            y1 = x1.sqrt()
+                * x1.poly_p::<P>(&[
+                    1.4142135263E0,
+                    -1.1784741703E-1,
+                    2.6454905019E-2,
+                    -7.5272886713E-3,
+                    1.7596881071E-3,
+                ]);
 
-            let x2 = x1 * x1;
-            let x4 = x2 * x2;
-            y1 = x1.sqrt() * poly_4(x1, x2, x4, r0, r1, r2, r3, r4);
             y1 = undef.select(Vf32::<S>::nan(), y1);
         }
 
@@ -308,17 +291,17 @@ where
         let bitmask = x_small.bitmask();
 
         if P::POLICY.avoid_branching || bitmask.any() {
-            let r0 = Vf32::<S>::splat(3.33337300303E-1);
-            let r1 = Vf32::<S>::splat(1.99782164500E-1);
-            let r2 = Vf32::<S>::splat(1.46691431730E-1);
-            let r3 = Vf32::<S>::splat(8.24370301058E-2);
-            let r4 = Vf32::<S>::splat(1.81740078349E-1);
-
             let x2 = x * x;
-            let x4 = x2 * x2;
-            let x8 = x4 * x4;
 
-            y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_adde(x2 * x, x);
+            y1 = x2
+                .poly_p::<P>(&[
+                    3.33337300303E-1,
+                    1.99782164500E-1,
+                    1.46691431730E-1,
+                    8.24370301058E-2,
+                    1.81740078349E-1,
+                ])
+                .mul_adde(x2 * x, x);
         }
 
         if P::POLICY.avoid_branching || !bitmask.all() {
@@ -425,25 +408,6 @@ where
         let log2e = Vf32::<S>::splat(LOG2_E); // 1/ln(2)
         let ln2 = Vf32::<S>::splat(LN_2);
 
-        // coefficients for logarithm expansion
-        let p0logf = Vf32::<S>::splat(3.3333331174E-1);
-        let p1logf = Vf32::<S>::splat(-2.4999993993E-1);
-        let p2logf = Vf32::<S>::splat(2.0000714765E-1);
-        let p3logf = Vf32::<S>::splat(-1.6668057665E-1);
-        let p4logf = Vf32::<S>::splat(1.4249322787E-1);
-        let p5logf = Vf32::<S>::splat(-1.2420140846E-1);
-        let p6logf = Vf32::<S>::splat(1.1676998740E-1);
-        let p7logf = Vf32::<S>::splat(-1.1514610310E-1);
-        let p8logf = Vf32::<S>::splat(7.0376836292E-2);
-
-        // coefficients for Taylor expansion of exp
-        let p2expf = Vf32::<S>::splat(1.0 / 2.0);
-        let p3expf = Vf32::<S>::splat(1.0 / 6.0);
-        let p4expf = Vf32::<S>::splat(1.0 / 24.0);
-        let p5expf = Vf32::<S>::splat(1.0 / 120.0);
-        let p6expf = Vf32::<S>::splat(1.0 / 720.0);
-        let p7expf = Vf32::<S>::splat(1.0 / 5040.0);
-
         let zero = Vf32::<S>::zero();
         let one = Vf32::<S>::one();
         let half = Vf32::<S>::splat(0.5);
@@ -460,22 +424,20 @@ where
 
         // Taylor expansion, high precision
         let x2 = x * x;
-        let x4 = x2 * x2;
-        let mut lg1 = poly_8(
-            x,
-            x2,
-            x4,
-            x4 * x4,
-            p0logf,
-            p1logf,
-            p2logf,
-            p3logf,
-            p4logf,
-            p5logf,
-            p6logf,
-            p7logf,
-            p8logf,
-        );
+
+        // logarithm expansion
+        let mut lg1 = x.poly_p::<P>(&[
+            3.3333331174E-1,
+            -2.4999993993E-1,
+            2.0000714765E-1,
+            -1.6668057665E-1,
+            1.4249322787E-1,
+            -1.2420140846E-1,
+            1.1676998740E-1,
+            -1.1514610310E-1,
+            7.0376836292E-2,
+        ]);
+
         lg1 *= x2 * x;
 
         let ef = <Vf32<S> as SimdFromCast<S, Vi32<S>>>::from_cast(exponent::<S>(x1)) + (blend.value() & one);
@@ -512,7 +474,11 @@ where
 
         let x2 = x * x;
         let x4 = x2 * x2;
-        let z = poly_5(x, x2, x4, p2expf, p3expf, p4expf, p5expf, p6expf, p7expf).mul_adde(x2, x + one);
+
+        // Taylor expansion of exp
+        let z = x
+            .poly_p::<P>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .mul_adde(x * x, x + one);
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
@@ -834,7 +800,17 @@ where
         let z2 = z * z;
         let z4 = z2 * z2;
 
-        let lanczos_sum = poly_5(z, z2, z4, n0, n1, n2, n3, n4, n5) / poly_5(z, z2, z4, zero, d1, d2, d3, d4, one);
+        let lanczos_sum = z.poly_rational_p::<P>(
+            &[
+                58.52061591769095910314047740215847630266,
+                182.5248962595894264831189414768236280862,
+                211.0971093028510041839168287718170827259,
+                112.2526547883668146736465390902227161763,
+                27.5192015197455403062503721613097825345,
+                2.50662858515256974113978724717473206342,
+            ],
+            &[0.0, 24.0, 50.0, 35.0, 10.0, 1.0],
+        );
 
         let zgh = z + gh;
         let lzgh = zgh.ln_p::<P>();
@@ -865,13 +841,6 @@ fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
 
 #[inline(always)]
 fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
-    let p0expf = Vf32::<S>::splat(1.0 / 2.0);
-    let p1expf = Vf32::<S>::splat(1.0 / 6.0);
-    let p2expf = Vf32::<S>::splat(1.0 / 24.0);
-    let p3expf = Vf32::<S>::splat(1.0 / 120.0);
-    let p4expf = Vf32::<S>::splat(1.0 / 720.0);
-    let p5expf = Vf32::<S>::splat(1.0 / 5040.0);
-
     let mut x = x0;
     let mut r;
 
@@ -915,8 +884,9 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         }
     }
 
-    let x2 = x * x;
-    let mut z = poly_5(x, x2, x2 * x2, p0expf, p1expf, p2expf, p3expf, p4expf, p5expf).mul_adde(x2, x);
+    let mut z = x
+        .poly_p::<P>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+        .mul_adde(x * x, x);
 
     let n2 = pow2n_f::<S>(r);
 
@@ -948,12 +918,6 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
 #[inline(always)]
 fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
-    let p4asinf = Vf32::<S>::splat(4.2163199048E-2);
-    let p3asinf = Vf32::<S>::splat(2.4181311049E-2);
-    let p2asinf = Vf32::<S>::splat(4.5470025998E-2);
-    let p1asinf = Vf32::<S>::splat(7.4953002686E-2);
-    let p0asinf = Vf32::<S>::splat(1.6666752422E-1);
-
     let xa = x.abs();
 
     let is_big = xa.gt(Vf32::<S>::splat(0.5));
@@ -964,11 +928,15 @@ fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
     let xb = x1.sqrt();
     let x4 = is_big.select(xb, xa);
 
-    let xx = x3;
-    let xx2 = xx * xx;
-    let xx4 = xx2 * xx2;
-
-    let z = poly_4(xx, xx2, xx4, p0asinf, p1asinf, p2asinf, p3asinf, p4asinf).mul_adde(x3 * x4, x4);
+    let z = x3
+        .poly_p::<P>(&[
+            1.6666752422E-1,
+            7.4953002686E-2,
+            4.5470025998E-2,
+            2.4181311049E-2,
+            4.2163199048E-2,
+        ])
+        .mul_adde(x3 * x4, x4);
 
     let z1 = z + z;
 
@@ -1000,15 +968,6 @@ fn exponent<S: Simd>(x: Vf32<S>) -> Vi32<S> {
 fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let ln2f_hi = Vf32::<S>::splat(0.693359375);
     let ln2f_lo = Vf32::<S>::splat(-2.12194440E-4);
-    let p0logf = Vf32::<S>::splat(3.3333331174E-1);
-    let p1logf = Vf32::<S>::splat(-2.4999993993E-1);
-    let p2logf = Vf32::<S>::splat(2.0000714765E-1);
-    let p3logf = Vf32::<S>::splat(-1.6668057665E-1);
-    let p4logf = Vf32::<S>::splat(1.4249322787E-1);
-    let p5logf = Vf32::<S>::splat(-1.2420140846E-1);
-    let p6logf = Vf32::<S>::splat(1.1676998740E-1);
-    let p7logf = Vf32::<S>::splat(-1.1514610310E-1);
-    let p8logf = Vf32::<S>::splat(7.0376836292E-2);
     let one = Vf32::<S>::one();
 
     let x1 = if p1 { x0 + one } else { x0 };
@@ -1035,24 +994,18 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     };
 
     let x2 = x * x;
-    let x3 = x2 * x;
-    let x4 = x2 * x2;
-
-    let mut res = poly_8(
-        x,
-        x2,
-        x4,
-        x4 * x4,
-        p0logf,
-        p1logf,
-        p2logf,
-        p3logf,
-        p4logf,
-        p5logf,
-        p6logf,
-        p7logf,
-        p8logf,
-    ) * x3;
+    let mut res = x.poly_p::<P>(&[
+        0.0, // multiply all by x
+        3.3333331174E-1,
+        -2.4999993993E-1,
+        2.0000714765E-1,
+        -1.6668057665E-1,
+        1.4249322787E-1,
+        -1.2420140846E-1,
+        1.1676998740E-1,
+        -1.1514610310E-1,
+        7.0376836292E-2,
+    ]) * x2;
 
     res = fe.mul_adde(ln2f_lo, res);
     res += x2.nmul_adde(Vf32::<S>::splat(0.5), x);

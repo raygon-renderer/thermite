@@ -15,18 +15,6 @@ where
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
         let dp3 = Vf64::<S>::splat(3.06161699786838294307E-17 * 2.0);
-        let p0sin = Vf64::<S>::splat(-1.66666666666666307295E-1);
-        let p1sin = Vf64::<S>::splat(8.33333333332211858878E-3);
-        let p2sin = Vf64::<S>::splat(-1.98412698295895385996E-4);
-        let p3sin = Vf64::<S>::splat(2.75573136213857245213E-6);
-        let p4sin = Vf64::<S>::splat(-2.50507477628578072866E-8);
-        let p5sin = Vf64::<S>::splat(1.58962301576546568060E-10);
-        let p0cos = Vf64::<S>::splat(4.16666666666665929218E-2);
-        let p1cos = Vf64::<S>::splat(-1.38888888888730564116E-3);
-        let p2cos = Vf64::<S>::splat(2.48015872888517045348E-5);
-        let p3cos = Vf64::<S>::splat(-2.75573141792967388112E-7);
-        let p4cos = Vf64::<S>::splat(2.08757008419747316778E-9);
-        let p5cos = Vf64::<S>::splat(-1.13585365213876817300E-11);
         let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
 
@@ -41,12 +29,25 @@ where
 
         // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
         let x2 = x * x;
-        let x3 = x2 * x;
         let x4 = x2 * x2;
-        let x8 = x4 * x4;
 
-        let mut s = poly_5(x2, x4, x8, p0sin, p1sin, p2sin, p3sin, p4sin, p5sin);
-        let mut c = poly_5(x2, x4, x8, p0cos, p1cos, p2cos, p3cos, p4cos, p5cos);
+        let mut s = x2.poly_p::<P>(&[
+            -1.66666666666666307295E-1,
+            8.33333333332211858878E-3,
+            -1.98412698295895385996E-4,
+            2.75573136213857245213E-6,
+            -2.50507477628578072866E-8,
+            1.58962301576546568060E-10,
+        ]);
+
+        let mut c = x2.poly_p::<P>(&[
+            4.16666666666665929218E-2,
+            -1.38888888888730564116E-3,
+            2.48015872888517045348E-5,
+            -2.75573141792967388112E-7,
+            2.08757008419747316778E-9,
+            -1.13585365213876817300E-11,
+        ]);
 
         s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
         c = c.mul_adde(x4, x2.nmul_adde(Vf64::<S>::splat(0.5), one)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
@@ -106,19 +107,20 @@ where
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
-            let p0 = Vf64::<S>::splat(-3.51754964808151394800E5);
-            let p1 = Vf64::<S>::splat(-1.15614435765005216044E4);
-            let p2 = Vf64::<S>::splat(-1.63725857525983828727E2);
-            let p3 = Vf64::<S>::splat(-7.89474443963537015605E-1);
-            let q0 = Vf64::<S>::splat(-2.11052978884890840399E6);
-            let q1 = Vf64::<S>::splat(3.61578279834431989373E4);
-            let q2 = Vf64::<S>::splat(-2.77711081420602794433E2);
-            let q3 = one;
-
             let x2 = x * x;
-            let x4 = x2 * x2;
 
-            y1 = poly_3(x2, x4, p0, p1, p2, p3) / poly_3(x2, x4, q0, q1, q2, q3);
+            y1 = x2.poly_p::<P>(&[
+                -3.51754964808151394800E5,
+                -1.15614435765005216044E4,
+                -1.63725857525983828727E2,
+                -7.89474443963537015605E-1,
+            ]) / x2.poly_p::<P>(&[
+                -2.11052978884890840399E6,
+                3.61578279834431989373E4,
+                -2.77711081420602794433E2,
+                1.0,
+            ]);
+
             y1 = y1.mul_adde(x * x2, x);
         }
 
@@ -147,18 +149,19 @@ where
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
-            let p0 = Vf64::<S>::splat(-1.61468768441708447952E3);
-            let p1 = Vf64::<S>::splat(-9.92877231001918586564E1);
-            let p2 = Vf64::<S>::splat(-9.64399179425052238628E-1);
-            let q0 = Vf64::<S>::splat(4.84406305325125486048E3);
-            let q1 = Vf64::<S>::splat(2.23548839060100448583E3);
-            let q2 = Vf64::<S>::splat(1.12811678491632931402E2);
-            let q3 = one;
-
             let x2 = x * x;
-            let x4 = x2 * x2;
 
-            y1 = poly_2(x2, x4, p0, p1, p2) / poly_3(x2, x4, q0, q1, q2, q3);
+            y1 = x2.poly_p::<P>(&[
+                -1.61468768441708447952E3,
+                -9.92877231001918586564E1,
+                -9.64399179425052238628E-1,
+            ]) / x2.poly_p::<P>(&[
+                4.84406305325125486048E3,
+                2.23548839060100448583E3,
+                1.12811678491632931402E2,
+                1.0,
+            ]);
+
             y1 = y1.mul_adde(x2 * x, x);
         }
 
@@ -192,21 +195,20 @@ where
         let bitmask = x_small.bitmask();
 
         if P::POLICY.avoid_branching || bitmask.any() {
-            let p0 = Vf64::<S>::splat(-5.56682227230859640450E0);
-            let p1 = Vf64::<S>::splat(-9.09030533308377316566E0);
-            let p2 = Vf64::<S>::splat(-4.37390226194356683570E0);
-            let p3 = Vf64::<S>::splat(-5.91750212056387121207E-1);
-            let p4 = Vf64::<S>::splat(-4.33231683752342103572E-3);
-            let q0 = Vf64::<S>::splat(3.34009336338516356383E1);
-            let q1 = Vf64::<S>::splat(6.95722521337257608734E1);
-            let q2 = Vf64::<S>::splat(4.86042483805291788324E1);
-            let q3 = Vf64::<S>::splat(1.28757002067426453537E1);
-            let q4 = one;
+            y1 = x2.poly_p::<P>(&[
+                -5.56682227230859640450E0,
+                -9.09030533308377316566E0,
+                -4.37390226194356683570E0,
+                -5.91750212056387121207E-1,
+                -4.33231683752342103572E-3,
+            ]) / x2.poly_p::<P>(&[
+                3.34009336338516356383E1,
+                6.95722521337257608734E1,
+                4.86042483805291788324E1,
+                1.28757002067426453537E1,
+                1.0,
+            ]);
 
-            let x4 = x2 * x2;
-            let x8 = x4 * x4;
-
-            y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_4(x2, x4, x8, q0, q1, q2, q3, q4);
             y1 = y1.mul_adde(x2 * x, x);
         }
 
@@ -237,22 +239,23 @@ where
         let bitmask = x_small.bitmask();
 
         if P::POLICY.avoid_branching || bitmask.any() {
-            let p0 = Vf64::<S>::splat(1.10855947270161294369E5);
-            let p1 = Vf64::<S>::splat(1.08102874834699867335E5);
-            let p2 = Vf64::<S>::splat(3.43989375926195455866E4);
-            let p3 = Vf64::<S>::splat(3.94726656571334401102E3);
-            let p4 = Vf64::<S>::splat(1.18801130533544501356E2);
-            let q0 = Vf64::<S>::splat(7.83869920495893927727E4);
-            let q1 = Vf64::<S>::splat(8.29725251988426222434E4);
-            let q2 = Vf64::<S>::splat(2.97683430363289370382E4);
-            let q3 = Vf64::<S>::splat(4.15352677227719831579E3);
-            let q4 = Vf64::<S>::splat(1.86145380837903397292E2);
-            let q5 = one;
+            y1 = x1.sqrt()
+                * x1.poly_p::<P>(&[
+                    1.10855947270161294369E5,
+                    1.08102874834699867335E5,
+                    3.43989375926195455866E4,
+                    3.94726656571334401102E3,
+                    1.18801130533544501356E2,
+                ])
+                / x1.poly_p::<P>(&[
+                    7.83869920495893927727E4,
+                    8.29725251988426222434E4,
+                    2.97683430363289370382E4,
+                    4.15352677227719831579E3,
+                    1.86145380837903397292E2,
+                    1.0,
+                ]);
 
-            let x2 = x1 * x1;
-            let x4 = x2 * x2;
-
-            y1 = x1.sqrt() * (poly_4(x1, x2, x4, p0, p1, p2, p3, p4) / poly_5(x1, x2, x4, q0, q1, q2, q3, q4, q5));
             y1 = is_undef.select(Vf64::<S>::nan(), y1);
         }
 
@@ -282,23 +285,23 @@ where
         let bitmask = x_small.bitmask();
 
         if P::POLICY.avoid_branching || bitmask.any() {
-            let p0 = Vf64::<S>::splat(-3.09092539379866942570E1);
-            let p1 = Vf64::<S>::splat(6.54566728676544377376E1);
-            let p2 = Vf64::<S>::splat(-4.61252884198732692637E1);
-            let p3 = Vf64::<S>::splat(1.20426861384072379242E1);
-            let p4 = Vf64::<S>::splat(-8.54074331929669305196E-1);
-            let q0 = Vf64::<S>::splat(-9.27277618139601130017E1);
-            let q1 = Vf64::<S>::splat(2.52006675691344555838E2);
-            let q2 = Vf64::<S>::splat(-2.49839401325893582852E2);
-            let q3 = Vf64::<S>::splat(1.08938092147140262656E2);
-            let q4 = Vf64::<S>::splat(-1.95638849376911654834E1);
-            let q5 = one;
-
             let x2 = x * x;
-            let x4 = x2 * x2;
-            let x8 = x4 * x4;
 
-            y1 = poly_4(x2, x4, x8, p0, p1, p2, p3, p4) / poly_5(x2, x4, x8, q0, q1, q2, q3, q4, q5);
+            y1 = x2.poly_p::<P>(&[
+                -3.09092539379866942570E1,
+                6.54566728676544377376E1,
+                -4.61252884198732692637E1,
+                1.20426861384072379242E1,
+                -8.54074331929669305196E-1,
+            ]) / x2.poly_p::<P>(&[
+                -9.27277618139601130017E1,
+                2.52006675691344555838E2,
+                -2.49839401325893582852E2,
+                1.08938092147140262656E2,
+                -1.95638849376911654834E1,
+                1.0,
+            ]);
+
             y1 = y1.mul_adde(x2 * x, x);
         }
 
@@ -406,20 +409,6 @@ where
         let ln2 = Vf64::<S>::splat(LN_2);
 
         // coefficients for Pade polynomials
-        let p0logl = Vf64::<S>::splat(2.0039553499201281259648E1);
-        let p1logl = Vf64::<S>::splat(5.7112963590585538103336E1);
-        let p2logl = Vf64::<S>::splat(6.0949667980987787057556E1);
-        let p3logl = Vf64::<S>::splat(2.9911919328553073277375E1);
-        let p4logl = Vf64::<S>::splat(6.5787325942061044846969E0);
-        let p5logl = Vf64::<S>::splat(4.9854102823193375972212E-1);
-        let p6logl = Vf64::<S>::splat(4.5270000862445199635215E-5);
-        let q0logl = Vf64::<S>::splat(6.0118660497603843919306E1);
-        let q1logl = Vf64::<S>::splat(2.1642788614495947685003E2);
-        let q2logl = Vf64::<S>::splat(3.0909872225312059774938E2);
-        let q3logl = Vf64::<S>::splat(2.2176239823732856465394E2);
-        let q4logl = Vf64::<S>::splat(8.3047565967967209469434E1);
-        let q5logl = Vf64::<S>::splat(1.5062909083469192043167E1);
-
         let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
         let half = Vf64::<S>::splat(0.5);
@@ -434,12 +423,26 @@ where
         x -= one;
 
         let x2 = x * x;
-        let x4 = x2 * x2;
-        let x8 = x4 * x4;
 
-        let px = x2 * x * poly_6(x, x2, x4, p0logl, p1logl, p2logl, p3logl, p4logl, p5logl, p6logl);
-        let qx = poly_6(x, x2, x4, q0logl, q1logl, q2logl, q3logl, q4logl, q5logl, one);
-        let lg1 = px / qx;
+        let lg1 = (x2 * x)
+            * x.poly_p::<P>(&[
+                2.0039553499201281259648E1,
+                5.7112963590585538103336E1,
+                6.0949667980987787057556E1,
+                2.9911919328553073277375E1,
+                6.5787325942061044846969E0,
+                4.9854102823193375972212E-1,
+                4.5270000862445199635215E-5,
+            ])
+            / x.poly_p::<P>(&[
+                6.0118660497603843919306E1,
+                2.1642788614495947685003E2,
+                3.0909872225312059774938E2,
+                2.2176239823732856465394E2,
+                8.3047565967967209469434E1,
+                1.5062909083469192043167E1,
+                1.0,
+            ]);
 
         let ef = exponent_f::<S>(x1) + (blend.value() & one);
 
@@ -594,28 +597,35 @@ where
         ln_d_internal::<S, P>(x, false) * Vf64::<S>::splat(LOG10_E)
     }
 
-    #[rustfmt::skip]
     #[inline(always)]
     fn erf<P: Policy>(x: Self::Vf) -> Self::Vf {
-        let p0 = Vf64::<S>::splat(5.55923013010394962768e4);
-        let p1 = Vf64::<S>::splat(7.00332514112805075473e3);
-        let p2 = Vf64::<S>::splat(2.23200534594684319226e3);
-        let p3 = Vf64::<S>::splat(9.00260197203842689217e1);
-        let p4 = Vf64::<S>::splat(9.60497373987051638749e0);
+        let x2 = x * x;
+        let res = x * x2.poly_rational_p::<P>(
+            &[
+                5.55923013010394962768e4,
+                7.00332514112805075473e3,
+                2.23200534594684319226e3,
+                9.00260197203842689217e1,
+                9.60497373987051638749e0,
+                0.0,
+            ],
+            &[
+                4.92673942608635921086e4,
+                2.26290000613890934246e4,
+                4.59432382970980127987e3,
+                5.21357949780152679795e2,
+                3.35617141647503099647e1,
+                1.00000000000000000000e0,
+            ],
+        );
 
-        let q0 = Vf64::<S>::splat(4.92673942608635921086e4);
-        let q1 = Vf64::<S>::splat(2.26290000613890934246e4);
-        let q2 = Vf64::<S>::splat(4.59432382970980127987e3);
-        let q3 = Vf64::<S>::splat(5.21357949780152679795e2);
-        let q4 = Vf64::<S>::splat(3.35617141647503099647e1);
-        let q5 = Vf64::<S>::splat(1.00000000000000000000e0);
-
-        let z1 = x * x;
-        let z2 = z1 * z1;
-        let z4 = z2 * z2;
-
-        x * poly_4(z1, z2, z4, p0, p1, p2, p3, p4) /
-            poly_5(z1, z2, z4, q0, q1, q2, q3, q4, q5)
+        if P::POLICY.check_overflow {
+            // x^2 highest point in the polynomial, use x2 to avoid needing absolute value
+            // TODO: Find more exact value?
+            x2.gt(Vf64::<S>::splat(8.135455562428929)).select(x.signum(), res)
+        } else {
+            res
+        }
     }
 
     #[inline(always)]
@@ -848,30 +858,38 @@ where
         let z4 = z2 * z2;
         let z8 = z4 * z4;
 
-        let mut lanczos_sum = poly_12(
-            z, z2, z4, z8, n00, n01, n02, n03, n04, n05, n06, n07, n08, n09, n10, n11, n12,
-        ) / poly_12(
-            z, z2, z4, z8, zero, d01, d02, d03, d04, d05, d06, d07, d08, d09, d10, d11, one,
+        let lanczos_sum = z.poly_rational_p::<P>(
+            &[
+                23531376880.41075968857200767445163675473,
+                42919803642.64909876895789904700198885093,
+                35711959237.35566804944018545154716670596,
+                17921034426.03720969991975575445893111267,
+                6039542586.352028005064291644307297921070,
+                1439720407.311721673663223072794912393972,
+                248874557.8620541565114603864132294232163,
+                31426415.58540019438061423162831820536287,
+                2876370.628935372441225409051620849613599,
+                186056.2653952234950402949897160456992822,
+                8071.672002365816210638002902272250613822,
+                210.8242777515793458725097339207133627117,
+                2.506628274631000270164908177133837338626,
+            ],
+            &[
+                0.0,
+                39916800.0,
+                120543840.0,
+                150917976.0,
+                105258076.0,
+                45995730.0,
+                13339535.0,
+                2637558.0,
+                357423.0,
+                32670.0,
+                1925.0,
+                66.0,
+                1.0,
+            ],
         );
-
-        if P::POLICY.extra_precision {
-            let invert = z.gt(one);
-
-            if invert.any() {
-                let z = one / z;
-                let z2 = z * z;
-                let z4 = z2 * z2;
-                let z8 = z4 * z4;
-
-                let lanczos_sum_inv = poly_12(
-                    z, z2, z4, z8, n12, n11, n10, n09, n08, n07, n06, n05, n04, n03, n02, n01, n00,
-                ) / poly_11(
-                    z, z2, z4, z8, one, d11, d10, d09, d08, d07, d06, d05, d04, d03, d02, d01,
-                );
-
-                lanczos_sum = invert.select(lanczos_sum_inv, lanczos_sum);
-            }
-        }
 
         let zgh = z + gh;
         let lzgh = zgh.ln_p::<P>();
@@ -918,18 +936,6 @@ fn exponent_f<S: Simd>(x: Vf64<S>) -> Vf64<S> {
 fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     let ln2_hi = Vf64::<S>::splat(0.693359375);
     let ln2_lo = Vf64::<S>::splat(-2.121944400546905827679E-4);
-    let p0log = Vf64::<S>::splat(7.70838733755885391666E0);
-    let p1log = Vf64::<S>::splat(1.79368678507819816313E1);
-    let p2log = Vf64::<S>::splat(1.44989225341610930846E1);
-    let p3log = Vf64::<S>::splat(4.70579119878881725854E0);
-    let p4log = Vf64::<S>::splat(4.97494994976747001425E-1);
-    let p5log = Vf64::<S>::splat(1.01875663804580931796E-4);
-    let q0log = Vf64::<S>::splat(2.31251620126765340583E1);
-    let q1log = Vf64::<S>::splat(7.11544750618563894466E1);
-    let q2log = Vf64::<S>::splat(8.29875266912776603211E1);
-    let q3log = Vf64::<S>::splat(4.52279145837532221105E1);
-    let q4log = Vf64::<S>::splat(1.12873587189167450590E1);
-
     let one = Vf64::<S>::one();
     let zero = Vf64::<S>::zero();
 
@@ -956,12 +962,23 @@ fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
 
     let x2 = x * x;
     let x3 = x * x2;
-    let x4 = x2 * x2;
 
-    let px = poly_5(x, x2, x4, p0log, p1log, p2log, p3log, p4log, p5log) * x3;
-    let qx = poly_5(x, x2, x4, q0log, q1log, q2log, q3log, q4log, one);
-
-    let mut res = px / qx;
+    let mut res =
+        x3 * x.poly_p::<P>(&[
+            7.70838733755885391666E0,
+            1.79368678507819816313E1,
+            1.44989225341610930846E1,
+            4.70579119878881725854E0,
+            4.97494994976747001425E-1,
+            1.01875663804580931796E-4,
+        ]) / x.poly_p::<P>(&[
+            2.31251620126765340583E1,
+            7.11544750618563894466E1,
+            8.29875266912776603211E1,
+            4.52279145837532221105E1,
+            1.12873587189167450590E1,
+            1.0,
+        ]);
 
     res = fe.mul_adde(ln2_lo, res); // res += fe * ln2_lo;
     res += x2.nmul_adde(Vf64::<S>::splat(0.5), x); // res += x - 0.5 * x2;
@@ -991,16 +1008,6 @@ fn atan_internal<S: Simd, P: Policy>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf6
     let morebits = Vf64::<S>::splat(6.123233995736765886130E-17);
     let morebitso2 = Vf64::<S>::splat(6.123233995736765886130E-17 * 0.5);
     let t3po8 = Vf64::<S>::splat(SQRT_2 + 1.0);
-    let p4atan = Vf64::<S>::splat(-8.750608600031904122785E-1);
-    let p3atan = Vf64::<S>::splat(-1.615753718733365076637E1);
-    let p2atan = Vf64::<S>::splat(-7.500855792314704667340E1);
-    let p1atan = Vf64::<S>::splat(-1.228866684490136173410E2);
-    let p0atan = Vf64::<S>::splat(-6.485021904942025371773E1);
-    let q4atan = Vf64::<S>::splat(2.485846490142306297962E1);
-    let q3atan = Vf64::<S>::splat(1.650270098316988542046E2);
-    let q2atan = Vf64::<S>::splat(4.328810604912902668951E2);
-    let q1atan = Vf64::<S>::splat(4.853903996359136964868E2);
-    let q0atan = Vf64::<S>::splat(1.945506571482613964425E2);
     let neg_one = Vf64::<S>::neg_one();
     let one = Vf64::<S>::one();
     let zero = Vf64::<S>::zero();
@@ -1044,14 +1051,24 @@ fn atan_internal<S: Simd, P: Policy>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf6
     let z = a / b;
 
     let zz = z * z;
-    let zz2 = zz * zz;
-    let zz4 = zz2 * zz2;
 
-    let px = poly_4(zz, zz2, zz4, p0atan, p1atan, p2atan, p3atan, p4atan);
-    let qx = poly_5(zz, zz2, zz4, q0atan, q1atan, q2atan, q3atan, q4atan, one);
+    let re0 = zz.poly_p::<P>(&[
+        -6.485021904942025371773E1,
+        -1.228866684490136173410E2,
+        -7.500855792314704667340E1,
+        -1.615753718733365076637E1,
+        -8.750608600031904122785E-1,
+    ]) / zz.poly_p::<P>(&[
+        1.945506571482613964425E2,
+        4.853903996359136964868E2,
+        4.328810604912902668951E2,
+        1.650270098316988542046E2,
+        2.485846490142306297962E1,
+        1.0,
+    ]);
 
     // place additions before mul_add to lessen dependency chain
-    let mut re = (px / qx).mul_adde(z * zz, z + s + fac);
+    let mut re = re0.mul_adde(z * zz, z + s + fac);
 
     if atan2 {
         re = swapxy.select(Vf64::<S>::splat(FRAC_PI_2) - re, re);
@@ -1089,37 +1106,44 @@ fn asin_internal<S: Simd, P: Policy>(x: Vf64<S>, acos: bool) -> Vf64<S> {
 
     // if not all are big (if any are small)
     if P::POLICY.avoid_branching || !bitmask.all() {
-        let p5asin = Vf64::<S>::splat(4.253011369004428248960E-3);
-        let p4asin = Vf64::<S>::splat(-6.019598008014123785661E-1);
-        let p3asin = Vf64::<S>::splat(5.444622390564711410273E0);
-        let p2asin = Vf64::<S>::splat(-1.626247967210700244449E1);
-        let p1asin = Vf64::<S>::splat(1.956261983317594739197E1);
-        let p0asin = Vf64::<S>::splat(-8.198089802484824371615E0);
-        let q4asin = Vf64::<S>::splat(-1.474091372988853791896E1);
-        let q3asin = Vf64::<S>::splat(7.049610280856842141659E1);
-        let q2asin = Vf64::<S>::splat(-1.471791292232726029859E2);
-        let q1asin = Vf64::<S>::splat(1.395105614657485689735E2);
-        let q0asin = Vf64::<S>::splat(-4.918853881490881290097E1);
+        px = x1.poly_p::<P>(&[
+            -8.198089802484824371615E0,
+            1.956261983317594739197E1,
+            -1.626247967210700244449E1,
+            5.444622390564711410273E0,
+            -6.019598008014123785661E-1,
+            4.253011369004428248960E-3,
+        ]);
 
-        px = poly_5(x1, x2, x4, p0asin, p1asin, p2asin, p3asin, p4asin, p5asin);
-        qx = poly_5(x1, x2, x4, q0asin, q1asin, q2asin, q3asin, q4asin, one);
+        qx = x1.poly_p::<P>(&[
+            -4.918853881490881290097E1,
+            1.395105614657485689735E2,
+            -1.471791292232726029859E2,
+            7.049610280856842141659E1,
+            -1.474091372988853791896E1,
+            1.0,
+        ]);
     }
 
     // if any are big
     if P::POLICY.avoid_branching || bitmask.any() {
-        let r4asin = Vf64::<S>::splat(2.967721961301243206100E-3);
-        let r3asin = Vf64::<S>::splat(-5.634242780008963776856E-1);
-        let r2asin = Vf64::<S>::splat(6.968710824104713396794E0);
-        let r1asin = Vf64::<S>::splat(-2.556901049652824852289E1);
-        let r0asin = Vf64::<S>::splat(2.853665548261061424989E1);
-        let s3asin = Vf64::<S>::splat(-2.194779531642920639778E1);
-        let s2asin = Vf64::<S>::splat(1.470656354026814941758E2);
-        let s1asin = Vf64::<S>::splat(-3.838770957603691357202E2);
-        let s0asin = Vf64::<S>::splat(3.424398657913078477438E2);
-
-        rx = poly_4(x1, x2, x4, r0asin, r1asin, r2asin, r3asin, r4asin);
-        sx = poly_4(x1, x2, x4, s0asin, s1asin, s2asin, s3asin, one);
         xb = (x1 + x1).sqrt();
+
+        rx = x1.poly_p::<P>(&[
+            2.853665548261061424989E1,
+            -2.556901049652824852289E1,
+            6.968710824104713396794E0,
+            -5.634242780008963776856E-1,
+            2.967721961301243206100E-3,
+        ]);
+
+        sx = x1.poly_p::<P>(&[
+            3.424398657913078477438E2,
+            -3.838770957603691357202E2,
+            1.470656354026814941758E2,
+            -2.194779531642920639778E1,
+            1.0,
+        ]);
     }
 
     let vx = is_big.select(rx, px);
