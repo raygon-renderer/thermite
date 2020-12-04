@@ -1221,25 +1221,24 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
 
     let n2 = pow2n_d::<S>(r);
 
-    if mode == ExpMode::Expm1 {
-        z = z.mul_adde(n2, n2 - one);
-    } else {
-        z = z.mul_adde(n2, n2); // (z + 1.0f) * n2
-    }
-
-    let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite();
-
-    if likely!(in_range.all()) {
-        return z;
-    }
-
-    let underflow_value = if mode == ExpMode::Expm1 {
-        Vf64::<S>::neg_one()
-    } else {
-        Vf64::<S>::zero()
+    z = match mode {
+        ExpMode::Expm1 => z.mul_adde(n2, n2 - one),
+        _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
     if P::POLICY.check_overflow() {
+        let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite();
+
+        if likely!(in_range.all()) {
+            return z;
+        }
+
+        let underflow_value = if mode == ExpMode::Expm1 {
+            Vf64::<S>::neg_one()
+        } else {
+            Vf64::<S>::zero()
+        };
+
         r = x0.select_negative(underflow_value, Vf64::<S>::infinity());
         z = in_range.select(z, r);
         z = x0.is_nan().select(x0, z);

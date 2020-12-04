@@ -921,25 +921,24 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
     let n2 = pow2n_f::<S>(r);
 
-    if mode == ExpMode::Expm1 {
-        z = z.mul_adde(n2, n2 - Vf32::<S>::one());
-    } else {
-        z = z.mul_adde(n2, n2); // (z + 1.0f) * n2
-    }
-
-    let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite();
-
-    if likely!(in_range.all()) {
-        return z;
-    }
-
-    let underflow_value = if mode == ExpMode::Expm1 {
-        Vf32::<S>::neg_one()
-    } else {
-        Vf32::<S>::zero()
+    z = match mode {
+        ExpMode::Expm1 => z.mul_adde(n2, n2 - Vf32::<S>::one()),
+        _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
     if P::POLICY.check_overflow() {
+        let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite();
+
+        if likely!(in_range.all()) {
+            return z;
+        }
+
+        let underflow_value = if mode == ExpMode::Expm1 {
+            Vf32::<S>::neg_one()
+        } else {
+            Vf32::<S>::zero()
+        };
+
         r = x0.select_negative(underflow_value, Vf32::<S>::infinity());
         z = in_range.select(z, r);
         z = x0.is_nan().select(x0, z);
