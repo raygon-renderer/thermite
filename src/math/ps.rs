@@ -43,7 +43,7 @@ where
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
 
-        if P::POLICY.check_overflow() {
+        if P::POLICY.check_overflow {
             let overflow = q.gt(Vu32::<S>::splat(0x2000000)) & xa.is_finite().cast_to(); // q big if overflow
 
             s = overflow.select(Vf32::<S>::zero(), s);
@@ -189,7 +189,7 @@ where
         let mut x2 = swap_xy.select(y1, x1);
         let mut y2 = swap_xy.select(x1, y1);
 
-        if P::POLICY.check_overflow() {
+        if P::POLICY.check_overflow {
             let both_infinite = (x.is_infinite() & y.is_infinite());
 
             if unlikely!(both_infinite.any()) {
@@ -384,7 +384,7 @@ where
 
         let mut t = Vf32::<S>::from_bits(ui);
 
-        if P::POLICY == Policies::Precision || !S::INSTRSET.has_true_fma() {
+        if P::POLICY.extra_precision || !S::INSTRSET.has_true_fma() {
             let mut td = t.cast_to::<Vf64<S>>();
             let xd = x.cast_to::<Vf64<S>>();
 
@@ -408,7 +408,7 @@ where
             }
         }
 
-        if P::POLICY == Policies::UltraPerformance {
+        if !P::POLICY.check_overflow {
             // use float cmp and blend here to avoid domain change
             return x.eq(Vf32::<S>::zero()).select(x, t);
         }
@@ -524,7 +524,7 @@ where
         // add exponent by signed integer addition
         let mut z = Vf32::<S>::from_bits((Vi32::<S>::from_bits(z.into_bits()) + (ei << 23)).into_bits());
 
-        if P::POLICY == Policies::UltraPerformance {
+        if !P::POLICY.check_overflow {
             return z;
         }
 
@@ -667,7 +667,7 @@ where
                 -0.000200214257,
             ]);
 
-            if P::POLICY == Policies::UltraPerformance {
+            if P::POLICY.check_overflow {
                 p1 = a.eq(one).select(Vf32::<S>::infinity(), p1); // erfinv(x == 1) = inf
                 p1 = a.gt(one).select(Vf32::<S>::nan(), p1); // erfinv(x > 1) = NaN
             }
@@ -687,7 +687,7 @@ where
         let bits = v.into_bits();
         let finite = Vf32::<S>::from_bits(v.ge(Vf32::<S>::zero()).select(bits + i1, bits - i1));
 
-        if P::POLICY == Policies::UltraPerformance {
+        if !P::POLICY.check_overflow {
             return finite;
         }
 
@@ -703,7 +703,7 @@ where
         let bits = v.into_bits();
         let finite = Vf32::<S>::from_bits(v.gt(Vf32::<S>::zero()).select(bits - i1, bits + i1));
 
-        if P::POLICY == Policies::UltraPerformance {
+        if !P::POLICY.check_overflow {
             return finite;
         }
 
@@ -732,23 +732,22 @@ where
 
             // sine is expensive, so branch for it.
             if unlikely!(reflected.any()) {
-                refl_res = match P::POLICY {
-                    Policies::Precision => {
-                        let z = z.abs();
-                        let mut fl = z.floor();
+                refl_res = if P::POLICY.extra_precision {
+                    let z = z.abs();
+                    let mut fl = z.floor();
 
-                        let is_odd = (fl % Vf32::<S>::splat(2.0)).ne(zero);
+                    let is_odd = (fl % Vf32::<S>::splat(2.0)).ne(zero);
 
-                        fl += one & is_odd.value(); // conditional add
+                    fl += one & is_odd.value(); // conditional add
 
-                        let sign = Vf32::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
-                        let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
+                    let sign = Vf32::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
+                    let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
 
-                        dist -= one & dist.gt(half).value(); // conditional subtract
+                    dist -= one & dist.gt(half).value(); // conditional subtract
 
-                        (z ^ sign) * (dist * pi).sin_p::<P>()
-                    }
-                    _ => z * (z * pi).sin_p::<P>(),
+                    (z ^ sign) * (dist * pi).sin_p::<P>()
+                } else {
+                    z * (z * pi).sin_p::<P>()
                 };
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
@@ -926,7 +925,7 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
         _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
-    if P::POLICY.check_overflow() {
+    if P::POLICY.check_overflow {
         let in_range = x0.abs().lt(Vf32::<S>::splat(max_x)) & x0.is_finite();
 
         if likely!(in_range.all()) {
@@ -1059,7 +1058,7 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     res += x2.nmul_adde(Vf32::<S>::splat(0.5), x);
     res = fe.mul_adde(ln2f_hi, res);
 
-    if !P::POLICY.check_overflow() {
+    if !P::POLICY.check_overflow {
         return res;
     }
 

@@ -54,7 +54,7 @@ where
         // swap sin and cos if odd quadrant
         let swap = (q & Vu64::<S>::one()).ne(Vu64::<S>::zero());
 
-        if P::POLICY.check_overflow() {
+        if P::POLICY.check_overflow {
             let overflow = y.gt(Vf64::<S>::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
             let s = overflow.select(zero, s);
@@ -379,7 +379,7 @@ where
         ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
         t = Vf64::<S>::from_bits(ui);
 
-        let r = if P::POLICY == Policies::Precision || !S::INSTRSET.has_true_fma() {
+        let r = if P::POLICY.extra_precision || !S::INSTRSET.has_true_fma() {
             // original form, 5 simple ops, 2 divisions
             ((x / (t * t)) - t) / ((t + t) + (x / (t * t)))
         } else {
@@ -390,7 +390,7 @@ where
 
         t = r.mul_adde(t, t);
 
-        if P::POLICY == Policies::UltraPerformance {
+        if !P::POLICY.check_overflow {
             return x.eq(Vf64::<S>::zero()).select(x, t);
         }
 
@@ -504,7 +504,7 @@ where
         // add exponent by integer addition
         let mut z = Vf64::<S>::from_bits((ei.into_bits() << 52) + z.into_bits());
 
-        if !P::POLICY.check_overflow() {
+        if !P::POLICY.check_overflow {
             return z;
         }
 
@@ -666,7 +666,7 @@ where
                 -0.0000023620166848468398,
             ]);
 
-            if P::POLICY.check_overflow() {
+            if P::POLICY.check_overflow {
                 p1 = a.eq(one).select(Vf64::<S>::infinity(), p1); // erfinv(x == 1) = inf
                 p1 = a.gt(one).select(Vf64::<S>::nan(), p1); // erfinv(x > 1) = NaN
             }
@@ -686,7 +686,7 @@ where
         let bits = v.into_bits();
         let finite = Vf64::<S>::from_bits(v.ge(Vf64::<S>::zero()).select(bits + i1, bits - i1));
 
-        if P::POLICY == Policies::UltraPerformance {
+        if P::POLICY.check_overflow {
             return finite;
         }
 
@@ -702,7 +702,7 @@ where
         let bits = v.into_bits();
         let finite = Vf64::<S>::from_bits(v.gt(Vf64::<S>::zero()).select(bits - i1, bits + i1));
 
-        if P::POLICY == Policies::UltraPerformance {
+        if P::POLICY.check_overflow {
             return finite;
         }
 
@@ -731,23 +731,22 @@ where
 
             // sine is expensive, so branch for it.
             if unlikely!(reflected.any()) {
-                refl_res = match P::POLICY {
-                    Policies::Precision => {
-                        let z = z.abs();
-                        let mut fl = z.floor();
+                refl_res = if P::POLICY.extra_precision {
+                    let z = z.abs();
+                    let mut fl = z.floor();
 
-                        let is_odd = (fl % Vf64::<S>::splat(2.0)).ne(zero);
+                    let is_odd = (fl % Vf64::<S>::splat(2.0)).ne(zero);
 
-                        fl += one & is_odd.value(); // conditional add
+                    fl += one & is_odd.value(); // conditional add
 
-                        let sign = Vf64::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
-                        let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
+                    let sign = Vf64::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
+                    let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
 
-                        dist -= one & dist.gt(half).value(); // conditional subtract
+                    dist -= one & dist.gt(half).value(); // conditional subtract
 
-                        (z ^ sign) * (dist * pi).sin_p::<P>()
-                    }
-                    _ => z * (z * pi).sin_p::<P>(),
+                    (z ^ sign) * (dist * pi).sin_p::<P>()
+                } else {
+                    z * (z * pi).sin_p::<P>()
                 };
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
@@ -855,7 +854,7 @@ where
             z, z2, z4, z8, zero, d01, d02, d03, d04, d05, d06, d07, d08, d09, d10, d11, one,
         );
 
-        if P::POLICY == Policies::Precision {
+        if P::POLICY.extra_precision {
             let invert = z.gt(one);
 
             if invert.any() {
@@ -968,7 +967,7 @@ fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
     res += x2.nmul_adde(Vf64::<S>::splat(0.5), x); // res += x - 0.5 * x2;
     res = fe.mul_adde(ln2_hi, res); // res += fe * ln2_hi;
 
-    if !P::POLICY.check_overflow() {
+    if !P::POLICY.check_overflow {
         return res;
     }
 
@@ -1017,7 +1016,7 @@ fn atan_internal<S: Simd, P: Policy>(y: Vf64<S>, x: Vf64<S>, atan2: bool) -> Vf6
         let mut x2 = swapxy.select(y1, x1);
         let mut y2 = swapxy.select(x1, y1);
 
-        if P::POLICY.check_overflow() {
+        if P::POLICY.check_overflow {
             let both_inf = x.is_infinite() & y.is_infinite();
 
             // TODO: Benchmark this branch
@@ -1226,7 +1225,7 @@ fn exp_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, mode: ExpMode) -> Vf64<S> {
         _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
-    if P::POLICY.check_overflow() {
+    if P::POLICY.check_overflow {
         let in_range = x0.abs().lt(Vf64::<S>::splat(max_x)) & x0.is_finite();
 
         if likely!(in_range.all()) {

@@ -16,33 +16,34 @@ mod ps;
 /// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.
 pub trait Policy: Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + core::hash::Hash {
     /// The specific policy used. This is a constant to allow for dead-code elimination of branches.
-    const POLICY: Policies;
+    const POLICY: Parameters;
 }
 
-/// Execution Policies (precision, performance, etc.)
+/** Execution Policies (precision, performance, etc.)
+
+To define a custom policy:
+```rust,ignore
+pub struct MyPolicy;
+
+impl Policy for MyPolicy {
+    const POLICY: Parameters = Parameters {
+        check_overflow: false,
+        unroll_loops: false,
+        extra_precision: true,
+    };
+}
+
+let y = x.cbrt_p::<MyPolicy>();
+```
+*/
 pub mod policies {
     use super::Policy;
 
-    /// Set of policies provided for Thermite
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub enum Policies {
-        /// See [`UltraPerformance`]
-        UltraPerformance,
-        /// See [`Performance`]
-        Performance,
-        /// See [`Precision`]
-        Precision,
-        /// See [`Size`]
-        Size,
-    }
-
-    impl Policies {
-        pub(crate) const fn check_overflow(self) -> bool {
-            match self {
-                Policies::UltraPerformance => false,
-                _ => true,
-            }
-        }
+    /// Customizable Policy Parameters
+    pub struct Parameters {
+        pub check_overflow: bool,
+        pub unroll_loops: bool,
+        pub extra_precision: bool,
     }
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
@@ -74,19 +75,35 @@ pub mod policies {
     pub struct Size;
 
     impl Policy for UltraPerformance {
-        const POLICY: Policies = Policies::UltraPerformance;
+        const POLICY: Parameters = Parameters {
+            check_overflow: false,
+            unroll_loops: true,
+            extra_precision: false,
+        };
     }
 
     impl Policy for Performance {
-        const POLICY: Policies = Policies::Performance;
+        const POLICY: Parameters = Parameters {
+            check_overflow: true,
+            unroll_loops: true,
+            extra_precision: false,
+        };
     }
 
     impl Policy for Precision {
-        const POLICY: Policies = Policies::Precision;
+        const POLICY: Parameters = Parameters {
+            check_overflow: true,
+            unroll_loops: true,
+            extra_precision: true,
+        };
     }
 
     impl Policy for Size {
-        const POLICY: Policies = Policies::Size;
+        const POLICY: Parameters = Parameters {
+            check_overflow: true,
+            unroll_loops: false,
+            extra_precision: false,
+        };
     }
 }
 
@@ -653,7 +670,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         F: FnMut(usize) -> Self::Vf
     {
         // Use tiny Horner's method for code size optimization
-        if P::POLICY == Policies::Size {
+        if !P::POLICY.unroll_loops {
             let mut idx = n - 1;
             let mut sum = c(idx);
 
