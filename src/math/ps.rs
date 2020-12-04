@@ -685,10 +685,13 @@ where
         let v = x.eq(Vf32::<S>::neg_zero()).select(Vf32::<S>::zero(), x);
 
         let bits = v.into_bits();
-        x.eq(Vf32::<S>::infinity()).select(
-            x,
-            Vf32::<S>::from_bits(v.ge(Vf32::<S>::zero()).select(bits + i1, bits - i1)),
-        )
+        let finite = Vf32::<S>::from_bits(v.ge(Vf32::<S>::zero()).select(bits + i1, bits - i1));
+
+        if P::POLICY == Policies::UltraPerformance {
+            return finite;
+        }
+
+        x.eq(Vf32::<S>::infinity()).select(x, finite)
     }
 
     #[inline(always)]
@@ -698,10 +701,13 @@ where
         let v = x.eq(Vf32::<S>::zero()).select(Vf32::<S>::neg_zero(), x);
 
         let bits = v.into_bits();
-        x.eq(Vf32::<S>::neg_infinity()).select(
-            x,
-            Vf32::<S>::from_bits(v.gt(Vf32::<S>::zero()).select(bits - i1, bits + i1)),
-        )
+        let finite = Vf32::<S>::from_bits(v.gt(Vf32::<S>::zero()).select(bits - i1, bits + i1));
+
+        if P::POLICY == Policies::UltraPerformance {
+            return finite;
+        }
+
+        x.eq(Vf32::<S>::neg_infinity()).select(x, finite)
     }
 
     #[inline(always)]
