@@ -849,11 +849,30 @@ where
         let z4 = z2 * z2;
         let z8 = z4 * z4;
 
-        let lanczos_sum = poly_12(
+        let mut lanczos_sum = poly_12(
             z, z2, z4, z8, n00, n01, n02, n03, n04, n05, n06, n07, n08, n09, n10, n11, n12,
         ) / poly_12(
             z, z2, z4, z8, zero, d01, d02, d03, d04, d05, d06, d07, d08, d09, d10, d11, one,
         );
+
+        if P::POLICY == Policies::Precision {
+            let invert = z.gt(one);
+
+            if invert.any() {
+                let z = one / z;
+                let z2 = z * z;
+                let z4 = z2 * z2;
+                let z8 = z4 * z4;
+
+                let lanczos_sum_inv = poly_12(
+                    z, z2, z4, z8, n12, n11, n10, n09, n08, n07, n06, n05, n04, n03, n02, n01, n00,
+                ) / poly_11(
+                    z, z2, z4, z8, one, d11, d10, d09, d08, d07, d06, d05, d04, d03, d02, d01,
+                );
+
+                lanczos_sum = invert.select(lanczos_sum_inv, lanczos_sum);
+            }
+        }
 
         let zgh = z + gh;
         let lzgh = zgh.ln_p::<P>();
