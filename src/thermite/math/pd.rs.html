@@ -1248,6 +1248,30 @@
 <span id="1245">1245</span>
 <span id="1246">1246</span>
 <span id="1247">1247</span>
+<span id="1248">1248</span>
+<span id="1249">1249</span>
+<span id="1250">1250</span>
+<span id="1251">1251</span>
+<span id="1252">1252</span>
+<span id="1253">1253</span>
+<span id="1254">1254</span>
+<span id="1255">1255</span>
+<span id="1256">1256</span>
+<span id="1257">1257</span>
+<span id="1258">1258</span>
+<span id="1259">1259</span>
+<span id="1260">1260</span>
+<span id="1261">1261</span>
+<span id="1262">1262</span>
+<span id="1263">1263</span>
+<span id="1264">1264</span>
+<span id="1265">1265</span>
+<span id="1266">1266</span>
+<span id="1267">1267</span>
+<span id="1268">1268</span>
+<span id="1269">1269</span>
+<span id="1270">1270</span>
+<span id="1271">1271</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1266,18 +1290,6 @@
         <span class="kw">let</span> <span class="ident">dp1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.853981554508209228515625E-1</span> <span class="op">*</span> <span class="number">2.0</span>);
         <span class="kw">let</span> <span class="ident">dp2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.94662735614792836714E-9</span> <span class="op">*</span> <span class="number">2.0</span>);
         <span class="kw">let</span> <span class="ident">dp3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.06161699786838294307E-17</span> <span class="op">*</span> <span class="number">2.0</span>);
-        <span class="kw">let</span> <span class="ident">p0sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.66666666666666307295E-1</span>);
-        <span class="kw">let</span> <span class="ident">p1sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.33333333332211858878E-3</span>);
-        <span class="kw">let</span> <span class="ident">p2sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.98412698295895385996E-4</span>);
-        <span class="kw">let</span> <span class="ident">p3sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.75573136213857245213E-6</span>);
-        <span class="kw">let</span> <span class="ident">p4sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.50507477628578072866E-8</span>);
-        <span class="kw">let</span> <span class="ident">p5sin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.58962301576546568060E-10</span>);
-        <span class="kw">let</span> <span class="ident">p0cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.16666666666665929218E-2</span>);
-        <span class="kw">let</span> <span class="ident">p1cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.38888888888730564116E-3</span>);
-        <span class="kw">let</span> <span class="ident">p2cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.48015872888517045348E-5</span>);
-        <span class="kw">let</span> <span class="ident">p3cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.75573141792967388112E-7</span>);
-        <span class="kw">let</span> <span class="ident">p4cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.08757008419747316778E-9</span>);
-        <span class="kw">let</span> <span class="ident">p5cos</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.13585365213876817300E-11</span>);
         <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
 
@@ -1292,12 +1304,25 @@
 
         <span class="comment">// Taylor expansion of sin and cos, valid for -pi/4 &lt;= x &lt;= pi/4</span>
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-        <span class="kw">let</span> <span class="ident">x3</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>;
         <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-        <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">s</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">p0sin</span>, <span class="ident">p1sin</span>, <span class="ident">p2sin</span>, <span class="ident">p3sin</span>, <span class="ident">p4sin</span>, <span class="ident">p5sin</span>);
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">p0cos</span>, <span class="ident">p1cos</span>, <span class="ident">p2cos</span>, <span class="ident">p3cos</span>, <span class="ident">p4cos</span>, <span class="ident">p5cos</span>);
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">s</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="op">-</span><span class="number">1.66666666666666307295E-1</span>,
+            <span class="number">8.33333333332211858878E-3</span>,
+            <span class="op">-</span><span class="number">1.98412698295895385996E-4</span>,
+            <span class="number">2.75573136213857245213E-6</span>,
+            <span class="op">-</span><span class="number">2.50507477628578072866E-8</span>,
+            <span class="number">1.58962301576546568060E-10</span>,
+        ]);
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">4.16666666666665929218E-2</span>,
+            <span class="op">-</span><span class="number">1.38888888888730564116E-3</span>,
+            <span class="number">2.48015872888517045348E-5</span>,
+            <span class="op">-</span><span class="number">2.75573141792967388112E-7</span>,
+            <span class="number">2.08757008419747316778E-9</span>,
+            <span class="op">-</span><span class="number">1.13585365213876817300E-11</span>,
+        ]);
 
         <span class="ident">s</span> <span class="op">=</span> <span class="ident">s</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>); <span class="comment">// s = x + (x * x2) * s;</span>
         <span class="ident">c</span> <span class="op">=</span> <span class="ident">c</span>.<span class="ident">mul_adde</span>(<span class="ident">x4</span>, <span class="ident">x2</span>.<span class="ident">nmul_adde</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>), <span class="ident">one</span>)); <span class="comment">// c = 1.0 - x2 * 0.5 + (x2 * x2) * c;</span>
@@ -1357,19 +1382,20 @@
 
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.51754964808151394800E5</span>);
-            <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.15614435765005216044E4</span>);
-            <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.63725857525983828727E2</span>);
-            <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">7.89474443963537015605E-1</span>);
-            <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.11052978884890840399E6</span>);
-            <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.61578279834431989373E4</span>);
-            <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.77711081420602794433E2</span>);
-            <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">one</span>;
-
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_3</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>) <span class="op">/</span> <span class="ident">poly_3</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>);
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">3.51754964808151394800E5</span>,
+                <span class="op">-</span><span class="number">1.15614435765005216044E4</span>,
+                <span class="op">-</span><span class="number">1.63725857525983828727E2</span>,
+                <span class="op">-</span><span class="number">7.89474443963537015605E-1</span>,
+            ]) <span class="op">/</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">2.11052978884890840399E6</span>,
+                <span class="number">3.61578279834431989373E4</span>,
+                <span class="op">-</span><span class="number">2.77711081420602794433E2</span>,
+                <span class="number">1.0</span>,
+            ]);
+
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x</span> <span class="op">*</span> <span class="ident">x2</span>, <span class="ident">x</span>);
         }
 
@@ -1398,18 +1424,19 @@
 
         <span class="comment">// if any are small</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.61468768441708447952E3</span>);
-            <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.92877231001918586564E1</span>);
-            <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.64399179425052238628E-1</span>);
-            <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.84406305325125486048E3</span>);
-            <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.23548839060100448583E3</span>);
-            <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.12811678491632931402E2</span>);
-            <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">one</span>;
-
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_2</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>) <span class="op">/</span> <span class="ident">poly_3</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>);
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">1.61468768441708447952E3</span>,
+                <span class="op">-</span><span class="number">9.92877231001918586564E1</span>,
+                <span class="op">-</span><span class="number">9.64399179425052238628E-1</span>,
+            ]) <span class="op">/</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="number">4.84406305325125486048E3</span>,
+                <span class="number">2.23548839060100448583E3</span>,
+                <span class="number">1.12811678491632931402E2</span>,
+                <span class="number">1.0</span>,
+            ]);
+
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
@@ -1443,21 +1470,20 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.56682227230859640450E0</span>);
-            <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.09030533308377316566E0</span>);
-            <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.37390226194356683570E0</span>);
-            <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.91750212056387121207E-1</span>);
-            <span class="kw">let</span> <span class="ident">p4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.33231683752342103572E-3</span>);
-            <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.34009336338516356383E1</span>);
-            <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.95722521337257608734E1</span>);
-            <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.86042483805291788324E1</span>);
-            <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.28757002067426453537E1</span>);
-            <span class="kw">let</span> <span class="ident">q4</span> <span class="op">=</span> <span class="ident">one</span>;
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">5.56682227230859640450E0</span>,
+                <span class="op">-</span><span class="number">9.09030533308377316566E0</span>,
+                <span class="op">-</span><span class="number">4.37390226194356683570E0</span>,
+                <span class="op">-</span><span class="number">5.91750212056387121207E-1</span>,
+                <span class="op">-</span><span class="number">4.33231683752342103572E-3</span>,
+            ]) <span class="op">/</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="number">3.34009336338516356383E1</span>,
+                <span class="number">6.95722521337257608734E1</span>,
+                <span class="number">4.86042483805291788324E1</span>,
+                <span class="number">1.28757002067426453537E1</span>,
+                <span class="number">1.0</span>,
+            ]);
 
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-            <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
-
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>, <span class="ident">p4</span>) <span class="op">/</span> <span class="ident">poly_4</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>, <span class="ident">q4</span>);
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
@@ -1488,22 +1514,23 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.10855947270161294369E5</span>);
-            <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.08102874834699867335E5</span>);
-            <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.43989375926195455866E4</span>);
-            <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.94726656571334401102E3</span>);
-            <span class="kw">let</span> <span class="ident">p4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.18801130533544501356E2</span>);
-            <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.83869920495893927727E4</span>);
-            <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.29725251988426222434E4</span>);
-            <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.97683430363289370382E4</span>);
-            <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.15352677227719831579E3</span>);
-            <span class="kw">let</span> <span class="ident">q4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.86145380837903397292E2</span>);
-            <span class="kw">let</span> <span class="ident">q5</span> <span class="op">=</span> <span class="ident">one</span>;
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">sqrt</span>()
+                <span class="op">*</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                    <span class="number">1.10855947270161294369E5</span>,
+                    <span class="number">1.08102874834699867335E5</span>,
+                    <span class="number">3.43989375926195455866E4</span>,
+                    <span class="number">3.94726656571334401102E3</span>,
+                    <span class="number">1.18801130533544501356E2</span>,
+                ])
+                <span class="op">/</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                    <span class="number">7.83869920495893927727E4</span>,
+                    <span class="number">8.29725251988426222434E4</span>,
+                    <span class="number">2.97683430363289370382E4</span>,
+                    <span class="number">4.15352677227719831579E3</span>,
+                    <span class="number">1.86145380837903397292E2</span>,
+                    <span class="number">1.0</span>,
+                ]);
 
-            <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x1</span> <span class="op">*</span> <span class="ident">x1</span>;
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">sqrt</span>() <span class="op">*</span> (<span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>, <span class="ident">p4</span>) <span class="op">/</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>, <span class="ident">q4</span>, <span class="ident">q5</span>));
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">is_undef</span>.<span class="ident">select</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>(), <span class="ident">y1</span>);
         }
 
@@ -1533,23 +1560,23 @@
         <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">x_small</span>.<span class="ident">bitmask</span>();
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.09092539379866942570E1</span>);
-            <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.54566728676544377376E1</span>);
-            <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.61252884198732692637E1</span>);
-            <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.20426861384072379242E1</span>);
-            <span class="kw">let</span> <span class="ident">p4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">8.54074331929669305196E-1</span>);
-            <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">9.27277618139601130017E1</span>);
-            <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.52006675691344555838E2</span>);
-            <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.49839401325893582852E2</span>);
-            <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.08938092147140262656E2</span>);
-            <span class="kw">let</span> <span class="ident">q4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.95638849376911654834E1</span>);
-            <span class="kw">let</span> <span class="ident">q5</span> <span class="op">=</span> <span class="ident">one</span>;
-
             <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-            <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-            <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
 
-            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>, <span class="ident">p4</span>) <span class="op">/</span> <span class="ident">poly_5</span>(<span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">x8</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>, <span class="ident">q4</span>, <span class="ident">q5</span>);
+            <span class="ident">y1</span> <span class="op">=</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">3.09092539379866942570E1</span>,
+                <span class="number">6.54566728676544377376E1</span>,
+                <span class="op">-</span><span class="number">4.61252884198732692637E1</span>,
+                <span class="number">1.20426861384072379242E1</span>,
+                <span class="op">-</span><span class="number">8.54074331929669305196E-1</span>,
+            ]) <span class="op">/</span> <span class="ident">x2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="op">-</span><span class="number">9.27277618139601130017E1</span>,
+                <span class="number">2.52006675691344555838E2</span>,
+                <span class="op">-</span><span class="number">2.49839401325893582852E2</span>,
+                <span class="number">1.08938092147140262656E2</span>,
+                <span class="op">-</span><span class="number">1.95638849376911654834E1</span>,
+                <span class="number">1.0</span>,
+            ]);
+
             <span class="ident">y1</span> <span class="op">=</span> <span class="ident">y1</span>.<span class="ident">mul_adde</span>(<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
         }
 
@@ -1657,20 +1684,6 @@
         <span class="kw">let</span> <span class="ident">ln2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>);
 
         <span class="comment">// coefficients for Pade polynomials</span>
-        <span class="kw">let</span> <span class="ident">p0logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.0039553499201281259648E1</span>);
-        <span class="kw">let</span> <span class="ident">p1logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.7112963590585538103336E1</span>);
-        <span class="kw">let</span> <span class="ident">p2logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.0949667980987787057556E1</span>);
-        <span class="kw">let</span> <span class="ident">p3logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.9911919328553073277375E1</span>);
-        <span class="kw">let</span> <span class="ident">p4logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.5787325942061044846969E0</span>);
-        <span class="kw">let</span> <span class="ident">p5logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.9854102823193375972212E-1</span>);
-        <span class="kw">let</span> <span class="ident">p6logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.5270000862445199635215E-5</span>);
-        <span class="kw">let</span> <span class="ident">q0logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.0118660497603843919306E1</span>);
-        <span class="kw">let</span> <span class="ident">q1logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.1642788614495947685003E2</span>);
-        <span class="kw">let</span> <span class="ident">q2logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.0909872225312059774938E2</span>);
-        <span class="kw">let</span> <span class="ident">q3logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.2176239823732856465394E2</span>);
-        <span class="kw">let</span> <span class="ident">q4logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.3047565967967209469434E1</span>);
-        <span class="kw">let</span> <span class="ident">q5logl</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.5062909083469192043167E1</span>);
-
         <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
         <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>);
@@ -1685,12 +1698,26 @@
         <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">one</span>;
 
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-        <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
-        <span class="kw">let</span> <span class="ident">x8</span> <span class="op">=</span> <span class="ident">x4</span> <span class="op">*</span> <span class="ident">x4</span>;
 
-        <span class="kw">let</span> <span class="ident">px</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">poly_6</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0logl</span>, <span class="ident">p1logl</span>, <span class="ident">p2logl</span>, <span class="ident">p3logl</span>, <span class="ident">p4logl</span>, <span class="ident">p5logl</span>, <span class="ident">p6logl</span>);
-        <span class="kw">let</span> <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_6</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0logl</span>, <span class="ident">q1logl</span>, <span class="ident">q2logl</span>, <span class="ident">q3logl</span>, <span class="ident">q4logl</span>, <span class="ident">q5logl</span>, <span class="ident">one</span>);
-        <span class="kw">let</span> <span class="ident">lg1</span> <span class="op">=</span> <span class="ident">px</span> <span class="op">/</span> <span class="ident">qx</span>;
+        <span class="kw">let</span> <span class="ident">lg1</span> <span class="op">=</span> (<span class="ident">x2</span> <span class="op">*</span> <span class="ident">x</span>)
+            <span class="op">*</span> <span class="ident">x</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="number">2.0039553499201281259648E1</span>,
+                <span class="number">5.7112963590585538103336E1</span>,
+                <span class="number">6.0949667980987787057556E1</span>,
+                <span class="number">2.9911919328553073277375E1</span>,
+                <span class="number">6.5787325942061044846969E0</span>,
+                <span class="number">4.9854102823193375972212E-1</span>,
+                <span class="number">4.5270000862445199635215E-5</span>,
+            ])
+            <span class="op">/</span> <span class="ident">x</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+                <span class="number">6.0118660497603843919306E1</span>,
+                <span class="number">2.1642788614495947685003E2</span>,
+                <span class="number">3.0909872225312059774938E2</span>,
+                <span class="number">2.2176239823732856465394E2</span>,
+                <span class="number">8.3047565967967209469434E1</span>,
+                <span class="number">1.5062909083469192043167E1</span>,
+                <span class="number">1.0</span>,
+            ]);
 
         <span class="kw">let</span> <span class="ident">ef</span> <span class="op">=</span> <span class="ident">exponent_f</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x1</span>) <span class="op">+</span> (<span class="ident">blend</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>);
 
@@ -1845,28 +1872,35 @@
         <span class="ident">ln_d_internal</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="bool-val">false</span>) <span class="op">*</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LOG10_E</span>)
     }
 
-    <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">erf</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">p0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.55923013010394962768e4</span>);
-        <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.00332514112805075473e3</span>);
-        <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.23200534594684319226e3</span>);
-        <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">9.00260197203842689217e1</span>);
-        <span class="kw">let</span> <span class="ident">p4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">9.60497373987051638749e0</span>);
+        <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
+        <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
+            <span class="kw-2">&amp;</span>[
+                <span class="number">5.55923013010394962768e4</span>,
+                <span class="number">7.00332514112805075473e3</span>,
+                <span class="number">2.23200534594684319226e3</span>,
+                <span class="number">9.00260197203842689217e1</span>,
+                <span class="number">9.60497373987051638749e0</span>,
+                <span class="number">0.0</span>,
+            ],
+            <span class="kw-2">&amp;</span>[
+                <span class="number">4.92673942608635921086e4</span>,
+                <span class="number">2.26290000613890934246e4</span>,
+                <span class="number">4.59432382970980127987e3</span>,
+                <span class="number">5.21357949780152679795e2</span>,
+                <span class="number">3.35617141647503099647e1</span>,
+                <span class="number">1.00000000000000000000e0</span>,
+            ],
+        );
 
-        <span class="kw">let</span> <span class="ident">q0</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.92673942608635921086e4</span>);
-        <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.26290000613890934246e4</span>);
-        <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.59432382970980127987e3</span>);
-        <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.21357949780152679795e2</span>);
-        <span class="kw">let</span> <span class="ident">q4</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.35617141647503099647e1</span>);
-        <span class="kw">let</span> <span class="ident">q5</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.00000000000000000000e0</span>);
-
-        <span class="kw">let</span> <span class="ident">z1</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-        <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">z1</span> <span class="op">*</span> <span class="ident">z1</span>;
-        <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
-
-        <span class="ident">x</span> <span class="op">*</span> <span class="ident">poly_4</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">p0</span>, <span class="ident">p1</span>, <span class="ident">p2</span>, <span class="ident">p3</span>, <span class="ident">p4</span>) <span class="op">/</span>
-            <span class="ident">poly_5</span>(<span class="ident">z1</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">q0</span>, <span class="ident">q1</span>, <span class="ident">q2</span>, <span class="ident">q3</span>, <span class="ident">q4</span>, <span class="ident">q5</span>)
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
+            <span class="comment">// x^2 highest point in the polynomial, use x2 to avoid needing absolute value</span>
+            <span class="comment">// TODO: Find more exact value?</span>
+            <span class="ident">x2</span>.<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.135455562428929</span>)).<span class="ident">select</span>(<span class="ident">x</span>.<span class="ident">signum</span>(), <span class="ident">res</span>)
+        } <span class="kw">else</span> {
+            <span class="ident">res</span>
+        }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -2099,30 +2133,38 @@
         <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
         <span class="kw">let</span> <span class="ident">z8</span> <span class="op">=</span> <span class="ident">z4</span> <span class="op">*</span> <span class="ident">z4</span>;
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">poly_12</span>(
-            <span class="ident">z</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">z8</span>, <span class="ident">n00</span>, <span class="ident">n01</span>, <span class="ident">n02</span>, <span class="ident">n03</span>, <span class="ident">n04</span>, <span class="ident">n05</span>, <span class="ident">n06</span>, <span class="ident">n07</span>, <span class="ident">n08</span>, <span class="ident">n09</span>, <span class="ident">n10</span>, <span class="ident">n11</span>, <span class="ident">n12</span>,
-        ) <span class="op">/</span> <span class="ident">poly_12</span>(
-            <span class="ident">z</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">z8</span>, <span class="ident">zero</span>, <span class="ident">d01</span>, <span class="ident">d02</span>, <span class="ident">d03</span>, <span class="ident">d04</span>, <span class="ident">d05</span>, <span class="ident">d06</span>, <span class="ident">d07</span>, <span class="ident">d08</span>, <span class="ident">d09</span>, <span class="ident">d10</span>, <span class="ident">d11</span>, <span class="ident">one</span>,
+        <span class="kw">let</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
+            <span class="kw-2">&amp;</span>[
+                <span class="number">23531376880.41075968857200767445163675473</span>,
+                <span class="number">42919803642.64909876895789904700198885093</span>,
+                <span class="number">35711959237.35566804944018545154716670596</span>,
+                <span class="number">17921034426.03720969991975575445893111267</span>,
+                <span class="number">6039542586.352028005064291644307297921070</span>,
+                <span class="number">1439720407.311721673663223072794912393972</span>,
+                <span class="number">248874557.8620541565114603864132294232163</span>,
+                <span class="number">31426415.58540019438061423162831820536287</span>,
+                <span class="number">2876370.628935372441225409051620849613599</span>,
+                <span class="number">186056.2653952234950402949897160456992822</span>,
+                <span class="number">8071.672002365816210638002902272250613822</span>,
+                <span class="number">210.8242777515793458725097339207133627117</span>,
+                <span class="number">2.506628274631000270164908177133837338626</span>,
+            ],
+            <span class="kw-2">&amp;</span>[
+                <span class="number">0.0</span>,
+                <span class="number">39916800.0</span>,
+                <span class="number">120543840.0</span>,
+                <span class="number">150917976.0</span>,
+                <span class="number">105258076.0</span>,
+                <span class="number">45995730.0</span>,
+                <span class="number">13339535.0</span>,
+                <span class="number">2637558.0</span>,
+                <span class="number">357423.0</span>,
+                <span class="number">32670.0</span>,
+                <span class="number">1925.0</span>,
+                <span class="number">66.0</span>,
+                <span class="number">1.0</span>,
+            ],
         );
-
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> {
-            <span class="kw">let</span> <span class="ident">invert</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">gt</span>(<span class="ident">one</span>);
-
-            <span class="kw">if</span> <span class="ident">invert</span>.<span class="ident">any</span>() {
-                <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> <span class="ident">z</span>;
-                <span class="kw">let</span> <span class="ident">z2</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> <span class="ident">z</span>;
-                <span class="kw">let</span> <span class="ident">z4</span> <span class="op">=</span> <span class="ident">z2</span> <span class="op">*</span> <span class="ident">z2</span>;
-                <span class="kw">let</span> <span class="ident">z8</span> <span class="op">=</span> <span class="ident">z4</span> <span class="op">*</span> <span class="ident">z4</span>;
-
-                <span class="kw">let</span> <span class="ident">lanczos_sum_inv</span> <span class="op">=</span> <span class="ident">poly_12</span>(
-                    <span class="ident">z</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">z8</span>, <span class="ident">n12</span>, <span class="ident">n11</span>, <span class="ident">n10</span>, <span class="ident">n09</span>, <span class="ident">n08</span>, <span class="ident">n07</span>, <span class="ident">n06</span>, <span class="ident">n05</span>, <span class="ident">n04</span>, <span class="ident">n03</span>, <span class="ident">n02</span>, <span class="ident">n01</span>, <span class="ident">n00</span>,
-                ) <span class="op">/</span> <span class="ident">poly_11</span>(
-                    <span class="ident">z</span>, <span class="ident">z2</span>, <span class="ident">z4</span>, <span class="ident">z8</span>, <span class="ident">one</span>, <span class="ident">d11</span>, <span class="ident">d10</span>, <span class="ident">d09</span>, <span class="ident">d08</span>, <span class="ident">d07</span>, <span class="ident">d06</span>, <span class="ident">d05</span>, <span class="ident">d04</span>, <span class="ident">d03</span>, <span class="ident">d02</span>, <span class="ident">d01</span>,
-                );
-
-                <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">invert</span>.<span class="ident">select</span>(<span class="ident">lanczos_sum_inv</span>, <span class="ident">lanczos_sum</span>);
-            }
-        }
 
         <span class="kw">let</span> <span class="ident">zgh</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>;
         <span class="kw">let</span> <span class="ident">lzgh</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
@@ -2169,18 +2211,6 @@
 <span class="kw">fn</span> <span class="ident">ln_d_internal</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x0</span>: <span class="ident">Vf64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">p1</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vf64</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="kw">let</span> <span class="ident">ln2_hi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.693359375</span>);
     <span class="kw">let</span> <span class="ident">ln2_lo</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.121944400546905827679E-4</span>);
-    <span class="kw">let</span> <span class="ident">p0log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.70838733755885391666E0</span>);
-    <span class="kw">let</span> <span class="ident">p1log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.79368678507819816313E1</span>);
-    <span class="kw">let</span> <span class="ident">p2log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.44989225341610930846E1</span>);
-    <span class="kw">let</span> <span class="ident">p3log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.70579119878881725854E0</span>);
-    <span class="kw">let</span> <span class="ident">p4log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.97494994976747001425E-1</span>);
-    <span class="kw">let</span> <span class="ident">p5log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.01875663804580931796E-4</span>);
-    <span class="kw">let</span> <span class="ident">q0log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.31251620126765340583E1</span>);
-    <span class="kw">let</span> <span class="ident">q1log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.11544750618563894466E1</span>);
-    <span class="kw">let</span> <span class="ident">q2log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.29875266912776603211E1</span>);
-    <span class="kw">let</span> <span class="ident">q3log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.52279145837532221105E1</span>);
-    <span class="kw">let</span> <span class="ident">q4log</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.12873587189167450590E1</span>);
-
     <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
     <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
 
@@ -2207,12 +2237,23 @@
 
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
     <span class="kw">let</span> <span class="ident">x3</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x2</span>;
-    <span class="kw">let</span> <span class="ident">x4</span> <span class="op">=</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>;
 
-    <span class="kw">let</span> <span class="ident">px</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0log</span>, <span class="ident">p1log</span>, <span class="ident">p2log</span>, <span class="ident">p3log</span>, <span class="ident">p4log</span>, <span class="ident">p5log</span>) <span class="op">*</span> <span class="ident">x3</span>;
-    <span class="kw">let</span> <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0log</span>, <span class="ident">q1log</span>, <span class="ident">q2log</span>, <span class="ident">q3log</span>, <span class="ident">q4log</span>, <span class="ident">one</span>);
-
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">px</span> <span class="op">/</span> <span class="ident">qx</span>;
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span>
+        <span class="ident">x3</span> <span class="op">*</span> <span class="ident">x</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">7.70838733755885391666E0</span>,
+            <span class="number">1.79368678507819816313E1</span>,
+            <span class="number">1.44989225341610930846E1</span>,
+            <span class="number">4.70579119878881725854E0</span>,
+            <span class="number">4.97494994976747001425E-1</span>,
+            <span class="number">1.01875663804580931796E-4</span>,
+        ]) <span class="op">/</span> <span class="ident">x</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">2.31251620126765340583E1</span>,
+            <span class="number">7.11544750618563894466E1</span>,
+            <span class="number">8.29875266912776603211E1</span>,
+            <span class="number">4.52279145837532221105E1</span>,
+            <span class="number">1.12873587189167450590E1</span>,
+            <span class="number">1.0</span>,
+        ]);
 
     <span class="ident">res</span> <span class="op">=</span> <span class="ident">fe</span>.<span class="ident">mul_adde</span>(<span class="ident">ln2_lo</span>, <span class="ident">res</span>); <span class="comment">// res += fe * ln2_lo;</span>
     <span class="ident">res</span> <span class="op">+</span><span class="op">=</span> <span class="ident">x2</span>.<span class="ident">nmul_adde</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>), <span class="ident">x</span>); <span class="comment">// res += x - 0.5 * x2;</span>
@@ -2242,16 +2283,6 @@
     <span class="kw">let</span> <span class="ident">morebits</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.123233995736765886130E-17</span>);
     <span class="kw">let</span> <span class="ident">morebitso2</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.123233995736765886130E-17</span> <span class="op">*</span> <span class="number">0.5</span>);
     <span class="kw">let</span> <span class="ident">t3po8</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_2</span> <span class="op">+</span> <span class="number">1.0</span>);
-    <span class="kw">let</span> <span class="ident">p4atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">8.750608600031904122785E-1</span>);
-    <span class="kw">let</span> <span class="ident">p3atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.615753718733365076637E1</span>);
-    <span class="kw">let</span> <span class="ident">p2atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">7.500855792314704667340E1</span>);
-    <span class="kw">let</span> <span class="ident">p1atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.228866684490136173410E2</span>);
-    <span class="kw">let</span> <span class="ident">p0atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">6.485021904942025371773E1</span>);
-    <span class="kw">let</span> <span class="ident">q4atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.485846490142306297962E1</span>);
-    <span class="kw">let</span> <span class="ident">q3atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.650270098316988542046E2</span>);
-    <span class="kw">let</span> <span class="ident">q2atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.328810604912902668951E2</span>);
-    <span class="kw">let</span> <span class="ident">q1atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.853903996359136964868E2</span>);
-    <span class="kw">let</span> <span class="ident">q0atan</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.945506571482613964425E2</span>);
     <span class="kw">let</span> <span class="ident">neg_one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_one</span>();
     <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
     <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
@@ -2295,14 +2326,24 @@
     <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">a</span> <span class="op">/</span> <span class="ident">b</span>;
 
     <span class="kw">let</span> <span class="ident">zz</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">*</span> <span class="ident">z</span>;
-    <span class="kw">let</span> <span class="ident">zz2</span> <span class="op">=</span> <span class="ident">zz</span> <span class="op">*</span> <span class="ident">zz</span>;
-    <span class="kw">let</span> <span class="ident">zz4</span> <span class="op">=</span> <span class="ident">zz2</span> <span class="op">*</span> <span class="ident">zz2</span>;
 
-    <span class="kw">let</span> <span class="ident">px</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">zz</span>, <span class="ident">zz2</span>, <span class="ident">zz4</span>, <span class="ident">p0atan</span>, <span class="ident">p1atan</span>, <span class="ident">p2atan</span>, <span class="ident">p3atan</span>, <span class="ident">p4atan</span>);
-    <span class="kw">let</span> <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">zz</span>, <span class="ident">zz2</span>, <span class="ident">zz4</span>, <span class="ident">q0atan</span>, <span class="ident">q1atan</span>, <span class="ident">q2atan</span>, <span class="ident">q3atan</span>, <span class="ident">q4atan</span>, <span class="ident">one</span>);
+    <span class="kw">let</span> <span class="ident">re0</span> <span class="op">=</span> <span class="ident">zz</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+        <span class="op">-</span><span class="number">6.485021904942025371773E1</span>,
+        <span class="op">-</span><span class="number">1.228866684490136173410E2</span>,
+        <span class="op">-</span><span class="number">7.500855792314704667340E1</span>,
+        <span class="op">-</span><span class="number">1.615753718733365076637E1</span>,
+        <span class="op">-</span><span class="number">8.750608600031904122785E-1</span>,
+    ]) <span class="op">/</span> <span class="ident">zz</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+        <span class="number">1.945506571482613964425E2</span>,
+        <span class="number">4.853903996359136964868E2</span>,
+        <span class="number">4.328810604912902668951E2</span>,
+        <span class="number">1.650270098316988542046E2</span>,
+        <span class="number">2.485846490142306297962E1</span>,
+        <span class="number">1.0</span>,
+    ]);
 
     <span class="comment">// place additions before mul_add to lessen dependency chain</span>
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">re</span> <span class="op">=</span> (<span class="ident">px</span> <span class="op">/</span> <span class="ident">qx</span>).<span class="ident">mul_adde</span>(<span class="ident">z</span> <span class="op">*</span> <span class="ident">zz</span>, <span class="ident">z</span> <span class="op">+</span> <span class="ident">s</span> <span class="op">+</span> <span class="ident">fac</span>);
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">re</span> <span class="op">=</span> <span class="ident">re0</span>.<span class="ident">mul_adde</span>(<span class="ident">z</span> <span class="op">*</span> <span class="ident">zz</span>, <span class="ident">z</span> <span class="op">+</span> <span class="ident">s</span> <span class="op">+</span> <span class="ident">fac</span>);
 
     <span class="kw">if</span> <span class="ident">atan2</span> {
         <span class="ident">re</span> <span class="op">=</span> <span class="ident">swapxy</span>.<span class="ident">select</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_PI_2</span>) <span class="op">-</span> <span class="ident">re</span>, <span class="ident">re</span>);
@@ -2340,37 +2381,44 @@
 
     <span class="comment">// if not all are big (if any are small)</span>
     <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">bitmask</span>.<span class="ident">all</span>() {
-        <span class="kw">let</span> <span class="ident">p5asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.253011369004428248960E-3</span>);
-        <span class="kw">let</span> <span class="ident">p4asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">6.019598008014123785661E-1</span>);
-        <span class="kw">let</span> <span class="ident">p3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.444622390564711410273E0</span>);
-        <span class="kw">let</span> <span class="ident">p2asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.626247967210700244449E1</span>);
-        <span class="kw">let</span> <span class="ident">p1asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.956261983317594739197E1</span>);
-        <span class="kw">let</span> <span class="ident">p0asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">8.198089802484824371615E0</span>);
-        <span class="kw">let</span> <span class="ident">q4asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.474091372988853791896E1</span>);
-        <span class="kw">let</span> <span class="ident">q3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">7.049610280856842141659E1</span>);
-        <span class="kw">let</span> <span class="ident">q2asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">1.471791292232726029859E2</span>);
-        <span class="kw">let</span> <span class="ident">q1asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.395105614657485689735E2</span>);
-        <span class="kw">let</span> <span class="ident">q0asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">4.918853881490881290097E1</span>);
+        <span class="ident">px</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="op">-</span><span class="number">8.198089802484824371615E0</span>,
+            <span class="number">1.956261983317594739197E1</span>,
+            <span class="op">-</span><span class="number">1.626247967210700244449E1</span>,
+            <span class="number">5.444622390564711410273E0</span>,
+            <span class="op">-</span><span class="number">6.019598008014123785661E-1</span>,
+            <span class="number">4.253011369004428248960E-3</span>,
+        ]);
 
-        <span class="ident">px</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">p0asin</span>, <span class="ident">p1asin</span>, <span class="ident">p2asin</span>, <span class="ident">p3asin</span>, <span class="ident">p4asin</span>, <span class="ident">p5asin</span>);
-        <span class="ident">qx</span> <span class="op">=</span> <span class="ident">poly_5</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">q0asin</span>, <span class="ident">q1asin</span>, <span class="ident">q2asin</span>, <span class="ident">q3asin</span>, <span class="ident">q4asin</span>, <span class="ident">one</span>);
+        <span class="ident">qx</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="op">-</span><span class="number">4.918853881490881290097E1</span>,
+            <span class="number">1.395105614657485689735E2</span>,
+            <span class="op">-</span><span class="number">1.471791292232726029859E2</span>,
+            <span class="number">7.049610280856842141659E1</span>,
+            <span class="op">-</span><span class="number">1.474091372988853791896E1</span>,
+            <span class="number">1.0</span>,
+        ]);
     }
 
     <span class="comment">// if any are big</span>
     <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">bitmask</span>.<span class="ident">any</span>() {
-        <span class="kw">let</span> <span class="ident">r4asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.967721961301243206100E-3</span>);
-        <span class="kw">let</span> <span class="ident">r3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">5.634242780008963776856E-1</span>);
-        <span class="kw">let</span> <span class="ident">r2asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.968710824104713396794E0</span>);
-        <span class="kw">let</span> <span class="ident">r1asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.556901049652824852289E1</span>);
-        <span class="kw">let</span> <span class="ident">r0asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.853665548261061424989E1</span>);
-        <span class="kw">let</span> <span class="ident">s3asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.194779531642920639778E1</span>);
-        <span class="kw">let</span> <span class="ident">s2asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.470656354026814941758E2</span>);
-        <span class="kw">let</span> <span class="ident">s1asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">3.838770957603691357202E2</span>);
-        <span class="kw">let</span> <span class="ident">s0asin</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.424398657913078477438E2</span>);
-
-        <span class="ident">rx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">r0asin</span>, <span class="ident">r1asin</span>, <span class="ident">r2asin</span>, <span class="ident">r3asin</span>, <span class="ident">r4asin</span>);
-        <span class="ident">sx</span> <span class="op">=</span> <span class="ident">poly_4</span>(<span class="ident">x1</span>, <span class="ident">x2</span>, <span class="ident">x4</span>, <span class="ident">s0asin</span>, <span class="ident">s1asin</span>, <span class="ident">s2asin</span>, <span class="ident">s3asin</span>, <span class="ident">one</span>);
         <span class="ident">xb</span> <span class="op">=</span> (<span class="ident">x1</span> <span class="op">+</span> <span class="ident">x1</span>).<span class="ident">sqrt</span>();
+
+        <span class="ident">rx</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">2.853665548261061424989E1</span>,
+            <span class="op">-</span><span class="number">2.556901049652824852289E1</span>,
+            <span class="number">6.968710824104713396794E0</span>,
+            <span class="op">-</span><span class="number">5.634242780008963776856E-1</span>,
+            <span class="number">2.967721961301243206100E-3</span>,
+        ]);
+
+        <span class="ident">sx</span> <span class="op">=</span> <span class="ident">x1</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
+            <span class="number">3.424398657913078477438E2</span>,
+            <span class="op">-</span><span class="number">3.838770957603691357202E2</span>,
+            <span class="number">1.470656354026814941758E2</span>,
+            <span class="op">-</span><span class="number">2.194779531642920639778E1</span>,
+            <span class="number">1.0</span>,
+        ]);
     }
 
     <span class="kw">let</span> <span class="ident">vx</span> <span class="op">=</span> <span class="ident">is_big</span>.<span class="ident">select</span>(<span class="ident">rx</span>, <span class="ident">px</span>);
