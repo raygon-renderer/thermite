@@ -105,7 +105,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let p0 = Vf64::<S>::splat(-3.51754964808151394800E5);
             let p1 = Vf64::<S>::splat(-1.15614435765005216044E4);
             let p2 = Vf64::<S>::splat(-1.63725857525983828727E2);
@@ -123,7 +123,7 @@ where
         }
 
         // if not all are small
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = x.exph_p::<P>();
             y2 -= Vf64::<S>::splat(0.25) / y2;
         }
@@ -146,7 +146,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let p0 = Vf64::<S>::splat(-1.61468768441708447952E3);
             let p1 = Vf64::<S>::splat(-9.92877231001918586564E1);
             let p2 = Vf64::<S>::splat(-9.64399179425052238628E-1);
@@ -163,7 +163,7 @@ where
         }
 
         // if not all are small
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = (x + x).exp_p::<P>();
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
@@ -191,7 +191,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let p0 = Vf64::<S>::splat(-5.56682227230859640450E0);
             let p1 = Vf64::<S>::splat(-9.09030533308377316566E0);
             let p2 = Vf64::<S>::splat(-4.37390226194356683570E0);
@@ -210,7 +210,7 @@ where
             y1 = y1.mul_adde(x2 * x, x);
         }
 
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = ((x2 + one).sqrt() + x).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
@@ -236,7 +236,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let p0 = Vf64::<S>::splat(1.10855947270161294369E5);
             let p1 = Vf64::<S>::splat(1.08102874834699867335E5);
             let p2 = Vf64::<S>::splat(3.43989375926195455866E4);
@@ -256,7 +256,7 @@ where
             y1 = is_undef.select(Vf64::<S>::nan(), y1);
         }
 
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
@@ -281,7 +281,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let p0 = Vf64::<S>::splat(-3.09092539379866942570E1);
             let p1 = Vf64::<S>::splat(6.54566728676544377376E1);
             let p2 = Vf64::<S>::splat(-4.61252884198732692637E1);
@@ -302,7 +302,7 @@ where
             y1 = y1.mul_adde(x2 * x, x);
         }
 
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = ((one + x) / (one - x)).ln_p::<P>() * half;
 
             y2 = x
@@ -1088,7 +1088,7 @@ fn asin_internal<S: Simd, P: Policy>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     let bitmask = is_big.bitmask();
 
     // if not all are big (if any are small)
-    if !bitmask.all() {
+    if P::POLICY.avoid_branching || !bitmask.all() {
         let p5asin = Vf64::<S>::splat(4.253011369004428248960E-3);
         let p4asin = Vf64::<S>::splat(-6.019598008014123785661E-1);
         let p3asin = Vf64::<S>::splat(5.444622390564711410273E0);
@@ -1106,7 +1106,7 @@ fn asin_internal<S: Simd, P: Policy>(x: Vf64<S>, acos: bool) -> Vf64<S> {
     }
 
     // if any are big
-    if bitmask.any() {
+    if P::POLICY.avoid_branching || bitmask.any() {
         let r4asin = Vf64::<S>::splat(2.967721961301243206100E-3);
         let r3asin = Vf64::<S>::splat(-5.634242780008963776856E-1);
         let r2asin = Vf64::<S>::splat(6.968710824104713396794E0);

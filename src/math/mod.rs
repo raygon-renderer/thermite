@@ -41,9 +41,23 @@ pub mod policies {
 
     /// Customizable Policy Parameters
     pub struct Parameters {
+        /// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.
+        ///
+        /// If false, all of that work is avoided, and the result is undefined in those cases. Garbage in, garbage out.
+        ///
+        /// However, those checks can be expensive.
         pub check_overflow: bool,
+
+        /// If true, unrolled and optimized versions of some algorithms will be used. These can be much faster than
+        /// the linear variants. If code size is important, this will improve codegen when used with `opt-level=z`
         pub unroll_loops: bool,
+
+        /// If true, extra care is taken to improve precision of results, often at the cost of some performance.
         pub extra_precision: bool,
+
+        /// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,
+        /// but branchless may be desired in some cases, such as minimizing code size.
+        pub avoid_branching: bool,
     }
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
@@ -79,6 +93,7 @@ pub mod policies {
             check_overflow: false,
             unroll_loops: true,
             extra_precision: false,
+            avoid_branching: false,
         };
     }
 
@@ -87,6 +102,7 @@ pub mod policies {
             check_overflow: true,
             unroll_loops: true,
             extra_precision: false,
+            avoid_branching: false,
         };
     }
 
@@ -95,6 +111,7 @@ pub mod policies {
             check_overflow: true,
             unroll_loops: true,
             extra_precision: true,
+            avoid_branching: false,
         };
     }
 
@@ -103,6 +120,7 @@ pub mod policies {
             check_overflow: true,
             unroll_loops: false,
             extra_precision: false,
+            avoid_branching: true,
         };
     }
 }

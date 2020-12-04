@@ -73,7 +73,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let r0 = Vf32::<S>::splat(1.66667160211E-1);
             let r1 = Vf32::<S>::splat(8.33028376239E-3);
             let r2 = Vf32::<S>::splat(2.03721912945E-4);
@@ -83,7 +83,7 @@ where
         }
 
         // if not all are small
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = x.exph_p::<P>();
             y2 -= Vf32::<S>::splat(0.25) / y2;
         }
@@ -105,7 +105,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let r0 = Vf32::<S>::splat(-3.33332819422E-1);
             let r1 = Vf32::<S>::splat(1.33314422036E-1);
             let r2 = Vf32::<S>::splat(-5.37397155531E-2);
@@ -119,7 +119,7 @@ where
         }
 
         // if not all are small
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = (x + x).exp_p::<P>();
             y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
         }
@@ -235,7 +235,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let r0 = Vf32::<S>::splat(-1.6666288134E-1);
             let r1 = Vf32::<S>::splat(7.4847586088E-2);
             let r2 = Vf32::<S>::splat(-4.2699340972E-2);
@@ -244,7 +244,7 @@ where
             y1 = poly_3(x2, x2 * x2, r0, r1, r2, r3).mul_adde(x2 * x, x);
         }
 
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = ((x2 + Vf32::<S>::one()).sqrt() + x).ln_p::<P>();
 
             if unlikely!(x_huge.any()) {
@@ -271,7 +271,7 @@ where
         let bitmask = x_small.bitmask();
 
         // if any are small
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let r0 = Vf32::<S>::splat(1.4142135263E0);
             let r1 = Vf32::<S>::splat(-1.1784741703E-1);
             let r2 = Vf32::<S>::splat(2.6454905019E-2);
@@ -285,7 +285,7 @@ where
         }
 
         // if not all are small
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
 
             if x_huge.any() {
@@ -307,7 +307,7 @@ where
 
         let bitmask = x_small.bitmask();
 
-        if bitmask.any() {
+        if P::POLICY.avoid_branching || bitmask.any() {
             let r0 = Vf32::<S>::splat(3.33337300303E-1);
             let r1 = Vf32::<S>::splat(1.99782164500E-1);
             let r2 = Vf32::<S>::splat(1.46691431730E-1);
@@ -321,7 +321,7 @@ where
             y1 = poly_4(x2, x4, x8, r0, r1, r2, r3, r4).mul_adde(x2 * x, x);
         }
 
-        if !bitmask.all() {
+        if P::POLICY.avoid_branching || !bitmask.all() {
             let one = Vf32::<S>::one();
 
             y2 = ((one + x) / (one - x)).ln_p::<P>() * Vf32::<S>::splat(0.5);
