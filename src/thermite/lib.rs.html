@@ -1240,7 +1240,7 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">math</span>;
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>)]</span>
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">math</span>::<span class="kw-2">*</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">math</span>::{<span class="ident">SimdVectorizedMath</span>, <span class="kw-2">*</span>};
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;math&quot;</span>))]</span>
 <span class="doccomment">/// &quot;math&quot; features is disabled. This trait is empty.</span>

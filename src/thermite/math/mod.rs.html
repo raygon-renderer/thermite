@@ -1516,6 +1516,8 @@
 <span id="1513">1513</span>
 <span id="1514">1514</span>
 <span id="1515">1515</span>
+<span id="1516">1516</span>
+<span id="1517">1517</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1549,6 +1551,8 @@ impl Policy for MyPolicy {
         check_overflow: false,
         unroll_loops: false,
         extra_precision: true,
+        avoid_branching: true,
+        max_series_iterations: 10000,
     };
 }
 
@@ -1738,11 +1742,12 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
 <span class="doccomment">/// Set of vectorized special functions optimized for both single and double precision.</span>
 <span class="doccomment">///</span>
+<span class="doccomment">/// This trait is automatically implemented for any vector that implements [`SimdVectorizedMathPolicied`], and delegates to that</span>
+<span class="doccomment">/// using the default policy [`Performance`](policies::Performance) for all methods.</span>
+<span class="doccomment">///</span>
 <span class="doccomment">/// To use a specific execution policy for any function listed below, simply append `_p` to the function name and provide one of</span>
 <span class="doccomment">/// the [available policies](policies) via turbofish, such as `x.sin_p::&lt;`[`Precision`](policies::Precision)`&gt;()`</span>
-<span class="doccomment">///</span>
-<span class="doccomment">/// The default execution policy for all functions in `SimdVectorizedMath` is [`Performance`](policies::Performance).</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdVectorizedMathPolicied</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdVectorizedMathPolicied</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="doccomment">/// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`</span>
     <span class="kw">fn</span> <span class="ident">scale</span>(<span class="self">self</span>, <span class="ident">in_min</span>: <span class="self">Self</span>, <span class="ident">in_max</span>: <span class="self">Self</span>, <span class="ident">out_min</span>: <span class="self">Self</span>, <span class="ident">out_max</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
@@ -2027,8 +2032,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">T</span><span class="op">&gt;</span> <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span>
 <span class="kw">where</span>
-    <span class="ident">T</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
-    <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vf</span> <span class="op">=</span> <span class="ident">T</span><span class="op">&gt;</span>,
+    <span class="ident">T</span>: <span class="ident">SimdVectorizedMathPolicied</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
 {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">scale</span>(<span class="self">self</span>, <span class="ident">in_min</span>: <span class="self">Self</span>, <span class="ident">in_max</span>: <span class="self">Self</span>, <span class="ident">out_min</span>: <span class="self">Self</span>, <span class="ident">out_max</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">scale_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">in_min</span>, <span class="ident">in_max</span>, <span class="ident">out_min</span>, <span class="ident">out_max</span>)
