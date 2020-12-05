@@ -211,8 +211,36 @@ mod bessel_internal {
 
         // 4 < w <= 8
         if P::POLICY.avoid_branching || be48.any() {
-            let r = (x * x).poly_rational_p::<P>(
-                &[
+            let r = if P::POLICY.extra_precision {
+                let y = E::Vf::one() / (x * x);
+
+                // reverse coefficients and evaluate at 1/(x*x),
+                // this preserves precision by ensuring powers of
+                // x are between 0 and 1. Since x > 4 here, do it
+                // unconditionally
+                y.poly_p::<P>(&[
+                    E::cast_from(4.6179191852758252278e+00f64),
+                    E::cast_from(-7.5023342220781607561e+03f64),
+                    E::cast_from(5.0793266148011179143e+06f64),
+                    E::cast_from(-1.8113931269860667829e+09f64),
+                    E::cast_from(3.5580665670910619166e+11f64),
+                    E::cast_from(-3.6658018905416665164e+13f64),
+                    E::cast_from(1.6608531731299018674e+15f64),
+                    E::cast_from(-1.7527881995806511112e+16f64),
+                ]) / y.poly_p::<P>(&[
+                    E::cast_from(1.0f64),
+                    E::cast_from(1.3886978985861357615e+03f64),
+                    E::cast_from(1.1267125065029138050e+06f64),
+                    E::cast_from(6.4872502899596389593e+08f64),
+                    E::cast_from(2.7622777286244082666e+11f64),
+                    E::cast_from(8.4899346165481429307e+13f64),
+                    E::cast_from(1.7128800897135812012e+16f64),
+                    E::cast_from(1.7253905888447681194e+18f64),
+                ])
+            } else {
+                let y = x * x;
+
+                y.poly_p::<P>(&[
                     E::cast_from(-1.7527881995806511112e+16f64),
                     E::cast_from(1.6608531731299018674e+15f64),
                     E::cast_from(-3.6658018905416665164e+13f64),
@@ -221,8 +249,7 @@ mod bessel_internal {
                     E::cast_from(5.0793266148011179143e+06f64),
                     E::cast_from(-7.5023342220781607561e+03f64),
                     E::cast_from(4.6179191852758252278e+00f64),
-                ],
-                &[
+                ]) / y.poly_p::<P>(&[
                     E::cast_from(1.7253905888447681194e+18f64),
                     E::cast_from(1.7128800897135812012e+16f64),
                     E::cast_from(8.4899346165481429307e+13f64),
@@ -231,8 +258,8 @@ mod bessel_internal {
                     E::cast_from(1.1267125065029138050e+06f64),
                     E::cast_from(1.3886978985861357615e+03f64),
                     E::cast_from(1.0f64),
-                ],
-            );
+                ]);
+            };
 
             y48 = r * w * (w + x2) * (den.mul_adde(x21, w) - x22);
         }
