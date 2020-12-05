@@ -56,8 +56,17 @@ pub mod policies {
         pub extra_precision: bool,
 
         /// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,
-        /// but branchless may be desired in some cases, such as minimizing code size.
+        /// but branchless may be desired in some cases, such as minimizing code size. However, note that some branches
+        /// are required for improving precision. Enabling `extra_precision` will re-enable those.
         pub avoid_branching: bool,
+    }
+
+    impl Parameters {
+        /// Returns true if the policy says to avoid branches at the cost of precision
+        #[inline(always)]
+        pub const fn avoid_precision_branches(self) -> bool {
+            self.avoid_branching && !self.extra_precision
+        }
     }
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
@@ -93,7 +102,7 @@ pub mod policies {
             check_overflow: false,
             unroll_loops: true,
             extra_precision: false,
-            avoid_branching: false,
+            avoid_branching: true,
         };
     }
 
@@ -120,12 +129,17 @@ pub mod policies {
             check_overflow: true,
             unroll_loops: false,
             extra_precision: false,
-            avoid_branching: true,
+
+            // debatable, but for WASM it can't use
+            // instruction-level parallelism anyway.
+            avoid_branching: false,
         };
     }
 }
 
 use policies::*;
+
+type DefaultPolicy = Performance;
 
 //TODO: beta function, j0, y0
 
@@ -474,20 +488,20 @@ where
     <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
 {
     #[inline(always)] fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
-        self.scale_p::<Performance>(in_min, in_max, out_min, out_max)
+        self.scale_p::<DefaultPolicy>(in_min, in_max, out_min, out_max)
     }
 
-    #[inline(always)] fn lerp(self, a: Self, b: Self)   -> Self { self.lerp_p::<Performance>(a, b) }
-    #[inline(always)] fn fmod(self, y: Self)            -> Self { self.fmod_p::<Performance>(y) }
-    #[inline(always)] fn hypot(self, y: Self)           -> Self { self.hypot_p::<Performance>(y) }
-    #[inline(always)] fn powi(self, e: i32)             -> Self { self.powi_p::<Performance>(e) }
-    #[inline(always)] fn powiv(self, e: S::Vi32)        -> Self { self.powiv_p::<Performance>(e) }
+    #[inline(always)] fn lerp(self, a: Self, b: Self)   -> Self { self.lerp_p::<DefaultPolicy>(a, b) }
+    #[inline(always)] fn fmod(self, y: Self)            -> Self { self.fmod_p::<DefaultPolicy>(y) }
+    #[inline(always)] fn hypot(self, y: Self)           -> Self { self.hypot_p::<DefaultPolicy>(y) }
+    #[inline(always)] fn powi(self, e: i32)             -> Self { self.powi_p::<DefaultPolicy>(e) }
+    #[inline(always)] fn powiv(self, e: S::Vi32)        -> Self { self.powiv_p::<DefaultPolicy>(e) }
 
     #[inline(always)] fn poly_f<F>(self, n: usize, f: F) -> Self
     where
         F: FnMut(usize) -> Self,
     {
-        self.poly_f_p::<Performance, F>(n, f)
+        self.poly_f_p::<DefaultPolicy, F>(n, f)
     }
 
     #[inline(always)] fn poly_rational(
@@ -495,48 +509,48 @@ where
         numerator_coefficients: &[Self::Element],
         denominator_coefficients: &[Self::Element],
     ) -> Self {
-        self.poly_rational_p::<Performance>(numerator_coefficients, denominator_coefficients)
+        self.poly_rational_p::<DefaultPolicy>(numerator_coefficients, denominator_coefficients)
     }
 
-    #[inline(always)] fn poly(self, coefficients: &[Self::Element])             -> Self { self.poly_p::<Performance>(coefficients) }
-    #[inline(always)] fn hermite(self, n: u32)                                  -> Self { self.hermite_p::<Performance>(n) }
-    #[inline(always)] fn hermitev(self, n: S::Vu32)                             -> Self { self.hermitev_p::<Performance>(n) }
-    #[inline(always)] fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32)  -> Self { self.jacobi_p::<Performance>(alpha, beta, n, m) }
-    #[inline(always)] fn legendre(self, n: u32, m: u32)                         -> Self { self.legendre_p::<Performance>(n, m) }
+    #[inline(always)] fn poly(self, coefficients: &[Self::Element])             -> Self { self.poly_p::<DefaultPolicy>(coefficients) }
+    #[inline(always)] fn hermite(self, n: u32)                                  -> Self { self.hermite_p::<DefaultPolicy>(n) }
+    #[inline(always)] fn hermitev(self, n: S::Vu32)                             -> Self { self.hermitev_p::<DefaultPolicy>(n) }
+    #[inline(always)] fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32)  -> Self { self.jacobi_p::<DefaultPolicy>(alpha, beta, n, m) }
+    #[inline(always)] fn legendre(self, n: u32, m: u32)                         -> Self { self.legendre_p::<DefaultPolicy>(n, m) }
 
-    #[inline(always)] fn sin(self)              -> Self         { self.sin_p::<Performance>() }
-    #[inline(always)] fn cos(self)              -> Self         { self.cos_p::<Performance>() }
-    #[inline(always)] fn tan(self)              -> Self         { self.tan_p::<Performance>() }
-    #[inline(always)] fn sin_cos(self)          -> (Self, Self) { self.sin_cos_p::<Performance>() }
-    #[inline(always)] fn sinh(self)             -> Self         { self.sinh_p::<Performance>() }
-    #[inline(always)] fn cosh(self)             -> Self         { self.cosh_p::<Performance>() }
-    #[inline(always)] fn tanh(self)             -> Self         { self.tanh_p::<Performance>() }
-    #[inline(always)] fn asinh(self)            -> Self         { self.asinh_p::<Performance>() }
-    #[inline(always)] fn acosh(self)            -> Self         { self.acosh_p::<Performance>() }
-    #[inline(always)] fn atanh(self)            -> Self         { self.atanh_p::<Performance>() }
-    #[inline(always)] fn asin(self)             -> Self         { self.asin_p::<Performance>() }
-    #[inline(always)] fn acos(self)             -> Self         { self.acos_p::<Performance>() }
-    #[inline(always)] fn atan(self)             -> Self         { self.atan_p::<Performance>() }
-    #[inline(always)] fn atan2(self, x: Self)   -> Self         { self.atan2_p::<Performance>(x) }
-    #[inline(always)] fn exp(self)              -> Self         { self.exp_p::<Performance>() }
-    #[inline(always)] fn exph(self)             -> Self         { self.exph_p::<Performance>() }
-    #[inline(always)] fn exp2(self)             -> Self         { self.exp2_p::<Performance>() }
-    #[inline(always)] fn exp10(self)            -> Self         { self.exp10_p::<Performance>() }
-    #[inline(always)] fn exp_m1(self)           -> Self         { self.exp_m1_p::<Performance>() }
-    #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<Performance>() }
-    #[inline(always)] fn powf(self, e: Self)    -> Self         { self.powf_p::<Performance>(e) }
-    #[inline(always)] fn ln(self)               -> Self         { self.ln_p::<Performance>() }
-    #[inline(always)] fn ln_1p(self)            -> Self         { self.ln_1p_p::<Performance>() }
-    #[inline(always)] fn log2(self)             -> Self         { self.log2_p::<Performance>() }
-    #[inline(always)] fn log10(self)            -> Self         { self.log10_p::<Performance>() }
-    #[inline(always)] fn erf(self)              -> Self         { self.erf_p::<Performance>() }
-    #[inline(always)] fn erfinv(self)           -> Self         { self.erfinv_p::<Performance>() }
-    #[inline(always)] fn tgamma(self)           -> Self         { self.tgamma_p::<Performance>() }
-    #[inline(always)] fn next_float(self)       -> Self         { self.next_float_p::<Performance>() }
-    #[inline(always)] fn prev_float(self)       -> Self         { self.prev_float_p::<Performance>() }
-    #[inline(always)] fn smoothstep(self)       -> Self         { self.smoothstep_p::<Performance>() }
-    #[inline(always)] fn smootherstep(self)     -> Self         { self.smootherstep_p::<Performance>() }
-    #[inline(always)] fn smootheststep(self)    -> Self         { self.smootheststep_p::<Performance>() }
+    #[inline(always)] fn sin(self)              -> Self         { self.sin_p::<DefaultPolicy>() }
+    #[inline(always)] fn cos(self)              -> Self         { self.cos_p::<DefaultPolicy>() }
+    #[inline(always)] fn tan(self)              -> Self         { self.tan_p::<DefaultPolicy>() }
+    #[inline(always)] fn sin_cos(self)          -> (Self, Self) { self.sin_cos_p::<DefaultPolicy>() }
+    #[inline(always)] fn sinh(self)             -> Self         { self.sinh_p::<DefaultPolicy>() }
+    #[inline(always)] fn cosh(self)             -> Self         { self.cosh_p::<DefaultPolicy>() }
+    #[inline(always)] fn tanh(self)             -> Self         { self.tanh_p::<DefaultPolicy>() }
+    #[inline(always)] fn asinh(self)            -> Self         { self.asinh_p::<DefaultPolicy>() }
+    #[inline(always)] fn acosh(self)            -> Self         { self.acosh_p::<DefaultPolicy>() }
+    #[inline(always)] fn atanh(self)            -> Self         { self.atanh_p::<DefaultPolicy>() }
+    #[inline(always)] fn asin(self)             -> Self         { self.asin_p::<DefaultPolicy>() }
+    #[inline(always)] fn acos(self)             -> Self         { self.acos_p::<DefaultPolicy>() }
+    #[inline(always)] fn atan(self)             -> Self         { self.atan_p::<DefaultPolicy>() }
+    #[inline(always)] fn atan2(self, x: Self)   -> Self         { self.atan2_p::<DefaultPolicy>(x) }
+    #[inline(always)] fn exp(self)              -> Self         { self.exp_p::<DefaultPolicy>() }
+    #[inline(always)] fn exph(self)             -> Self         { self.exph_p::<DefaultPolicy>() }
+    #[inline(always)] fn exp2(self)             -> Self         { self.exp2_p::<DefaultPolicy>() }
+    #[inline(always)] fn exp10(self)            -> Self         { self.exp10_p::<DefaultPolicy>() }
+    #[inline(always)] fn exp_m1(self)           -> Self         { self.exp_m1_p::<DefaultPolicy>() }
+    #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<DefaultPolicy>() }
+    #[inline(always)] fn powf(self, e: Self)    -> Self         { self.powf_p::<DefaultPolicy>(e) }
+    #[inline(always)] fn ln(self)               -> Self         { self.ln_p::<DefaultPolicy>() }
+    #[inline(always)] fn ln_1p(self)            -> Self         { self.ln_1p_p::<DefaultPolicy>() }
+    #[inline(always)] fn log2(self)             -> Self         { self.log2_p::<DefaultPolicy>() }
+    #[inline(always)] fn log10(self)            -> Self         { self.log10_p::<DefaultPolicy>() }
+    #[inline(always)] fn erf(self)              -> Self         { self.erf_p::<DefaultPolicy>() }
+    #[inline(always)] fn erfinv(self)           -> Self         { self.erfinv_p::<DefaultPolicy>() }
+    #[inline(always)] fn tgamma(self)           -> Self         { self.tgamma_p::<DefaultPolicy>() }
+    #[inline(always)] fn next_float(self)       -> Self         { self.next_float_p::<DefaultPolicy>() }
+    #[inline(always)] fn prev_float(self)       -> Self         { self.prev_float_p::<DefaultPolicy>() }
+    #[inline(always)] fn smoothstep(self)       -> Self         { self.smoothstep_p::<DefaultPolicy>() }
+    #[inline(always)] fn smootherstep(self)     -> Self         { self.smootherstep_p::<DefaultPolicy>() }
+    #[inline(always)] fn smootheststep(self)    -> Self         { self.smootheststep_p::<DefaultPolicy>() }
 }
 
 #[doc(hidden)]

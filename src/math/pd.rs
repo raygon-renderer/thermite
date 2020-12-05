@@ -105,6 +105,16 @@ where
         // use bitmask directly to avoid two calls
         let bitmask = x_small.bitmask();
 
+        // if not all are small
+        if P::POLICY.avoid_branching || !bitmask.all() {
+            y2 = x.exph_p::<P>();
+            y2 -= Vf64::<S>::splat(0.25) / y2;
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.combine_sign(x0);
+            }
+        }
+
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
             let x2 = x * x;
@@ -124,12 +134,6 @@ where
             y1 = y1.mul_adde(x * x2, x);
         }
 
-        // if not all are small
-        if P::POLICY.avoid_branching || !bitmask.all() {
-            y2 = x.exph_p::<P>();
-            y2 -= Vf64::<S>::splat(0.25) / y2;
-        }
-
         x_small.select(y1, y2).combine_sign(x0)
     }
 
@@ -146,6 +150,20 @@ where
 
         // use bitmask directly to avoid two calls
         let bitmask = x_small.bitmask();
+
+        // if not all are small
+        if P::POLICY.avoid_branching || !bitmask.all() {
+            y2 = (x + x).exp_p::<P>();
+            y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
+
+            if P::POLICY.check_overflow {
+                y2 = x.gt(Vf64::<S>::splat(350.0)).select(one, y2);
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.combine_sign(x0);
+            }
+        }
 
         // if any are small
         if P::POLICY.avoid_branching || bitmask.any() {
@@ -165,18 +183,7 @@ where
             y1 = y1.mul_adde(x2 * x, x);
         }
 
-        // if not all are small
-        if P::POLICY.avoid_branching || !bitmask.all() {
-            y2 = (x + x).exp_p::<P>();
-            y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
-        }
-
-        let x_big = x.gt(Vf64::<S>::splat(350.0));
-
-        y1 = x_small.select(y1, y2);
-        y1 = x_big.select(one, y1);
-
-        y1.combine_sign(x0)
+        x_small.select(y1, y2).combine_sign(x0)
     }
 
     #[inline(always)]
@@ -187,12 +194,27 @@ where
         let x2 = x0 * x0;
 
         let x_small = x.le(Vf64::<S>::splat(0.533));
-        let x_huge = x.gt(Vf64::<S>::splat(1e20));
 
         let mut y1 = unsafe { Vf64::<S>::undefined() };
         let mut y2 = unsafe { Vf64::<S>::undefined() };
 
         let bitmask = x_small.bitmask();
+
+        if P::POLICY.avoid_branching || !bitmask.all() {
+            y2 = ((x2 + one).sqrt() + x).ln_p::<P>();
+
+            if P::POLICY.check_overflow {
+                let x_huge = x.gt(Vf64::<S>::splat(1e20));
+
+                if unlikely!(x_huge.any()) {
+                    y2 = x_huge.select(x.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
+                }
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.combine_sign(x0);
+            }
+        }
 
         if P::POLICY.avoid_branching || bitmask.any() {
             y1 = x2.poly_p::<P>(&[
@@ -212,14 +234,6 @@ where
             y1 = y1.mul_adde(x2 * x, x);
         }
 
-        if P::POLICY.avoid_branching || !bitmask.all() {
-            y2 = ((x2 + one).sqrt() + x).ln_p::<P>();
-
-            if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
-            }
-        }
-
         x_small.select(y1, y2).combine_sign(x0)
     }
 
@@ -229,14 +243,27 @@ where
 
         let x1 = x0 - one;
 
-        let is_undef = x0.lt(one);
         let x_small = x1.lt(Vf64::<S>::splat(0.49));
-        let x_huge = x1.gt(Vf64::<S>::splat(1e20));
 
         let mut y1 = unsafe { Vf64::<S>::undefined() };
         let mut y2 = unsafe { Vf64::<S>::undefined() };
 
         let bitmask = x_small.bitmask();
+
+        if P::POLICY.avoid_branching || !bitmask.all() {
+            y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
+
+            if P::POLICY.check_overflow {
+                let x_huge = x1.gt(Vf64::<S>::splat(1e20));
+                if unlikely!(x_huge.any()) {
+                    y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
+                }
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2;
+            }
+        }
 
         if P::POLICY.avoid_branching || bitmask.any() {
             y1 = x1.sqrt()
@@ -256,14 +283,8 @@ where
                     1.0,
                 ]);
 
-            y1 = is_undef.select(Vf64::<S>::nan(), y1);
-        }
-
-        if P::POLICY.avoid_branching || !bitmask.all() {
-            y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
-
-            if unlikely!(x_huge.any()) {
-                y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
+            if P::POLICY.check_overflow {
+                y1 = x0.lt(one).select(Vf64::<S>::nan(), y1);
             }
         }
 
@@ -284,6 +305,20 @@ where
 
         let bitmask = x_small.bitmask();
 
+        if P::POLICY.avoid_branching || !bitmask.all() {
+            y2 = ((one + x) / (one - x)).ln_p::<P>() * half;
+
+            if P::POLICY.check_overflow {
+                y2 = x
+                    .gt(one)
+                    .select(x.eq(one).select(Vf64::<S>::infinity(), Vf64::<S>::nan()), y2);
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.combine_sign(x0);
+            }
+        }
+
         if P::POLICY.avoid_branching || bitmask.any() {
             let x2 = x * x;
 
@@ -303,14 +338,6 @@ where
             ]);
 
             y1 = y1.mul_adde(x2 * x, x);
-        }
-
-        if P::POLICY.avoid_branching || !bitmask.all() {
-            y2 = ((one + x) / (one - x)).ln_p::<P>() * half;
-
-            y2 = x
-                .gt(one)
-                .select(x.eq(one).select(Vf64::<S>::infinity(), Vf64::<S>::nan()), y2)
         }
 
         x_small.select(y1, y2).combine_sign(x0)
@@ -740,7 +767,7 @@ where
             let mut refl_res = unsafe { Vf64::<S>::undefined() };
 
             // sine is expensive, so branch for it.
-            if unlikely!(reflected.any()) {
+            if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
                 refl_res = if P::POLICY.extra_precision {
                     let z = z.abs();
                     let mut fl = z.floor();
@@ -758,6 +785,16 @@ where
                 } else {
                     z * (z * pi).sin_p::<P>()
                 };
+
+                // If not branching, all negative values are reflected
+                if P::POLICY.avoid_precision_branches() {
+                    reflected = is_neg;
+
+                    res = reflected.select(refl_res, res);
+                    z ^= reflected.value() & Vf64::<S>::neg_zero(); // conditional negate
+
+                    break 'goto_positive;
+                }
 
                 // NOTE: I chose not to use a bitmask here, because some bitmasks can be
                 // one extra instruction than the raw call to `all` again, and since z <= -20 is so rare,
