@@ -35,7 +35,7 @@ pub use element::SimdElement;
 #[cfg(feature = "math")]
 pub mod math;
 #[cfg(feature = "math")]
-pub use math::*;
+pub use math::{SimdVectorizedMath, *};
 
 #[cfg(not(feature = "math"))]
 /// "math" features is disabled. This trait is empty.

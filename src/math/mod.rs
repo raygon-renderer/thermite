@@ -30,6 +30,8 @@ impl Policy for MyPolicy {
         check_overflow: false,
         unroll_loops: false,
         extra_precision: true,
+        avoid_branching: true,
+        max_series_iterations: 10000,
     };
 }
 
@@ -219,11 +221,12 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
 
 /// Set of vectorized special functions optimized for both single and double precision.
 ///
+/// This trait is automatically implemented for any vector that implements [`SimdVectorizedMathPolicied`], and delegates to that
+/// using the default policy [`Performance`](policies::Performance) for all methods.
+///
 /// To use a specific execution policy for any function listed below, simply append `_p` to the function name and provide one of
 /// the [available policies](policies) via turbofish, such as `x.sin_p::<`[`Precision`](policies::Precision)`>()`
-///
-/// The default execution policy for all functions in `SimdVectorizedMath` is [`Performance`](policies::Performance).
-pub trait SimdVectorizedMath<S: Simd>: SimdFloatVector<S> + SimdVectorizedMathPolicied<S> {
+pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// Scales values between `in_min` and `in_max`, to between `out_min` and `out_max`
     fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
@@ -508,8 +511,7 @@ where
 #[rustfmt::skip]
 impl<S: Simd, T> SimdVectorizedMath<S> for T
 where
-    T: SimdFloatVector<S>,
-    <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
+    T: SimdVectorizedMathPolicied<S>,
 {
     #[inline(always)] fn scale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
         self.scale_p::<DefaultPolicy>(in_min, in_max, out_min, out_max)
