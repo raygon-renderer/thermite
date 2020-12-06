@@ -396,7 +396,7 @@ where
 
         let mut t = Vf32::<S>::from_bits(ui);
 
-        if P::POLICY.extra_precision || !S::INSTRSET.has_true_fma() {
+        if P::POLICY.precision >= PrecisionPolicy::Best || !S::INSTRSET.has_true_fma() {
             let mut td = t.cast_to::<Vf64<S>>();
             let xd = x.cast_to::<Vf64<S>>();
 
@@ -727,7 +727,7 @@ where
 
             // sine is expensive, so branch for it.
             if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
-                refl_res = if P::POLICY.extra_precision {
+                refl_res = if P::POLICY.precision >= PrecisionPolicy::Best {
                     let z = z.abs();
                     let mut fl = z.floor();
 

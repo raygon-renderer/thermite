@@ -409,7 +409,7 @@ where
         ui = (ui + Vu64::<S>::splat(0x80000000)) & Vu64::<S>::splat(0xffffffffc0000000);
         t = Vf64::<S>::from_bits(ui);
 
-        let r = if P::POLICY.extra_precision || !S::INSTRSET.has_true_fma() {
+        let r = if P::POLICY.precision >= PrecisionPolicy::Best || !S::INSTRSET.has_true_fma() {
             // original form, 5 simple ops, 2 divisions
             ((x / (t * t)) - t) / ((t + t) + (x / (t * t)))
         } else {
@@ -768,7 +768,7 @@ where
 
             // sine is expensive, so branch for it.
             if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
-                refl_res = if P::POLICY.extra_precision {
+                refl_res = if P::POLICY.precision >= PrecisionPolicy::Best {
                     let z = z.abs();
                     let mut fl = z.floor();
 

@@ -16,7 +16,52 @@ mod ps;
 /// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.
 pub trait Policy: Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + core::hash::Hash {
     /// The specific policy used. This is a constant to allow for dead-code elimination of branches.
-    const POLICY: Parameters;
+    const POLICY: PolicyParameters;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
+pub enum PrecisionPolicy {
+    Worst = 0,
+    Average,
+    Best,
+}
+
+/// Customizable Policy Parameters
+pub struct PolicyParameters {
+    /// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.
+    ///
+    /// If false, all of that work is avoided, and the result is undefined in those cases. Garbage in, garbage out.
+    ///
+    /// However, those checks can be expensive.
+    pub check_overflow: bool,
+
+    /// If true, unrolled and optimized versions of some algorithms will be used. These can be much faster than
+    /// the linear variants. If code size is important, this will improve codegen when used with `opt-level=z`
+    pub unroll_loops: bool,
+
+    /// Controls if precision should be emphasized or de-emphasized.
+    pub precision: PrecisionPolicy,
+
+    /// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,
+    /// but branchless may be desired in some cases, such as minimizing code size.
+    pub avoid_branching: bool,
+
+    /// Some special functions require many, many iterations of a function to converge on an accurate result.
+    /// This parameter controls the maximum iterations allowed. Setting this too low may result in loss of precision.
+    ///
+    /// Note that this is the upper limit allowed for pathological cases, and many loops will
+    /// terminate dynamically before this.
+    pub max_series_iterations: usize,
+}
+
+impl PolicyParameters {
+    /// Returns true if the policy says to avoid branches at the cost of precision
+    #[inline(always)]
+    pub const fn avoid_precision_branches(self) -> bool {
+        // cheat the const-comparison here by casting to u8
+        self.avoid_branching && self.precision as u8 == PrecisionPolicy::Worst as u8
+    }
 }
 
 /** Execution Policies (precision, performance, etc.)
@@ -29,7 +74,7 @@ impl Policy for MyPolicy {
     const POLICY: Parameters = Parameters {
         check_overflow: false,
         unroll_loops: false,
-        extra_precision: true,
+        precision: PrecisionPolicy::Average,
         avoid_branching: true,
         max_series_iterations: 10000,
     };
@@ -39,44 +84,7 @@ let y = x.cbrt_p::<MyPolicy>();
 ```
 */
 pub mod policies {
-    use super::Policy;
-
-    /// Customizable Policy Parameters
-    pub struct Parameters {
-        /// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.
-        ///
-        /// If false, all of that work is avoided, and the result is undefined in those cases. Garbage in, garbage out.
-        ///
-        /// However, those checks can be expensive.
-        pub check_overflow: bool,
-
-        /// If true, unrolled and optimized versions of some algorithms will be used. These can be much faster than
-        /// the linear variants. If code size is important, this will improve codegen when used with `opt-level=z`
-        pub unroll_loops: bool,
-
-        /// If true, extra care is taken to improve precision of results, often at the cost of some performance.
-        pub extra_precision: bool,
-
-        /// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,
-        /// but branchless may be desired in some cases, such as minimizing code size. However, note that some branches
-        /// are required for improving precision. Enabling `extra_precision` will re-enable those.
-        pub avoid_branching: bool,
-
-        /// Some special functions require many, many iterations of a function to converge on an accurate result.
-        /// This parameter controls the maximum iterations allowed. Setting this too low may result in loss of precision.
-        ///
-        /// Note that this is the upper limit allowed for pathological cases, and many loops will
-        /// terminate dynamically before this.
-        pub max_series_iterations: usize,
-    }
-
-    impl Parameters {
-        /// Returns true if the policy says to avoid branches at the cost of precision
-        #[inline(always)]
-        pub const fn avoid_precision_branches(self) -> bool {
-            self.avoid_branching && !self.extra_precision
-        }
-    }
+    use super::{Policy, PolicyParameters, PrecisionPolicy};
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
     ///
@@ -107,40 +115,40 @@ pub mod policies {
     pub struct Size;
 
     impl Policy for UltraPerformance {
-        const POLICY: Parameters = Parameters {
+        const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: false,
             unroll_loops: true,
-            extra_precision: false,
+            precision: PrecisionPolicy::Worst,
             avoid_branching: true,
             max_series_iterations: 1000,
         };
     }
 
     impl Policy for Performance {
-        const POLICY: Parameters = Parameters {
+        const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: true,
             unroll_loops: true,
-            extra_precision: false,
+            precision: PrecisionPolicy::Average,
             avoid_branching: false,
             max_series_iterations: 10000,
         };
     }
 
     impl Policy for Precision {
-        const POLICY: Parameters = Parameters {
+        const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: true,
             unroll_loops: true,
-            extra_precision: true,
+            precision: PrecisionPolicy::Best,
             avoid_branching: false,
             max_series_iterations: 50000,
         };
     }
 
     impl Policy for Size {
-        const POLICY: Parameters = Parameters {
+        const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: true,
             unroll_loops: false,
-            extra_precision: false,
+            precision: PrecisionPolicy::Average,
 
             // debatable, but for WASM it can't use
             // instruction-level parallelism anyway.
@@ -892,7 +900,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         numerator_coefficients: &[Self],
         denominator_coefficients: &[Self],
     ) -> Self::Vf {
-        if P::POLICY.extra_precision {
+        if P::POLICY.precision > PrecisionPolicy::Average {
             let one = Self::Vf::one();
             let invert = x.gt(one);
             let bitmask = invert.bitmask();
