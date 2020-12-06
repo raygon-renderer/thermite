@@ -8,23 +8,6 @@ mod bessel_internal {
     const FRAC_1_SQRT_PI: f64 = 5.641895835477562869480794515607725858e-01;
 
     #[inline(always)]
-    pub fn bessel_j<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
-        match n {
-            0 => bessel_j0::<S, E, P>(x),
-            1 => bessel_j1::<S, E, P>(x),
-            _ => unimplemented!(),
-        }
-    }
-
-    #[inline(always)]
-    pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf, n: u32) -> E::Vf {
-        match n {
-            0 => bessel_y0::<S, E, P>(x),
-            _ => unimplemented!(),
-        }
-    }
-
-    #[inline(always)]
     pub fn bessel_j0<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf) -> E::Vf {
         let x1 = E::Vf::splat_as(2.4048255576957727686e+00);
         let x2 = E::Vf::splat_as(5.5200781102863106496e+00);
@@ -313,6 +296,7 @@ mod bessel_internal {
         y.combine_sign(x)
     }
 
+    #[inline(always)]
     pub fn bessel_y0<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
         let x1 = E::Vf::splat_as(8.9357696627916752158e-01f64);
         let x2 = E::Vf::splat_as(3.9576784193148578684e+00f64);
@@ -487,5 +471,212 @@ mod bessel_internal {
         y = x.lt(E::Vf::zero()).select(yi0, y);
 
         y
+    }
+
+    #[inline(always)]
+    pub fn bessel_y1<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
+        let x1 = E::Vf::splat_as(2.1971413260310170351e+00f64);
+        let x2 = E::Vf::splat_as(5.4296810407941351328e+00f64);
+
+        let lnx1 = E::Vf::splat_as(0.7871571181569950672690417763111546486043689808047331111421468535);
+        let lnx2 = E::Vf::splat_as(1.6918803920353296781969247742811007463414923906071109385474494417);
+
+        let x11 = E::Vf::splat_as(5.620e+02f64);
+        let x12 = E::Vf::splat_as(1.8288260310170351490e-03f64);
+        let x21 = E::Vf::splat_as(1.3900e+03f64);
+        let x22 = E::Vf::splat_as(-6.4592058648672279948e-06f64);
+        let den = E::Vf::splat_as(-1.0 / 256.0);
+
+        let p1 = &[
+            E::cast_from(4.0535726612579544093e+13f64),
+            E::cast_from(5.4708611716525426053e+12f64),
+            E::cast_from(-3.7595974497819597599e+11f64),
+            E::cast_from(7.2144548214502560419e+09f64),
+            E::cast_from(-5.9157479997408395984e+07f64),
+            E::cast_from(2.2157953222280260820e+05f64),
+            E::cast_from(-3.1714424660046133456e+02f64),
+        ];
+        let q1 = &[
+            E::cast_from(3.0737873921079286084e+14f64),
+            E::cast_from(4.1272286200406461981e+12f64),
+            E::cast_from(2.7800352738690585613e+10f64),
+            E::cast_from(1.2250435122182963220e+08f64),
+            E::cast_from(3.8136470753052572164e+05f64),
+            E::cast_from(8.2079908168393867438e+02f64),
+            E::cast_from(1.0f64),
+        ];
+        let p2 = &[
+            E::cast_from(-1.2337180442012953128e+03f64),
+            E::cast_from(1.9153806858264202986e+06f64),
+            E::cast_from(-1.1957961912070617006e+09f64),
+            E::cast_from(3.7453673962438488783e+11f64),
+            E::cast_from(-5.9530713129741981618e+13f64),
+            E::cast_from(4.0686275289804744814e+15f64),
+            E::cast_from(-2.3638408497043134724e+16f64),
+            E::cast_from(-5.6808094574724204577e+18f64),
+            E::cast_from(1.1514276357909013326e+19f64),
+        ];
+        let q2 = &[
+            E::cast_from(1.0f64),
+            E::cast_from(1.2855164849321609336e+03f64),
+            E::cast_from(1.0453748201934079734e+06f64),
+            E::cast_from(6.3550318087088919566e+08f64),
+            E::cast_from(3.0221766852960403645e+11f64),
+            E::cast_from(1.1187010065856971027e+14f64),
+            E::cast_from(3.0837179548112881950e+16f64),
+            E::cast_from(5.6968198822857178911e+18f64),
+            E::cast_from(5.3321844313316185697e+20f64),
+        ];
+        let pc = &[
+            E::cast_from(-4.4357578167941278571e+06f64),
+            E::cast_from(-9.9422465050776411957e+06f64),
+            E::cast_from(-6.6033732483649391093e+06f64),
+            E::cast_from(-1.5235293511811373833e+06f64),
+            E::cast_from(-1.0982405543459346727e+05f64),
+            E::cast_from(-1.6116166443246101165e+03f64),
+            E::cast_from(0.0f64),
+        ];
+        let qc = &[
+            E::cast_from(-4.4357578167941278568e+06f64),
+            E::cast_from(-9.9341243899345856590e+06f64),
+            E::cast_from(-6.5853394797230870728e+06f64),
+            E::cast_from(-1.5118095066341608816e+06f64),
+            E::cast_from(-1.0726385991103820119e+05f64),
+            E::cast_from(-1.4550094401904961825e+03f64),
+            E::cast_from(1.0f64),
+        ];
+        let ps = &[
+            E::cast_from(3.3220913409857223519e+04f64),
+            E::cast_from(8.5145160675335701966e+04f64),
+            E::cast_from(6.6178836581270835179e+04f64),
+            E::cast_from(1.8494262873223866797e+04f64),
+            E::cast_from(1.7063754290207680021e+03f64),
+            E::cast_from(3.5265133846636032186e+01f64),
+            E::cast_from(0.0f64),
+        ];
+        let qs = &[
+            E::cast_from(7.0871281941028743574e+05f64),
+            E::cast_from(1.8194580422439972989e+06f64),
+            E::cast_from(1.4194606696037208929e+06f64),
+            E::cast_from(4.0029443582266975117e+05f64),
+            E::cast_from(3.7890229745772202641e+04f64),
+            E::cast_from(8.6383677696049909675e+02f64),
+            E::cast_from(1.0f64),
+        ];
+
+        let yi0 = E::Vf::nan();
+        let y00 = E::Vf::neg_infinity();
+        let mut y04 = unsafe { E::Vf::undefined() };
+        let mut y48 = unsafe { E::Vf::undefined() };
+        let mut y8i = unsafe { E::Vf::undefined() };
+
+        let le4 = x.le(E::Vf::splat_as(4.0));
+        let le8 = x.le(E::Vf::splat_as(8.0));
+
+        let be48 = le4 ^ le8;
+
+        let mut j1_2_frac_pi = unsafe { E::Vf::undefined() };
+        let mut lnx_j1_2_frac_pi = unsafe { E::Vf::undefined() };
+        let mut xx = unsafe { E::Vf::undefined() };
+        let mut ix = unsafe { E::Vf::undefined() };
+
+        if true || P::POLICY.avoid_branching || le8.any() {
+            xx = x * x;
+            ix = E::Vf::one() / x;
+            j1_2_frac_pi = x.bessel_j_p::<P>(1) * E::Vf::splat_as(core::f64::consts::FRAC_2_PI);
+            lnx_j1_2_frac_pi = x.ln_p::<P>() * j1_2_frac_pi;
+        }
+
+        if P::POLICY.avoid_branching || le4.any() {
+            let r = xx.poly_rational_p::<P>(p1, q1);
+            let f = (x + x1) * (den.mul_adde(x11, x) - x12) * ix;
+            y04 = f.mul_adde(r, lnx1.nmul_add(j1_2_frac_pi, lnx_j1_2_frac_pi));
+        }
+
+        if P::POLICY.avoid_branching || be48.any() {
+            let ixx = ix * ix;
+            let r = ixx.poly_p::<P>(p2) / ixx.poly_p::<P>(q2);
+            let f = (x + x2) * (den.mul_adde(x21, x) - x22) * ix;
+            y48 = f.mul_adde(r, lnx2.nmul_add(j1_2_frac_pi, lnx_j1_2_frac_pi));
+        }
+
+        if P::POLICY.avoid_branching || !le8.all() {
+            let y = E::Vf::splat_as(8.0) / x;
+            let y2 = y * y;
+
+            let factor = E::Vf::splat_as(FRAC_1_SQRT_PI) / x.sqrt();
+
+            // y2 <= 1.0 given above division, no need for poly_rational
+            let rc = y2.poly_p::<P>(pc) / y2.poly_p::<P>(qc);
+            let rs = y2.poly_p::<P>(ps) / y2.poly_p::<P>(qs);
+
+            let (sx, cx) = x.sin_cos_p::<P>();
+
+            y8i = factor * rc.nmul_adde(sx + cx, y * rs * (sx - cx));
+        }
+
+        let mut y = y8i;
+        y = le8.select(y48, y);
+        y = le4.select(y04, y);
+        y = x.eq(E::Vf::zero()).select(y00, y);
+        y = x.lt(E::Vf::zero()).select(yi0, y);
+
+        y
+    }
+
+    #[inline(always)]
+    pub fn bessel_j<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
+        match n {
+            0 => bessel_j0::<S, E, P>(x),
+            1 => bessel_j1::<S, E, P>(x),
+            _ => unimplemented!(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf, n: u32) -> E::Vf {
+        let mut y0 = unsafe { E::Vf::undefined() };
+        let mut y1 = unsafe { E::Vf::undefined() };
+
+        // only call y0 and y1 once at most, to encourage inlining
+        if n == 0 || n > 1 {
+            y0 = bessel_y0::<S, E, P>(x);
+        }
+
+        if n >= 1 {
+            y1 = bessel_y1::<S, E, P>(x);
+        }
+
+        match n {
+            0 => y0,
+            1 => y1,
+            _ => {
+                let one = E::Vf::one();
+                let two = E::Vf::splat_as(2);
+
+                let mut prev = y0;
+                let mut current = y1;
+                let mut value = unsafe { E::Vf::undefined() };
+
+                let ix = one / x;
+
+                // TODO: Figure out where this went wrong.
+                //let inv = mult.gt(one) & current.abs().gt(one);
+                //let icur = inv.select(one / current, one);
+                //prev *= icur;
+                //value *= icur;
+                //current = inv.select(one, current);
+
+                // NOTE: Since the above is skipped, this includes the first iteration
+                for k in 1..n {
+                    let mult = E::Vf::splat_as(k + k) * ix;
+                    value = mult.mul_sub(current, prev);
+                    prev = current;
+                    current = value;
+                }
+
+                value
+            }
+        }
     }
 }
