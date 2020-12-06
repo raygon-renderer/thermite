@@ -16,7 +16,8 @@ mod bessel_internal {
     }
 
     #[inline(always)]
-    pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
+    pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf, n: u32) -> E::Vf {
+        x = x.abs();
         match n {
             0 => bessel_y0::<S, E, P>(x),
             _ => unimplemented!(),
@@ -258,7 +259,7 @@ mod bessel_internal {
                     E::cast_from(1.1267125065029138050e+06f64),
                     E::cast_from(1.3886978985861357615e+03f64),
                     E::cast_from(1.0f64),
-                ]);
+                ])
             };
 
             y48 = r * w * (w + x2) * (den.mul_adde(x21, w) - x22);
@@ -328,12 +329,19 @@ mod bessel_internal {
         let x1 = E::Vf::splat_as(8.9357696627916752158e-01f64);
         let x2 = E::Vf::splat_as(3.9576784193148578684e+00f64);
         let x3 = E::Vf::splat_as(7.0860510603017726976e+00f64);
+
+        // ln(x1, x2, x3)
+        let lnx1 = E::Vf::splat_as(-0.112522807880794125038133980477252212668015528121886074367185547f64);
+        let lnx2 = E::Vf::splat_as(1.3756575956013471336175786440565011276993580049899787950261170276f64);
+        let lnx3 = E::Vf::splat_as(1.9581282122177381156900951130612350155885109149487567360554102593f64);
+
         let x11 = E::Vf::splat_as(2.280e+02f64);
         let x12 = E::Vf::splat_as(2.9519662791675215849e-03f64);
         let x21 = E::Vf::splat_as(1.0130e+03f64);
         let x22 = E::Vf::splat_as(6.4716931485786837568e-04f64);
         let x31 = E::Vf::splat_as(1.8140e+03f64);
         let x32 = E::Vf::splat_as(1.1356030177269762362e-04f64);
+        let den = E::Vf::splat_as(-1.0 / 256.0);
 
         let yi0 = E::Vf::nan();
         let y00 = E::Vf::neg_infinity();
@@ -351,6 +359,150 @@ mod bessel_internal {
         // if le55 AND le8, then NOT between.
         let be558 = le55 ^ le8;
 
-        todo!()
+        let P1 = &[
+            E::cast_from(1.0723538782003176831e+11f64),
+            E::cast_from(-8.3716255451260504098e+09f64),
+            E::cast_from(2.0422274357376619816e+08f64),
+            E::cast_from(-2.1287548474401797963e+06f64),
+            E::cast_from(1.0102532948020907590e+04f64),
+            E::cast_from(-1.8402381979244993524e+01f64),
+        ];
+        let Q1 = &[
+            E::cast_from(5.8873865738997033405e+11f64),
+            E::cast_from(8.1617187777290363573e+09f64),
+            E::cast_from(5.5662956624278251596e+07f64),
+            E::cast_from(2.3889393209447253406e+05f64),
+            E::cast_from(6.6475986689240190091e+02f64),
+            E::cast_from(1.0f64),
+        ];
+        let P2 = &[
+            E::cast_from(1.7427031242901594547e+01f64),
+            E::cast_from(-1.4566865832663635920e+04f64),
+            E::cast_from(4.6905288611678631510e+06f64),
+            E::cast_from(-6.9590439394619619534e+08f64),
+            E::cast_from(4.3600098638603061642e+10f64),
+            E::cast_from(-5.5107435206722644429e+11f64),
+            E::cast_from(-2.2213976967566192242e+13f64),
+        ];
+        let Q2 = &[
+            E::cast_from(1.0f64),
+            E::cast_from(8.3030857612070288823e+02f64),
+            E::cast_from(4.0669982352539552018e+05f64),
+            E::cast_from(1.3960202770986831075e+08f64),
+            E::cast_from(3.4015103849971240096e+10f64),
+            E::cast_from(5.4266824419412347550e+12f64),
+            E::cast_from(4.3386146580707264428e+14f64),
+        ];
+        let P3 = &[
+            E::cast_from(-1.7439661319197499338e+01f64),
+            E::cast_from(2.1363534169313901632e+04f64),
+            E::cast_from(-1.0085539923498211426e+07f64),
+            E::cast_from(2.1958827170518100757e+09f64),
+            E::cast_from(-1.9363051266772083678e+11f64),
+            E::cast_from(-1.2829912364088687306e+11f64),
+            E::cast_from(6.7016641869173237784e+14f64),
+            E::cast_from(-8.0728726905150210443e+15f64),
+        ];
+        let Q3 = &[
+            E::cast_from(1.0f64),
+            E::cast_from(8.7903362168128450017e+02f64),
+            E::cast_from(5.3924739209768057030e+05f64),
+            E::cast_from(2.4727219475672302327e+08f64),
+            E::cast_from(8.6926121104209825246e+10f64),
+            E::cast_from(2.2598377924042897629e+13f64),
+            E::cast_from(3.9272425569640309819e+15f64),
+            E::cast_from(3.4563724628846457519e+17f64),
+        ];
+        let PC = &[
+            E::cast_from(2.2779090197304684302e+04f64),
+            E::cast_from(4.1345386639580765797e+04f64),
+            E::cast_from(2.1170523380864944322e+04f64),
+            E::cast_from(3.4806486443249270347e+03f64),
+            E::cast_from(1.5376201909008354296e+02f64),
+            E::cast_from(8.8961548424210455236e-01f64),
+        ];
+        let QC = &[
+            E::cast_from(2.2779090197304684318e+04f64),
+            E::cast_from(4.1370412495510416640e+04f64),
+            E::cast_from(2.1215350561880115730e+04f64),
+            E::cast_from(3.5028735138235608207e+03f64),
+            E::cast_from(1.5711159858080893649e+02f64),
+            E::cast_from(1.0f64),
+        ];
+        let PS = &[
+            E::cast_from(-8.9226600200800094098e+01f64),
+            E::cast_from(-1.8591953644342993800e+02f64),
+            E::cast_from(-1.1183429920482737611e+02f64),
+            E::cast_from(-2.2300261666214198472e+01f64),
+            E::cast_from(-1.2441026745835638459e+00f64),
+            E::cast_from(-8.8033303048680751817e-03f64),
+        ];
+        let QS = &[
+            E::cast_from(5.7105024128512061905e+03f64),
+            E::cast_from(1.1951131543434613647e+04f64),
+            E::cast_from(7.2642780169211018836e+03f64),
+            E::cast_from(1.4887231232283756582e+03f64),
+            E::cast_from(9.0593769594993125859e+01f64),
+            E::cast_from(1.0f64),
+        ];
+
+        let mut j0 = unsafe { E::Vf::undefined() };
+        let mut lnx = unsafe { E::Vf::undefined() };
+
+        if P::POLICY.avoid_branching || le8.any() {
+            j0 = bessel_j0::<S, E, P>(x);
+            lnx = x.ln_p::<P>();
+        }
+
+        let xx = x * x;
+        let ixx = E::Vf::one() / xx;
+
+        if P::POLICY.avoid_branching || le3.any() {
+            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx1) * j0;
+            let r = xx.poly_rational_p::<P>(P1, Q1);
+            let f = (x + x1) * (den.mul_adde(x11, x) - x12);
+            y03 = f.mul_adde(r, z);
+        }
+
+        if P::POLICY.avoid_branching || be355.any() {
+            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx2) * j0;
+            let r = ixx.poly_p::<P>(P2) / ixx.poly_p::<P>(Q2);
+            let f = (x + x2) * (den.mul_adde(x21, x) - x22);
+            y355 = f.mul_adde(r, z);
+        }
+
+        if P::POLICY.avoid_branching || be558.any() {
+            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx3) * j0;
+            let r = ixx.poly_p::<P>(P3) / ixx.poly_p::<P>(Q3);
+            let f = (x + x3) * (den.mul_adde(x31, x) - x32);
+            y558 = f.mul_adde(r, z);
+        }
+
+        if P::POLICY.avoid_branching || !le8.all() {
+            // 1 / sqrt(pi)
+            let frac_one_sqrt_pi = E::Vf::splat_as(5.641895835477562869480794515607725858e-01f64);
+
+            let y = E::Vf::splat_as(8.0) / x;
+            let y2 = y * y;
+
+            let factor = frac_one_sqrt_pi / x.sqrt();
+
+            // y2 <= 1.0 given above division, no need for poly_rational
+            let rc = y2.poly_p::<P>(PC) / y2.poly_p::<P>(QC);
+            let rs = y2.poly_p::<P>(PS) / y2.poly_p::<P>(QS);
+
+            let (sx, cx) = x.sin_cos_p::<P>();
+
+            y8i = factor * rc.mul_adde(sx - cx, y * rs * (cx + sx));
+        }
+
+        let mut y = y8i;
+        y = le8.select(y558, y);
+        y = le55.select(y355, y);
+        y = le3.select(y03, y);
+        y = x.eq(E::Vf::zero()).select(y00, y);
+        y = x.lt(E::Vf::zero()).select(yi0, y);
+
+        y
     }
 }
