@@ -435,11 +435,11 @@ mod bessel_internal {
         // if le55 AND le8, then NOT between.
         let be558 = le55 ^ le8;
 
-        let mut j0 = unsafe { E::Vf::undefined() };
+        let mut j0_2_frac_pi = unsafe { E::Vf::undefined() };
         let mut lnx = unsafe { E::Vf::undefined() };
 
         if P::POLICY.avoid_branching || le8.any() {
-            j0 = bessel_j0::<S, E, P>(x);
+            j0_2_frac_pi = bessel_j0::<S, E, P>(x) * E::Vf::splat_as(core::f64::consts::FRAC_2_PI);
             lnx = x.ln_p::<P>();
         }
 
@@ -447,24 +447,21 @@ mod bessel_internal {
         let ixx = E::Vf::one() / xx;
 
         if P::POLICY.avoid_branching || le3.any() {
-            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx1) * j0;
             let r = xx.poly_rational_p::<P>(p1, q1);
             let f = (x + x1) * (den.mul_adde(x11, x) - x12);
-            y03 = f.mul_adde(r, z);
+            y03 = f.mul_adde(r, (lnx - lnx1) * j0_2_frac_pi);
         }
 
         if P::POLICY.avoid_branching || be355.any() {
-            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx2) * j0;
             let r = ixx.poly_p::<P>(p2) / ixx.poly_p::<P>(q2);
             let f = (x + x2) * (den.mul_adde(x21, x) - x22);
-            y355 = f.mul_adde(r, z);
+            y355 = f.mul_adde(r, (lnx - lnx2) * j0_2_frac_pi);
         }
 
         if P::POLICY.avoid_branching || be558.any() {
-            let z = E::Vf::splat_as(core::f64::consts::FRAC_2_PI) * (lnx - lnx3) * j0;
             let r = ixx.poly_p::<P>(p3) / ixx.poly_p::<P>(q3);
             let f = (x + x3) * (den.mul_adde(x31, x) - x32);
-            y558 = f.mul_adde(r, z);
+            y558 = f.mul_adde(r, (lnx - lnx3) * j0_2_frac_pi);
         }
 
         if P::POLICY.avoid_branching || !le8.all() {
