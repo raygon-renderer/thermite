@@ -496,19 +496,6 @@
 <span id="493">493</span>
 <span id="494">494</span>
 <span id="495">495</span>
-<span id="496">496</span>
-<span id="497">497</span>
-<span id="498">498</span>
-<span id="499">499</span>
-<span id="500">500</span>
-<span id="501">501</span>
-<span id="502">502</span>
-<span id="503">503</span>
-<span id="504">504</span>
-<span id="505">505</span>
-<span id="506">506</span>
-<span id="507">507</span>
-<span id="508">508</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
@@ -517,6 +504,8 @@
 <span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
 <span class="kw">mod</span> <span class="ident">bessel_internal</span> {
     <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
+
+    <span class="kw">const</span> <span class="ident">FRAC_1_SQRT_PI</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">5.641895835477562869480794515607725858e-01</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bessel_j</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">E</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="ident">E</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">E</span>::<span class="ident">Vf</span> {
@@ -538,8 +527,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bessel_j0</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">E</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="ident">E</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">E</span>::<span class="ident">Vf</span> {
-        <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>(); <span class="comment">// even function</span>
-
         <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">2.4048255576957727686e+00</span>);
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.5200781102863106496e+00</span>);
         <span class="kw">let</span> <span class="ident">x11</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">6.160e+02</span>);
@@ -547,6 +534,85 @@
         <span class="kw">let</span> <span class="ident">x21</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">1.4130e+03</span>);
         <span class="kw">let</span> <span class="ident">x22</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.46860286310649596604e-04</span>);
         <span class="kw">let</span> <span class="ident">den</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">1.0</span> <span class="op">/</span> <span class="number">256.0</span>);
+
+        <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.1298668500990866786e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.7282507878605942706e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.2140700423540120665e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6302997904833794242e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.6629814655107086448e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0344222815443188943e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2117036164593528341e-01f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.3883787996332290397e+12f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.6328198300859648632e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3985097372263433271e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.5612696224219938200e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.3614022392337710626e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8319397969392084011e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2254078161378989535e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">7.2879702464464618998e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0341910641583726701e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1725046279757103576e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.4176707025325087628e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.4321196680624245801e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.8591703355916499363e+01f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.5783478026152301072e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.4599102262586308984e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.4055062591169562211e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8680990008359188352e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.9458766545509337327e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.3307310774649071172e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.5258076240801555057e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">pc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684302e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1345386639580765797e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1170523380864944322e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4806486443249270347e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5376201909008354296e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.8961548424210455236e-01f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">qc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684318e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1370412495510416640e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1215350561880115730e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5028735138235608207e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5711159858080893649e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">ps</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.9226600200800094098e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8591953644342993800e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1183429920482737611e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2300261666214198472e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2441026745835638459e+00f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.8033303048680751817e-03f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">qs</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.7105024128512061905e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1951131543434613647e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.2642780169211018836e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4887231232283756582e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.0593769594993125859e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
+        <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>(); <span class="comment">// even function</span>
 
         <span class="kw">let</span> <span class="ident">y00</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">y04</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">undefined</span>() };
@@ -563,26 +629,7 @@
 
         <span class="comment">// 0 &lt; x &lt;= 4</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">le4</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>).<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
-                <span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.1298668500990866786e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.7282507878605942706e+10f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.2140700423540120665e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6302997904833794242e+06f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.6629814655107086448e+04f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0344222815443188943e+02f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2117036164593528341e-01f64</span>),
-                ],
-                <span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.3883787996332290397e+12f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.6328198300859648632e+10f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3985097372263433271e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.5612696224219938200e+05f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.3614022392337710626e+02f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
-                ],
-            );
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>).<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p1</span>, <span class="ident">q1</span>);
 
             <span class="ident">y04</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x1</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x11</span>, <span class="ident">x</span>) <span class="op">-</span> <span class="ident">x12</span>) <span class="op">*</span> <span class="ident">r</span>;
         };
@@ -592,71 +639,21 @@
             <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">1.0</span> <span class="op">/</span> <span class="number">64.0</span>).<span class="ident">mul_adde</span>(<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>());
 
             <span class="comment">// y &lt;= 1 given above operation</span>
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8319397969392084011e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2254078161378989535e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">7.2879702464464618998e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0341910641583726701e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1725046279757103576e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.4176707025325087628e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.4321196680624245801e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.8591703355916499363e+01f64</span>),
-            ]) <span class="op">/</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.5783478026152301072e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.4599102262586308984e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.4055062591169562211e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8680990008359188352e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.9458766545509337327e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.3307310774649071172e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.5258076240801555057e+01f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            ]);
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p2</span>) <span class="op">/</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">q2</span>);
 
             <span class="ident">y48</span> <span class="op">=</span> <span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x21</span>, <span class="ident">x</span>) <span class="op">*</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x2</span>) <span class="op">*</span> <span class="ident">r</span>;
         }
 
         <span class="comment">// 8 &lt; x &lt;= inf</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">le8</span>.<span class="ident">all</span>() {
-            <span class="comment">// 1 / sqrt(pi)</span>
-            <span class="kw">let</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.641895835477562869480794515607725858e-01f64</span>);
-
-            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>();
+            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">FRAC_1_SQRT_PI</span>) <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>();
 
             <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">8.0</span>) <span class="op">/</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">y2</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> <span class="ident">y</span>;
 
             <span class="comment">// y2 &lt;= 1.0 given above division, no need to do poly_rational</span>
-            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684302e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1345386639580765797e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1170523380864944322e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4806486443249270347e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5376201909008354296e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.8961548424210455236e-01f64</span>),
-            ]) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684318e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1370412495510416640e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1215350561880115730e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5028735138235608207e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5711159858080893649e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            ]);
-
-            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.9226600200800094098e+01f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8591953644342993800e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1183429920482737611e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2300261666214198472e+01f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2441026745835638459e+00f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.8033303048680751817e-03f64</span>),
-            ]) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.7105024128512061905e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1951131543434613647e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.2642780169211018836e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4887231232283756582e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.0593769594993125859e+01f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            ]);
+            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">pc</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qc</span>);
+            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">ps</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qs</span>);
 
             <span class="kw">let</span> (<span class="ident">sx</span>, <span class="ident">cx</span>) <span class="op">=</span> <span class="ident">x</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
@@ -673,8 +670,6 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bessel_j1</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">E</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="ident">E</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">E</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
-
         <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">3.8317059702075123156e+00f64</span>);
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">7.0155866698156187535e+00f64</span>);
         <span class="kw">let</span> <span class="ident">x11</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">9.810e+02f64</span>);
@@ -682,6 +677,89 @@
         <span class="kw">let</span> <span class="ident">x21</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">1.7960e+03f64</span>);
         <span class="kw">let</span> <span class="ident">x22</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">3.8330184381246462950e-05f64</span>);
         <span class="kw">let</span> <span class="ident">den</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">1.0</span> <span class="op">/</span> <span class="number">256.0</span>);
+
+        <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4258509801366645672e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6781041261492395835e+09f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1548696764841276794e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.8062904098958257677e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4615792982775076130e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0650724020080236441e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0767857011487300348e-02f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1868604460820175290e+12f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.2091902282580133541e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.0228375140097033958e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.9117614494174794095e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0742272239517380498e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.6179191852758252278e+00f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">7.5023342220781607561e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.0793266148011179143e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8113931269860667829e+09f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5580665670910619166e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.6658018905416665164e+13f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.6608531731299018674e+15f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.7527881995806511112e+16f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3886978985861357615e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1267125065029138050e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.4872502899596389593e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.7622777286244082666e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.4899346165481429307e+13f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7128800897135812012e+16f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7253905888447681194e+18f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">pc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4357578167941278571e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">9.9422465050776411957e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.6033732483649391093e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.5235293511811373833e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0982405543459346727e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.6116166443246101165e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">qc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4357578167941278568e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">9.9341243899345856590e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.5853394797230870728e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.5118095066341608816e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0726385991103820119e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4550094401904961825e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">ps</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.3220913409857223519e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.5145160675335701966e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6178836581270835179e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8494262873223866797e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7063754290207680021e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5265133846636032186e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">qs</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.0871281941028743574e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8194580422439972989e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4194606696037208929e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.0029443582266975117e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.7890229745772202641e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.6383677696049909675e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
+        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
 
         <span class="kw">let</span> <span class="ident">y00</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">y04</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">undefined</span>() };
@@ -698,130 +776,29 @@
 
         <span class="comment">// 0 &lt; w &lt;= 4</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">le4</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>).<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
-                <span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4258509801366645672e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6781041261492395835e+09f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1548696764841276794e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.8062904098958257677e+05f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4615792982775076130e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0650724020080236441e+01f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0767857011487300348e-02f64</span>),
-                ],
-                <span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1868604460820175290e+12f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.2091902282580133541e+10f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.0228375140097033958e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.9117614494174794095e+05f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0742272239517380498e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
-                ],
-            );
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>).<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p1</span>, <span class="ident">q1</span>);
 
             <span class="ident">y04</span> <span class="op">=</span> <span class="ident">r</span> <span class="op">*</span> <span class="ident">w</span> <span class="op">*</span> (<span class="ident">w</span> <span class="op">+</span> <span class="ident">x1</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x11</span>, <span class="ident">w</span>) <span class="op">-</span> <span class="ident">x12</span>);
         }
 
         <span class="comment">// 4 &lt; w &lt;= 8</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">be48</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> {
-                <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>() <span class="op">/</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>);
-
-                <span class="comment">// reverse coefficients and evaluate at 1/(x*x),</span>
-                <span class="comment">// this preserves precision by ensuring powers of</span>
-                <span class="comment">// x are between 0 and 1. Since x &gt; 4 here, do it</span>
-                <span class="comment">// unconditionally</span>
-                <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.6179191852758252278e+00f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">7.5023342220781607561e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.0793266148011179143e+06f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8113931269860667829e+09f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5580665670910619166e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.6658018905416665164e+13f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.6608531731299018674e+15f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.7527881995806511112e+16f64</span>),
-                ]) <span class="op">/</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3886978985861357615e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1267125065029138050e+06f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.4872502899596389593e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.7622777286244082666e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.4899346165481429307e+13f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7128800897135812012e+16f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7253905888447681194e+18f64</span>),
-                ])
-            } <span class="kw">else</span> {
-                <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>;
-
-                <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.7527881995806511112e+16f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.6608531731299018674e+15f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">3.6658018905416665164e+13f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5580665670910619166e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8113931269860667829e+09f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.0793266148011179143e+06f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">7.5023342220781607561e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.6179191852758252278e+00f64</span>),
-                ]) <span class="op">/</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7253905888447681194e+18f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7128800897135812012e+16f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.4899346165481429307e+13f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.7622777286244082666e+11f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.4872502899596389593e+08f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1267125065029138050e+06f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3886978985861357615e+03f64</span>),
-                    <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-                ])
-            };
+            <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>() <span class="op">/</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>);
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p2</span>) <span class="op">/</span> <span class="ident">y</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">q2</span>);
 
             <span class="ident">y48</span> <span class="op">=</span> <span class="ident">r</span> <span class="op">*</span> <span class="ident">w</span> <span class="op">*</span> (<span class="ident">w</span> <span class="op">+</span> <span class="ident">x2</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x21</span>, <span class="ident">w</span>) <span class="op">-</span> <span class="ident">x22</span>);
         }
 
         <span class="comment">// 8 &lt; w &lt;= inf</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">le8</span>.<span class="ident">all</span>() {
-            <span class="comment">// 1 / sqrt(pi)</span>
-            <span class="kw">let</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.641895835477562869480794515607725858e-01f64</span>);
-
             <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">8.0</span>) <span class="op">/</span> <span class="ident">w</span>;
             <span class="kw">let</span> <span class="ident">y2</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> <span class="ident">y</span>;
 
-            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">/</span> <span class="ident">w</span>.<span class="ident">sqrt</span>();
+            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">FRAC_1_SQRT_PI</span>) <span class="op">/</span> <span class="ident">w</span>.<span class="ident">sqrt</span>();
 
             <span class="comment">// y2 &lt;= 1.0 given above division, no need for poly_rational</span>
-            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4357578167941278571e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">9.9422465050776411957e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.6033732483649391093e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.5235293511811373833e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0982405543459346727e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.6116166443246101165e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
-            ]) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">4.4357578167941278568e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">9.9341243899345856590e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.5853394797230870728e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.5118095066341608816e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0726385991103820119e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4550094401904961825e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            ]);
-            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.3220913409857223519e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.5145160675335701966e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6178836581270835179e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8494262873223866797e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7063754290207680021e+03f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5265133846636032186e+01f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">0.0f64</span>),
-            ]) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.0871281941028743574e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.8194580422439972989e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4194606696037208929e+06f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.0029443582266975117e+05f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.7890229745772202641e+04f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.6383677696049909675e+02f64</span>),
-                <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            ]);
+            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">pc</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qc</span>);
+            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">ps</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qs</span>);
 
             <span class="comment">// in the original, this used x instead of w, but that produced incorrect results</span>
             <span class="kw">let</span> (<span class="ident">sx</span>, <span class="ident">cx</span>) <span class="op">=</span> <span class="ident">w</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
@@ -855,6 +832,93 @@
         <span class="kw">let</span> <span class="ident">x32</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">1.1356030177269762362e-04f64</span>);
         <span class="kw">let</span> <span class="ident">den</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">1.0</span> <span class="op">/</span> <span class="number">256.0</span>);
 
+        <span class="kw">let</span> <span class="ident">p1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0723538782003176831e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.3716255451260504098e+09f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.0422274357376619816e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.1287548474401797963e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0102532948020907590e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8402381979244993524e+01f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">q1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.8873865738997033405e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.1617187777290363573e+09f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.5662956624278251596e+07f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.3889393209447253406e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6475986689240190091e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">p2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7427031242901594547e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4566865832663635920e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.6905288611678631510e+06f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.9590439394619619534e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.3600098638603061642e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">5.5107435206722644429e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2213976967566192242e+13f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">q2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.3030857612070288823e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.0669982352539552018e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3960202770986831075e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4015103849971240096e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.4266824419412347550e+12f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.3386146580707264428e+14f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">p3</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.7439661319197499338e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1363534169313901632e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0085539923498211426e+07f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1958827170518100757e+09f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.9363051266772083678e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2829912364088687306e+11f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.7016641869173237784e+14f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.0728726905150210443e+15f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">q3</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.7903362168128450017e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.3924739209768057030e+05f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.4727219475672302327e+08f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.6926121104209825246e+10f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2598377924042897629e+13f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.9272425569640309819e+15f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4563724628846457519e+17f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">pc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684302e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1345386639580765797e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1170523380864944322e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4806486443249270347e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5376201909008354296e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.8961548424210455236e-01f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">qc</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684318e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1370412495510416640e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1215350561880115730e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5028735138235608207e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5711159858080893649e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">ps</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.9226600200800094098e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8591953644342993800e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1183429920482737611e+02f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2300261666214198472e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2441026745835638459e+00f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.8033303048680751817e-03f64</span>),
+        ];
+        <span class="kw">let</span> <span class="ident">qs</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.7105024128512061905e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1951131543434613647e+04f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.2642780169211018836e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4887231232283756582e+03f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.0593769594993125859e+01f64</span>),
+            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
+        ];
+
         <span class="kw">let</span> <span class="ident">yi0</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">nan</span>();
         <span class="kw">let</span> <span class="ident">y00</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">neg_infinity</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">y03</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">undefined</span>() };
@@ -871,93 +935,6 @@
         <span class="comment">// if le55 AND le8, then NOT between.</span>
         <span class="kw">let</span> <span class="ident">be558</span> <span class="op">=</span> <span class="ident">le55</span> <span class="op">^</span> <span class="ident">le8</span>;
 
-        <span class="kw">let</span> <span class="ident">P1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0723538782003176831e+11f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.3716255451260504098e+09f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.0422274357376619816e+08f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.1287548474401797963e+06f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0102532948020907590e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8402381979244993524e+01f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">Q1</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.8873865738997033405e+11f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.1617187777290363573e+09f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.5662956624278251596e+07f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.3889393209447253406e+05f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.6475986689240190091e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">P2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.7427031242901594547e+01f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.4566865832663635920e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.6905288611678631510e+06f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">6.9590439394619619534e+08f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.3600098638603061642e+10f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">5.5107435206722644429e+11f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2213976967566192242e+13f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">Q2</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.3030857612070288823e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.0669982352539552018e+05f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.3960202770986831075e+08f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4015103849971240096e+10f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.4266824419412347550e+12f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.3386146580707264428e+14f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">P3</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.7439661319197499338e+01f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1363534169313901632e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.0085539923498211426e+07f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1958827170518100757e+09f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.9363051266772083678e+11f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2829912364088687306e+11f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">6.7016641869173237784e+14f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.0728726905150210443e+15f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">Q3</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.7903362168128450017e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.3924739209768057030e+05f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.4727219475672302327e+08f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.6926121104209825246e+10f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2598377924042897629e+13f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.9272425569640309819e+15f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4563724628846457519e+17f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">PC</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684302e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1345386639580765797e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1170523380864944322e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.4806486443249270347e+03f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5376201909008354296e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">8.8961548424210455236e-01f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">QC</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.2779090197304684318e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">4.1370412495510416640e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">2.1215350561880115730e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">3.5028735138235608207e+03f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.5711159858080893649e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">PS</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.9226600200800094098e+01f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.8591953644342993800e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.1183429920482737611e+02f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">2.2300261666214198472e+01f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">1.2441026745835638459e+00f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="op">-</span><span class="number">8.8033303048680751817e-03f64</span>),
-        ];
-        <span class="kw">let</span> <span class="ident">QS</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">5.7105024128512061905e+03f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.1951131543434613647e+04f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">7.2642780169211018836e+03f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.4887231232283756582e+03f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">9.0593769594993125859e+01f64</span>),
-            <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0f64</span>),
-        ];
-
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">j0</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">undefined</span>() };
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lnx</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">undefined</span>() };
 
@@ -971,37 +948,34 @@
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">le3</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">core</span>::<span class="ident">f64</span>::<span class="ident">consts</span>::<span class="ident">FRAC_2_PI</span>) <span class="op">*</span> (<span class="ident">lnx</span> <span class="op">-</span> <span class="ident">lnx1</span>) <span class="op">*</span> <span class="ident">j0</span>;
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">xx</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">P1</span>, <span class="ident">Q1</span>);
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">xx</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p1</span>, <span class="ident">q1</span>);
             <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x1</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x11</span>, <span class="ident">x</span>) <span class="op">-</span> <span class="ident">x12</span>);
             <span class="ident">y03</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">mul_adde</span>(<span class="ident">r</span>, <span class="ident">z</span>);
         }
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">be355</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">core</span>::<span class="ident">f64</span>::<span class="ident">consts</span>::<span class="ident">FRAC_2_PI</span>) <span class="op">*</span> (<span class="ident">lnx</span> <span class="op">-</span> <span class="ident">lnx2</span>) <span class="op">*</span> <span class="ident">j0</span>;
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">P2</span>) <span class="op">/</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">Q2</span>);
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p2</span>) <span class="op">/</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">q2</span>);
             <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x2</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x21</span>, <span class="ident">x</span>) <span class="op">-</span> <span class="ident">x22</span>);
             <span class="ident">y355</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">mul_adde</span>(<span class="ident">r</span>, <span class="ident">z</span>);
         }
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">be558</span>.<span class="ident">any</span>() {
             <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">core</span>::<span class="ident">f64</span>::<span class="ident">consts</span>::<span class="ident">FRAC_2_PI</span>) <span class="op">*</span> (<span class="ident">lnx</span> <span class="op">-</span> <span class="ident">lnx3</span>) <span class="op">*</span> <span class="ident">j0</span>;
-            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">P3</span>) <span class="op">/</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">Q3</span>);
+            <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">p3</span>) <span class="op">/</span> <span class="ident">ixx</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">q3</span>);
             <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">x3</span>) <span class="op">*</span> (<span class="ident">den</span>.<span class="ident">mul_adde</span>(<span class="ident">x31</span>, <span class="ident">x</span>) <span class="op">-</span> <span class="ident">x32</span>);
             <span class="ident">y558</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">mul_adde</span>(<span class="ident">r</span>, <span class="ident">z</span>);
         }
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="op">!</span><span class="ident">le8</span>.<span class="ident">all</span>() {
-            <span class="comment">// 1 / sqrt(pi)</span>
-            <span class="kw">let</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.641895835477562869480794515607725858e-01f64</span>);
-
             <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">8.0</span>) <span class="op">/</span> <span class="ident">x</span>;
             <span class="kw">let</span> <span class="ident">y2</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> <span class="ident">y</span>;
 
-            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">frac_one_sqrt_pi</span> <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>();
+            <span class="kw">let</span> <span class="ident">factor</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="ident">FRAC_1_SQRT_PI</span>) <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>();
 
             <span class="comment">// y2 &lt;= 1.0 given above division, no need for poly_rational</span>
-            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">PC</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">QC</span>);
-            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">PS</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">QS</span>);
+            <span class="kw">let</span> <span class="ident">rc</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">pc</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qc</span>);
+            <span class="kw">let</span> <span class="ident">rs</span> <span class="op">=</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">ps</span>) <span class="op">/</span> <span class="ident">y2</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">qs</span>);
 
             <span class="kw">let</span> (<span class="ident">sx</span>, <span class="ident">cx</span>) <span class="op">=</span> <span class="ident">x</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
