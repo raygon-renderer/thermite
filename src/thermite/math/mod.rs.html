@@ -1264,6 +1264,14 @@
 <span id="1261">1261</span>
 <span id="1262">1262</span>
 <span id="1263">1263</span>
+<span id="1264">1264</span>
+<span id="1265">1265</span>
+<span id="1266">1266</span>
+<span id="1267">1267</span>
+<span id="1268">1268</span>
+<span id="1269">1269</span>
+<span id="1270">1270</span>
+<span id="1271">1271</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1283,7 +1291,52 @@
 <span class="doccomment">/// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Policy</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">PartialEq</span> <span class="op">+</span> <span class="ident">Eq</span> <span class="op">+</span> <span class="ident">PartialOrd</span> <span class="op">+</span> <span class="ident">Ord</span> <span class="op">+</span> <span class="ident">core</span>::<span class="ident">hash</span>::<span class="ident">Hash</span> {
     <span class="doccomment">/// The specific policy used. This is a constant to allow for dead-code elimination of branches.</span>
-    <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">Parameters</span>;
+    <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span>;
+}
+
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
+<span class="attribute">#[<span class="ident">repr</span>(<span class="ident">u8</span>)]</span>
+<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">PrecisionPolicy</span> {
+    <span class="ident">Worst</span> <span class="op">=</span> <span class="number">0</span>,
+    <span class="ident">Average</span>,
+    <span class="ident">Best</span>,
+}
+
+<span class="doccomment">/// Customizable Policy Parameters</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">PolicyParameters</span> {
+    <span class="doccomment">/// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// If false, all of that work is avoided, and the result is undefined in those cases. Garbage in, garbage out.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// However, those checks can be expensive.</span>
+    <span class="kw">pub</span> <span class="ident">check_overflow</span>: <span class="ident">bool</span>,
+
+    <span class="doccomment">/// If true, unrolled and optimized versions of some algorithms will be used. These can be much faster than</span>
+    <span class="doccomment">/// the linear variants. If code size is important, this will improve codegen when used with `opt-level=z`</span>
+    <span class="kw">pub</span> <span class="ident">unroll_loops</span>: <span class="ident">bool</span>,
+
+    <span class="doccomment">/// Controls if precision should be emphasized or de-emphasized.</span>
+    <span class="kw">pub</span> <span class="ident">precision</span>: <span class="ident">PrecisionPolicy</span>,
+
+    <span class="doccomment">/// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,</span>
+    <span class="doccomment">/// but branchless may be desired in some cases, such as minimizing code size.</span>
+    <span class="kw">pub</span> <span class="ident">avoid_branching</span>: <span class="ident">bool</span>,
+
+    <span class="doccomment">/// Some special functions require many, many iterations of a function to converge on an accurate result.</span>
+    <span class="doccomment">/// This parameter controls the maximum iterations allowed. Setting this too low may result in loss of precision.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note that this is the upper limit allowed for pathological cases, and many loops will</span>
+    <span class="doccomment">/// terminate dynamically before this.</span>
+    <span class="kw">pub</span> <span class="ident">max_series_iterations</span>: <span class="ident">usize</span>,
+}
+
+<span class="kw">impl</span> <span class="ident">PolicyParameters</span> {
+    <span class="doccomment">/// Returns true if the policy says to avoid branches at the cost of precision</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">avoid_precision_branches</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="comment">// cheat the const-comparison here by casting to u8</span>
+        <span class="self">self</span>.<span class="ident">avoid_branching</span> <span class="op">&amp;&amp;</span> <span class="self">self</span>.<span class="ident">precision</span> <span class="kw">as</span> <span class="ident">u8</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> <span class="kw">as</span> <span class="ident">u8</span>
+    }
 }
 
 <span class="doccomment">/** Execution Policies (precision, performance, etc.)
@@ -1296,7 +1349,7 @@ impl Policy for MyPolicy {
     const POLICY: Parameters = Parameters {
         check_overflow: false,
         unroll_loops: false,
-        extra_precision: true,
+        precision: PrecisionPolicy::Average,
         avoid_branching: true,
         max_series_iterations: 10000,
     };
@@ -1306,44 +1359,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 ```
 */</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">policies</span> {
-    <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">Policy</span>;
-
-    <span class="doccomment">/// Customizable Policy Parameters</span>
-    <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Parameters</span> {
-        <span class="doccomment">/// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.</span>
-        <span class="doccomment">///</span>
-        <span class="doccomment">/// If false, all of that work is avoided, and the result is undefined in those cases. Garbage in, garbage out.</span>
-        <span class="doccomment">///</span>
-        <span class="doccomment">/// However, those checks can be expensive.</span>
-        <span class="kw">pub</span> <span class="ident">check_overflow</span>: <span class="ident">bool</span>,
-
-        <span class="doccomment">/// If true, unrolled and optimized versions of some algorithms will be used. These can be much faster than</span>
-        <span class="doccomment">/// the linear variants. If code size is important, this will improve codegen when used with `opt-level=z`</span>
-        <span class="kw">pub</span> <span class="ident">unroll_loops</span>: <span class="ident">bool</span>,
-
-        <span class="doccomment">/// If true, extra care is taken to improve precision of results, often at the cost of some performance.</span>
-        <span class="kw">pub</span> <span class="ident">extra_precision</span>: <span class="ident">bool</span>,
-
-        <span class="doccomment">/// If true, methods will not try to avoid extra work by branching. Some of the internal branches are expensive,</span>
-        <span class="doccomment">/// but branchless may be desired in some cases, such as minimizing code size. However, note that some branches</span>
-        <span class="doccomment">/// are required for improving precision. Enabling `extra_precision` will re-enable those.</span>
-        <span class="kw">pub</span> <span class="ident">avoid_branching</span>: <span class="ident">bool</span>,
-
-        <span class="doccomment">/// Some special functions require many, many iterations of a function to converge on an accurate result.</span>
-        <span class="doccomment">/// This parameter controls the maximum iterations allowed. Setting this too low may result in loss of precision.</span>
-        <span class="doccomment">///</span>
-        <span class="doccomment">/// Note that this is the upper limit allowed for pathological cases, and many loops will</span>
-        <span class="doccomment">/// terminate dynamically before this.</span>
-        <span class="kw">pub</span> <span class="ident">max_series_iterations</span>: <span class="ident">usize</span>,
-    }
-
-    <span class="kw">impl</span> <span class="ident">Parameters</span> {
-        <span class="doccomment">/// Returns true if the policy says to avoid branches at the cost of precision</span>
-        <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-        <span class="kw">pub</span> <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">avoid_precision_branches</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-            <span class="self">self</span>.<span class="ident">avoid_branching</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="self">self</span>.<span class="ident">extra_precision</span>
-        }
-    }
+    <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">Policy</span>, <span class="ident">PolicyParameters</span>, <span class="ident">PrecisionPolicy</span>};
 
     <span class="doccomment">/// Optimize for performance at the cost of precision and safety (doesn&#39;t handle special cases such as NaNs or overflow).</span>
     <span class="doccomment">///</span>
@@ -1374,40 +1390,40 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Size</span>;
 
     <span class="kw">impl</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">UltraPerformance</span> {
-        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">Parameters</span> <span class="op">=</span> <span class="ident">Parameters</span> {
+        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
             <span class="ident">check_overflow</span>: <span class="bool-val">false</span>,
             <span class="ident">unroll_loops</span>: <span class="bool-val">true</span>,
-            <span class="ident">extra_precision</span>: <span class="bool-val">false</span>,
+            <span class="ident">precision</span>: <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span>,
             <span class="ident">avoid_branching</span>: <span class="bool-val">true</span>,
             <span class="ident">max_series_iterations</span>: <span class="number">1000</span>,
         };
     }
 
     <span class="kw">impl</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">Performance</span> {
-        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">Parameters</span> <span class="op">=</span> <span class="ident">Parameters</span> {
+        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
             <span class="ident">check_overflow</span>: <span class="bool-val">true</span>,
             <span class="ident">unroll_loops</span>: <span class="bool-val">true</span>,
-            <span class="ident">extra_precision</span>: <span class="bool-val">false</span>,
+            <span class="ident">precision</span>: <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span>,
             <span class="ident">avoid_branching</span>: <span class="bool-val">false</span>,
             <span class="ident">max_series_iterations</span>: <span class="number">10000</span>,
         };
     }
 
     <span class="kw">impl</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">Precision</span> {
-        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">Parameters</span> <span class="op">=</span> <span class="ident">Parameters</span> {
+        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
             <span class="ident">check_overflow</span>: <span class="bool-val">true</span>,
             <span class="ident">unroll_loops</span>: <span class="bool-val">true</span>,
-            <span class="ident">extra_precision</span>: <span class="bool-val">true</span>,
+            <span class="ident">precision</span>: <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span>,
             <span class="ident">avoid_branching</span>: <span class="bool-val">false</span>,
             <span class="ident">max_series_iterations</span>: <span class="number">50000</span>,
         };
     }
 
     <span class="kw">impl</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">Size</span> {
-        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">Parameters</span> <span class="op">=</span> <span class="ident">Parameters</span> {
+        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
             <span class="ident">check_overflow</span>: <span class="bool-val">true</span>,
             <span class="ident">unroll_loops</span>: <span class="bool-val">false</span>,
-            <span class="ident">extra_precision</span>: <span class="bool-val">false</span>,
+            <span class="ident">precision</span>: <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span>,
 
             <span class="comment">// debatable, but for WASM it can&#39;t use</span>
             <span class="comment">// instruction-level parallelism anyway.</span>
@@ -2159,7 +2175,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
         <span class="ident">numerator_coefficients</span>: <span class="kw-2">&amp;</span>[<span class="self">Self</span>],
         <span class="ident">denominator_coefficients</span>: <span class="kw-2">&amp;</span>[<span class="self">Self</span>],
     ) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">extra_precision</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
             <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
             <span class="kw">let</span> <span class="ident">invert</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">gt</span>(<span class="ident">one</span>);
             <span class="kw">let</span> <span class="ident">bitmask</span> <span class="op">=</span> <span class="ident">invert</span>.<span class="ident">bitmask</span>();
