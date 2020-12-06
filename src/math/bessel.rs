@@ -19,7 +19,6 @@ mod bessel_internal {
 
     #[inline(always)]
     pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf, n: u32) -> E::Vf {
-        x = x.abs();
         match n {
             0 => bessel_y0::<S, E, P>(x),
             _ => unimplemented!(),
