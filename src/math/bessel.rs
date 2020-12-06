@@ -343,22 +343,6 @@ mod bessel_internal {
         let x32 = E::Vf::splat_as(1.1356030177269762362e-04f64);
         let den = E::Vf::splat_as(-1.0 / 256.0);
 
-        let yi0 = E::Vf::nan();
-        let y00 = E::Vf::neg_infinity();
-        let mut y03 = unsafe { E::Vf::undefined() };
-        let mut y355 = unsafe { E::Vf::undefined() };
-        let mut y558 = unsafe { E::Vf::undefined() };
-        let mut y8i = unsafe { E::Vf::undefined() };
-
-        let le3 = x.le(E::Vf::splat_as(3.0f64));
-        let le55 = x.le(E::Vf::splat_as(5.5f64));
-        let le8 = x.le(E::Vf::splat_as(8.0));
-
-        // if le3 AND le55, then NOT between.
-        let be355 = le3 ^ le55;
-        // if le55 AND le8, then NOT between.
-        let be558 = le55 ^ le8;
-
         let P1 = &[
             E::cast_from(1.0723538782003176831e+11f64),
             E::cast_from(-8.3716255451260504098e+09f64),
@@ -445,6 +429,22 @@ mod bessel_internal {
             E::cast_from(9.0593769594993125859e+01f64),
             E::cast_from(1.0f64),
         ];
+
+        let yi0 = E::Vf::nan();
+        let y00 = E::Vf::neg_infinity();
+        let mut y03 = unsafe { E::Vf::undefined() };
+        let mut y355 = unsafe { E::Vf::undefined() };
+        let mut y558 = unsafe { E::Vf::undefined() };
+        let mut y8i = unsafe { E::Vf::undefined() };
+
+        let le3 = x.le(E::Vf::splat_as(3.0f64));
+        let le55 = x.le(E::Vf::splat_as(5.5f64));
+        let le8 = x.le(E::Vf::splat_as(8.0));
+
+        // if le3 AND le55, then NOT between.
+        let be355 = le3 ^ le55;
+        // if le55 AND le8, then NOT between.
+        let be558 = le55 ^ le8;
 
         let mut j0 = unsafe { E::Vf::undefined() };
         let mut lnx = unsafe { E::Vf::undefined() };
