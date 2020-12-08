@@ -14,6 +14,7 @@ where
     const __EPSILON: Self = f64::EPSILON;
     const __SQRT_EPSILON: Self = 1.4901161193847656314265919999999999861416556075118966152884e-8;
     const __PI: Self = core::f64::consts::PI;
+    const __DIGITS: u32 = f64::MANTISSA_DIGITS;
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
@@ -846,7 +847,7 @@ where
             // recursively apply Γ(z+1)/z
             while is_neg.any() {
                 res = is_neg.select(res / mod_z, res);
-                mod_z = is_neg.select(mod_z + one, mod_z);
+                mod_z += is_neg.value() & one; // conditional add
                 is_neg = mod_z.is_negative();
             }
 
@@ -1059,6 +1060,66 @@ where
         res = reflect.select(ln_pi - res, res);
 
         res
+    }
+
+    #[inline(always)]
+    fn digamma<P: Policy>(mut x: Self::Vf) -> Self::Vf {
+        let zero = Vf64::<S>::zero();
+        let one = Vf64::<S>::one();
+        let pi = Vf64::<S>::splat(PI);
+
+        let mut result = zero;
+
+        let reflect = x.le(Vf64::<S>::neg_one());
+
+        if reflect.any() {
+            x = reflect.select(one - x, x);
+
+            let mut rem = x - x.floor();
+
+            rem -= rem.gt(Vf64::<S>::splat(0.5)).value() & one; // conditional subtract
+
+            let (s, c) = (rem * pi).sin_cos_p::<P>();
+            let refl_res = pi * c / s;
+
+            result = reflect.select(refl_res, result);
+        }
+
+        let lim = Vf64::<S>::splat(
+            0.5 * (10 + ((<Self as SimdVectorizedMathInternal<S>>::__DIGITS as i64 - 50) * 240) / 950) as f64,
+        );
+
+        let is_small = x.lt(lim);
+        if P::POLICY.avoid_branching || is_small.any() {
+            let mut while_small = is_small;
+
+            while while_small.any() {
+                // conditional subtract and add
+                result -= while_small.value() & (one / x);
+                x += while_small.value() & one;
+                while_small = x.lt(lim);
+            }
+        }
+
+        x -= one;
+
+        let z = one / (x * x);
+        let a = x.ln_p::<P>() + (one / (x + x));
+
+        let y = z.poly_p::<P>(&[
+            0.083333333333333333333333333333333333333333333333333,
+            -0.0083333333333333333333333333333333333333333333333333,
+            0.003968253968253968253968253968253968253968253968254,
+            -0.0041666666666666666666666666666666666666666666666667,
+            0.0075757575757575757575757575757575757575757575757576,
+            -0.021092796092796092796092796092796092796092796092796,
+            0.083333333333333333333333333333333333333333333333333,
+            -0.44325980392156862745098039215686274509803921568627,
+        ]);
+
+        result += z.nmul_adde(y, a);
+
+        result
     }
 }
 

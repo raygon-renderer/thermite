@@ -14,6 +14,7 @@ where
     const __EPSILON: Self = f32::EPSILON;
     const __SQRT_EPSILON: Self = 0.0003452669836517821464776144458809047877858776827733458406716232;
     const __PI: Self = core::f32::consts::PI;
+    const __DIGITS: u32 = f32::MANTISSA_DIGITS;
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
@@ -914,6 +915,61 @@ where
         res = reflect.select(ln_pi - res, res);
 
         res
+    }
+
+    #[inline(always)]
+    fn digamma<P: Policy>(mut x: Self::Vf) -> Self::Vf {
+        let zero = Vf32::<S>::zero();
+        let one = Vf32::<S>::one();
+        let pi = Vf32::<S>::splat(PI);
+
+        let mut result = zero;
+
+        let reflect = x.le(Vf32::<S>::neg_one());
+
+        if reflect.any() {
+            x = reflect.select(one - x, x);
+
+            let mut rem = x - x.floor();
+
+            rem -= rem.gt(Vf32::<S>::splat(0.5)).value() & one; // conditional subtract
+
+            let (s, c) = (rem * pi).sin_cos_p::<P>();
+            let refl_res = pi * c / s;
+
+            result = reflect.select(refl_res, result);
+        }
+
+        let lim = Vf32::<S>::splat(
+            0.5 * (10 + ((<Self as SimdVectorizedMathInternal<S>>::__DIGITS as i64 - 50) * 240) / 950) as f32,
+        );
+
+        let is_small = x.lt(lim);
+        if P::POLICY.avoid_branching || is_small.any() {
+            let mut while_small = is_small;
+
+            while while_small.any() {
+                // conditional subtract and add
+                result -= while_small.value() & (one / x);
+                x += while_small.value() & one;
+                while_small = x.lt(lim);
+            }
+        }
+
+        x -= one;
+
+        let z = one / (x * x);
+        let a = x.ln_p::<P>() + (one / (x + x));
+
+        let y = z.poly_p::<P>(&[
+            0.083333333333333333333333333333333333333333333333333,
+            -0.0083333333333333333333333333333333333333333333333333,
+            0.003968253968253968253968253968253968253968253968254,
+        ]);
+
+        result += z.nmul_adde(y, a);
+
+        result
     }
 }
 
