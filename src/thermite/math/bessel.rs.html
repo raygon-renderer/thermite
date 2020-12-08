@@ -683,6 +683,24 @@
 <span id="680">680</span>
 <span id="681">681</span>
 <span id="682">682</span>
+<span id="683">683</span>
+<span id="684">684</span>
+<span id="685">685</span>
+<span id="686">686</span>
+<span id="687">687</span>
+<span id="688">688</span>
+<span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="kw-2">*</span>;
 
@@ -695,6 +713,24 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bessel_j0</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">E</span>: <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="ident">E</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">E</span>::<span class="ident">Vf</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Reference</span> {
+            <span class="kw">let</span> <span class="ident">xx4</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">0.25</span>);
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">powers</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">factorial</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="number">1.0</span>);
+
+            <span class="kw">let</span> <span class="ident">sum</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">summation_f_p</span>::<span class="op">&lt;</span><span class="ident">P</span>, <span class="kw">_</span><span class="op">&gt;</span>(<span class="number">1</span>, <span class="ident">isize</span>::<span class="ident">MAX</span>, <span class="op">|</span><span class="ident">k</span><span class="op">|</span> {
+                <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">k</span> <span class="op">&amp;</span> <span class="number">1</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>() } <span class="kw">else</span> { <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">neg_zero</span>() };
+                <span class="ident">factorial</span> <span class="op">=</span> <span class="ident">factorial</span> <span class="op">*</span> <span class="ident">E</span>::<span class="ident">cast_from</span>(<span class="ident">k</span>);
+                <span class="ident">powers</span> <span class="op">=</span> <span class="ident">powers</span> <span class="op">*</span> <span class="ident">xx4</span>;
+                <span class="ident">sign</span> <span class="op">^</span> <span class="ident">powers</span> <span class="op">/</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="ident">factorial</span> <span class="op">*</span> <span class="ident">factorial</span>)
+            });
+
+            <span class="kw">return</span> <span class="kw">match</span> <span class="ident">sum</span> {
+                <span class="prelude-val">Ok</span>(<span class="ident">sum</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">sum</span> <span class="op">+</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">one</span>(),
+                <span class="prelude-val">Err</span>(<span class="kw">_</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>(),
+            };
+        }
+
         <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">2.4048255576957727686e+00</span>);
         <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">5.5200781102863106496e+00</span>);
         <span class="kw">let</span> <span class="ident">x11</span> <span class="op">=</span> <span class="ident">E</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">6.160e+02</span>);

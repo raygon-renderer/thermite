@@ -468,7 +468,6 @@
 <span id="465">465</span>
 <span id="466">466</span>
 <span id="467">467</span>
-<span id="468">468</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -613,12 +612,10 @@
 }
 
 <span class="kw">impl</span> <span class="ident">PartialEq</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">i32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">eq</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">eq</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">*</span><span class="ident">other</span>).<span class="ident">all</span>()
-    }
-
-    <span class="kw">fn</span> <span class="ident">ne</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">ne</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">*</span><span class="ident">other</span>).<span class="ident">any</span>()
+        <span class="comment">// if equal, XOR cancels out and all bits are zero</span>
+        <span class="kw">unsafe</span> { (<span class="kw-2">*</span><span class="self">self</span> <span class="op">^</span> <span class="kw-2">*</span><span class="ident">other</span>).<span class="ident">_mm_none</span>() }
     }
 }
 
@@ -632,17 +629,18 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_all</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="kw">as</span> <span class="ident">u32</span> <span class="op">=</span><span class="op">=</span> <span class="ident">u32</span>::<span class="ident">MAX</span>
+        <span class="kw">let</span> <span class="ident">ones</span> <span class="op">=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span>::<span class="ident">truthy</span>().<span class="ident">value</span>();
+        <span class="number">0</span> <span class="op">!</span><span class="op">=</span> <span class="ident">_mm256_testc_si256</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">ones</span>.<span class="ident">value</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_any</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">!</span><span class="op">=</span> <span class="number">0</span>
+        <span class="number">0</span> <span class="op">=</span><span class="op">=</span> <span class="ident">_mm256_testz_si256</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_none</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
-        <span class="ident">_mm256_movemask_epi8</span>(<span class="self">self</span>.<span class="ident">value</span>) <span class="op">=</span><span class="op">=</span> <span class="number">0</span>
+        <span class="number">0</span> <span class="op">!</span><span class="op">=</span> <span class="ident">_mm256_testz_si256</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>)
     }
 }
 

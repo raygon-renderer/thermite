@@ -587,6 +587,26 @@
 <span id="584">584</span>
 <span id="585">585</span>
 <span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -743,10 +763,13 @@
 }
 
 <span class="kw">impl</span> <span class="ident">PartialEq</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32x8</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span> {
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">eq</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="comment">// shouldn&#39;t use XOR/ptest trick here because NaNs</span>
         <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">eq</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">*</span><span class="ident">other</span>).<span class="ident">all</span>()
     }
 
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">ne</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">other</span>: <span class="kw-2">&amp;</span><span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">AVX2</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">ne</span>(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">*</span><span class="ident">other</span>).<span class="ident">any</span>()
     }
@@ -756,6 +779,23 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_blendv</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="self">Self</span>, <span class="ident">f</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">_mm256_blendv_ps</span>(<span class="ident">f</span>.<span class="ident">value</span>, <span class="ident">t</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_all</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="comment">// `(!x &amp;&amp; !0) == !(x || 0) == !x` via De Morgan&#39;s laws</span>
+        <span class="kw">let</span> <span class="ident">ones</span> <span class="op">=</span> <span class="ident">Mask</span>::<span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span>::<span class="ident">truthy</span>().<span class="ident">value</span>();
+        <span class="number">0</span> <span class="op">!</span><span class="op">=</span> <span class="ident">_mm256_testc_ps</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="ident">ones</span>.<span class="ident">value</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_any</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="number">0</span> <span class="op">=</span><span class="op">=</span> <span class="ident">_mm256_testz_ps</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>)
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm_none</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="number">0</span> <span class="op">!</span><span class="op">=</span> <span class="ident">_mm256_testz_ps</span>(<span class="self">self</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>)
     }
 }
 
