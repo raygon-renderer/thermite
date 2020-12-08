@@ -10,6 +10,7 @@ where
 
     const __EPSILON: Self = f64::EPSILON;
     const __SQRT_EPSILON: Self = 1.4901161193847656314265919999999999861416556075118966152884e-8;
+    const __PI: Self = core::f64::consts::PI;
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
@@ -813,23 +814,7 @@ where
 
             // sine is expensive, so branch for it.
             if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
-                refl_res = if P::POLICY.precision >= PrecisionPolicy::Best {
-                    let z = z.abs();
-                    let mut fl = z.floor();
-
-                    let is_odd = (fl % Vf64::<S>::splat(2.0)).ne(zero);
-
-                    fl += one & is_odd.value(); // conditional add
-
-                    let sign = Vf64::<S>::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
-                    let mut dist = (z - fl) ^ sign; // -(z - fl) = (fl - z) if odd
-
-                    dist -= one & dist.gt(half).value(); // conditional subtract
-
-                    (z ^ sign) * (dist * pi).sin_p::<P>()
-                } else {
-                    z * (z * pi).sin_p::<P>()
-                };
+                refl_res = Self::sin_pix::<P>(z);
 
                 // If not branching, all negative values are reflected
                 if P::POLICY.avoid_precision_branches() {
@@ -936,10 +921,6 @@ where
 
         let gh = Vf64::<S>::splat(6.024680040776729583740234375 - 0.5);
 
-        let z2 = z * z;
-        let z4 = z2 * z2;
-        let z8 = z4 * z4;
-
         let lanczos_sum = z.poly_rational_p::<P>(
             &[
                 23531376880.41075968857200767445163675473,
@@ -989,6 +970,69 @@ where
         res *= tiny.select(tiny_res, normal_res);
 
         reflected.select(-pi / res, z_int.select(fact_res, res))
+    }
+
+    #[inline(always)]
+    fn lgamma<P: Policy>(mut z: Self::Vf) -> Self::Vf {
+        let one = Vf64::<S>::one();
+
+        let reflect = z.lt(Vf64::<S>::zero());
+
+        let mut t = one;
+
+        if P::POLICY.avoid_branching || reflect.any() {
+            t = reflect.select(Self::sin_pix::<P>(z).abs(), one);
+            z ^= Vf64::<S>::neg_zero() & reflect.value(); // conditional negate
+        }
+
+        let gh = Vf64::<S>::splat(6.024680040776729583740234375 - 0.5);
+
+        let lanczos_sum = z.poly_rational_p::<P>(
+            &[
+                56906521.91347156388090791033559122686859,
+                103794043.1163445451906271053616070238554,
+                86363131.28813859145546927288977868422342,
+                43338889.32467613834773723740590533316085,
+                14605578.08768506808414169982791359218571,
+                3481712.15498064590882071018964774556468,
+                601859.6171681098786670226533699352302507,
+                75999.29304014542649875303443598909137092,
+                6955.999602515376140356310115515198987526,
+                449.9445569063168119446858607650988409623,
+                19.51992788247617482847860966235652136208,
+                0.5098416655656676188125178644804694509993,
+                0.006061842346248906525783753964555936883222,
+            ],
+            &[
+                0.0,
+                39916800.0,
+                120543840.0,
+                150917976.0,
+                105258076.0,
+                45995730.0,
+                13339535.0,
+                2637558.0,
+                357423.0,
+                32670.0,
+                1925.0,
+                66.0,
+                1.0,
+            ],
+        );
+
+        let zgh = z + gh;
+
+        let a = zgh.ln_p::<P>() - one;
+        let b = z - Vf64::<S>::splat(0.5);
+        let c = (lanczos_sum * t).ln_p::<P>();
+
+        let mut res = a.mul_adde(b, c);
+
+        let ln_pi = Vf64::<S>::splat(1.1447298858494001741434273513530587116472948129153115715136230714);
+
+        res = reflect.select(ln_pi - res, res);
+
+        res
     }
 }
 

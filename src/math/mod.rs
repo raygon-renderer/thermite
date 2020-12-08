@@ -250,6 +250,7 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn erf_p<P: Policy>(self) -> Self;
     fn erfinv_p<P: Policy>(self) -> Self;
     fn tgamma_p<P: Policy>(self) -> Self;
+    fn lgamma_p<P: Policy>(self) -> Self;
     fn next_float_p<P: Policy>(self) -> Self;
     fn prev_float_p<P: Policy>(self) -> Self;
     fn smoothstep_p<P: Policy>(self) -> Self;
@@ -422,6 +423,12 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// NOTE: The Gamma function is not defined for negative integers.
     fn tgamma(self) -> Self;
 
+    /// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.
+    fn lgamma(self) -> Self;
+
+    // /// Computes `Γ(x)/Γ(x + delta)`, possibly more efficiently than two invocations to tgamma.
+    // fn tgamma_delta(self, delta: Self) -> Self;
+
     /// Finds the next representable float moving upwards to positive infinity.
     fn next_float(self) -> Self;
 
@@ -588,6 +595,7 @@ where
     #[inline] fn erf_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf::<P>(self)  }
     #[inline] fn erfinv_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv::<P>(self)  }
     #[inline] fn tgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma::<P>(self)  }
+    #[inline] fn lgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lgamma::<P>(self)  }
     #[inline] fn next_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float::<P>(self)  }
     #[inline] fn prev_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float::<P>(self)  }
     #[inline] fn smoothstep_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep::<P>(self)  }
@@ -684,6 +692,7 @@ where
     #[inline(always)] fn erf(self)              -> Self         { self.erf_p::<DefaultPolicy>() }
     #[inline(always)] fn erfinv(self)           -> Self         { self.erfinv_p::<DefaultPolicy>() }
     #[inline(always)] fn tgamma(self)           -> Self         { self.tgamma_p::<DefaultPolicy>() }
+    #[inline(always)] fn lgamma(self)           -> Self         { self.lgamma_p::<DefaultPolicy>() }
     #[inline(always)] fn next_float(self)       -> Self         { self.next_float_p::<DefaultPolicy>() }
     #[inline(always)] fn prev_float(self)       -> Self         { self.prev_float_p::<DefaultPolicy>() }
     #[inline(always)] fn smoothstep(self)       -> Self         { self.smoothstep_p::<DefaultPolicy>() }
@@ -716,6 +725,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     const __EPSILON: Self;
     const __SQRT_EPSILON: Self;
+    const __PI: Self;
 
     #[inline(always)]
     fn scale<P: Policy>(
@@ -1106,6 +1116,34 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         }
     }
 
+    /// x * sin(x * pi)
+    #[inline(always)]
+    fn sin_pix<P: Policy>(x: Self::Vf) -> Self::Vf {
+        let one = Self::Vf::one();
+        let zero = Self::Vf::zero();
+        let half = Self::Vf::splat_as(0.5f64);
+        let two = Self::Vf::splat_as(2.0);
+        let pi = Self::Vf::splat(Self::__PI);
+
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            let x = x.abs();
+            let mut fl = x.floor();
+
+            let is_odd = (fl % two).ne(zero);
+
+            fl += one & is_odd.value(); // conditional add
+
+            let sign = Self::Vf::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
+            let mut dist = (x - fl) ^ sign; // -(x - fl) = (fl - x) if odd
+
+            dist -= one & dist.gt(half).value(); // conditional subtract
+
+            (x ^ sign) * (dist * pi).sin_p::<P>()
+        } else {
+            x * (x * pi).sin_p::<P>()
+        }
+    }
+
     #[inline(always)]
     fn sin<P: Policy>(x: Self::Vf) -> Self::Vf {
         Self::sin_cos::<P>(x).0
@@ -1169,6 +1207,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn prev_float<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     fn tgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn lgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
     fn smoothstep<P: Policy>(x: Self::Vf) -> Self::Vf {
