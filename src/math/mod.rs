@@ -14,17 +14,31 @@ mod pd;
 mod ps;
 
 /// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.
-pub trait Policy: Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + core::hash::Hash {
+pub trait Policy {
     /// The specific policy used. This is a constant to allow for dead-code elimination of branches.
     const POLICY: PolicyParameters;
 }
 
+/** Precision Policy, tradeoffs between precision and performance.
+
+The precision policy modifies how functions are evaluated to provide extra precision
+at the cost of performance, or sacrifice precision for extra performance.
+
+For example, some functions have a generic solution that is technically correct but due to floating
+point errors will not be very precise, and it's often better to fallback to another solution that
+does not accrue such errors, at the cost of performance.
+*/
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum PrecisionPolicy {
+    /// Precision is not important, so prefer simpler or faster algorithms.
     Worst = 0,
+    /// Precision is important, but not the focus, so avoid expensive fallbacks.
     Average,
+    /// Precision is very important, so do everything to improve it.
     Best,
+    /// Precision is the only factor, use infinite sums to compute reference solutions.
+    Reference,
 }
 
 /// Customizable Policy Parameters
@@ -114,6 +128,10 @@ pub mod policies {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Size;
 
+    /// Calculates a reference value for operations where possible, which can be very expensive.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Reference;
+
     impl Policy for UltraPerformance {
         const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: false,
@@ -156,6 +174,16 @@ pub mod policies {
             max_series_iterations: 10000,
         };
     }
+
+    impl Policy for Reference {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: true,
+            unroll_loops: true,
+            precision: PrecisionPolicy::Reference,
+            avoid_branching: false,
+            max_series_iterations: 100000,
+        };
+    }
 }
 
 use policies::*;
@@ -183,6 +211,14 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn poly_f_p<P: Policy, F>(self, n: usize, f: F) -> Self
     where
         F: FnMut(usize) -> Self;
+
+    fn summation_f_p<P: Policy, F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+        F: FnMut(isize) -> Self;
+
+    fn product_f_p<P: Policy, F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+        F: FnMut(isize) -> Self;
 
     fn sin_p<P: Policy>(self) -> Self;
     fn cos_p<P: Policy>(self) -> Self;
@@ -274,6 +310,28 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     fn poly_f<F>(self, n: usize, f: F) -> Self
     where
         F: FnMut(usize) -> Self;
+
+    /// Computes `Σ[f(n)]` from `n=start` to `end`.
+    ///
+    /// Returns `Ok` if the sum converges, `Err` otherwise with the diverging value.
+    ///
+    /// This will terminate when the sum converges or hits the policy iteration limit.
+    ///
+    /// Note that this method does not accept `self`, but rather you should use any variables by capturing them in the passed closure.
+    fn summation_f<F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+        F: FnMut(isize) -> Self;
+
+    /// Computes `Π[f(n)]` from `n=start` to `end`.
+    ///
+    /// Returns `Ok` if the product converges, `Err` otherwise with the diverging value.
+    ///
+    /// This will terminate when the product converges or hits the policy iteration limit.
+    ///
+    /// Note that this method does not accept `self`, but rather you should use any variables by capturing them in the passed closure.
+    fn product_f<F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+        F: FnMut(isize) -> Self;
 
     /// Computes the sine of a vector.
     fn sin(self) -> Self;
@@ -467,6 +525,20 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly::<P>(self, coefficients)
     }
 
+    #[inline] fn summation_f_p<P: Policy, F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+            F: FnMut(isize) -> Self
+    {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::summation_f::<P, F>(start, end, f)
+    }
+
+    #[inline] fn product_f_p<P: Policy, F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+        F: FnMut(isize) -> Self
+    {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::product_f::<P, F>(start, end, f)
+    }
+
     #[inline] fn poly_rational_p<P: Policy>(
         self,
         numerator_coefficients: &[Self::Element],
@@ -556,6 +628,20 @@ where
         self.poly_f_p::<DefaultPolicy, F>(n, f)
     }
 
+    #[inline(always)] fn summation_f<F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+            F: FnMut(isize) -> Self
+    {
+        Self::summation_f_p::<DefaultPolicy, F>(start, end, f)
+    }
+
+    #[inline(always)] fn product_f<F>(start: isize, end: isize, f: F) -> Result<Self, Self>
+    where
+            F: FnMut(isize) -> Self
+    {
+        Self::product_f_p::<DefaultPolicy, F>(start, end, f)
+    }
+
     #[inline(always)] fn poly_rational(
         self,
         numerator_coefficients: &[Self::Element],
@@ -629,6 +715,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     type Vf: SimdFloatVector<S, Element = Self>;
 
     const __EPSILON: Self;
+    const __SQRT_EPSILON: Self;
 
     #[inline(always)]
     fn scale<P: Policy>(
@@ -697,7 +784,8 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             e >>= 1;
             x *= x;
 
-            if e.eq(zero_i).all() {
+            // Use `.none()` to avoid extra register and XOR for testc
+            if e.ne(zero_i).none() {
                 return res;
             }
         }
@@ -781,9 +869,77 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let max = x.max(y);
         let t = min / max;
 
-        let ret = max * t.mul_add(t, Self::Vf::one()).sqrt();
+        let mut ret = max * t.mul_add(t, Self::Vf::one()).sqrt();
 
-        min.eq(Self::Vf::zero()).select(max, ret)
+        if P::POLICY.check_overflow {
+            let inf = Self::Vf::infinity();
+            ret = (x.lt(inf) & y.lt(inf) & t.lt(inf)).select(ret, x + y);
+        }
+
+        ret
+    }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn summation_f<P: Policy, F>(mut n: isize, end: isize, mut f: F) -> Result<Self::Vf, Self::Vf>
+    where
+        F: FnMut(isize) -> Self::Vf,
+    {
+        let mut sum = Self::Vf::zero();
+
+        if unlikely!(n == end) {
+            return Ok(sum);
+        }
+
+        let epsilon = Self::Vf::splat(match P::POLICY.precision {
+            PrecisionPolicy::Worst => Self::__SQRT_EPSILON,
+            PrecisionPolicy::Average => Self::__EPSILON,
+            _ => Self::__EPSILON * Self::cast_from(0.5f64),
+        });
+
+        for _ in 0..P::POLICY.max_series_iterations {
+            let delta = f(n);
+            sum += delta;
+            n += 1;
+            // use `.none()` here to avoid extra register/xor with testc
+            if delta.abs().gt(epsilon).none() || n >= end {
+                return Ok(sum);
+            }
+        }
+
+        Err(sum)
+    }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn product_f<P: Policy, F>(mut n: isize, end: isize, mut f: F) -> Result<Self::Vf, Self::Vf>
+    where
+        F: FnMut(isize) -> Self::Vf,
+    {
+        let mut product = Self::Vf::one();
+
+        if unlikely!(n == end) {
+            return Ok(product);
+        }
+
+        let epsilon = Self::Vf::splat(match P::POLICY.precision {
+            PrecisionPolicy::Worst => Self::__SQRT_EPSILON,
+            PrecisionPolicy::Average => Self::__EPSILON,
+            _ => Self::__EPSILON * Self::cast_from(0.5f64),
+        });
+
+        for _ in 0..P::POLICY.max_series_iterations {
+            let new_product = product * f(n);
+            let delta = new_product - product;
+            product = new_product;
+            n += 1;
+            // use `.none()` here to avoid extra register/xor with testc
+            if delta.abs().gt(epsilon).none() || n >= end {
+                return Ok(product);
+            }
+        }
+
+        Err(product)
     }
 
     #[inline(always)]
@@ -792,6 +948,20 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     where
         F: FnMut(usize) -> Self::Vf
     {
+        // TODO: Test the precision of this. Seems sketchy.
+        // Use Horner's method + Compensated floats for error correction
+        if P::POLICY.precision >= PrecisionPolicy::Best && !S::INSTRSET.has_true_fma() {
+            use compensated::Compensated;
+            let mut idx = n - 1;
+            let mut sum = Compensated::<S, Self::Vf>::new(c(idx));
+
+            loop {
+                idx -= 1;
+                sum = (sum * x) + c(idx);
+                if idx == 0 { return sum.value(); }
+            }
+        }
+
         // Use tiny Horner's method for code size optimization
         if !P::POLICY.unroll_loops {
             let mut idx = n - 1;

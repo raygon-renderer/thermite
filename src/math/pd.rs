@@ -9,9 +9,54 @@ where
     type Vf = <S as Simd>::Vf64;
 
     const __EPSILON: Self = f64::EPSILON;
+    const __SQRT_EPSILON: Self = 1.4901161193847656314265919999999999861416556075118966152884e-8;
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+        /*
+        // This ended up being pointless, but I'm keeping the code around for reference.
+
+        if P::POLICY.precision == PrecisionPolicy::Reference {
+            let epsilon = Vf64::<S>::splat(f64::EPSILON * 0.5);
+
+            let xx2 = xx * xx;
+            let mut n = 1;
+            let mut fact = 1.0;
+            let mut powers = xx2; // NOTE: powers is always positive
+
+            let mut sin_sum = xx;
+            let mut cos_sum = Vf64::<S>::one();
+
+            for _ in 0..P::POLICY.max_series_iterations {
+                let sign = if n & 1 == 0 {
+                    Vf64::<S>::zero()
+                } else {
+                    Vf64::<S>::neg_zero()
+                };
+
+                let n2 = n + n;
+                fact *= n2 as f64 * (n2 - 1) as f64;
+
+                let cos_delta = powers / Vf64::<S>::splat(fact);
+                let sin_delta = (powers * xx) / Vf64::<S>::splat(fact * (n2 + 1) as f64);
+                cos_sum += sign ^ cos_delta;
+                sin_sum += sign ^ sin_delta;
+
+                // the cosine term is always positive, but sine is odd and can be negative
+                let not_converged = cos_delta.gt(epsilon) | sin_delta.abs().gt(epsilon);
+
+                if not_converged.none() {
+                    return (sin_sum, cos_sum);
+                }
+
+                powers *= xx2;
+                n += 1;
+            }
+
+            // panic!("sin_cos did not converge");
+        }
+        */
+
         let dp1 = Vf64::<S>::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf64::<S>::splat(7.94662735614792836714E-9 * 2.0);
         let dp3 = Vf64::<S>::splat(3.06161699786838294307E-17 * 2.0);

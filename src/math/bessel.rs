@@ -9,6 +9,24 @@ mod bessel_internal {
 
     #[inline(always)]
     pub fn bessel_j0<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf) -> E::Vf {
+        if P::POLICY.precision == PrecisionPolicy::Reference {
+            let xx4 = x * x * E::Vf::splat_as(0.25);
+            let mut powers = E::Vf::one();
+            let mut factorial = E::cast_from(1.0);
+
+            let sum = E::Vf::summation_f_p::<P, _>(1, isize::MAX, |k| {
+                let sign = if k & 1 == 0 { E::Vf::zero() } else { E::Vf::neg_zero() };
+                factorial = factorial * E::cast_from(k);
+                powers = powers * xx4;
+                sign ^ powers / E::Vf::splat(factorial * factorial)
+            });
+
+            return match sum {
+                Ok(sum) => sum + E::Vf::one(),
+                Err(_) => E::Vf::zero(),
+            };
+        }
+
         let x1 = E::Vf::splat_as(2.4048255576957727686e+00);
         let x2 = E::Vf::splat_as(5.5200781102863106496e+00);
         let x11 = E::Vf::splat_as(6.160e+02);

@@ -9,6 +9,7 @@ where
     type Vf = <S as Simd>::Vf32;
 
     const __EPSILON: Self = f32::EPSILON;
+    const __SQRT_EPSILON: Self = 0.0003452669836517821464776144458809047877858776827733458406716232;
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
