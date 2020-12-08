@@ -25,6 +25,7 @@ The primary goal of Thermite is to provide optimal codegen for every backend ins
 
 * SSE2, SSE4.2, AVX, AVX2 backends, with planned support for scalar, AVX512, WASM SIMD and ARM NEON backends.
 * Extensive built-in vectorized math library.
+* Compile-time policies to emphasize precision, performance or code size (useful for WASM)
 * Compile-time monomorphisation with runtime selection
     * Aided by a `#[dispatch]` procedural macro to ensure optimal codegen.
 * Zero runtime overhead.
@@ -39,7 +40,7 @@ The primary goal of Thermite is to provide optimal codegen for every backend ins
 For optimal performance, ensure you `Cargo.toml` profiles looks something like this:
 ```toml
 [profile.dev]
-opt-level = 2       # Required to use SIMD intrinsics internally
+opt-level = 2       # Required to inline SIMD intrinsics internally
 
 [profile.release]
 opt-level = 3       # Should be at least 2; level 1 will not use SIMD intrinsics
