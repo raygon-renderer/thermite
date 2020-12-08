@@ -170,23 +170,6 @@ impl SimdMask<AVX2> for f32x8<AVX2> {
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new(_mm256_blendv_ps(f.value, t.value, self.value))
     }
-
-    #[inline(always)]
-    unsafe fn _mm_all(self) -> bool {
-        // `(!x && !0) == !(x || 0) == !x` via De Morgan's laws
-        let ones = Mask::<AVX2, Self>::truthy().value();
-        0 != _mm256_testc_ps(self.value, ones.value)
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_any(self) -> bool {
-        0 == _mm256_testz_ps(self.value, self.value)
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_none(self) -> bool {
-        0 != _mm256_testz_ps(self.value, self.value)
-    }
 }
 
 impl SimdVector<AVX2> for f32x8<AVX2> {

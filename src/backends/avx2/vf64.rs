@@ -216,24 +216,6 @@ impl SimdMask<AVX2> for f64x8<AVX2> {
             _mm256_blendv_pd(f.value.1, t.value.1, self.value.1),
         ))
     }
-
-    #[inline(always)]
-    unsafe fn _mm_all(self) -> bool {
-        let ones = _mm256_castsi256_pd(_mm256_set1_epi32(-1));
-        0 == _mm256_testc_pd(_mm256_and_pd(self.value.0, self.value.1), ones)
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_any(self) -> bool {
-        let any = _mm256_or_pd(self.value.0, self.value.1);
-        0 == _mm256_testz_pd(any, any)
-    }
-
-    #[inline(always)]
-    unsafe fn _mm_none(self) -> bool {
-        let any = _mm256_or_pd(self.value.0, self.value.1);
-        0 != _mm256_testz_pd(any, any)
-    }
 }
 
 impl SimdVector<AVX2> for f64x8<AVX2> {

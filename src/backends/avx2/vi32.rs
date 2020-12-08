@@ -158,6 +158,7 @@ impl SimdMask<AVX2> for i32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_all(self) -> bool {
+        // `(!x && !0) == !(x || 0) == !x` via De Morgan's laws
         let ones = Mask::<AVX2, Self>::truthy().value();
         0 != _mm256_testc_si256(self.value, ones.value)
     }
