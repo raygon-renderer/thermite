@@ -2,6 +2,9 @@ use super::{poly::*, *};
 
 use core::f64::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
 
+const EULERS_CONSTANT: f64 = 5.772156649015328606065120900824024310e-01;
+const LN_PI: f64 = 1.1447298858494001741434273513530587116472948129153115715136230714;
+
 impl<S: Simd> SimdVectorizedMathInternal<S> for f64
 where
     <S as Simd>::Vf64: SimdFloatVector<S, Element = f64>,
@@ -814,7 +817,7 @@ where
 
             // sine is expensive, so branch for it.
             if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
-                refl_res = Self::sin_pix::<P>(z);
+                refl_res = <Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z);
 
                 // If not branching, all negative values are reflected
                 if P::POLICY.avoid_precision_branches() {
@@ -883,13 +886,6 @@ where
                 return fact_res;
             }
         }
-
-        // Tiny
-
-        let sqrt_epsilon = Vf64::<S>::splat(0.1490116119384765625e-7);
-        let euler = Vf64::<S>::splat(5.772156649015328606065120900824024310e-01);
-        let tiny = z.lt(sqrt_epsilon);
-        let tiny_res = one / z - euler;
 
         // Full
 
@@ -967,7 +963,17 @@ where
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
 
-        res *= tiny.select(tiny_res, normal_res);
+        // Tiny
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            let is_tiny = z.lt(Vf64::<S>::splat_as(
+                <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
+            ));
+            let tiny_res = one / z - Vf64::<S>::splat(EULERS_CONSTANT);
+
+            res *= is_tiny.select(tiny_res, normal_res);
+        } else {
+            res *= normal_res;
+        }
 
         reflected.select(-pi / res, z_int.select(fact_res, res))
     }
@@ -975,19 +981,23 @@ where
     #[inline(always)]
     fn lgamma<P: Policy>(mut z: Self::Vf) -> Self::Vf {
         let one = Vf64::<S>::one();
+        let zero = Vf64::<S>::zero();
 
-        let reflect = z.lt(Vf64::<S>::zero());
+        let reflect = z.lt(zero);
 
         let mut t = one;
 
+        // NOTE: instead of computing ln(t) here, it's deferred to below where instead of
+        // ln_pi - ln(gamma(x)) - ln(t), we compute ln_pi - ln(gamma(x) * t), sort of.
+        // It's actually on the lanczos sum rather than gamma, but same difference.
         if P::POLICY.avoid_branching || reflect.any() {
-            t = reflect.select(Self::sin_pix::<P>(z).abs(), one);
+            t = reflect.select(<Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z).abs(), one);
             z ^= Vf64::<S>::neg_zero() & reflect.value(); // conditional negate
         }
 
         let gh = Vf64::<S>::splat(6.024680040776729583740234375 - 0.5);
 
-        let lanczos_sum = z.poly_rational_p::<P>(
+        let mut lanczos_sum = z.poly_rational_p::<P>(
             &[
                 56906521.91347156388090791033559122686859,
                 103794043.1163445451906271053616070238554,
@@ -1020,15 +1030,31 @@ where
             ],
         );
 
-        let zgh = z + gh;
+        // Full A
+        let mut a = (z + gh).ln_p::<P>() - one;
 
-        let a = zgh.ln_p::<P>() - one;
+        // Tiny
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            let is_not_tiny = z.ge(Vf64::<S>::splat_as(
+                <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
+            ));
+            let tiny_res = one / z - Vf64::<S>::splat(EULERS_CONSTANT);
+
+            // shove the tiny result into the log down below
+            lanczos_sum = is_not_tiny.select(lanczos_sum, tiny_res);
+            // force multiplier to zero for tiny case, allowing the modified
+            // lanczos sum and ln(t) to be combined for cheap
+            a &= is_not_tiny.value();
+        }
+
+        // Full
+
         let b = z - Vf64::<S>::splat(0.5);
         let c = (lanczos_sum * t).ln_p::<P>();
 
         let mut res = a.mul_adde(b, c);
 
-        let ln_pi = Vf64::<S>::splat(1.1447298858494001741434273513530587116472948129153115715136230714);
+        let ln_pi = Vf64::<S>::splat(LN_PI);
 
         res = reflect.select(ln_pi - res, res);
 

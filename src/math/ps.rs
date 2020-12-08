@@ -2,6 +2,9 @@ use super::{poly::*, *};
 
 use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
 
+const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
+const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
+
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
 where
     <S as Simd>::Vf32: SimdFloatVector<S, Element = f32>,
@@ -729,7 +732,7 @@ where
 
             // sine is expensive, so branch for it.
             if P::POLICY.avoid_precision_branches() || unlikely!(reflected.any()) {
-                refl_res = Self::sin_pix::<P>(z);
+                refl_res = <Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z);
 
                 // If not branching, all negative values are reflected
                 if P::POLICY.avoid_precision_branches() {
@@ -799,13 +802,6 @@ where
             }
         }
 
-        // Tiny
-
-        let sqrt_epsilon = Vf32::<S>::splat(0.00034526698300124390839884978618400831996329879769945);
-        let euler = Vf32::<S>::splat(5.772156649015328606065120900824024310e-01);
-        let tiny = z.lt(sqrt_epsilon);
-        let tiny_res = one / z - euler;
-
         // Full
 
         let n0 = Vf32::<S>::splat(58.52061591769095910314047740215847630266);
@@ -847,7 +843,16 @@ where
 
         let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
 
-        res *= tiny.select(tiny_res, normal_res);
+        // Tiny
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            let is_tiny = z.lt(Vf32::<S>::splat(
+                <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
+            ));
+            let tiny_res = one / z - Vf32::<S>::splat(EULERS_CONSTANT);
+            res *= is_tiny.select(tiny_res, normal_res);
+        } else {
+            res *= normal_res;
+        }
 
         reflected.select(-pi / res, z_int.select(fact_res, res))
     }
@@ -855,19 +860,20 @@ where
     #[inline(always)]
     fn lgamma<P: Policy>(mut z: Self::Vf) -> Self::Vf {
         let one = Vf32::<S>::one();
+        let zero = Vf32::<S>::zero();
 
-        let reflect = z.lt(Vf32::<S>::zero());
+        let reflect = z.lt(zero);
 
         let mut t = one;
 
         if P::POLICY.avoid_branching || reflect.any() {
-            t = reflect.select(Self::sin_pix::<P>(z).abs(), one);
+            t = reflect.select(<Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z).abs(), one);
             z ^= Vf32::<S>::neg_zero() & reflect.value(); // conditional negate
         }
 
         let gh = Vf32::<S>::splat(1.428456135094165802001953125 - 0.5);
 
-        let lanczos_sum = z.poly_rational_p::<P>(
+        let mut lanczos_sum = z.poly_rational_p::<P>(
             &[
                 14.0261432874996476619570577285003839357,
                 43.74732405540314316089531289293124360129,
@@ -879,15 +885,31 @@ where
             &[0.0, 24.0, 50.0, 35.0, 10.0, 1.0],
         );
 
-        let zgh = z + gh;
+        // Full A
+        let mut a = (z + gh).ln_p::<P>() - one;
 
-        let a = zgh.ln_p::<P>() - one;
+        // Tiny
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            let is_not_tiny = z.ge(Vf32::<S>::splat_as(
+                <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
+            ));
+            let tiny_res = one / z - Vf32::<S>::splat(EULERS_CONSTANT);
+
+            // shove the tiny result into the log down below
+            lanczos_sum = is_not_tiny.select(lanczos_sum, tiny_res);
+            // force multiplier to zero for tiny case, allowing the modified
+            // lanczos sum and ln(t) to be combined for cheap
+            a &= is_not_tiny.value();
+        }
+
+        // Full
+
         let b = z - Vf32::<S>::splat(0.5);
         let c = (lanczos_sum * t).ln_p::<P>();
 
         let mut res = a.mul_adde(b, c);
 
-        let ln_pi = Vf32::<S>::splat(1.1447298858494001741434273513530587116472948129153115715136230714);
+        let ln_pi = Vf32::<S>::splat(LN_PI);
 
         res = reflect.select(ln_pi - res, res);
 
