@@ -341,6 +341,56 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     c.bench(
+        "lgamma",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, x| {
+                #[inline(never)]
+                fn do_algorithm(x: Vf32) -> Vf32 {
+                    x.lgamma()
+                }
+                b.iter(|| do_algorithm(Vf32::splat(*x)))
+            },
+            vec![-25.43, -4.83, 0.53, 20.3, 4.0, 20.0],
+        )
+        .with_function("thermite-pd", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf64) -> Vf64 {
+                x.lgamma()
+            }
+            b.iter(|| do_algorithm(Vf64::splat(*x as f64)));
+        })
+        .with_function("libm-ps", |b, x| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f32; 8]) -> [f32; 8] {
+                for i in 0..8 {
+                    x[i] = libm::lgammaf(x[i]);
+                }
+                x
+            }
+
+            let mut xs = [0.0; 8];
+            black_box(Vf32::splat(*x)).store_unaligned(&mut xs);
+            b.iter(|| unsafe { do_algorithm(xs) })
+        })
+        .with_function("libm-pd", |b, x| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f64; 8]) -> [f64; 8] {
+                for i in 0..8 {
+                    x[i] = libm::lgamma(x[i]);
+                }
+                x
+            }
+
+            let mut xs = [0.0; 8];
+            black_box(Vf64::splat(*x as f64)).store_unaligned(&mut xs);
+            b.iter(|| unsafe { do_algorithm(xs) })
+        }),
+    );
+
+    c.bench(
         "large_poly_eval",
         ParameterizedBenchmark::new(
             "thermite",
