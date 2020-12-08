@@ -153,10 +153,13 @@ impl SimdBitwise<AVX2> for f32x8<AVX2> {
 }
 
 impl PartialEq<Self> for f32x8<AVX2> {
+    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
+        // shouldn't use XOR/ptest trick here because NaNs
         <Self as SimdVector<AVX2>>::eq(*self, *other).all()
     }
 
+    #[inline(always)]
     fn ne(&self, other: &Self) -> bool {
         <Self as SimdVector<AVX2>>::ne(*self, *other).any()
     }
@@ -166,6 +169,23 @@ impl SimdMask<AVX2> for f32x8<AVX2> {
     #[inline(always)]
     unsafe fn _mm_blendv(self, t: Self, f: Self) -> Self {
         Self::new(_mm256_blendv_ps(f.value, t.value, self.value))
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_all(self) -> bool {
+        // `(!x && !0) == !(x || 0) == !x` via De Morgan's laws
+        let ones = Mask::<AVX2, Self>::truthy().value();
+        0 != _mm256_testc_ps(self.value, ones.value)
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_any(self) -> bool {
+        0 == _mm256_testz_ps(self.value, self.value)
+    }
+
+    #[inline(always)]
+    unsafe fn _mm_none(self) -> bool {
+        0 != _mm256_testz_ps(self.value, self.value)
     }
 }
 

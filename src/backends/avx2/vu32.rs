@@ -141,12 +141,10 @@ impl SimdBitwise<AVX2> for u32x8<AVX2> {
 }
 
 impl PartialEq<Self> for u32x8<AVX2> {
+    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
-        <Self as SimdVector<AVX2>>::eq(*self, *other).all()
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        <Self as SimdVector<AVX2>>::ne(*self, *other).any()
+        // if equal, XOR cancels out and all bits are zero
+        unsafe { (*self ^ *other)._mm_none() }
     }
 }
 
@@ -160,17 +158,18 @@ impl SimdMask<AVX2> for u32x8<AVX2> {
 
     #[inline(always)]
     unsafe fn _mm_all(self) -> bool {
-        _mm256_movemask_epi8(self.value) as u32 == u32::MAX
+        let ones = Mask::<AVX2, Self>::truthy().value();
+        0 != _mm256_testc_si256(self.value, ones.value)
     }
 
     #[inline(always)]
     unsafe fn _mm_any(self) -> bool {
-        _mm256_movemask_epi8(self.value) != 0
+        0 == _mm256_testz_si256(self.value, self.value)
     }
 
     #[inline(always)]
     unsafe fn _mm_none(self) -> bool {
-        _mm256_movemask_epi8(self.value) == 0
+        0 != _mm256_testz_si256(self.value, self.value)
     }
 }
 
