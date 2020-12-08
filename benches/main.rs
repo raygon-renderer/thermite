@@ -15,6 +15,60 @@ type Vi64 = <AVX2 as Simd>::Vi64;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench(
+        "sinh",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, x| {
+                #[inline(never)]
+                fn do_algorithm(x: Vf32) -> Vf32 {
+                    x.sinh()
+                }
+                let x = black_box(Vf32::splat(*x) + Vf32::indexed());
+                b.iter(|| do_algorithm(x))
+            },
+            vec![0.5],
+        )
+        .with_function("thermite-pd", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf64) -> Vf64 {
+                x.sinh()
+            }
+            let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
+            b.iter(|| do_algorithm(x))
+        })
+        .with_function("scalar-ps", |b, x| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f32; 8]) -> [f32; 8] {
+                for i in 0..8 {
+                    x[i] = x[i].sinh();
+                }
+                x
+            }
+
+            let mut xs = [0.0; 8];
+            black_box(Vf32::splat(*x) + Vf32::indexed()).store_unaligned(&mut xs);
+
+            b.iter(|| unsafe { do_algorithm(xs) })
+        })
+        .with_function("scalar-pd", |b, x| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f64; 8]) -> [f64; 8] {
+                for i in 0..8 {
+                    x[i] = x[i].sinh();
+                }
+                x
+            }
+
+            let mut xs = [0.0; 8];
+            black_box(Vf64::splat(*x as f64) + Vf64::indexed()).store_unaligned(&mut xs);
+
+            b.iter(|| unsafe { do_algorithm(xs) })
+        }),
+    );
+
+    c.bench(
         "exp",
         ParameterizedBenchmark::new(
             "thermite-ps",
