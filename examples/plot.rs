@@ -66,6 +66,7 @@ fn main() {
     //    x.sin_p::<policies::Reference>()
     //});
 
+    plot_function("tgamma(x)", &x_axis, &mut plot, |x| x.tgamma());
     plot_function("lgamma(x)", &x_axis, &mut plot, |x| x.lgamma());
     //plot_function("ln(tgamma(x))", &x_axis, &mut plot, |x| x.tgamma().ln());
     //plot_function("diff*1000", &x_axis, &mut plot, |x| {

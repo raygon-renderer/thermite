@@ -762,7 +762,7 @@ where
             // recursively apply Γ(z+1)/z
             while is_neg.any() {
                 res = is_neg.select(res / mod_z, res);
-                mod_z = is_neg.select(mod_z + one, mod_z);
+                mod_z += is_neg.value() & one; // conditional add
                 is_neg = mod_z.is_negative();
             }
 
