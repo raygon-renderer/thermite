@@ -1442,6 +1442,45 @@
 <span id="1439">1439</span>
 <span id="1440">1440</span>
 <span id="1441">1441</span>
+<span id="1442">1442</span>
+<span id="1443">1443</span>
+<span id="1444">1444</span>
+<span id="1445">1445</span>
+<span id="1446">1446</span>
+<span id="1447">1447</span>
+<span id="1448">1448</span>
+<span id="1449">1449</span>
+<span id="1450">1450</span>
+<span id="1451">1451</span>
+<span id="1452">1452</span>
+<span id="1453">1453</span>
+<span id="1454">1454</span>
+<span id="1455">1455</span>
+<span id="1456">1456</span>
+<span id="1457">1457</span>
+<span id="1458">1458</span>
+<span id="1459">1459</span>
+<span id="1460">1460</span>
+<span id="1461">1461</span>
+<span id="1462">1462</span>
+<span id="1463">1463</span>
+<span id="1464">1464</span>
+<span id="1465">1465</span>
+<span id="1466">1466</span>
+<span id="1467">1467</span>
+<span id="1468">1468</span>
+<span id="1469">1469</span>
+<span id="1470">1470</span>
+<span id="1471">1471</span>
+<span id="1472">1472</span>
+<span id="1473">1473</span>
+<span id="1474">1474</span>
+<span id="1475">1475</span>
+<span id="1476">1476</span>
+<span id="1477">1477</span>
+<span id="1478">1478</span>
+<span id="1479">1479</span>
+<span id="1480">1480</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1695,6 +1734,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">erf_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">erfinv_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">tgamma_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">lgamma_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">next_float_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">prev_float_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">smoothstep_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -1867,6 +1907,12 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="doccomment">/// NOTE: The Gamma function is not defined for negative integers.</span>
     <span class="kw">fn</span> <span class="ident">tgamma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
+    <span class="doccomment">/// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.</span>
+    <span class="kw">fn</span> <span class="ident">lgamma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+
+    <span class="comment">// /// Computes `Γ(x)/Γ(x + delta)`, possibly more efficiently than two invocations to tgamma.</span>
+    <span class="comment">// fn tgamma_delta(self, delta: Self) -&gt; Self;</span>
+
     <span class="doccomment">/// Finds the next representable float moving upwards to positive infinity.</span>
     <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
@@ -2033,6 +2079,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">erf_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)              <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">erf</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">erfinv_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">erfinv</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">tgamma_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">tgamma</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">lgamma_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">lgamma</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">next_float_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">next_float</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">prev_float_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">prev_float</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">smoothstep_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">smoothstep</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
@@ -2129,6 +2176,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">erf</span>(<span class="self">self</span>)              <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">erf_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">erfinv</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">erfinv_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">tgamma</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">tgamma_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">lgamma</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">lgamma_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">next_float</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">next_float_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">prev_float</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">prev_float_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">smoothstep</span>(<span class="self">self</span>)       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">smoothstep_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
@@ -2161,6 +2209,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="kw">const</span> <span class="ident">__EPSILON</span>: <span class="self">Self</span>;
     <span class="kw">const</span> <span class="ident">__SQRT_EPSILON</span>: <span class="self">Self</span>;
+    <span class="kw">const</span> <span class="ident">__PI</span>: <span class="self">Self</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">scale</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(
@@ -2551,6 +2600,34 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
         }
     }
 
+    <span class="doccomment">/// x * sin(x * pi)</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">sin_pix</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
+        <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">zero</span>();
+        <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">0.5f64</span>);
+        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_as</span>(<span class="number">2.0</span>);
+        <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat</span>(<span class="self">Self</span>::<span class="ident">__PI</span>);
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> {
+            <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">fl</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">floor</span>();
+
+            <span class="kw">let</span> <span class="ident">is_odd</span> <span class="op">=</span> (<span class="ident">fl</span> <span class="op">%</span> <span class="ident">two</span>).<span class="ident">ne</span>(<span class="ident">zero</span>);
+
+            <span class="ident">fl</span> <span class="op">+</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// conditional add</span>
+
+            <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">is_odd</span>.<span class="ident">value</span>(); <span class="comment">// if odd -0.0 or 0.0</span>
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">dist</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">-</span> <span class="ident">fl</span>) <span class="op">^</span> <span class="ident">sign</span>; <span class="comment">// -(x - fl) = (fl - x) if odd</span>
+
+            <span class="ident">dist</span> <span class="op">-</span><span class="op">=</span> <span class="ident">one</span> <span class="op">&amp;</span> <span class="ident">dist</span>.<span class="ident">gt</span>(<span class="ident">half</span>).<span class="ident">value</span>(); <span class="comment">// conditional subtract</span>
+
+            (<span class="ident">x</span> <span class="op">^</span> <span class="ident">sign</span>) <span class="op">*</span> (<span class="ident">dist</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
+        } <span class="kw">else</span> {
+            <span class="ident">x</span> <span class="op">*</span> (<span class="ident">x</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>()
+        }
+    }
+
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sin</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="self">Self</span>::<span class="ident">sin_cos</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>).<span class="number">0</span>
@@ -2614,6 +2691,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">prev_float</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
     <span class="kw">fn</span> <span class="ident">tgamma</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
+    <span class="kw">fn</span> <span class="ident">lgamma</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">smoothstep</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
