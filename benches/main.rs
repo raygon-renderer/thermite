@@ -391,6 +391,28 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     c.bench(
+        "digamma",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, x| {
+                #[inline(never)]
+                fn do_algorithm(x: Vf32) -> Vf32 {
+                    x.digamma()
+                }
+                b.iter(|| do_algorithm(Vf32::splat(*x)))
+            },
+            vec![-25.43, -4.83, 0.53, 20.3, 4.0, 20.0],
+        )
+        .with_function("thermite-pd", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf64) -> Vf64 {
+                x.digamma()
+            }
+            b.iter(|| do_algorithm(Vf64::splat(*x as f64)));
+        }),
+    );
+
+    c.bench(
         "large_poly_eval",
         ParameterizedBenchmark::new(
             "thermite",
