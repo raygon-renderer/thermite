@@ -1096,10 +1096,35 @@
 <span id="1093">1093</span>
 <span id="1094">1094</span>
 <span id="1095">1095</span>
+<span id="1096">1096</span>
+<span id="1097">1097</span>
+<span id="1098">1098</span>
+<span id="1099">1099</span>
+<span id="1100">1100</span>
+<span id="1101">1101</span>
+<span id="1102">1102</span>
+<span id="1103">1103</span>
+<span id="1104">1104</span>
+<span id="1105">1105</span>
+<span id="1106">1106</span>
+<span id="1107">1107</span>
+<span id="1108">1108</span>
+<span id="1109">1109</span>
+<span id="1110">1110</span>
+<span id="1111">1111</span>
+<span id="1112">1112</span>
+<span id="1113">1113</span>
+<span id="1114">1114</span>
+<span id="1115">1115</span>
+<span id="1116">1116</span>
+<span id="1117">1117</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
 <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">f32</span>::<span class="ident">consts</span>::{<span class="ident">FRAC_PI_2</span>, <span class="ident">FRAC_PI_4</span>, <span class="ident">LN_10</span>, <span class="ident">LN_2</span>, <span class="ident">LOG10_2</span>, <span class="ident">LOG10_E</span>, <span class="ident">LOG2_E</span>, <span class="ident">PI</span>, <span class="ident">SQRT_2</span>};
+
+<span class="kw">const</span> <span class="ident">EULERS_CONSTANT</span>: <span class="ident">f32</span> <span class="op">=</span> <span class="number">5.772156649015328606065120900824024310e-01</span>;
+<span class="kw">const</span> <span class="ident">LN_PI</span>: <span class="ident">f32</span> <span class="op">=</span> <span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>;
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f32</span>
 <span class="kw">where</span>
@@ -1828,7 +1853,7 @@
 
             <span class="comment">// sine is expensive, so branch for it.</span>
             <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_precision_branches</span>() <span class="op">|</span><span class="op">|</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="ident">reflected</span>.<span class="ident">any</span>()) {
-                <span class="ident">refl_res</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">sin_pix</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span>);
+                <span class="ident">refl_res</span> <span class="op">=</span> <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">sin_pix</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span>);
 
                 <span class="comment">// If not branching, all negative values are reflected</span>
                 <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_precision_branches</span>() {
@@ -1898,13 +1923,6 @@
             }
         }
 
-        <span class="comment">// Tiny</span>
-
-        <span class="kw">let</span> <span class="ident">sqrt_epsilon</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.00034526698300124390839884978618400831996329879769945</span>);
-        <span class="kw">let</span> <span class="ident">euler</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">5.772156649015328606065120900824024310e-01</span>);
-        <span class="kw">let</span> <span class="ident">tiny</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">lt</span>(<span class="ident">sqrt_epsilon</span>);
-        <span class="kw">let</span> <span class="ident">tiny_res</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> <span class="ident">z</span> <span class="op">-</span> <span class="ident">euler</span>;
-
         <span class="comment">// Full</span>
 
         <span class="kw">let</span> <span class="ident">n0</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">58.52061591769095910314047740215847630266</span>);
@@ -1946,7 +1964,16 @@
 
         <span class="kw">let</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>) <span class="op">/</span> <span class="ident">zgh</span>.<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
-        <span class="ident">res</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">tiny</span>.<span class="ident">select</span>(<span class="ident">tiny_res</span>, <span class="ident">normal_res</span>);
+        <span class="comment">// Tiny</span>
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> {
+            <span class="kw">let</span> <span class="ident">is_tiny</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">lt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(
+                <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">__SQRT_EPSILON</span>,
+            ));
+            <span class="kw">let</span> <span class="ident">tiny_res</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> <span class="ident">z</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">EULERS_CONSTANT</span>);
+            <span class="ident">res</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">is_tiny</span>.<span class="ident">select</span>(<span class="ident">tiny_res</span>, <span class="ident">normal_res</span>);
+        } <span class="kw">else</span> {
+            <span class="ident">res</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">normal_res</span>;
+        }
 
         <span class="ident">reflected</span>.<span class="ident">select</span>(<span class="op">-</span><span class="ident">pi</span> <span class="op">/</span> <span class="ident">res</span>, <span class="ident">z_int</span>.<span class="ident">select</span>(<span class="ident">fact_res</span>, <span class="ident">res</span>))
     }
@@ -1954,19 +1981,20 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">lgamma</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">z</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+        <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
 
-        <span class="kw">let</span> <span class="ident">reflect</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">lt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>());
+        <span class="kw">let</span> <span class="ident">reflect</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">lt</span>(<span class="ident">zero</span>);
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">t</span> <span class="op">=</span> <span class="ident">one</span>;
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">reflect</span>.<span class="ident">any</span>() {
-            <span class="ident">t</span> <span class="op">=</span> <span class="ident">reflect</span>.<span class="ident">select</span>(<span class="self">Self</span>::<span class="ident">sin_pix</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span>).<span class="ident">abs</span>(), <span class="ident">one</span>);
+            <span class="ident">t</span> <span class="op">=</span> <span class="ident">reflect</span>.<span class="ident">select</span>(<span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">sin_pix</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span>).<span class="ident">abs</span>(), <span class="ident">one</span>);
             <span class="ident">z</span> <span class="op">^</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">reflect</span>.<span class="ident">value</span>(); <span class="comment">// conditional negate</span>
         }
 
         <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.428456135094165802001953125</span> <span class="op">-</span> <span class="number">0.5</span>);
 
-        <span class="kw">let</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
             <span class="kw-2">&amp;</span>[
                 <span class="number">14.0261432874996476619570577285003839357</span>,
                 <span class="number">43.74732405540314316089531289293124360129</span>,
@@ -1978,15 +2006,31 @@
             <span class="kw-2">&amp;</span>[<span class="number">0.0</span>, <span class="number">24.0</span>, <span class="number">50.0</span>, <span class="number">35.0</span>, <span class="number">10.0</span>, <span class="number">1.0</span>],
         );
 
-        <span class="kw">let</span> <span class="ident">zgh</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>;
+        <span class="comment">// Full A</span>
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">a</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">-</span> <span class="ident">one</span>;
 
-        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">-</span> <span class="ident">one</span>;
+        <span class="comment">// Tiny</span>
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> {
+            <span class="kw">let</span> <span class="ident">is_not_tiny</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">ge</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat_as</span>(
+                <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">__SQRT_EPSILON</span>,
+            ));
+            <span class="kw">let</span> <span class="ident">tiny_res</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> <span class="ident">z</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">EULERS_CONSTANT</span>);
+
+            <span class="comment">// shove the tiny result into the log down below</span>
+            <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">is_not_tiny</span>.<span class="ident">select</span>(<span class="ident">lanczos_sum</span>, <span class="ident">tiny_res</span>);
+            <span class="comment">// force multiplier to zero for tiny case, allowing the modified</span>
+            <span class="comment">// lanczos sum and ln(t) to be combined for cheap</span>
+            <span class="ident">a</span> <span class="op">&amp;=</span> <span class="ident">is_not_tiny</span>.<span class="ident">value</span>();
+        }
+
+        <span class="comment">// Full</span>
+
         <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>);
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> (<span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">t</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">mul_adde</span>(<span class="ident">b</span>, <span class="ident">c</span>);
 
-        <span class="kw">let</span> <span class="ident">ln_pi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>);
+        <span class="kw">let</span> <span class="ident">ln_pi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_PI</span>);
 
         <span class="ident">res</span> <span class="op">=</span> <span class="ident">reflect</span>.<span class="ident">select</span>(<span class="ident">ln_pi</span> <span class="op">-</span> <span class="ident">res</span>, <span class="ident">res</span>);
 
