@@ -11,6 +11,10 @@ In addition to that, Thermite includes a highly optimized **vectorized math libr
 <sup>1</sup> All vectors in an instruction set are the same length, regardless of size.
 </small></sub>
 
+# Current Status
+
+Refer to issue [#1](https://github.com/raygon-renderer/thermite/issues/1)
+
 # Motivation and Goals
 
 Thermite was conceived while working on Raygon renderer, when it was decided we needed a state of the art high-performance SIMD vector library focused on facilitating SoA algorithms. Using SIMD for AoS values was a nightmare, constantly shuffling vectors and performing unnecessary horizontal operations. We also weren't able to take advantage of AVX2 fully due to 3D vectors only using 3 or 4 lanes of a regular 128-bit register.
