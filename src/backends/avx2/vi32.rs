@@ -392,6 +392,13 @@ impl SimdSignedVector<AVX2> for i32x8<AVX2> {
     }
 
     #[inline(always)]
+    fn conditional_neg(self, mask: Mask<AVX2, impl SimdCastTo<AVX2, Self>>) -> Self {
+        let mask = SimdCastTo::cast_mask(mask);
+        // if the mask is true, all ones, that corresponds to -1
+        (self ^ mask.value()) + mask.value()
+    }
+
+    #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
         Self::new(_mm256_sign_epi32(self.value, _mm256_set1_epi32(-1)))
     }

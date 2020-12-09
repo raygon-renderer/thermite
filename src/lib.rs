@@ -676,6 +676,18 @@ pub trait SimdVector<S: Simd + ?Sized>:
     fn eq(self, other: Self) -> Mask<S, Self>;
     fn gt(self, other: Self) -> Mask<S, Self>;
 
+    /// Add `self` and `value` only if the corresponding lane in the given mask is true.
+    #[inline(always)]
+    fn conditional_add(self, value: Self, mask: Mask<S, impl SimdCastTo<S, Self>>) -> Self {
+        self + (value & SimdCastTo::cast_mask(mask).value())
+    }
+
+    /// Subtracts `value` from `self` only if the corresponding lane in the given mask is true.
+    #[inline(always)]
+    fn conditional_sub(self, value: Self, mask: Mask<S, impl SimdCastTo<S, Self>>) -> Self {
+        self - (value & SimdCastTo::cast_mask(mask).value())
+    }
+
     #[inline(always)]
     fn ne(self, other: Self) -> Mask<S, Self> {
         !self.eq(other)
@@ -837,6 +849,9 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
     fn signum(self) -> Self {
         self.is_negative().select(Self::neg_one(), Self::one())
     }
+
+    /// For each lane, if the mask is true, negate the value.
+    fn conditional_neg(self, mask: Mask<S, impl SimdCastTo<S, Self>>) -> Self;
 
     /// Test if positive, greater or equal to zero
     #[inline(always)]

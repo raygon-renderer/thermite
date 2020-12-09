@@ -1144,12 +1144,12 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
             let is_odd = (fl % two).ne(zero);
 
-            fl += one & is_odd.value(); // conditional add
+            fl = fl.conditional_add(one, is_odd);
 
             let sign = Self::Vf::neg_zero() & is_odd.value(); // if odd -0.0 or 0.0
             let mut dist = (x - fl) ^ sign; // -(x - fl) = (fl - x) if odd
 
-            dist -= one & dist.gt(half).value(); // conditional subtract
+            dist = dist.conditional_sub(one, dist.gt(half));
 
             (x ^ sign) * (dist * pi).sin_p::<P>()
         } else {

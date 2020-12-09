@@ -416,6 +416,11 @@ impl SimdSignedVector<AVX2> for f64x8<AVX2> {
     }
 
     #[inline(always)]
+    fn conditional_neg(self, mask: Mask<AVX2, impl SimdCastTo<AVX2, Self>>) -> Self {
+        self ^ (SimdCastTo::cast_mask(mask).value() & Self::neg_zero())
+    }
+
+    #[inline(always)]
     fn select_negative(self, neg: Self, pos: Self) -> Self {
         unsafe { self._mm_blendv(neg, pos) }
     }

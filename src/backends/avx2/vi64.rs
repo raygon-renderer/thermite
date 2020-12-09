@@ -475,6 +475,13 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
     }
 
     #[inline(always)]
+    fn conditional_neg(self, mask: Mask<AVX2, impl SimdCastTo<AVX2, Self>>) -> Self {
+        let mask = SimdCastTo::cast_mask(mask);
+        // if the mask is true, all ones, that corresponds to -1
+        (self ^ mask.value()) + mask.value()
+    }
+
+    #[inline(always)]
     unsafe fn _mm_neg(self) -> Self {
         (self ^ Self::neg_one()) + Self::one()
     }

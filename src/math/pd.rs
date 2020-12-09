@@ -497,7 +497,7 @@ where
 
         let blend = x.gt(Vf64::<S>::splat(SQRT_2 * 0.5));
 
-        x += !blend.value() & x; // conditional add
+        x = x.conditional_add(x, !blend);
         x -= one;
 
         let x2 = x * x;
@@ -826,7 +826,7 @@ where
                     reflected = is_neg;
 
                     res = reflected.select(refl_res, res);
-                    z ^= reflected.value() & Vf64::<S>::neg_zero(); // conditional negate
+                    z = z.conditional_neg(reflected);
 
                     break 'goto_positive;
                 }
@@ -848,7 +848,7 @@ where
             // recursively apply Γ(z+1)/z
             while is_neg.any() {
                 res = is_neg.select(res / mod_z, res);
-                mod_z += is_neg.value() & one; // conditional add
+                mod_z = mod_z.conditional_add(one, is_neg);
                 is_neg = mod_z.is_negative();
             }
 
@@ -944,7 +944,7 @@ where
         // It's actually on the lanczos sum rather than gamma, but same difference.
         if P::POLICY.avoid_branching || reflect.any() {
             t = reflect.select(<Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z).abs(), one);
-            z ^= Vf64::<S>::neg_zero() & reflect.value(); // conditional negate
+            z = z.conditional_neg(reflect);
         }
 
         let gh = Vf64::<S>::splat(LANCZOS_G - 0.5);
@@ -997,7 +997,7 @@ where
 
             let mut rem = x - x.floor();
 
-            rem -= rem.gt(Vf64::<S>::splat(0.5)).value() & one; // conditional subtract
+            rem = rem.conditional_sub(one, rem.gt(Vf64::<S>::splat(0.5)));
 
             let (s, c) = (rem * pi).sin_cos_p::<P>();
             let refl_res = pi * c / s;
@@ -1012,9 +1012,8 @@ where
         // Rescale to use asymptotic expansion
         let mut is_small = x.lt(lim);
         while is_small.any() {
-            // conditional subtract and add
-            result -= is_small.value() & (one / x);
-            x += is_small.value() & one;
+            result = result.conditional_sub(one / x, is_small);
+            x = x.conditional_add(one, is_small);
             is_small = x.lt(lim);
         }
 
@@ -1130,9 +1129,8 @@ fn ln_d_internal<S: Simd, P: Policy>(x0: Vf64<S>, p1: bool) -> Vf64<S> {
 
     let blend = x.gt(Vf64::<S>::splat(SQRT_2 * 0.5));
 
-    // conditional adds
-    x += !blend.value() & x;
-    fe += blend.value() & one;
+    x = x.conditional_add(x, !blend);
+    fe = fe.conditional_add(one, blend);
 
     let xp1 = x - one;
 

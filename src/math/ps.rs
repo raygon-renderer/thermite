@@ -741,7 +741,7 @@ where
                     reflected = is_neg;
 
                     res = reflected.select(refl_res, res);
-                    z ^= reflected.value() & Vf32::<S>::neg_zero(); // conditional negate
+                    z = z.conditional_neg(reflected);
 
                     break 'goto_positive;
                 }
@@ -763,7 +763,7 @@ where
             // recursively apply Γ(z+1)/z
             while is_neg.any() {
                 res = is_neg.select(res / mod_z, res);
-                mod_z += is_neg.value() & one; // conditional add
+                mod_z = mod_z.conditional_add(one, is_neg);
                 is_neg = mod_z.is_negative();
             }
 
@@ -855,7 +855,7 @@ where
 
         if P::POLICY.avoid_branching || reflect.any() {
             t = reflect.select(<Self as SimdVectorizedMathInternal<S>>::sin_pix::<P>(z).abs(), one);
-            z ^= Vf32::<S>::neg_zero() & reflect.value(); // conditional negate
+            z = z.conditional_neg(reflect);
         }
 
         let gh = Vf32::<S>::splat(LANCZOS_G - 0.5);
@@ -908,7 +908,7 @@ where
 
             let mut rem = x - x.floor();
 
-            rem -= rem.gt(Vf32::<S>::splat(0.5)).value() & one; // conditional subtract
+            rem = rem.conditional_sub(one, rem.gt(Vf32::<S>::splat(0.5)));
 
             let (s, c) = (rem * pi).sin_cos_p::<P>();
             let refl_res = pi * c / s;
@@ -923,9 +923,8 @@ where
         // Rescale to use asymptotic expansion
         let mut is_small = x.lt(lim);
         while is_small.any() {
-            // conditional subtract and add
-            result -= is_small.value() & (one / x);
-            x += is_small.value() & one;
+            result = result.conditional_sub(one / x, is_small);
+            x = x.conditional_add(one, is_small);
             is_small = x.lt(lim);
         }
 
@@ -1146,8 +1145,8 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
 
     let blend = x.gt(Vf32::<S>::splat(SQRT_2 * 0.5));
 
-    x += !blend.value() & x; // conditional addition
-    e += Vi32::<S>::from_bits(blend.value().into_bits() & Vu32::<S>::one()); // conditional (signed) addition
+    x = x.conditional_add(x, !blend);
+    e = e.conditional_add(Vi32::<S>::one(), blend);
 
     // TODO: Fix this cast when the type inference bug hits stable
     let fe = <Vf32<S> as SimdFromCast<S, Vi32<S>>>::from_cast(e);
