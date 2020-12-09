@@ -478,7 +478,7 @@ impl SimdSignedVector<AVX2> for i64x8<AVX2> {
     fn conditional_neg(self, mask: Mask<AVX2, impl SimdCastTo<AVX2, Self>>) -> Self {
         let mask = SimdCastTo::cast_mask(mask);
         // if the mask is true, all ones, that corresponds to -1
-        (self ^ mask.value()) + mask.value()
+        (self ^ mask.value()) + (mask.value() >> 63) // get hsb for +1
     }
 
     #[inline(always)]
