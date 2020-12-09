@@ -1222,7 +1222,6 @@
 <span id="1219">1219</span>
 <span id="1220">1220</span>
 <span id="1221">1221</span>
-<span id="1222">1222</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1967,7 +1966,7 @@
                     <span class="ident">reflected</span> <span class="op">=</span> <span class="ident">is_neg</span>;
 
                     <span class="ident">res</span> <span class="op">=</span> <span class="ident">reflected</span>.<span class="ident">select</span>(<span class="ident">refl_res</span>, <span class="ident">res</span>);
-                    <span class="ident">z</span> <span class="op">^</span><span class="op">=</span> <span class="ident">reflected</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>(); <span class="comment">// conditional negate</span>
+                    <span class="ident">z</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">conditional_neg</span>(<span class="ident">reflected</span>);
 
                     <span class="kw">break</span> <span class="lifetime">&#39;goto_positive</span>;
                 }
@@ -1989,7 +1988,7 @@
             <span class="comment">// recursively apply Γ(z+1)/z</span>
             <span class="kw">while</span> <span class="ident">is_neg</span>.<span class="ident">any</span>() {
                 <span class="ident">res</span> <span class="op">=</span> <span class="ident">is_neg</span>.<span class="ident">select</span>(<span class="ident">res</span> <span class="op">/</span> <span class="ident">mod_z</span>, <span class="ident">res</span>);
-                <span class="ident">mod_z</span> <span class="op">+</span><span class="op">=</span> <span class="ident">is_neg</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>; <span class="comment">// conditional add</span>
+                <span class="ident">mod_z</span> <span class="op">=</span> <span class="ident">mod_z</span>.<span class="ident">conditional_add</span>(<span class="ident">one</span>, <span class="ident">is_neg</span>);
                 <span class="ident">is_neg</span> <span class="op">=</span> <span class="ident">mod_z</span>.<span class="ident">is_negative</span>();
             }
 
@@ -2081,7 +2080,7 @@
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">reflect</span>.<span class="ident">any</span>() {
             <span class="ident">t</span> <span class="op">=</span> <span class="ident">reflect</span>.<span class="ident">select</span>(<span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">sin_pix</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">z</span>).<span class="ident">abs</span>(), <span class="ident">one</span>);
-            <span class="ident">z</span> <span class="op">^</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">reflect</span>.<span class="ident">value</span>(); <span class="comment">// conditional negate</span>
+            <span class="ident">z</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">conditional_neg</span>(<span class="ident">reflect</span>);
         }
 
         <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LANCZOS_G</span> <span class="op">-</span> <span class="number">0.5</span>);
@@ -2134,7 +2133,7 @@
 
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">rem</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">-</span> <span class="ident">x</span>.<span class="ident">floor</span>();
 
-            <span class="ident">rem</span> <span class="op">-</span><span class="op">=</span> <span class="ident">rem</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>)).<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>; <span class="comment">// conditional subtract</span>
+            <span class="ident">rem</span> <span class="op">=</span> <span class="ident">rem</span>.<span class="ident">conditional_sub</span>(<span class="ident">one</span>, <span class="ident">rem</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>)));
 
             <span class="kw">let</span> (<span class="ident">s</span>, <span class="ident">c</span>) <span class="op">=</span> (<span class="ident">rem</span> <span class="op">*</span> <span class="ident">pi</span>).<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
             <span class="kw">let</span> <span class="ident">refl_res</span> <span class="op">=</span> <span class="ident">pi</span> <span class="op">*</span> <span class="ident">c</span> <span class="op">/</span> <span class="ident">s</span>;
@@ -2149,9 +2148,8 @@
         <span class="comment">// Rescale to use asymptotic expansion</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">is_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
         <span class="kw">while</span> <span class="ident">is_small</span>.<span class="ident">any</span>() {
-            <span class="comment">// conditional subtract and add</span>
-            <span class="ident">result</span> <span class="op">-</span><span class="op">=</span> <span class="ident">is_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> (<span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>);
-            <span class="ident">x</span> <span class="op">+</span><span class="op">=</span> <span class="ident">is_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>;
+            <span class="ident">result</span> <span class="op">=</span> <span class="ident">result</span>.<span class="ident">conditional_sub</span>(<span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>, <span class="ident">is_small</span>);
+            <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">conditional_add</span>(<span class="ident">one</span>, <span class="ident">is_small</span>);
             <span class="ident">is_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
         }
 
@@ -2372,8 +2370,8 @@
 
     <span class="kw">let</span> <span class="ident">blend</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_2</span> <span class="op">*</span> <span class="number">0.5</span>));
 
-    <span class="ident">x</span> <span class="op">+</span><span class="op">=</span> <span class="op">!</span><span class="ident">blend</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">x</span>; <span class="comment">// conditional addition</span>
-    <span class="ident">e</span> <span class="op">+</span><span class="op">=</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">blend</span>.<span class="ident">value</span>().<span class="ident">into_bits</span>() <span class="op">&amp;</span> <span class="ident">Vu32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()); <span class="comment">// conditional (signed) addition</span>
+    <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">conditional_add</span>(<span class="ident">x</span>, <span class="op">!</span><span class="ident">blend</span>);
+    <span class="ident">e</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">conditional_add</span>(<span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>(), <span class="ident">blend</span>);
 
     <span class="comment">// TODO: Fix this cast when the type inference bug hits stable</span>
     <span class="kw">let</span> <span class="ident">fe</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">as</span> <span class="ident">SimdFromCast</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">Vi32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">from_cast</span>(<span class="ident">e</span>);

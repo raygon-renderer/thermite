@@ -469,6 +469,13 @@
 <span id="466">466</span>
 <span id="467">467</span>
 <span id="468">468</span>
+<span id="469">469</span>
+<span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -861,6 +868,13 @@
     <span class="kw">fn</span> <span class="ident">select_negative</span>(<span class="self">self</span>, <span class="ident">neg</span>: <span class="self">Self</span>, <span class="ident">pos</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// Uses the HSB (which is only set if negative) to select values</span>
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">_mm256_blendv_epi32x</span>(<span class="ident">pos</span>.<span class="ident">value</span>, <span class="ident">neg</span>.<span class="ident">value</span>, <span class="self">self</span>.<span class="ident">value</span>) })
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">conditional_neg</span>(<span class="self">self</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="kw">impl</span> <span class="ident">SimdCastTo</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">SimdCastTo</span>::<span class="ident">cast_mask</span>(<span class="ident">mask</span>);
+        <span class="comment">// if the mask is true, all ones, that corresponds to -1</span>
+        (<span class="self">self</span> <span class="op">^</span> <span class="ident">mask</span>.<span class="ident">value</span>()) <span class="op">+</span> <span class="ident">mask</span>.<span class="ident">value</span>()
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

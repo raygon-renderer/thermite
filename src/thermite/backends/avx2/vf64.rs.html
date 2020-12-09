@@ -710,6 +710,11 @@
 <span id="707">707</span>
 <span id="708">708</span>
 <span id="709">709</span>
+<span id="710">710</span>
+<span id="711">711</span>
+<span id="712">712</span>
+<span id="713">713</span>
+<span id="714">714</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
@@ -1126,6 +1131,11 @@
     <span class="kw">fn</span> <span class="ident">abs</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// clear sign bit</span>
         <span class="self">self</span> <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">splat</span>(<span class="ident">f64</span>::<span class="ident">from_bits</span>(<span class="number">0x7fffffffffffffff</span>))
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">conditional_neg</span>(<span class="self">self</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="kw">impl</span> <span class="ident">SimdCastTo</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">self</span> <span class="op">^</span> (<span class="ident">SimdCastTo</span>::<span class="ident">cast_mask</span>(<span class="ident">mask</span>).<span class="ident">value</span>() <span class="op">&amp;</span> <span class="self">Self</span>::<span class="ident">neg_zero</span>())
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
