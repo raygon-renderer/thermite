@@ -1046,7 +1046,7 @@
     <span class="kw">fn</span> <span class="ident">conditional_neg</span>(<span class="self">self</span>, <span class="ident">mask</span>: <span class="ident">Mask</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="kw">impl</span> <span class="ident">SimdCastTo</span><span class="op">&lt;</span><span class="ident">AVX2</span>, <span class="self">Self</span><span class="op">&gt;</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">SimdCastTo</span>::<span class="ident">cast_mask</span>(<span class="ident">mask</span>);
         <span class="comment">// if the mask is true, all ones, that corresponds to -1</span>
-        (<span class="self">self</span> <span class="op">^</span> <span class="ident">mask</span>.<span class="ident">value</span>()) <span class="op">+</span> <span class="ident">mask</span>.<span class="ident">value</span>()
+        (<span class="self">self</span> <span class="op">^</span> <span class="ident">mask</span>.<span class="ident">value</span>()) <span class="op">+</span> (<span class="ident">mask</span>.<span class="ident">value</span>() <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">63</span>) <span class="comment">// get hsb for +1</span>
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
