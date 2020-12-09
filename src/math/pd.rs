@@ -962,7 +962,14 @@ where
         // only compute powf once
         let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(half, quarter), z - half));
 
-        let normal_res = lanczos_sum * very_large.select(h * h, h) / zgh.exp_p::<P>();
+        let mut normal_res = lanczos_sum * very_large.select(h * h, h);
+
+        // save a couple cycles by avoiding this division, but worst-case precision is slightly worse
+        if P::POLICY.precision >= PrecisionPolicy::Best {
+            normal_res /= zgh.exp_p::<P>();
+        } else {
+            normal_res *= (-zgh).exp_p::<P>();
+        }
 
         // Tiny
         if P::POLICY.precision >= PrecisionPolicy::Best {
@@ -1089,16 +1096,13 @@ where
             0.5 * (10 + ((<Self as SimdVectorizedMathInternal<S>>::__DIGITS as i64 - 50) * 240) / 950) as f64,
         );
 
-        let is_small = x.lt(lim);
-        if P::POLICY.avoid_branching || is_small.any() {
-            let mut while_small = is_small;
-
-            while while_small.any() {
-                // conditional subtract and add
-                result -= while_small.value() & (one / x);
-                x += while_small.value() & one;
-                while_small = x.lt(lim);
-            }
+        // Rescale to use asymptotic expansion
+        let mut is_small = x.lt(lim);
+        while is_small.any() {
+            // conditional subtract and add
+            result -= is_small.value() & (one / x);
+            x += is_small.value() & one;
+            is_small = x.lt(lim);
         }
 
         x -= one;
