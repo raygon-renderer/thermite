@@ -252,6 +252,7 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn tgamma_p<P: Policy>(self) -> Self;
     fn lgamma_p<P: Policy>(self) -> Self;
     fn digamma_p<P: Policy>(self) -> Self;
+    fn beta_p<P: Policy>(self, y: Self) -> Self;
     fn next_float_p<P: Policy>(self) -> Self;
     fn prev_float_p<P: Policy>(self) -> Self;
     fn smoothstep_p<P: Policy>(self) -> Self;
@@ -430,6 +431,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// Computes the Digamma function `ψ(x)`, the first derivative of `ln(Γ(x))`, or `ln(Γ(x)) d/dx`
     fn digamma(self) -> Self;
 
+    /// Computes the Beta function `Β(x, y)`
+    fn beta(self, y: Self) -> Self;
+
     // /// Computes `Γ(x)/Γ(x + delta)`, possibly more efficiently than two invocations to tgamma.
     // fn tgamma_delta(self, delta: Self) -> Self;
 
@@ -601,6 +605,7 @@ where
     #[inline] fn tgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma::<P>(self)  }
     #[inline] fn lgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lgamma::<P>(self)  }
     #[inline] fn digamma_p<P: Policy>(self)          -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::digamma::<P>(self)  }
+    #[inline] fn beta_p<P: Policy>(self, y: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::beta::<P>(self, y)  }
     #[inline] fn next_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float::<P>(self)  }
     #[inline] fn prev_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float::<P>(self)  }
     #[inline] fn smoothstep_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep::<P>(self)  }
@@ -699,6 +704,7 @@ where
     #[inline(always)] fn tgamma(self)           -> Self         { self.tgamma_p::<DefaultPolicy>() }
     #[inline(always)] fn lgamma(self)           -> Self         { self.lgamma_p::<DefaultPolicy>() }
     #[inline(always)] fn digamma(self)          -> Self         { self.digamma_p::<DefaultPolicy>() }
+    #[inline(always)] fn beta(self, y: Self)    -> Self         { self.beta_p::<DefaultPolicy>(y) }
     #[inline(always)] fn next_float(self)       -> Self         { self.next_float_p::<DefaultPolicy>() }
     #[inline(always)] fn prev_float(self)       -> Self         { self.prev_float_p::<DefaultPolicy>() }
     #[inline(always)] fn smoothstep(self)       -> Self         { self.smoothstep_p::<DefaultPolicy>() }
@@ -1216,6 +1222,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn tgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn lgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn digamma<P: Policy>(x: Self::Vf) -> Self::Vf;
+    fn beta<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf;
 
     #[inline(always)]
     fn smoothstep<P: Policy>(x: Self::Vf) -> Self::Vf {

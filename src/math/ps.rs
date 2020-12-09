@@ -4,6 +4,7 @@ use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG
 
 const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
+const SQRT_E: f32 = 1.6487212707001281468486507878141635716537761007101480115750793116;
 
 impl<S: Simd> SimdVectorizedMathInternal<S> for f32
 where
@@ -805,31 +806,9 @@ where
 
         // Full
 
-        let n0 = Vf32::<S>::splat(58.52061591769095910314047740215847630266);
-        let n1 = Vf32::<S>::splat(182.5248962595894264831189414768236280862);
-        let n2 = Vf32::<S>::splat(211.0971093028510041839168287718170827259);
-        let n3 = Vf32::<S>::splat(112.2526547883668146736465390902227161763);
-        let n4 = Vf32::<S>::splat(27.5192015197455403062503721613097825345);
-        let n5 = Vf32::<S>::splat(2.50662858515256974113978724717473206342);
+        let gh = Vf32::<S>::splat(LANCZOS_G - 0.5);
 
-        let d1 = Vf32::<S>::splat(24.0);
-        let d2 = Vf32::<S>::splat(50.0);
-        let d3 = Vf32::<S>::splat(35.0);
-        let d4 = Vf32::<S>::splat(10.0);
-
-        let gh = Vf32::<S>::splat(1.428456135094165802001953125 - 0.5);
-
-        let lanczos_sum = z.poly_rational_p::<P>(
-            &[
-                58.52061591769095910314047740215847630266,
-                182.5248962595894264831189414768236280862,
-                211.0971093028510041839168287718170827259,
-                112.2526547883668146736465390902227161763,
-                27.5192015197455403062503721613097825345,
-                2.50662858515256974113978724717473206342,
-            ],
-            &[0.0, 24.0, 50.0, 35.0, 10.0, 1.0],
-        );
+        let lanczos_sum = z.poly_rational_p::<P>(LANCZOS_P, LANCZOS_Q);
 
         let zgh = z + gh;
         let lzgh = zgh.ln_p::<P>();
@@ -879,19 +858,9 @@ where
             z ^= Vf32::<S>::neg_zero() & reflect.value(); // conditional negate
         }
 
-        let gh = Vf32::<S>::splat(1.428456135094165802001953125 - 0.5);
+        let gh = Vf32::<S>::splat(LANCZOS_G - 0.5);
 
-        let mut lanczos_sum = z.poly_rational_p::<P>(
-            &[
-                14.0261432874996476619570577285003839357,
-                43.74732405540314316089531289293124360129,
-                50.59547402616588964511581430025589038612,
-                26.90456680562548195593733429204228910299,
-                6.595765571169314946316366571954421695196,
-                0.6007854010515290065101128585795542383721,
-            ],
-            &[0.0, 24.0, 50.0, 35.0, 10.0, 1.0],
-        );
+        let mut lanczos_sum = z.poly_rational_p::<P>(LANCZOS_P_EXPG_SCALED, LANCZOS_Q);
 
         // Full A
         let mut a = (z + gh).ln_p::<P>() - one;
@@ -972,6 +941,60 @@ where
         ]);
 
         result += z.nmul_adde(y, a);
+
+        result
+    }
+
+    #[inline(always)]
+    fn beta<P: Policy>(a: Self::Vf, b: Self::Vf) -> Self::Vf {
+        let zero = Vf32::<S>::zero();
+        let one = Vf32::<S>::one();
+
+        let is_valid = a.gt(zero) & b.gt(zero);
+
+        if P::POLICY.check_overflow && !P::POLICY.avoid_branching {
+            if is_valid.none() {
+                return Vf32::<S>::nan();
+            }
+        }
+
+        let mut prefix = one;
+        let c = a + b;
+
+        // if a < b then swap
+        let (a, b) = (a.max(b), a.min(b));
+
+        let mut result = a.poly_rational_p::<P>(LANCZOS_P_EXPG_SCALED, LANCZOS_Q)
+            * (b.poly_rational_p::<P>(LANCZOS_P_EXPG_SCALED, LANCZOS_Q)
+                / c.poly_rational_p::<P>(LANCZOS_P_EXPG_SCALED, LANCZOS_Q));
+
+        let gh = Vf32::<S>::splat(LANCZOS_G - 0.5);
+
+        let agh = a + gh;
+        let bgh = b + gh;
+        let cgh = c + gh;
+
+        let agh_d_cgh = agh / cgh;
+        let bgh_d_cgh = bgh / cgh;
+        let agh_p_bgh = agh * bgh;
+        let cgh_p_cgh = cgh * cgh;
+
+        let base = cgh
+            .gt(Vf32::<S>::splat(1e10))
+            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
+
+        result *= agh_d_cgh.powf_p::<P>(a - Vf32::<S>::splat(0.5) - b);
+        result *= base.powf_p::<P>(b) * Vf32::<S>::splat(SQRT_E);
+
+        if P::POLICY.precision >= PrecisionPolicy::Average {
+            result /= bgh.sqrt();
+        } else {
+            result *= bgh.rsqrt_precise();
+        }
+
+        if P::POLICY.check_overflow {
+            result = is_valid.select(result, Vf32::<S>::nan());
+        }
 
         result
     }
@@ -1175,3 +1198,25 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
 
     res
 }
+
+const LANCZOS_G: f32 = 1.428456135094165802001953125;
+
+const LANCZOS_P: &[f32] = &[
+    58.52061591769095910314047740215847630266,
+    182.5248962595894264831189414768236280862,
+    211.0971093028510041839168287718170827259,
+    112.2526547883668146736465390902227161763,
+    27.5192015197455403062503721613097825345,
+    2.50662858515256974113978724717473206342,
+];
+
+const LANCZOS_Q: &[f32] = &[0.0, 24.0, 50.0, 35.0, 10.0, 1.0];
+
+const LANCZOS_P_EXPG_SCALED: &[f32] = &[
+    14.0261432874996476619570577285003839357,
+    43.74732405540314316089531289293124360129,
+    50.59547402616588964511581430025589038612,
+    26.90456680562548195593733429204228910299,
+    6.595765571169314946316366571954421695196,
+    0.6007854010515290065101128585795542383721,
+];
