@@ -1485,6 +1485,27 @@
 <span id="1482">1482</span>
 <span id="1483">1483</span>
 <span id="1484">1484</span>
+<span id="1485">1485</span>
+<span id="1486">1486</span>
+<span id="1487">1487</span>
+<span id="1488">1488</span>
+<span id="1489">1489</span>
+<span id="1490">1490</span>
+<span id="1491">1491</span>
+<span id="1492">1492</span>
+<span id="1493">1493</span>
+<span id="1494">1494</span>
+<span id="1495">1495</span>
+<span id="1496">1496</span>
+<span id="1497">1497</span>
+<span id="1498">1498</span>
+<span id="1499">1499</span>
+<span id="1500">1500</span>
+<span id="1501">1501</span>
+<span id="1502">1502</span>
+<span id="1503">1503</span>
+<span id="1504">1504</span>
+<span id="1505">1505</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1492,6 +1513,7 @@
 
 <span class="kw">const</span> <span class="ident">EULERS_CONSTANT</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">5.772156649015328606065120900824024310e-01</span>;
 <span class="kw">const</span> <span class="ident">LN_PI</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>;
+<span class="kw">const</span> <span class="ident">SQRT_E</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">1.6487212707001281468486507878141635716537761007101480115750793116</span>;
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64</span>
 <span class="kw">where</span>
@@ -2378,66 +2400,9 @@
 
         <span class="comment">// Full</span>
 
-        <span class="kw">let</span> <span class="ident">n00</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">23531376880.41075968857200767445163675473</span>);
-        <span class="kw">let</span> <span class="ident">n01</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">42919803642.64909876895789904700198885093</span>);
-        <span class="kw">let</span> <span class="ident">n02</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">35711959237.35566804944018545154716670596</span>);
-        <span class="kw">let</span> <span class="ident">n03</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">17921034426.03720969991975575445893111267</span>);
-        <span class="kw">let</span> <span class="ident">n04</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6039542586.352028005064291644307297921070</span>);
-        <span class="kw">let</span> <span class="ident">n05</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1439720407.311721673663223072794912393972</span>);
-        <span class="kw">let</span> <span class="ident">n06</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">248874557.8620541565114603864132294232163</span>);
-        <span class="kw">let</span> <span class="ident">n07</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">31426415.58540019438061423162831820536287</span>);
-        <span class="kw">let</span> <span class="ident">n08</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2876370.628935372441225409051620849613599</span>);
-        <span class="kw">let</span> <span class="ident">n09</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">186056.2653952234950402949897160456992822</span>);
-        <span class="kw">let</span> <span class="ident">n10</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8071.672002365816210638002902272250613822</span>);
-        <span class="kw">let</span> <span class="ident">n11</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">210.8242777515793458725097339207133627117</span>);
-        <span class="kw">let</span> <span class="ident">n12</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.506628274631000270164908177133837338626</span>);
+        <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LANCZOS_G</span> <span class="op">-</span> <span class="number">0.5</span>);
 
-        <span class="kw">let</span> <span class="ident">d01</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">39916800.0</span>);
-        <span class="kw">let</span> <span class="ident">d02</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">120543840.0</span>);
-        <span class="kw">let</span> <span class="ident">d03</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">150917976.0</span>);
-        <span class="kw">let</span> <span class="ident">d04</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">105258076.0</span>);
-        <span class="kw">let</span> <span class="ident">d05</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">45995730.0</span>);
-        <span class="kw">let</span> <span class="ident">d06</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">13339535.0</span>);
-        <span class="kw">let</span> <span class="ident">d07</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2637558.0</span>);
-        <span class="kw">let</span> <span class="ident">d08</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">357423.0</span>);
-        <span class="kw">let</span> <span class="ident">d09</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">32670.0</span>);
-        <span class="kw">let</span> <span class="ident">d10</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1925.0</span>);
-        <span class="kw">let</span> <span class="ident">d11</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">66.0</span>);
-
-        <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.024680040776729583740234375</span> <span class="op">-</span> <span class="number">0.5</span>);
-
-        <span class="kw">let</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
-            <span class="kw-2">&amp;</span>[
-                <span class="number">23531376880.41075968857200767445163675473</span>,
-                <span class="number">42919803642.64909876895789904700198885093</span>,
-                <span class="number">35711959237.35566804944018545154716670596</span>,
-                <span class="number">17921034426.03720969991975575445893111267</span>,
-                <span class="number">6039542586.352028005064291644307297921070</span>,
-                <span class="number">1439720407.311721673663223072794912393972</span>,
-                <span class="number">248874557.8620541565114603864132294232163</span>,
-                <span class="number">31426415.58540019438061423162831820536287</span>,
-                <span class="number">2876370.628935372441225409051620849613599</span>,
-                <span class="number">186056.2653952234950402949897160456992822</span>,
-                <span class="number">8071.672002365816210638002902272250613822</span>,
-                <span class="number">210.8242777515793458725097339207133627117</span>,
-                <span class="number">2.506628274631000270164908177133837338626</span>,
-            ],
-            <span class="kw-2">&amp;</span>[
-                <span class="number">0.0</span>,
-                <span class="number">39916800.0</span>,
-                <span class="number">120543840.0</span>,
-                <span class="number">150917976.0</span>,
-                <span class="number">105258076.0</span>,
-                <span class="number">45995730.0</span>,
-                <span class="number">13339535.0</span>,
-                <span class="number">2637558.0</span>,
-                <span class="number">357423.0</span>,
-                <span class="number">32670.0</span>,
-                <span class="number">1925.0</span>,
-                <span class="number">66.0</span>,
-                <span class="number">1.0</span>,
-            ],
-        );
+        <span class="kw">let</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">LANCZOS_P</span>, <span class="ident">LANCZOS_Q</span>);
 
         <span class="kw">let</span> <span class="ident">zgh</span> <span class="op">=</span> <span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>;
         <span class="kw">let</span> <span class="ident">lzgh</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
@@ -2450,7 +2415,14 @@
         <span class="comment">// only compute powf once</span>
         <span class="kw">let</span> <span class="ident">h</span> <span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">z</span>.<span class="ident">mul_sube</span>(<span class="ident">half</span>, <span class="ident">quarter</span>), <span class="ident">z</span> <span class="op">-</span> <span class="ident">half</span>));
 
-        <span class="kw">let</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>) <span class="op">/</span> <span class="ident">zgh</span>.<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">normal_res</span> <span class="op">=</span> <span class="ident">lanczos_sum</span> <span class="op">*</span> <span class="ident">very_large</span>.<span class="ident">select</span>(<span class="ident">h</span> <span class="op">*</span> <span class="ident">h</span>, <span class="ident">h</span>);
+
+        <span class="comment">// save a couple cycles by avoiding this division, but worst-case precision is slightly worse</span>
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> {
+            <span class="ident">normal_res</span> <span class="op">/</span><span class="op">=</span> <span class="ident">zgh</span>.<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        } <span class="kw">else</span> {
+            <span class="ident">normal_res</span> <span class="kw-2">*</span><span class="op">=</span> (<span class="op">-</span><span class="ident">zgh</span>).<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        }
 
         <span class="comment">// Tiny</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> {
@@ -2484,40 +2456,9 @@
             <span class="ident">z</span> <span class="op">^</span><span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_zero</span>() <span class="op">&amp;</span> <span class="ident">reflect</span>.<span class="ident">value</span>(); <span class="comment">// conditional negate</span>
         }
 
-        <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">6.024680040776729583740234375</span> <span class="op">-</span> <span class="number">0.5</span>);
+        <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LANCZOS_G</span> <span class="op">-</span> <span class="number">0.5</span>);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(
-            <span class="kw-2">&amp;</span>[
-                <span class="number">56906521.91347156388090791033559122686859</span>,
-                <span class="number">103794043.1163445451906271053616070238554</span>,
-                <span class="number">86363131.28813859145546927288977868422342</span>,
-                <span class="number">43338889.32467613834773723740590533316085</span>,
-                <span class="number">14605578.08768506808414169982791359218571</span>,
-                <span class="number">3481712.15498064590882071018964774556468</span>,
-                <span class="number">601859.6171681098786670226533699352302507</span>,
-                <span class="number">75999.29304014542649875303443598909137092</span>,
-                <span class="number">6955.999602515376140356310115515198987526</span>,
-                <span class="number">449.9445569063168119446858607650988409623</span>,
-                <span class="number">19.51992788247617482847860966235652136208</span>,
-                <span class="number">0.5098416655656676188125178644804694509993</span>,
-                <span class="number">0.006061842346248906525783753964555936883222</span>,
-            ],
-            <span class="kw-2">&amp;</span>[
-                <span class="number">0.0</span>,
-                <span class="number">39916800.0</span>,
-                <span class="number">120543840.0</span>,
-                <span class="number">150917976.0</span>,
-                <span class="number">105258076.0</span>,
-                <span class="number">45995730.0</span>,
-                <span class="number">13339535.0</span>,
-                <span class="number">2637558.0</span>,
-                <span class="number">357423.0</span>,
-                <span class="number">32670.0</span>,
-                <span class="number">1925.0</span>,
-                <span class="number">66.0</span>,
-                <span class="number">1.0</span>,
-            ],
-        );
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">lanczos_sum</span> <span class="op">=</span> <span class="ident">z</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">LANCZOS_P_EXPG_SCALED</span>, <span class="ident">LANCZOS_Q</span>);
 
         <span class="comment">// Full A</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">a</span> <span class="op">=</span> (<span class="ident">z</span> <span class="op">+</span> <span class="ident">gh</span>).<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">-</span> <span class="ident">one</span>;
@@ -2577,16 +2518,13 @@
             <span class="number">0.5</span> <span class="op">*</span> (<span class="number">10</span> <span class="op">+</span> ((<span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">__DIGITS</span> <span class="kw">as</span> <span class="ident">i64</span> <span class="op">-</span> <span class="number">50</span>) <span class="op">*</span> <span class="number">240</span>) <span class="op">/</span> <span class="number">950</span>) <span class="kw">as</span> <span class="ident">f64</span>,
         );
 
-        <span class="kw">let</span> <span class="ident">is_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> <span class="op">|</span><span class="op">|</span> <span class="ident">is_small</span>.<span class="ident">any</span>() {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">while_small</span> <span class="op">=</span> <span class="ident">is_small</span>;
-
-            <span class="kw">while</span> <span class="ident">while_small</span>.<span class="ident">any</span>() {
-                <span class="comment">// conditional subtract and add</span>
-                <span class="ident">result</span> <span class="op">-</span><span class="op">=</span> <span class="ident">while_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> (<span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>);
-                <span class="ident">x</span> <span class="op">+</span><span class="op">=</span> <span class="ident">while_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>;
-                <span class="ident">while_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
-            }
+        <span class="comment">// Rescale to use asymptotic expansion</span>
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">is_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
+        <span class="kw">while</span> <span class="ident">is_small</span>.<span class="ident">any</span>() {
+            <span class="comment">// conditional subtract and add</span>
+            <span class="ident">result</span> <span class="op">-</span><span class="op">=</span> <span class="ident">is_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> (<span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>);
+            <span class="ident">x</span> <span class="op">+</span><span class="op">=</span> <span class="ident">is_small</span>.<span class="ident">value</span>() <span class="op">&amp;</span> <span class="ident">one</span>;
+            <span class="ident">is_small</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">lt</span>(<span class="ident">lim</span>);
         }
 
         <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">one</span>;
@@ -2606,6 +2544,60 @@
         ]);
 
         <span class="ident">result</span> <span class="op">+</span><span class="op">=</span> <span class="ident">z</span>.<span class="ident">nmul_adde</span>(<span class="ident">y</span>, <span class="ident">a</span>);
+
+        <span class="ident">result</span>
+    }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">beta</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">a</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">b</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+
+        <span class="kw">let</span> <span class="ident">is_valid</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">gt</span>(<span class="ident">zero</span>) <span class="op">&amp;</span> <span class="ident">b</span>.<span class="ident">gt</span>(<span class="ident">zero</span>);
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span> {
+            <span class="kw">if</span> <span class="ident">is_valid</span>.<span class="ident">none</span>() {
+                <span class="kw">return</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>();
+            }
+        }
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">prefix</span> <span class="op">=</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">a</span> <span class="op">+</span> <span class="ident">b</span>;
+
+        <span class="comment">// if a &lt; b then swap</span>
+        <span class="kw">let</span> (<span class="ident">a</span>, <span class="ident">b</span>) <span class="op">=</span> (<span class="ident">a</span>.<span class="ident">max</span>(<span class="ident">b</span>), <span class="ident">a</span>.<span class="ident">min</span>(<span class="ident">b</span>));
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">LANCZOS_P_EXPG_SCALED</span>, <span class="ident">LANCZOS_Q</span>)
+            <span class="op">*</span> (<span class="ident">b</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">LANCZOS_P_EXPG_SCALED</span>, <span class="ident">LANCZOS_Q</span>)
+                <span class="op">/</span> <span class="ident">c</span>.<span class="ident">poly_rational_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">LANCZOS_P_EXPG_SCALED</span>, <span class="ident">LANCZOS_Q</span>));
+
+        <span class="kw">let</span> <span class="ident">gh</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LANCZOS_G</span> <span class="op">-</span> <span class="number">0.5</span>);
+
+        <span class="kw">let</span> <span class="ident">agh</span> <span class="op">=</span> <span class="ident">a</span> <span class="op">+</span> <span class="ident">gh</span>;
+        <span class="kw">let</span> <span class="ident">bgh</span> <span class="op">=</span> <span class="ident">b</span> <span class="op">+</span> <span class="ident">gh</span>;
+        <span class="kw">let</span> <span class="ident">cgh</span> <span class="op">=</span> <span class="ident">c</span> <span class="op">+</span> <span class="ident">gh</span>;
+
+        <span class="kw">let</span> <span class="ident">agh_d_cgh</span> <span class="op">=</span> <span class="ident">agh</span> <span class="op">/</span> <span class="ident">cgh</span>;
+        <span class="kw">let</span> <span class="ident">bgh_d_cgh</span> <span class="op">=</span> <span class="ident">bgh</span> <span class="op">/</span> <span class="ident">cgh</span>;
+        <span class="kw">let</span> <span class="ident">agh_p_bgh</span> <span class="op">=</span> <span class="ident">agh</span> <span class="op">*</span> <span class="ident">bgh</span>;
+        <span class="kw">let</span> <span class="ident">cgh_p_cgh</span> <span class="op">=</span> <span class="ident">cgh</span> <span class="op">*</span> <span class="ident">cgh</span>;
+
+        <span class="kw">let</span> <span class="ident">base</span> <span class="op">=</span> <span class="ident">cgh</span>
+            .<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1e10</span>))
+            .<span class="ident">select</span>(<span class="ident">agh_d_cgh</span> <span class="op">*</span> <span class="ident">bgh_d_cgh</span>, <span class="ident">agh_p_bgh</span> <span class="op">/</span> <span class="ident">cgh_p_cgh</span>);
+
+        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>);
+        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>) <span class="op">*</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>);
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
+            <span class="ident">result</span> <span class="op">/</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>();
+        } <span class="kw">else</span> {
+            <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">rsqrt_precise</span>();
+        }
+
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
+            <span class="ident">result</span> <span class="op">=</span> <span class="ident">is_valid</span>.<span class="ident">select</span>(<span class="ident">result</span>, <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>());
+        }
 
         <span class="ident">result</span>
     }
@@ -2970,5 +2962,55 @@
 
     <span class="ident">z</span>
 }
+
+<span class="kw">const</span> <span class="ident">LANCZOS_G</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">6.024680040776729583740234375</span>;
+
+<span class="kw">const</span> <span class="ident">LANCZOS_P</span>: <span class="kw-2">&amp;</span>[<span class="ident">f64</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[
+    <span class="number">23531376880.41075968857200767445163675473</span>,
+    <span class="number">42919803642.64909876895789904700198885093</span>,
+    <span class="number">35711959237.35566804944018545154716670596</span>,
+    <span class="number">17921034426.03720969991975575445893111267</span>,
+    <span class="number">6039542586.352028005064291644307297921070</span>,
+    <span class="number">1439720407.311721673663223072794912393972</span>,
+    <span class="number">248874557.8620541565114603864132294232163</span>,
+    <span class="number">31426415.58540019438061423162831820536287</span>,
+    <span class="number">2876370.628935372441225409051620849613599</span>,
+    <span class="number">186056.2653952234950402949897160456992822</span>,
+    <span class="number">8071.672002365816210638002902272250613822</span>,
+    <span class="number">210.8242777515793458725097339207133627117</span>,
+    <span class="number">2.506628274631000270164908177133837338626</span>,
+];
+
+<span class="kw">const</span> <span class="ident">LANCZOS_Q</span>: <span class="kw-2">&amp;</span>[<span class="ident">f64</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[
+    <span class="number">0.0</span>,
+    <span class="number">39916800.0</span>,
+    <span class="number">120543840.0</span>,
+    <span class="number">150917976.0</span>,
+    <span class="number">105258076.0</span>,
+    <span class="number">45995730.0</span>,
+    <span class="number">13339535.0</span>,
+    <span class="number">2637558.0</span>,
+    <span class="number">357423.0</span>,
+    <span class="number">32670.0</span>,
+    <span class="number">1925.0</span>,
+    <span class="number">66.0</span>,
+    <span class="number">1.0</span>,
+];
+
+<span class="kw">const</span> <span class="ident">LANCZOS_P_EXPG_SCALED</span>: <span class="kw-2">&amp;</span>[<span class="ident">f64</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[
+    <span class="number">56906521.91347156388090791033559122686859</span>,
+    <span class="number">103794043.1163445451906271053616070238554</span>,
+    <span class="number">86363131.28813859145546927288977868422342</span>,
+    <span class="number">43338889.32467613834773723740590533316085</span>,
+    <span class="number">14605578.08768506808414169982791359218571</span>,
+    <span class="number">3481712.15498064590882071018964774556468</span>,
+    <span class="number">601859.6171681098786670226533699352302507</span>,
+    <span class="number">75999.29304014542649875303443598909137092</span>,
+    <span class="number">6955.999602515376140356310115515198987526</span>,
+    <span class="number">449.9445569063168119446858607650988409623</span>,
+    <span class="number">19.51992788247617482847860966235652136208</span>,
+    <span class="number">0.5098416655656676188125178644804694509993</span>,
+    <span class="number">0.006061842346248906525783753964555936883222</span>,
+];
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../";window.currentCrate = "thermite";</script><script src="../../../main.js"></script><script src="../../../source-script.js"></script><script src="../../../source-files.js"></script><script defer src="../../../search-index.js"></script></body></html>
