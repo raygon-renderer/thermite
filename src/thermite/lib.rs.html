@@ -1217,6 +1217,26 @@
 <span id="1214">1214</span>
 <span id="1215">1215</span>
 <span id="1216">1216</span>
+<span id="1217">1217</span>
+<span id="1218">1218</span>
+<span id="1219">1219</span>
+<span id="1220">1220</span>
+<span id="1221">1221</span>
+<span id="1222">1222</span>
+<span id="1223">1223</span>
+<span id="1224">1224</span>
+<span id="1225">1225</span>
+<span id="1226">1226</span>
+<span id="1227">1227</span>
+<span id="1228">1228</span>
+<span id="1229">1229</span>
+<span id="1230">1230</span>
+<span id="1231">1231</span>
+<span id="1232">1232</span>
+<span id="1233">1233</span>
+<span id="1234">1234</span>
+<span id="1235">1235</span>
+<span id="1236">1236</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
@@ -1243,8 +1263,8 @@
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">divider</span>::<span class="kw-2">*</span>;
 
 <span class="kw">mod</span> <span class="ident">pointer</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="self">self</span>::<span class="ident">pointer</span>::<span class="ident">VPtr</span>;
 <span class="kw">use</span> <span class="self">self</span>::<span class="ident">pointer</span>::<span class="kw-2">*</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="self">self</span>::<span class="ident">pointer</span>::{<span class="ident">AssociatedVector</span>, <span class="ident">VPtr</span>};
 
 <span class="kw">mod</span> <span class="ident">mask</span>;
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">mask</span>::{<span class="ident">BitMask</span>, <span class="ident">Mask</span>};
@@ -1266,6 +1286,9 @@
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;rng&quot;</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">rng</span>;
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">iter</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">iter</span>::<span class="kw-2">*</span>;
 
 <span class="kw">use</span> <span class="ident">core</span>::{<span class="ident">fmt</span>::<span class="ident">Debug</span>, <span class="ident">marker</span>::<span class="ident">PhantomData</span>, <span class="ident">mem</span>, <span class="ident">ops</span>::<span class="kw-2">*</span>, <span class="ident">ptr</span>};
 
@@ -1392,7 +1415,7 @@
 }
 
 <span class="doccomment">/// Basic shared vector interface</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Default</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> {
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="lifetime">&#39;static</span> <span class="op">+</span> <span class="ident">Sized</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Default</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> {
     <span class="kw">type</span> <span class="ident">Element</span>: <span class="ident">SimdElement</span>;
 
     <span class="doccomment">/// Size of element type in bytes</span>
@@ -2354,7 +2377,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 <span class="doccomment">///</span>
 <span class="doccomment">/// Take your time to look through this. All trait bounds contain methods and associated values which</span>
 <span class="doccomment">/// encapsulate all functionality for this crate.</span>
-<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">PartialEq</span> <span class="op">+</span> <span class="ident">Eq</span> {
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">Simd</span>: <span class="lifetime">&#39;static</span> <span class="op">+</span> <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="ident">Clone</span> <span class="op">+</span> <span class="ident">Copy</span> <span class="op">+</span> <span class="ident">PartialEq</span> <span class="op">+</span> <span class="ident">Eq</span> {
     <span class="kw">const</span> <span class="ident">INSTRSET</span>: <span class="ident">SimdInstructionSet</span>;
 
     <span class="comment">//type Vi8: SimdIntVector&lt;Self, Element = i8&gt; + SimdSignedVector&lt;Self, i8&gt; + SimdMasked&lt;Self, u8, Mask = Self::Vm8&gt;;</span>
@@ -2430,6 +2453,23 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Vusize</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Vusize</span>;
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Visize</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">Visize</span>;
+
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdAssociatedVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdElement</span> {
+    <span class="kw">type</span> <span class="ident">V</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>;
+}
+
+<span class="doccomment">/// Associated vector type for a scalar type</span>
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">AssociatedVector</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">SimdAssociatedVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">V</span>;
+
+<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">impl_associated</span> {
+    ($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span>:<span class="ident">ident</span>),<span class="kw-2">*</span>) <span class="op">=</span><span class="op">&gt;</span> {<span class="ident">paste</span>::<span class="macro">paste</span><span class="macro">!</span>{$(
+        <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SimdAssociatedVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span> {
+            <span class="kw">type</span> <span class="ident">V</span> <span class="op">=</span> <span class="op">&lt;</span><span class="ident">S</span> <span class="kw">as</span> <span class="ident">Simd</span><span class="op">&gt;</span>::[<span class="op">&lt;</span><span class="ident">V</span> <span class="macro-nonterminal">$</span><span class="macro-nonterminal">ty</span><span class="op">&gt;</span>];
+        }
+    )<span class="kw-2">*</span>}};
+}
+
+<span class="macro">impl_associated</span><span class="macro">!</span>(<span class="ident">i32</span>, <span class="ident">i64</span>, <span class="ident">u32</span>, <span class="ident">u64</span>, <span class="ident">f32</span>, <span class="ident">f64</span>);
 
 <span class="comment">// Re-exported for procedural macro</span>
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
