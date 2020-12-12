@@ -1,9 +1,9 @@
 use crate::*;
 
 /// Umbrella trait for SIMD vector element bounds
-pub trait SimdElement: mask::Truthy + CastFromAll + Clone + Debug + Copy + Default + Send + Sync {}
+pub trait SimdElement: 'static + mask::Truthy + CastFromAll + Clone + Debug + Copy + Default + Send + Sync {}
 
-impl<T> SimdElement for T where T: mask::Truthy + CastFromAll + Clone + Debug + Copy + Default + Send + Sync {}
+impl<T> SimdElement for T where T: 'static + mask::Truthy + CastFromAll + Clone + Debug + Copy + Default + Send + Sync {}
 
 macro_rules! decl_cast_from_all {
     ($($ty:ty),*) => {

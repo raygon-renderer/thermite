@@ -23,8 +23,8 @@ mod divider;
 pub use divider::*;
 
 mod pointer;
+pub use self::pointer::VPtr;
 use self::pointer::*;
-pub use self::pointer::{AssociatedVector, VPtr};
 
 mod mask;
 pub use mask::{BitMask, Mask};
@@ -46,6 +46,9 @@ impl<S: Simd, T> SimdVectorizedMath<S> for T where T: SimdFloatVector<S> {}
 
 #[cfg(feature = "rng")]
 pub mod rng;
+
+pub mod iter;
+pub use iter::*;
 
 use core::{fmt::Debug, marker::PhantomData, mem, ops::*, ptr};
 
@@ -172,7 +175,7 @@ macro_rules! shuffle {
 }
 
 /// Basic shared vector interface
-pub trait SimdVectorBase<S: Simd + ?Sized>: Sized + Copy + Debug + Default + Send + Sync {
+pub trait SimdVectorBase<S: Simd + ?Sized>: 'static + Sized + Copy + Debug + Default + Send + Sync {
     type Element: SimdElement;
 
     /// Size of element type in bytes
@@ -1134,7 +1137,7 @@ impl SimdInstructionSet {
 ///
 /// Take your time to look through this. All trait bounds contain methods and associated values which
 /// encapsulate all functionality for this crate.
-pub trait Simd: Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
+pub trait Simd: 'static + Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     const INSTRSET: SimdInstructionSet;
 
     //type Vi8: SimdIntVector<Self, Element = i8> + SimdSignedVector<Self, i8> + SimdMasked<Self, u8, Mask = Self::Vm8>;
@@ -1210,6 +1213,23 @@ pub type Vf64<S> = <S as Simd>::Vf64;
 
 pub type Vusize<S> = <S as Simd>::Vusize;
 pub type Visize<S> = <S as Simd>::Visize;
+
+pub trait SimdAssociatedVector<S: Simd>: SimdElement {
+    type V: SimdVectorBase<S>;
+}
+
+/// Associated vector type for a scalar type
+pub type AssociatedVector<S, T> = <T as SimdAssociatedVector<S>>::V;
+
+macro_rules! impl_associated {
+    ($($ty:ident),*) => {paste::paste!{$(
+        impl<S: Simd> SimdAssociatedVector<S> for $ty {
+            type V = <S as Simd>::[<V $ty>];
+        }
+    )*}};
+}
+
+impl_associated!(i32, i64, u32, u64, f32, f64);
 
 // Re-exported for procedural macro
 #[doc(hidden)]

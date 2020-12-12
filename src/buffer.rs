@@ -58,6 +58,16 @@ impl<S: Simd, V: SimdVectorBase<S>> VectorBuffer<S, V> {
         }
     }
 
+    #[inline(always)]
+    pub fn iter_vectors<'a>(&'a self) -> SimdSliceIter<'a, S, V> {
+        SimdSliceIter::new(self.as_slice())
+    }
+
+    #[inline(always)]
+    pub fn iter_vectors_mut<'a>(&'a mut self) -> AlignedMutIter<'a, S, V> {
+        unsafe { AlignedMut::new_unchecked(self.as_mut_slice()).iter_mut() }
+    }
+
     /// Gathers values from the buffer using more efficient instructions where possible
     #[inline(always)]
     pub fn gather(&self, indices: S::Vu32) -> V

@@ -13,7 +13,7 @@ pub struct VPtr<S: Simd, T> {
 impl<S: Simd, T> VPtr<S, T>
 where
     T: SimdAssociatedVector<S>,
-    S::Vusize: SimdPtrInternal<S, <T as SimdAssociatedVector<S>>::V>,
+    S::Vusize: SimdPtrInternal<S, AssociatedVector<S, T>>,
 {
     #[inline(always)]
     pub fn splat(ptr: *mut T) -> Self {
@@ -61,30 +61,13 @@ where
     }
 }
 
-pub trait SimdAssociatedVector<S: Simd> {
-    type V: SimdVector<S>;
-}
-
-/// Associated vector type for a scalar type
-pub type AssociatedVector<S, T> = <T as SimdAssociatedVector<S>>::V;
-
-macro_rules! impl_associated {
-    ($($ty:ident),*) => {paste::paste!{$(
-        impl<S: Simd> SimdAssociatedVector<S> for $ty {
-            type V = <S as Simd>::[<V $ty>];
-        }
-    )*}};
-}
-
-impl_associated!(i32, u32, u64, f32, f64);
-
 #[doc(hidden)]
 pub trait AsUsize: Sized {
     fn as_usize(self) -> usize;
 }
 
 #[doc(hidden)]
-pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVector<S>>: SimdVector<S>
+pub trait SimdPtrInternal<S: Simd + ?Sized, V: SimdVectorBase<S>>: SimdVector<S>
 where
     <Self as SimdVectorBase<S>>::Element: AsUsize,
 {
