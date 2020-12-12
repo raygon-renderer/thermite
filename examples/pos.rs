@@ -20,6 +20,7 @@ pub struct System<S: Simd> {
     pub vel: Vector2D<S>,
 }
 
+#[dispatch]
 impl<S: Simd> System<S> {
     pub fn update(&mut self, dt: f32) {
         let dt = Vf32::<S>::splat(dt);
