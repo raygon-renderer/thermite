@@ -5,7 +5,7 @@ Thermite SIMD: Melt your CPU
 
 Thermite is a WIP SIMD library focused on providing portable SIMD acceleration of SoA (Structure of Arrays) algorithms, using consistent-length<sup>1</sup> SIMD vectors for lockstep iteration and computation.
 
-Thermite provides highly optimized **feature-rich backends** for SSE2, SSE4.2, AVX and AVX2, with planned support for AVX512, Aarch64, and WASM SIMD extensions.
+Thermite provides highly optimized **feature-rich backends** for SSE2, SSE4.2, AVX and AVX2, with planned support for AVX512, ARM/Aarch64 NEON, and WASM SIMD extensions.
 
 In addition to that, Thermite includes a highly optimized **vectorized math library** with many special math functions and algorithms, specialized for both single and double precision.
 
