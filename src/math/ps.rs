@@ -39,7 +39,7 @@ where
 
         let mut c = x2
             .poly_p::<P>(&[4.166664568298827E-2, -1.388731625493765E-3, 2.443315711809948E-5])
-            .mul_adde(x2 * x2, Vf32::<S>::splat(0.5).nmul_add(x2, Vf32::<S>::one()));
+            .mul_adde(x2 * x2, Vf32::<S>::splat(0.5).nmul_adde(x2, Vf32::<S>::one()));
 
         // swap sin and cos if odd quadrant
         let swap = (q & Vu32::<S>::one()).ne(Vu32::<S>::zero());
@@ -1023,8 +1023,8 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
             r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
 
-            x = r.nmul_add(ln2f_hi, x); // x -= r * ln2f_hi;
-            x = r.nmul_add(ln2f_lo, x); // x -= r * ln2f_lo;
+            x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
+            x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
 
             if mode == ExpMode::Exph {
                 r -= Vf32::<S>::one();
@@ -1046,8 +1046,8 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
             r = (x0 * Vf32::<S>::splat(LN_10 * LOG2_E)).round();
 
-            x = r.nmul_add(log10_2_hi, x); // x -= r * log10_2_hi;
-            x = r.nmul_add(log10_2_lo, x); // x -= r * log10_2_lo;
+            x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
+            x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
             x *= Vf32::<S>::splat(LN_10);
         }
     }
