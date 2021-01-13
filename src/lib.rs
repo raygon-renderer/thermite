@@ -1108,12 +1108,22 @@ where
 /// Enum of supported instruction sets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimdInstructionSet {
+    Scalar,
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     SSE2,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     SSE42,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     AVX,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     AVX2,
-    //AVX512F,
-    //AVX512FBW,
+
+    #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+    NEON,
+
+    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    WASM32,
 }
 
 impl SimdInstructionSet {

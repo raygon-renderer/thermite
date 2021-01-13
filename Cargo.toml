@@ -10,6 +10,8 @@ edition = "2018"
 
 [features]
 default = ["alloc", "math", "rng", "emulate_fma"]
+neon = ["thermite-dispatch/neon"]
+wasm32 = ["thermite-dispatch/wasm32"]
 alloc = []
 nightly = []
 math = []
@@ -18,19 +20,18 @@ emulate_fma = []
 
 [dependencies]
 thermite-dispatch = { path = "./dispatch" }
-paste = "1.0.3"
+paste = "1"
 half = "1.6.0"
 
 [dev-dependencies]
 criterion = "0.3"
 libm = "0.2.1"
 plotly = "0.6.0"
-rand = "0.7.3"
-rand_xoshiro = "0.4.0"
-no-panic = "0.1.14"
+rand = "0.8"
+rand_xoshiro = "0.6.0"
+no-panic = "0.1"
 
 [profile.dev]
-incremental = false
 opt-level = 2
 
 [profile.release]

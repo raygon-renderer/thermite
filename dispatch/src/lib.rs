@@ -15,12 +15,19 @@ use syn::{
     TypeParam, WherePredicate,
 };
 
+#[cfg(not(any(feature = "neon", feature = "wasm")))]
 static BACKENDS: &[(&str, &str)] = &[
     ("SSE2", "sse2"),
     ("SSE42", "sse4.2"),
     ("AVX", "avx"),
     ("AVX2", "avx2,fma"),
 ];
+
+#[cfg(feature = "neon")]
+static BACKENDS: &[(&str, &str)] = &[("NEON", "neon")];
+
+#[cfg(feature = "wasm32")]
+static BACKENDS: &[(&str, &str)] = &[("WASM32", "simd128")];
 
 type PunctuatedAttributes = Punctuated<NestedMeta, Token![,]>;
 

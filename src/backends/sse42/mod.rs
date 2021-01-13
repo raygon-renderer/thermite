@@ -18,6 +18,8 @@ pub(crate) mod polyfills;
 use super::polyfills::*;
 use polyfills::*;
 
+mod vf32;
+
 /*
 //mod vf32;
 //mod vf64;
