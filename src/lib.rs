@@ -9,7 +9,7 @@ pub use thermite_dispatch::dispatch;
 mod macros;
 
 #[macro_use]
-mod call;
+mod runtime;
 
 use half::f16;
 
