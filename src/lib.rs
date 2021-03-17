@@ -1127,6 +1127,36 @@ pub enum SimdInstructionSet {
 }
 
 impl SimdInstructionSet {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    pub fn detect_runtime() -> SimdInstructionSet {
+        if core_detect::is_x86_feature_detected!("fma") {
+            // TODO: AVX512
+            if core_detect::is_x86_feature_detected!("avx2") {
+                return SimdInstructionSet::AVX2;
+            }
+        }
+
+        if core_detect::is_x86_feature_detected!("avx") {
+            SimdInstructionSet::AVX
+        } else if core_detect::is_x86_feature_detected!("sse4.2") {
+            SimdInstructionSet::SSE42
+        } else if core_detect::is_x86_feature_detected!("sse2") {
+            SimdInstructionSet::SSE2
+        } else {
+            SimdInstructionSet::Scalar
+        }
+    }
+
+    #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+    pub fn detect_runtime() -> SimdInstructionSet {
+        SimdInstructionSet::NEON
+    }
+
+    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    pub fn detect_runtime() -> SimdInstructionSet {
+        SimdInstructionSet::WASM32
+    }
+
     /// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.
     pub const fn has_true_fma(self) -> bool {
         match self {
