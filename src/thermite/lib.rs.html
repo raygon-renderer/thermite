@@ -1289,14 +1289,6 @@
 <span id="1286">1286</span>
 <span id="1287">1287</span>
 <span id="1288">1288</span>
-<span id="1289">1289</span>
-<span id="1290">1290</span>
-<span id="1291">1291</span>
-<span id="1292">1292</span>
-<span id="1293">1293</span>
-<span id="1294">1294</span>
-<span id="1295">1295</span>
-<span id="1296">1296</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
@@ -2308,21 +2300,13 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// Calculates the square-root of each element in the vector.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: This operation can be quite slow, so if you only need an approximation of `sqrt(x)` consider</span>
-    <span class="doccomment">/// using `rsqrt` or `rsqrt_precise`, which compute `1/sqrt(x)`. `sqrt(x) = x/sqrt(x) ≈ x * x.rsqrt()`</span>
+    <span class="doccomment">/// using `rsqrt` or `invsqrt`, which compute `1/sqrt(x)`. `sqrt(x) = x/sqrt(x) ≈ x * x.rsqrt()`</span>
     <span class="kw">fn</span> <span class="ident">sqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Compute the approximate reciprocal of the square root `1/sqrt(x)`</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">rsqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">self</span>.<span class="ident">sqrt</span>().<span class="ident">rcp</span>()
-    }
-
-    <span class="doccomment">/// A more precise `1/sqrt(x)` variation, which may use faster instructions where possible.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// **NOTE**: This is still an approximation, but uses Newton&#39;s method to improve accuracy.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">rsqrt_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>.<span class="ident">sqrt</span>()
     }
 
     <span class="doccomment">/// Computes the approximate reciprocal/inverse of each value</span>

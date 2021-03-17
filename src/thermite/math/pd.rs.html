@@ -2589,7 +2589,7 @@
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
             <span class="ident">result</span> <span class="op">/</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>();
         } <span class="kw">else</span> {
-            <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">rsqrt_precise</span>();
+            <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">invsqrt_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
         }
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {

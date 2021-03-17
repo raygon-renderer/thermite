@@ -1497,6 +1497,38 @@
 <span id="1494">1494</span>
 <span id="1495">1495</span>
 <span id="1496">1496</span>
+<span id="1497">1497</span>
+<span id="1498">1498</span>
+<span id="1499">1499</span>
+<span id="1500">1500</span>
+<span id="1501">1501</span>
+<span id="1502">1502</span>
+<span id="1503">1503</span>
+<span id="1504">1504</span>
+<span id="1505">1505</span>
+<span id="1506">1506</span>
+<span id="1507">1507</span>
+<span id="1508">1508</span>
+<span id="1509">1509</span>
+<span id="1510">1510</span>
+<span id="1511">1511</span>
+<span id="1512">1512</span>
+<span id="1513">1513</span>
+<span id="1514">1514</span>
+<span id="1515">1515</span>
+<span id="1516">1516</span>
+<span id="1517">1517</span>
+<span id="1518">1518</span>
+<span id="1519">1519</span>
+<span id="1520">1520</span>
+<span id="1521">1521</span>
+<span id="1522">1522</span>
+<span id="1523">1523</span>
+<span id="1524">1524</span>
+<span id="1525">1525</span>
+<span id="1526">1526</span>
+<span id="1527">1527</span>
+<span id="1528">1528</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1741,6 +1773,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">exp10_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">exp_m1_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">cbrt_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="kw">fn</span> <span class="ident">invsqrt_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">powf_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">powiv_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">powi_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -1886,6 +1919,9 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="doccomment">/// Computes the cubic-root of each lane in a vector.</span>
     <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+
+    <span class="doccomment">/// Computes the approximate inverse square root (`1/sqrt(x)`)</span>
+    <span class="kw">fn</span> <span class="ident">invsqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents</span>
     <span class="kw">fn</span> <span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -2096,6 +2132,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">exp10_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)            <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">exp10</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">exp_m1_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">exp_m1</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">cbrt_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)             <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">cbrt</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">invsqrt_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)          <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">invsqrt</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">powf_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>)    <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">powf</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">e</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">ln_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)               <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">ln</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">ln_1p_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>)            <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedMathInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">ln_1p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>)  }
@@ -2195,6 +2232,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">exp10</span>(<span class="self">self</span>)            <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">exp10_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">exp_m1</span>(<span class="self">self</span>)           <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">exp_m1_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>)             <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">cbrt_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">invsqrt</span>(<span class="self">self</span>)          <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">invsqrt_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">e</span>: <span class="self">Self</span>)    <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">e</span>) }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">ln</span>(<span class="self">self</span>)               <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">ln_1p</span>(<span class="self">self</span>)            <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>         { <span class="self">self</span>.<span class="ident">ln_1p_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>() }
@@ -2706,6 +2744,32 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     }
 
     <span class="kw">fn</span> <span class="ident">cbrt</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">invsqrt</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="comment">// double-precision doesn&#39;t actually have an rsqrt (yet?)</span>
+        <span class="kw">if</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">ELEMENT_SIZE</span> <span class="op">!</span><span class="op">=</span> <span class="number">4</span> {
+            <span class="kw">return</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>();
+        }
+
+        <span class="kw">let</span> <span class="ident">iterations</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> {
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">0</span>,
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">1</span>,
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">2</span>,
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Reference</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">return</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="ident">x</span>.<span class="ident">sqrt</span>(),
+        };
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">rsqrt</span>();
+
+        <span class="kw">let</span> <span class="ident">nx2</span> <span class="op">=</span> <span class="ident">x</span> <span class="op">*</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="op">-</span><span class="number">0.5</span>);
+        <span class="kw">let</span> <span class="ident">threehalfs</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">1.5</span>);
+
+        <span class="kw">for</span> <span class="kw">_</span> <span class="kw">in</span> <span class="number">0</span>..<span class="ident">iterations</span> {
+            <span class="ident">y</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> (<span class="ident">y</span> <span class="op">*</span> <span class="ident">y</span>).<span class="ident">mul_adde</span>(<span class="ident">nx2</span>, <span class="ident">threehalfs</span>);
+        }
+
+        <span class="ident">y</span>
+    }
 
     <span class="kw">fn</span> <span class="ident">powf</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">e</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
