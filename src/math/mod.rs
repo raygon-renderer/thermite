@@ -6,9 +6,10 @@ use crate::*;
 
 pub mod compensated;
 pub mod complex;
+pub mod poly;
+
 #[cfg(feature = "nightly")]
 pub mod hyperdual;
-pub mod poly;
 
 mod pd;
 mod ps;

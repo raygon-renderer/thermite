@@ -2,17 +2,36 @@
 
 use crate::*;
 
-use core::marker::PhantomData;
+use core::{fmt, marker::PhantomData};
 
-#[derive(Debug, Clone, Copy)]
-pub struct Complex<S: Simd, V: SimdFloatVector<S>> {
+pub struct Complex<S: Simd, V: SimdFloatVector<S>, P: Policy = policies::Performance> {
     pub re: V,
     pub im: V,
-    _simd: PhantomData<S>,
+    _simd: PhantomData<(S, P)>,
+}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Clone for Complex<S, V, P> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Copy for Complex<S, V, P> {}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> fmt::Debug for Complex<S, V, P>
+where
+    V: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Complex")
+            .field("re", &self.re)
+            .field("im", &self.im)
+            .finish()
+    }
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
     #[inline(always)]
     pub fn new(re: V, im: V) -> Self {
         Self {
@@ -54,20 +73,20 @@ impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V> {
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Complex<S, V>
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P>
 where
     V: SimdVectorizedMath<S>,
 {
     /// Returns the square of the norm
     #[inline(always)]
     pub fn norm_sqr(self) -> V {
-        self.re.mul_add(self.re, self.im * self.im)
+        self.re.mul_adde(self.re, self.im * self.im)
     }
 
     /// Calculate |self|
     #[inline(always)]
     pub fn norm(self) -> V {
-        self.re.hypot(self.im)
+        self.re.hypot_p::<P>(self.im)
     }
 
     /// Multiplies `self` by the scalar `t`.
@@ -79,6 +98,8 @@ where
     }
 
     /// Divides `self` by the scalar `t`.
+    ///
+    /// NOTE: This will result in undefined values if `t` is zero.
     #[inline(always)]
     pub fn unscale(self, t: V) -> Self {
         self.scale(V::one() / t)
@@ -99,8 +120,8 @@ where
 
     pub fn mul_add(self, m: Self, a: Self) -> Self {
         Self::new(
-            self.im.nmul_add(m.im, self.re.mul_add(m.re, a.re)),
-            self.re.mul_add(m.im, self.im.mul_add(m.re, a.im)),
+            self.im.nmul_adde(m.im, self.re.mul_adde(m.re, a.re)),
+            self.re.mul_adde(m.im, self.im.mul_adde(m.re, a.im)),
         )
     }
 
@@ -115,7 +136,7 @@ where
     /// Calculate the principal Arg of self.
     #[inline(always)]
     pub fn arg(self) -> V {
-        self.im.atan2(self.re)
+        self.im.atan2_p::<P>(self.re)
     }
 
     /// Convert to polar form (r, theta), such that
@@ -128,7 +149,7 @@ where
     /// Convert a polar representation into a complex number.
     #[inline(always)]
     pub fn from_polar(r: V, theta: V) -> Self {
-        let (s, c) = theta.sin_cos();
+        let (s, c) = theta.sin_cos_p::<P>();
         Self::new(r * c, r * s)
     }
 
@@ -137,7 +158,7 @@ where
     pub fn exp(self) -> Self {
         // formula: e^(a + bi) = e^a (cos(b) + i*sin(b))
         // = from_polar(e^a, b)
-        Self::from_polar(self.re.exp(), self.im)
+        Self::from_polar(self.re.exp_p::<P>(), self.im)
     }
 
     /// Computes the principal value of natural logarithm of `self`.
@@ -150,7 +171,7 @@ where
     pub fn ln(self) -> Self {
         // formula: ln(z) = ln|z| + i*arg(z)
         let (r, theta) = self.to_polar();
-        Self::new(r.ln(), theta)
+        Self::new(r.ln_p::<P>(), theta)
     }
 
     pub fn sqrt(self) -> Self {
@@ -168,7 +189,7 @@ where
         // formula: x^y = (ρ e^(i θ))^y = ρ^y e^(i θ y)
         // = from_polar(ρ^y, θ y)
         let (r, theta) = self.to_polar();
-        Self::from_polar(r.powf(exp), theta * exp)
+        Self::from_polar(r.powf_p::<P>(exp), theta * exp)
     }
 
     /// Returns the logarithm of `self` with respect to an arbitrary base.
@@ -178,8 +199,8 @@ where
         // = log_y(ρ) + log_y(e^(i θ)) = log_y(ρ) + ln(e^(i θ)) / ln(y)
         // = log_y(ρ) + i θ / ln(y)
         let (r, theta) = self.to_polar();
-        let d = V::one() / base.ln();
-        Self::new(r.ln() * d, theta * d)
+        let d = V::one() / base.ln_p::<P>();
+        Self::new(r.ln_p::<P>() * d, theta * d)
     }
 
     /// Raises `self` to a complex power.
@@ -198,8 +219,8 @@ where
         // = from_polar(p^c e^(−d θ), c θ + d ln(ρ))
         let (r, theta) = self.to_polar();
         Self::from_polar(
-            r.powf(exp.re) * (-exp.im * theta).exp(),
-            exp.re * theta + exp.im * r.ln(),
+            r.powf_p::<P>(exp.re) * (-exp.im * theta).exp_p::<P>(),
+            exp.re * theta + exp.im * r.ln_p::<P>(),
         )
     }
 
@@ -208,22 +229,22 @@ where
     pub fn expf(self, base: V) -> Self {
         // formula: x^(a+bi) = x^a x^bi = x^a e^(b ln(x) i)
         // = from_polar(x^a, b ln(x))
-        Self::from_polar(base.powf(self.re), self.im * base.ln())
+        Self::from_polar(base.powf_p::<P>(self.re), self.im * base.ln_p::<P>())
     }
     /// Computes the sine of `self`.
     #[inline(always)]
     pub fn sin(self) -> Self {
         // formula: sin(a + bi) = sin(a)cosh(b) + i*cos(a)sinh(b)
-        let (s, c) = self.re.sin_cos();
-        Self::new(s * self.im.cosh(), c * self.im.sinh())
+        let (s, c) = self.re.sin_cos_p::<P>();
+        Self::new(s * self.im.cosh_p::<P>(), c * self.im.sinh_p::<P>())
     }
 
     /// Computes the cosine of `self`.
     #[inline]
     pub fn cos(self) -> Self {
         // formula: cos(a + bi) = cos(a)cosh(b) - i*sin(a)sinh(b)
-        let (s, c) = self.re.sin_cos();
-        Self::new(c * self.im.cosh(), -s * self.im.sinh())
+        let (s, c) = self.re.sin_cos_p::<P>();
+        Self::new(c * self.im.cosh_p::<P>(), -s * self.im.sinh_p::<P>())
     }
 
     /// Computes the tangent of `self`.
@@ -231,8 +252,8 @@ where
     pub fn tan(self) -> Self {
         // formula: tan(a + bi) = (sin(2a) + i*sinh(2b))/(cos(2a) + cosh(2b))
         let (two_re, two_im) = (self.re + self.re, self.im + self.im);
-        let (s, c) = two_re.sin_cos();
-        Self::new(s, two_im.sinh()).unscale(c + two_im.cosh())
+        let (s, c) = two_re.sin_cos_p::<P>();
+        Self::new(s, two_im.sinh()).unscale(c + two_im.cosh_p::<P>())
     }
 
     /// Computes the principal value of the inverse sine of `self`.
@@ -278,29 +299,38 @@ where
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
         let i = Self::i();
         let one = Self::one();
+        let neg_one = Self::real(V::neg_one());
         let two = one + one;
         //if self == i {
         //    return Self::new(T::zero(), T::infinity());
         //} else if self == -i {
         //    return Self::new(T::zero(), -T::infinity());
         //}
-        ((one + i * self).ln() - (one - i * self).ln()) / (two * i)
+
+        let a = self.mul_add(i, one);
+        let b = self.mul_add(i, neg_one);
+
+        let res = (a.ln() - b.ln()) / (two * i);
+
+        //((one + i * self).ln() - (one - i * self).ln()) / (two * i)
+
+        res
     }
 
     /// Computes the hyperbolic sine of `self`.
     #[inline]
     pub fn sinh(self) -> Self {
         // formula: sinh(a + bi) = sinh(a)cos(b) + i*cosh(a)sin(b)
-        let (s, c) = self.im.sin_cos();
-        Self::new(self.re.sinh() * c, self.re.cosh() * s)
+        let (s, c) = self.im.sin_cos_p::<P>();
+        Self::new(self.re.sinh_p::<P>() * c, self.re.cosh_p::<P>() * s)
     }
 
     /// Computes the hyperbolic cosine of `self`.
     #[inline]
     pub fn cosh(self) -> Self {
         // formula: cosh(a + bi) = cosh(a)cos(b) + i*sinh(a)sin(b)
-        let (s, c) = self.im.sin_cos();
-        Self::new(self.re.cosh() * c, self.re.sinh() * s)
+        let (s, c) = self.im.sin_cos_p::<P>();
+        Self::new(self.re.cosh_p::<P>() * c, self.re.sinh_p::<P>() * s)
     }
 
     /// Computes the hyperbolic tangent of `self`.
@@ -308,8 +338,8 @@ where
     pub fn tanh(self) -> Self {
         // formula: tanh(a + bi) = (sinh(2a) + i*sin(2b))/(cosh(2a) + cos(2b))
         let (two_re, two_im) = (self.re + self.re, self.im + self.im);
-        let (s, c) = two_im.sin_cos();
-        Self::new(two_re.sinh(), s).unscale(two_re.cosh() + c)
+        let (s, c) = two_im.sin_cos_p::<P>();
+        Self::new(two_re.sinh_p::<P>(), s).unscale(two_re.cosh_p::<P>() + c)
     }
 
     /// Computes the principal value of inverse hyperbolic sine of `self`.
@@ -324,7 +354,9 @@ where
     pub fn asinh(self) -> Self {
         // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
         let one = Self::one();
-        (self + (one + self * self).sqrt()).ln()
+        let a = self.mul_add(self, one);
+        //(self + (one + self * self).sqrt()).ln()
+        (self + a.sqrt()).ln()
     }
 
     /// Computes the principal value of inverse hyperbolic cosine of `self`.
@@ -370,7 +402,7 @@ where
     #[inline]
     pub fn finv(self) -> Self {
         let norm = Self::real(self.norm());
-        self.conj() / norm / norm
+        (self.conj() / norm) / norm
     }
 
     /// Returns `self/other` using floating-point operations.
@@ -384,7 +416,7 @@ where
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Add<Self> for Complex<S, V> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Add<Self> for Complex<S, V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -394,7 +426,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Add<Self> for Complex<S, V> {
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Sub<Self> for Complex<S, V> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Sub<Self> for Complex<S, V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -404,20 +436,20 @@ impl<S: Simd, V: SimdFloatVector<S>> Sub<Self> for Complex<S, V> {
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Mul<Self> for Complex<S, V> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Mul<Self> for Complex<S, V, P> {
     type Output = Self;
 
     #[inline(always)]
     fn mul(self, rhs: Self) -> Self {
         Self::new(
-            self.re.mul_sub(rhs.re, self.im * rhs.im),
-            self.re.mul_add(rhs.im, self.im * rhs.re),
+            self.re.mul_sube(rhs.re, self.im * rhs.im),
+            self.re.mul_adde(rhs.im, self.im * rhs.re),
         )
     }
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Div<Self> for Complex<S, V>
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Div<Self> for Complex<S, V, P>
 where
     V: SimdVectorizedMath<S>,
 {
@@ -425,15 +457,15 @@ where
 
     #[inline(always)]
     fn div(self, rhs: Self) -> Self {
-        let re = self.re.mul_add(rhs.re, self.im * rhs.im);
-        let im = self.im.mul_sub(rhs.re, self.re * rhs.im);
+        let re = self.re.mul_adde(rhs.re, self.im * rhs.im);
+        let im = self.im.mul_sube(rhs.re, self.re * rhs.im);
 
         Self::new(re, im).unscale(rhs.norm_sqr())
     }
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>> Neg for Complex<S, V> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Neg for Complex<S, V, P> {
     type Output = Self;
 
     #[inline(always)]
