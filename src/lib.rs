@@ -8,6 +8,9 @@ pub use thermite_dispatch::dispatch;
 #[macro_use]
 mod macros;
 
+#[macro_use]
+mod call;
+
 use half::f16;
 
 pub mod arch;
@@ -1107,6 +1110,7 @@ where
 
 /// Enum of supported instruction sets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
 pub enum SimdInstructionSet {
     Scalar,
 
@@ -1127,8 +1131,24 @@ pub enum SimdInstructionSet {
 }
 
 impl SimdInstructionSet {
+    pub fn runtime_detect() -> SimdInstructionSet {
+        unsafe {
+            static mut CACHED: Option<SimdInstructionSet> = None;
+
+            match CACHED {
+                Some(value) => value,
+                None => {
+                    // Allow this to race, they all converge to the same result
+                    let isa = Self::runtime_detect_internal();
+                    CACHED = Some(isa);
+                    isa
+                }
+            }
+        }
+    }
+
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    pub fn detect_runtime() -> SimdInstructionSet {
+    fn runtime_detect_internal() -> SimdInstructionSet {
         if core_detect::is_x86_feature_detected!("fma") {
             // TODO: AVX512
             if core_detect::is_x86_feature_detected!("avx2") {
@@ -1148,12 +1168,12 @@ impl SimdInstructionSet {
     }
 
     #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
-    pub fn detect_runtime() -> SimdInstructionSet {
+    fn runtime_detect_internal() -> SimdInstructionSet {
         SimdInstructionSet::NEON
     }
 
     #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
-    pub fn detect_runtime() -> SimdInstructionSet {
+    fn runtime_detect_internal() -> SimdInstructionSet {
         SimdInstructionSet::WASM32
     }
 
