@@ -241,6 +241,7 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn exp10_p<P: Policy>(self) -> Self;
     fn exp_m1_p<P: Policy>(self) -> Self;
     fn cbrt_p<P: Policy>(self) -> Self;
+    fn invsqrt_p<P: Policy>(self) -> Self;
     fn powf_p<P: Policy>(self, e: Self) -> Self;
     fn powiv_p<P: Policy>(self, e: S::Vi32) -> Self;
     fn powi_p<P: Policy>(self, e: i32) -> Self;
@@ -386,6 +387,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
 
     /// Computes the cubic-root of each lane in a vector.
     fn cbrt(self) -> Self;
+
+    /// Computes the approximate inverse square root (`1/sqrt(x)`)
+    fn invsqrt(self) -> Self;
 
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
@@ -596,6 +600,7 @@ where
     #[inline] fn exp10_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp10::<P>(self)  }
     #[inline] fn exp_m1_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1::<P>(self)  }
     #[inline] fn cbrt_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<P>(self)  }
+    #[inline] fn invsqrt_p<P: Policy>(self)          -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::invsqrt::<P>(self)  }
     #[inline] fn powf_p<P: Policy>(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf::<P>(self, e)  }
     #[inline] fn ln_p<P: Policy>(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln::<P>(self)  }
     #[inline] fn ln_1p_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p::<P>(self)  }
@@ -695,6 +700,7 @@ where
     #[inline(always)] fn exp10(self)            -> Self         { self.exp10_p::<DefaultPolicy>() }
     #[inline(always)] fn exp_m1(self)           -> Self         { self.exp_m1_p::<DefaultPolicy>() }
     #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<DefaultPolicy>() }
+    #[inline(always)] fn invsqrt(self)          -> Self         { self.invsqrt_p::<DefaultPolicy>() }
     #[inline(always)] fn powf(self, e: Self)    -> Self         { self.powf_p::<DefaultPolicy>(e) }
     #[inline(always)] fn ln(self)               -> Self         { self.ln_p::<DefaultPolicy>() }
     #[inline(always)] fn ln_1p(self)            -> Self         { self.ln_1p_p::<DefaultPolicy>() }
@@ -1206,6 +1212,32 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf;
+
+    #[inline(always)]
+    fn invsqrt<P: Policy>(x: Self::Vf) -> Self::Vf {
+        // double-precision doesn't actually have an rsqrt (yet?)
+        if Self::Vf::ELEMENT_SIZE != 4 {
+            return Self::Vf::one() / x.sqrt();
+        }
+
+        let iterations = match P::POLICY.precision {
+            PrecisionPolicy::Worst => 0,
+            PrecisionPolicy::Average => 1,
+            PrecisionPolicy::Best => 2,
+            PrecisionPolicy::Reference => return Self::Vf::one() / x.sqrt(),
+        };
+
+        let mut y = x.rsqrt();
+
+        let nx2 = x * Self::Vf::splat_any(-0.5);
+        let threehalfs = Self::Vf::splat_any(1.5);
+
+        for _ in 0..iterations {
+            y = y * (y * y).mul_adde(nx2, threehalfs);
+        }
+
+        y
+    }
 
     fn powf<P: Policy>(x: Self::Vf, e: Self::Vf) -> Self::Vf;
 

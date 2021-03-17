@@ -1082,7 +1082,7 @@ where
         if P::POLICY.precision >= PrecisionPolicy::Average {
             result /= bgh.sqrt();
         } else {
-            result *= bgh.rsqrt_precise();
+            result *= bgh.invsqrt_p::<P>();
         }
 
         if P::POLICY.check_overflow {

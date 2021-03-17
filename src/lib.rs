@@ -1008,21 +1008,13 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// Calculates the square-root of each element in the vector.
     ///
     /// **NOTE**: This operation can be quite slow, so if you only need an approximation of `sqrt(x)` consider
-    /// using `rsqrt` or `rsqrt_precise`, which compute `1/sqrt(x)`. `sqrt(x) = x/sqrt(x) ≈ x * x.rsqrt()`
+    /// using `rsqrt` or `invsqrt`, which compute `1/sqrt(x)`. `sqrt(x) = x/sqrt(x) ≈ x * x.rsqrt()`
     fn sqrt(self) -> Self;
 
     /// Compute the approximate reciprocal of the square root `1/sqrt(x)`
     #[inline(always)]
     fn rsqrt(self) -> Self {
         self.sqrt().rcp()
-    }
-
-    /// A more precise `1/sqrt(x)` variation, which may use faster instructions where possible.
-    ///
-    /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
-    #[inline(always)]
-    fn rsqrt_precise(self) -> Self {
-        Self::one() / self.sqrt()
     }
 
     /// Computes the approximate reciprocal/inverse of each value

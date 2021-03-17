@@ -2,9 +2,9 @@ use thermite::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vector3xN<S: Simd> {
-    pub x: S::Vf32,
-    pub y: S::Vf32,
-    pub z: S::Vf32,
+    pub x: Vf32<S>,
+    pub y: Vf32<S>,
+    pub z: Vf32<S>,
 }
 
 impl<S: Simd> Vector3xN<S> {
@@ -29,7 +29,7 @@ impl<S: Simd> Vector3xN<S> {
     }
 
     pub fn normalize(&self) -> Self {
-        let inv_norm = self.norm_squared().rsqrt_precise();
+        let inv_norm = self.norm_squared().invsqrt_p::<policies::Precision>();
 
         Self {
             x: self.x * inv_norm,

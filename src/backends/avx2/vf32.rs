@@ -485,15 +485,6 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    fn rsqrt_precise(self) -> Self {
-        let y = self.rsqrt();
-        let nx2 = self * Self::splat(-0.5);
-        let threehalfs = Self::splat(1.5);
-
-        y * (y * y).mul_add(nx2, threehalfs)
-    }
-
-    #[inline(always)]
     fn rcp(self) -> Self {
         Self::new(unsafe { _mm256_rcp_ps(self.value) })
     }
