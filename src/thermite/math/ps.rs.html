@@ -1222,10 +1222,32 @@
 <span id="1219">1219</span>
 <span id="1220">1220</span>
 <span id="1221">1221</span>
+<span id="1222">1222</span>
+<span id="1223">1223</span>
+<span id="1224">1224</span>
+<span id="1225">1225</span>
+<span id="1226">1226</span>
+<span id="1227">1227</span>
+<span id="1228">1228</span>
+<span id="1229">1229</span>
+<span id="1230">1230</span>
+<span id="1231">1231</span>
+<span id="1232">1232</span>
+<span id="1233">1233</span>
+<span id="1234">1234</span>
+<span id="1235">1235</span>
+<span id="1236">1236</span>
+<span id="1237">1237</span>
+<span id="1238">1238</span>
+<span id="1239">1239</span>
+<span id="1240">1240</span>
+<span id="1241">1241</span>
+<span id="1242">1242</span>
+<span id="1243">1243</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
-<span class="kw">use</span> <span class="ident">core</span>::<span class="ident">f32</span>::<span class="ident">consts</span>::{<span class="ident">FRAC_PI_2</span>, <span class="ident">FRAC_PI_4</span>, <span class="ident">LN_10</span>, <span class="ident">LN_2</span>, <span class="ident">LOG10_2</span>, <span class="ident">LOG10_E</span>, <span class="ident">LOG2_E</span>, <span class="ident">PI</span>, <span class="ident">SQRT_2</span>};
+<span class="kw">use</span> <span class="ident">core</span>::<span class="ident">f32</span>::<span class="ident">consts</span>::{<span class="ident">FRAC_1_PI</span>, <span class="ident">FRAC_PI_2</span>, <span class="ident">FRAC_PI_4</span>, <span class="ident">LN_10</span>, <span class="ident">LN_2</span>, <span class="ident">LOG10_2</span>, <span class="ident">LOG10_E</span>, <span class="ident">LOG2_E</span>, <span class="ident">PI</span>, <span class="ident">SQRT_2</span>};
 
 <span class="kw">const</span> <span class="ident">EULERS_CONSTANT</span>: <span class="ident">f32</span> <span class="op">=</span> <span class="number">5.772156649015328606065120900824024310e-01</span>;
 <span class="kw">const</span> <span class="ident">LN_PI</span>: <span class="ident">f32</span> <span class="op">=</span> <span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>;
@@ -1244,6 +1266,28 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sin_cos</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">xx</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="self">Self</span>::<span class="ident">Vf</span>, <span class="self">Self</span>::<span class="ident">Vf</span>) {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
+            <span class="comment">// https://stackoverflow.com/a/28050328/2083075</span>
+            <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+            <span class="kw">fn</span> <span class="ident">fast_cosine</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+                <span class="kw">let</span> <span class="ident">quarter</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>);
+
+                <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_1_PI</span> <span class="op">*</span> <span class="number">0.5</span>);
+                <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">quarter</span> <span class="op">+</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">quarter</span>).<span class="ident">floor</span>();
+
+                <span class="comment">// rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here</span>
+                <span class="comment">//x *= Vf32::&lt;S&gt;::splat(16.0) * (x.abs() - Vf32::&lt;S&gt;::splat(0.5));</span>
+                <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>().<span class="ident">mul_sube</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">16.0</span>), <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.0</span>));
+
+                <span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.225</span>) <span class="op">*</span> (<span class="ident">x</span>.<span class="ident">abs</span>() <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()), <span class="ident">x</span>)
+            }
+
+            <span class="kw">let</span> <span class="ident">sine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">xx</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_PI_2</span>));
+            <span class="kw">let</span> <span class="ident">cosine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">xx</span>);
+
+            <span class="kw">return</span> (<span class="ident">sine</span>, <span class="ident">cosine</span>);
+        }
+
         <span class="kw">let</span> <span class="ident">dp1f</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.78515625</span> <span class="op">*</span> <span class="number">2.0</span>);
         <span class="kw">let</span> <span class="ident">dp2f</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">2.4187564849853515625E-4</span> <span class="op">*</span> <span class="number">2.0</span>);
         <span class="kw">let</span> <span class="ident">dp3f</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">3.77489497744594108E-8</span> <span class="op">*</span> <span class="number">2.0</span>);
