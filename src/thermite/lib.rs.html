@@ -1281,14 +1281,6 @@
 <span id="1278">1278</span>
 <span id="1279">1279</span>
 <span id="1280">1280</span>
-<span id="1281">1281</span>
-<span id="1282">1282</span>
-<span id="1283">1283</span>
-<span id="1284">1284</span>
-<span id="1285">1285</span>
-<span id="1286">1286</span>
-<span id="1287">1287</span>
-<span id="1288">1288</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
@@ -2312,14 +2304,6 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// Computes the approximate reciprocal/inverse of each value</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">rcp</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>
-    }
-
-    <span class="doccomment">/// A more precise `1/x` variation, which may use faster instructions where possible.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// **NOTE**: This is still an approximation, but uses Newton&#39;s method to improve accuracy.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">rcp_precise</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="self">self</span>
     }
 
