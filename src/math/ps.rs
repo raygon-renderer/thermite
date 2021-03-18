@@ -1,6 +1,6 @@
 use super::{poly::*, *};
 
-use core::f32::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
 
 const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
@@ -19,6 +19,28 @@ where
 
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
+        if P::POLICY.precision == PrecisionPolicy::Worst {
+            // https://stackoverflow.com/a/28050328/2083075
+            #[inline(always)]
+            fn fast_cosine<S: Simd>(mut x: Vf32<S>) -> Vf32<S> {
+                let quarter = Vf32::<S>::splat(0.25);
+
+                x *= Vf32::<S>::splat(FRAC_1_PI * 0.5);
+                x -= quarter + (x + quarter).floor();
+
+                // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
+                //x *= Vf32::<S>::splat(16.0) * (x.abs() - Vf32::<S>::splat(0.5));
+                x *= x.abs().mul_sube(Vf32::<S>::splat(16.0), Vf32::<S>::splat(8.0));
+
+                x.mul_adde(Vf32::<S>::splat(0.225) * (x.abs() - Vf32::<S>::one()), x)
+            }
+
+            let sine = fast_cosine::<S>(xx - Vf32::<S>::splat(FRAC_PI_2));
+            let cosine = fast_cosine::<S>(xx);
+
+            return (sine, cosine);
+        }
+
         let dp1f = Vf32::<S>::splat(0.78515625 * 2.0);
         let dp2f = Vf32::<S>::splat(2.4187564849853515625E-4 * 2.0);
         let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
