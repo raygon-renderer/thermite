@@ -1023,14 +1023,6 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
         Self::one() / self
     }
 
-    /// A more precise `1/x` variation, which may use faster instructions where possible.
-    ///
-    /// **NOTE**: This is still an approximation, but uses Newton's method to improve accuracy.
-    #[inline(always)]
-    fn rcp_precise(self) -> Self {
-        Self::one() / self
-    }
-
     #[inline(always)]
     fn approx_eq(self, other: Self, tolerance: Self) -> Mask<S, Self> {
         (self - other).abs().lt(tolerance)

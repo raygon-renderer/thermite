@@ -490,14 +490,6 @@ impl SimdFloatVector<AVX2> for f32x8<AVX2> {
     }
 
     #[inline(always)]
-    fn rcp_precise(self) -> Self {
-        let rcp = self.rcp();
-
-        // one iteration of Newton's method
-        rcp * self.nmul_add(rcp, Self::splat(2.0))
-    }
-
-    #[inline(always)]
     fn is_subnormal(self) -> Mask<AVX2, Self> {
         let m: Self = Self::splat(f32::from_bits(0xFF000000));
         let u: Self = self << 1;

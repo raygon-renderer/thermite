@@ -242,6 +242,7 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn exp_m1_p<P: Policy>(self) -> Self;
     fn cbrt_p<P: Policy>(self) -> Self;
     fn invsqrt_p<P: Policy>(self) -> Self;
+    fn reciprocal_p<P: Policy>(self) -> Self;
     fn powf_p<P: Policy>(self, e: Self) -> Self;
     fn powiv_p<P: Policy>(self, e: S::Vi32) -> Self;
     fn powi_p<P: Policy>(self, e: i32) -> Self;
@@ -390,6 +391,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
 
     /// Computes the approximate inverse square root (`1/sqrt(x)`)
     fn invsqrt(self) -> Self;
+
+    /// Computes the approximate reciprocal `1/x` variation, which may use faster instructions where possible.
+    fn reciprocal(self) -> Self;
 
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
     fn powf(self, e: Self) -> Self;
@@ -601,6 +605,7 @@ where
     #[inline] fn exp_m1_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::exp_m1::<P>(self)  }
     #[inline] fn cbrt_p<P: Policy>(self)             -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cbrt::<P>(self)  }
     #[inline] fn invsqrt_p<P: Policy>(self)          -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::invsqrt::<P>(self)  }
+    #[inline] fn reciprocal_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::reciprocal::<P>(self)  }
     #[inline] fn powf_p<P: Policy>(self, e: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::powf::<P>(self, e)  }
     #[inline] fn ln_p<P: Policy>(self)               -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln::<P>(self)  }
     #[inline] fn ln_1p_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::ln_1p::<P>(self)  }
@@ -701,6 +706,7 @@ where
     #[inline(always)] fn exp_m1(self)           -> Self         { self.exp_m1_p::<DefaultPolicy>() }
     #[inline(always)] fn cbrt(self)             -> Self         { self.cbrt_p::<DefaultPolicy>() }
     #[inline(always)] fn invsqrt(self)          -> Self         { self.invsqrt_p::<DefaultPolicy>() }
+    #[inline(always)] fn reciprocal(self)       -> Self         { self.reciprocal_p::<DefaultPolicy>() }
     #[inline(always)] fn powf(self, e: Self)    -> Self         { self.powf_p::<DefaultPolicy>(e) }
     #[inline(always)] fn ln(self)               -> Self         { self.ln_p::<DefaultPolicy>() }
     #[inline(always)] fn ln_1p(self)            -> Self         { self.ln_1p_p::<DefaultPolicy>() }
@@ -1234,6 +1240,23 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         for _ in 0..iterations {
             y = y * (y * y).mul_adde(nx2, threehalfs);
+        }
+
+        y
+    }
+
+    #[inline(always)]
+    fn reciprocal<P: Policy>(x: Self::Vf) -> Self::Vf {
+        // double-precision doesn't actually have an rcp (yet?)
+        if Self::Vf::ELEMENT_SIZE != 4 || P::POLICY.precision > PrecisionPolicy::Average {
+            return Self::Vf::one() / x;
+        }
+
+        let mut y = x.rcp();
+
+        if P::POLICY.precision > PrecisionPolicy::Worst {
+            // one iteration of Newton's method
+            y = y * x.nmul_adde(y, Self::Vf::splat_any(2.0))
         }
 
         y
