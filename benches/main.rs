@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Parameter
 
 use thermite::*;
 
-use thermite::backends::AVX2;
+use thermite::backends::avx2::AVX2;
 
 type Vf32 = <AVX2 as Simd>::Vf32;
 type Vf64 = <AVX2 as Simd>::Vf64;
