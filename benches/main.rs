@@ -252,6 +252,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             let x = black_box(Vf64::splat(*x as f64) + Vf64::indexed());
             b.iter(|| do_algorithm(x))
         })
+        .with_function("thermite-ps-ultra", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32) -> (Vf32, Vf32) {
+                x.sin_cos_p::<policies::UltraPerformance>()
+            }
+            let x = black_box(Vf32::splat(*x) + Vf32::indexed());
+            b.iter(|| do_algorithm(x))
+        })
         .with_function("scalar-ps", |b, x| {
             #[inline(never)]
             #[target_feature(enable = "avx2,fma")]
