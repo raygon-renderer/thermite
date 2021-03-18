@@ -22,10 +22,17 @@ where
         if P::POLICY.precision == PrecisionPolicy::Worst {
             // https://stackoverflow.com/a/28050328/2083075
             #[inline(always)]
-            fn fast_cosine<S: Simd>(mut x: Vf32<S>) -> Vf32<S> {
+            fn fast_cosine<S: Simd>(mut x: Vf32<S>, sine: bool) -> Vf32<S> {
                 let quarter = Vf32::<S>::splat(0.25);
 
-                x *= Vf32::<S>::splat(FRAC_1_PI * 0.5);
+                let frac_1_2pi = Vf32::<S>::splat(FRAC_1_PI * 0.5);
+
+                if sine {
+                    x = x.mul_sube(frac_1_2pi, quarter);
+                } else {
+                    x *= frac_1_2pi;
+                }
+
                 x -= quarter + (x + quarter).floor();
 
                 // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
@@ -35,8 +42,8 @@ where
                 x.mul_adde(Vf32::<S>::splat(0.225) * (x.abs() - Vf32::<S>::one()), x)
             }
 
-            let sine = fast_cosine::<S>(xx - Vf32::<S>::splat(FRAC_PI_2));
-            let cosine = fast_cosine::<S>(xx);
+            let sine = fast_cosine::<S>(xx, true);
+            let cosine = fast_cosine::<S>(xx, false);
 
             return (sine, cosine);
         }
