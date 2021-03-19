@@ -1251,6 +1251,7 @@
 <span id="1248">1248</span>
 <span id="1249">1249</span>
 <span id="1250">1250</span>
+<span id="1251">1251</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1274,30 +1275,31 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">sin_cos</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">xx</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="self">Self</span>::<span class="ident">Vf</span>, <span class="self">Self</span>::<span class="ident">Vf</span>) {
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
-            <span class="comment">// https://stackoverflow.com/a/28050328/2083075</span>
+            <span class="comment">// https://stackoverflow.com/a/28050328/2083075 with modifications</span>
             <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
             <span class="kw">fn</span> <span class="ident">fast_cosine</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">sine</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vf32</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
                 <span class="kw">let</span> <span class="ident">quarter</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>);
+                <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>);
 
-                <span class="kw">let</span> <span class="ident">frac_1_2pi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_1_PI</span> <span class="op">*</span> <span class="number">0.5</span>);
-
+                <span class="comment">// encourage instruction-level parallelism</span>
                 <span class="kw">if</span> <span class="ident">sine</span> {
-                    <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">mul_sube</span>(<span class="ident">frac_1_2pi</span>, <span class="ident">quarter</span>);
+                    <span class="ident">x</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">-</span> <span class="ident">half</span>) <span class="op">-</span> <span class="ident">x</span>.<span class="ident">floor</span>();
                 } <span class="kw">else</span> {
-                    <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">frac_1_2pi</span>;
+                    <span class="ident">x</span> <span class="op">=</span> (<span class="ident">x</span> <span class="op">-</span> <span class="ident">quarter</span>) <span class="op">-</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">quarter</span>).<span class="ident">floor</span>();
                 }
-
-                <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">quarter</span> <span class="op">+</span> (<span class="ident">x</span> <span class="op">+</span> <span class="ident">quarter</span>).<span class="ident">floor</span>();
 
                 <span class="comment">// rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here</span>
                 <span class="comment">//x *= Vf32::&lt;S&gt;::splat(16.0) * (x.abs() - Vf32::&lt;S&gt;::splat(0.5));</span>
                 <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>().<span class="ident">mul_sube</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">16.0</span>), <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">8.0</span>));
 
-                <span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.225</span>) <span class="op">*</span> (<span class="ident">x</span>.<span class="ident">abs</span>() <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()), <span class="ident">x</span>)
+                <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.225</span>);
+                <span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">x</span>.<span class="ident">abs</span>().<span class="ident">mul_sube</span>(<span class="ident">c</span>, <span class="ident">c</span>), <span class="ident">x</span>)
             }
 
-            <span class="kw">let</span> <span class="ident">sine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">xx</span>, <span class="bool-val">true</span>);
-            <span class="kw">let</span> <span class="ident">cosine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">xx</span>, <span class="bool-val">false</span>);
+            <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">xx</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">FRAC_1_PI</span> <span class="op">*</span> <span class="number">0.5</span>);
+
+            <span class="kw">let</span> <span class="ident">sine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="bool-val">true</span>);
+            <span class="kw">let</span> <span class="ident">cosine</span> <span class="op">=</span> <span class="ident">fast_cosine</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="bool-val">false</span>);
 
             <span class="kw">return</span> (<span class="ident">sine</span>, <span class="ident">cosine</span>);
         }
