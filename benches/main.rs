@@ -421,6 +421,35 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     c.bench(
+        "beta",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, x| {
+                #[inline(never)]
+                fn do_algorithm(x: Vf32, y: Vf32) -> Vf32 {
+                    x.beta_p::<policies::UltraPerformance>(y)
+                }
+                b.iter(|| do_algorithm(Vf32::splat(x.0), Vf32::splat(x.1)))
+            },
+            vec![(5.0, 0.5)],
+        )
+        .with_function("thermite-ps-precision", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32, y: Vf32) -> Vf32 {
+                x.beta_p::<policies::Precision>(y)
+            }
+            b.iter(|| do_algorithm(Vf32::splat(x.0), Vf32::splat(x.1)))
+        })
+        .with_function("thermite-pd", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf64, y: Vf64) -> Vf64 {
+                x.beta(y)
+            }
+            b.iter(|| do_algorithm(Vf64::splat(x.0 as f64), Vf64::splat(x.1 as f64)));
+        }),
+    );
+
+    c.bench(
         "large_poly_eval",
         ParameterizedBenchmark::new(
             "thermite",
