@@ -1552,6 +1552,11 @@
 <span id="1549">1549</span>
 <span id="1550">1550</span>
 <span id="1551">1551</span>
+<span id="1552">1552</span>
+<span id="1553">1553</span>
+<span id="1554">1554</span>
+<span id="1555">1555</span>
+<span id="1556">1556</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1903,7 +1908,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="doccomment">/// Computes both the sine and cosine of a vector together faster than they would be computed separately.</span>
     <span class="doccomment">///</span>
-    <span class="doccomment">/// If you need both, use this.</span>
+    <span class="doccomment">/// If you need both, use this, as it will allow for sharing parts of the computation between both sine and cosine.</span>
     <span class="kw">fn</span> <span class="ident">sin_cos</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="self">Self</span>, <span class="self">Self</span>);
 
     <span class="doccomment">/// Computes the hyperbolic-sine of a vector.</span>
@@ -1948,6 +1953,11 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">invsqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes the approximate reciprocal `1/x` variation, which may use faster instructions where possible.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: It is not advised to use in conjunction with a single multiplication afterwards,</span>
+    <span class="doccomment">/// such as `a * b.recriprocal()` to replace `a / b`. Use this method only when the recriprocal itself is needed,</span>
+    <span class="doccomment">/// otherwise it is probably more performant to just use division. The exception for this is when on the `Worst`</span>
+    <span class="doccomment">/// precision policy, in which case this may outperform plain division, but at a severe cost in precision.</span>
     <span class="kw">fn</span> <span class="ident">reciprocal</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents</span>
@@ -1986,7 +1996,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="doccomment">/// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.</span>
     <span class="doccomment">/// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).</span>
     <span class="doccomment">///</span>
-    <span class="doccomment">/// NOTE: The Gamma function is not defined for negative integers.</span>
+    <span class="doccomment">/// **NOTE**: The Gamma function is not defined for negative integers.</span>
     <span class="kw">fn</span> <span class="ident">tgamma</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.</span>
@@ -2811,7 +2821,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
             <span class="comment">// one iteration of Newton&#39;s method</span>
-            <span class="ident">y</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> <span class="ident">x</span>.<span class="ident">nmul_adde</span>(<span class="ident">y</span>, <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">2.0</span>))
+            <span class="ident">y</span> <span class="op">=</span> <span class="ident">y</span> <span class="op">*</span> <span class="ident">x</span>.<span class="ident">nmul_adde</span>(<span class="ident">y</span>, <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">splat_any</span>(<span class="number">2.0</span>));
         }
 
         <span class="ident">y</span>
