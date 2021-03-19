@@ -852,7 +852,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             p0 = p1;
             p1 = tmp;
 
-            let next0 = x.mul_sub(p0, cf * p1);
+            let next0 = x.mul_sube(p0, cf * p1);
 
             p1 = next0 + next0; // 2 * next0
 
@@ -889,7 +889,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             p0 = p1;
             p1 = tmp;
 
-            let next0 = x.mul_sub(p0, cf * p1);
+            let next0 = x.mul_sube(p0, cf * p1);
             let next = next0 + next0; // 2 * next0
 
             p1 = cont.select(next, p1);
@@ -910,7 +910,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let max = x.max(y);
         let t = min / max;
 
-        let mut ret = max * t.mul_add(t, Self::Vf::one()).sqrt();
+        let mut ret = max * t.mul_adde(t, Self::Vf::one()).sqrt();
 
         if P::POLICY.check_overflow {
             let inf = Self::Vf::infinity();
@@ -1288,7 +1288,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     #[inline(always)]
     fn smoothstep<P: Policy>(x: Self::Vf) -> Self::Vf {
         // use integer coefficients to ensure as-accurate-as-possible casts to f32 or f64
-        x * x * x.nmul_add(Self::Vf::splat_any(2i16), Self::Vf::splat_any(3i16))
+        x * x * x.nmul_adde(Self::Vf::splat_any(2i16), Self::Vf::splat_any(3i16))
     }
 
     #[inline(always)]
@@ -1301,7 +1301,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let x2 = x * x;
         let x4 = x2 * x2;
 
-        x4.mul_add(x.mul_add(c5, c4), x2 * x * c3)
+        x4.mul_adde(x.mul_adde(c5, c4), x2 * x * c3)
     }
 
     #[inline(always)]
@@ -1313,7 +1313,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         let x2 = x * x;
 
-        x2 * x2 * x2.mul_add(x.mul_add(c7, c6), x.mul_add(c5, c4))
+        x2 * x2 * x2.mul_adde(x.mul_adde(c7, c6), x.mul_adde(c5, c4))
     }
 
     // TODO: Add some associated forms?
@@ -1333,65 +1333,65 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         // hand-tuned Estrin's scheme polynomials
         match n {
-            2 => x2.mul_add(c!(3, 2), c!(-1, 2)),
-            3 => x * x2.mul_add(c!(5, 2), c!(-3, 2)),
-            4 => x4.mul_add(c!(35, 8), x2.mul_add(c!(-15, 4), c!(3, 8))),
-            5 => x * x4.mul_add(c!(63, 8), x2.mul_add(c!(-35, 4), c!(15, 8))),
-            6 => x4.mul_add(
-                x2.mul_add(c!(231, 16), c!(-315, 16)),
-                x2.mul_add(c!(105, 16), c!(-5, 16)),
+            2 => x2.mul_adde(c!(3, 2), c!(-1, 2)),
+            3 => x * x2.mul_adde(c!(5, 2), c!(-3, 2)),
+            4 => x4.mul_adde(c!(35, 8), x2.mul_adde(c!(-15, 4), c!(3, 8))),
+            5 => x * x4.mul_adde(c!(63, 8), x2.mul_adde(c!(-35, 4), c!(15, 8))),
+            6 => x4.mul_adde(
+                x2.mul_adde(c!(231, 16), c!(-315, 16)),
+                x2.mul_adde(c!(105, 16), c!(-5, 16)),
             ),
             7 => {
-                x * x4.mul_add(
-                    x2.mul_add(c!(429, 16), c!(-693, 16)),
-                    x2.mul_add(c!(315, 16), c!(-35, 16)),
+                x * x4.mul_adde(
+                    x2.mul_adde(c!(429, 16), c!(-693, 16)),
+                    x2.mul_adde(c!(315, 16), c!(-35, 16)),
                 )
             }
-            8 => x8.mul_add(
+            8 => x8.mul_adde(
                 c!(6435, 128),
-                x4.mul_add(
-                    x2.mul_add(c!(-3003, 32), c!(3465, 64)),
-                    x2.mul_add(c!(-315, 32), c!(35, 128)),
+                x4.mul_adde(
+                    x2.mul_adde(c!(-3003, 32), c!(3465, 64)),
+                    x2.mul_adde(c!(-315, 32), c!(35, 128)),
                 ),
             ),
             9 => {
-                x * x8.mul_add(
+                x * x8.mul_adde(
                     c!(12155, 128),
-                    x4.mul_add(
-                        x2.mul_add(c!(-6435, 32), c!(9009, 64)),
-                        x2.mul_add(c!(-1155, 32), c!(315, 128)),
+                    x4.mul_adde(
+                        x2.mul_adde(c!(-6435, 32), c!(9009, 64)),
+                        x2.mul_adde(c!(-1155, 32), c!(315, 128)),
                     ),
                 )
             }
-            10 => x8.mul_add(
-                x2.mul_add(c!(46189, 256), c!(-109395, 256)),
-                x4.mul_add(
-                    x2.mul_add(c!(45045, 128), c!(-15015, 128)),
-                    x2.mul_add(c!(3465, 256), c!(-63, 256)),
+            10 => x8.mul_adde(
+                x2.mul_adde(c!(46189, 256), c!(-109395, 256)),
+                x4.mul_adde(
+                    x2.mul_adde(c!(45045, 128), c!(-15015, 128)),
+                    x2.mul_adde(c!(3465, 256), c!(-63, 256)),
                 ),
             ),
             11 => {
-                x * x8.mul_add(
-                    x2.mul_add(c!(88179, 256), c!(-230945, 256)),
-                    x4.mul_add(
-                        x2.mul_add(c!(109395, 128), c!(-45045, 128)),
-                        x2.mul_add(c!(15015, 256), c!(-693, 256)),
+                x * x8.mul_adde(
+                    x2.mul_adde(c!(88179, 256), c!(-230945, 256)),
+                    x4.mul_adde(
+                        x2.mul_adde(c!(109395, 128), c!(-45045, 128)),
+                        x2.mul_adde(c!(15015, 256), c!(-693, 256)),
                     ),
                 )
             }
-            12 => x8.mul_add(
-                x4.mul_add(c!(676039, 1024), x2.mul_add(c!(-969969, 512), c!(2078505, 1024))),
-                x4.mul_add(
-                    x2.mul_add(c!(-255255, 256), c!(225225, 1024)),
-                    x2.mul_add(c!(-9009, 512), c!(231, 1024)),
+            12 => x8.mul_adde(
+                x4.mul_adde(c!(676039, 1024), x2.mul_adde(c!(-969969, 512), c!(2078505, 1024))),
+                x4.mul_adde(
+                    x2.mul_adde(c!(-255255, 256), c!(225225, 1024)),
+                    x2.mul_adde(c!(-9009, 512), c!(231, 1024)),
                 ),
             ),
             13 => {
-                x * x8.mul_add(
-                    x4.mul_add(c!(1300075, 1024), x2.mul_add(c!(-2028117, 512), c!(4849845, 1024))),
-                    x4.mul_add(
-                        x2.mul_add(c!(-692835, 256), c!(765765, 1024)),
-                        x2.mul_add(c!(-45045, 512), c!(3003, 1024)),
+                x * x8.mul_adde(
+                    x4.mul_adde(c!(1300075, 1024), x2.mul_adde(c!(-2028117, 512), c!(4849845, 1024))),
+                    x4.mul_adde(
+                        x2.mul_adde(c!(-692835, 256), c!(765765, 1024)),
+                        x2.mul_adde(c!(-45045, 512), c!(3003, 1024)),
                     ),
                 )
             }
@@ -1419,7 +1419,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                     let nf = Self::Vf::splat_as::<u32>(k);
 
                     let tmp = p1;
-                    p1 = x.mul_sub((nf + nf).mul_sub(p1, p1), nf.mul_sub(p0, p0)) / nf;
+                    p1 = x.mul_sube((nf + nf).mul_sube(p1, p1), nf.mul_sube(p0, p0)) / nf;
                     p0 = tmp;
 
                     k += 1;
@@ -1432,7 +1432,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         let jacobi = Self::jacobi::<P>(x, zero, zero, n, m);
 
-        let x12 = x.nmul_add(x, one); // (1 - x^2)
+        let x12 = x.nmul_adde(x, one); // (1 - x^2)
 
         if m & 1 == 0 {
             jacobi * Self::powi::<P>(x12, (m >> 1) as i32)
@@ -1466,7 +1466,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             let t0 = half * (nf + alpha + beta);
 
             for j in 0..m {
-                scale *= half.mul_add(jf, t0);
+                scale *= half.mul_adde(jf, t0);
                 jf += one;
             }
 
@@ -1491,7 +1491,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let alpha2beta2 = alpha_sqr - beta_sqr;
 
         //let mut y1 = alpha + one + half * (alpha_p_beta + two) * (x - one);
-        let mut y1 = half * (x.mul_add(alpha, alpha) + x.mul_sub(beta, beta) + x + x);
+        let mut y1 = half * (x.mul_adde(alpha, alpha) + x.mul_sube(beta, beta) + x + x);
 
         let mut yk = y1;
         let mut k = Self::cast_from(2u32);
@@ -1508,11 +1508,11 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
             let k2_alpha_p_beta_m2 = k2_alpha_p_beta - two;
 
             let denom = kf2 * k_alpha_p_beta * k2_alpha_p_beta_m2;
-            let t0 = x.mul_add(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
-            let gamma1 = k2_alpha_p_beta.mul_sub(t0, t0);
+            let t0 = x.mul_adde(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
+            let gamma1 = k2_alpha_p_beta.mul_sube(t0, t0);
             let gamma0 = two * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
 
-            yk = gamma1.mul_sub(y1, gamma0 * y0) / denom;
+            yk = gamma1.mul_sube(y1, gamma0 * y0) / denom;
 
             y0 = y1;
             y1 = yk;
