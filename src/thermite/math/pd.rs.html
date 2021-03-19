@@ -1500,10 +1500,6 @@
 <span id="1497">1497</span>
 <span id="1498">1498</span>
 <span id="1499">1499</span>
-<span id="1500">1500</span>
-<span id="1501">1501</span>
-<span id="1502">1502</span>
-<span id="1503">1503</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -2583,14 +2579,10 @@
             .<span class="ident">gt</span>(<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1e10</span>))
             .<span class="ident">select</span>(<span class="ident">agh_d_cgh</span> <span class="op">*</span> <span class="ident">bgh_d_cgh</span>, <span class="ident">agh_p_bgh</span> <span class="op">/</span> <span class="ident">cgh_p_cgh</span>);
 
-        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>);
-        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>) <span class="op">*</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>);
-
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
-            <span class="ident">result</span> <span class="op">/</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>();
-        } <span class="kw">else</span> {
-            <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">invsqrt_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
-        }
+        <span class="comment">// encourage instruction-level parallelism</span>
+        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>)
+            <span class="op">*</span> <span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>)
+            <span class="op">*</span> (<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>) <span class="op">/</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>());
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="ident">result</span> <span class="op">=</span> <span class="ident">is_valid</span>.<span class="ident">select</span>(<span class="ident">result</span>, <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>());

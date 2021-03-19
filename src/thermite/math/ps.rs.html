@@ -2281,14 +2281,14 @@
             .<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">1e10</span>))
             .<span class="ident">select</span>(<span class="ident">agh_d_cgh</span> <span class="op">*</span> <span class="ident">bgh_d_cgh</span>, <span class="ident">agh_p_bgh</span> <span class="op">/</span> <span class="ident">cgh_p_cgh</span>);
 
-        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>);
-        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>) <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>);
-
-        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
-            <span class="ident">result</span> <span class="op">/</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>();
+        <span class="kw">let</span> <span class="ident">denom</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> {
+            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>) <span class="op">/</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>()
         } <span class="kw">else</span> {
-            <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">bgh</span>.<span class="ident">invsqrt_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
-        }
+            <span class="comment">// bump up the precision a little to improve beta function accuracy</span>
+            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>) <span class="op">*</span> <span class="ident">bgh</span>.<span class="ident">invsqrt_p</span>::<span class="op">&lt;</span><span class="ident">ExtraPrecision</span><span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span><span class="op">&gt;</span>()
+        };
+
+        <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>) <span class="op">*</span> (<span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>) <span class="op">*</span> <span class="ident">denom</span>);
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="ident">result</span> <span class="op">=</span> <span class="ident">is_valid</span>.<span class="ident">select</span>(<span class="ident">result</span>, <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>());
@@ -2369,10 +2369,9 @@
             <span class="kw">return</span> <span class="ident">z</span>;
         }
 
-        <span class="kw">let</span> <span class="ident">underflow_value</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">mode</span> <span class="op">=</span><span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> {
-            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_one</span>()
-        } <span class="kw">else</span> {
-            <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>()
+        <span class="kw">let</span> <span class="ident">underflow_value</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">mode</span> {
+            <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">neg_one</span>(),
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>(),
         };
 
         <span class="ident">r</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">select_negative</span>(<span class="ident">underflow_value</span>, <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">infinity</span>());
@@ -2389,6 +2388,7 @@
 
     <span class="kw">let</span> <span class="ident">is_big</span> <span class="op">=</span> <span class="ident">xa</span>.<span class="ident">gt</span>(<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>));
 
+    <span class="comment">// TODO: Branch to avoid sqrt?</span>
     <span class="kw">let</span> <span class="ident">x1</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">*</span> (<span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>() <span class="op">-</span> <span class="ident">xa</span>);
     <span class="kw">let</span> <span class="ident">x2</span> <span class="op">=</span> <span class="ident">xa</span> <span class="op">*</span> <span class="ident">xa</span>;
     <span class="kw">let</span> <span class="ident">x3</span> <span class="op">=</span> <span class="ident">is_big</span>.<span class="ident">select</span>(<span class="ident">x1</span>, <span class="ident">x2</span>);

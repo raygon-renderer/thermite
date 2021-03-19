@@ -1557,6 +1557,31 @@
 <span id="1554">1554</span>
 <span id="1555">1555</span>
 <span id="1556">1556</span>
+<span id="1557">1557</span>
+<span id="1558">1558</span>
+<span id="1559">1559</span>
+<span id="1560">1560</span>
+<span id="1561">1561</span>
+<span id="1562">1562</span>
+<span id="1563">1563</span>
+<span id="1564">1564</span>
+<span id="1565">1565</span>
+<span id="1566">1566</span>
+<span id="1567">1567</span>
+<span id="1568">1568</span>
+<span id="1569">1569</span>
+<span id="1570">1570</span>
+<span id="1571">1571</span>
+<span id="1572">1572</span>
+<span id="1573">1573</span>
+<span id="1574">1574</span>
+<span id="1575">1575</span>
+<span id="1576">1576</span>
+<span id="1577">1577</span>
+<span id="1578">1578</span>
+<span id="1579">1579</span>
+<span id="1580">1580</span>
+<span id="1581">1581</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1659,7 +1684,14 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 ```
 */</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">policies</span> {
+    <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">marker</span>::<span class="ident">PhantomData</span>;
+
     <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">Policy</span>, <span class="ident">PolicyParameters</span>, <span class="ident">PrecisionPolicy</span>};
+
+    <span class="doccomment">/// Policy adapter that increases the precision requires by one level,</span>
+    <span class="doccomment">/// e.g.: `Worst` -&gt; `Average`, `Average` -&gt; `Best`</span>
+    <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">ExtraPrecision</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">PhantomData</span><span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>);
 
     <span class="doccomment">/// Optimize for performance at the cost of precision and safety (doesn&#39;t handle special cases such as NaNs or overflow).</span>
     <span class="doccomment">///</span>
@@ -1692,6 +1724,24 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="doccomment">/// Calculates a reference value for operations where possible, which can be very expensive.</span>
     <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">PartialOrd</span>, <span class="ident">Ord</span>, <span class="ident">Hash</span>)]</span>
     <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Reference</span>;
+
+    <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">extra_precision</span>(<span class="ident">p</span>: <span class="ident">PrecisionPolicy</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span> {
+        <span class="kw">match</span> <span class="ident">p</span> {
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span>,
+            <span class="ident">PrecisionPolicy</span>::<span class="ident">Average</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span>,
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Reference</span>,
+        }
+    }
+
+    <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">ExtraPrecision</span><span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span> {
+        <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
+            <span class="ident">check_overflow</span>: <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span>,
+            <span class="ident">unroll_loops</span>: <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">unroll_loops</span>,
+            <span class="ident">precision</span>: <span class="ident">extra_precision</span>(<span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span>),
+            <span class="ident">avoid_branching</span>: <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">avoid_branching</span>,
+            <span class="ident">max_series_iterations</span>: <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">max_series_iterations</span>,
+        };
+    }
 
     <span class="kw">impl</span> <span class="ident">Policy</span> <span class="kw">for</span> <span class="ident">UltraPerformance</span> {
         <span class="kw">const</span> <span class="ident">POLICY</span>: <span class="ident">PolicyParameters</span> <span class="op">=</span> <span class="ident">PolicyParameters</span> {
