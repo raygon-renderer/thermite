@@ -20,30 +20,31 @@ where
     #[inline(always)]
     fn sin_cos<P: Policy>(xx: Self::Vf) -> (Self::Vf, Self::Vf) {
         if P::POLICY.precision == PrecisionPolicy::Worst {
-            // https://stackoverflow.com/a/28050328/2083075
+            // https://stackoverflow.com/a/28050328/2083075 with modifications
             #[inline(always)]
             fn fast_cosine<S: Simd>(mut x: Vf32<S>, sine: bool) -> Vf32<S> {
                 let quarter = Vf32::<S>::splat(0.25);
+                let half = Vf32::<S>::splat(0.5);
 
-                let frac_1_2pi = Vf32::<S>::splat(FRAC_1_PI * 0.5);
-
+                // encourage instruction-level parallelism
                 if sine {
-                    x = x.mul_sube(frac_1_2pi, quarter);
+                    x = (x - half) - x.floor();
                 } else {
-                    x *= frac_1_2pi;
+                    x = (x - quarter) - (x + quarter).floor();
                 }
-
-                x -= quarter + (x + quarter).floor();
 
                 // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
                 //x *= Vf32::<S>::splat(16.0) * (x.abs() - Vf32::<S>::splat(0.5));
                 x *= x.abs().mul_sube(Vf32::<S>::splat(16.0), Vf32::<S>::splat(8.0));
 
-                x.mul_adde(Vf32::<S>::splat(0.225) * (x.abs() - Vf32::<S>::one()), x)
+                let c = Vf32::<S>::splat(0.225);
+                x.mul_adde(x.abs().mul_sube(c, c), x)
             }
 
-            let sine = fast_cosine::<S>(xx, true);
-            let cosine = fast_cosine::<S>(xx, false);
+            let x = xx * Vf32::<S>::splat(FRAC_1_PI * 0.5);
+
+            let sine = fast_cosine::<S>(x, true);
+            let cosine = fast_cosine::<S>(x, false);
 
             return (sine, cosine);
         }
