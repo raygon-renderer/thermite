@@ -99,7 +99,14 @@ let y = x.cbrt_p::<MyPolicy>();
 ```
 */
 pub mod policies {
+    use core::marker::PhantomData;
+
     use super::{Policy, PolicyParameters, PrecisionPolicy};
+
+    /// Policy adapter that increases the precision requires by one level,
+    /// e.g.: `Worst` -> `Average`, `Average` -> `Best`
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ExtraPrecision<P: Policy>(PhantomData<P>);
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
     ///
@@ -132,6 +139,24 @@ pub mod policies {
     /// Calculates a reference value for operations where possible, which can be very expensive.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Reference;
+
+    const fn extra_precision(p: PrecisionPolicy) -> PrecisionPolicy {
+        match p {
+            PrecisionPolicy::Worst => PrecisionPolicy::Average,
+            PrecisionPolicy::Average => PrecisionPolicy::Best,
+            _ => PrecisionPolicy::Reference,
+        }
+    }
+
+    impl<P: Policy> Policy for ExtraPrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: extra_precision(P::POLICY.precision),
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
 
     impl Policy for UltraPerformance {
         const POLICY: PolicyParameters = PolicyParameters {

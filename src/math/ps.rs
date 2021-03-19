@@ -1019,14 +1019,14 @@ where
             .gt(Vf32::<S>::splat(1e10))
             .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
 
-        result *= agh_d_cgh.powf_p::<P>(a - Vf32::<S>::splat(0.5) - b);
-        result *= base.powf_p::<P>(b) * Vf32::<S>::splat(SQRT_E);
-
-        if P::POLICY.precision >= PrecisionPolicy::Average {
-            result /= bgh.sqrt();
+        let denom = if P::POLICY.precision > PrecisionPolicy::Average {
+            Vf32::<S>::splat(SQRT_E) / bgh.sqrt()
         } else {
-            result *= bgh.invsqrt_p::<P>();
-        }
+            // bump up the precision a little to improve beta function accuracy
+            Vf32::<S>::splat(SQRT_E) * bgh.invsqrt_p::<ExtraPrecision<P>>()
+        };
+
+        result *= agh_d_cgh.powf_p::<P>(a - Vf32::<S>::splat(0.5) - b) * (base.powf_p::<P>(b) * denom);
 
         if P::POLICY.check_overflow {
             result = is_valid.select(result, Vf32::<S>::nan());
@@ -1107,10 +1107,9 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
             return z;
         }
 
-        let underflow_value = if mode == ExpMode::Expm1 {
-            Vf32::<S>::neg_one()
-        } else {
-            Vf32::<S>::zero()
+        let underflow_value = match mode {
+            ExpMode::Expm1 => Vf32::<S>::neg_one(),
+            _ => Vf32::<S>::zero(),
         };
 
         r = x0.select_negative(underflow_value, Vf32::<S>::infinity());
@@ -1127,6 +1126,7 @@ fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
 
     let is_big = xa.gt(Vf32::<S>::splat(0.5));
 
+    // TODO: Branch to avoid sqrt?
     let x1 = Vf32::<S>::splat(0.5) * (Vf32::<S>::one() - xa);
     let x2 = xa * xa;
     let x3 = is_big.select(x1, x2);

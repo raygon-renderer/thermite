@@ -1076,14 +1076,10 @@ where
             .gt(Vf64::<S>::splat(1e10))
             .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
 
-        result *= agh_d_cgh.powf_p::<P>(a - Vf64::<S>::splat(0.5) - b);
-        result *= base.powf_p::<P>(b) * Vf64::<S>::splat(SQRT_E);
-
-        if P::POLICY.precision >= PrecisionPolicy::Average {
-            result /= bgh.sqrt();
-        } else {
-            result *= bgh.invsqrt_p::<P>();
-        }
+        // encourage instruction-level parallelism
+        result *= agh_d_cgh.powf_p::<P>(a - Vf64::<S>::splat(0.5) - b)
+            * base.powf_p::<P>(b)
+            * (Vf64::<S>::splat(SQRT_E) / bgh.sqrt());
 
         if P::POLICY.check_overflow {
             result = is_valid.select(result, Vf64::<S>::nan());
