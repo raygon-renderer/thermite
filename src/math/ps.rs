@@ -1,6 +1,8 @@
 use super::{poly::*, *};
 
-use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+use core::f32::consts::{
+    FRAC_1_PI, FRAC_2_PI, FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2,
+};
 
 const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
@@ -54,7 +56,7 @@ where
         let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
         let xa: Vf32<S> = xx.abs();
 
-        let y: Vf32<S> = (xa * Vf32::<S>::splat(2.0 / PI)).round();
+        let y: Vf32<S> = (xa * Vf32::<S>::splat(FRAC_2_PI)).round();
         let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
 
         // Reduce by extended precision modular arithmetic
@@ -140,7 +142,9 @@ where
         // if not all are small
         if P::POLICY.avoid_branching || !bitmask.all() {
             y2 = (x + x).exp_p::<P>();
-            y2 = (y2 - one) / (y2 + one); // originally (1 - 2/(y2 + 1)), but doing it this way avoids loading 2.0
+            // originally (1 - 2/(y2 + 1)), but doing it this way avoids
+            // loading 2.0 and encourages slight instruction-level parallelism
+            y2 = (y2 - one) / (y2 + one);
 
             if P::POLICY.check_overflow {
                 y2 = x.gt(Vf32::<S>::splat(44.4)).select(one, y2);
@@ -865,7 +869,7 @@ where
             let is_tiny = z.lt(Vf32::<S>::splat(
                 <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
             ));
-            let tiny_res = one / z - Vf32::<S>::splat(EULERS_CONSTANT);
+            let tiny_res = z.reciprocal_p::<P>() - Vf32::<S>::splat(EULERS_CONSTANT);
             res *= is_tiny.select(tiny_res, normal_res);
         } else {
             res *= normal_res;
@@ -900,7 +904,7 @@ where
             let is_not_tiny = z.ge(Vf32::<S>::splat_as(
                 <Self as SimdVectorizedMathInternal<S>>::__SQRT_EPSILON,
             ));
-            let tiny_res = one / z - Vf32::<S>::splat(EULERS_CONSTANT);
+            let tiny_res = z.reciprocal_p::<P>() - Vf32::<S>::splat(EULERS_CONSTANT);
 
             // shove the tiny result into the log down below
             lanczos_sum = is_not_tiny.select(lanczos_sum, tiny_res);
@@ -927,6 +931,7 @@ where
     fn digamma<P: Policy>(mut x: Self::Vf) -> Self::Vf {
         let zero = Vf32::<S>::zero();
         let one = Vf32::<S>::one();
+        let half = Vf32::<S>::splat(0.5);
         let pi = Vf32::<S>::splat(PI);
 
         let mut result = zero;
@@ -938,7 +943,7 @@ where
 
             let mut rem = x - x.floor();
 
-            rem = rem.conditional_sub(one, rem.gt(Vf32::<S>::splat(0.5)));
+            rem = rem.conditional_sub(one, rem.gt(half));
 
             let (s, c) = (rem * pi).sin_cos_p::<P>();
             let refl_res = pi * c / s;
@@ -953,15 +958,17 @@ where
         // Rescale to use asymptotic expansion
         let mut is_small = x.lt(lim);
         while is_small.any() {
-            result = result.conditional_sub(one / x, is_small);
+            result = result.conditional_sub(x.reciprocal_p::<P>(), is_small);
             x = x.conditional_add(one, is_small);
             is_small = x.lt(lim);
         }
 
         x -= one;
 
-        let z = one / (x * x);
-        let a = x.ln_p::<P>() + (one / (x + x));
+        let inv_x = x.reciprocal_p::<P>();
+
+        let z = inv_x * inv_x;
+        let a = x.ln_p::<P>() + (inv_x * half);
 
         let y = z.poly_p::<P>(&[
             0.083333333333333333333333333333333333333333333333333,
