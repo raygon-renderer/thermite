@@ -348,7 +348,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
 
     /// Computes both the sine and cosine of a vector together faster than they would be computed separately.
     ///
-    /// If you need both, use this.
+    /// If you need both, use this, as it will allow for sharing parts of the computation between both sine and cosine.
     fn sin_cos(self) -> (Self, Self);
 
     /// Computes the hyperbolic-sine of a vector.
@@ -393,6 +393,11 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     fn invsqrt(self) -> Self;
 
     /// Computes the approximate reciprocal `1/x` variation, which may use faster instructions where possible.
+    ///
+    /// **NOTE**: It is not advised to use in conjunction with a single multiplication afterwards,
+    /// such as `a * b.recriprocal()` to replace `a / b`. Use this method only when the recriprocal itself is needed,
+    /// otherwise it is probably more performant to just use division. The exception for this is when on the `Worst`
+    /// precision policy, in which case this may outperform plain division, but at a severe cost in precision.
     fn reciprocal(self) -> Self;
 
     /// Computes `x^e` where `x` is `self` and `e` is a vector of floating-point exponents
@@ -431,7 +436,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.
     /// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).
     ///
-    /// NOTE: The Gamma function is not defined for negative integers.
+    /// **NOTE**: The Gamma function is not defined for negative integers.
     fn tgamma(self) -> Self;
 
     /// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.
@@ -1256,7 +1261,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         if P::POLICY.precision > PrecisionPolicy::Worst {
             // one iteration of Newton's method
-            y = y * x.nmul_adde(y, Self::Vf::splat_any(2.0))
+            y = y * x.nmul_adde(y, Self::Vf::splat_any(2.0));
         }
 
         y
