@@ -812,29 +812,33 @@ where
 
         // Integers
 
-        let zf = z.floor();
-        let z_int = zf.eq(z);
+        let mut z_int = Mask::falsey();
         let mut fact_res = one;
 
-        let bitmask = z_int.bitmask();
+        if P::POLICY.precision > PrecisionPolicy::Worst {
+            let zf = z.floor();
+            z_int = zf.eq(z);
 
-        if unlikely!(bitmask.any()) {
-            let mut j = one;
-            let mut k = j.lt(zf);
+            let bitmask = z_int.bitmask();
 
-            while k.any() {
-                fact_res = k.select(fact_res * j, fact_res);
-                j += one;
-                k = j.lt(zf);
-            }
+            if unlikely!(bitmask.any()) {
+                let mut j = one;
+                let mut k = j.lt(zf);
 
-            // Γ(-int) = NaN for poles
-            fact_res = is_neg.select(Vf32::<S>::nan(), fact_res);
-            // approaching zero from either side results in +/- infinity
-            fact_res = orig_z.eq(zero).select(Vf32::<S>::infinity().copysign(orig_z), fact_res);
+                while k.any() {
+                    fact_res = k.select(fact_res * j, fact_res);
+                    j += one;
+                    k = j.lt(zf);
+                }
 
-            if bitmask.all() {
-                return fact_res;
+                // Γ(-int) = NaN for poles
+                fact_res = is_neg.select(Vf32::<S>::nan(), fact_res);
+                // approaching zero from either side results in +/- infinity
+                fact_res = orig_z.eq(zero).select(Vf32::<S>::infinity().copysign(orig_z), fact_res);
+
+                if bitmask.all() {
+                    return fact_res;
+                }
             }
         }
 
@@ -855,14 +859,14 @@ where
         // only compute powf once
         let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(half, quarter), z - half));
 
-        let mut normal_res = lanczos_sum * very_large.select(h * h, h);
-
         // save a couple cycles by avoiding this division, but worst-case precision is slightly worse
-        if P::POLICY.precision >= PrecisionPolicy::Best {
-            normal_res /= zgh.exp_p::<P>();
+        let denom = if P::POLICY.precision >= PrecisionPolicy::Best {
+            lanczos_sum / zgh.exp_p::<P>()
         } else {
-            normal_res *= (-zgh).exp_p::<P>();
-        }
+            lanczos_sum * (-zgh).exp_p::<P>()
+        };
+
+        let normal_res = very_large.select(h * h, h) * denom;
 
         // Tiny
         if P::POLICY.precision >= PrecisionPolicy::Best {
@@ -994,7 +998,6 @@ where
             }
         }
 
-        let mut prefix = one;
         let c = a + b;
 
         // if a < b then swap
