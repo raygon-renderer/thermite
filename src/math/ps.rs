@@ -1208,6 +1208,30 @@ fn exponent<S: Simd>(x: Vf32<S>) -> Vi32<S> {
 
 #[inline(always)]
 fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
+    if P::POLICY.precision == PrecisionPolicy::Worst {
+        // https://stackoverflow.com/a/39822314/2083075
+
+        let a = Vi32::<S>::from_bits(x0.into_bits());
+        let e = (a - Vi32::<S>::splat(0x3f2aaaab)) & Vi32::<S>::splat(0xff800000u32 as i32);
+        let i = e.cast_to::<Vf32<S>>() * Vf32::<S>::splat(1.19209290e-7);
+        let mut f = Vf32::<S>::from_bits((a - e).into_bits());
+
+        if !p1 {
+            f -= Vf32::<S>::one();
+        }
+
+        let s = f * f;
+
+        /* Compute log1p(f) for f in [-1/3, 1/3] */
+        let r = f.mul_adde(Vf32::<S>::splat(0.230836749), Vf32::<S>::splat(-0.279208571)); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
+        let t = f.mul_adde(Vf32::<S>::splat(0.331826031), Vf32::<S>::splat(-0.498910338)); // 0x1.53ca34p-2, -0x1.fee25ap-2
+        let r = r.mul_adde(s, t);
+        let r = r.mul_adde(s, f);
+        let r = i.mul_adde(Vf32::<S>::splat(0.693147182), r); // 0x1.62e430p-1 // log(2)
+
+        return r;
+    }
+
     let ln2f_hi = Vf32::<S>::splat(0.693359375);
     let ln2f_lo = Vf32::<S>::splat(-2.12194440E-4);
     let one = Vf32::<S>::one();
