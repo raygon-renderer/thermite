@@ -472,6 +472,10 @@ where
 
     #[inline(always)]
     fn powf<P: Policy>(x0: Self::Vf, y: Self::Vf) -> Self::Vf {
+        if P::POLICY.precision == PrecisionPolicy::Worst {
+            return (x0.log2_p::<P>() * y).exp2_p::<P>();
+        }
+
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
@@ -1052,55 +1056,85 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
     let mut x = x0;
     let mut r;
 
-    let max_x;
+    let max_x = match mode {
+        ExpMode::Exp => 87.3,
+        ExpMode::Exph | ExpMode::Expm1 => 89.0,
+        ExpMode::Pow2 => 126.0,
+        ExpMode::Pow10 => 37.9,
+    };
 
-    match mode {
-        ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
-            max_x = if mode == ExpMode::Exp { 87.3 } else { 89.0 };
+    let mut z = if P::POLICY.precision == PrecisionPolicy::Worst {
+        // https://stackoverflow.com/a/10792321 with a better 2^f fit
 
-            let ln2f_hi = Vf32::<S>::splat(0.693359375);
-            let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
+        // Compute t such that b^x = 2^t
+        let t = match mode {
+            ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => x * Vf32::<S>::splat(LOG2_E),
+            ExpMode::Pow2 => x,
+            ExpMode::Pow10 => x * Vf32::<S>::splat(LOG10_2),
+        };
 
-            r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
+        let fi = t.floor();
+        let f = t - fi;
 
-            x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
-            x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
+        // if the exponent exceeds this method's limitations, then it's far outside of the valid range for exp
+        let i = unsafe { fi.to_int_fast() };
 
-            if mode == ExpMode::Exph {
-                r -= Vf32::<S>::one();
+        // polynomial approximation of 2^f
+        let cf = f.poly_p::<P>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
+
+        // scale 2^f by 2^i
+        let ci = Vi32::<S>::from_bits(cf.into_bits()) + (i << 23);
+
+        let z = Vf32::<S>::from_bits(ci.into_bits());
+
+        match mode {
+            ExpMode::Exph => z * Vf32::<S>::splat(0.5),
+            ExpMode::Expm1 => z - Vf32::<S>::one(),
+            _ => z,
+        }
+    } else {
+        match mode {
+            ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
+                let ln2f_hi = Vf32::<S>::splat(0.693359375);
+                let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
+
+                r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
+
+                x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
+                x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
+
+                if mode == ExpMode::Exph {
+                    r -= Vf32::<S>::one();
+                }
+            }
+            ExpMode::Pow2 => {
+                r = x0.round();
+
+                x -= r;
+                x *= Vf32::<S>::splat(LN_2);
+            }
+            ExpMode::Pow10 => {
+                let log10_2_hi = Vf32::<S>::splat(0.301025391); // log10(2) in two parts
+                let log10_2_lo = Vf32::<S>::splat(4.60503907E-6);
+
+                r = (x0 * Vf32::<S>::splat(LN_10 * LOG2_E)).round();
+
+                x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
+                x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
+                x *= Vf32::<S>::splat(LN_10);
             }
         }
-        ExpMode::Pow2 => {
-            max_x = 126.0;
 
-            r = x0.round();
+        let mut z = x
+            .poly_p::<P>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .mul_adde(x * x, x);
 
-            x -= r;
-            x *= Vf32::<S>::splat(LN_2);
+        let n2 = pow2n_f::<S>(r);
+
+        match mode {
+            ExpMode::Expm1 => z.mul_adde(n2, n2 - Vf32::<S>::one()),
+            _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
         }
-        ExpMode::Pow10 => {
-            max_x = 37.9;
-
-            let log10_2_hi = Vf32::<S>::splat(0.301025391); // log10(2) in two parts
-            let log10_2_lo = Vf32::<S>::splat(4.60503907E-6);
-
-            r = (x0 * Vf32::<S>::splat(LN_10 * LOG2_E)).round();
-
-            x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
-            x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
-            x *= Vf32::<S>::splat(LN_10);
-        }
-    }
-
-    let mut z = x
-        .poly_p::<P>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
-        .mul_adde(x * x, x);
-
-    let n2 = pow2n_f::<S>(r);
-
-    z = match mode {
-        ExpMode::Expm1 => z.mul_adde(n2, n2 - Vf32::<S>::one()),
-        _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
     if P::POLICY.check_overflow {

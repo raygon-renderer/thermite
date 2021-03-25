@@ -408,7 +408,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// Base-10 exponential function, returns `10^(self)`
     fn exp10(self) -> Self;
     /// Exponential function minus one, `e^(self) - 1.0`,
-    /// special implementation that is more accurate if the numbr if closer to zero.
+    /// special implementation that is more accurate if the number if closer to zero.
     fn exp_m1(self) -> Self;
 
     /// Computes the cubic-root of each lane in a vector.
