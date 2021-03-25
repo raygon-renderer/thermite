@@ -1,6 +1,6 @@
 #![no_std]
-// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic
-#![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics, min_const_generics))]
+// stdmind for f16c instructions, core_intrinsics for likely/unlikely
+#![cfg_attr(feature = "nightly", feature(stdsimd, core_intrinsics))]
 #![allow(unused_imports, non_camel_case_types, non_snake_case)]
 
 pub use thermite_dispatch::dispatch;

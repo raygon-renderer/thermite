@@ -6,10 +6,8 @@ use crate::*;
 
 pub mod compensated;
 pub mod complex;
-pub mod poly;
-
-#[cfg(feature = "nightly")]
 pub mod hyperdual;
+pub mod poly;
 
 mod pd;
 mod ps;
@@ -1572,10 +1570,17 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 mod bessel;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 enum ExpMode {
-    Exp,
+    Exp = 0,
     Expm1,
     Exph,
     Pow2,
     Pow10,
 }
+
+const EXP_MODE_EXP: u8 = ExpMode::Exp as u8;
+const EXP_MODE_EXPM1: u8 = ExpMode::Expm1 as u8;
+const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
+const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
+const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;

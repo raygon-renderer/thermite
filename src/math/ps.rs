@@ -175,12 +175,12 @@ where
 
     #[inline(always)]
     fn asin<P: Policy>(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S, P>(x, false)
+        asin_f_internal::<S, P, false>(x)
     }
 
     #[inline(always)]
     fn acos<P: Policy>(x: Self::Vf) -> Self::Vf {
-        asin_f_internal::<S, P>(x, true)
+        asin_f_internal::<S, P, true>(x)
     }
 
     #[inline(always)]
@@ -388,27 +388,27 @@ where
 
     #[inline(always)]
     fn exp<P: Policy>(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S, P>(x, ExpMode::Exp)
+        exp_f_internal::<S, P, { EXP_MODE_EXP }>(x)
     }
 
     #[inline(always)]
     fn exph<P: Policy>(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S, P>(x, ExpMode::Exph)
+        exp_f_internal::<S, P, { EXP_MODE_EXPH }>(x)
     }
 
     #[inline(always)]
     fn exp2<P: Policy>(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S, P>(x, ExpMode::Pow2)
+        exp_f_internal::<S, P, { EXP_MODE_POW2 }>(x)
     }
 
     #[inline(always)]
     fn exp10<P: Policy>(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S, P>(x, ExpMode::Pow10)
+        exp_f_internal::<S, P, { EXP_MODE_POW10 }>(x)
     }
 
     #[inline(always)]
     fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
-        exp_f_internal::<S, P>(x, ExpMode::Expm1)
+        exp_f_internal::<S, P, { EXP_MODE_EXPM1 }>(x)
     }
 
     #[inline(always)]
@@ -636,22 +636,22 @@ where
 
     #[inline(always)]
     fn ln<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P>(x, false)
+        ln_f_internal::<S, P, false>(x)
     }
 
     #[inline(always)]
     fn ln_1p<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P>(x, true)
+        ln_f_internal::<S, P, true>(x)
     }
 
     #[inline(always)]
     fn log2<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P>(x, false) * Vf32::<S>::splat(LOG2_E)
+        ln_f_internal::<S, P, false>(x) * Vf32::<S>::splat(LOG2_E)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P>(x, false) * Vf32::<S>::splat(LOG10_E)
+        ln_f_internal::<S, P, false>(x) * Vf32::<S>::splat(LOG10_E)
     }
 
     #[inline(always)]
@@ -1052,25 +1052,25 @@ fn pow2n_f<S: Simd>(n: Vf32<S>) -> Vf32<S> {
 }
 
 #[inline(always)]
-fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
+fn exp_f_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf32<S>) -> Vf32<S> {
     let mut x = x0;
     let mut r;
 
-    let max_x = match mode {
-        ExpMode::Exp => 87.3,
-        ExpMode::Exph | ExpMode::Expm1 => 89.0,
-        ExpMode::Pow2 => 126.0,
-        ExpMode::Pow10 => 37.9,
+    let max_x = match MODE {
+        EXP_MODE_EXP => 87.3,
+        EXP_MODE_POW2 => 126.0,
+        EXP_MODE_POW10 => 37.9,
+        /*EXP_MODE_EXPH | EXP_MODE_EXPM1*/ _ => 89.0,
     };
 
     let mut z = if P::POLICY.precision == PrecisionPolicy::Worst {
         // https://stackoverflow.com/a/10792321 with a better 2^f fit
 
         // Compute t such that b^x = 2^t
-        let t = match mode {
-            ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => x * Vf32::<S>::splat(LOG2_E),
-            ExpMode::Pow2 => x,
-            ExpMode::Pow10 => x * Vf32::<S>::splat(LOG10_2),
+        let t = match MODE {
+            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x * Vf32::<S>::splat(LOG2_E),
+            EXP_MODE_POW10 => x * Vf32::<S>::splat(LOG10_2),
+            _ => x,
         };
 
         let fi = t.floor();
@@ -1087,33 +1087,20 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
         let z = Vf32::<S>::from_bits(ci.into_bits());
 
-        match mode {
-            ExpMode::Exph => z * Vf32::<S>::splat(0.5),
-            ExpMode::Expm1 => z - Vf32::<S>::one(),
+        match MODE {
+            EXP_MODE_EXPH => z * Vf32::<S>::splat(0.5),
+            EXP_MODE_EXPM1 => z - Vf32::<S>::one(),
             _ => z,
         }
     } else {
-        match mode {
-            ExpMode::Exp | ExpMode::Exph | ExpMode::Expm1 => {
-                let ln2f_hi = Vf32::<S>::splat(0.693359375);
-                let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
-
-                r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
-
-                x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
-                x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
-
-                if mode == ExpMode::Exph {
-                    r -= Vf32::<S>::one();
-                }
-            }
-            ExpMode::Pow2 => {
+        match MODE {
+            EXP_MODE_POW2 => {
                 r = x0.round();
 
                 x -= r;
                 x *= Vf32::<S>::splat(LN_2);
             }
-            ExpMode::Pow10 => {
+            EXP_MODE_POW10 => {
                 let log10_2_hi = Vf32::<S>::splat(0.301025391); // log10(2) in two parts
                 let log10_2_lo = Vf32::<S>::splat(4.60503907E-6);
 
@@ -1123,6 +1110,19 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
                 x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
                 x *= Vf32::<S>::splat(LN_10);
             }
+            _ => {
+                let ln2f_hi = Vf32::<S>::splat(0.693359375);
+                let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
+
+                r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
+
+                x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
+                x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
+
+                if MODE == EXP_MODE_EXPH {
+                    r -= Vf32::<S>::one();
+                }
+            }
         }
 
         let mut z = x
@@ -1131,8 +1131,8 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 
         let n2 = pow2n_f::<S>(r);
 
-        match mode {
-            ExpMode::Expm1 => z.mul_adde(n2, n2 - Vf32::<S>::one()),
+        match MODE {
+            EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - Vf32::<S>::one()),
             _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
         }
     };
@@ -1144,8 +1144,8 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
             return z;
         }
 
-        let underflow_value = match mode {
-            ExpMode::Expm1 => Vf32::<S>::neg_one(),
+        let underflow_value = match MODE {
+            EXP_MODE_EXPM1 => Vf32::<S>::neg_one(),
             _ => Vf32::<S>::zero(),
         };
 
@@ -1158,7 +1158,7 @@ fn exp_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, mode: ExpMode) -> Vf32<S> {
 }
 
 #[inline(always)]
-fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
+fn asin_f_internal<S: Simd, P: Policy, const ACOS: bool>(x: Vf32<S>) -> Vf32<S> {
     let xa = x.abs();
 
     let is_big = xa.gt(Vf32::<S>::splat(0.5));
@@ -1182,7 +1182,7 @@ fn asin_f_internal<S: Simd, P: Policy>(x: Vf32<S>, acos: bool) -> Vf32<S> {
 
     let z1 = z + z;
 
-    if acos {
+    if ACOS {
         let z1 = x.select_negative(Vf32::<S>::splat(PI) - z1, z1);
         let z2 = Vf32::<S>::splat(FRAC_PI_2) - z.combine_sign(x);
 
@@ -1207,7 +1207,7 @@ fn exponent<S: Simd>(x: Vf32<S>) -> Vi32<S> {
 }
 
 #[inline(always)]
-fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
+fn ln_f_internal<S: Simd, P: Policy, const P1: bool>(x0: Vf32<S>) -> Vf32<S> {
     if P::POLICY.precision == PrecisionPolicy::Worst {
         // https://stackoverflow.com/a/39822314/2083075
 
@@ -1216,7 +1216,7 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
         let i = e.cast_to::<Vf32<S>>() * Vf32::<S>::splat(1.19209290e-7);
         let mut f = Vf32::<S>::from_bits((a - e).into_bits());
 
-        if !p1 {
+        if !P1 {
             f -= Vf32::<S>::one();
         }
 
@@ -1236,7 +1236,7 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
     let ln2f_lo = Vf32::<S>::splat(-2.12194440E-4);
     let one = Vf32::<S>::one();
 
-    let x1 = if p1 { x0 + one } else { x0 };
+    let x1 = if P1 { x0 + one } else { x0 };
 
     let mut x = fraction2::<S>(x1);
     let mut e = exponent::<S>(x1);
@@ -1251,7 +1251,7 @@ fn ln_f_internal<S: Simd, P: Policy>(x0: Vf32<S>, p1: bool) -> Vf32<S> {
 
     let xp1 = x - one;
 
-    x = if p1 {
+    x = if P1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
         e.eq(Vi32::<S>::zero()).select(x0, xp1)
     } else {
