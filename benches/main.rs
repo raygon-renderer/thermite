@@ -82,6 +82,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             },
             vec![0.5],
         )
+        .with_function("thermite-ps-ultra", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32) -> Vf32 {
+                x.exp_p::<policies::UltraPerformance>()
+            }
+            let x = black_box(Vf32::splat(*x) + Vf32::indexed());
+            b.iter(|| do_algorithm(x))
+        })
         .with_function("thermite-pd", |b, x| {
             #[inline(never)]
             fn do_algorithm(x: Vf64) -> Vf64 {
@@ -136,6 +144,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             },
             vec![0.5],
         )
+        .with_function("thermite-ps-ultra", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32) -> Vf32 {
+                x.ln_p::<policies::UltraPerformance>()
+            }
+            let x = black_box(Vf32::splat(*x) + Vf32::indexed());
+            b.iter(|| do_algorithm(x))
+        })
         .with_function("thermite-pd", |b, x| {
             #[inline(never)]
             fn do_algorithm(x: Vf64) -> Vf64 {
@@ -311,6 +327,13 @@ fn criterion_benchmark(c: &mut Criterion) {
             },
             vec![-25.43, -4.83, 0.53, 20.3, 4.0, 20.0],
         )
+        .with_function("thermite-ps-ultra", |b, x| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32) -> Vf32 {
+                x.tgamma_p::<policies::UltraPerformance>()
+            }
+            b.iter(|| do_algorithm(Vf32::splat(*x)))
+        })
         .with_function("thermite-pd", |b, x| {
             #[inline(never)]
             fn do_algorithm(x: Vf64) -> Vf64 {
