@@ -1,18 +1,35 @@
 use crate::*;
 
-use core::marker::PhantomData;
+use core::{fmt, marker::PhantomData};
 
+pub type Hyperdual<S, V, const N: usize> = HyperdualP<S, V, policies::Performance, N>;
 pub type DuelNumber<S, V> = Hyperdual<S, V, 1>;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Hyperdual<S: Simd, V: SimdFloatVector<S>, const N: usize> {
+pub struct HyperdualP<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> {
     pub re: V,
     pub du: [V; N],
-    _simd: PhantomData<S>,
+    _simd: PhantomData<(S, P)>,
+}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Clone for HyperdualP<S, V, P, N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Copy for HyperdualP<S, V, P, N> {}
+
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> fmt::Debug for HyperdualP<S, V, P, N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HyperdualP")
+            .field("re", &self.re)
+            .field("du", &self.du)
+            .finish()
+    }
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> HyperdualP<S, V, P, N> {
     #[inline(always)]
     pub fn new(re: V, du: [V; N]) -> Self {
         Self {
@@ -59,7 +76,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N> {
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Hyperdual<S, V, N>
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> HyperdualP<S, V, P, N>
 where
     V: SimdVectorizedMath<S>,
 {
@@ -80,15 +97,15 @@ where
 
     #[inline(always)]
     pub fn powi(self, n: i32) -> Self {
-        let r = self.re.powi(n - 1);
+        let r = self.re.powi_p::<P>(n - 1);
         unimplemented!() // TODO
     }
 
     #[inline(always)]
     pub fn powf(mut self, n: Self) -> Self {
-        let re = self.re.powf(n.re);
-        let a = n.re * self.re.powf(n.re - V::one());
-        let b = re * self.re.ln();
+        let re = self.re.powf_p::<P>(n.re);
+        let a = n.re * self.re.powf_p::<P>(n.re - V::one());
+        let b = re * self.re.ln_p::<P>();
         self.re = re;
         for i in 0..N {
             self.du[i] = a.mul_add(self.du[i], b * n.du[i]);
@@ -98,12 +115,12 @@ where
 
     #[inline(always)]
     pub fn exp(self) -> Self {
-        let re = self.re.exp();
+        let re = self.re.exp_p::<P>();
         self.map_dual(re, |x| re * x)
     }
 
     pub fn exp2(self) -> Self {
-        let re = self.re.exp2();
+        let re = self.re.exp2_p::<P>();
         unimplemented!() // TODO
 
         //let ln2 =
@@ -112,7 +129,7 @@ where
 
     #[inline(always)]
     pub fn ln(self) -> Self {
-        self.map_dual(self.re.ln(), |x| x / self.re)
+        self.map_dual(self.re.ln_p::<P>(), |x| x / self.re)
     }
 
     #[inline(always)]
@@ -141,7 +158,7 @@ where
 
     #[inline(always)]
     pub fn sin_cos(self) -> (Self, Self) {
-        let (s, c) = self.re.sin_cos();
+        let (s, c) = self.re.sin_cos_p::<P>();
 
         let mut sine = self;
         let mut cosi = self;
@@ -158,28 +175,28 @@ where
 
     #[inline(always)]
     pub fn tan(self) -> Self {
-        let t = self.re.tan();
+        let t = self.re.tan_p::<P>();
         let c = t.mul_add(t, V::one());
         self.map_dual(t, |x| x * c)
     }
 
     #[inline(always)]
     pub fn sinh_cosh(self) -> (Self, Self) {
-        let s = self.re.sinh();
-        let c = self.re.cosh();
+        let s = self.re.sinh_p::<P>();
+        let c = self.re.cosh_p::<P>();
         (self.map_dual(s, |x| x * c), self.map_dual(c, |x| x * s))
     }
 
     #[inline(always)]
     pub fn tanh(self) -> Self {
-        let re = self.re.tanh();
+        let re = self.re.tanh_p::<P>();
         let c = re.nmul_add(re, V::one()); // 1 - r^2
         self.map_dual(re, |x| x * c)
     }
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Add<Self> for Hyperdual<S, V, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Add<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
     #[inline(always)]
@@ -193,7 +210,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Add<Self> for Hyperdual<S, 
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Sub<Self> for Hyperdual<S, V, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Sub<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
     #[inline(always)]
@@ -207,7 +224,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Sub<Self> for Hyperdual<S, 
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Mul<Self> for Hyperdual<S, V, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Mul<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
     #[inline(always)]
@@ -221,7 +238,7 @@ impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Mul<Self> for Hyperdual<S, 
 }
 
 #[dispatch(S, thermite = "crate")]
-impl<S: Simd, V: SimdFloatVector<S>, const N: usize> Div<Self> for Hyperdual<S, V, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Div<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
     #[inline(always)]
