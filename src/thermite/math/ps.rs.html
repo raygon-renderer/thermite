@@ -1262,6 +1262,40 @@
 <span id="1259">1259</span>
 <span id="1260">1260</span>
 <span id="1261">1261</span>
+<span id="1262">1262</span>
+<span id="1263">1263</span>
+<span id="1264">1264</span>
+<span id="1265">1265</span>
+<span id="1266">1266</span>
+<span id="1267">1267</span>
+<span id="1268">1268</span>
+<span id="1269">1269</span>
+<span id="1270">1270</span>
+<span id="1271">1271</span>
+<span id="1272">1272</span>
+<span id="1273">1273</span>
+<span id="1274">1274</span>
+<span id="1275">1275</span>
+<span id="1276">1276</span>
+<span id="1277">1277</span>
+<span id="1278">1278</span>
+<span id="1279">1279</span>
+<span id="1280">1280</span>
+<span id="1281">1281</span>
+<span id="1282">1282</span>
+<span id="1283">1283</span>
+<span id="1284">1284</span>
+<span id="1285">1285</span>
+<span id="1286">1286</span>
+<span id="1287">1287</span>
+<span id="1288">1288</span>
+<span id="1289">1289</span>
+<span id="1290">1290</span>
+<span id="1291">1291</span>
+<span id="1292">1292</span>
+<span id="1293">1293</span>
+<span id="1294">1294</span>
+<span id="1295">1295</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::{<span class="ident">poly</span>::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
 
@@ -1737,6 +1771,10 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">powf</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x0</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
+            <span class="kw">return</span> (<span class="ident">x0</span>.<span class="ident">log2_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">*</span> <span class="ident">y</span>).<span class="ident">exp2_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        }
+
         <span class="comment">// define constants</span>
         <span class="kw">let</span> <span class="ident">ln2f_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.693359375</span>); <span class="comment">// log(2), split in two for extended precision</span>
         <span class="kw">let</span> <span class="ident">ln2f_lo</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.12194440e-4</span>);
@@ -2317,55 +2355,85 @@
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x0</span>;
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">r</span>;
 
-    <span class="kw">let</span> <span class="ident">max_x</span>;
+    <span class="kw">let</span> <span class="ident">max_x</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">mode</span> {
+        <span class="ident">ExpMode</span>::<span class="ident">Exp</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">87.3</span>,
+        <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">89.0</span>,
+        <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">126.0</span>,
+        <span class="ident">ExpMode</span>::<span class="ident">Pow10</span> <span class="op">=</span><span class="op">&gt;</span> <span class="number">37.9</span>,
+    };
 
-    <span class="kw">match</span> <span class="ident">mode</span> {
-        <span class="ident">ExpMode</span>::<span class="ident">Exp</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="ident">max_x</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">mode</span> <span class="op">=</span><span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Exp</span> { <span class="number">87.3</span> } <span class="kw">else</span> { <span class="number">89.0</span> };
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
+        <span class="comment">// https://stackoverflow.com/a/10792321 with a better 2^f fit</span>
 
-            <span class="kw">let</span> <span class="ident">ln2f_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.693359375</span>);
-            <span class="kw">let</span> <span class="ident">ln2f_lo</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.12194440e-4</span>);
+        <span class="comment">// Compute t such that b^x = 2^t</span>
+        <span class="kw">let</span> <span class="ident">t</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">mode</span> {
+            <span class="ident">ExpMode</span>::<span class="ident">Exp</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LOG2_E</span>),
+            <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">x</span>,
+            <span class="ident">ExpMode</span>::<span class="ident">Pow10</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LOG10_2</span>),
+        };
 
-            <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x0</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LOG2_E</span>)).<span class="ident">round</span>();
+        <span class="kw">let</span> <span class="ident">fi</span> <span class="op">=</span> <span class="ident">t</span>.<span class="ident">floor</span>();
+        <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> <span class="ident">t</span> <span class="op">-</span> <span class="ident">fi</span>;
 
-            <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">ln2f_hi</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_hi;</span>
-            <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">ln2f_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_lo;</span>
+        <span class="comment">// if the exponent exceeds this method&#39;s limitations, then it&#39;s far outside of the valid range for exp</span>
+        <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="kw">unsafe</span> { <span class="ident">fi</span>.<span class="ident">to_int_fast</span>() };
 
-            <span class="kw">if</span> <span class="ident">mode</span> <span class="op">=</span><span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> {
-                <span class="ident">r</span> <span class="op">-</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+        <span class="comment">// polynomial approximation of 2^f</span>
+        <span class="kw">let</span> <span class="ident">cf</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[<span class="number">1.0</span>, <span class="number">0.695556856</span>, <span class="number">0.226173572</span>, <span class="number">0.0781455737</span>]);
+
+        <span class="comment">// scale 2^f by 2^i</span>
+        <span class="kw">let</span> <span class="ident">ci</span> <span class="op">=</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">cf</span>.<span class="ident">into_bits</span>()) <span class="op">+</span> (<span class="ident">i</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="number">23</span>);
+
+        <span class="kw">let</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">from_bits</span>(<span class="ident">ci</span>.<span class="ident">into_bits</span>());
+
+        <span class="kw">match</span> <span class="ident">mode</span> {
+            <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>),
+            <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>(),
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>,
+        }
+    } <span class="kw">else</span> {
+        <span class="kw">match</span> <span class="ident">mode</span> {
+            <span class="ident">ExpMode</span>::<span class="ident">Exp</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="op">|</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="kw">let</span> <span class="ident">ln2f_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.693359375</span>);
+                <span class="kw">let</span> <span class="ident">ln2f_lo</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="op">-</span><span class="number">2.12194440e-4</span>);
+
+                <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x0</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LOG2_E</span>)).<span class="ident">round</span>();
+
+                <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">ln2f_hi</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_hi;</span>
+                <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">ln2f_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * ln2f_lo;</span>
+
+                <span class="kw">if</span> <span class="ident">mode</span> <span class="op">=</span><span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> {
+                    <span class="ident">r</span> <span class="op">-</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
+                }
+            }
+            <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="ident">r</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">round</span>();
+
+                <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">r</span>;
+                <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>);
+            }
+            <span class="ident">ExpMode</span>::<span class="ident">Pow10</span> <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="kw">let</span> <span class="ident">log10_2_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.301025391</span>); <span class="comment">// log10(2) in two parts</span>
+                <span class="kw">let</span> <span class="ident">log10_2_lo</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.60503907E-6</span>);
+
+                <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x0</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_10</span> <span class="op">*</span> <span class="ident">LOG2_E</span>)).<span class="ident">round</span>();
+
+                <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">log10_2_hi</span>, <span class="ident">x</span>); <span class="comment">// x -= r * log10_2_hi;</span>
+                <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">log10_2_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * log10_2_lo;</span>
+                <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_10</span>);
             }
         }
-        <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="ident">max_x</span> <span class="op">=</span> <span class="number">126.0</span>;
 
-            <span class="ident">r</span> <span class="op">=</span> <span class="ident">x0</span>.<span class="ident">round</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">x</span>
+            .<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[<span class="number">1.0</span> <span class="op">/</span> <span class="number">2.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">6.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">24.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">120.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">720.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">5040.0</span>])
+            .<span class="ident">mul_adde</span>(<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
 
-            <span class="ident">x</span> <span class="op">-</span><span class="op">=</span> <span class="ident">r</span>;
-            <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_2</span>);
+        <span class="kw">let</span> <span class="ident">n2</span> <span class="op">=</span> <span class="ident">pow2n_f</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">r</span>);
+
+        <span class="kw">match</span> <span class="ident">mode</span> {
+            <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>.<span class="ident">mul_adde</span>(<span class="ident">n2</span>, <span class="ident">n2</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()),
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>.<span class="ident">mul_adde</span>(<span class="ident">n2</span>, <span class="ident">n2</span>), <span class="comment">// (z + 1.0f) * n2</span>
         }
-        <span class="ident">ExpMode</span>::<span class="ident">Pow10</span> <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="ident">max_x</span> <span class="op">=</span> <span class="number">37.9</span>;
-
-            <span class="kw">let</span> <span class="ident">log10_2_hi</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.301025391</span>); <span class="comment">// log10(2) in two parts</span>
-            <span class="kw">let</span> <span class="ident">log10_2_lo</span> <span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">4.60503907E-6</span>);
-
-            <span class="ident">r</span> <span class="op">=</span> (<span class="ident">x0</span> <span class="op">*</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_10</span> <span class="op">*</span> <span class="ident">LOG2_E</span>)).<span class="ident">round</span>();
-
-            <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">log10_2_hi</span>, <span class="ident">x</span>); <span class="comment">// x -= r * log10_2_hi;</span>
-            <span class="ident">x</span> <span class="op">=</span> <span class="ident">r</span>.<span class="ident">nmul_adde</span>(<span class="ident">log10_2_lo</span>, <span class="ident">x</span>); <span class="comment">// x -= r * log10_2_lo;</span>
-            <span class="ident">x</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_10</span>);
-        }
-    }
-
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">z</span> <span class="op">=</span> <span class="ident">x</span>
-        .<span class="ident">poly_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span>[<span class="number">1.0</span> <span class="op">/</span> <span class="number">2.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">6.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">24.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">120.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">720.0</span>, <span class="number">1.0</span> <span class="op">/</span> <span class="number">5040.0</span>])
-        .<span class="ident">mul_adde</span>(<span class="ident">x</span> <span class="op">*</span> <span class="ident">x</span>, <span class="ident">x</span>);
-
-    <span class="kw">let</span> <span class="ident">n2</span> <span class="op">=</span> <span class="ident">pow2n_f</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>(<span class="ident">r</span>);
-
-    <span class="ident">z</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">mode</span> {
-        <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>.<span class="ident">mul_adde</span>(<span class="ident">n2</span>, <span class="ident">n2</span> <span class="op">-</span> <span class="ident">Vf32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>()),
-        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">z</span>.<span class="ident">mul_adde</span>(<span class="ident">n2</span>, <span class="ident">n2</span>), <span class="comment">// (z + 1.0f) * n2</span>
     };
 
     <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
