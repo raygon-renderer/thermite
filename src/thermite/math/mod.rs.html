@@ -1582,6 +1582,11 @@
 <span id="1579">1579</span>
 <span id="1580">1580</span>
 <span id="1581">1581</span>
+<span id="1582">1582</span>
+<span id="1583">1583</span>
+<span id="1584">1584</span>
+<span id="1585">1585</span>
+<span id="1586">1586</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1591,10 +1596,8 @@
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">compensated</span>;
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">complex</span>;
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">poly</span>;
-
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">hyperdual</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">poly</span>;
 
 <span class="kw">mod</span> <span class="ident">pd</span>;
 <span class="kw">mod</span> <span class="ident">ps</span>;
@@ -3157,13 +3160,20 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 <span class="kw">mod</span> <span class="ident">bessel</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
+<span class="attribute">#[<span class="ident">repr</span>(<span class="ident">u8</span>)]</span>
 <span class="kw">enum</span> <span class="ident">ExpMode</span> {
-    <span class="ident">Exp</span>,
+    <span class="ident">Exp</span> <span class="op">=</span> <span class="number">0</span>,
     <span class="ident">Expm1</span>,
     <span class="ident">Exph</span>,
     <span class="ident">Pow2</span>,
     <span class="ident">Pow10</span>,
 }
+
+<span class="kw">const</span> <span class="ident">EXP_MODE_EXP</span>: <span class="ident">u8</span> <span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Exp</span> <span class="kw">as</span> <span class="ident">u8</span>;
+<span class="kw">const</span> <span class="ident">EXP_MODE_EXPM1</span>: <span class="ident">u8</span> <span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Expm1</span> <span class="kw">as</span> <span class="ident">u8</span>;
+<span class="kw">const</span> <span class="ident">EXP_MODE_EXPH</span>: <span class="ident">u8</span> <span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Exph</span> <span class="kw">as</span> <span class="ident">u8</span>;
+<span class="kw">const</span> <span class="ident">EXP_MODE_POW2</span>: <span class="ident">u8</span> <span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Pow2</span> <span class="kw">as</span> <span class="ident">u8</span>;
+<span class="kw">const</span> <span class="ident">EXP_MODE_POW10</span>: <span class="ident">u8</span> <span class="op">=</span> <span class="ident">ExpMode</span>::<span class="ident">Pow10</span> <span class="kw">as</span> <span class="ident">u8</span>;
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="thermite"></div>
     <script src="../../../main.js"></script><script src="../../../source-script.js"></script><script src="../../../source-files.js"></script><script defer src="../../../search-index.js"></script></body></html>

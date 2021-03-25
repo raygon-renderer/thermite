@@ -1283,8 +1283,8 @@
 <span id="1280">1280</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
-<span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely, min_const_generics for hyperdual generic</span>
-<span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>, <span class="ident">min_const_generics</span>))]</span>
+<span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely</span>
+<span class="attribute">#![<span class="ident">cfg_attr</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>, <span class="ident">feature</span>(<span class="ident">stdsimd</span>, <span class="ident">core_intrinsics</span>))]</span>
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>, <span class="ident">non_camel_case_types</span>, <span class="ident">non_snake_case</span>)]</span>
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">thermite_dispatch</span>::<span class="ident">dispatch</span>;
