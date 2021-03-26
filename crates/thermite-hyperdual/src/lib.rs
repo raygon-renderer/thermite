@@ -102,8 +102,9 @@ where
 
     #[inline(always)]
     pub fn powi(self, n: i32) -> Self {
-        let _r = self.re.powi_p::<P>(n - 1);
-        unimplemented!() // TODO
+        let r = self.re.powi_p::<P>(n - 1);
+        let nf = V::splat_as(n) * r;
+        self.map_dual(self.re * r, |x| x * nf)
     }
 
     #[inline(always)]
@@ -125,11 +126,9 @@ where
     }
 
     pub fn exp2(self) -> Self {
-        let _re = self.re.exp2_p::<P>();
-        unimplemented!() // TODO
-
-        //let ln2 =
-        //self.map_dual(re, |x| )
+        let re = self.re.exp2_p::<P>();
+        let re_ln2 = V::LN_2() * re;
+        self.map_dual(re, |x| x * re_ln2)
     }
 
     #[inline(always)]
