@@ -38,3 +38,14 @@ impl<S: Simd> Vector3xN<S> {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct Matrix4xN<S: Simd> {
+    pub m: [[S::Vf32; 4]; 4],
+}
+
+impl<S: Simd> Matrix4xN<S> {
+    pub fn at(&self, row: usize, col: usize) -> &S::Vf32 {
+        &self.m[col][row]
+    }
+}

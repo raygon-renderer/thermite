@@ -1,8 +1,13 @@
 //! Complex Number Vectors
 
-use crate::*;
+#![no_std]
+use thermite::*;
 
-use core::{fmt, marker::PhantomData};
+use core::{
+    fmt,
+    marker::PhantomData,
+    ops::{Add, Div, Mul, Neg, Sub},
+};
 
 pub struct Complex<S: Simd, V: SimdFloatVector<S>, P: Policy = policies::Performance> {
     pub re: V,
@@ -72,7 +77,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P>
 where
     V: SimdVectorizedMath<S>,

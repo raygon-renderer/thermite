@@ -5,8 +5,6 @@
 use crate::*;
 
 pub mod compensated;
-pub mod complex;
-pub mod hyperdual;
 pub mod poly;
 
 mod pd;
@@ -212,7 +210,7 @@ pub mod policies {
 
 use policies::*;
 
-type DefaultPolicy = Performance;
+pub type DefaultPolicy = Performance;
 
 //TODO: beta function, j0, y0
 
@@ -275,23 +273,11 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
     fn log10_p<P: Policy>(self) -> Self;
     fn erf_p<P: Policy>(self) -> Self;
     fn erfinv_p<P: Policy>(self) -> Self;
-    fn tgamma_p<P: Policy>(self) -> Self;
-    fn lgamma_p<P: Policy>(self) -> Self;
-    fn digamma_p<P: Policy>(self) -> Self;
-    fn beta_p<P: Policy>(self, y: Self) -> Self;
     fn next_float_p<P: Policy>(self) -> Self;
     fn prev_float_p<P: Policy>(self) -> Self;
     fn smoothstep_p<P: Policy>(self) -> Self;
     fn smootherstep_p<P: Policy>(self) -> Self;
     fn smootheststep_p<P: Policy>(self) -> Self;
-    fn hermite_p<P: Policy>(self, n: u32) -> Self;
-    fn hermitev_p<P: Policy>(self, n: S::Vu32) -> Self;
-    fn jacobi_p<P: Policy>(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
-    fn legendre_p<P: Policy>(self, n: u32, m: u32) -> Self;
-    fn bessel_j_p<P: Policy>(self, n: u32) -> Self;
-    fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self;
-    fn bessel_y_p<P: Policy>(self, n: u32) -> Self;
-    fn bessel_yf_p<P: Policy>(self, n: Self::Element) -> Self;
 }
 
 /// Set of vectorized special functions optimized for both single and double precision.
@@ -449,28 +435,6 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// Computes the inverse error function for each value in a vector.
     fn erfinv(self) -> Self;
 
-    /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
-    ///
-    /// This implementation uses a few different behaviors to ensure the greatest precision where possible.
-    ///
-    /// * For non-integer positive inputs, it uses the Lanczos approximation.
-    /// * For small non-integer negative inputs, it uses the recursive identity `Γ(z)=Γ(z+1)/z` until `z` is positive.
-    /// * For large non-integer negative inputs, it uses the reflection formula `-π/(Γ(z)sin(πz)z)`.
-    /// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.
-    /// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).
-    ///
-    /// **NOTE**: The Gamma function is not defined for negative integers.
-    fn tgamma(self) -> Self;
-
-    /// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.
-    fn lgamma(self) -> Self;
-
-    /// Computes the Digamma function `ψ(x)`, the first derivative of `ln(Γ(x))`, or `ln(Γ(x)) d/dx`
-    fn digamma(self) -> Self;
-
-    /// Computes the Beta function `Β(x, y)`
-    fn beta(self, y: Self) -> Self;
-
     // /// Computes `Γ(x)/Γ(x + delta)`, possibly more efficiently than two invocations to tgamma.
     // fn tgamma_delta(self, delta: Self) -> Self;
 
@@ -497,56 +461,6 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     /// **NOTE**: This function is only valid between 0 and 1, but does not clamp the input to maintain performance
     /// where that is not needed. Consider using `.saturate()` and `.scale` to ensure the input is within 0 to 1.
     fn smootheststep(self) -> Self;
-
-    /// Computes the n-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
-    /// `H_n(x)` where `x` is `self` and `n` is an unsigned integer representing the polynomial degree.
-    ///
-    /// This uses the recurrence relation to compute the polynomial iteratively.
-    ///
-    /// **NOTE**: Given a constant `n`, LLVM will happily unroll and optimize the inner loop where possible.
-    fn hermite(self, n: u32) -> Self;
-
-    /// Computes the n-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
-    /// `H_n(x)` where `x` is `self` and `n` is a vector of unsigned integers representing the polynomial degree.
-    ///
-    /// The polynomial is calculated independenty per-lane with the given degree in `n`.
-    ///
-    /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermitev(self, n: S::Vu32) -> Self;
-
-    /// Computes the m-th derivative of the n-th degree Jacobi polynomial
-    ///
-    /// A the special case where α and β are both zero, the Jacobi polynomial reduces to a
-    /// Legendre polynomial.
-    ///
-    /// **NOTE**: Given constant α, β or `n`, LLVM will happily optimize those away and unroll loops.
-    fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
-
-    /// Computes the m-th associated n-th degree Legendre polynomial,
-    /// where m=0 signifies the regular n-th degree Legendre polynomial.
-    ///
-    /// If `m` is odd, the input is only valid between -1 and 1
-    ///
-    /// **NOTE**: Given constant `n` and/or `m`, LLVM will happily unroll and optimize inner loops.
-    ///
-    /// Internally, this is computed with [`jacobi_d`](#tymethod.jacobi_d)
-    fn legendre(self, n: u32, m: u32) -> Self;
-
-    /// Computes the Bessel function of the first kind `J_n(x)` with whole integer order `n`.
-    ///
-    /// **NOTE**: For `n < 2`, this uses an efficient rational polynomial approximation.
-    fn bessel_j(self, n: u32) -> Self;
-
-    /// Computes the Bessel function of the first kind `J_n(x)` with real order `n`.
-    fn bessel_jf(self, n: Self::Element) -> Self;
-
-    /// Computes the Bessel function of the second kind `Y_n(x)` with whole integer order `n`.
-    ///
-    /// **NOTE**: For `n < 2`, this uses an efficient rational polynomial approximation.
-    fn bessel_y(self, n: u32) -> Self;
-
-    /// Computes the Bessel function of the second kind `Y_n(x)` with real order `n`.
-    fn bessel_yf(self, n: Self::Element) -> Self;
 }
 
 #[rustfmt::skip]
@@ -599,19 +513,6 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::poly_rational::<P>(self, numerator_coefficients, denominator_coefficients)
     }
 
-    #[inline] fn hermite_p<P: Policy>(self, n: u32)                                      -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermite::<P>(self, n)
-    }
-    #[inline] fn hermitev_p<P: Policy>(self, n: S::Vu32)                                 -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::hermitev::<P>(self, n)
-    }
-    #[inline] fn jacobi_p<P: Policy>(self, alpha: Self, beta: Self, n: u32, m: u32)    -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::jacobi::<P>(self, alpha, beta, n, m)
-    }
-    #[inline] fn legendre_p<P: Policy>(self, n: u32, m: u32)                           -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::legendre::<P>(self, n, m)
-    }
-
     #[inline] fn sin_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sin::<P>(self)  }
     #[inline] fn cos_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::cos::<P>(self)  }
     #[inline] fn tan_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tan::<P>(self)  }
@@ -641,26 +542,11 @@ where
     #[inline] fn log10_p<P: Policy>(self)            -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::log10::<P>(self)  }
     #[inline] fn erf_p<P: Policy>(self)              -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erf::<P>(self)  }
     #[inline] fn erfinv_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::erfinv::<P>(self)  }
-    #[inline] fn tgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::tgamma::<P>(self)  }
-    #[inline] fn lgamma_p<P: Policy>(self)           -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::lgamma::<P>(self)  }
-    #[inline] fn digamma_p<P: Policy>(self)          -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::digamma::<P>(self)  }
-    #[inline] fn beta_p<P: Policy>(self, y: Self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::beta::<P>(self, y)  }
     #[inline] fn next_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::next_float::<P>(self)  }
     #[inline] fn prev_float_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::prev_float::<P>(self)  }
     #[inline] fn smoothstep_p<P: Policy>(self)       -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smoothstep::<P>(self)  }
     #[inline] fn smootherstep_p<P: Policy>(self)     -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootherstep::<P>(self)  }
     #[inline] fn smootheststep_p<P: Policy>(self)    -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::smootheststep::<P>(self)  }
-    #[inline] fn bessel_j_p<P: Policy>(self, n: u32) -> Self         { <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::bessel_j::<P>(self, n) }
-
-    #[inline] fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::bessel_jf::<P>(self, n)
-    }
-    #[inline] fn bessel_y_p<P: Policy>(self, n: u32) -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::bessel_y::<P>(self, n)
-    }
-    #[inline] fn bessel_yf_p<P: Policy>(self, n: Self::Element) -> Self {
-        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::bessel_yf::<P>(self, n)
-    }
 }
 
 #[rustfmt::skip]
@@ -708,10 +594,6 @@ where
     }
 
     #[inline(always)] fn poly(self, coefficients: &[Self::Element])             -> Self { self.poly_p::<DefaultPolicy>(coefficients) }
-    #[inline(always)] fn hermite(self, n: u32)                                  -> Self { self.hermite_p::<DefaultPolicy>(n) }
-    #[inline(always)] fn hermitev(self, n: S::Vu32)                             -> Self { self.hermitev_p::<DefaultPolicy>(n) }
-    #[inline(always)] fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32)  -> Self { self.jacobi_p::<DefaultPolicy>(alpha, beta, n, m) }
-    #[inline(always)] fn legendre(self, n: u32, m: u32)                         -> Self { self.legendre_p::<DefaultPolicy>(n, m) }
 
     #[inline(always)] fn sin(self)              -> Self         { self.sin_p::<DefaultPolicy>() }
     #[inline(always)] fn cos(self)              -> Self         { self.cos_p::<DefaultPolicy>() }
@@ -742,26 +624,12 @@ where
     #[inline(always)] fn log10(self)            -> Self         { self.log10_p::<DefaultPolicy>() }
     #[inline(always)] fn erf(self)              -> Self         { self.erf_p::<DefaultPolicy>() }
     #[inline(always)] fn erfinv(self)           -> Self         { self.erfinv_p::<DefaultPolicy>() }
-    #[inline(always)] fn tgamma(self)           -> Self         { self.tgamma_p::<DefaultPolicy>() }
-    #[inline(always)] fn lgamma(self)           -> Self         { self.lgamma_p::<DefaultPolicy>() }
-    #[inline(always)] fn digamma(self)          -> Self         { self.digamma_p::<DefaultPolicy>() }
-    #[inline(always)] fn beta(self, y: Self)    -> Self         { self.beta_p::<DefaultPolicy>(y) }
+
     #[inline(always)] fn next_float(self)       -> Self         { self.next_float_p::<DefaultPolicy>() }
     #[inline(always)] fn prev_float(self)       -> Self         { self.prev_float_p::<DefaultPolicy>() }
     #[inline(always)] fn smoothstep(self)       -> Self         { self.smoothstep_p::<DefaultPolicy>() }
     #[inline(always)] fn smootherstep(self)     -> Self         { self.smootherstep_p::<DefaultPolicy>() }
     #[inline(always)] fn smootheststep(self)    -> Self         { self.smootheststep_p::<DefaultPolicy>() }
-    #[inline(always)] fn bessel_j(self, n: u32) -> Self         { self.bessel_j_p::<DefaultPolicy>(n) }
-
-    #[inline(always)] fn bessel_jf(self, n: Self::Element) -> Self {
-        self.bessel_jf_p::<DefaultPolicy>(n)
-    }
-    #[inline(always)] fn bessel_y(self, n: u32) -> Self {
-        self.bessel_y_p::<DefaultPolicy>(n)
-    }
-    #[inline(always)] fn bessel_yf(self, n: Self::Element) -> Self {
-        self.bessel_yf_p::<DefaultPolicy>(n)
-    }
 }
 
 #[doc(hidden)]
@@ -1546,6 +1414,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         scale * yk
     }
 
+    /*
     #[inline(always)]
     fn bessel_j<P: Policy>(x: Self::Vf, n: u32) -> Self::Vf {
         bessel::bessel_j::<S, Self, P>(x, n)
@@ -1565,9 +1434,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn bessel_yf<P: Policy>(x: Self::Vf, n: Self) -> Self::Vf {
         unimplemented!()
     }
+     */
 }
 
-mod bessel;
+//mod bessel;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

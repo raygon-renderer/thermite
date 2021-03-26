@@ -1,6 +1,11 @@
-use crate::*;
+#![no_std]
+use thermite::*;
 
-use core::{fmt, marker::PhantomData};
+use core::{
+    fmt,
+    marker::PhantomData,
+    ops::{Add, Div, Mul, Sub},
+};
 
 pub type Hyperdual<S, V, const N: usize> = HyperdualP<S, V, policies::Performance, N>;
 pub type DuelNumber<S, V> = Hyperdual<S, V, 1>;
@@ -97,7 +102,7 @@ where
 
     #[inline(always)]
     pub fn powi(self, n: i32) -> Self {
-        let r = self.re.powi_p::<P>(n - 1);
+        let _r = self.re.powi_p::<P>(n - 1);
         unimplemented!() // TODO
     }
 
@@ -120,7 +125,7 @@ where
     }
 
     pub fn exp2(self) -> Self {
-        let re = self.re.exp2_p::<P>();
+        let _re = self.re.exp2_p::<P>();
         unimplemented!() // TODO
 
         //let ln2 =
