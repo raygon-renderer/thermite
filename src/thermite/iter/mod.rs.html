@@ -201,7 +201,7 @@
 
         <span class="comment">// if there is a remainder, check to fill it</span>
         <span class="kw">let</span> <span class="ident">rem</span> <span class="op">=</span> <span class="ident">chunks</span>.<span class="ident">into_remainder</span>();
-        <span class="kw">if</span> <span class="macro">unlikely</span><span class="macro">!</span>(<span class="op">!</span><span class="ident">rem</span>.<span class="ident">is_empty</span>()) {
+        <span class="kw">if</span> <span class="macro">thermite_unlikely</span><span class="macro">!</span>(<span class="op">!</span><span class="ident">rem</span>.<span class="ident">is_empty</span>()) {
             <span class="comment">// if there are any values left, write what we can or zero it</span>
             <span class="kw">let</span> <span class="ident">value</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">next</span>() {
                 <span class="prelude-val">Some</span>(<span class="ident">value</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">value</span>,
