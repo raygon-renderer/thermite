@@ -304,7 +304,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">re</span>: <span class="ident">V</span>, <span class="ident">du</span>: [<span class="ident">V</span>; <span class="ident">N</span>]) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
@@ -351,7 +351,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span>
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
@@ -471,7 +471,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">Add</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -485,7 +485,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">Sub</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -499,7 +499,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">Mul</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -513,7 +513,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span>, <span class="kw">const</span> <span class="ident">N</span>: <span class="ident">usize</span><span class="op">&gt;</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">HyperdualP</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span>, <span class="ident">N</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 

@@ -502,6 +502,7 @@
 <span id="499">499</span>
 <span id="500">500</span>
 <span id="501">501</span>
+<span id="502">502</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Complex Number Vectors</span>
 
@@ -543,7 +544,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">re</span>: <span class="ident">V</span>, <span class="ident">im</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
@@ -560,16 +561,28 @@
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">re</span>), <span class="ident">V</span>::<span class="ident">splat</span>(<span class="ident">im</span>))
     }
 
-    <span class="doccomment">/// Create a new Complex</span>
+    <span class="doccomment">/// Create a new Complex `a+0i`</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">real</span>(<span class="ident">re</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">re</span>, <span class="ident">V</span>::<span class="ident">zero</span>())
+    }
+
+    <span class="doccomment">/// Create a new Complex `0+bi`</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">imag</span>(<span class="ident">im</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">zero</span>(), <span class="ident">im</span>)
     }
 
     <span class="doccomment">/// Returns imaginary unit</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">i</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">zero</span>(), <span class="ident">V</span>::<span class="ident">one</span>())
+    }
+
+    <span class="doccomment">/// Return negative imaginary unit</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">neg_i</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">zero</span>(), <span class="ident">V</span>::<span class="ident">neg_one</span>())
     }
 
     <span class="doccomment">/// real(1)</span>
@@ -615,7 +628,7 @@
     <span class="doccomment">/// NOTE: This will result in undefined values if `t` is zero.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">unscale</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">scale</span>(<span class="ident">V</span>::<span class="ident">one</span>() <span class="op">/</span> <span class="ident">t</span>)
+        <span class="self">self</span>.<span class="ident">scale</span>(<span class="ident">t</span>.<span class="ident">reciprocal_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>())
     }
 
     <span class="doccomment">/// Returns the complex conjugate. i.e. `re - i im`</span>
@@ -811,9 +824,7 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">acos</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)</span>
-        <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">i</span>();
-
-        <span class="op">-</span><span class="ident">i</span> <span class="op">*</span> <span class="ident">i</span>.<span class="ident">mul_add</span>(<span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="self">self</span>, <span class="self">Self</span>::<span class="ident">one</span>()).<span class="ident">sqrt</span>(), <span class="self">self</span>).<span class="ident">ln</span>()
+        <span class="self">Self</span>::<span class="ident">neg_i</span>() <span class="op">*</span> <span class="self">Self</span>::<span class="ident">i</span>().<span class="ident">mul_add</span>(<span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="self">self</span>, <span class="self">Self</span>::<span class="ident">one</span>()).<span class="ident">sqrt</span>(), <span class="self">self</span>).<span class="ident">ln</span>()
     }
 
     <span class="doccomment">/// Computes the principal value of the inverse tangent of `self`.</span>
@@ -827,23 +838,13 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">atan</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)</span>
-        <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">i</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
-        <span class="comment">//if self == i {</span>
-        <span class="comment">//    return Self::new(T::zero(), T::infinity());</span>
-        <span class="comment">//} else if self == -i {</span>
-        <span class="comment">//    return Self::new(T::zero(), -T::infinity());</span>
-        <span class="comment">//}</span>
 
-        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">i</span>, <span class="ident">one</span>);
-        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> (<span class="op">-</span><span class="self">self</span>).<span class="ident">mul_add</span>(<span class="ident">i</span>, <span class="ident">one</span>);
+        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="self">Self</span>::<span class="ident">i</span>(), <span class="ident">one</span>);
+        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="self">Self</span>::<span class="ident">neg_i</span>(), <span class="ident">one</span>);
 
-        <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> (<span class="ident">a</span>.<span class="ident">ln</span>() <span class="op">-</span> <span class="ident">b</span>.<span class="ident">ln</span>()) <span class="op">/</span> (<span class="ident">two</span> <span class="op">*</span> <span class="ident">i</span>);
-
-        <span class="comment">//((one + i * self).ln() - (one - i * self).ln()) / (two * i)</span>
-
-        <span class="ident">res</span>
+        <span class="comment">// z/(2i) == -0.5i * z</span>
+        (<span class="ident">a</span>.<span class="ident">ln</span>() <span class="op">-</span> <span class="ident">b</span>.<span class="ident">ln</span>()) <span class="op">*</span> <span class="self">Self</span>::<span class="ident">imag</span>(<span class="ident">V</span>::<span class="ident">splat_as</span>(<span class="op">-</span><span class="number">0.5f32</span>))
     }
 
     <span class="doccomment">/// Computes the hyperbolic sine of `self`.</span>
@@ -933,6 +934,7 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">finv</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="ident">norm</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">real</span>(<span class="self">self</span>.<span class="ident">norm</span>());
+        <span class="comment">// TODO: Maybe extract 1/n and multiply?</span>
         (<span class="self">self</span>.<span class="ident">conj</span>() <span class="op">/</span> <span class="ident">norm</span>) <span class="op">/</span> <span class="ident">norm</span>
     }
 
@@ -946,7 +948,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Add</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -956,7 +958,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Sub</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -966,7 +968,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Mul</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
@@ -979,7 +981,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Div</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span>
 <span class="kw">where</span>
     <span class="ident">V</span>: <span class="ident">SimdVectorizedMath</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>,
@@ -995,7 +997,7 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>, <span class="ident">thermite</span> <span class="op">=</span> <span class="string">&quot;crate&quot;</span>)]</span>
+<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Neg</span> <span class="kw">for</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="kw">type</span> <span class="ident">Output</span> <span class="op">=</span> <span class="self">Self</span>;
 
