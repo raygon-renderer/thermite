@@ -3,6 +3,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 
 use thermite::*;
+use thermite_special::*;
 
 use thermite::backends::avx2::AVX2;
 

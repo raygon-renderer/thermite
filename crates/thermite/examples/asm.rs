@@ -7,6 +7,7 @@
 use no_panic::no_panic;
 
 use thermite::*;
+use thermite_special::*;
 
 pub mod geo;
 
@@ -202,12 +203,12 @@ pub unsafe fn test_pscbrt(x: Vf32) -> Vf32 {
     x.cbrt()
 }
 
-#[no_mangle]
-#[inline(never)]
-#[target_feature(enable = "avx2,fma")]
-pub unsafe fn test_ps_bessel_y4(x: Vf32) -> Vf32 {
-    x.bessel_y_p::<policies::Precision>(4)
-}
+//#[no_mangle]
+//#[inline(never)]
+//#[target_feature(enable = "avx2,fma")]
+//pub unsafe fn test_ps_bessel_y4(x: Vf32) -> Vf32 {
+//    x.bessel_y_p::<policies::Precision>(4)
+//}
 
 #[no_mangle]
 #[inline(never)]

@@ -811,6 +811,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     where
         F: FnMut(usize) -> Self::Vf
     {
+        // TODO: Re-evaluate what methods should be chosen where. Precision can falter on very large degrees
+        // if using the Estrin's scheme method, so perhaps if `precision > Average` then dynamically choose
+        // which method based on x's value. If `x^n > F::MAX` or some precision limit, fallback to Horner's method
+
         // TODO: Test the precision of this. Seems sketchy.
         // Use Horner's method + Compensated floats for error correction
         if P::POLICY.precision >= PrecisionPolicy::Best && !S::INSTRSET.has_true_fma() {
