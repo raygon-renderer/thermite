@@ -267,7 +267,6 @@
 <span id="264">264</span>
 <span id="265">265</span>
 <span id="266">266</span>
-<span id="267">267</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="kw">use</span> <span class="ident">thermite</span>::<span class="kw-2">*</span>;
@@ -373,8 +372,9 @@
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">powi</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="ident">_r</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">powi_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">n</span> <span class="op">-</span> <span class="number">1</span>);
-        <span class="macro">unimplemented</span><span class="macro">!</span>() <span class="comment">// TODO</span>
+        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">powi_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">n</span> <span class="op">-</span> <span class="number">1</span>);
+        <span class="kw">let</span> <span class="ident">nf</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">splat_as</span>(<span class="ident">n</span>) <span class="op">*</span> <span class="ident">r</span>;
+        <span class="self">self</span>.<span class="ident">map_dual</span>(<span class="self">self</span>.<span class="ident">re</span> <span class="op">*</span> <span class="ident">r</span>, <span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">nf</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -396,11 +396,9 @@
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">exp2</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="ident">_re</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">exp2_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
-        <span class="macro">unimplemented</span><span class="macro">!</span>() <span class="comment">// TODO</span>
-
-        <span class="comment">//let ln2 =</span>
-        <span class="comment">//self.map_dual(re, |x| )</span>
+        <span class="kw">let</span> <span class="ident">re</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">exp2_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        <span class="kw">let</span> <span class="ident">re_ln2</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">LN_2</span>() <span class="op">*</span> <span class="ident">re</span>;
+        <span class="self">self</span>.<span class="ident">map_dual</span>(<span class="ident">re</span>, <span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span> <span class="op">*</span> <span class="ident">re_ln2</span>)
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>

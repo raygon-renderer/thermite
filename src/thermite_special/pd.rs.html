@@ -354,12 +354,8 @@
 <span id="351">351</span>
 <span id="352">352</span>
 <span id="353">353</span>
-<span id="354">354</span>
-<span id="355">355</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-
-<span class="kw">use</span> <span class="ident">core</span>::<span class="ident">f64</span>::<span class="ident">consts</span>::{<span class="ident">FRAC_PI_2</span>, <span class="ident">FRAC_PI_4</span>, <span class="ident">LN_10</span>, <span class="ident">LN_2</span>, <span class="ident">LOG10_2</span>, <span class="ident">LOG10_E</span>, <span class="ident">LOG2_E</span>, <span class="ident">PI</span>, <span class="ident">SQRT_2</span>};
 
 <span class="kw">const</span> <span class="ident">EULERS_CONSTANT</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">5.772156649015328606065120900824024310e-01</span>;
 <span class="kw">const</span> <span class="ident">LN_PI</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>;
@@ -375,7 +371,7 @@
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
         <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>);
         <span class="kw">let</span> <span class="ident">quarter</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.25</span>);
-        <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">PI</span>);
+        <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">PI</span>();
 
         <span class="kw">let</span> <span class="ident">orig_z</span> <span class="op">=</span> <span class="ident">z</span>;
 
@@ -562,7 +558,7 @@
     <span class="kw">fn</span> <span class="ident">digamma</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="kw">let</span> <span class="ident">zero</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">PI</span>);
+        <span class="kw">let</span> <span class="ident">pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">PI</span>();
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">zero</span>;
 
