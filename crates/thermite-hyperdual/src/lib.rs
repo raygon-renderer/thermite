@@ -125,6 +125,7 @@ where
         self.map_dual(re, |x| re * x)
     }
 
+    #[inline(always)]
     pub fn exp2(self) -> Self {
         let re = self.re.exp2_p::<P>();
         let re_ln2 = V::LN_2() * re;
