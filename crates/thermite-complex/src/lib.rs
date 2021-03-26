@@ -9,8 +9,11 @@ use core::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
+/// A vectorized (SoA) complex number in Cartesian form.
 pub struct Complex<S: Simd, V: SimdFloatVector<S>, P: Policy = policies::Performance> {
+    /// Real part
     pub re: V,
+    /// Imaginary part
     pub im: V,
     _simd: PhantomData<(S, P)>,
 }
@@ -123,6 +126,7 @@ where
         self.unscale(self.norm_sqr()).conj()
     }
 
+    /// Returns `self * m + a`
     pub fn mul_add(self, m: Self, a: Self) -> Self {
         Self::new(
             self.im.nmul_adde(m.im, self.re.mul_adde(m.re, a.re)),
@@ -173,20 +177,35 @@ where
     /// * `(-∞, 0]`, continuous from above.
     ///
     /// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.
+    #[inline(always)]
     pub fn ln(self) -> Self {
         // formula: ln(z) = ln|z| + i*arg(z)
         let (r, theta) = self.to_polar();
         Self::new(r.ln_p::<P>(), theta)
     }
 
+    /// Computes the principal value of the square root of `self`.
+    #[inline(always)]
     pub fn sqrt(self) -> Self {
-        // TODO: Convert reference to branchless
-        unimplemented!()
+        // formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
+        let one = V::one();
+        let two = one + one;
+        let (r, theta) = self.to_polar();
+        Self::from_polar(r.sqrt(), theta / two)
     }
 
+    /// Computes the principal value of the cube root of `self`.
+    ///
+    /// Note that this does not match the usual result for the cube root of
+    /// negative real numbers. For example, the real cube root of `-8` is `-2`,
+    /// but the principal complex cube root of `-8` is `1 + i√3`.
+    #[inline(always)]
     pub fn cbrt(self) -> Self {
-        // TODO: Convert reference to branchless
-        unimplemented!()
+        // formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
+        let one = V::one();
+        let three = one + one + one;
+        let (r, theta) = self.to_polar();
+        Self::from_polar(r.cbrt(), theta / three)
     }
 
     /// Raises `self` to a floating point power.
@@ -225,7 +244,7 @@ where
         let (r, theta) = self.to_polar();
         Self::from_polar(
             r.powf_p::<P>(exp.re) * (-exp.im * theta).exp_p::<P>(),
-            exp.re * theta + exp.im * r.ln_p::<P>(),
+            exp.im.mul_adde(r.ln_p::<P>(), exp.re * theta),
         )
     }
 
@@ -288,7 +307,8 @@ where
     pub fn acos(self) -> Self {
         // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
         let i = Self::i();
-        -i * (i * (Self::one() - self * self).sqrt() + self).ln()
+
+        -i * i.mul_add(self.mul_add(-self, Self::one()).sqrt(), self).ln()
     }
 
     /// Computes the principal value of the inverse tangent of `self`.
@@ -304,7 +324,6 @@ where
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
         let i = Self::i();
         let one = Self::one();
-        let neg_one = Self::real(V::neg_one());
         let two = one + one;
         //if self == i {
         //    return Self::new(T::zero(), T::infinity());
@@ -313,7 +332,7 @@ where
         //}
 
         let a = self.mul_add(i, one);
-        let b = self.mul_add(i, neg_one);
+        let b = (-self).mul_add(i, one);
 
         let res = (a.ln() - b.ln()) / (two * i);
 
@@ -359,9 +378,8 @@ where
     pub fn asinh(self) -> Self {
         // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
         let one = Self::one();
-        let a = self.mul_add(self, one);
         //(self + (one + self * self).sqrt()).ln()
-        (self + a.sqrt()).ln()
+        (self + self.mul_add(self, one).sqrt()).ln()
     }
 
     /// Computes the principal value of inverse hyperbolic cosine of `self`.
@@ -375,8 +393,11 @@ where
     pub fn acosh(self) -> Self {
         // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
         let one = Self::one();
-        let two = one + one;
-        two * (((self + one) / two).sqrt() + ((self - one) / two).sqrt()).ln()
+        let one_half = one / (one + one);
+
+        let res = (self.mul_add(one_half, one_half).sqrt() + self.mul_add(one_half, -one_half).sqrt()).ln();
+
+        res + res // res * 2
     }
 
     /// Computes the principal value of inverse hyperbolic tangent of `self`.
@@ -391,13 +412,13 @@ where
     pub fn atanh(self) -> Self {
         // formula: arctanh(z) = (ln(1+z) - ln(1-z))/2
         let one = Self::one();
-        let two = one + one;
+        let one_half = one / (one + one);
         //if self == one {
         //    return Self::new(T::infinity(), T::zero());
         //} else if self == -one {
         //    return Self::new(-T::infinity(), T::zero());
         //}
-        ((one + self).ln() - (one - self).ln()) / two
+        one_half * ((one + self).ln() - (one - self).ln())
     }
 
     /// Returns `1/self` using floating-point operations.
