@@ -38,7 +38,7 @@ where
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
     #[inline(always)]
     pub fn new(re: V, im: V) -> Self {
@@ -55,16 +55,28 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
         Self::new(V::splat(re), V::splat(im))
     }
 
-    /// Create a new Complex
+    /// Create a new Complex `a+0i`
     #[inline(always)]
     pub fn real(re: V) -> Self {
         Self::new(re, V::zero())
+    }
+
+    /// Create a new Complex `0+bi`
+    #[inline(always)]
+    pub fn imag(im: V) -> Self {
+        Self::new(V::zero(), im)
     }
 
     /// Returns imaginary unit
     #[inline(always)]
     pub fn i() -> Self {
         Self::new(V::zero(), V::one())
+    }
+
+    /// Return negative imaginary unit
+    #[inline(always)]
+    pub fn neg_i() -> Self {
+        Self::new(V::zero(), V::neg_one())
     }
 
     /// real(1)
@@ -110,7 +122,7 @@ where
     /// NOTE: This will result in undefined values if `t` is zero.
     #[inline(always)]
     pub fn unscale(self, t: V) -> Self {
-        self.scale(V::one() / t)
+        self.scale(t.reciprocal_p::<P>())
     }
 
     /// Returns the complex conjugate. i.e. `re - i im`
@@ -306,9 +318,7 @@ where
     #[inline]
     pub fn acos(self) -> Self {
         // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
-        let i = Self::i();
-
-        -i * i.mul_add(self.mul_add(-self, Self::one()).sqrt(), self).ln()
+        Self::neg_i() * Self::i().mul_add(self.mul_add(-self, Self::one()).sqrt(), self).ln()
     }
 
     /// Computes the principal value of the inverse tangent of `self`.
@@ -322,23 +332,13 @@ where
     #[inline]
     pub fn atan(self) -> Self {
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
-        let i = Self::i();
         let one = Self::one();
-        let two = one + one;
-        //if self == i {
-        //    return Self::new(T::zero(), T::infinity());
-        //} else if self == -i {
-        //    return Self::new(T::zero(), -T::infinity());
-        //}
 
-        let a = self.mul_add(i, one);
-        let b = (-self).mul_add(i, one);
+        let a = self.mul_add(Self::i(), one);
+        let b = self.mul_add(Self::neg_i(), one);
 
-        let res = (a.ln() - b.ln()) / (two * i);
-
-        //((one + i * self).ln() - (one - i * self).ln()) / (two * i)
-
-        res
+        // z/(2i) == -0.5i * z
+        (a.ln() - b.ln()) * Self::imag(V::splat_as(-0.5f32))
     }
 
     /// Computes the hyperbolic sine of `self`.
@@ -428,6 +428,7 @@ where
     #[inline]
     pub fn finv(self) -> Self {
         let norm = Self::real(self.norm());
+        // TODO: Maybe extract 1/n and multiply?
         (self.conj() / norm) / norm
     }
 
@@ -441,7 +442,7 @@ where
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Add<Self> for Complex<S, V, P> {
     type Output = Self;
 
@@ -451,7 +452,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Add<Self> for Complex<S, V, P> {
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Sub<Self> for Complex<S, V, P> {
     type Output = Self;
 
@@ -461,7 +462,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Sub<Self> for Complex<S, V, P> {
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Mul<Self> for Complex<S, V, P> {
     type Output = Self;
 
@@ -474,7 +475,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Mul<Self> for Complex<S, V, P> {
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Div<Self> for Complex<S, V, P>
 where
     V: SimdVectorizedMath<S>,
@@ -490,7 +491,7 @@ where
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Neg for Complex<S, V, P> {
     type Output = Self;
 

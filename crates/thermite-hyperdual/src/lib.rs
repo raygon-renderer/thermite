@@ -33,7 +33,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> fmt::Debug for H
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> HyperdualP<S, V, P, N> {
     #[inline(always)]
     pub fn new(re: V, du: [V; N]) -> Self {
@@ -80,7 +80,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> HyperdualP<S, V,
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> HyperdualP<S, V, P, N>
 where
     V: SimdVectorizedMath<S>,
@@ -200,7 +200,7 @@ where
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Add<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
@@ -214,7 +214,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Add<Self> for Hy
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Sub<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
@@ -228,7 +228,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Sub<Self> for Hy
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Mul<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
@@ -242,7 +242,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Mul<Self> for Hy
     }
 }
 
-#[dispatch(S, thermite = "crate")]
+#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Div<Self> for HyperdualP<S, V, P, N> {
     type Output = Self;
 
