@@ -133,7 +133,12 @@ where
 
     #[inline(always)]
     pub fn ln(self) -> Self {
-        self.map_dual(self.re.ln_p::<P>(), |x| x / self.re)
+        if N > 1 {
+            let inv_re = self.re.reciprocal_p::<P>();
+            self.map_dual(self.re.ln_p::<P>(), |x| x * inv_re)
+        } else {
+            self.map_dual(self.re.ln_p::<P>(), |x| x / self.re)
+        }
     }
 
     #[inline(always)]
@@ -141,7 +146,7 @@ where
         let re = self.re.sqrt();
         let re2 = re + re;
         if N > 1 {
-            let d = V::one() / re2;
+            let d = re2.reciprocal_p::<P>();
             self.map_dual(re, |x| x * d)
         } else {
             self.map_dual(re, |x| x / re2)
@@ -153,7 +158,7 @@ where
         let re = self.re.cbrt();
         let re3 = re + re + re;
         if N > 1 {
-            let d = V::one() / re3;
+            let d = re3.reciprocal_p::<P>();
             self.map_dual(re, |x| x * d)
         } else {
             self.map_dual(re, |x| x / re3)
@@ -242,7 +247,10 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Mul<Self> for Hy
 }
 
 #[dispatch(S)]
-impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Div<Self> for HyperdualP<S, V, P, N> {
+impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Div<Self> for HyperdualP<S, V, P, N>
+where
+    V: SimdVectorizedMath<S>,
+{
     type Output = Self;
 
     #[inline(always)]
@@ -250,8 +258,7 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> Div<Self> for Hy
         let d = self.re * rhs.re;
         if N > 1 {
             // precompute division
-            let d = V::one() / d;
-
+            let d = d.reciprocal_p::<P>();
             for i in 0..N {
                 self.du[i] = rhs.re.mul_sub(self.du[i], self.re * rhs.du[i]) * d;
             }
