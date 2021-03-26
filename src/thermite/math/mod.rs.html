@@ -1154,6 +1154,10 @@
 <span id="1151">1151</span>
 <span id="1152">1152</span>
 <span id="1153">1153</span>
+<span id="1154">1154</span>
+<span id="1155">1155</span>
+<span id="1156">1156</span>
+<span id="1157">1157</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1968,6 +1972,10 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">where</span>
         <span class="ident">F</span>: <span class="ident">FnMut</span>(<span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>
     {
+        <span class="comment">// TODO: Re-evaluate what methods should be chosen where. Precision can falter on very large degrees</span>
+        <span class="comment">// if using the Estrin&#39;s scheme method, so perhaps if `precision &gt; Average` then dynamically choose</span>
+        <span class="comment">// which method based on x&#39;s value. If `x^n &gt; F::MAX` or some precision limit, fallback to Horner&#39;s method</span>
+
         <span class="comment">// TODO: Test the precision of this. Seems sketchy.</span>
         <span class="comment">// Use Horner&#39;s method + Compensated floats for error correction</span>
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Best</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="ident">S</span>::<span class="ident">INSTRSET</span>.<span class="ident">has_true_fma</span>() {
