@@ -1223,6 +1223,7 @@ pub trait Simd: 'static + Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     type Vf32: SimdFloatVector<Self, Element = f32, Vu = Self::Vu32, Vi = Self::Vi32>
         + SimdIntoBits<Self, Self::Vu32>
         + SimdFromBits<Self, Self::Vu32>
+        + SimdFloatVectorConsts<Self>
         + SimdVectorizedMath<Self>
         + SimdVectorizedMathPolicied<Self>;
 
@@ -1233,6 +1234,7 @@ pub trait Simd: 'static + Debug + Send + Sync + Clone + Copy + PartialEq + Eq {
     type Vf64: SimdFloatVector<Self, Element = f64, Vu = Self::Vu64, Vi = Self::Vi64>
         + SimdIntoBits<Self, Self::Vu64>
         + SimdFromBits<Self, Self::Vu64>
+        + SimdFloatVectorConsts<Self>
         + SimdVectorizedMath<Self>
         + SimdVectorizedMathPolicied<Self>;
 
