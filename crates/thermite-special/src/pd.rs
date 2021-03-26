@@ -1,7 +1,5 @@
 use super::*;
 
-use core::f64::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
-
 const EULERS_CONSTANT: f64 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f64 = 1.1447298858494001741434273513530587116472948129153115715136230714;
 const SQRT_E: f64 = 1.6487212707001281468486507878141635716537761007101480115750793116;
@@ -16,7 +14,7 @@ where
         let one = Vf64::<S>::one();
         let half = Vf64::<S>::splat(0.5);
         let quarter = Vf64::<S>::splat(0.25);
-        let pi = Vf64::<S>::splat(PI);
+        let pi = Vf64::<S>::PI();
 
         let orig_z = z;
 
@@ -203,7 +201,7 @@ where
     fn digamma<P: Policy>(mut x: Self::Vf) -> Self::Vf {
         let zero = Vf64::<S>::zero();
         let one = Vf64::<S>::one();
-        let pi = Vf64::<S>::splat(PI);
+        let pi = Vf64::<S>::PI();
 
         let mut result = zero;
 

@@ -1,10 +1,8 @@
 use super::{poly::*, *};
 
-use core::f32::consts::{
-    FRAC_1_PI, FRAC_2_PI, FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2,
-};
+use core::f32::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
 
-const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
+const EULERS_MASCHERONI_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
 const SQRT_E: f32 = 1.6487212707001281468486507878141635716537761007101480115750793116;
 
@@ -12,11 +10,8 @@ impl<S: Simd> SimdVectorizedMathInternal<S> for f32
 where
     <S as Simd>::Vf32: SimdFloatVector<S, Element = f32>,
 {
-    type Vf = <S as Simd>::Vf32;
-
     const __EPSILON: Self = f32::EPSILON;
     const __SQRT_EPSILON: Self = 0.0003452669836517821464776144458809047877858776827733458406716232;
-    const __PI: Self = core::f32::consts::PI;
     const __DIGITS: u32 = f32::MANTISSA_DIGITS;
 
     #[inline(always)]
@@ -56,7 +51,7 @@ where
         let dp3f = Vf32::<S>::splat(3.77489497744594108E-8 * 2.0);
         let xa: Vf32<S> = xx.abs();
 
-        let y: Vf32<S> = (xa * Vf32::<S>::splat(FRAC_2_PI)).round();
+        let y: Vf32<S> = (xa * Vf32::<S>::FRAC_2_PI()).round();
         let q: Vu32<S> = y.cast_to::<Vi32<S>>().into_bits(); // cast to signed (faster), then transmute to unsigned
 
         // Reduce by extended precision modular arithmetic
@@ -190,7 +185,7 @@ where
         let not_small = t.ge(Vf32::<S>::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
         let not_big = t.le(Vf32::<S>::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
 
-        let s = not_big.select(Vf32::<S>::splat(FRAC_PI_4), Vf32::<S>::splat(FRAC_PI_2)) & not_small.value(); // select(not_small, s, 0.0);
+        let s = not_big.select(Vf32::<S>::FRAC_PI_4(), Vf32::<S>::FRAC_PI_2()) & not_small.value(); // select(not_small, s, 0.0);
 
         // small:  z = t / 1.0;
         // medium: z = (t-1.0) / (t+1.0);
@@ -240,7 +235,7 @@ where
         let a = t + (not_small.value() & neg_one);
         let b = Vf32::<S>::one() + (not_small.value() & t);
 
-        let s = not_small.value() & Vf32::<S>::splat(FRAC_PI_4);
+        let s = not_small.value() & Vf32::<S>::FRAC_PI_4();
 
         let z = a / b;
         let z2 = z * z;
@@ -249,9 +244,9 @@ where
             .poly_p::<P>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s);
 
-        re = swap_xy.select(Vf32::<S>::splat(FRAC_PI_2) - re, re);
+        re = swap_xy.select(Vf32::<S>::FRAC_PI_2() - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
-        re = x.select_negative(Vf32::<S>::splat(PI) - re, re); // also for x = -0.
+        re = x.select_negative(Vf32::<S>::PI() - re, re); // also for x = -0.
 
         re
     }
@@ -275,7 +270,7 @@ where
                 let x_huge = x.gt(Vf32::<S>::splat(1e10));
 
                 if P::POLICY.avoid_precision_branches() || thermite_unlikely!(x_huge.any()) {
-                    y2 = x_huge.select(x.ln_p::<P>() + Vf32::<S>::splat(LN_2), y2);
+                    y2 = x_huge.select(x.ln_p::<P>() + Vf32::<S>::LN_2(), y2);
                 }
             }
 
@@ -314,7 +309,7 @@ where
                 let x_huge = x1.gt(Vf32::<S>::splat(1e10));
 
                 if P::POLICY.avoid_precision_branches() || thermite_unlikely!(x_huge.any()) {
-                    y2 = x_huge.select(x0.ln_p::<P>() + Vf32::<S>::splat(LN_2), y2);
+                    y2 = x_huge.select(x0.ln_p::<P>() + Vf32::<S>::LN_2(), y2);
                 }
             }
 
@@ -479,8 +474,8 @@ where
         // define constants
         let ln2f_hi = Vf32::<S>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
-        let log2e = Vf32::<S>::splat(LOG2_E); // 1/ln(2)
-        let ln2 = Vf32::<S>::splat(LN_2);
+        let log2e = Vf32::<S>::LOG2_E();
+        let ln2 = Vf32::<S>::LN_2();
 
         let zero = Vf32::<S>::zero();
         let one = Vf32::<S>::one();
@@ -646,12 +641,12 @@ where
 
     #[inline(always)]
     fn log2<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P, false>(x) * Vf32::<S>::splat(LOG2_E)
+        ln_f_internal::<S, P, false>(x) * Vf32::<S>::LOG2_E()
     }
 
     #[inline(always)]
     fn log10<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_f_internal::<S, P, false>(x) * Vf32::<S>::splat(LOG10_E)
+        ln_f_internal::<S, P, false>(x) * Vf32::<S>::LOG10_E()
     }
 
     #[inline(always)]
@@ -776,8 +771,8 @@ fn exp_f_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf32<S>) -> Vf32<S> {
 
         // Compute t such that b^x = 2^t
         let t = match MODE {
-            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x * Vf32::<S>::splat(LOG2_E),
-            EXP_MODE_POW10 => x * Vf32::<S>::splat(LOG10_2),
+            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x * Vf32::<S>::LOG2_E(),
+            EXP_MODE_POW10 => x * Vf32::<S>::LOG10_2(),
             _ => x,
         };
 
@@ -806,7 +801,7 @@ fn exp_f_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf32<S>) -> Vf32<S> {
                 r = x0.round();
 
                 x -= r;
-                x *= Vf32::<S>::splat(LN_2);
+                x *= Vf32::<S>::LN_2();
             }
             EXP_MODE_POW10 => {
                 let log10_2_hi = Vf32::<S>::splat(0.301025391); // log10(2) in two parts
@@ -816,13 +811,13 @@ fn exp_f_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf32<S>) -> Vf32<S> {
 
                 x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
                 x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
-                x *= Vf32::<S>::splat(LN_10);
+                x *= Vf32::<S>::LN_10();
             }
             _ => {
                 let ln2f_hi = Vf32::<S>::splat(0.693359375);
                 let ln2f_lo = Vf32::<S>::splat(-2.12194440e-4);
 
-                r = (x0 * Vf32::<S>::splat(LOG2_E)).round();
+                r = (x0 * Vf32::<S>::LOG2_E()).round();
 
                 x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
                 x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
@@ -891,12 +886,12 @@ fn asin_f_internal<S: Simd, P: Policy, const ACOS: bool>(x: Vf32<S>) -> Vf32<S> 
     let z1 = z + z;
 
     if ACOS {
-        let z1 = x.select_negative(Vf32::<S>::splat(PI) - z1, z1);
-        let z2 = Vf32::<S>::splat(FRAC_PI_2) - z.combine_sign(x);
+        let z1 = x.select_negative(Vf32::<S>::PI() - z1, z1);
+        let z2 = Vf32::<S>::FRAC_PI_2() - z.combine_sign(x);
 
         is_big.select(z1, z2)
     } else {
-        let z1 = Vf32::<S>::splat(FRAC_PI_2) - z1;
+        let z1 = Vf32::<S>::FRAC_PI_2() - z1;
 
         is_big.select(z1, z).combine_sign(x)
     }

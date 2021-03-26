@@ -7,6 +7,9 @@ use crate::*;
 pub mod compensated;
 pub mod poly;
 
+mod consts;
+pub use self::consts::*;
+
 mod pd;
 mod ps;
 
@@ -218,7 +221,7 @@ pub type DefaultPolicy = Performance;
 ///
 /// Please refer to the documentation of [`SimdVectorizedMath`] for function reference and [`policies`] for an
 /// overview of available execution policies.
-pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> {
+pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> + SimdFloatVectorConsts<S> {
     fn scale_p<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
     fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
     fn fmod_p<P: Policy>(self, y: Self) -> Self;
@@ -467,7 +470,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
 #[dispatch(S, thermite = "crate")]
 impl<S: Simd, T> SimdVectorizedMathPolicied<S> for T
 where
-    T: SimdFloatVector<S>,
+    T: SimdFloatVector<S> + SimdFloatVectorConsts<S>,
     <T as SimdVectorBase<S>>::Element: SimdVectorizedMathInternal<S, Vf = T>,
 {
     #[inline] fn scale_p<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
@@ -635,6 +638,7 @@ where
 #[doc(hidden)]
 pub trait SimdVectorizedMathInternal<S: Simd>:
     SimdElement
+    + SimdFloatVectorConstsInternal<S>
     + From<f32>
     + From<i16>
     + Add<Self, Output = Self>
@@ -642,11 +646,8 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     + Div<Self, Output = Self>
     + PartialOrd
 {
-    type Vf: SimdFloatVector<S, Element = Self>;
-
     const __EPSILON: Self;
     const __SQRT_EPSILON: Self;
-    const __PI: Self;
     const __DIGITS: u32;
 
     #[inline(always)]
@@ -980,7 +981,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         let zero = Self::Vf::zero();
         let half = Self::Vf::splat_as(0.5f64);
         let two = Self::Vf::splat_as(2.0);
-        let pi = Self::Vf::splat(Self::__PI);
+        let pi = Self::Vf::PI();
 
         if P::POLICY.precision >= PrecisionPolicy::Best {
             let x = x.abs();

@@ -1,8 +1,8 @@
 use super::{poly::*, *};
 
-use core::f64::consts::{FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2};
+use core::f64::consts::{LN_10, LN_2, LOG2_E, SQRT_2};
 
-const EULERS_CONSTANT: f64 = 5.772156649015328606065120900824024310e-01;
+const EULERS_MASCHERONI_CONSTANT: f64 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f64 = 1.1447298858494001741434273513530587116472948129153115715136230714;
 const SQRT_E: f64 = 1.6487212707001281468486507878141635716537761007101480115750793116;
 
@@ -10,11 +10,8 @@ impl<S: Simd> SimdVectorizedMathInternal<S> for f64
 where
     <S as Simd>::Vf64: SimdFloatVector<S, Element = f64>,
 {
-    type Vf = <S as Simd>::Vf64;
-
     const __EPSILON: Self = f64::EPSILON;
     const __SQRT_EPSILON: Self = 1.4901161193847656314265919999999999861416556075118966152884e-8;
-    const __PI: Self = core::f64::consts::PI;
     const __DIGITS: u32 = f64::MANTISSA_DIGITS;
 
     #[inline(always)]
@@ -71,7 +68,7 @@ where
 
         let xa = xx.abs();
 
-        let y = (xa * Vf64::<S>::splat(2.0 / PI)).round();
+        let y = (xa * Vf64::<S>::FRAC_2_PI()).round();
         let q = unsafe { y.to_uint_fast() };
 
         // Reduce by extended precision modular arithmetic
@@ -258,7 +255,7 @@ where
                 let x_huge = x.gt(Vf64::<S>::splat(1e20));
 
                 if thermite_unlikely!(x_huge.any()) {
-                    y2 = x_huge.select(x.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
+                    y2 = x_huge.select(x.ln_p::<P>() + Vf64::<S>::LN_2(), y2);
                 }
             }
 
@@ -307,7 +304,7 @@ where
             if P::POLICY.check_overflow {
                 let x_huge = x1.gt(Vf64::<S>::splat(1e20));
                 if thermite_unlikely!(x_huge.any()) {
-                    y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::splat(LN_2), y2);
+                    y2 = x_huge.select(x0.ln_p::<P>() + Vf64::<S>::LN_2(), y2);
                 }
             }
 
@@ -483,8 +480,8 @@ where
         // define constants
         let ln2d_hi = Vf64::<S>::splat(0.693145751953125); // log(2) in extra precision, high bits
         let ln2d_lo = Vf64::<S>::splat(1.42860682030941723212E-6); // low bits of log(2)
-        let log2e = Vf64::<S>::splat(LOG2_E); // 1/log(2)
-        let ln2 = Vf64::<S>::splat(LN_2);
+        let log2e = Vf64::<S>::LOG2_E();
+        let ln2 = Vf64::<S>::LN_2();
 
         // coefficients for Pade polynomials
         let zero = Vf64::<S>::zero();
@@ -667,12 +664,12 @@ where
 
     #[inline(always)]
     fn log2<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_d_internal::<S, P, false>(x) * Vf64::<S>::splat(LOG2_E)
+        ln_d_internal::<S, P, false>(x) * Vf64::<S>::LOG2_E()
     }
 
     #[inline(always)]
     fn log10<P: Policy>(x: Self::Vf) -> Self::Vf {
-        ln_d_internal::<S, P, false>(x) * Vf64::<S>::splat(LOG10_E)
+        ln_d_internal::<S, P, false>(x) * Vf64::<S>::LOG10_E()
     }
 
     #[inline(always)]
@@ -928,7 +925,7 @@ fn atan_internal<S: Simd, P: Policy, const ATAN2: bool>(y: Vf64<S>, x: Vf64<S>) 
     let not_big = t.le(t3po8);
     let not_small = t.ge(Vf64::<S>::splat(0.66));
 
-    let s = not_big.select(Vf64::<S>::splat(FRAC_PI_4), Vf64::<S>::splat(FRAC_PI_2)) & not_small.value();
+    let s = not_big.select(Vf64::<S>::FRAC_PI_4(), Vf64::<S>::FRAC_PI_2()) & not_small.value();
 
     let fac = not_big.select(morebitso2, morebits) & not_small.value();
 
@@ -958,10 +955,10 @@ fn atan_internal<S: Simd, P: Policy, const ATAN2: bool>(y: Vf64<S>, x: Vf64<S>) 
     let mut re = re0.mul_adde(z * zz, z + s + fac);
 
     if ATAN2 {
-        re = swapxy.select(Vf64::<S>::splat(FRAC_PI_2) - re, re);
+        re = swapxy.select(Vf64::<S>::FRAC_PI_2() - re, re);
         re = (x | y).eq(zero).select(zero, re); // atan2(0,0) = 0 by convention
                                                 // also for x = -0.
-        re = x.select_negative(Vf64::<S>::splat(PI) - re, re);
+        re = x.select_negative(Vf64::<S>::PI() - re, re);
     }
 
     re.combine_sign(y)
@@ -1042,10 +1039,10 @@ fn asin_internal<S: Simd, P: Policy, const ACOS: bool>(x: Vf64<S>) -> Vf64<S> {
     let z1 = xb.mul_adde(y1, xb);
     let z2 = xa.mul_adde(y1, xa);
 
-    let frac_pi_2 = Vf64::<S>::splat(FRAC_PI_2);
+    let frac_pi_2 = Vf64::<S>::FRAC_PI_2();
 
     if ACOS {
-        let z1 = x.select_negative(Vf64::<S>::splat(PI) - z1, z1);
+        let z1 = x.select_negative(Vf64::<S>::PI() - z1, z1);
         let z2 = frac_pi_2 - z2.combine_sign(x);
         is_big.select(z1, z2)
     } else {
@@ -1079,7 +1076,7 @@ fn exp_d_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf64<S>) -> Vf64<S> {
             r = x0.round();
 
             x -= r;
-            x *= Vf64::<S>::splat(LN_2);
+            x *= Vf64::<S>::LN_2();
         }
         EXP_MODE_POW10 => {
             max_x = 307.65;
@@ -1091,7 +1088,7 @@ fn exp_d_internal<S: Simd, P: Policy, const MODE: u8>(x0: Vf64<S>) -> Vf64<S> {
 
             x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
             x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
-            x *= Vf64::<S>::splat(LN_10);
+            x *= Vf64::<S>::LN_10();
         }
         _ => {
             max_x = if MODE == EXP_MODE_EXP { 708.39 } else { 709.7 };

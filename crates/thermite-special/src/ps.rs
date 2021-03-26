@@ -1,9 +1,5 @@
 use super::*;
 
-use core::f32::consts::{
-    FRAC_1_PI, FRAC_2_PI, FRAC_PI_2, FRAC_PI_4, LN_10, LN_2, LOG10_2, LOG10_E, LOG2_E, PI, SQRT_2,
-};
-
 const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
 const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
 const SQRT_E: f32 = 1.6487212707001281468486507878141635716537761007101480115750793116;
@@ -18,7 +14,7 @@ where
         let one = Vf32::<S>::one();
         let half = Vf32::<S>::splat(0.5);
         let quarter = Vf32::<S>::splat(0.25);
-        let pi = Vf32::<S>::splat(PI);
+        let pi = Vf32::<S>::PI();
 
         let orig_z = z;
 
@@ -202,7 +198,7 @@ where
         let zero = Vf32::<S>::zero();
         let one = Vf32::<S>::one();
         let half = Vf32::<S>::splat(0.5);
-        let pi = Vf32::<S>::splat(PI);
+        let pi = Vf32::<S>::PI();
 
         let mut result = zero;
 
