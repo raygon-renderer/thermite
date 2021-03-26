@@ -1,0 +1,1 @@
+initSidebarItems({"attr":[["dispatch","Generates monomorphized backend `target_feature` function calls to the annotated function or `impl` block."]]});
