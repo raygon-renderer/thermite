@@ -90,7 +90,7 @@ where
 
         // if there is a remainder, check to fill it
         let rem = chunks.into_remainder();
-        if unlikely!(!rem.is_empty()) {
+        if thermite_unlikely!(!rem.is_empty()) {
             // if there are any values left, write what we can or zero it
             let value = match self.next() {
                 Some(value) => value,

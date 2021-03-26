@@ -2,12 +2,12 @@
 
 use thermite::*;
 
-type Vi32 = <backends::AVX2 as Simd>::Vi32;
-type Vu32 = <backends::AVX2 as Simd>::Vu32;
-type Vu64 = <backends::AVX2 as Simd>::Vu64;
-type Vf64 = <backends::AVX2 as Simd>::Vf64;
-type Vf32 = <backends::AVX2 as Simd>::Vf32;
-type Vi64 = <backends::AVX2 as Simd>::Vi64;
+type Vi32 = <backends::avx2::AVX2 as Simd>::Vi32;
+type Vu32 = <backends::avx2::AVX2 as Simd>::Vu32;
+type Vu64 = <backends::avx2::AVX2 as Simd>::Vu64;
+type Vf64 = <backends::avx2::AVX2 as Simd>::Vf64;
+type Vf32 = <backends::avx2::AVX2 as Simd>::Vf32;
+type Vi64 = <backends::avx2::AVX2 as Simd>::Vi64;
 
 #[test]
 fn test_bitreversal_32bit() {

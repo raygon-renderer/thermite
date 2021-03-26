@@ -23,16 +23,20 @@ pub unsafe fn unlikely(b: bool) -> bool {
     if b { cold() } b
 }
 
+#[doc(hidden)]
+#[macro_export]
 #[rustfmt::skip]
-macro_rules! likely {
+macro_rules! thermite_likely {
     ($e:expr) => {{
         #[allow(unused_unsafe)]
         unsafe { $crate::macros::likely($e) }
     }};
 }
 
+#[doc(hidden)]
+#[macro_export]
 #[rustfmt::skip]
-macro_rules! unlikely {
+macro_rules! thermite_unlikely {
     ($e:expr) => {{
         #[allow(unused_unsafe)]
         unsafe { $crate::macros::unlikely($e) }

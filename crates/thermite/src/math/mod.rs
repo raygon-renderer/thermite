@@ -493,7 +493,7 @@ where
 
     #[inline] fn summation_f_p<P: Policy, F>(start: isize, end: isize, f: F) -> Result<Self, Self>
     where
-            F: FnMut(isize) -> Self
+        F: FnMut(isize) -> Self
     {
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::summation_f::<P, F>(start, end, f)
     }
@@ -724,75 +724,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     }
 
     #[inline(always)]
-    fn hermite<P: Policy>(x: Self::Vf, mut n: u32) -> Self::Vf {
-        let one = Self::Vf::one();
-        let mut p0 = one;
-
-        if unlikely!(n == 0) {
-            return p0;
-        }
-
-        let mut p1 = x + x; // 2 * x
-
-        let mut c = 1;
-        let mut cf = one;
-
-        while c < n {
-            // swap p0, p1
-            let tmp = p0;
-            p0 = p1;
-            p1 = tmp;
-
-            let next0 = x.mul_sube(p0, cf * p1);
-
-            p1 = next0 + next0; // 2 * next0
-
-            c += 1;
-            cf += one;
-        }
-
-        p1
-    }
-
-    #[inline(always)]
-    fn hermitev<P: Policy>(x: Self::Vf, mut n: S::Vu32) -> Self::Vf {
-        let one = Self::Vf::one();
-        let i1 = Vu32::<S>::one();
-        let n_is_zero = n.eq(Vu32::<S>::zero());
-
-        let mut c = i1;
-
-        // count `n = c.to_float()` separately to avoid expensive converting every iteration
-        let mut cf = one;
-
-        let mut p0 = one;
-        let mut p1 = x + x; // 2 * x
-
-        loop {
-            let cont = c.lt(n);
-
-            if cont.none() {
-                break;
-            }
-
-            // swap p0, p1
-            let tmp = p0;
-            p0 = p1;
-            p1 = tmp;
-
-            let next0 = x.mul_sube(p0, cf * p1);
-            let next = next0 + next0; // 2 * next0
-
-            p1 = cont.select(next, p1);
-
-            c += i1;
-            cf += one;
-        }
-
-        n_is_zero.select(one, p1)
-    }
-
-    #[inline(always)]
     fn hypot<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf {
         let x = x.abs();
         let y = y.abs();
@@ -819,7 +750,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     {
         let mut sum = Self::Vf::zero();
 
-        if unlikely!(n == end) {
+        if thermite_unlikely!(n == end) {
             return Ok(sum);
         }
 
@@ -850,7 +781,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     {
         let mut product = Self::Vf::one();
 
-        if unlikely!(n == end) {
+        if thermite_unlikely!(n == end) {
             return Ok(product);
         }
 
@@ -1171,11 +1102,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn next_float<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn prev_float<P: Policy>(x: Self::Vf) -> Self::Vf;
 
-    fn tgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
-    fn lgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
-    fn digamma<P: Policy>(x: Self::Vf) -> Self::Vf;
-    fn beta<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf;
-
     #[inline(always)]
     fn smoothstep<P: Policy>(x: Self::Vf) -> Self::Vf {
         // use integer coefficients to ensure as-accurate-as-possible casts to f32 or f64
@@ -1206,235 +1132,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
         x2 * x2 * x2.mul_adde(x.mul_adde(c7, c6), x.mul_adde(c5, c4))
     }
-
-    // TODO: Add some associated forms?
-    /// This is split into its own function to avoid direct recursion within `legendre_p`,
-    /// as that will prevent loop unrolling or inlining and optimization at all.
-    #[inline(always)]
-    fn hardcoded_legendre(x: Self::Vf, n: u32) -> Self::Vf {
-        macro_rules! c {
-            ($n:expr, $d:expr) => {
-                Self::Vf::splat(Self::cast_from($n) / Self::cast_from($d))
-            };
-        }
-
-        let x2 = x * x;
-        let x4 = x2 * x2;
-        let x8 = x4 * x4;
-
-        // hand-tuned Estrin's scheme polynomials
-        match n {
-            2 => x2.mul_adde(c!(3, 2), c!(-1, 2)),
-            3 => x * x2.mul_adde(c!(5, 2), c!(-3, 2)),
-            4 => x4.mul_adde(c!(35, 8), x2.mul_adde(c!(-15, 4), c!(3, 8))),
-            5 => x * x4.mul_adde(c!(63, 8), x2.mul_adde(c!(-35, 4), c!(15, 8))),
-            6 => x4.mul_adde(
-                x2.mul_adde(c!(231, 16), c!(-315, 16)),
-                x2.mul_adde(c!(105, 16), c!(-5, 16)),
-            ),
-            7 => {
-                x * x4.mul_adde(
-                    x2.mul_adde(c!(429, 16), c!(-693, 16)),
-                    x2.mul_adde(c!(315, 16), c!(-35, 16)),
-                )
-            }
-            8 => x8.mul_adde(
-                c!(6435, 128),
-                x4.mul_adde(
-                    x2.mul_adde(c!(-3003, 32), c!(3465, 64)),
-                    x2.mul_adde(c!(-315, 32), c!(35, 128)),
-                ),
-            ),
-            9 => {
-                x * x8.mul_adde(
-                    c!(12155, 128),
-                    x4.mul_adde(
-                        x2.mul_adde(c!(-6435, 32), c!(9009, 64)),
-                        x2.mul_adde(c!(-1155, 32), c!(315, 128)),
-                    ),
-                )
-            }
-            10 => x8.mul_adde(
-                x2.mul_adde(c!(46189, 256), c!(-109395, 256)),
-                x4.mul_adde(
-                    x2.mul_adde(c!(45045, 128), c!(-15015, 128)),
-                    x2.mul_adde(c!(3465, 256), c!(-63, 256)),
-                ),
-            ),
-            11 => {
-                x * x8.mul_adde(
-                    x2.mul_adde(c!(88179, 256), c!(-230945, 256)),
-                    x4.mul_adde(
-                        x2.mul_adde(c!(109395, 128), c!(-45045, 128)),
-                        x2.mul_adde(c!(15015, 256), c!(-693, 256)),
-                    ),
-                )
-            }
-            12 => x8.mul_adde(
-                x4.mul_adde(c!(676039, 1024), x2.mul_adde(c!(-969969, 512), c!(2078505, 1024))),
-                x4.mul_adde(
-                    x2.mul_adde(c!(-255255, 256), c!(225225, 1024)),
-                    x2.mul_adde(c!(-9009, 512), c!(231, 1024)),
-                ),
-            ),
-            13 => {
-                x * x8.mul_adde(
-                    x4.mul_adde(c!(1300075, 1024), x2.mul_adde(c!(-2028117, 512), c!(4849845, 1024))),
-                    x4.mul_adde(
-                        x2.mul_adde(c!(-692835, 256), c!(765765, 1024)),
-                        x2.mul_adde(c!(-45045, 512), c!(3003, 1024)),
-                    ),
-                )
-            }
-            _ => unsafe { core::hint::unreachable_unchecked() },
-        }
-    }
-
-    #[inline(always)]
-    fn legendre<P: Policy>(x: Self::Vf, n: u32, m: u32) -> Self::Vf {
-        let zero = Self::Vf::zero();
-        let one = Self::Vf::one();
-
-        match (n, m) {
-            (0, 0) => return one,
-            (1, 0) => return x,
-            (n, 0) if n <= 13 => return Self::hardcoded_legendre(x, n),
-            (n, 0) => {
-                let mut k = 14; // set to max degree hard-coded + 1
-
-                // these should inline
-                let mut p0 = Self::hardcoded_legendre(x, k - 2);
-                let mut p1 = Self::hardcoded_legendre(x, k - 1);
-
-                while k <= n {
-                    let nf = Self::Vf::splat_as::<u32>(k);
-
-                    let tmp = p1;
-                    p1 = x.mul_sube((nf + nf).mul_sube(p1, p1), nf.mul_sube(p0, p0)) / nf;
-                    p0 = tmp;
-
-                    k += 1;
-                }
-
-                return p1;
-            }
-            _ => {}
-        }
-
-        let jacobi = Self::jacobi::<P>(x, zero, zero, n, m);
-
-        let x12 = x.nmul_adde(x, one); // (1 - x^2)
-
-        if m & 1 == 0 {
-            jacobi * Self::powi::<P>(x12, (m >> 1) as i32)
-        } else {
-            // negate sign for odd powers (-1)^m
-            -jacobi * Self::powi::<P>(x12, m as i32).sqrt()
-        }
-    }
-
-    #[inline(always)]
-    fn jacobi<P: Policy>(x: Self::Vf, mut alpha: Self::Vf, mut beta: Self::Vf, mut n: u32, m: u32) -> Self::Vf {
-        /*
-            This implementation is a little weird since I wanted to keep it generic, but all casts
-            from integers should be const-folded
-        */
-
-        if unlikely!(m > n) {
-            return Self::Vf::zero();
-        }
-
-        let one = Self::Vf::one();
-        let two = Self::Vf::splat_any(2);
-        let half = Self::Vf::splat_any(0.5);
-
-        let mut scale = one;
-
-        if m > 0 {
-            let mut jf = one;
-            let nf = Self::Vf::splat_as::<u32>(n);
-
-            let t0 = half * (nf + alpha + beta);
-
-            for j in 0..m {
-                scale *= half.mul_adde(jf, t0);
-                jf += one;
-            }
-
-            let mf = Self::Vf::splat_as::<u32>(m);
-
-            alpha += mf;
-            beta += mf;
-            n -= m;
-        }
-
-        if unlikely!(n == 0) {
-            return scale; // scale * one
-        }
-
-        let mut y0 = one;
-
-        let alpha_p_beta = alpha + beta;
-        let alpha_sqr = alpha * alpha;
-        let beta_sqr = beta * beta;
-        let alpha1 = alpha - one;
-        let beta1 = beta - one;
-        let alpha2beta2 = alpha_sqr - beta_sqr;
-
-        //let mut y1 = alpha + one + half * (alpha_p_beta + two) * (x - one);
-        let mut y1 = half * (x.mul_adde(alpha, alpha) + x.mul_sube(beta, beta) + x + x);
-
-        let mut yk = y1;
-        let mut k = Self::cast_from(2u32);
-
-        let k_max = Self::cast_from(n) * (Self::cast_from(1u32) + Self::__EPSILON);
-
-        while k < k_max {
-            let kf = Self::Vf::splat(k);
-            let kf2 = two * kf;
-
-            let k_alpha_p_beta = kf + alpha_p_beta;
-            let k2_alpha_p_beta = kf2 + alpha_p_beta;
-
-            let k2_alpha_p_beta_m2 = k2_alpha_p_beta - two;
-
-            let denom = kf2 * k_alpha_p_beta * k2_alpha_p_beta_m2;
-            let t0 = x.mul_adde(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
-            let gamma1 = k2_alpha_p_beta.mul_sube(t0, t0);
-            let gamma0 = two * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
-
-            yk = gamma1.mul_sube(y1, gamma0 * y0) / denom;
-
-            y0 = y1;
-            y1 = yk;
-
-            k = k + Self::cast_from(1u32);
-        }
-
-        scale * yk
-    }
-
-    /*
-    #[inline(always)]
-    fn bessel_j<P: Policy>(x: Self::Vf, n: u32) -> Self::Vf {
-        bessel::bessel_j::<S, Self, P>(x, n)
-    }
-
-    #[inline(always)]
-    fn bessel_jf<P: Policy>(x: Self::Vf, n: Self) -> Self::Vf {
-        unimplemented!()
-    }
-
-    #[inline(always)]
-    fn bessel_y<P: Policy>(x: Self::Vf, n: u32) -> Self::Vf {
-        bessel::bessel_y::<S, Self, P>(x, n)
-    }
-
-    #[inline(always)]
-    fn bessel_yf<P: Policy>(x: Self::Vf, n: Self) -> Self::Vf {
-        unimplemented!()
-    }
-     */
 }
 
 //mod bessel;

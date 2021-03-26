@@ -6,7 +6,8 @@
 pub use thermite_dispatch::dispatch;
 
 #[macro_use]
-mod macros;
+#[doc(hidden)]
+pub mod macros;
 
 #[macro_use]
 mod runtime;

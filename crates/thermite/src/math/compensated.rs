@@ -92,7 +92,7 @@ impl<S: Simd, V: SimdFloatVector<S>> Mul<V> for Compensated<S, V> {
     fn mul(mut self, rhs: V) -> Self {
         let pi = Self::product(self.val, rhs);
         self.val = pi.val;
-        self.err = self.err * rhs + pi.err;
+        self.err = self.err.mul_adde(rhs, pi.err);
         self
     }
 }
