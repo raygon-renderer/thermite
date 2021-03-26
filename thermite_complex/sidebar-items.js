@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["Complex",""]]});
+initSidebarItems({"struct":[["Complex","A vectorized (SoA) complex number in Cartesian form."]]});

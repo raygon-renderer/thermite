@@ -481,6 +481,27 @@
 <span id="478">478</span>
 <span id="479">479</span>
 <span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Complex Number Vectors</span>
 
@@ -493,8 +514,11 @@
     <span class="ident">ops</span>::{<span class="ident">Add</span>, <span class="ident">Div</span>, <span class="ident">Mul</span>, <span class="ident">Neg</span>, <span class="ident">Sub</span>},
 };
 
+<span class="doccomment">/// A vectorized (SoA) complex number in Cartesian form.</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span> <span class="op">=</span> <span class="ident">policies</span>::<span class="ident">Performance</span><span class="op">&gt;</span> {
+    <span class="doccomment">/// Real part</span>
     <span class="kw">pub</span> <span class="ident">re</span>: <span class="ident">V</span>,
+    <span class="doccomment">/// Imaginary part</span>
     <span class="kw">pub</span> <span class="ident">im</span>: <span class="ident">V</span>,
     <span class="ident">_simd</span>: <span class="ident">PhantomData</span><span class="op">&lt;</span>(<span class="ident">S</span>, <span class="ident">P</span>)<span class="op">&gt;</span>,
 }
@@ -607,6 +631,7 @@
         <span class="self">self</span>.<span class="ident">unscale</span>(<span class="self">self</span>.<span class="ident">norm_sqr</span>()).<span class="ident">conj</span>()
     }
 
+    <span class="doccomment">/// Returns `self * m + a`</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(
             <span class="self">self</span>.<span class="ident">im</span>.<span class="ident">nmul_adde</span>(<span class="ident">m</span>.<span class="ident">im</span>, <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">mul_adde</span>(<span class="ident">m</span>.<span class="ident">re</span>, <span class="ident">a</span>.<span class="ident">re</span>)),
@@ -657,20 +682,35 @@
     <span class="doccomment">/// * `(-∞, 0]`, continuous from above.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">ln</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: ln(z) = ln|z| + i*arg(z)</span>
         <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">r</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(), <span class="ident">theta</span>)
     }
 
+    <span class="doccomment">/// Computes the principal value of the square root of `self`.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="comment">// TODO: Convert reference to branchless</span>
-        <span class="macro">unimplemented</span><span class="macro">!</span>()
+        <span class="comment">// formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)</span>
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">one</span>();
+        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
+        <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
+        <span class="self">Self</span>::<span class="ident">from_polar</span>(<span class="ident">r</span>.<span class="ident">sqrt</span>(), <span class="ident">theta</span> <span class="op">/</span> <span class="ident">two</span>)
     }
 
+    <span class="doccomment">/// Computes the principal value of the cube root of `self`.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Note that this does not match the usual result for the cube root of</span>
+    <span class="doccomment">/// negative real numbers. For example, the real cube root of `-8` is `-2`,</span>
+    <span class="doccomment">/// but the principal complex cube root of `-8` is `1 + i√3`.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="comment">// TODO: Convert reference to branchless</span>
-        <span class="macro">unimplemented</span><span class="macro">!</span>()
+        <span class="comment">// formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)</span>
+        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">one</span>();
+        <span class="kw">let</span> <span class="ident">three</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
+        <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
+        <span class="self">Self</span>::<span class="ident">from_polar</span>(<span class="ident">r</span>.<span class="ident">cbrt</span>(), <span class="ident">theta</span> <span class="op">/</span> <span class="ident">three</span>)
     }
 
     <span class="doccomment">/// Raises `self` to a floating point power.</span>
@@ -709,7 +749,7 @@
         <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
         <span class="self">Self</span>::<span class="ident">from_polar</span>(
             <span class="ident">r</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">exp</span>.<span class="ident">re</span>) <span class="op">*</span> (<span class="op">-</span><span class="ident">exp</span>.<span class="ident">im</span> <span class="op">*</span> <span class="ident">theta</span>).<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(),
-            <span class="ident">exp</span>.<span class="ident">re</span> <span class="op">*</span> <span class="ident">theta</span> <span class="op">+</span> <span class="ident">exp</span>.<span class="ident">im</span> <span class="op">*</span> <span class="ident">r</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(),
+            <span class="ident">exp</span>.<span class="ident">im</span>.<span class="ident">mul_adde</span>(<span class="ident">r</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(), <span class="ident">exp</span>.<span class="ident">re</span> <span class="op">*</span> <span class="ident">theta</span>),
         )
     }
 
@@ -772,7 +812,8 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">acos</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)</span>
         <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">i</span>();
-        <span class="op">-</span><span class="ident">i</span> <span class="op">*</span> (<span class="ident">i</span> <span class="op">*</span> (<span class="self">Self</span>::<span class="ident">one</span>() <span class="op">-</span> <span class="self">self</span> <span class="op">*</span> <span class="self">self</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="self">self</span>).<span class="ident">ln</span>()
+
+        <span class="op">-</span><span class="ident">i</span> <span class="op">*</span> <span class="ident">i</span>.<span class="ident">mul_add</span>(<span class="self">self</span>.<span class="ident">mul_add</span>(<span class="op">-</span><span class="self">self</span>, <span class="self">Self</span>::<span class="ident">one</span>()).<span class="ident">sqrt</span>(), <span class="self">self</span>).<span class="ident">ln</span>()
     }
 
     <span class="doccomment">/// Computes the principal value of the inverse tangent of `self`.</span>
@@ -788,7 +829,6 @@
         <span class="comment">// formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)</span>
         <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">i</span>();
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">neg_one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">real</span>(<span class="ident">V</span>::<span class="ident">neg_one</span>());
         <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
         <span class="comment">//if self == i {</span>
         <span class="comment">//    return Self::new(T::zero(), T::infinity());</span>
@@ -797,7 +837,7 @@
         <span class="comment">//}</span>
 
         <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">i</span>, <span class="ident">one</span>);
-        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">i</span>, <span class="ident">neg_one</span>);
+        <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> (<span class="op">-</span><span class="self">self</span>).<span class="ident">mul_add</span>(<span class="ident">i</span>, <span class="ident">one</span>);
 
         <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> (<span class="ident">a</span>.<span class="ident">ln</span>() <span class="op">-</span> <span class="ident">b</span>.<span class="ident">ln</span>()) <span class="op">/</span> (<span class="ident">two</span> <span class="op">*</span> <span class="ident">i</span>);
 
@@ -843,9 +883,8 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">asinh</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arcsinh(z) = ln(z + sqrt(1+z^2))</span>
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">one</span>);
         <span class="comment">//(self + (one + self * self).sqrt()).ln()</span>
-        (<span class="self">self</span> <span class="op">+</span> <span class="ident">a</span>.<span class="ident">sqrt</span>()).<span class="ident">ln</span>()
+        (<span class="self">self</span> <span class="op">+</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">one</span>).<span class="ident">sqrt</span>()).<span class="ident">ln</span>()
     }
 
     <span class="doccomment">/// Computes the principal value of inverse hyperbolic cosine of `self`.</span>
@@ -859,8 +898,11 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">acosh</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))</span>
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
-        <span class="ident">two</span> <span class="op">*</span> (((<span class="self">self</span> <span class="op">+</span> <span class="ident">one</span>) <span class="op">/</span> <span class="ident">two</span>).<span class="ident">sqrt</span>() <span class="op">+</span> ((<span class="self">self</span> <span class="op">-</span> <span class="ident">one</span>) <span class="op">/</span> <span class="ident">two</span>).<span class="ident">sqrt</span>()).<span class="ident">ln</span>()
+        <span class="kw">let</span> <span class="ident">one_half</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> (<span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>);
+
+        <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> (<span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">one_half</span>, <span class="ident">one_half</span>).<span class="ident">sqrt</span>() <span class="op">+</span> <span class="self">self</span>.<span class="ident">mul_add</span>(<span class="ident">one_half</span>, <span class="op">-</span><span class="ident">one_half</span>).<span class="ident">sqrt</span>()).<span class="ident">ln</span>();
+
+        <span class="ident">res</span> <span class="op">+</span> <span class="ident">res</span> <span class="comment">// res * 2</span>
     }
 
     <span class="doccomment">/// Computes the principal value of inverse hyperbolic tangent of `self`.</span>
@@ -875,13 +917,13 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">atanh</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: arctanh(z) = (ln(1+z) - ln(1-z))/2</span>
         <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">two</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="ident">one_half</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> (<span class="ident">one</span> <span class="op">+</span> <span class="ident">one</span>);
         <span class="comment">//if self == one {</span>
         <span class="comment">//    return Self::new(T::infinity(), T::zero());</span>
         <span class="comment">//} else if self == -one {</span>
         <span class="comment">//    return Self::new(-T::infinity(), T::zero());</span>
         <span class="comment">//}</span>
-        ((<span class="ident">one</span> <span class="op">+</span> <span class="self">self</span>).<span class="ident">ln</span>() <span class="op">-</span> (<span class="ident">one</span> <span class="op">-</span> <span class="self">self</span>).<span class="ident">ln</span>()) <span class="op">/</span> <span class="ident">two</span>
+        <span class="ident">one_half</span> <span class="op">*</span> ((<span class="ident">one</span> <span class="op">+</span> <span class="self">self</span>).<span class="ident">ln</span>() <span class="op">-</span> (<span class="ident">one</span> <span class="op">-</span> <span class="self">self</span>).<span class="ident">ln</span>())
     }
 
     <span class="doccomment">/// Returns `1/self` using floating-point operations.</span>
