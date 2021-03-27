@@ -11,7 +11,9 @@ pub type Hyperdual<S, V, const N: usize> = HyperdualP<S, V, policies::Performanc
 pub type DuelNumber<S, V> = Hyperdual<S, V, 1>;
 
 pub struct HyperdualP<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> {
+    /// Real part
     pub re: V,
+    /// Dual parts
     pub du: [V; N],
     _simd: PhantomData<(S, P)>,
 }
@@ -86,9 +88,50 @@ where
     V: SimdVectorizedMath<S>,
 {
     #[inline(always)]
+    fn div_dual(self, re: V, denom: V) -> Self {
+        if N > 1 {
+            let rcp = denom.reciprocal_p::<P>();
+            self.map_dual(re, |x| x * rcp)
+        } else {
+            self.map_dual(re, |x| x / denom)
+        }
+    }
+
+    #[inline(always)]
+    pub fn fract(mut self) -> Self {
+        self.re = self.re.fract();
+        self
+    }
+
+    #[inline(always)]
+    pub fn signum(self) -> Self {
+        Self::real(self.re.signum())
+    }
+
+    #[inline(always)]
     pub fn abs(self) -> Self {
         let signum = self.re.signum();
         self.map(|x| x * signum)
+    }
+
+    #[inline(always)]
+    pub fn select(mask: Mask<S, V>, t: Self, f: Self) -> Self {
+        let mut t = t; // Weird compiler bug
+        for i in 0..N {
+            t.du[i] = mask.select(t.du[i], f.du[i]);
+        }
+        t.re = mask.select(t.re, f.re);
+        t
+    }
+
+    #[inline(always)]
+    pub fn min(self, other: Self) -> Self {
+        Self::select(self.re.lt(other.re), self, other)
+    }
+
+    #[inline(always)]
+    pub fn max(mut self, other: Self) -> Self {
+        Self::select(self.re.gt(other.re), self, other)
     }
 
     #[inline(always)]
@@ -109,9 +152,13 @@ where
 
     #[inline(always)]
     pub fn powf(mut self, n: Self) -> Self {
-        let re = self.re.powf_p::<P>(n.re);
-        let a = n.re * self.re.powf_p::<P>(n.re - V::one());
+        let re_n1 = self.re.powf_p::<P>(n.re - V::one());
+
+        let re = re_n1 * self.re; // re^n
+
+        let a = n.re * re_n1; // n * re^(n-1)
         let b = re * self.re.ln_p::<P>();
+
         self.re = re;
         for i in 0..N {
             self.du[i] = a.mul_add(self.du[i], b * n.du[i]);
@@ -134,36 +181,40 @@ where
 
     #[inline(always)]
     pub fn ln(self) -> Self {
-        if N > 1 {
-            let inv_re = self.re.reciprocal_p::<P>();
-            self.map_dual(self.re.ln_p::<P>(), |x| x * inv_re)
-        } else {
-            self.map_dual(self.re.ln_p::<P>(), |x| x / self.re)
-        }
+        self.div_dual(self.re.ln_p::<P>(), self.re)
     }
 
     #[inline(always)]
     pub fn sqrt(self) -> Self {
         let re = self.re.sqrt();
-        let re2 = re + re;
-        if N > 1 {
-            let d = re2.reciprocal_p::<P>();
-            self.map_dual(re, |x| x * d)
-        } else {
-            self.map_dual(re, |x| x / re2)
-        }
+        self.div_dual(re, re + re)
     }
 
     #[inline(always)]
     pub fn cbrt(self) -> Self {
         let re = self.re.cbrt();
-        let re3 = re + re + re;
-        if N > 1 {
-            let d = re3.reciprocal_p::<P>();
-            self.map_dual(re, |x| x * d)
-        } else {
-            self.map_dual(re, |x| x / re3)
+        self.div_dual(re, re + re + re)
+    }
+
+    fn hypot(self, other: Self) -> Self {
+        let c = self.re.hypot(other.re);
+        let mut v = Self::real(c);
+
+        let inv_c = c.reciprocal_p::<P>();
+        for i in 0..N {
+            let x = self.du[i];
+            let y = other.du[i];
+
+            v.du[i] = self.re.mul_add(x, other.re * y);
+
+            if N > 1 {
+                v.du[i] *= inv_c;
+            } else {
+                v.du[i] /= c;
+            }
         }
+
+        v
     }
 
     #[inline(always)]
@@ -188,6 +239,44 @@ where
         let t = self.re.tan_p::<P>();
         let c = t.mul_add(t, V::one());
         self.map_dual(t, |x| x * c)
+    }
+
+    #[inline(always)]
+    pub fn asin(self) -> Self {
+        let c = self.re.nmul_adde(self.re, V::one()).invsqrt_p::<P>();
+        self.map_dual(self.re.asin(), |x| x * c)
+    }
+
+    #[inline(always)]
+    pub fn acos(self) -> Self {
+        let c = self.re.nmul_adde(self.re, V::one()).invsqrt_p::<P>().neg();
+        self.map_dual(self.re.acos(), |x| x * c)
+    }
+
+    #[inline(always)]
+    pub fn atan(self) -> Self {
+        let c = self.re.mul_adde(self.re, V::one());
+        self.div_dual(self.re.atan(), c)
+    }
+
+    pub fn atan2(self, x: Self) -> Self {
+        let y = self;
+        let c = y.re.mul_add(y.re, x.re * x.re);
+
+        let mut v = Self::real(y.re.atan2(x.re));
+
+        let inv_c = c.reciprocal_p::<P>();
+        for i in 0..N {
+            v.du[i] = x.re.mul_sub(y.du[i], y.re * x.du[i]) * c;
+
+            if N > 1 {
+                v.du[i] *= inv_c;
+            } else {
+                v.du[i] /= c;
+            }
+        }
+
+        v
     }
 
     #[inline(always)]
@@ -257,15 +346,15 @@ where
     #[inline(always)]
     fn div(mut self, rhs: Self) -> Self {
         let d = self.re * rhs.re;
-        if N > 1 {
-            // precompute division
-            let d = d.reciprocal_p::<P>();
-            for i in 0..N {
-                self.du[i] = rhs.re.mul_sub(self.du[i], self.re * rhs.du[i]) * d;
-            }
-        } else {
-            for i in 0..N {
-                self.du[i] = rhs.re.mul_sub(self.du[i], self.re * rhs.du[i]) / d;
+
+        let inv_d = d.reciprocal_p::<P>();
+        for i in 0..N {
+            self.du[i] = rhs.re.mul_sub(self.du[i], self.re * rhs.du[i]) * d;
+
+            if N > 1 {
+                self.du[i] *= inv_d;
+            } else {
+                self.du[i] /= d;
             }
         }
         self.re /= rhs.re;
