@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["HyperdualP",""]],"type":[["DuelNumber",""],["Hyperdual",""]]});
+initSidebarItems({"struct":[["HyperdualP",""]],"type":[["DualNumber",""],["Hyperdual",""]]});
