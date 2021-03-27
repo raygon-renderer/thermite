@@ -1116,6 +1116,16 @@ pub enum SimdInstructionSet {
 }
 
 impl SimdInstructionSet {
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "static_init"))]
+    #[inline]
+    pub fn runtime_detect() -> SimdInstructionSet {
+        #[static_init::dynamic(0)]
+        static SIS: SimdInstructionSet = SimdInstructionSet::runtime_detect_x86_internal();
+
+        unsafe { *SIS }
+    }
+
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), not(feature = "static_init")))]
     pub fn runtime_detect() -> SimdInstructionSet {
         unsafe {
             static mut CACHED: Option<SimdInstructionSet> = None;
@@ -1124,7 +1134,7 @@ impl SimdInstructionSet {
                 Some(value) => value,
                 None => {
                     // Allow this to race, they all converge to the same result
-                    let isa = Self::runtime_detect_internal();
+                    let isa = Self::runtime_detect_x86_internal();
                     CACHED = Some(isa);
                     isa
                 }
@@ -1132,8 +1142,18 @@ impl SimdInstructionSet {
         }
     }
 
+    #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+    const fn runtime_detect() -> SimdInstructionSet {
+        SimdInstructionSet::NEON
+    }
+
+    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    const fn runtime_detect() -> SimdInstructionSet {
+        SimdInstructionSet::WASM32
+    }
+
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    fn runtime_detect_internal() -> SimdInstructionSet {
+    fn runtime_detect_x86_internal() -> SimdInstructionSet {
         if core_detect::is_x86_feature_detected!("fma") {
             // TODO: AVX512
             if core_detect::is_x86_feature_detected!("avx2") {
@@ -1150,16 +1170,6 @@ impl SimdInstructionSet {
         } else {
             SimdInstructionSet::Scalar
         }
-    }
-
-    #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
-    fn runtime_detect_internal() -> SimdInstructionSet {
-        SimdInstructionSet::NEON
-    }
-
-    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
-    fn runtime_detect_internal() -> SimdInstructionSet {
-        SimdInstructionSet::WASM32
     }
 
     /// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.
