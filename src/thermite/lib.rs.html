@@ -1284,6 +1284,16 @@
 <span id="1281">1281</span>
 <span id="1282">1282</span>
 <span id="1283">1283</span>
+<span id="1284">1284</span>
+<span id="1285">1285</span>
+<span id="1286">1286</span>
+<span id="1287">1287</span>
+<span id="1288">1288</span>
+<span id="1289">1289</span>
+<span id="1290">1290</span>
+<span id="1291">1291</span>
+<span id="1292">1292</span>
+<span id="1293">1293</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely</span>
@@ -2403,6 +2413,16 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 }
 
 <span class="kw">impl</span> <span class="ident">SimdInstructionSet</span> {
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">any</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>), <span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;static_init&quot;</span>))]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">runtime_detect</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
+        <span class="attribute">#[<span class="ident">static_init</span>::<span class="ident">dynamic</span>(<span class="number">0</span>)]</span>
+        <span class="kw">static</span> <span class="ident">SIS</span>: <span class="ident">SimdInstructionSet</span> <span class="op">=</span> <span class="ident">SimdInstructionSet</span>::<span class="ident">runtime_detect_x86_internal</span>();
+
+        <span class="kw">unsafe</span> { <span class="kw-2">*</span><span class="ident">SIS</span> }
+    }
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">any</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>), <span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;static_init&quot;</span>)))]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">runtime_detect</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
         <span class="kw">unsafe</span> {
             <span class="kw">static</span> <span class="kw-2">mut</span> <span class="ident">CACHED</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">SimdInstructionSet</span><span class="op">&gt;</span> <span class="op">=</span> <span class="prelude-val">None</span>;
@@ -2411,7 +2431,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
                 <span class="prelude-val">Some</span>(<span class="ident">value</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">value</span>,
                 <span class="prelude-val">None</span> <span class="op">=</span><span class="op">&gt;</span> {
                     <span class="comment">// Allow this to race, they all converge to the same result</span>
-                    <span class="kw">let</span> <span class="ident">isa</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">runtime_detect_internal</span>();
+                    <span class="kw">let</span> <span class="ident">isa</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">runtime_detect_x86_internal</span>();
                     <span class="ident">CACHED</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">isa</span>);
                     <span class="ident">isa</span>
                 }
@@ -2419,8 +2439,18 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
         }
     }
 
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;neon&quot;</span>, <span class="ident">any</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;arm&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;aarch64&quot;</span>)))]</span>
+    <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">runtime_detect</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
+        <span class="ident">SimdInstructionSet</span>::<span class="ident">NEON</span>
+    }
+
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;wasm32&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;wasm32&quot;</span>))]</span>
+    <span class="kw">const</span> <span class="kw">fn</span> <span class="ident">runtime_detect</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
+        <span class="ident">SimdInstructionSet</span>::<span class="ident">WASM32</span>
+    }
+
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">any</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>))]</span>
-    <span class="kw">fn</span> <span class="ident">runtime_detect_internal</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
+    <span class="kw">fn</span> <span class="ident">runtime_detect_x86_internal</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
         <span class="kw">if</span> <span class="ident">core_detect</span>::<span class="macro">is_x86_feature_detected</span><span class="macro">!</span>(<span class="string">&quot;fma&quot;</span>) {
             <span class="comment">// TODO: AVX512</span>
             <span class="kw">if</span> <span class="ident">core_detect</span>::<span class="macro">is_x86_feature_detected</span><span class="macro">!</span>(<span class="string">&quot;avx2&quot;</span>) {
@@ -2437,16 +2467,6 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
         } <span class="kw">else</span> {
             <span class="ident">SimdInstructionSet</span>::<span class="ident">Scalar</span>
         }
-    }
-
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;neon&quot;</span>, <span class="ident">any</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;arm&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;aarch64&quot;</span>)))]</span>
-    <span class="kw">fn</span> <span class="ident">runtime_detect_internal</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
-        <span class="ident">SimdInstructionSet</span>::<span class="ident">NEON</span>
-    }
-
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">all</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;wasm32&quot;</span>, <span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;wasm32&quot;</span>))]</span>
-    <span class="kw">fn</span> <span class="ident">runtime_detect_internal</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SimdInstructionSet</span> {
-        <span class="ident">SimdInstructionSet</span>::<span class="ident">WASM32</span>
     }
 
     <span class="doccomment">/// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.</span>
