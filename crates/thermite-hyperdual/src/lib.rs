@@ -8,7 +8,7 @@ use core::{
 };
 
 pub type Hyperdual<S, V, const N: usize> = HyperdualP<S, V, policies::Performance, N>;
-pub type DuelNumber<S, V> = Hyperdual<S, V, 1>;
+pub type DualNumber<S, V> = Hyperdual<S, V, 1>;
 
 pub struct HyperdualP<S: Simd, V: SimdFloatVector<S>, P: Policy, const N: usize> {
     /// Real part
