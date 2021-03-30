@@ -733,6 +733,35 @@ pub trait SimdIntoBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     }
 }
 
+/// Reflexive helper trait to overcome trait bounds cycles
+pub trait SimdBitsFrom<S: Simd + ?Sized, V>: SimdVectorBase<S> {
+    fn bits_from(vec: V) -> Self;
+}
+
+impl<S: Simd + ?Sized, V, T: SimdVectorBase<S>> SimdBitsFrom<S, V> for T
+where
+    V: SimdIntoBits<S, T>,
+{
+    #[inline(always)]
+    fn bits_from(vec: V) -> Self {
+        vec.into_bits()
+    }
+}
+
+/// Reflexive helper trait to overcome trait bounds cycles
+pub trait SimdBitsInto<S: Simd + ?Sized, V>: SimdVectorBase<S> {
+    fn bits_into(self) -> V;
+}
+
+impl<S: Simd + ?Sized, V, T: SimdVectorBase<S>> SimdBitsInto<S, V> for T
+where
+    V: SimdFromBits<S, T>,
+{
+    fn bits_into(self) -> V {
+        V::from_bits(self)
+    }
+}
+
 /// Transmutations from raw bits
 pub trait SimdFromBits<S: Simd + ?Sized, B>: SimdVectorBase<S> {
     #[inline(always)]
@@ -890,8 +919,8 @@ pub trait SimdSignedVector<S: Simd + ?Sized>: SimdVector<S> + Neg<Output = Self>
 
 /// Floating point SIMD vectors
 pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S> {
-    type Vi: SimdIntVector<S> + SimdSignedVector<S>;
-    type Vu: SimdIntVector<S>;
+    type Vi: SimdIntVector<S> + SimdSignedVector<S> + SimdFromBits<S, Self::Vu> + SimdIntoBits<S, Self::Vu>;
+    type Vu: SimdIntVector<S> + SimdBitsFrom<S, Self> + SimdBitsInto<S, Self>;
 
     fn epsilon() -> Self;
     fn infinity() -> Self;
@@ -914,6 +943,20 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     unsafe fn load_f16_unaligned_unchecked(src: *const f16) -> Self;
     unsafe fn store_f16_unaligned_unchecked(&self, dst: *mut f16);
 
+    /// Converts floating-point values to integer values that can be used
+    /// for total equality, ordering and hashing.
+    ///
+    /// **NOTE**: **This is not the integer cast of the float vector**, but merely an associated
+    /// integer with similar ordering.
+    #[inline(always)]
+    fn as_ord_int(self) -> Self::Vi {
+        let u = Self::Vu::bits_from(self);
+        let bit = Self::Vu::splat_as(1u64 << (Self::ELEMENT_SIZE * 8 - 1));
+
+        // TODO: Maybe optimize this better?
+        Self::Vi::from_bits((u & bit).eq(Self::Vu::zero()).select(u | bit, !u))
+    }
+
     /// Can convert to a signed integer faster than a regular `cast`, but may not provide
     /// correct results above a certain range.
     ///
@@ -923,7 +966,7 @@ pub trait SimdFloatVector<S: Simd + ?Sized>: SimdVector<S> + SimdSignedVector<S>
     /// the results should be exact, but do not rely on this for large floats.
     unsafe fn to_int_fast(self) -> Self::Vi;
 
-    /// Can convert to a signed integer faster than a regular `cast`, but may not provide
+    /// Can convert to an unsigned integer faster than a regular `cast`, but may not provide
     /// correct results above a certain range.
     ///
     /// For example, `f64 -> u64` is only valid from `[0, 2^52)` or so.
