@@ -16,6 +16,9 @@ pub trait SimdVectorizedSpecialFunctionsPolicied<S: Simd>: SimdFloatVector<S> {
     fn digamma_p<P: Policy>(self) -> Self;
     fn beta_p<P: Policy>(self, y: Self) -> Self;
 
+    fn gaussian_p<P: Policy>(self, a: Self, c: Self) -> Self;
+    fn gaussian_integral_p<P: Policy>(self, x1: Self, a: Self, c: Self) -> Self;
+
     /*
     fn bessel_j_p<P: Policy>(self, n: u32) -> Self;
     fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self;
@@ -81,6 +84,19 @@ pub trait SimdVectorizedSpecialFunctions<S: Simd>: SimdVectorizedSpecialFunction
     /// Internally, this is computed with [`jacobi`](#tymethod.jacobi)
     fn legendre(self, n: u32, m: u32) -> Self;
 
+    /// Computes the generic Gaussian function:
+    ///
+    /// ```
+    /// f(x) = a * e^(-1/2 * x^2/c^2)
+    /// ```
+    fn gaussian(self, a: Self, c: Self) -> Self;
+
+    /// Integrates the generic Gaussian function from `x0`(`self`) to `x1`
+    ///
+    /// **NOTE**: This uses the Gaussian form `f(x) = a * e^(-1/2 * x^2/c^2)`, so if you offset `x` by some amount,
+    /// make sure to do that here as well with `x0`(`self`) and `x1`
+    fn gaussian_integral(self, x1: Self, a: Self, c: Self) -> Self;
+
     /*
     /// Computes the Bessel function of the first kind `J_n(x)` with whole integer order `n`.
     ///
@@ -132,6 +148,13 @@ where
     #[inline] fn beta_p<P: Policy>(self, y: Self) -> Self {
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::beta::<P>(self, y)
     }
+
+    #[inline] fn gaussian_p<P: Policy>(self, a: Self, c: Self) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::gaussian::<P>(self, a, c)
+    }
+    #[inline] fn gaussian_integral_p<P: Policy>(self, x1: Self, a: Self, c: Self) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::gaussian_integral::<P>(self, x1, a, c)
+    }
 }
 
 #[rustfmt::skip]
@@ -147,6 +170,8 @@ where
     #[inline(always)] fn hermitev(self, n: S::Vu32)                             -> Self { self.hermitev_p::<DefaultPolicy>(n) }
     #[inline(always)] fn jacobi(self, alpha: Self, beta: Self, n: u32, m: u32)  -> Self { self.jacobi_p::<DefaultPolicy>(alpha, beta, n, m) }
     #[inline(always)] fn legendre(self, n: u32, m: u32)                         -> Self { self.legendre_p::<DefaultPolicy>(n, m) }
+    #[inline(always)] fn gaussian(self, a: Self, c: Self)                       -> Self { self.gaussian_p::<DefaultPolicy>(a, c) }
+    #[inline(always)] fn gaussian_integral(self, a: Self, c: Self, x1: Self)    -> Self { self.gaussian_integral_p::<DefaultPolicy>(x1, a, c) }
 }
 
 #[doc(hidden)]
@@ -431,6 +456,32 @@ pub trait SimdVectorizedSpecialFunctionsInternal<S: Simd>: SimdVectorizedMathInt
     fn lgamma<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn digamma<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn beta<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf;
+
+    #[inline(always)]
+    fn gaussian<P: Policy>(x: Self::Vf, a: Self::Vf, c: Self::Vf) -> Self::Vf {
+        let xc = match P::POLICY.precision {
+            PrecisionPolicy::Worst => x * c.reciprocal_p::<P>(),
+            _ => x / c,
+        };
+
+        a * (Self::Vf::splat_as(-0.5) * xc * xc).exp_p::<P>()
+    }
+
+    #[inline(always)]
+    fn gaussian_integral<P: Policy>(x0: Self::Vf, x1: Self::Vf, a: Self::Vf, c: Self::Vf) -> Self::Vf {
+        let common = Self::Vf::SQRT_FRAC_PI_2() * a * c;
+        let denom = Self::Vf::SQRT_2() * c;
+
+        let (a1, a0) = match P::POLICY.precision {
+            PrecisionPolicy::Worst => {
+                let denom = denom.reciprocal_p::<P>();
+                (x1 * denom, x0 * denom)
+            }
+            _ => (x1 / denom, x0 / denom),
+        };
+
+        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
+    }
 
     /*
     #[inline(always)]
