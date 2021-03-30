@@ -1337,6 +1337,24 @@
 <span id="1334">1334</span>
 <span id="1335">1335</span>
 <span id="1336">1336</span>
+<span id="1337">1337</span>
+<span id="1338">1338</span>
+<span id="1339">1339</span>
+<span id="1340">1340</span>
+<span id="1341">1341</span>
+<span id="1342">1342</span>
+<span id="1343">1343</span>
+<span id="1344">1344</span>
+<span id="1345">1345</span>
+<span id="1346">1346</span>
+<span id="1347">1347</span>
+<span id="1348">1348</span>
+<span id="1349">1349</span>
+<span id="1350">1350</span>
+<span id="1351">1351</span>
+<span id="1352">1352</span>
+<span id="1353">1353</span>
+<span id="1354">1354</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely</span>
@@ -1618,6 +1636,24 @@
             });
         }
         <span class="ident">res</span>
+    }
+
+    <span class="doccomment">/// Reverses the elements in the vector</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
+    <span class="kw">fn</span> <span class="ident">reverse</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// TODO: Expand this if necessary, but as of now no vectors are longer than 8 anyway</span>
+        <span class="kw">match</span> <span class="self">Self</span>::<span class="ident">NUM_ELEMENTS</span> {
+            <span class="number">0</span> <span class="op">|</span> <span class="number">1</span> <span class="op">=</span><span class="op">&gt;</span> <span class="self">self</span>,
+            <span class="number">2</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">shuffle</span><span class="macro">!</span>(<span class="self">self</span>, [<span class="number">1</span>, <span class="number">0</span>]),
+            <span class="number">4</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">shuffle</span><span class="macro">!</span>(<span class="self">self</span>, [<span class="number">3</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">0</span>]),
+            <span class="number">8</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">shuffle</span><span class="macro">!</span>(<span class="self">self</span>, [<span class="number">7</span>, <span class="number">6</span>, <span class="number">5</span>, <span class="number">4</span>, <span class="number">3</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">0</span>]),
+            <span class="number">16</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">shuffle</span><span class="macro">!</span>(<span class="self">self</span>, [<span class="number">15</span>, <span class="number">14</span>, <span class="number">13</span>, <span class="number">12</span>, <span class="number">11</span>, <span class="number">10</span>, <span class="number">9</span>, <span class="number">8</span>, <span class="number">7</span>, <span class="number">6</span>, <span class="number">5</span>, <span class="number">4</span>, <span class="number">3</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">0</span>]),
+            <span class="number">32</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">shuffle</span><span class="macro">!</span>(
+                <span class="self">self</span>, [<span class="number">31</span>, <span class="number">30</span>, <span class="number">29</span>, <span class="number">28</span>, <span class="number">27</span>, <span class="number">26</span>, <span class="number">25</span>, <span class="number">24</span>, <span class="number">23</span>, <span class="number">22</span>, <span class="number">21</span>, <span class="number">20</span>, <span class="number">19</span>, <span class="number">18</span>, <span class="number">17</span>, <span class="number">16</span>, <span class="number">15</span>, <span class="number">14</span>, <span class="number">13</span>, <span class="number">12</span>, <span class="number">11</span>, <span class="number">10</span>, <span class="number">9</span>, <span class="number">8</span>, <span class="number">7</span>, <span class="number">6</span>, <span class="number">5</span>, <span class="number">4</span>, <span class="number">3</span>, <span class="number">2</span>, <span class="number">1</span>, <span class="number">0</span>]
+            ),
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unreachable</span><span class="macro">!</span>(),
+        }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
