@@ -1294,6 +1294,49 @@
 <span id="1291">1291</span>
 <span id="1292">1292</span>
 <span id="1293">1293</span>
+<span id="1294">1294</span>
+<span id="1295">1295</span>
+<span id="1296">1296</span>
+<span id="1297">1297</span>
+<span id="1298">1298</span>
+<span id="1299">1299</span>
+<span id="1300">1300</span>
+<span id="1301">1301</span>
+<span id="1302">1302</span>
+<span id="1303">1303</span>
+<span id="1304">1304</span>
+<span id="1305">1305</span>
+<span id="1306">1306</span>
+<span id="1307">1307</span>
+<span id="1308">1308</span>
+<span id="1309">1309</span>
+<span id="1310">1310</span>
+<span id="1311">1311</span>
+<span id="1312">1312</span>
+<span id="1313">1313</span>
+<span id="1314">1314</span>
+<span id="1315">1315</span>
+<span id="1316">1316</span>
+<span id="1317">1317</span>
+<span id="1318">1318</span>
+<span id="1319">1319</span>
+<span id="1320">1320</span>
+<span id="1321">1321</span>
+<span id="1322">1322</span>
+<span id="1323">1323</span>
+<span id="1324">1324</span>
+<span id="1325">1325</span>
+<span id="1326">1326</span>
+<span id="1327">1327</span>
+<span id="1328">1328</span>
+<span id="1329">1329</span>
+<span id="1330">1330</span>
+<span id="1331">1331</span>
+<span id="1332">1332</span>
+<span id="1333">1333</span>
+<span id="1334">1334</span>
+<span id="1335">1335</span>
+<span id="1336">1336</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely</span>
@@ -2030,6 +2073,35 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     }
 }
 
+<span class="doccomment">/// Reflexive helper trait to overcome trait bounds cycles</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdBitsFrom</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span><span class="op">&gt;</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">bits_from</span>(<span class="ident">vec</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span>, <span class="ident">T</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span> <span class="ident">SimdBitsFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span>
+<span class="kw">where</span>
+    <span class="ident">V</span>: <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">T</span><span class="op">&gt;</span>,
+{
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">bits_from</span>(<span class="ident">vec</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="ident">vec</span>.<span class="ident">into_bits</span>()
+    }
+}
+
+<span class="doccomment">/// Reflexive helper trait to overcome trait bounds cycles</span>
+<span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdBitsInto</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span><span class="op">&gt;</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">bits_into</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">V</span>;
+}
+
+<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">V</span>, <span class="ident">T</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span> <span class="ident">SimdBitsInto</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">T</span>
+<span class="kw">where</span>
+    <span class="ident">V</span>: <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">T</span><span class="op">&gt;</span>,
+{
+    <span class="kw">fn</span> <span class="ident">bits_into</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">V</span> {
+        <span class="ident">V</span>::<span class="ident">from_bits</span>(<span class="self">self</span>)
+    }
+}
+
 <span class="doccomment">/// Transmutations from raw bits</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span>, <span class="ident">B</span><span class="op">&gt;</span>: <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
@@ -2187,8 +2259,8 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
 
 <span class="doccomment">/// Floating point SIMD vectors</span>
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span> <span class="op">+</span> <span class="question-mark">?</span><span class="ident">Sized</span><span class="op">&gt;</span>: <span class="ident">SimdVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
-    <span class="kw">type</span> <span class="ident">Vi</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>;
-    <span class="kw">type</span> <span class="ident">Vu</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vi</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdSignedVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdFromBits</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span>::<span class="ident">Vu</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdIntoBits</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span>::<span class="ident">Vu</span><span class="op">&gt;</span>;
+    <span class="kw">type</span> <span class="ident">Vu</span>: <span class="ident">SimdIntVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdBitsFrom</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">SimdBitsInto</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span><span class="op">&gt;</span>;
 
     <span class="kw">fn</span> <span class="ident">epsilon</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">infinity</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -2211,6 +2283,20 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">load_f16_unaligned_unchecked</span>(<span class="ident">src</span>: <span class="kw-2">*</span><span class="kw">const</span> <span class="ident">f16</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">store_f16_unaligned_unchecked</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">dst</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="ident">f16</span>);
 
+    <span class="doccomment">/// Converts floating-point values to integer values that can be used</span>
+    <span class="doccomment">/// for total equality, ordering and hashing.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: **This is not the integer cast of the float vector**, but merely an associated</span>
+    <span class="doccomment">/// integer with similar ordering.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">as_ord_int</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vi</span> {
+        <span class="kw">let</span> <span class="ident">u</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu</span>::<span class="ident">bits_from</span>(<span class="self">self</span>);
+        <span class="kw">let</span> <span class="ident">bit</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vu</span>::<span class="ident">splat_as</span>(<span class="number">1u64</span> <span class="op">&lt;</span><span class="op">&lt;</span> (<span class="self">Self</span>::<span class="ident">ELEMENT_SIZE</span> <span class="op">*</span> <span class="number">8</span> <span class="op">-</span> <span class="number">1</span>));
+
+        <span class="comment">// TODO: Maybe optimize this better?</span>
+        <span class="self">Self</span>::<span class="ident">Vi</span>::<span class="ident">from_bits</span>((<span class="ident">u</span> <span class="op">&amp;</span> <span class="ident">bit</span>).<span class="ident">eq</span>(<span class="self">Self</span>::<span class="ident">Vu</span>::<span class="ident">zero</span>()).<span class="ident">select</span>(<span class="ident">u</span> <span class="op">|</span> <span class="ident">bit</span>, <span class="op">!</span><span class="ident">u</span>))
+    }
+
     <span class="doccomment">/// Can convert to a signed integer faster than a regular `cast`, but may not provide</span>
     <span class="doccomment">/// correct results above a certain range.</span>
     <span class="doccomment">///</span>
@@ -2220,7 +2306,7 @@ impl&lt;E, V&gt; SimdVectorExtra&lt;E&gt; for V where
     <span class="doccomment">/// the results should be exact, but do not rely on this for large floats.</span>
     <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">to_int_fast</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vi</span>;
 
-    <span class="doccomment">/// Can convert to a signed integer faster than a regular `cast`, but may not provide</span>
+    <span class="doccomment">/// Can convert to an unsigned integer faster than a regular `cast`, but may not provide</span>
     <span class="doccomment">/// correct results above a certain range.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// For example, `f64 -&gt; u64` is only valid from `[0, 2^52)` or so.</span>
