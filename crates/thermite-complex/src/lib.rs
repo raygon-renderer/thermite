@@ -199,9 +199,18 @@ where
     /// Computes the principal value of the square root of `self`.
     #[inline(always)]
     pub fn sqrt(self) -> Self {
-        // formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
-        let (r, theta) = self.to_polar();
-        Self::from_polar(r.sqrt(), theta * V::splat_as(0.5))
+        // Old formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
+        // let (r, theta) = self.to_polar();
+        // Self::from_polar(r.sqrt(), theta * V::splat_as(0.5))
+
+        // New formula from: http://stanleyrabinowitz.com/bibliography/complexSquareRoot.pdf
+        let half = V::splat_as(0.5);
+        let m = self.norm() * half;
+
+        let r = self.re.mul_adde(half, m).sqrt(); // sqrt(0.5 * (m + re))
+        let i = self.re.nmul_adde(half, m).sqrt(); // sqrt(0.5 * (m - re))
+
+        Complex::new(r, i.combine_sign(self.im))
     }
 
     /// Computes the principal value of the cube root of `self`.
