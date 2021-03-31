@@ -1,8 +1,6 @@
 use super::*;
 
 const EULERS_CONSTANT: f64 = 5.772156649015328606065120900824024310e-01;
-const LN_PI: f64 = 1.1447298858494001741434273513530587116472948129153115715136230714;
-const SQRT_E: f64 = 1.6487212707001281468486507878141635716537761007101480115750793116;
 
 impl<S: Simd> SimdVectorizedSpecialFunctionsInternal<S> for f64
 where
@@ -190,7 +188,7 @@ where
 
         let mut res = a.mul_adde(b, c);
 
-        let ln_pi = Vf64::<S>::splat(LN_PI);
+        let ln_pi = Vf64::<S>::LN_PI();
 
         res = reflect.select(ln_pi - res, res);
 
@@ -292,7 +290,7 @@ where
         // encourage instruction-level parallelism
         result *= agh_d_cgh.powf_p::<P>(a - Vf64::<S>::splat(0.5) - b)
             * base.powf_p::<P>(b)
-            * (Vf64::<S>::splat(SQRT_E) / bgh.sqrt());
+            * (Vf64::<S>::SQRT_E() / bgh.sqrt());
 
         if P::POLICY.check_overflow {
             result = is_valid.select(result, Vf64::<S>::nan());

@@ -1,8 +1,6 @@
 use super::*;
 
 const EULERS_CONSTANT: f32 = 5.772156649015328606065120900824024310e-01;
-const LN_PI: f32 = 1.1447298858494001741434273513530587116472948129153115715136230714;
-const SQRT_E: f32 = 1.6487212707001281468486507878141635716537761007101480115750793116;
 
 impl<S: Simd> SimdVectorizedSpecialFunctionsInternal<S> for f32
 where
@@ -186,7 +184,7 @@ where
 
         let mut res = a.mul_adde(b, c);
 
-        let ln_pi = Vf32::<S>::splat(LN_PI);
+        let ln_pi = Vf32::<S>::LN_PI();
 
         res = reflect.select(ln_pi - res, res);
 
@@ -284,10 +282,10 @@ where
             .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
 
         let denom = if P::POLICY.precision > PrecisionPolicy::Average {
-            Vf32::<S>::splat(SQRT_E) / bgh.sqrt()
+            Vf32::<S>::SQRT_E() / bgh.sqrt()
         } else {
             // bump up the precision a little to improve beta function accuracy
-            Vf32::<S>::splat(SQRT_E) * bgh.invsqrt_p::<policies::ExtraPrecision<P>>()
+            Vf32::<S>::SQRT_E() * bgh.invsqrt_p::<policies::ExtraPrecision<P>>()
         };
 
         result *= agh_d_cgh.powf_p::<P>(a - Vf32::<S>::splat(0.5) - b) * (base.powf_p::<P>(b) * denom);

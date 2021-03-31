@@ -305,7 +305,9 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
 
     /// Computes `sqrt(x * x + y * y)` for each element of the vector, but can be more precise with values around zero.
     ///
-    /// NOTE: This is not higher-performance than the naive version, only slightly more precise.
+    /// **NOTE**: This is not higher-performance than the naive version, only slightly more precise.
+    ///
+    /// **NOTE 2**: When using the `Worst` precision policy, this is just the naive version.
     fn hypot(self, y: Self) -> Self;
 
     /// Computes the sum `Σ(coefficients[i] * x^i)` from `i=0` to `coefficients.len()`
@@ -324,7 +326,8 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     ///
     /// **NOTE**: This has the potential to inline and unroll the inner loop for constant input. For
     /// best results with dynamic input, try to precompute the input function, as it will allow for better
-    /// cache utilization and lessen register pressure.
+    /// cache utilization and lessen register pressure. Furthermore, because the function will be inlined,
+    /// keep it lightweight. Avoid computations within the callback.
     fn poly_f<F>(self, n: usize, f: F) -> Self
     where
         F: FnMut(usize) -> Self;
@@ -677,12 +680,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     #[inline(always)]
     fn powi<P: Policy>(mut x: Self::Vf, mut e: i32) -> Self::Vf {
-        let one = Self::Vf::one();
-
-        let mut res = one;
+        let mut res = Self::Vf::one();
 
         if e < 0 {
-            x = one / x;
+            x = res / x; // one / x
             e = -e;
         }
 
@@ -702,11 +703,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn powiv<P: Policy>(mut x: Self::Vf, mut e: S::Vi32) -> Self::Vf {
         let zero_i = Vi32::<S>::zero();
         let one_i = Vi32::<S>::one();
-        let one = Self::Vf::one();
 
-        let mut res = one;
+        let mut res = Self::Vf::one();
 
-        x = e.is_negative().select(one / x, x);
+        x = e.is_negative().select(res / x, x);
         e = e.abs();
 
         loop {
@@ -726,6 +726,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
     #[inline(always)]
     fn hypot<P: Policy>(x: Self::Vf, y: Self::Vf) -> Self::Vf {
+        if P::POLICY.precision == PrecisionPolicy::Worst {
+            return x.mul_adde(x, y * y).sqrt();
+        }
+
         let x = x.abs();
         let y = y.abs();
 
@@ -1043,11 +1047,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
     fn exph<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn exp2<P: Policy>(x: Self::Vf) -> Self::Vf;
     fn exp10<P: Policy>(x: Self::Vf) -> Self::Vf;
-
-    #[inline(always)]
-    fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf {
-        x.exp_p::<P>() - Self::Vf::one()
-    }
+    fn exp_m1<P: Policy>(x: Self::Vf) -> Self::Vf;
 
     fn cbrt<P: Policy>(x: Self::Vf) -> Self::Vf;
 
@@ -1138,8 +1138,6 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         x2 * x2 * x2.mul_adde(x.mul_adde(c7, c6), x.mul_adde(c5, c4))
     }
 }
-
-//mod bessel;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
