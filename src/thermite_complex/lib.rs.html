@@ -499,6 +499,25 @@
 <span id="496">496</span>
 <span id="497">497</span>
 <span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Complex Number Vectors</span>
 
@@ -701,9 +720,18 @@
     <span class="doccomment">/// Computes the principal value of the square root of `self`.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sqrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="comment">// formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)</span>
-        <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
-        <span class="self">Self</span>::<span class="ident">from_polar</span>(<span class="ident">r</span>.<span class="ident">sqrt</span>(), <span class="ident">theta</span> <span class="op">*</span> <span class="ident">V</span>::<span class="ident">splat_as</span>(<span class="number">0.5</span>))
+        <span class="comment">// Old formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)</span>
+        <span class="comment">// let (r, theta) = self.to_polar();</span>
+        <span class="comment">// Self::from_polar(r.sqrt(), theta * V::splat_as(0.5))</span>
+
+        <span class="comment">// New formula from: http://stanleyrabinowitz.com/bibliography/complexSquareRoot.pdf</span>
+        <span class="kw">let</span> <span class="ident">half</span> <span class="op">=</span> <span class="ident">V</span>::<span class="ident">splat_as</span>(<span class="number">0.5</span>);
+        <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">norm</span>() <span class="op">*</span> <span class="ident">half</span>;
+
+        <span class="kw">let</span> <span class="ident">r</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">mul_adde</span>(<span class="ident">half</span>, <span class="ident">m</span>).<span class="ident">sqrt</span>(); <span class="comment">// sqrt(0.5 * (m + re))</span>
+        <span class="kw">let</span> <span class="ident">i</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">nmul_adde</span>(<span class="ident">half</span>, <span class="ident">m</span>).<span class="ident">sqrt</span>(); <span class="comment">// sqrt(0.5 * (m - re))</span>
+
+        <span class="ident">Complex</span>::<span class="ident">new</span>(<span class="ident">r</span>, <span class="ident">i</span>.<span class="ident">combine_sign</span>(<span class="self">self</span>.<span class="ident">im</span>))
     }
 
     <span class="doccomment">/// Computes the principal value of the cube root of `self`.</span>
@@ -766,6 +794,16 @@
         <span class="comment">// = from_polar(x^a, b ln(x))</span>
         <span class="self">Self</span>::<span class="ident">from_polar</span>(<span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>.<span class="ident">re</span>), <span class="self">self</span>.<span class="ident">im</span> <span class="op">*</span> <span class="ident">base</span>.<span class="ident">ln_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>())
     }
+
+    <span class="doccomment">/// Computes sine and cosine of `self` together, improving efficiency.</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sin_cos</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="self">Self</span>, <span class="self">Self</span>) {
+        <span class="kw">let</span> (<span class="ident">s</span>, <span class="ident">c</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
+        <span class="kw">let</span> (<span class="ident">sh</span>, <span class="ident">ch</span>) <span class="op">=</span> (<span class="self">self</span>.<span class="ident">im</span>.<span class="ident">sinh_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(), <span class="self">self</span>.<span class="ident">im</span>.<span class="ident">cosh_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>());
+
+        (<span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">s</span> <span class="op">*</span> <span class="ident">ch</span>, <span class="ident">c</span> <span class="op">*</span> <span class="ident">sh</span>), <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">c</span> <span class="op">*</span> <span class="ident">ch</span>, <span class="op">-</span><span class="ident">s</span> <span class="op">*</span> <span class="ident">sh</span>))
+    }
+
     <span class="doccomment">/// Computes the sine of `self`.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sin</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
