@@ -352,14 +352,10 @@
 <span id="349">349</span>
 <span id="350">350</span>
 <span id="351">351</span>
-<span id="352">352</span>
-<span id="353">353</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
 
 <span class="kw">const</span> <span class="ident">EULERS_CONSTANT</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">5.772156649015328606065120900824024310e-01</span>;
-<span class="kw">const</span> <span class="ident">LN_PI</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">1.1447298858494001741434273513530587116472948129153115715136230714</span>;
-<span class="kw">const</span> <span class="ident">SQRT_E</span>: <span class="ident">f64</span> <span class="op">=</span> <span class="number">1.6487212707001281468486507878141635716537761007101480115750793116</span>;
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span> <span class="ident">SimdVectorizedSpecialFunctionsInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">f64</span>
 <span class="kw">where</span>
@@ -547,7 +543,7 @@
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">a</span>.<span class="ident">mul_adde</span>(<span class="ident">b</span>, <span class="ident">c</span>);
 
-        <span class="kw">let</span> <span class="ident">ln_pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">LN_PI</span>);
+        <span class="kw">let</span> <span class="ident">ln_pi</span> <span class="op">=</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">LN_PI</span>();
 
         <span class="ident">res</span> <span class="op">=</span> <span class="ident">reflect</span>.<span class="ident">select</span>(<span class="ident">ln_pi</span> <span class="op">-</span> <span class="ident">res</span>, <span class="ident">res</span>);
 
@@ -649,7 +645,7 @@
         <span class="comment">// encourage instruction-level parallelism</span>
         <span class="ident">result</span> <span class="kw-2">*</span><span class="op">=</span> <span class="ident">agh_d_cgh</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">a</span> <span class="op">-</span> <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="number">0.5</span>) <span class="op">-</span> <span class="ident">b</span>)
             <span class="op">*</span> <span class="ident">base</span>.<span class="ident">powf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">b</span>)
-            <span class="op">*</span> (<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">splat</span>(<span class="ident">SQRT_E</span>) <span class="op">/</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>());
+            <span class="op">*</span> (<span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">SQRT_E</span>() <span class="op">/</span> <span class="ident">bgh</span>.<span class="ident">sqrt</span>());
 
         <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">check_overflow</span> {
             <span class="ident">result</span> <span class="op">=</span> <span class="ident">is_valid</span>.<span class="ident">select</span>(<span class="ident">result</span>, <span class="ident">Vf64</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">nan</span>());

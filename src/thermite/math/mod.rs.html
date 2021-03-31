@@ -1157,8 +1157,6 @@
 <span id="1154">1154</span>
 <span id="1155">1155</span>
 <span id="1156">1156</span>
-<span id="1157">1157</span>
-<span id="1158">1158</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Vectorized Math Library</span>
 
@@ -1467,7 +1465,9 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="doccomment">/// Computes `sqrt(x * x + y * y)` for each element of the vector, but can be more precise with values around zero.</span>
     <span class="doccomment">///</span>
-    <span class="doccomment">/// NOTE: This is not higher-performance than the naive version, only slightly more precise.</span>
+    <span class="doccomment">/// **NOTE**: This is not higher-performance than the naive version, only slightly more precise.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE 2**: When using the `Worst` precision policy, this is just the naive version.</span>
     <span class="kw">fn</span> <span class="ident">hypot</span>(<span class="self">self</span>, <span class="ident">y</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
     <span class="doccomment">/// Computes the sum `Σ(coefficients[i] * x^i)` from `i=0` to `coefficients.len()`</span>
@@ -1486,7 +1486,8 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="doccomment">///</span>
     <span class="doccomment">/// **NOTE**: This has the potential to inline and unroll the inner loop for constant input. For</span>
     <span class="doccomment">/// best results with dynamic input, try to precompute the input function, as it will allow for better</span>
-    <span class="doccomment">/// cache utilization and lessen register pressure.</span>
+    <span class="doccomment">/// cache utilization and lessen register pressure. Furthermore, because the function will be inlined,</span>
+    <span class="doccomment">/// keep it lightweight. Avoid computations within the callback.</span>
     <span class="kw">fn</span> <span class="ident">poly_f</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">usize</span>, <span class="ident">f</span>: <span class="ident">F</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>
     <span class="kw">where</span>
         <span class="ident">F</span>: <span class="ident">FnMut</span>(<span class="ident">usize</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
@@ -1839,12 +1840,10 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">powi</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="kw-2">mut</span> <span class="ident">e</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
-
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
 
         <span class="kw">if</span> <span class="ident">e</span> <span class="op">&lt;</span> <span class="number">0</span> {
-            <span class="ident">x</span> <span class="op">=</span> <span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>;
+            <span class="ident">x</span> <span class="op">=</span> <span class="ident">res</span> <span class="op">/</span> <span class="ident">x</span>; <span class="comment">// one / x</span>
             <span class="ident">e</span> <span class="op">=</span> <span class="op">-</span><span class="ident">e</span>;
         }
 
@@ -1864,11 +1863,10 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">powiv</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="kw-2">mut</span> <span class="ident">e</span>: <span class="ident">S</span>::<span class="ident">Vi32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
         <span class="kw">let</span> <span class="ident">zero_i</span> <span class="op">=</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">zero</span>();
         <span class="kw">let</span> <span class="ident">one_i</span> <span class="op">=</span> <span class="ident">Vi32</span>::<span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>::<span class="ident">one</span>();
-        <span class="kw">let</span> <span class="ident">one</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">one</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">res</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>();
 
-        <span class="ident">x</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">is_negative</span>().<span class="ident">select</span>(<span class="ident">one</span> <span class="op">/</span> <span class="ident">x</span>, <span class="ident">x</span>);
+        <span class="ident">x</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">is_negative</span>().<span class="ident">select</span>(<span class="ident">res</span> <span class="op">/</span> <span class="ident">x</span>, <span class="ident">x</span>);
         <span class="ident">e</span> <span class="op">=</span> <span class="ident">e</span>.<span class="ident">abs</span>();
 
         <span class="kw">loop</span> {
@@ -1888,6 +1886,10 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">fn</span> <span class="ident">hypot</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">y</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="kw">if</span> <span class="ident">P</span>::<span class="ident">POLICY</span>.<span class="ident">precision</span> <span class="op">=</span><span class="op">=</span> <span class="ident">PrecisionPolicy</span>::<span class="ident">Worst</span> {
+            <span class="kw">return</span> <span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">x</span>, <span class="ident">y</span> <span class="op">*</span> <span class="ident">y</span>).<span class="ident">sqrt</span>();
+        }
+
         <span class="kw">let</span> <span class="ident">x</span> <span class="op">=</span> <span class="ident">x</span>.<span class="ident">abs</span>();
         <span class="kw">let</span> <span class="ident">y</span> <span class="op">=</span> <span class="ident">y</span>.<span class="ident">abs</span>();
 
@@ -2205,11 +2207,7 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
     <span class="kw">fn</span> <span class="ident">exph</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
     <span class="kw">fn</span> <span class="ident">exp2</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
     <span class="kw">fn</span> <span class="ident">exp10</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
-
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">fn</span> <span class="ident">exp_m1</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
-        <span class="ident">x</span>.<span class="ident">exp_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">-</span> <span class="self">Self</span>::<span class="ident">Vf</span>::<span class="ident">one</span>()
-    }
+    <span class="kw">fn</span> <span class="ident">exp_m1</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
     <span class="kw">fn</span> <span class="ident">cbrt</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span>;
 
@@ -2300,8 +2298,6 @@ let y = x.cbrt_p::&lt;MyPolicy&gt;();
         <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span> <span class="op">*</span> <span class="ident">x2</span>.<span class="ident">mul_adde</span>(<span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">c7</span>, <span class="ident">c6</span>), <span class="ident">x</span>.<span class="ident">mul_adde</span>(<span class="ident">c5</span>, <span class="ident">c4</span>))
     }
 }
-
-<span class="comment">//mod bessel;</span>
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
 <span class="attribute">#[<span class="ident">repr</span>(<span class="ident">u8</span>)]</span>
