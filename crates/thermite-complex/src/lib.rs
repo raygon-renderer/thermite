@@ -264,6 +264,16 @@ where
         // = from_polar(x^a, b ln(x))
         Self::from_polar(base.powf_p::<P>(self.re), self.im * base.ln_p::<P>())
     }
+
+    /// Computes sine and cosine of `self` together, improving efficiency.
+    #[inline(always)]
+    pub fn sin_cos(self) -> (Self, Self) {
+        let (s, c) = self.re.sin_cos_p::<P>();
+        let (sh, ch) = (self.im.sinh_p::<P>(), self.im.cosh_p::<P>());
+
+        (Self::new(s * ch, c * sh), Self::new(c * ch, -s * sh))
+    }
+
     /// Computes the sine of `self`.
     #[inline(always)]
     pub fn sin(self) -> Self {
