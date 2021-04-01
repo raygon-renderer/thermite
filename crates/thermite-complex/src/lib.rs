@@ -38,7 +38,6 @@ where
     }
 }
 
-#[dispatch(S)]
 impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
     #[inline(always)]
     pub fn new(re: V, im: V) -> Self {
@@ -89,6 +88,15 @@ impl<S: Simd, V: SimdFloatVector<S>, P: Policy> Complex<S, V, P> {
     #[inline(always)]
     pub fn zero() -> Self {
         Self::new(V::zero(), V::zero())
+    }
+
+    #[inline(always)]
+    pub fn with_policy<NP: Policy>(self) -> Complex<S, V, NP> {
+        Complex {
+            re: self.re,
+            im: self.im,
+            _simd: PhantomData,
+        }
     }
 }
 
