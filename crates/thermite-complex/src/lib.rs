@@ -121,8 +121,11 @@ where
     ///
     /// NOTE: This will result in undefined values if `t` is zero.
     #[inline(always)]
-    pub fn unscale(self, t: V) -> Self {
-        self.scale(t.reciprocal_p::<P>())
+    pub fn unscale(mut self, t: V) -> Self {
+        // instruction-level parallelism should cancel out the division cost
+        self.re /= t;
+        self.im /= t;
+        self
     }
 
     /// Returns the complex conjugate. i.e. `re - i im`
@@ -139,6 +142,7 @@ where
     }
 
     /// Returns `self * m + a`
+    #[inline(always)]
     pub fn mul_add(self, m: Self, a: Self) -> Self {
         Self::new(
             self.im.nmul_adde(m.im, self.re.mul_adde(m.re, a.re)),
@@ -175,7 +179,7 @@ where
     }
 
     /// Computes `e^(self)`, where `e` is the base of the natural logarithm.
-    #[inline(always)]
+    #[inline]
     pub fn exp(self) -> Self {
         // formula: e^(a + bi) = e^a (cos(b) + i*sin(b))
         // = from_polar(e^a, b)
@@ -189,7 +193,7 @@ where
     /// * `(-∞, 0]`, continuous from above.
     ///
     /// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.
-    #[inline(always)]
+    #[inline]
     pub fn ln(self) -> Self {
         // formula: ln(z) = ln|z| + i*arg(z)
         let (r, theta) = self.to_polar();
@@ -218,7 +222,7 @@ where
     /// Note that this does not match the usual result for the cube root of
     /// negative real numbers. For example, the real cube root of `-8` is `-2`,
     /// but the principal complex cube root of `-8` is `1 + i√3`.
-    #[inline(always)]
+    #[inline]
     pub fn cbrt(self) -> Self {
         // formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
         let (r, theta) = self.to_polar();
@@ -227,6 +231,7 @@ where
     }
 
     /// Raises `self` to a floating point power.
+    #[inline]
     pub fn powf(self, exp: V) -> Self {
         // formula: x^y = (ρ e^(i θ))^y = ρ^y e^(i θ y)
         // = from_polar(ρ^y, θ y)
@@ -235,7 +240,7 @@ where
     }
 
     /// Returns the logarithm of `self` with respect to an arbitrary base.
-    #[inline(always)]
+    #[inline]
     pub fn log(self, base: V) -> Self {
         // formula: log_y(x) = log_y(ρ e^(i θ))
         // = log_y(ρ) + log_y(e^(i θ)) = log_y(ρ) + ln(e^(i θ)) / ln(y)
@@ -246,7 +251,7 @@ where
     }
 
     /// Raises `self` to a complex power.
-    #[inline(always)]
+    #[inline]
     pub fn powc(self, exp: Self) -> Self {
         // formula: x^y = (a + i b)^(c + i d)
         // = (ρ e^(i θ))^c (ρ e^(i θ))^(i d)
@@ -267,7 +272,7 @@ where
     }
 
     /// Raises a floating point number to the complex power `self`.
-    #[inline(always)]
+    #[inline]
     pub fn expf(self, base: V) -> Self {
         // formula: x^(a+bi) = x^a x^bi = x^a e^(b ln(x) i)
         // = from_polar(x^a, b ln(x))
@@ -275,7 +280,7 @@ where
     }
 
     /// Computes sine and cosine of `self` together, improving efficiency.
-    #[inline(always)]
+    #[inline]
     pub fn sin_cos(self) -> (Self, Self) {
         let (s, c) = self.re.sin_cos_p::<P>();
         let (sh, ch) = (self.im.sinh_p::<P>(), self.im.cosh_p::<P>());
@@ -284,7 +289,7 @@ where
     }
 
     /// Computes the sine of `self`.
-    #[inline(always)]
+    #[inline]
     pub fn sin(self) -> Self {
         // formula: sin(a + bi) = sin(a)cosh(b) + i*cos(a)sinh(b)
         let (s, c) = self.re.sin_cos_p::<P>();
@@ -440,7 +445,7 @@ where
     ///
     /// This may be more accurate than the generic `self.inv()` in cases
     /// where `self.norm_sqr()` would overflow to ∞ or underflow to 0.
-    #[inline]
+    #[inline(always)]
     pub fn finv(self) -> Self {
         let norm = Self::real(self.norm());
         // TODO: Maybe extract 1/n and multiply?
