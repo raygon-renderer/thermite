@@ -518,6 +518,19 @@
 <span id="515">515</span>
 <span id="516">516</span>
 <span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Complex Number Vectors</span>
 
@@ -559,7 +572,6 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
 <span class="kw">impl</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span>, <span class="ident">V</span>: <span class="ident">SimdFloatVector</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span>, <span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">P</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">re</span>: <span class="ident">V</span>, <span class="ident">im</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
@@ -611,6 +623,15 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">zero</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(<span class="ident">V</span>::<span class="ident">zero</span>(), <span class="ident">V</span>::<span class="ident">zero</span>())
     }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">with_policy</span><span class="op">&lt;</span><span class="ident">NP</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Complex</span><span class="op">&lt;</span><span class="ident">S</span>, <span class="ident">V</span>, <span class="ident">NP</span><span class="op">&gt;</span> {
+        <span class="ident">Complex</span> {
+            <span class="ident">re</span>: <span class="self">self</span>.<span class="ident">re</span>,
+            <span class="ident">im</span>: <span class="self">self</span>.<span class="ident">im</span>,
+            <span class="ident">_simd</span>: <span class="ident">PhantomData</span>,
+        }
+    }
 }
 
 <span class="attribute">#[<span class="ident">dispatch</span>(<span class="ident">S</span>)]</span>
@@ -642,8 +663,11 @@
     <span class="doccomment">///</span>
     <span class="doccomment">/// NOTE: This will result in undefined values if `t` is zero.</span>
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">unscale</span>(<span class="self">self</span>, <span class="ident">t</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="self">self</span>.<span class="ident">scale</span>(<span class="ident">t</span>.<span class="ident">reciprocal_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>())
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">unscale</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">t</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="comment">// instruction-level parallelism should cancel out the division cost</span>
+        <span class="self">self</span>.<span class="ident">re</span> <span class="op">/</span><span class="op">=</span> <span class="ident">t</span>;
+        <span class="self">self</span>.<span class="ident">im</span> <span class="op">/</span><span class="op">=</span> <span class="ident">t</span>;
+        <span class="self">self</span>
     }
 
     <span class="doccomment">/// Returns the complex conjugate. i.e. `re - i im`</span>
@@ -660,6 +684,7 @@
     }
 
     <span class="doccomment">/// Returns `self * m + a`</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">mul_add</span>(<span class="self">self</span>, <span class="ident">m</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="self">Self</span>::<span class="ident">new</span>(
             <span class="self">self</span>.<span class="ident">im</span>.<span class="ident">nmul_adde</span>(<span class="ident">m</span>.<span class="ident">im</span>, <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">mul_adde</span>(<span class="ident">m</span>.<span class="ident">re</span>, <span class="ident">a</span>.<span class="ident">re</span>)),
@@ -696,7 +721,7 @@
     }
 
     <span class="doccomment">/// Computes `e^(self)`, where `e` is the base of the natural logarithm.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">exp</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: e^(a + bi) = e^a (cos(b) + i*sin(b))</span>
         <span class="comment">// = from_polar(e^a, b)</span>
@@ -710,7 +735,7 @@
     <span class="doccomment">/// * `(-∞, 0]`, continuous from above.</span>
     <span class="doccomment">///</span>
     <span class="doccomment">/// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">ln</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: ln(z) = ln|z| + i*arg(z)</span>
         <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
@@ -739,7 +764,7 @@
     <span class="doccomment">/// Note that this does not match the usual result for the cube root of</span>
     <span class="doccomment">/// negative real numbers. For example, the real cube root of `-8` is `-2`,</span>
     <span class="doccomment">/// but the principal complex cube root of `-8` is `1 + i√3`.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cbrt</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)</span>
         <span class="kw">let</span> (<span class="ident">r</span>, <span class="ident">theta</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">to_polar</span>();
@@ -748,6 +773,7 @@
     }
 
     <span class="doccomment">/// Raises `self` to a floating point power.</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">powf</span>(<span class="self">self</span>, <span class="ident">exp</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: x^y = (ρ e^(i θ))^y = ρ^y e^(i θ y)</span>
         <span class="comment">// = from_polar(ρ^y, θ y)</span>
@@ -756,7 +782,7 @@
     }
 
     <span class="doccomment">/// Returns the logarithm of `self` with respect to an arbitrary base.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">log</span>(<span class="self">self</span>, <span class="ident">base</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: log_y(x) = log_y(ρ e^(i θ))</span>
         <span class="comment">// = log_y(ρ) + log_y(e^(i θ)) = log_y(ρ) + ln(e^(i θ)) / ln(y)</span>
@@ -767,7 +793,7 @@
     }
 
     <span class="doccomment">/// Raises `self` to a complex power.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">powc</span>(<span class="self">self</span>, <span class="ident">exp</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: x^y = (a + i b)^(c + i d)</span>
         <span class="comment">// = (ρ e^(i θ))^c (ρ e^(i θ))^(i d)</span>
@@ -788,7 +814,7 @@
     }
 
     <span class="doccomment">/// Raises a floating point number to the complex power `self`.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expf</span>(<span class="self">self</span>, <span class="ident">base</span>: <span class="ident">V</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: x^(a+bi) = x^a x^bi = x^a e^(b ln(x) i)</span>
         <span class="comment">// = from_polar(x^a, b ln(x))</span>
@@ -796,7 +822,7 @@
     }
 
     <span class="doccomment">/// Computes sine and cosine of `self` together, improving efficiency.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sin_cos</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="self">Self</span>, <span class="self">Self</span>) {
         <span class="kw">let</span> (<span class="ident">s</span>, <span class="ident">c</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
         <span class="kw">let</span> (<span class="ident">sh</span>, <span class="ident">ch</span>) <span class="op">=</span> (<span class="self">self</span>.<span class="ident">im</span>.<span class="ident">sinh_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(), <span class="self">self</span>.<span class="ident">im</span>.<span class="ident">cosh_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>());
@@ -805,7 +831,7 @@
     }
 
     <span class="doccomment">/// Computes the sine of `self`.</span>
-    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sin</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="comment">// formula: sin(a + bi) = sin(a)cosh(b) + i*cos(a)sinh(b)</span>
         <span class="kw">let</span> (<span class="ident">s</span>, <span class="ident">c</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">re</span>.<span class="ident">sin_cos_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>();
@@ -961,7 +987,7 @@
     <span class="doccomment">///</span>
     <span class="doccomment">/// This may be more accurate than the generic `self.inv()` in cases</span>
     <span class="doccomment">/// where `self.norm_sqr()` would overflow to ∞ or underflow to 0.</span>
-    <span class="attribute">#[<span class="ident">inline</span>]</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">finv</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="ident">norm</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">real</span>(<span class="self">self</span>.<span class="ident">norm</span>());
         <span class="comment">// TODO: Maybe extract 1/n and multiply?</span>

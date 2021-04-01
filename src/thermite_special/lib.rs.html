@@ -508,10 +508,32 @@
 <span id="505">505</span>
 <span id="506">506</span>
 <span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused_imports</span>)]</span>
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
+
 <span class="kw">use</span> <span class="ident">thermite</span>::<span class="kw-2">*</span>;
+
+<span class="kw">use</span> <span class="ident">thermite_complex</span>::<span class="ident">Complex</span>;
 
 <span class="kw">mod</span> <span class="ident">pd</span>;
 <span class="kw">mod</span> <span class="ident">ps</span>;
@@ -530,12 +552,12 @@
     <span class="kw">fn</span> <span class="ident">gaussian_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
     <span class="kw">fn</span> <span class="ident">gaussian_integral_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">x1</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    <span class="comment">/*
-    fn bessel_j_p&lt;P: Policy&gt;(self, n: u32) -&gt; Self;
-    fn bessel_jf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self;
-    fn bessel_y_p&lt;P: Policy&gt;(self, n: u32) -&gt; Self;
-    fn bessel_yf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self;
-    */</span>
+    <span class="comment">//fn hankel_p&lt;P: Policy&gt;(self, x: Self, sign: bool) -&gt; Complex&lt;S, Self, P&gt;;</span>
+
+    <span class="kw">fn</span> <span class="ident">bessel_j_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="comment">//fn bessel_jf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self;</span>
+    <span class="kw">fn</span> <span class="ident">bessel_y_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
+    <span class="comment">//fn bessel_yf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self;</span>
 }
 
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">SimdVectorizedSpecialFunctions</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Simd</span><span class="op">&gt;</span>: <span class="ident">SimdVectorizedSpecialFunctionsPolicied</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span> {
@@ -608,23 +630,21 @@
     <span class="doccomment">/// make sure to do that here as well with `x0`(`self`) and `x1`</span>
     <span class="kw">fn</span> <span class="ident">gaussian_integral</span>(<span class="self">self</span>, <span class="ident">x1</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    <span class="comment">/*
-    /// Computes the Bessel function of the first kind `J_n(x)` with whole integer order `n`.
-    ///
-    /// **NOTE**: For `n &lt; 2`, this uses an efficient rational polynomial approximation.
-    fn bessel_j(self, n: u32) -&gt; Self;
+    <span class="doccomment">/// Computes the Bessel function of the first kind `J_n(x)` with whole integer order `n`.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: For `n &lt; 2`, this uses an efficient rational polynomial approximation.</span>
+    <span class="kw">fn</span> <span class="ident">bessel_j</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    /// Computes the Bessel function of the first kind `J_n(x)` with real order `n`.
-    fn bessel_jf(self, n: Self::Element) -&gt; Self;
+    <span class="comment">// /// Computes the Bessel function of the first kind `J_n(x)` with real order `n`.</span>
+    <span class="comment">// fn bessel_jf(self, n: Self::Element) -&gt; Self;</span>
 
-    /// Computes the Bessel function of the second kind `Y_n(x)` with whole integer order `n`.
-    ///
-    /// **NOTE**: For `n &lt; 2`, this uses an efficient rational polynomial approximation.
-    fn bessel_y(self, n: u32) -&gt; Self;
+    <span class="doccomment">/// Computes the Bessel function of the second kind `Y_n(x)` with whole integer order `n`.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// **NOTE**: For `n &lt; 2`, this uses an efficient rational polynomial approximation.</span>
+    <span class="kw">fn</span> <span class="ident">bessel_y</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>;
 
-    /// Computes the Bessel function of the second kind `Y_n(x)` with real order `n`.
-    fn bessel_yf(self, n: Self::Element) -&gt; Self;
-    */</span>
+    <span class="comment">// /// Computes the Bessel function of the second kind `Y_n(x)` with real order `n`.</span>
+    <span class="comment">// fn bessel_yf(self, n: Self::Element) -&gt; Self;</span>
 }
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
@@ -666,6 +686,19 @@
     <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">gaussian_integral_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">x1</span>: <span class="self">Self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedSpecialFunctionsInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">gaussian_integral</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">x1</span>, <span class="ident">a</span>, <span class="ident">c</span>)
     }
+
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">bessel_j_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedSpecialFunctionsInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">bessel_j</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>)
+    }
+    <span class="comment">//#[inline] fn bessel_jf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self {</span>
+    <span class="comment">//    &lt;&lt;Self as SimdVectorBase&lt;S&gt;&gt;::Element as SimdVectorizedSpecialFunctionsInternal&lt;S&gt;&gt;::bessel_jf::&lt;P&gt;(self, n)</span>
+    <span class="comment">//}</span>
+    <span class="attribute">#[<span class="ident">inline</span>]</span> <span class="kw">fn</span> <span class="ident">bessel_y_p</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
+        <span class="op">&lt;</span><span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> <span class="ident">SimdVectorBase</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">Element</span> <span class="kw">as</span> <span class="ident">SimdVectorizedSpecialFunctionsInternal</span><span class="op">&lt;</span><span class="ident">S</span><span class="op">&gt;</span><span class="op">&gt;</span>::<span class="ident">bessel_y</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">n</span>)
+    }
+    <span class="comment">//#[inline] fn bessel_yf_p&lt;P: Policy&gt;(self, n: Self::Element) -&gt; Self {</span>
+    <span class="comment">//    &lt;&lt;Self as SimdVectorBase&lt;S&gt;&gt;::Element as SimdVectorizedSpecialFunctionsInternal&lt;S&gt;&gt;::bessel_yf::&lt;P&gt;(self, n)</span>
+    <span class="comment">//}</span>
 }
 
 <span class="attribute">#[<span class="ident">rustfmt</span>::<span class="ident">skip</span>]</span>
@@ -683,6 +716,11 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">legendre</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>, <span class="ident">m</span>: <span class="ident">u32</span>)                         <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">self</span>.<span class="ident">legendre_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">n</span>, <span class="ident">m</span>) }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">gaussian</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>)                       <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">self</span>.<span class="ident">gaussian_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">a</span>, <span class="ident">c</span>) }
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">gaussian_integral</span>(<span class="self">self</span>, <span class="ident">a</span>: <span class="self">Self</span>, <span class="ident">c</span>: <span class="self">Self</span>, <span class="ident">x1</span>: <span class="self">Self</span>)    <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">self</span>.<span class="ident">gaussian_integral_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">x1</span>, <span class="ident">a</span>, <span class="ident">c</span>) }
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">bessel_j</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>)                                 <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">self</span>.<span class="ident">bessel_j_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">n</span>) }
+    <span class="comment">//#[inline(always)] fn bessel_jf(self, n: Self::Element)                      -&gt; Self { self.bessel_jf_p::&lt;DefaultPolicy&gt;(n) }</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span> <span class="kw">fn</span> <span class="ident">bessel_y</span>(<span class="self">self</span>, <span class="ident">n</span>: <span class="ident">u32</span>)                                 <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> { <span class="self">self</span>.<span class="ident">bessel_y_p</span>::<span class="op">&lt;</span><span class="ident">DefaultPolicy</span><span class="op">&gt;</span>(<span class="ident">n</span>) }
+    <span class="comment">//#[inline(always)] fn bessel_yf(self, n: Self::Element)                      -&gt; Self { self.bessel_yf_p::&lt;DefaultPolicy&gt;(n) }</span>
 }
 
 <span class="attribute">#[<span class="ident">doc</span>(<span class="ident">hidden</span>)]</span>
@@ -994,28 +1032,28 @@
         <span class="ident">common</span> <span class="op">*</span> (<span class="ident">a1</span>.<span class="ident">erf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>() <span class="op">-</span> <span class="ident">a0</span>.<span class="ident">erf_p</span>::<span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>())
     }
 
-    <span class="comment">/*
-    #[inline(always)]
-    fn bessel_j&lt;P: Policy&gt;(x: Self::Vf, n: u32) -&gt; Self::Vf {
-        bessel::bessel_j::&lt;S, Self, P&gt;(x, n)
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">bessel_j</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="ident">bessel</span>::<span class="ident">bessel_j</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span>, <span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="ident">n</span>)
     }
 
-    #[inline(always)]
-    fn bessel_jf&lt;P: Policy&gt;(x: Self::Vf, n: Self) -&gt; Self::Vf {
-        unimplemented!()
+    <span class="comment">//#[inline(always)]</span>
+    <span class="comment">//fn bessel_jf&lt;P: Policy&gt;(_x: Self::Vf, _n: Self) -&gt; Self::Vf {</span>
+    <span class="comment">//    unimplemented!()</span>
+    <span class="comment">//}</span>
+
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">bessel_y</span><span class="op">&lt;</span><span class="ident">P</span>: <span class="ident">Policy</span><span class="op">&gt;</span>(<span class="ident">x</span>: <span class="self">Self</span>::<span class="ident">Vf</span>, <span class="ident">n</span>: <span class="ident">u32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">Vf</span> {
+        <span class="ident">bessel</span>::<span class="ident">bessel_y</span>::<span class="op">&lt;</span><span class="ident">S</span>, <span class="self">Self</span>, <span class="ident">P</span><span class="op">&gt;</span>(<span class="ident">x</span>, <span class="ident">n</span>)
     }
 
-    #[inline(always)]
-    fn bessel_y&lt;P: Policy&gt;(x: Self::Vf, n: u32) -&gt; Self::Vf {
-        bessel::bessel_y::&lt;S, Self, P&gt;(x, n)
-    }
-
-    #[inline(always)]
-    fn bessel_yf&lt;P: Policy&gt;(x: Self::Vf, n: Self) -&gt; Self::Vf {
-        unimplemented!()
-    }
-    */</span>
+    <span class="comment">//#[inline(always)]</span>
+    <span class="comment">//fn bessel_yf&lt;P: Policy&gt;(_x: Self::Vf, _n: Self) -&gt; Self::Vf {</span>
+    <span class="comment">//    unimplemented!()</span>
+    <span class="comment">//}</span>
 }
+
+<span class="kw">mod</span> <span class="ident">bessel</span>;
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite_special"></div>
     <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>

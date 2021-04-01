@@ -3,5 +3,5 @@ sourcesIndex["thermite"] = {"name":"","dirs":[{"name":"backends","dirs":[{"name"
 sourcesIndex["thermite_complex"] = {"name":"","files":["lib.rs"]};
 sourcesIndex["thermite_dispatch"] = {"name":"","files":["lib.rs"]};
 sourcesIndex["thermite_hyperdual"] = {"name":"","files":["lib.rs"]};
-sourcesIndex["thermite_special"] = {"name":"","files":["lib.rs","pd.rs","ps.rs"]};
+sourcesIndex["thermite_special"] = {"name":"","files":["bessel.rs","lib.rs","pd.rs","ps.rs"]};
 createSourceSidebar();
