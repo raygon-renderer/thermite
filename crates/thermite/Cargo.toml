@@ -39,6 +39,8 @@ rand = "0.8"
 rand_xoshiro = "0.6.0"
 no-panic = "0.1"
 thermite-special = { path = "../thermite-special" }
+thermite-complex = { path = "../thermite-complex" }
+num-complex = "0.4"
 
 [[bench]]
 name = "main"

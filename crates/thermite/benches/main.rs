@@ -14,6 +14,8 @@ type Vu64 = <AVX2 as Simd>::Vu64;
 type Vu32 = <AVX2 as Simd>::Vu32;
 type Vi64 = <AVX2 as Simd>::Vi64;
 
+type Complex<V, P> = thermite_complex::Complex<AVX2, V, P>;
+
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench(
         "sinh",
@@ -632,6 +634,75 @@ fn criterion_benchmark(c: &mut Criterion) {
                     return buf;
                 },
             )
+        }),
+    );
+
+    const DATA_SET: &'static [(f32, f32)] = &[(0.42, 0.0), (0.0, 0.85), (0.42, 0.85)];
+
+    c.bench(
+        "complex-sqrt",
+        ParameterizedBenchmark::new(
+            "thermite-ps",
+            |b, i| {
+                #[inline(never)]
+                fn do_algorithm(x: Vf32, y: Vf32) -> (Vf32, Vf32) {
+                    let Complex { re, im, .. } = Complex::<Vf32, DefaultPolicy>::new(x, y).sqrt();
+                    (re, im)
+                }
+
+                let (x, y) = DATA_SET[*i];
+
+                b.iter(|| do_algorithm(Vf32::splat(x), Vf32::splat(y)));
+            },
+            vec![0usize, 1, 2],
+        )
+        .with_function("thermite-ps-polar", |b, i| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(x: Vf32, y: Vf32) -> (Vf32, Vf32) {
+                let c = Complex::<Vf32, DefaultPolicy>::new(x, y);
+                let (r, theta) = c.to_polar();
+                let Complex { re, im, .. } =
+                    Complex::<Vf32, DefaultPolicy>::from_polar(r.sqrt(), theta * Vf32::splat(0.5));
+                (re, im)
+            }
+
+            let (x, y) = DATA_SET[*i];
+
+            b.iter(|| unsafe { do_algorithm(Vf32::splat(x), Vf32::splat(y)) });
+        })
+        .with_function("thermite-ps-ultra", |b, i| {
+            #[inline(never)]
+            fn do_algorithm(x: Vf32, y: Vf32) -> (Vf32, Vf32) {
+                let Complex { re, im, .. } = Complex::<Vf32, policies::UltraPerformance>::new(x, y).sqrt();
+                (re, im)
+            }
+
+            let (x, y) = DATA_SET[*i];
+
+            b.iter(|| do_algorithm(Vf32::splat(x), Vf32::splat(y)));
+        })
+        .with_function("num-complex-ps", |b, i| {
+            let mut xs = [0.0; 8];
+            let mut ys = [0.0; 8];
+
+            let (x, y) = DATA_SET[*i];
+
+            black_box(Vf32::splat(x)).store_unaligned(&mut xs);
+            black_box(Vf32::splat(y)).store_unaligned(&mut ys);
+
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(mut x: [f32; 8], mut y: [f32; 8]) -> ([f32; 8], [f32; 8]) {
+                for i in 0..8 {
+                    let c = num_complex::Complex::new(x[i], y[i]).sqrt();
+                    x[i] = c.re;
+                    y[i] = c.im;
+                }
+                (x, y)
+            }
+
+            b.iter(|| unsafe { do_algorithm(xs, ys) })
         }),
     );
 }
