@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 thermite = { path = "../thermite" }
+thermite-complex = { path = "../thermite-complex" }

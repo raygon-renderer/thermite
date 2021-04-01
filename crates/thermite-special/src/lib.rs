@@ -1,6 +1,9 @@
 #![allow(unused_imports)]
 #![no_std]
+
 use thermite::*;
+
+use thermite_complex::Complex;
 
 mod pd;
 mod ps;
@@ -19,12 +22,12 @@ pub trait SimdVectorizedSpecialFunctionsPolicied<S: Simd>: SimdFloatVector<S> {
     fn gaussian_p<P: Policy>(self, a: Self, c: Self) -> Self;
     fn gaussian_integral_p<P: Policy>(self, x1: Self, a: Self, c: Self) -> Self;
 
-    /*
+    //fn hankel_p<P: Policy>(self, x: Self, sign: bool) -> Complex<S, Self, P>;
+
     fn bessel_j_p<P: Policy>(self, n: u32) -> Self;
-    fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self;
+    //fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self;
     fn bessel_y_p<P: Policy>(self, n: u32) -> Self;
-    fn bessel_yf_p<P: Policy>(self, n: Self::Element) -> Self;
-    */
+    //fn bessel_yf_p<P: Policy>(self, n: Self::Element) -> Self;
 }
 
 pub trait SimdVectorizedSpecialFunctions<S: Simd>: SimdVectorizedSpecialFunctionsPolicied<S> {
@@ -97,23 +100,21 @@ pub trait SimdVectorizedSpecialFunctions<S: Simd>: SimdVectorizedSpecialFunction
     /// make sure to do that here as well with `x0`(`self`) and `x1`
     fn gaussian_integral(self, x1: Self, a: Self, c: Self) -> Self;
 
-    /*
     /// Computes the Bessel function of the first kind `J_n(x)` with whole integer order `n`.
     ///
     /// **NOTE**: For `n < 2`, this uses an efficient rational polynomial approximation.
     fn bessel_j(self, n: u32) -> Self;
 
-    /// Computes the Bessel function of the first kind `J_n(x)` with real order `n`.
-    fn bessel_jf(self, n: Self::Element) -> Self;
+    // /// Computes the Bessel function of the first kind `J_n(x)` with real order `n`.
+    // fn bessel_jf(self, n: Self::Element) -> Self;
 
     /// Computes the Bessel function of the second kind `Y_n(x)` with whole integer order `n`.
     ///
     /// **NOTE**: For `n < 2`, this uses an efficient rational polynomial approximation.
     fn bessel_y(self, n: u32) -> Self;
 
-    /// Computes the Bessel function of the second kind `Y_n(x)` with real order `n`.
-    fn bessel_yf(self, n: Self::Element) -> Self;
-    */
+    // /// Computes the Bessel function of the second kind `Y_n(x)` with real order `n`.
+    // fn bessel_yf(self, n: Self::Element) -> Self;
 }
 
 #[rustfmt::skip]
@@ -155,6 +156,19 @@ where
     #[inline] fn gaussian_integral_p<P: Policy>(self, x1: Self, a: Self, c: Self) -> Self {
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::gaussian_integral::<P>(self, x1, a, c)
     }
+
+    #[inline] fn bessel_j_p<P: Policy>(self, n: u32) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::bessel_j::<P>(self, n)
+    }
+    //#[inline] fn bessel_jf_p<P: Policy>(self, n: Self::Element) -> Self {
+    //    <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::bessel_jf::<P>(self, n)
+    //}
+    #[inline] fn bessel_y_p<P: Policy>(self, n: u32) -> Self {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::bessel_y::<P>(self, n)
+    }
+    //#[inline] fn bessel_yf_p<P: Policy>(self, n: Self::Element) -> Self {
+    //    <<Self as SimdVectorBase<S>>::Element as SimdVectorizedSpecialFunctionsInternal<S>>::bessel_yf::<P>(self, n)
+    //}
 }
 
 #[rustfmt::skip]
@@ -172,6 +186,11 @@ where
     #[inline(always)] fn legendre(self, n: u32, m: u32)                         -> Self { self.legendre_p::<DefaultPolicy>(n, m) }
     #[inline(always)] fn gaussian(self, a: Self, c: Self)                       -> Self { self.gaussian_p::<DefaultPolicy>(a, c) }
     #[inline(always)] fn gaussian_integral(self, a: Self, c: Self, x1: Self)    -> Self { self.gaussian_integral_p::<DefaultPolicy>(x1, a, c) }
+
+    #[inline(always)] fn bessel_j(self, n: u32)                                 -> Self { self.bessel_j_p::<DefaultPolicy>(n) }
+    //#[inline(always)] fn bessel_jf(self, n: Self::Element)                      -> Self { self.bessel_jf_p::<DefaultPolicy>(n) }
+    #[inline(always)] fn bessel_y(self, n: u32)                                 -> Self { self.bessel_y_p::<DefaultPolicy>(n) }
+    //#[inline(always)] fn bessel_yf(self, n: Self::Element)                      -> Self { self.bessel_yf_p::<DefaultPolicy>(n) }
 }
 
 #[doc(hidden)]
@@ -483,25 +502,25 @@ pub trait SimdVectorizedSpecialFunctionsInternal<S: Simd>: SimdVectorizedMathInt
         common * (a1.erf_p::<P>() - a0.erf_p::<P>())
     }
 
-    /*
     #[inline(always)]
     fn bessel_j<P: Policy>(x: Self::Vf, n: u32) -> Self::Vf {
         bessel::bessel_j::<S, Self, P>(x, n)
     }
 
-    #[inline(always)]
-    fn bessel_jf<P: Policy>(x: Self::Vf, n: Self) -> Self::Vf {
-        unimplemented!()
-    }
+    //#[inline(always)]
+    //fn bessel_jf<P: Policy>(_x: Self::Vf, _n: Self) -> Self::Vf {
+    //    unimplemented!()
+    //}
 
     #[inline(always)]
     fn bessel_y<P: Policy>(x: Self::Vf, n: u32) -> Self::Vf {
         bessel::bessel_y::<S, Self, P>(x, n)
     }
 
-    #[inline(always)]
-    fn bessel_yf<P: Policy>(x: Self::Vf, n: Self) -> Self::Vf {
-        unimplemented!()
-    }
-    */
+    //#[inline(always)]
+    //fn bessel_yf<P: Policy>(_x: Self::Vf, _n: Self) -> Self::Vf {
+    //    unimplemented!()
+    //}
 }
+
+mod bessel;

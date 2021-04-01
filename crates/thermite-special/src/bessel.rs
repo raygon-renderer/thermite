@@ -5,10 +5,9 @@ pub use bessel_internal::*;
 mod bessel_internal {
     use crate::*;
 
-    const FRAC_1_SQRT_PI: f64 = 5.641895835477562869480794515607725858e-01;
-
     #[inline(always)]
-    pub fn bessel_j0<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf) -> E::Vf {
+    pub fn bessel_j0<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(mut x: E::Vf) -> E::Vf {
+        /*
         if P::POLICY.precision == PrecisionPolicy::Reference {
             let xx4 = x * x * E::Vf::splat_as(0.25);
             let mut powers = E::Vf::one();
@@ -18,7 +17,8 @@ mod bessel_internal {
                 let sign = if k & 1 == 0 { E::Vf::zero() } else { E::Vf::neg_zero() };
                 factorial = factorial * E::cast_from(k);
                 powers = powers * xx4;
-                sign ^ powers / E::Vf::splat(factorial * factorial)
+                let f = E::Vf::splat(factorial);
+                sign ^ powers / f / f
             });
 
             return match sum {
@@ -26,6 +26,7 @@ mod bessel_internal {
                 Err(_) => E::Vf::zero(),
             };
         }
+        */
 
         let x1 = E::Vf::splat_as(2.4048255576957727686e+00);
         let x2 = E::Vf::splat_as(5.5200781102863106496e+00);
@@ -141,12 +142,12 @@ mod bessel_internal {
             // y <= 1 given above operation
             let r = y.poly_p::<P>(p2) / y.poly_p::<P>(q2);
 
-            y48 = den.mul_adde(x21, x) * (x + x2) * r;
+            y48 = (x + x2) * (den.mul_adde(x21, x) - x22) * r;
         }
 
         // 8 < x <= inf
         if P::POLICY.avoid_branching || !le8.all() {
-            let factor = E::Vf::splat_as(FRAC_1_SQRT_PI) / x.sqrt();
+            let factor = E::Vf::FRAC_1_SQRT_PI() / x.sqrt();
 
             let y = E::Vf::splat_as(8.0) / x;
             let y2 = y * y;
@@ -169,7 +170,7 @@ mod bessel_internal {
     }
 
     #[inline(always)]
-    pub fn bessel_j1<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
+    pub fn bessel_j1<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
         let x1 = E::Vf::splat_as(3.8317059702075123156e+00f64);
         let x2 = E::Vf::splat_as(7.0155866698156187535e+00f64);
         let x11 = E::Vf::splat_as(9.810e+02f64);
@@ -294,7 +295,7 @@ mod bessel_internal {
             let y = E::Vf::splat_as(8.0) / w;
             let y2 = y * y;
 
-            let factor = E::Vf::splat_as(FRAC_1_SQRT_PI) / w.sqrt();
+            let factor = E::Vf::FRAC_1_SQRT_PI() / w.sqrt();
 
             // y2 <= 1.0 given above division, no need for poly_rational
             let rc = y2.poly_p::<P>(pc) / y2.poly_p::<P>(qc);
@@ -315,7 +316,7 @@ mod bessel_internal {
     }
 
     #[inline(always)]
-    pub fn bessel_y0<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
+    pub fn bessel_y0<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
         let x1 = E::Vf::splat_as(8.9357696627916752158e-01f64);
         let x2 = E::Vf::splat_as(3.9576784193148578684e+00f64);
         let x3 = E::Vf::splat_as(7.0860510603017726976e+00f64);
@@ -444,7 +445,7 @@ mod bessel_internal {
         if P::POLICY.avoid_branching || le8.any() {
             xx = x * x;
             ixx = E::Vf::one() / xx; // setup division early to pipeline it
-            j0_2_frac_pi = x.bessel_j_p::<P>(0) * E::Vf::splat_as(core::f64::consts::FRAC_2_PI);
+            j0_2_frac_pi = x.bessel_j_p::<P>(0) * E::Vf::FRAC_2_PI();
             lnx_j0_2_frac_pi = x.ln_p::<P>() * j0_2_frac_pi;
         }
 
@@ -470,7 +471,7 @@ mod bessel_internal {
             let y = E::Vf::splat_as(8.0) / x;
             let y2 = y * y;
 
-            let factor = E::Vf::splat_as(FRAC_1_SQRT_PI) / x.sqrt();
+            let factor = E::Vf::FRAC_1_SQRT_PI() / x.sqrt();
 
             // y2 <= 1.0 given above division, no need for poly_rational
             let rc = y2.poly_p::<P>(pc) / y2.poly_p::<P>(qc);
@@ -492,7 +493,7 @@ mod bessel_internal {
     }
 
     #[inline(always)]
-    pub fn bessel_y1<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
+    pub fn bessel_y1<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(x: E::Vf) -> E::Vf {
         let x1 = E::Vf::splat_as(2.1971413260310170351e+00f64);
         let x2 = E::Vf::splat_as(5.4296810407941351328e+00f64);
 
@@ -601,7 +602,7 @@ mod bessel_internal {
         if true || P::POLICY.avoid_branching || le8.any() {
             xx = x * x;
             ix = E::Vf::one() / x;
-            j1_2_frac_pi = x.bessel_j_p::<P>(1) * E::Vf::splat_as(core::f64::consts::FRAC_2_PI);
+            j1_2_frac_pi = x.bessel_j_p::<P>(1) * E::Vf::FRAC_2_PI();
             lnx_j1_2_frac_pi = x.ln_p::<P>() * j1_2_frac_pi;
         }
 
@@ -622,7 +623,7 @@ mod bessel_internal {
             let y = E::Vf::splat_as(8.0) / x;
             let y2 = y * y;
 
-            let factor = E::Vf::splat_as(FRAC_1_SQRT_PI) / x.sqrt();
+            let factor = E::Vf::FRAC_1_SQRT_PI() / x.sqrt();
 
             // y2 <= 1.0 given above division, no need for poly_rational
             let rc = y2.poly_p::<P>(pc) / y2.poly_p::<P>(qc);
@@ -643,16 +644,56 @@ mod bessel_internal {
     }
 
     #[inline(always)]
-    pub fn bessel_j<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
+    pub fn bessel_j<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
+        let mut j0 = unsafe { E::Vf::undefined() };
+        let mut j1 = unsafe { E::Vf::undefined() };
+
+        if n == 0 || n > 1 {
+            j0 = bessel_j0::<S, E, P>(x);
+        }
+
+        if n >= 1 {
+            j1 = bessel_j1::<S, E, P>(x);
+        }
+
         match n {
-            0 => bessel_j0::<S, E, P>(x),
-            1 => bessel_j1::<S, E, P>(x),
-            _ => unimplemented!(),
+            0 => j0,
+            1 => j1,
+            _ => {
+                let one = E::Vf::one();
+                let zero = E::Vf::zero();
+                let factor = x.lt(zero).select(E::Vf::neg_one(), one);
+
+                let mut prev = j0;
+                let mut current = j1 * factor; // abs(x)
+                let mut value = unsafe { E::Vf::undefined() };
+
+                let ix = x.abs().reciprocal_p::<P>();
+
+                // Generic forward recurrence
+                for k in 1..n {
+                    let mult = E::Vf::splat_as(k + k) * ix;
+
+                    value = mult.mul_sub(current, prev);
+                    prev = current;
+                    current = value;
+                }
+
+                // TODO: Improve precision around zero
+
+                value *= factor;
+
+                if P::POLICY.check_overflow {
+                    value = x.eq(zero).select(zero, value);
+                }
+
+                value
+            }
         }
     }
 
     #[inline(always)]
-    pub fn bessel_y<S: Simd, E: SimdVectorizedMathInternal<S>, P: Policy>(mut x: E::Vf, n: u32) -> E::Vf {
+    pub fn bessel_y<S: Simd, E: SimdVectorizedSpecialFunctionsInternal<S>, P: Policy>(x: E::Vf, n: u32) -> E::Vf {
         let mut y0 = unsafe { E::Vf::undefined() };
         let mut y1 = unsafe { E::Vf::undefined() };
 
@@ -669,23 +710,12 @@ mod bessel_internal {
             0 => y0,
             1 => y1,
             _ => {
-                let one = E::Vf::one();
-                let two = E::Vf::splat_as(2);
-
                 let mut prev = y0;
                 let mut current = y1;
                 let mut value = unsafe { E::Vf::undefined() };
 
-                let ix = one / x;
+                let ix = x.reciprocal_p::<P>();
 
-                // TODO: Figure out where this went wrong.
-                //let inv = mult.gt(one) & current.abs().gt(one);
-                //let icur = inv.select(one / current, one);
-                //prev *= icur;
-                //value *= icur;
-                //current = inv.select(one, current);
-
-                // NOTE: Since the above is skipped, this includes the first iteration
                 for k in 1..n {
                     let mult = E::Vf::splat_as(k + k) * ix;
                     value = mult.mul_sub(current, prev);
