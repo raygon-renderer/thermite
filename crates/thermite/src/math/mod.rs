@@ -245,6 +245,10 @@ pub trait SimdVectorizedMathPolicied<S: Simd>: SimdFloatVector<S> + SimdFloatVec
     where
         F: FnMut(isize) -> Self;
 
+    fn sum_f_p<P: Policy, F>(n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self;
+
     fn sin_p<P: Policy>(self) -> Self;
     fn cos_p<P: Policy>(self) -> Self;
     fn tan_p<P: Policy>(self) -> Self;
@@ -332,7 +336,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     where
         F: FnMut(usize) -> Self;
 
-    /// Computes `Σ[f(n)]` from `n=start` to `end`.
+    /// Computes `Σ[f(n)]` from `n=start` to `end`, **terminating early if the sum converges**.
     ///
     /// Returns `Ok` if the sum converges, `Err` otherwise with the diverging value.
     ///
@@ -343,7 +347,7 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     where
         F: FnMut(isize) -> Self;
 
-    /// Computes `Π[f(n)]` from `n=start` to `end`.
+    /// Computes `Π[f(n)]` from `n=start` to `end`, **terminating early if the sum converges**.
     ///
     /// Returns `Ok` if the product converges, `Err` otherwise with the diverging value.
     ///
@@ -353,6 +357,11 @@ pub trait SimdVectorizedMath<S: Simd>: SimdVectorizedMathPolicied<S> {
     fn product_f<F>(start: isize, end: isize, f: F) -> Result<Self, Self>
     where
         F: FnMut(isize) -> Self;
+
+    /// Computes `Σ[f(n)]` from `n=0` to `end`.
+    fn sum_f<F>(n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self;
 
     /// Computes the sine of a vector.
     fn sin(self) -> Self;
@@ -511,6 +520,13 @@ where
         <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::product_f::<P, F>(start, end, f)
     }
 
+    #[inline] fn sum_f_p<P: Policy, F>(n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self
+    {
+        <<Self as SimdVectorBase<S>>::Element as SimdVectorizedMathInternal<S>>::sum_f::<P, F>(n, f)
+    }
+
     #[inline] fn poly_rational_p<P: Policy>(
         self,
         numerator_coefficients: &[Self::Element],
@@ -589,6 +605,13 @@ where
             F: FnMut(isize) -> Self
     {
         Self::product_f_p::<DefaultPolicy, F>(start, end, f)
+    }
+
+    #[inline(always)] fn sum_f<F>(n: usize, f: F) -> Self
+    where
+        F: FnMut(usize) -> Self
+    {
+        Self::sum_f_p::<DefaultPolicy, F>(n, f)
     }
 
     #[inline(always)] fn poly_rational(
@@ -747,7 +770,76 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
         ret
     }
 
-    #[rustfmt::skip]
+    #[inline(always)]
+    fn sum_f<P: Policy, F>(n: usize, mut f: F) -> Self::Vf
+    where
+        F: FnMut(usize) -> Self::Vf,
+    {
+        let mut sum = Self::Vf::zero();
+
+        if thermite_unlikely!(n == 0) {
+            return sum;
+        }
+
+        match P::POLICY.precision {
+            // Klein's iterative Kahan–Babuška algorithm
+            PrecisionPolicy::Reference => {
+                let mut cs = sum;
+                let mut ccs = sum;
+
+                for i in 0..n {
+                    let mut delta = f(i);
+
+                    let mut t = sum + delta;
+
+                    sum.abs().lt(delta.abs()).swap(&mut sum, &mut delta);
+                    let mut c = (sum - t) + delta;
+
+                    sum = t;
+                    t = cs + c;
+
+                    cs.abs().lt(c.abs()).swap(&mut cs, &mut c);
+                    let cc = (cs - t) + c;
+
+                    cs = t;
+                    ccs += cc;
+                }
+
+                sum = sum + cs + ccs;
+            }
+            // Neumaier's improved Kahan–Babuška algorithm
+            PrecisionPolicy::Best => {
+                let mut c = sum; // zero
+
+                for i in 0..n {
+                    let mut delta = f(i);
+                    let t = sum + delta;
+
+                    sum.abs().lt(delta.abs()).swap(&mut sum, &mut delta);
+
+                    c += (sum - t) + delta;
+                    sum = t;
+                }
+
+                sum += c;
+            }
+            PrecisionPolicy::Average if P::POLICY.unroll_loops => {
+                // TODO: Unrolled Pseudo-Pairwise summation via instruction-level parallelism
+                for i in 0..n {
+                    sum += f(i);
+                }
+            }
+            // Naive sum with no correction
+            _ => {
+                for i in 0..n {
+                    sum += f(i);
+                }
+            }
+        }
+
+        sum
+    }
+
     #[inline(always)]
     fn summation_f<P: Policy, F>(mut n: isize, end: isize, mut f: F) -> Result<Self::Vf, Self::Vf>
     where
