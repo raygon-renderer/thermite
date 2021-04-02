@@ -270,6 +270,24 @@ where
     {
         unsafe { V::cast_mask(self).value()._mm_blendv(t, f) }
     }
+
+    /// For each lane, if the mask lane is truthy then swap the corresponding lanes in `a` and `b`
+    #[inline(always)]
+    pub fn swap<U>(self, a: &mut U, b: &mut U)
+    where
+        V: SimdCastTo<S, U>,
+        U: SimdVector<S>,
+    {
+        let mask = V::cast_mask(self).value();
+
+        let a2 = *a;
+        let b2 = *b;
+
+        unsafe {
+            *a = mask._mm_blendv(b2, a2);
+            *b = mask._mm_blendv(a2, b2);
+        }
+    }
 }
 
 impl<S: Simd + ?Sized, V> SimdVectorBase<S> for Mask<S, V>
