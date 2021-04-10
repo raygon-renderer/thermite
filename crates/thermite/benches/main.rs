@@ -510,6 +510,63 @@ fn criterion_benchmark(c: &mut Criterion) {
     );
 
     c.bench(
+        "large_sum",
+        ParameterizedBenchmark::new(
+            "thermite-perf",
+            |b, l| {
+                #[inline(never)]
+                fn do_algorithm(list: &[f32]) -> Vf32 {
+                    Vf32::sum_f_p::<policies::Performance, _>(list.len(), |i| unsafe {
+                        Vf32::splat(*list.get_unchecked(i))
+                    })
+                }
+
+                b.iter(move || do_algorithm(l));
+            },
+            vec![(0..16000).into_iter().map(|x| x as f32).collect::<Vec<f32>>()],
+        )
+        .with_function("thermite-ultra", |b, l| {
+            #[inline(never)]
+            fn do_algorithm(list: &[f32]) -> Vf32 {
+                Vf32::sum_f_p::<policies::UltraPerformance, _>(list.len(), |i| unsafe {
+                    Vf32::splat(*list.get_unchecked(i))
+                })
+            }
+
+            b.iter(move || do_algorithm(l));
+        })
+        .with_function("thermite-precision", |b, l| {
+            #[inline(never)]
+            fn do_algorithm(list: &[f32]) -> Vf32 {
+                Vf32::sum_f_p::<policies::Precision, _>(list.len(), |i| unsafe { Vf32::splat(*list.get_unchecked(i)) })
+            }
+
+            b.iter(move || do_algorithm(l));
+        })
+        .with_function("thermite-reference", |b, l| {
+            #[inline(never)]
+            fn do_algorithm(list: &[f32]) -> Vf32 {
+                Vf32::sum_f_p::<policies::Reference, _>(list.len(), |i| unsafe { Vf32::splat(*list.get_unchecked(i)) })
+            }
+
+            b.iter(move || do_algorithm(l));
+        })
+        .with_function("simple", |b, l| {
+            #[inline(never)]
+            #[target_feature(enable = "avx2,fma")]
+            unsafe fn do_algorithm(list: &[f32]) -> Vf32 {
+                let mut sum = Vf32::zero();
+                for i in 0..list.len() {
+                    sum += Vf32::splat(unsafe { *list.get_unchecked(i) });
+                }
+                sum
+            }
+
+            b.iter(move || unsafe { do_algorithm(l) });
+        }),
+    );
+
+    c.bench(
         "rng_gen2",
         ParameterizedBenchmark::new(
             "thermite",

@@ -823,11 +823,116 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
                 sum += c;
             }
-            PrecisionPolicy::Average if P::POLICY.unroll_loops => {
-                // TODO: Unrolled Pseudo-Pairwise summation via instruction-level parallelism
-                for i in 0..n {
-                    sum += f(i);
+            /*
+            // This ended up being quite slow due to the recursion, but I'll leave it here for reference
+            PrecisionPolicy::Average if P::POLICY.unroll_loops && !P::POLICY.avoid_recursion => {
+                #[dispatch(S, thermite = "crate")]
+                #[inline(always)]
+                fn pairwise_join<S: Simd, V: Add<V, Output = V>, F>(n: usize, s: usize, e: usize, f: &mut F) -> V
+                where
+                    F: FnMut(usize) -> V,
+                {
+                    let s2 = s + (n >> 1);
+
+                    // NOTE: Direct recursion doesn't work with the dispatch macro yet
+                    pairwise::<S, V, F>(s, s2, f) + pairwise::<S, V, F>(s2, e, f)
                 }
+
+                #[dispatch(S, thermite = "crate")]
+                #[inline(always)]
+                #[rustfmt::skip]
+                fn pairwise<S: Simd, V: Add<V, Output = V>, F>(s: usize, e: usize, f: &mut F) -> V
+                where
+                    F: FnMut(usize) -> V,
+                {
+                    let n = e - s;
+                    match n {
+                        0 => unsafe { core::hint::unreachable_unchecked() },
+                        1  =>    f(s+0),
+                        2  =>    f(s+0)  + f(s+1),
+                        3  =>    f(s+0)  + f(s+1)   + f(s+2),
+                        4  => (  f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)),
+                        5  => (  f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3))  +  f(s+4),
+                        6  => (  f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3))  + (f(s+4) + f(s+5)),
+                        7  => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3))) + (f(s+4) + f(s+5) + f(s+6)),
+                        8  => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7))),
+                        9  => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7) + f(s+8))),
+                        10 => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7)))
+                            + (  f(s+8)  + f(s+9)),
+                        11 => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7)))
+                            + (  f(s+8)  + f(s+9)   +  f(s+10)),
+                        12 => (( f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7)))
+                            + (( f(s+8)  + f(s+9))  + (f(s+10) + f(s+11))),
+                        13 => (((f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7))))
+                            + (((f(s+8)  + f(s+9))  + (f(s+10) + f(s+11))) + f(s+12)),
+                        14 => (((f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7))))
+                            + (((f(s+8)  + f(s+9))  + (f(s+10) + f(s+11)))
+                            + (  f(s+12) + f(s+13))),
+                        15 => (((f(s+0)  + f(s+1))  + (f(s+2)  + f(s+3)))
+                            + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7))))
+                            + (((f(s+8)  + f(s+9))  + (f(s+10) + f(s+11)))
+                            + (( f(s+12) + f(s+13)) +  f(s+14))),
+                        _ => pairwise_join::<S, V, F>(n, s, e, f),
+                    }
+                }
+
+                sum = pairwise::<S, _, _>(0, n, &mut f);
+            }
+            */
+            #[rustfmt::skip]
+            _ if P::POLICY.unroll_loops => {
+                let mut n = n;
+                while n >= 16 {
+                    n -= 16;
+                    // grouped together to maximize instruction-level parallelism
+                    sum += (((f(n + 0)  + f(n + 1))  + (f(n + 2)  + f(n + 3)))
+                        +  (( f(n + 4)  + f(n + 5))  + (f(n + 6)  + f(n + 7))))
+                        +  (((f(n + 8)  + f(n + 9))  + (f(n + 10) + f(n + 11)))
+                        +  (( f(n + 12) + f(n + 13)) + (f(n + 14) + f(n + 15))));
+                }
+
+                sum += match n {
+                    0  => return sum,
+                    1  =>    f(0),
+                    2  =>    f(0)  + f(1),
+                    3  =>    f(0)  + f(1)   + f(2),
+                    4  => (  f(0)  + f(1))  + (f(2)  + f(3)),
+                    5  => (  f(0)  + f(1))  + (f(2)  + f(3))  +  f(4),
+                    6  => (  f(0)  + f(1))  + (f(2)  + f(3))  + (f(4) + f(5)),
+                    7  => (( f(0)  + f(1))  + (f(2)  + f(3))) + (f(4) + f(5) + f(6)),
+                    8  => (( f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7))),
+                    9  => (( f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7) + f(8))),
+                    10 => (( f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7)))
+                        + (  f(8)  + f(9)),
+                    11 => (( f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7)))
+                        + (  f(8)  + f(9)   +  f(10)),
+                    12 => (( f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7)))
+                        + (( f(8)  + f(9))  + (f(10) + f(11))),
+                    13 => (((f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7))))
+                        + (((f(8)  + f(9))  + (f(10) + f(11))) + f(12)),
+                    14 => (((f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7))))
+                        + (((f(8)  + f(9))  + (f(10) + f(11)))
+                        + (  f(12) + f(13))),
+                    15 => (((f(0)  + f(1))  + (f(2)  + f(3)))
+                        + (( f(4)  + f(5))  + (f(6)  + f(7))))
+                        + (((f(8)  + f(9))  + (f(10) + f(11)))
+                        + (( f(12) + f(13)) +  f(14))),
+                    _  => unsafe { core::hint::unreachable_unchecked() }
+                };
             }
             // Naive sum with no correction
             _ => {
