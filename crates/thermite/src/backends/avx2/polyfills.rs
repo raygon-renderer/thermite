@@ -251,7 +251,7 @@ pub unsafe fn _mm256_popcnt_epi32x(v: __m256i) -> __m256i {
 #[inline(always)]
 pub unsafe fn _mm256_srai_epi64x(v: __m256i, cnt: i32) -> __m256i {
     let m = _mm256_set1_epi64x(1i64 << (63 - cnt));
-    _mm256_sub_epi64(_mm256_xor_si256(_mm256_srli_epi64(v, cnt), m), m)
+    _mm256_sub_epi64(_mm256_xor_si256(_mm256_srl_epi64(v, _mm_cvtsi32_si128(cnt)), m), m)
 }
 
 pub use divider::*;
@@ -315,54 +315,54 @@ pub mod divider {
     #[inline(always)]
     pub unsafe fn _mm256_div_epu32x(numers: __m256i, multiplier: u32, shift: u8) -> __m256i {
         if multiplier == 0 {
-            return _mm256_srli_epi32(numers, shift as i32);
+            return _mm256_srl_epi32(numers, _mm_cvtsi32_si128(shift as i32));
         }
 
         let q = _mm256_mullhi_epu32x(numers, _mm256_set1_epi32(multiplier as i32));
 
         if shift & 0x40 != 0 {
-            _mm256_srli_epi32(
+            _mm256_srl_epi32(
                 _mm256_add_epi32(_mm256_srli_epi32(_mm256_sub_epi32(numers, q), 1), q),
-                (shift & 0x1F) as i32,
+                _mm_cvtsi32_si128((shift & 0x1F) as i32),
             )
         } else {
-            _mm256_srli_epi32(q, shift as i32)
+            _mm256_srl_epi32(q, _mm_cvtsi32_si128(shift as i32))
         }
     }
 
     #[inline(always)]
     pub unsafe fn _mm256_div_epu32x_bf(numers: __m256i, multiplier: u32, shift: u8) -> __m256i {
         let q = _mm256_mullhi_epu32x(numers, _mm256_set1_epi32(multiplier as i32));
-        _mm256_srli_epi32(
+        _mm256_srl_epi32(
             _mm256_add_epi32(_mm256_srli_epi32(_mm256_sub_epi32(numers, q), 1), q),
-            shift as i32,
+            _mm_cvtsi32_si128(shift as i32),
         )
     }
 
     #[inline(always)]
     pub unsafe fn _mm256_div_epu64x_bf(numers: __m256i, multiplier: u64, shift: u8) -> __m256i {
         let q = _mm256_mullhi_epu64x(numers, _mm256_set1_epi64x(multiplier as i64));
-        _mm256_srli_epi64(
+        _mm256_srl_epi64(
             _mm256_add_epi64(_mm256_srli_epi64(_mm256_sub_epi64(numers, q), 1), q),
-            shift as i32,
+            _mm_cvtsi32_si128(shift as i32),
         )
     }
 
     #[inline(always)]
     pub unsafe fn _mm256_div_epu64x(numers: __m256i, multiplier: u64, shift: u8) -> __m256i {
         if multiplier == 0 {
-            return _mm256_srli_epi64(numers, shift as i32);
+            return _mm256_srl_epi64(numers, _mm_cvtsi32_si128(shift as i32));
         }
 
         let q = _mm256_mullhi_epu64x(numers, _mm256_set1_epi64x(multiplier as i64));
 
         if shift & 0x40 != 0 {
-            _mm256_srli_epi64(
+            _mm256_srl_epi64(
                 _mm256_add_epi64(_mm256_srli_epi64(_mm256_sub_epi64(numers, q), 1), q),
-                (shift & 0x3F) as i32,
+                _mm_cvtsi32_si128((shift & 0x3F) as i32),
             )
         } else {
-            _mm256_srli_epi64(q, shift as i32)
+            _mm256_srl_epi64(q, _mm_cvtsi32_si128(shift as i32))
         }
     }
 
@@ -381,7 +381,7 @@ pub mod divider {
                 numers,
                 _mm256_and_si256(_mm256_srai_epi32(numers, 31), round_to_zero_tweak),
             );
-            q = _mm256_srai_epi32(q, shift as i32);
+            q = _mm256_sra_epi32(q, _mm_cvtsi32_si128(shift as i32));
 
             let sign = _mm256_set1_epi32(((shift as i8) >> 7) as i32);
 
@@ -398,7 +398,7 @@ pub mod divider {
             }
 
             // q >>= shift
-            q = _mm256_srai_epi32(q, (shift & SHIFT_MASK) as i32);
+            q = _mm256_sra_epi32(q, _mm_cvtsi32_si128((shift & SHIFT_MASK) as i32));
             q = _mm256_add_epi32(q, _mm256_srli_epi32(q, 31)); // q += (q < 0)
 
             q
@@ -465,7 +465,7 @@ pub mod divider {
         let q_sign = _mm256_srai_epi32(q, 31); // q_sign = q >> 31
         let mask = _mm256_set1_epi32((1i32 << masked_shift) - is_power_of_2);
         q = _mm256_add_epi32(q, _mm256_and_si256(q_sign, mask)); // q = q + (q_sign & mask)
-        q = _mm256_srai_epi32(q, masked_shift as i32); // q >>= shift
+        q = _mm256_sra_epi32(q, _mm_cvtsi32_si128(masked_shift as i32)); // q >>= shift
         q = _mm256_sub_epi32(_mm256_xor_si256(q, sign), sign); // q = (q ^ sign) - sign
 
         q
