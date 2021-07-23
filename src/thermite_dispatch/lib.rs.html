@@ -1,7 +1,7 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/dispatch/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/dispatch/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../thermite_dispatch/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
-                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../thermite_dispatch/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
 <span id="4">  4</span>
@@ -654,12 +654,12 @@
 <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">proc_macro</span>;
 
 <span class="kw">use</span> <span class="ident">proc_macro2</span>::{<span class="ident">Span</span>, <span class="ident">TokenStream</span>};
-<span class="kw">use</span> <span class="ident">quote</span>::<span class="ident">quote</span>;
+<span class="kw">use</span> <span class="ident">quote::quote</span>;
 
 <span class="kw">use</span> <span class="ident">syn</span>::{
     <span class="ident">parse</span>::{<span class="ident">Parse</span>, <span class="ident">ParseStream</span>},
-    <span class="ident">punctuated</span>::<span class="ident">Punctuated</span>,
-    <span class="ident">visit_mut</span>::<span class="ident">VisitMut</span>,
+    <span class="ident">punctuated::Punctuated</span>,
+    <span class="ident">visit_mut::VisitMut</span>,
     <span class="ident">Attribute</span>, <span class="ident">AttributeArgs</span>, <span class="ident">ConstParam</span>, <span class="ident">Expr</span>, <span class="ident">ExprCall</span>, <span class="ident">ExprPath</span>, <span class="ident">FnArg</span>, <span class="ident">GenericArgument</span>, <span class="ident">GenericMethodArgument</span>,
     <span class="ident">GenericParam</span>, <span class="ident">Ident</span>, <span class="ident">ImplItem</span>, <span class="ident">ImplItemMethod</span>, <span class="ident">Item</span>, <span class="ident">ItemFn</span>, <span class="ident">ItemImpl</span>, <span class="ident">ItemMod</span>, <span class="ident">ItemTrait</span>, <span class="ident">Lifetime</span>, <span class="ident">Lit</span>, <span class="ident">Meta</span>,
     <span class="ident">NestedMeta</span>, <span class="ident">Pat</span>, <span class="ident">PatType</span>, <span class="ident">Path</span>, <span class="ident">PathArguments</span>, <span class="ident">PathSegment</span>, <span class="ident">QSelf</span>, <span class="ident">Receiver</span>, <span class="ident">ReturnType</span>, <span class="ident">Signature</span>, <span class="ident">Token</span>, <span class="ident">Type</span>,
@@ -680,52 +680,52 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;wasm32&quot;</span>)]</span>
 <span class="kw">static</span> <span class="ident">BACKENDS</span>: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="kw-2">&amp;</span><span class="ident">str</span>)] <span class="op">=</span> <span class="kw-2">&amp;</span>[(<span class="string">&quot;WASM32&quot;</span>, <span class="string">&quot;simd128&quot;</span>)];
 
-<span class="kw">type</span> <span class="ident">PunctuatedAttributes</span> <span class="op">=</span> <span class="ident">Punctuated</span><span class="op">&lt;</span><span class="ident">NestedMeta</span>, <span class="macro">Token</span><span class="macro">!</span>[,]<span class="op">&gt;</span>;
+<span class="kw">type</span> <span class="ident">PunctuatedAttributes</span> <span class="op">=</span> <span class="ident">Punctuated</span><span class="op">&lt;</span><span class="ident">NestedMeta</span>, <span class="macro">Token!</span>[,]<span class="op">&gt;</span>;
 
 <span class="kw">struct</span> <span class="ident">DispatchAttributes</span> {
     <span class="kw">pub</span> <span class="ident">attributes</span>: <span class="ident">PunctuatedAttributes</span>,
 }
 
 <span class="kw">impl</span> <span class="ident">Parse</span> <span class="kw">for</span> <span class="ident">DispatchAttributes</span> {
-    <span class="kw">fn</span> <span class="ident">parse</span>(<span class="ident">input</span>: <span class="ident">ParseStream</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">syn</span>::<span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">parse</span>(<span class="ident">input</span>: <span class="ident">ParseStream</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">syn::Result</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
         <span class="prelude-val">Ok</span>(<span class="ident">DispatchAttributes</span> {
-            <span class="ident">attributes</span>: <span class="ident">Punctuated</span>::<span class="ident">parse_terminated</span>(<span class="ident">input</span>)<span class="question-mark">?</span>,
+            <span class="ident">attributes</span>: <span class="ident">Punctuated::parse_terminated</span>(<span class="ident">input</span>)<span class="question-mark">?</span>,
         })
     }
 }
 
 <span class="doccomment">/// Generates monomorphized backend `target_feature` function calls to the annotated function or `impl` block.</span>
 <span class="attribute">#[<span class="ident">proc_macro_attribute</span>]</span>
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">dispatch</span>(<span class="ident">attr</span>: <span class="ident">proc_macro</span>::<span class="ident">TokenStream</span>, <span class="ident">item</span>: <span class="ident">proc_macro</span>::<span class="ident">TokenStream</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">proc_macro</span>::<span class="ident">TokenStream</span> {
-    <span class="kw">let</span> <span class="ident">attr</span> <span class="op">=</span> <span class="ident">syn</span>::<span class="macro">parse_macro_input</span><span class="macro">!</span>(<span class="ident">attr</span> <span class="kw">as</span> <span class="ident">DispatchAttributes</span>);
-    <span class="kw">let</span> <span class="ident">item</span> <span class="op">=</span> <span class="ident">syn</span>::<span class="macro">parse_macro_input</span><span class="macro">!</span>(<span class="ident">item</span> <span class="kw">as</span> <span class="ident">Item</span>);
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">dispatch</span>(<span class="ident">attr</span>: <span class="ident">proc_macro::TokenStream</span>, <span class="ident">item</span>: <span class="ident">proc_macro::TokenStream</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">proc_macro::TokenStream</span> {
+    <span class="kw">let</span> <span class="ident">attr</span> <span class="op">=</span> <span class="macro">syn::parse_macro_input!</span>(<span class="ident">attr</span> <span class="kw">as</span> <span class="ident">DispatchAttributes</span>);
+    <span class="kw">let</span> <span class="ident">item</span> <span class="op">=</span> <span class="macro">syn::parse_macro_input!</span>(<span class="ident">item</span> <span class="kw">as</span> <span class="ident">Item</span>);
 
-    <span class="ident">proc_macro</span>::<span class="ident">TokenStream</span>::<span class="ident">from</span>(<span class="kw">match</span> <span class="ident">item</span> {
-        <span class="ident">Item</span>::<span class="ident">Fn</span>(<span class="ident">fn_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_function</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="kw-2">&amp;</span><span class="ident">fn_item</span>),
-        <span class="ident">Item</span>::<span class="ident">Impl</span>(<span class="ident">impl_block</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_impl_block</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="ident">impl_block</span>),
-        <span class="ident">Item</span>::<span class="ident">Trait</span>(<span class="ident">trait_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_trait_def</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="ident">trait_item</span>),
-        <span class="ident">Item</span>::<span class="ident">Mod</span>(<span class="ident">module</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_mod_def</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="kw-2">&amp;</span><span class="ident">module</span>),
-        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented</span><span class="macro">!</span>(<span class="string">&quot;#[dispatch] is only supported on naked functions, impl blocks or trait defintions!&quot;</span>),
+    <span class="ident">proc_macro::TokenStream::from</span>(<span class="kw">match</span> <span class="ident">item</span> {
+        <span class="ident">Item::Fn</span>(<span class="ident">fn_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_function</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="kw-2">&amp;</span><span class="ident">fn_item</span>),
+        <span class="ident">Item::Impl</span>(<span class="ident">impl_block</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_impl_block</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="ident">impl_block</span>),
+        <span class="ident">Item::Trait</span>(<span class="ident">trait_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_trait_def</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="ident">trait_item</span>),
+        <span class="ident">Item::Mod</span>(<span class="ident">module</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_mod_def</span>(<span class="kw-2">&amp;</span><span class="ident">attr</span>.<span class="ident">attributes</span>, <span class="kw-2">&amp;</span><span class="ident">module</span>),
+        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented!</span>(<span class="string">&quot;#[dispatch] is only supported on naked functions, impl blocks or trait defintions!&quot;</span>),
     })
 }
 
 <span class="kw">fn</span> <span class="ident">parse_attr</span>(<span class="ident">attr</span>: <span class="kw-2">&amp;</span><span class="ident">PunctuatedAttributes</span>) <span class="op">-</span><span class="op">&gt;</span> (<span class="ident">TokenStream</span>, <span class="ident">TokenStream</span>) {
-    <span class="kw">let</span> <span class="ident">default_simd</span> <span class="op">=</span> <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;S&quot;</span>);
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">simd</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">default_simd</span> };
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">thermite</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { ::<span class="ident">thermite</span> };
+    <span class="kw">let</span> <span class="ident">default_simd</span> <span class="op">=</span> <span class="macro">quote::format_ident!</span>(<span class="string">&quot;S&quot;</span>);
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">simd</span> <span class="op">=</span> <span class="macro">quote!</span> { #<span class="ident">default_simd</span> };
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">thermite</span> <span class="op">=</span> <span class="macro">quote!</span> { <span class="ident">::thermite</span> };
 
     <span class="kw">for</span> <span class="ident">attr</span> <span class="kw">in</span> <span class="ident">attr</span>.<span class="ident">iter</span>() {
         <span class="kw">match</span> <span class="ident">attr</span> {
-            <span class="ident">NestedMeta</span>::<span class="ident">Meta</span>(<span class="ident">Meta</span>::<span class="ident">Path</span>(<span class="ident">path</span>)) <span class="op">=</span><span class="op">&gt;</span> {
-                <span class="ident">simd</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">path</span> };
+            <span class="ident">NestedMeta::Meta</span>(<span class="ident">Meta::Path</span>(<span class="ident">path</span>)) <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="ident">simd</span> <span class="op">=</span> <span class="macro">quote!</span> { #<span class="ident">path</span> };
             }
-            <span class="ident">NestedMeta</span>::<span class="ident">Meta</span>(<span class="ident">Meta</span>::<span class="ident">NameValue</span>(<span class="ident">nv</span>)) <span class="kw">if</span> <span class="ident">nv</span>.<span class="ident">path</span>.<span class="ident">is_ident</span>(<span class="string">&quot;thermite&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">NestedMeta::Meta</span>(<span class="ident">Meta::NameValue</span>(<span class="ident">nv</span>)) <span class="kw">if</span> <span class="ident">nv</span>.<span class="ident">path</span>.<span class="ident">is_ident</span>(<span class="string">&quot;thermite&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="kw">let</span> <span class="ident">lit</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">nv</span>.<span class="ident">lit</span> {
-                    <span class="ident">Lit</span>::<span class="ident">Str</span>(<span class="kw-2">ref</span> <span class="ident">s</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">s</span>.<span class="ident">value</span>(),
-                    <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">panic</span><span class="macro">!</span>(<span class="string">&quot;Invalid thermite path: {:?}&quot;</span>, <span class="ident">nv</span>.<span class="ident">lit</span>.<span class="ident">span</span>()),
+                    <span class="ident">Lit::Str</span>(<span class="kw-2">ref</span> <span class="ident">s</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">s</span>.<span class="ident">value</span>(),
+                    <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">panic!</span>(<span class="string">&quot;Invalid thermite path: {:?}&quot;</span>, <span class="ident">nv</span>.<span class="ident">lit</span>.<span class="ident">span</span>()),
                 };
-                <span class="kw">let</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">lit</span>);
-                <span class="ident">thermite</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">path</span> };
+                <span class="kw">let</span> <span class="ident">path</span> <span class="op">=</span> <span class="macro">quote::format_ident!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">lit</span>);
+                <span class="ident">thermite</span> <span class="op">=</span> <span class="macro">quote!</span> { #<span class="ident">path</span> };
             }
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
         }
@@ -741,25 +741,25 @@
 <span class="kw">impl</span> <span class="ident">VisitMut</span> <span class="kw">for</span> <span class="ident">TypeVisitor</span> {
     <span class="kw">fn</span> <span class="ident">visit_type_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Type</span>) {
         <span class="kw">match</span> <span class="ident">i</span> {
-            <span class="ident">Type</span>::<span class="ident">Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">qself</span>.<span class="ident">is_none</span>() <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">Type::Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">qself</span>.<span class="ident">is_none</span>() <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">is_ident</span>(<span class="string">&quot;Self&quot;</span>) {
                     <span class="kw-2">*</span><span class="ident">i</span> <span class="op">=</span> (<span class="kw-2">*</span><span class="self">self</span>.<span class="ident">self_ty</span>).<span class="ident">clone</span>();
                 } <span class="kw">else</span> <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">len</span>() <span class="op">&gt;</span> <span class="number">1</span> {
                     <span class="kw">let</span> <span class="ident">first</span> <span class="op">=</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">first_mut</span>();
                     <span class="kw">if</span> <span class="ident">first</span>.<span class="ident">map</span>(<span class="op">|</span><span class="ident">s</span><span class="op">|</span> <span class="ident">s</span>.<span class="ident">ident</span> <span class="op">=</span><span class="op">=</span> <span class="string">&quot;Self&quot;</span>) <span class="op">=</span><span class="op">=</span> <span class="prelude-val">Some</span>(<span class="bool-val">true</span>) {
-                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">Punctuated</span>::<span class="ident">new</span>();
-                        <span class="kw">let</span> <span class="ident">old_path</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>, <span class="ident">Punctuated</span>::<span class="ident">new</span>());
+                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">Punctuated::new</span>();
+                        <span class="kw">let</span> <span class="ident">old_path</span> <span class="op">=</span> <span class="ident">std::mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>, <span class="ident">Punctuated::new</span>());
                         <span class="kw">for</span> <span class="ident">segment</span> <span class="kw">in</span> <span class="ident">old_path</span>.<span class="ident">into_iter</span>().<span class="ident">skip</span>(<span class="number">1</span>) {
                             <span class="ident">path</span>.<span class="ident">push</span>(<span class="ident">segment</span>);
                         }
                         <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span> <span class="op">=</span> <span class="ident">path</span>;
-                        <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">leading_colon</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">Default</span>::<span class="ident">default</span>());
+                        <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">leading_colon</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">Default::default</span>());
                         <span class="ident">p</span>.<span class="ident">qself</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">QSelf</span> {
-                            <span class="ident">lt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+                            <span class="ident">lt_token</span>: <span class="ident">Default::default</span>(),
                             <span class="ident">ty</span>: <span class="self">self</span>.<span class="ident">self_ty</span>.<span class="ident">clone</span>(),
                             <span class="ident">position</span>: <span class="number">0</span>,
                             <span class="ident">as_token</span>: <span class="prelude-val">None</span>,
-                            <span class="ident">gt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+                            <span class="ident">gt_token</span>: <span class="ident">Default::default</span>(),
                         });
                     }
                 }
@@ -767,7 +767,7 @@
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
         }
 
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_type_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_type_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
     }
 }
 
@@ -783,11 +783,11 @@
 <span class="kw">impl</span> <span class="ident">SelfTraitVisitor</span> {
     <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">trait_</span>: <span class="ident">Path</span>, <span class="ident">self_ty</span>: <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">Type</span><span class="op">&gt;</span>, <span class="ident">method</span>: <span class="ident">Ident</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">SelfTraitVisitor</span> {
         <span class="kw">let</span> <span class="ident">qself</span> <span class="op">=</span> <span class="ident">QSelf</span> {
-            <span class="ident">lt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+            <span class="ident">lt_token</span>: <span class="ident">Default::default</span>(),
             <span class="ident">ty</span>: <span class="ident">self_ty</span>.<span class="ident">clone</span>(),
             <span class="ident">position</span>: <span class="ident">trait_</span>.<span class="ident">segments</span>.<span class="ident">len</span>(),
-            <span class="ident">as_token</span>: <span class="prelude-val">Some</span>(<span class="ident">Default</span>::<span class="ident">default</span>()),
-            <span class="ident">gt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+            <span class="ident">as_token</span>: <span class="prelude-val">Some</span>(<span class="ident">Default::default</span>()),
+            <span class="ident">gt_token</span>: <span class="ident">Default::default</span>(),
         };
 
         <span class="ident">SelfTraitVisitor</span> {
@@ -796,16 +796,16 @@
             <span class="ident">self_ty</span>,
             <span class="ident">trait_</span>,
             <span class="ident">qself</span>,
-            <span class="ident">self_arg</span>: <span class="ident">Expr</span>::<span class="ident">Path</span>(<span class="ident">ExprPath</span> {
-                <span class="ident">attrs</span>: <span class="ident">Vec</span>::<span class="ident">new</span>(),
+            <span class="ident">self_arg</span>: <span class="ident">Expr::Path</span>(<span class="ident">ExprPath</span> {
+                <span class="ident">attrs</span>: <span class="ident">Vec::new</span>(),
                 <span class="ident">qself</span>: <span class="prelude-val">None</span>,
                 <span class="ident">path</span>: <span class="ident">Path</span> {
                     <span class="ident">leading_colon</span>: <span class="prelude-val">None</span>,
                     <span class="ident">segments</span>: {
-                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">segments</span> <span class="op">=</span> <span class="ident">Punctuated</span>::<span class="ident">new</span>();
+                        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">segments</span> <span class="op">=</span> <span class="ident">Punctuated::new</span>();
                         <span class="ident">segments</span>.<span class="ident">push</span>(<span class="ident">PathSegment</span> {
-                            <span class="ident">ident</span>: <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;self&quot;</span>),
-                            <span class="ident">arguments</span>: <span class="ident">PathArguments</span>::<span class="prelude-val">None</span>,
+                            <span class="ident">ident</span>: <span class="macro">quote::format_ident!</span>(<span class="string">&quot;self&quot;</span>),
+                            <span class="ident">arguments</span>: <span class="ident">PathArguments::None</span>,
                         });
                         <span class="ident">segments</span>
                     },
@@ -820,47 +820,47 @@
     <span class="kw">fn</span> <span class="ident">visit_expr_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Expr</span>) {
         <span class="kw">if</span> <span class="self">self</span>.<span class="ident">depth</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
             <span class="kw">match</span> <span class="ident">i</span> {
-                <span class="ident">Expr</span>::<span class="ident">MethodCall</span>(<span class="ident">m</span>) <span class="kw">if</span> <span class="ident">m</span>.<span class="ident">method</span> <span class="op">=</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">method</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw-2">*</span><span class="ident">m</span>.<span class="ident">receiver</span> {
-                    <span class="ident">Expr</span>::<span class="ident">Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">is_ident</span>(<span class="string">&quot;self&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="ident">Expr::MethodCall</span>(<span class="ident">m</span>) <span class="kw">if</span> <span class="ident">m</span>.<span class="ident">method</span> <span class="op">=</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">method</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw-2">*</span><span class="ident">m</span>.<span class="ident">receiver</span> {
+                    <span class="ident">Expr::Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">is_ident</span>(<span class="string">&quot;self&quot;</span>) <span class="op">=</span><span class="op">&gt;</span> {
                         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">path</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">trait_</span>.<span class="ident">clone</span>();
                         <span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">push</span>(<span class="ident">PathSegment</span> {
                             <span class="ident">ident</span>: <span class="ident">m</span>.<span class="ident">method</span>.<span class="ident">clone</span>(),
                             <span class="ident">arguments</span>: <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">m</span>.<span class="ident">turbofish</span> {
-                                <span class="prelude-val">None</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">PathArguments</span>::<span class="prelude-val">None</span>,
+                                <span class="prelude-val">None</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">PathArguments::None</span>,
                                 <span class="prelude-val">Some</span>(<span class="ident">tf</span>) <span class="op">=</span><span class="op">&gt;</span> {
-                                    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">generic_args</span> <span class="op">=</span> <span class="ident">Punctuated</span>::<span class="ident">new</span>();
-                                    <span class="kw">let</span> <span class="ident">method_args</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">tf</span>.<span class="ident">args</span>, <span class="ident">Punctuated</span>::<span class="ident">new</span>());
+                                    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">generic_args</span> <span class="op">=</span> <span class="ident">Punctuated::new</span>();
+                                    <span class="kw">let</span> <span class="ident">method_args</span> <span class="op">=</span> <span class="ident">std::mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">tf</span>.<span class="ident">args</span>, <span class="ident">Punctuated::new</span>());
 
                                     <span class="kw">for</span> <span class="ident">arg</span> <span class="kw">in</span> <span class="ident">method_args</span>.<span class="ident">into_iter</span>() {
                                         <span class="ident">generic_args</span>.<span class="ident">push</span>(<span class="kw">match</span> <span class="ident">arg</span> {
-                                            <span class="ident">GenericMethodArgument</span>::<span class="ident">Const</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">GenericArgument</span>::<span class="ident">Const</span>(<span class="ident">c</span>),
-                                            <span class="ident">GenericMethodArgument</span>::<span class="ident">Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">GenericArgument</span>::<span class="ident">Type</span>(<span class="ident">ty</span>),
+                                            <span class="ident">GenericMethodArgument::Const</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">GenericArgument::Const</span>(<span class="ident">c</span>),
+                                            <span class="ident">GenericMethodArgument::Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">GenericArgument::Type</span>(<span class="ident">ty</span>),
                                         });
                                     }
 
-                                    <span class="ident">PathArguments</span>::<span class="ident">AngleBracketed</span>(<span class="ident">syn</span>::<span class="ident">AngleBracketedGenericArguments</span> {
-                                        <span class="ident">colon2_token</span>: <span class="prelude-val">Some</span>(<span class="ident">Default</span>::<span class="ident">default</span>()),
-                                        <span class="ident">lt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+                                    <span class="ident">PathArguments::AngleBracketed</span>(<span class="ident">syn::AngleBracketedGenericArguments</span> {
+                                        <span class="ident">colon2_token</span>: <span class="prelude-val">Some</span>(<span class="ident">Default::default</span>()),
+                                        <span class="ident">lt_token</span>: <span class="ident">Default::default</span>(),
                                         <span class="ident">args</span>: <span class="ident">generic_args</span>,
-                                        <span class="ident">gt_token</span>: <span class="ident">Default</span>::<span class="ident">default</span>(),
+                                        <span class="ident">gt_token</span>: <span class="ident">Default::default</span>(),
                                     })
                                 }
                             },
                         });
 
-                        <span class="kw">let</span> <span class="ident">call_attrs</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">m</span>.<span class="ident">attrs</span>, <span class="ident">Vec</span>::<span class="ident">new</span>());
-                        <span class="kw">let</span> <span class="ident">path_attrs</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">attrs</span>, <span class="ident">Vec</span>::<span class="ident">new</span>());
+                        <span class="kw">let</span> <span class="ident">call_attrs</span> <span class="op">=</span> <span class="ident">std::mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">m</span>.<span class="ident">attrs</span>, <span class="ident">Vec::new</span>());
+                        <span class="kw">let</span> <span class="ident">path_attrs</span> <span class="op">=</span> <span class="ident">std::mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">attrs</span>, <span class="ident">Vec::new</span>());
 
-                        <span class="kw-2">*</span><span class="ident">i</span> <span class="op">=</span> <span class="ident">Expr</span>::<span class="ident">Call</span>(<span class="ident">ExprCall</span> {
+                        <span class="kw-2">*</span><span class="ident">i</span> <span class="op">=</span> <span class="ident">Expr::Call</span>(<span class="ident">ExprCall</span> {
                             <span class="ident">attrs</span>: <span class="ident">call_attrs</span>,
-                            <span class="ident">func</span>: <span class="ident">Box</span>::<span class="ident">new</span>(<span class="ident">Expr</span>::<span class="ident">Path</span>(<span class="ident">ExprPath</span> {
+                            <span class="ident">func</span>: <span class="ident">Box::new</span>(<span class="ident">Expr::Path</span>(<span class="ident">ExprPath</span> {
                                 <span class="ident">attrs</span>: <span class="ident">path_attrs</span>,
                                 <span class="ident">qself</span>: <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="ident">qself</span>.<span class="ident">clone</span>()),
                                 <span class="ident">path</span>,
                             })),
                             <span class="ident">paren_token</span>: <span class="ident">m</span>.<span class="ident">paren_token</span>.<span class="ident">clone</span>(),
                             <span class="ident">args</span>: {
-                                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">args</span> <span class="op">=</span> <span class="ident">Punctuated</span>::<span class="ident">new</span>();
+                                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">args</span> <span class="op">=</span> <span class="ident">Punctuated::new</span>();
                                 <span class="ident">args</span>.<span class="ident">push</span>(<span class="self">self</span>.<span class="ident">self_arg</span>.<span class="ident">clone</span>()); <span class="comment">// insert self first</span>
                                 <span class="kw">for</span> <span class="ident">arg</span> <span class="kw">in</span> <span class="ident">m</span>.<span class="ident">args</span>.<span class="ident">iter</span>() {
                                     <span class="ident">args</span>.<span class="ident">push</span>(<span class="ident">arg</span>.<span class="ident">clone</span>());
@@ -871,14 +871,14 @@
                     }
                     <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
                 },
-                <span class="ident">Expr</span>::<span class="ident">Call</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw-2">*</span><span class="ident">c</span>.<span class="ident">func</span> {
-                    <span class="ident">Expr</span>::<span class="ident">Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">len</span>() <span class="op">=</span><span class="op">=</span> <span class="number">2</span> <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="ident">Expr::Call</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="kw-2">*</span><span class="ident">c</span>.<span class="ident">func</span> {
+                    <span class="ident">Expr::Path</span>(<span class="ident">p</span>) <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">len</span>() <span class="op">=</span><span class="op">=</span> <span class="number">2</span> <span class="op">=</span><span class="op">&gt;</span> {
                         <span class="kw">if</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">first</span>().<span class="ident">unwrap</span>().<span class="ident">ident</span> <span class="op">=</span><span class="op">=</span> <span class="string">&quot;Self&quot;</span>
                             <span class="op">&amp;&amp;</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">last</span>().<span class="ident">unwrap</span>().<span class="ident">ident</span> <span class="op">=</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">method</span>
                         {
                             <span class="ident">p</span>.<span class="ident">qself</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="ident">qself</span>.<span class="ident">clone</span>());
                             <span class="comment">// start off new path with trait_</span>
-                            <span class="kw">let</span> <span class="ident">old_path</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">mem</span>::<span class="ident">replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">path</span>, <span class="self">self</span>.<span class="ident">trait_</span>.<span class="ident">clone</span>());
+                            <span class="kw">let</span> <span class="ident">old_path</span> <span class="op">=</span> <span class="ident">std::mem::replace</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">p</span>.<span class="ident">path</span>, <span class="self">self</span>.<span class="ident">trait_</span>.<span class="ident">clone</span>());
                             <span class="comment">// skip 1st `Self` segment, then append the rest</span>
                             <span class="kw">for</span> <span class="ident">segment</span> <span class="kw">in</span> <span class="ident">old_path</span>.<span class="ident">segments</span>.<span class="ident">into_iter</span>().<span class="ident">skip</span>(<span class="number">1</span>) {
                                 <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">push</span>(<span class="ident">segment</span>);
@@ -891,32 +891,32 @@
             }
         }
 
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_expr_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_expr_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
     }
 
     <span class="comment">// Ensure that we don&#39;t rewrite non-associated scopes by tracking when we enter and leave them.</span>
 
-    <span class="kw">fn</span> <span class="ident">visit_item_fn_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn</span>::<span class="ident">ItemFn</span>) {
+    <span class="kw">fn</span> <span class="ident">visit_item_fn_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn::ItemFn</span>) {
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_item_fn_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_item_fn_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
     }
 
-    <span class="kw">fn</span> <span class="ident">visit_impl_item_method_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn</span>::<span class="ident">ImplItemMethod</span>) {
+    <span class="kw">fn</span> <span class="ident">visit_impl_item_method_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn::ImplItemMethod</span>) {
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_impl_item_method_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_impl_item_method_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
     }
 
-    <span class="kw">fn</span> <span class="ident">visit_expr_closure_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn</span>::<span class="ident">ExprClosure</span>) {
+    <span class="kw">fn</span> <span class="ident">visit_expr_closure_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn::ExprClosure</span>) {
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_expr_closure_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_expr_closure_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
     }
 
-    <span class="kw">fn</span> <span class="ident">visit_trait_item_method_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn</span>::<span class="ident">TraitItemMethod</span>) {
+    <span class="kw">fn</span> <span class="ident">visit_trait_item_method_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">syn::TraitItemMethod</span>) {
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_trait_item_method_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_trait_item_method_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
         <span class="self">self</span>.<span class="ident">depth</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
     }
 }
@@ -926,13 +926,13 @@
 <span class="kw">impl</span> <span class="ident">VisitMut</span> <span class="kw">for</span> <span class="ident">DemutSelfVisitor</span> {
     <span class="kw">fn</span> <span class="ident">visit_fn_arg_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">i</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">FnArg</span>) {
         <span class="kw">match</span> <span class="ident">i</span> {
-            <span class="ident">FnArg</span>::<span class="ident">Receiver</span>(<span class="ident">rcv</span>) <span class="kw">if</span> <span class="ident">rcv</span>.<span class="ident">reference</span>.<span class="ident">is_none</span>() <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">FnArg::Receiver</span>(<span class="ident">rcv</span>) <span class="kw">if</span> <span class="ident">rcv</span>.<span class="ident">reference</span>.<span class="ident">is_none</span>() <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="ident">rcv</span>.<span class="ident">mutability</span> <span class="op">=</span> <span class="prelude-val">None</span>;
             }
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
         }
 
-        <span class="ident">syn</span>::<span class="ident">visit_mut</span>::<span class="ident">visit_fn_arg_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
+        <span class="ident">syn::visit_mut::visit_fn_arg_mut</span>(<span class="self">self</span>, <span class="ident">i</span>);
     }
 }
 
@@ -948,17 +948,17 @@
 
     <span class="kw">let</span> <span class="ident">content</span> <span class="op">=</span> <span class="ident">content</span>.<span class="ident">as_ref</span>().<span class="ident">map</span>(<span class="op">|</span>(<span class="kw">_</span>, <span class="ident">items</span>)<span class="op">|</span> {
         <span class="kw">let</span> <span class="ident">items</span> <span class="op">=</span> <span class="ident">items</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">item</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">item</span> {
-            <span class="ident">Item</span>::<span class="ident">Fn</span>(<span class="ident">fn_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_function</span>(<span class="ident">attr</span>, <span class="ident">fn_item</span>),
-            <span class="ident">Item</span>::<span class="ident">Impl</span>(<span class="ident">impl_block</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_impl_block</span>(<span class="ident">attr</span>, <span class="ident">impl_block</span>.<span class="ident">clone</span>()),
-            <span class="ident">Item</span>::<span class="ident">Trait</span>(<span class="ident">trait_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_trait_def</span>(<span class="ident">attr</span>, <span class="ident">trait_item</span>.<span class="ident">clone</span>()),
-            <span class="ident">Item</span>::<span class="ident">Mod</span>(<span class="ident">module</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_mod_def</span>(<span class="ident">attr</span>, <span class="ident">module</span>),
-            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">item</span> },
+            <span class="ident">Item::Fn</span>(<span class="ident">fn_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_function</span>(<span class="ident">attr</span>, <span class="ident">fn_item</span>),
+            <span class="ident">Item::Impl</span>(<span class="ident">impl_block</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_impl_block</span>(<span class="ident">attr</span>, <span class="ident">impl_block</span>.<span class="ident">clone</span>()),
+            <span class="ident">Item::Trait</span>(<span class="ident">trait_item</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_trait_def</span>(<span class="ident">attr</span>, <span class="ident">trait_item</span>.<span class="ident">clone</span>()),
+            <span class="ident">Item::Mod</span>(<span class="ident">module</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">gen_mod_def</span>(<span class="ident">attr</span>, <span class="ident">module</span>),
+            <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote!</span> { #<span class="ident">item</span> },
         });
 
-        <span class="macro">quote</span><span class="macro">!</span> { { #(#<span class="ident">items</span>)<span class="op">*</span> } }
+        <span class="macro">quote!</span> { { #(#<span class="ident">items</span>)<span class="op">*</span> } }
     });
 
-    <span class="macro">quote</span><span class="macro">!</span> {
+    <span class="macro">quote!</span> {
         #(#<span class="ident">attrs</span>)<span class="op">*</span> #<span class="ident">vis</span> #<span class="ident">mod_token</span> #<span class="ident">ident</span> #<span class="ident">content</span> #<span class="ident">semi</span>
     }
 }
@@ -985,22 +985,22 @@
     <span class="kw">let</span> (<span class="ident">impl_generics</span>, <span class="ident">type_generics</span>, <span class="ident">where_clause</span>) <span class="op">=</span> <span class="ident">generics</span>.<span class="ident">split_for_impl</span>();
 
     <span class="kw">let</span> <span class="ident">extra_bounds</span> <span class="op">=</span> <span class="ident">where_clause</span>.<span class="ident">map</span>(<span class="op">|</span><span class="ident">wc</span><span class="op">|</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">extra_bounds</span> <span class="op">=</span> <span class="ident">Vec</span>::<span class="ident">new</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">extra_bounds</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
 
         <span class="kw">for</span> <span class="ident">pred</span> <span class="kw">in</span> <span class="ident">wc</span>.<span class="ident">predicates</span>.<span class="ident">iter</span>() {
             <span class="kw">match</span> <span class="ident">pred</span> {
-                <span class="ident">WherePredicate</span>::<span class="ident">Type</span>(<span class="ident">ty</span>) <span class="kw">if</span> <span class="ident">ty</span>.<span class="ident">bounded_ty</span> <span class="op">=</span><span class="op">=</span> <span class="kw-2">*</span><span class="kw-2">*</span><span class="ident">self_ty</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">extra_bounds</span>.<span class="ident">push</span>(<span class="kw-2">&amp;</span><span class="ident">ty</span>.<span class="ident">bounds</span>),
+                <span class="ident">WherePredicate::Type</span>(<span class="ident">ty</span>) <span class="kw">if</span> <span class="ident">ty</span>.<span class="ident">bounded_ty</span> <span class="op">=</span><span class="op">=</span> <span class="kw-2">*</span><span class="kw-2">*</span><span class="ident">self_ty</span> <span class="op">=</span><span class="op">&gt;</span> <span class="ident">extra_bounds</span>.<span class="ident">push</span>(<span class="kw-2">&amp;</span><span class="ident">ty</span>.<span class="ident">bounds</span>),
                 <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
             }
         }
 
-        <span class="macro">quote</span><span class="macro">!</span> {
+        <span class="macro">quote!</span> {
             : #(#<span class="ident">extra_bounds</span> <span class="op">+</span>)<span class="op">*</span>
         }
     });
 
     <span class="kw">let</span> <span class="ident">items</span> <span class="op">=</span> <span class="ident">items</span>.<span class="ident">iter_mut</span>().<span class="ident">map</span>(<span class="op">|</span><span class="kw-2">mut</span> <span class="ident">item</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">item</span> {
-        <span class="ident">ImplItem</span>::<span class="ident">Method</span>(<span class="ident">ImplItemMethod</span> {
+        <span class="ident">ImplItem::Method</span>(<span class="ident">ImplItemMethod</span> {
             <span class="ident">attrs</span>: <span class="ident">fn_attrs</span>,
             <span class="ident">vis</span>,
             <span class="ident">defaultness</span>,
@@ -1018,7 +1018,7 @@
                 ..
             } <span class="op">=</span> <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">sig</span>;
 
-            <span class="kw">let</span> <span class="ident">helper_trait_name</span> <span class="op">=</span> <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;__DispatchHelper_{}&quot;</span>, <span class="ident">ident</span>);
+            <span class="kw">let</span> <span class="ident">helper_trait_name</span> <span class="op">=</span> <span class="macro">quote::format_ident!</span>(<span class="string">&quot;__DispatchHelper_{}&quot;</span>, <span class="ident">ident</span>);
 
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">decl_sig</span> <span class="op">=</span> <span class="ident">sig</span>.<span class="ident">clone</span>();
             <span class="ident">DemutSelfVisitor</span>.<span class="ident">visit_signature_mut</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">decl_sig</span>);
@@ -1033,7 +1033,7 @@
 
             <span class="comment">// If a trait implementation, disambiguate all calls to self. or Self:: to refer to the parent trait</span>
             <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="ident">trait_</span>, <span class="kw">_</span>)) <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">trait_</span> {
-                <span class="ident">SelfTraitVisitor</span>::<span class="ident">new</span>(<span class="ident">trait_</span>.<span class="ident">clone</span>(), <span class="ident">self_ty</span>.<span class="ident">clone</span>(), <span class="ident">sig</span>.<span class="ident">ident</span>.<span class="ident">clone</span>()).<span class="ident">visit_block_mut</span>(<span class="ident">block</span>);
+                <span class="ident">SelfTraitVisitor::new</span>(<span class="ident">trait_</span>.<span class="ident">clone</span>(), <span class="ident">self_ty</span>.<span class="ident">clone</span>(), <span class="ident">sig</span>.<span class="ident">ident</span>.<span class="ident">clone</span>()).<span class="ident">visit_block_mut</span>(<span class="ident">block</span>);
             }
 
             <span class="kw">let</span> (<span class="ident">fn_impl_generics</span>, <span class="kw">_</span>, <span class="ident">fn_where_clause</span>) <span class="op">=</span> <span class="ident">fn_generics</span>.<span class="ident">split_for_impl</span>();
@@ -1045,13 +1045,13 @@
                 <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">decl_sig</span>.<span class="ident">output</span>;
                 <span class="kw">let</span> <span class="ident">where_clause</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">decl_sig</span>.<span class="ident">generics</span>.<span class="ident">where_clause</span>;
 
-                <span class="macro">quote</span><span class="macro">!</span> {
+                <span class="macro">quote!</span> {
                     #<span class="ident">asyncness</span> <span class="kw">unsafe</span> #<span class="ident">abi</span> <span class="kw">fn</span> #<span class="ident">dispatch_ident</span> #<span class="ident">fn_impl_generics</span>(#<span class="ident">inputs</span>) #<span class="ident">output</span> #<span class="ident">where_clause</span>;
                 }
             });
 
             <span class="comment">// define the dispatch trait</span>
-            <span class="kw">let</span> <span class="ident">dispatch_trait</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> {
+            <span class="kw">let</span> <span class="ident">dispatch_trait</span> <span class="op">=</span> <span class="macro">quote!</span> {
                 <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">non_camel_case_types</span>)]</span>
                 <span class="kw">unsafe</span> <span class="kw">trait</span> #<span class="ident">helper_trait_name</span> #<span class="ident">impl_generics</span> #<span class="ident">extra_bounds</span> #<span class="ident">where_clause</span> {
                     #<span class="ident">defaultness</span> #<span class="ident">decl_sig</span>;
@@ -1063,13 +1063,13 @@
             <span class="kw">let</span> <span class="kw-2">ref</span> <span class="kw-2">mut</span> <span class="ident">forward_args</span> <span class="op">=</span> <span class="ident">forward_args</span>(<span class="ident">inputs</span>.<span class="ident">iter</span>(), <span class="bool-val">false</span>);
             <span class="kw">let</span> <span class="kw-2">ref</span> <span class="kw-2">mut</span> <span class="ident">forward_tys</span> <span class="op">=</span> <span class="ident">forward_tys</span>(<span class="ident">fn_generics</span>.<span class="ident">params</span>.<span class="ident">iter</span>(), <span class="ident">inputs</span>.<span class="ident">iter</span>());
 
-            <span class="kw">let</span> <span class="ident">tf</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { ::<span class="op">&lt;</span>#(#<span class="ident">forward_tys</span>),<span class="kw-2">*</span><span class="op">&gt;</span> };
+            <span class="kw">let</span> <span class="ident">tf</span> <span class="op">=</span> <span class="macro">quote!</span> { ::<span class="op">&lt;</span>#(#<span class="ident">forward_tys</span>),<span class="kw-2">*</span><span class="op">&gt;</span> };
 
             <span class="comment">// impl instrset methods</span>
             <span class="kw">let</span> <span class="ident">branch_impls</span> <span class="op">=</span> <span class="ident">BACKENDS</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">backend</span>, <span class="ident">instrset</span>)<span class="op">|</span> {
                 <span class="kw">let</span> <span class="ident">dispatch_ident</span> <span class="op">=</span> <span class="ident">format_backend</span>(<span class="ident">backend</span>);
 
-                <span class="macro">quote</span><span class="macro">!</span> {
+                <span class="macro">quote!</span> {
                     <span class="attribute">#[<span class="ident">inline</span>]</span>
                     <span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> #<span class="ident">instrset</span>)]</span>
                     #<span class="ident">asyncness</span> <span class="kw">unsafe</span> #<span class="ident">abi</span> <span class="kw">fn</span> #<span class="ident">dispatch_ident</span> #<span class="ident">fn_impl_generics</span>(#<span class="ident">inputs</span>) #<span class="ident">output</span> #<span class="ident">fn_where_clause</span> {
@@ -1079,7 +1079,7 @@
             });
 
             <span class="comment">// impl Dispatch trait. We can copy the entire function definition here, which makes it really easy</span>
-            <span class="kw">let</span> <span class="ident">dispatch_impl</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> {
+            <span class="kw">let</span> <span class="ident">dispatch_impl</span> <span class="op">=</span> <span class="macro">quote!</span> {
                 <span class="kw">unsafe</span> <span class="kw">impl</span> #<span class="ident">impl_generics</span> #<span class="ident">helper_trait_name</span> #<span class="ident">type_generics</span> <span class="kw">for</span> #<span class="ident">self_ty</span> #<span class="ident">where_clause</span> {
                     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
                     #<span class="ident">defaultness</span> #<span class="ident">sig</span> #<span class="ident">block</span>
@@ -1090,41 +1090,41 @@
             <span class="comment">// Define the match branches and calls to the dispatch functions</span>
             <span class="kw">let</span> <span class="ident">branches</span> <span class="op">=</span> <span class="ident">BACKENDS</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">backend</span>, <span class="ident">instrset</span>)<span class="op">|</span> {
                 <span class="kw">let</span> <span class="ident">dispatch_ident</span> <span class="op">=</span> <span class="ident">format_backend</span>(<span class="ident">backend</span>);
-                <span class="kw">let</span> <span class="ident">backend</span> <span class="op">=</span> <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">backend</span>);
+                <span class="kw">let</span> <span class="ident">backend</span> <span class="op">=</span> <span class="macro">quote::format_ident!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">backend</span>);
 
-                <span class="macro">quote</span><span class="macro">!</span> {
-                    #<span class="ident">thermite</span>::<span class="ident">SimdInstructionSet</span>::#<span class="ident">backend</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> {
+                <span class="macro">quote!</span> {
+                    #<span class="ident">thermite::SimdInstructionSet</span>::#<span class="ident">backend</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> {
                         <span class="op">&lt;</span><span class="self">Self</span> <span class="kw">as</span> #<span class="ident">helper_trait_name</span> #<span class="ident">type_generics</span><span class="op">&gt;</span>::#<span class="ident">dispatch_ident</span> #<span class="ident">tf</span>(#(#<span class="ident">forward_args</span>,)<span class="kw-2">*</span>)
                     }
                 }
             });
 
             <span class="comment">// define final function defintion, block, and match statement</span>
-            <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> {
+            <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="macro">quote!</span> {
                 <span class="attribute">#[<span class="ident">allow</span>(<span class="ident">unused_mut</span>)]</span>
                 #(#<span class="ident">fn_attrs</span>)<span class="op">*</span> #<span class="ident">vis</span> #<span class="ident">defaultness</span> #<span class="ident">sig</span> {
                     #<span class="ident">dispatch_trait</span>
                     #<span class="ident">dispatch_impl</span>
 
-                    <span class="kw">match</span> <span class="op">&lt;</span>#<span class="ident">simd</span> <span class="kw">as</span> #<span class="ident">thermite</span>::<span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">INSTRSET</span> {
+                    <span class="kw">match</span> <span class="op">&lt;</span>#<span class="ident">simd</span> <span class="kw">as</span> #<span class="ident">thermite::Simd</span><span class="op">&gt;</span><span class="ident">::INSTRSET</span> {
                         #(#<span class="ident">branches</span>)<span class="op">*</span>
-                        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> { #<span class="ident">thermite</span>::<span class="ident">unreachable_unchecked</span>() }
+                        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> { #<span class="ident">thermite::unreachable_unchecked</span>() }
                     }
                 }
             };
 
             <span class="ident">res</span>
         }
-        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">item</span> }, <span class="comment">// unchanged</span>
+        <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote!</span> { #<span class="ident">item</span> }, <span class="comment">// unchanged</span>
     });
 
     <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">trait_</span> {
-        <span class="prelude-val">Some</span>((<span class="ident">bang</span>, <span class="ident">trait_</span>, <span class="ident">for_</span>)) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote</span><span class="macro">!</span> {
+        <span class="prelude-val">Some</span>((<span class="ident">bang</span>, <span class="ident">trait_</span>, <span class="ident">for_</span>)) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote!</span> {
             #<span class="ident">defaultness</span> #<span class="ident">unsafety</span> #<span class="ident">impl_token</span> #<span class="ident">impl_generics</span> #<span class="ident">bang</span> #<span class="ident">trait_</span> #<span class="ident">for_</span> #<span class="ident">self_ty</span> #<span class="ident">where_clause</span> {
                 #(#<span class="ident">items</span>)<span class="op">*</span>
             }
         },
-        <span class="prelude-val">None</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote</span><span class="macro">!</span> {
+        <span class="prelude-val">None</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote!</span> {
             #<span class="ident">defaultness</span> #<span class="ident">unsafety</span> #<span class="ident">impl_token</span> #<span class="ident">impl_generics</span> #<span class="ident">self_ty</span> #<span class="ident">where_clause</span> {
                 #(#<span class="ident">items</span>)<span class="op">*</span>
             }
@@ -1133,11 +1133,11 @@
 }
 
 <span class="kw">fn</span> <span class="ident">gen_trait_def</span>(<span class="ident">attrs</span>: <span class="kw-2">&amp;</span><span class="ident">PunctuatedAttributes</span>, <span class="ident">trait_item</span>: <span class="ident">ItemTrait</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">TokenStream</span> {
-    <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">trait_item</span> }
+    <span class="macro">quote!</span> { #<span class="ident">trait_item</span> }
 }
 
 <span class="kw">fn</span> <span class="ident">format_backend</span>(<span class="ident">backend</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Ident</span> {
-    <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;__dispatch_{}&quot;</span>, <span class="ident">backend</span>.<span class="ident">to_lowercase</span>())
+    <span class="macro">quote::format_ident!</span>(<span class="string">&quot;__dispatch_{}&quot;</span>, <span class="ident">backend</span>.<span class="ident">to_lowercase</span>())
 }
 
 <span class="doccomment">/// Accumulate generic names for forwarding, with the exception of late-bound lifetimes</span>
@@ -1145,26 +1145,26 @@
     <span class="ident">fn_generics</span>: <span class="kw">impl</span> <span class="ident">IntoIterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">GenericParam</span><span class="op">&gt;</span>,
     <span class="ident">inputs</span>: <span class="kw">impl</span> <span class="ident">IntoIterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">FnArg</span><span class="op">&gt;</span> <span class="op">+</span> <span class="ident">Clone</span>,
 ) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">TokenStream</span><span class="op">&gt;</span> {
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">forward_tys</span> <span class="op">=</span> <span class="ident">Vec</span>::<span class="ident">new</span>();
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">forward_tys</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
 
     <span class="lifetime">&#39;forwarding_tys</span>: <span class="kw">for</span> <span class="ident">generic</span> <span class="kw">in</span> <span class="ident">fn_generics</span>.<span class="ident">into_iter</span>() {
         <span class="ident">forward_tys</span>.<span class="ident">push</span>(<span class="kw">match</span> <span class="ident">generic</span> {
-            <span class="ident">GenericParam</span>::<span class="ident">Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">GenericParam::Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="kw">let</span> <span class="kw-2">ref</span> <span class="ident">ident</span> <span class="op">=</span> <span class="ident">ty</span>.<span class="ident">ident</span>;
-                <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">ident</span> }
+                <span class="macro">quote!</span> { #<span class="ident">ident</span> }
             }
-            <span class="ident">GenericParam</span>::<span class="ident">Lifetime</span>(<span class="ident">lf</span>) <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">GenericParam::Lifetime</span>(<span class="ident">lf</span>) <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="kw">for</span> <span class="ident">arg</span> <span class="kw">in</span> <span class="ident">inputs</span>.<span class="ident">clone</span>().<span class="ident">into_iter</span>() {
                     <span class="kw">match</span> <span class="ident">arg</span> {
-                        <span class="ident">FnArg</span>::<span class="ident">Typed</span>(<span class="ident">ty</span>) <span class="kw">if</span> <span class="ident">is_late_bound</span>(<span class="kw-2">&amp;</span><span class="ident">lf</span>.<span class="ident">lifetime</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">ty</span>.<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">continue</span> <span class="lifetime">&#39;forwarding_tys</span>,
+                        <span class="ident">FnArg::Typed</span>(<span class="ident">ty</span>) <span class="kw">if</span> <span class="ident">is_late_bound</span>(<span class="kw-2">&amp;</span><span class="ident">lf</span>.<span class="ident">lifetime</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">ty</span>.<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="kw">continue</span> <span class="lifetime">&#39;forwarding_tys</span>,
                         <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> {}
                     }
                 }
-                <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">lf</span> }
+                <span class="macro">quote!</span> { #<span class="ident">lf</span> }
             }
-            <span class="ident">GenericParam</span>::<span class="ident">Const</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="ident">GenericParam::Const</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="kw">let</span> <span class="kw-2">ref</span> <span class="ident">ident</span> <span class="op">=</span> <span class="ident">c</span>.<span class="ident">ident</span>;
-                <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">ident</span> }
+                <span class="macro">quote!</span> { #<span class="ident">ident</span> }
             }
         });
     }
@@ -1173,17 +1173,17 @@
 }
 
 <span class="kw">fn</span> <span class="ident">forward_args</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>(<span class="ident">inputs</span>: <span class="kw">impl</span> <span class="ident">IntoIterator</span><span class="op">&lt;</span><span class="ident">Item</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">FnArg</span><span class="op">&gt;</span>, <span class="ident">inner</span>: <span class="ident">bool</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">TokenStream</span><span class="op">&gt;</span> {
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">forward_args</span> <span class="op">=</span> <span class="ident">Vec</span>::<span class="ident">new</span>();
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">forward_args</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
 
     <span class="kw">for</span> <span class="ident">input</span> <span class="kw">in</span> <span class="ident">inputs</span> {
         <span class="ident">forward_args</span>.<span class="ident">push</span>(<span class="kw">match</span> <span class="ident">input</span> {
-            <span class="ident">FnArg</span>::<span class="ident">Receiver</span>(<span class="ident">rcv</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote</span><span class="macro">!</span> { <span class="self">self</span> },
-            <span class="ident">FnArg</span>::<span class="ident">Typed</span>(<span class="ident">arg</span>) <span class="op">=</span><span class="op">&gt;</span> {
-                <span class="kw">if</span> <span class="kw">let</span> <span class="ident">Pat</span>::<span class="ident">Ident</span>(<span class="kw-2">ref</span> <span class="ident">param</span>) <span class="op">=</span> <span class="kw-2">*</span><span class="ident">arg</span>.<span class="ident">pat</span> {
+            <span class="ident">FnArg::Receiver</span>(<span class="ident">rcv</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">quote!</span> { <span class="self">self</span> },
+            <span class="ident">FnArg::Typed</span>(<span class="ident">arg</span>) <span class="op">=</span><span class="op">&gt;</span> {
+                <span class="kw">if</span> <span class="kw">let</span> <span class="ident">Pat::Ident</span>(<span class="kw-2">ref</span> <span class="ident">param</span>) <span class="op">=</span> <span class="kw-2">*</span><span class="ident">arg</span>.<span class="ident">pat</span> {
                     <span class="kw">let</span> <span class="kw-2">ref</span> <span class="ident">ident</span> <span class="op">=</span> <span class="ident">param</span>.<span class="ident">ident</span>;
-                    <span class="macro">quote</span><span class="macro">!</span> { #<span class="ident">ident</span> }
+                    <span class="macro">quote!</span> { #<span class="ident">ident</span> }
                 } <span class="kw">else</span> {
-                    <span class="macro">unimplemented</span><span class="macro">!</span>()
+                    <span class="macro">unimplemented!</span>()
                 }
             }
         })
@@ -1221,21 +1221,21 @@
     <span class="kw">let</span> <span class="kw-2">ref</span> <span class="kw-2">mut</span> <span class="ident">forward_tys</span> <span class="op">=</span> <span class="ident">forward_tys</span>(<span class="ident">generics</span>.<span class="ident">params</span>.<span class="ident">iter</span>(), <span class="ident">inputs</span>.<span class="ident">iter</span>());
 
     <span class="comment">// TODO: Test if inner function must always be redeclared</span>
-    <span class="kw">let</span> <span class="ident">inner</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> {
+    <span class="kw">let</span> <span class="ident">inner</span> <span class="op">=</span> <span class="macro">quote!</span> {
         <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
         #<span class="ident">asyncness</span> #<span class="ident">unsafety</span> #<span class="ident">abi</span> <span class="kw">fn</span> #<span class="ident">ident</span> #<span class="ident">impl_generics</span>(#<span class="ident">inputs</span>) #<span class="ident">output</span> #<span class="ident">where_clause</span> #<span class="ident">block</span>
     };
 
-    <span class="kw">let</span> <span class="ident">tf</span> <span class="op">=</span> <span class="macro">quote</span><span class="macro">!</span> { ::<span class="op">&lt;</span>#(#<span class="ident">forward_tys</span>),<span class="kw-2">*</span><span class="op">&gt;</span> };
+    <span class="kw">let</span> <span class="ident">tf</span> <span class="op">=</span> <span class="macro">quote!</span> { ::<span class="op">&lt;</span>#(#<span class="ident">forward_tys</span>),<span class="kw-2">*</span><span class="op">&gt;</span> };
 
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">branches</span> <span class="op">=</span> <span class="ident">Vec</span>::<span class="ident">new</span>();
+    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">branches</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
 
     <span class="kw">for</span> (<span class="ident">backend</span>, <span class="ident">instrset</span>) <span class="kw">in</span> <span class="ident">BACKENDS</span> {
         <span class="kw">let</span> <span class="ident">dispatch_ident</span> <span class="op">=</span> <span class="ident">format_backend</span>(<span class="ident">backend</span>);
-        <span class="kw">let</span> <span class="ident">backend</span> <span class="op">=</span> <span class="ident">quote</span>::<span class="macro">format_ident</span><span class="macro">!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">backend</span>);
+        <span class="kw">let</span> <span class="ident">backend</span> <span class="op">=</span> <span class="macro">quote::format_ident!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">backend</span>);
 
-        <span class="ident">branches</span>.<span class="ident">push</span>(<span class="macro">quote</span><span class="macro">!</span> {
-            #<span class="ident">thermite</span>::<span class="ident">SimdInstructionSet</span>::#<span class="ident">backend</span> <span class="op">=</span><span class="op">&gt;</span> {
+        <span class="ident">branches</span>.<span class="ident">push</span>(<span class="macro">quote!</span> {
+            #<span class="ident">thermite::SimdInstructionSet</span>::#<span class="ident">backend</span> <span class="op">=</span><span class="op">&gt;</span> {
                 <span class="attribute">#[<span class="ident">inline</span>]</span>
                 <span class="attribute">#[<span class="ident">target_feature</span>(<span class="ident">enable</span> <span class="op">=</span> #<span class="ident">instrset</span>)]</span>
                 #<span class="ident">asyncness</span> <span class="kw">unsafe</span> <span class="kw">fn</span> #<span class="ident">dispatch_ident</span> #<span class="ident">impl_generics</span>(#<span class="ident">inputs</span>) #<span class="ident">output</span> #<span class="ident">where_clause</span> {
@@ -1248,13 +1248,13 @@
         });
     }
 
-    <span class="macro">quote</span><span class="macro">!</span> {
+    <span class="macro">quote!</span> {
         #(#<span class="ident">fn_attrs</span>)<span class="op">*</span> #<span class="ident">vis</span> #<span class="ident">asyncness</span> #<span class="ident">unsafety</span> #<span class="ident">abi</span> <span class="kw">fn</span> #<span class="ident">ident</span> #<span class="ident">impl_generics</span>(#<span class="ident">inputs</span>) #<span class="ident">output</span> #<span class="ident">where_clause</span> {
             #<span class="ident">inner</span>
 
-            <span class="kw">match</span> <span class="op">&lt;</span>#<span class="ident">simd</span> <span class="kw">as</span> #<span class="ident">thermite</span>::<span class="ident">Simd</span><span class="op">&gt;</span>::<span class="ident">INSTRSET</span> {
+            <span class="kw">match</span> <span class="op">&lt;</span>#<span class="ident">simd</span> <span class="kw">as</span> #<span class="ident">thermite::Simd</span><span class="op">&gt;</span><span class="ident">::INSTRSET</span> {
                 #(#<span class="ident">branches</span>,)<span class="op">*</span>
-                <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> { #<span class="ident">thermite</span>::<span class="ident">unreachable_unchecked</span>() }
+                <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="kw">unsafe</span> { #<span class="ident">thermite::unreachable_unchecked</span>() }
             }
         }
     }
@@ -1263,39 +1263,39 @@
 <span class="comment">// Checks if a lifetime is late-bound anywhere in a type</span>
 <span class="kw">fn</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>: <span class="kw-2">&amp;</span><span class="ident">Lifetime</span>, <span class="ident">ty</span>: <span class="kw-2">&amp;</span><span class="ident">Type</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
     <span class="kw">match</span> <span class="ident">ty</span> {
-        <span class="ident">Type</span>::<span class="ident">Reference</span>(<span class="ident">r</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="prelude-val">Some</span>(<span class="ident">lf</span>) <span class="op">=</span><span class="op">=</span> <span class="ident">r</span>.<span class="ident">lifetime</span>.<span class="ident">as_ref</span>() <span class="op">|</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">r</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">Array</span>(<span class="ident">a</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">a</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">Group</span>(<span class="ident">g</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">g</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">ImplTrait</span>(<span class="ident">i</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">i</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
-            <span class="ident">syn</span>::<span class="ident">TypeParamBound</span>::<span class="ident">Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
+        <span class="ident">Type::Reference</span>(<span class="ident">r</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="prelude-val">Some</span>(<span class="ident">lf</span>) <span class="op">=</span><span class="op">=</span> <span class="ident">r</span>.<span class="ident">lifetime</span>.<span class="ident">as_ref</span>() <span class="op">|</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">r</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::Array</span>(<span class="ident">a</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">a</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::Group</span>(<span class="ident">g</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">g</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::ImplTrait</span>(<span class="ident">i</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">i</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
+            <span class="ident">syn::TypeParamBound::Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
         }),
-        <span class="ident">Type</span>::<span class="ident">Paren</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">p</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">Ptr</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">p</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">Slice</span>(<span class="ident">s</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">s</span>.<span class="ident">elem</span>),
-        <span class="ident">Type</span>::<span class="ident">TraitObject</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">t</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
-            <span class="ident">syn</span>::<span class="ident">TypeParamBound</span>::<span class="ident">Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
+        <span class="ident">Type::Paren</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">p</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::Ptr</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">p</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::Slice</span>(<span class="ident">s</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="ident">s</span>.<span class="ident">elem</span>),
+        <span class="ident">Type::TraitObject</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">t</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
+            <span class="ident">syn::TypeParamBound::Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
         }),
-        <span class="ident">Type</span>::<span class="ident">Tuple</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">t</span>.<span class="ident">elems</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">elem</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">elem</span>)),
-        <span class="ident">Type</span>::<span class="ident">Path</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">seg</span><span class="op">|</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">seg</span>.<span class="ident">arguments</span> {
-            <span class="ident">PathArguments</span>::<span class="ident">Parenthesized</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">p</span>.<span class="ident">inputs</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">ty</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">ty</span>)),
-            <span class="ident">PathArguments</span>::<span class="ident">AngleBracketed</span>(<span class="ident">a</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">a</span>.<span class="ident">args</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">arg</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">arg</span> {
-                <span class="ident">GenericArgument</span>::<span class="ident">Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
-                <span class="ident">GenericArgument</span>::<span class="ident">Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">ty</span>),
-                <span class="ident">GenericArgument</span>::<span class="ident">Binding</span>(<span class="ident">b</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="ident">b</span>.<span class="ident">ty</span>),
-                <span class="ident">GenericArgument</span>::<span class="ident">Constraint</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">c</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
-                    <span class="ident">syn</span>::<span class="ident">TypeParamBound</span>::<span class="ident">Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
-                    <span class="ident">syn</span>::<span class="ident">TypeParamBound</span>::<span class="ident">Trait</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented</span><span class="macro">!</span>(),
+        <span class="ident">Type::Tuple</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">t</span>.<span class="ident">elems</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">elem</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">elem</span>)),
+        <span class="ident">Type::Path</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">p</span>.<span class="ident">path</span>.<span class="ident">segments</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">seg</span><span class="op">|</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">seg</span>.<span class="ident">arguments</span> {
+            <span class="ident">PathArguments::Parenthesized</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">p</span>.<span class="ident">inputs</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">ty</span><span class="op">|</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">ty</span>)),
+            <span class="ident">PathArguments::AngleBracketed</span>(<span class="ident">a</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">a</span>.<span class="ident">args</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">arg</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">arg</span> {
+                <span class="ident">GenericArgument::Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
+                <span class="ident">GenericArgument::Type</span>(<span class="ident">ty</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="ident">ty</span>),
+                <span class="ident">GenericArgument::Binding</span>(<span class="ident">b</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">is_late_bound</span>(<span class="ident">lf</span>, <span class="kw-2">&amp;</span><span class="ident">b</span>.<span class="ident">ty</span>),
+                <span class="ident">GenericArgument::Constraint</span>(<span class="ident">c</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">c</span>.<span class="ident">bounds</span>.<span class="ident">iter</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">bound</span><span class="op">|</span> <span class="kw">match</span> <span class="ident">bound</span> {
+                    <span class="ident">syn::TypeParamBound::Lifetime</span>(<span class="ident">l</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">l</span> <span class="op">=</span><span class="op">=</span> <span class="ident">lf</span>,
+                    <span class="ident">syn::TypeParamBound::Trait</span>(<span class="ident">t</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented!</span>(),
                 }),
-                <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented</span><span class="macro">!</span>(),
+                <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented!</span>(),
             }),
             <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
         }),
-        <span class="ident">Type</span>::<span class="ident">BareFn</span>(<span class="ident">f</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented</span><span class="macro">!</span>(),
+        <span class="ident">Type::BareFn</span>(<span class="ident">f</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">unimplemented!</span>(),
         <span class="kw">_</span> <span class="op">=</span><span class="op">&gt;</span> <span class="bool-val">false</span>,
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite_dispatch"></div>
-    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite_dispatch" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div>
+    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>

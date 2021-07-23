@@ -1,7 +1,7 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/thermite/src/arch.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>arch.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/thermite/src/arch.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>arch.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
-                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../thermite/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
 <span id="4">  4</span>
@@ -233,20 +233,20 @@
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Organized target-feature intrinsics</span>
 
-<span class="macro">macro_rules</span><span class="macro">!</span> <span class="ident">import_intrinsics</span> {
+<span class="macro">macro_rules!</span> <span class="ident">import_intrinsics</span> {
     ($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span>),<span class="op">+</span>) <span class="op">=</span><span class="op">&gt;</span> {
         <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>)]</span>
-        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">arch</span>::<span class="ident">x86_64</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
+        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core::arch::x86_64</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
 
         <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>)]</span>
-        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core</span>::<span class="ident">arch</span>::<span class="ident">x86</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
+        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core::arch::x86</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
     };
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse</span> {
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> { <span class="ident">__m128</span>, <span class="ident">__m128d</span>, <span class="ident">__m128i</span> }
+    <span class="macro">import_intrinsics!</span> { <span class="ident">__m128</span>, <span class="ident">__m128d</span>, <span class="ident">__m128i</span> }
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_CMP_EQ_OQ</span>, <span class="ident">_CMP_EQ_OS</span>, <span class="ident">_CMP_EQ_UQ</span>, <span class="ident">_CMP_EQ_US</span>, <span class="ident">_CMP_FALSE_OQ</span>, <span class="ident">_CMP_FALSE_OS</span>, <span class="ident">_CMP_GE_OQ</span>, <span class="ident">_CMP_GE_OS</span>,
         <span class="ident">_CMP_GT_OQ</span>, <span class="ident">_CMP_GT_OS</span>, <span class="ident">_CMP_LE_OQ</span>, <span class="ident">_CMP_LE_OS</span>, <span class="ident">_CMP_LT_OQ</span>, <span class="ident">_CMP_LT_OS</span>, <span class="ident">_CMP_NEQ_OQ</span>, <span class="ident">_CMP_NEQ_OS</span>,
         <span class="ident">_CMP_NEQ_UQ</span>, <span class="ident">_CMP_NEQ_US</span>, <span class="ident">_CMP_NGE_UQ</span>, <span class="ident">_CMP_NGE_US</span>, <span class="ident">_CMP_NGT_UQ</span>, <span class="ident">_CMP_NGT_US</span>, <span class="ident">_CMP_NLE_UQ</span>, <span class="ident">_CMP_NLE_US</span>,
@@ -257,7 +257,7 @@
         <span class="ident">_MM_FROUND_TO_POS_INF</span>, <span class="ident">_MM_FROUND_TO_ZERO</span>, <span class="ident">_MM_FROUND_TRUNC</span>
     }
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_add_ps</span>, <span class="ident">_mm_add_ss</span>, <span class="ident">_mm_and_ps</span>, <span class="ident">_mm_andnot_ps</span>, <span class="ident">_mm_cmpeq_ps</span>, <span class="ident">_mm_cmpeq_ss</span>, <span class="ident">_mm_cmpge_ps</span>, <span class="ident">_mm_cmpge_ss</span>,
         <span class="ident">_mm_cmpgt_ps</span>, <span class="ident">_mm_cmpgt_ss</span>, <span class="ident">_mm_cmple_ps</span>, <span class="ident">_mm_cmple_ss</span>, <span class="ident">_mm_cmplt_ps</span>, <span class="ident">_mm_cmplt_ss</span>, <span class="ident">_mm_cmpneq_ps</span>,
         <span class="ident">_mm_cmpneq_ss</span>, <span class="ident">_mm_cmpnge_ps</span>, <span class="ident">_mm_cmpnge_ss</span>, <span class="ident">_mm_cmpngt_ps</span>, <span class="ident">_mm_cmpngt_ss</span>, <span class="ident">_mm_cmpnle_ps</span>, <span class="ident">_mm_cmpnle_ss</span>,
@@ -276,8 +276,8 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse2</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">sse</span>::<span class="kw-2">*</span>;
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_add_epi16</span>, <span class="ident">_mm_add_epi32</span>, <span class="ident">_mm_add_epi64</span>, <span class="ident">_mm_add_epi8</span>, <span class="ident">_mm_add_pd</span>, <span class="ident">_mm_add_sd</span>, <span class="ident">_mm_adds_epi16</span>, <span class="ident">_mm_adds_epi8</span>,
         <span class="ident">_mm_adds_epu16</span>, <span class="ident">_mm_adds_epu8</span>, <span class="ident">_mm_and_pd</span>, <span class="ident">_mm_and_si128</span>, <span class="ident">_mm_andnot_pd</span>, <span class="ident">_mm_andnot_si128</span>, <span class="ident">_mm_avg_epu16</span>,
         <span class="ident">_mm_avg_epu8</span>, <span class="ident">_mm_bslli_si128</span>, <span class="ident">_mm_bsrli_si128</span>, <span class="ident">_mm_castpd_ps</span>, <span class="ident">_mm_castpd_si128</span>, <span class="ident">_mm_castps_pd</span>, <span class="ident">_mm_castps_si128</span>,
@@ -314,16 +314,16 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse3</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">sse2</span>::<span class="kw-2">*</span>;
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse2</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_addsub_pd</span>, <span class="ident">_mm_addsub_ps</span>, <span class="ident">_mm_hadd_pd</span>, <span class="ident">_mm_hadd_ps</span>, <span class="ident">_mm_hsub_pd</span>, <span class="ident">_mm_hsub_ps</span>, <span class="ident">_mm_lddqu_si128</span>,
         <span class="ident">_mm_loaddup_pd</span>, <span class="ident">_mm_movedup_pd</span>, <span class="ident">_mm_movehdup_ps</span>, <span class="ident">_mm_moveldup_ps</span>
     }
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">ssse3</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">sse3</span>::<span class="kw-2">*</span>;
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse3</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_abs_epi16</span>, <span class="ident">_mm_abs_epi32</span>, <span class="ident">_mm_abs_epi8</span>, <span class="ident">_mm_alignr_epi8</span>, <span class="ident">_mm_hadd_epi16</span>, <span class="ident">_mm_hadd_epi32</span>,
         <span class="ident">_mm_hadds_epi16</span>, <span class="ident">_mm_hsub_epi16</span>, <span class="ident">_mm_hsub_epi32</span>, <span class="ident">_mm_hsubs_epi16</span>, <span class="ident">_mm_maddubs_epi16</span>, <span class="ident">_mm_mulhrs_epi16</span>,
         <span class="ident">_mm_shuffle_epi8</span>, <span class="ident">_mm_sign_epi16</span>, <span class="ident">_mm_sign_epi32</span>, <span class="ident">_mm_sign_epi8</span>
@@ -331,8 +331,8 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse41</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">ssse3</span>::<span class="kw-2">*</span>;
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::ssse3</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_blend_epi16</span>, <span class="ident">_mm_blend_pd</span>, <span class="ident">_mm_blend_ps</span>, <span class="ident">_mm_blendv_epi8</span>, <span class="ident">_mm_blendv_pd</span>, <span class="ident">_mm_blendv_ps</span>, <span class="ident">_mm_ceil_pd</span>,
         <span class="ident">_mm_ceil_ps</span>, <span class="ident">_mm_ceil_sd</span>, <span class="ident">_mm_ceil_ss</span>, <span class="ident">_mm_cmpeq_epi64</span>, <span class="ident">_mm_cvtepi16_epi32</span>, <span class="ident">_mm_cvtepi16_epi64</span>,
         <span class="ident">_mm_cvtepi32_epi64</span>, <span class="ident">_mm_cvtepi8_epi16</span>, <span class="ident">_mm_cvtepi8_epi32</span>, <span class="ident">_mm_cvtepi8_epi64</span>, <span class="ident">_mm_cvtepu16_epi32</span>,
@@ -347,9 +347,9 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse42</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">sse41</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse41</span>::<span class="kw-2">*</span>;
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_cmpestra</span>, <span class="ident">_mm_cmpestrc</span>, <span class="ident">_mm_cmpestri</span>, <span class="ident">_mm_cmpestrm</span>, <span class="ident">_mm_cmpestro</span>, <span class="ident">_mm_cmpestrs</span>, <span class="ident">_mm_cmpestrz</span>,
         <span class="ident">_mm_cmpgt_epi64</span>, <span class="ident">_mm_cmpistra</span>, <span class="ident">_mm_cmpistrc</span>, <span class="ident">_mm_cmpistri</span>, <span class="ident">_mm_cmpistrm</span>, <span class="ident">_mm_cmpistro</span>, <span class="ident">_mm_cmpistrs</span>,
         <span class="ident">_mm_cmpistrz</span>, <span class="ident">_mm_crc32_u16</span>, <span class="ident">_mm_crc32_u32</span>, <span class="ident">_mm_crc32_u64</span>, <span class="ident">_mm_crc32_u8</span>
@@ -358,16 +358,16 @@
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">f16c</span> {
     <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> { <span class="ident">_mm256_cvtph_ps</span>, <span class="ident">_mm256_cvtps_ph</span> }
+    <span class="macro">import_intrinsics!</span> { <span class="ident">_mm256_cvtph_ps</span>, <span class="ident">_mm256_cvtps_ph</span> }
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">avx</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">f16c</span>::<span class="kw-2">*</span>;
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">sse42</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::f16c</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse42</span>::<span class="kw-2">*</span>;
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> { <span class="ident">__m256</span>, <span class="ident">__m256d</span>, <span class="ident">__m256i</span> }
+    <span class="macro">import_intrinsics!</span> { <span class="ident">__m256</span>, <span class="ident">__m256d</span>, <span class="ident">__m256i</span> }
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm256_add_pd</span>, <span class="ident">_mm256_add_ps</span>, <span class="ident">_mm256_addsub_pd</span>, <span class="ident">_mm256_addsub_ps</span>, <span class="ident">_mm256_and_pd</span>, <span class="ident">_mm256_and_ps</span>,
         <span class="ident">_mm256_andnot_pd</span>, <span class="ident">_mm256_andnot_ps</span>, <span class="ident">_mm256_blend_pd</span>, <span class="ident">_mm256_blend_ps</span>, <span class="ident">_mm256_blendv_pd</span>, <span class="ident">_mm256_blendv_ps</span>,
         <span class="ident">_mm256_broadcast_pd</span>, <span class="ident">_mm256_broadcast_ps</span>, <span class="ident">_mm256_broadcast_sd</span>, <span class="ident">_mm_broadcast_ss</span>, <span class="ident">_mm256_broadcast_ss</span>,
@@ -407,7 +407,7 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">fma</span> {
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm_fmadd_pd</span>, <span class="ident">_mm256_fmadd_pd</span>, <span class="ident">_mm_fmadd_ps</span>, <span class="ident">_mm256_fmadd_ps</span>, <span class="ident">_mm_fmadd_sd</span>, <span class="ident">_mm_fmadd_ss</span>, <span class="ident">_mm_fmaddsub_pd</span>,
         <span class="ident">_mm256_fmaddsub_pd</span>, <span class="ident">_mm_fmaddsub_ps</span>, <span class="ident">_mm256_fmaddsub_ps</span>, <span class="ident">_mm_fmsub_pd</span>, <span class="ident">_mm256_fmsub_pd</span>, <span class="ident">_mm_fmsub_ps</span>,
         <span class="ident">_mm256_fmsub_ps</span>, <span class="ident">_mm_fmsub_sd</span>, <span class="ident">_mm_fmsub_ss</span>, <span class="ident">_mm_fmsubadd_pd</span>, <span class="ident">_mm256_fmsubadd_pd</span>, <span class="ident">_mm_fmsubadd_ps</span>,
@@ -417,10 +417,10 @@
 }
 
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">avx2</span> {
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">avx</span>::<span class="kw-2">*</span>;
-    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span>::<span class="ident">fma</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::avx</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::fma</span>::<span class="kw-2">*</span>;
 
-    <span class="macro">import_intrinsics</span><span class="macro">!</span> {
+    <span class="macro">import_intrinsics!</span> {
         <span class="ident">_mm256_abs_epi16</span>, <span class="ident">_mm256_abs_epi32</span>, <span class="ident">_mm256_abs_epi8</span>, <span class="ident">_mm256_add_epi16</span>, <span class="ident">_mm256_add_epi32</span>, <span class="ident">_mm256_add_epi64</span>,
         <span class="ident">_mm256_add_epi8</span>, <span class="ident">_mm256_adds_epi16</span>, <span class="ident">_mm256_adds_epi8</span>, <span class="ident">_mm256_adds_epu16</span>, <span class="ident">_mm256_adds_epu8</span>, <span class="ident">_mm256_alignr_epi8</span>,
         <span class="ident">_mm256_and_si256</span>, <span class="ident">_mm256_andnot_si256</span>, <span class="ident">_mm256_avg_epu16</span>, <span class="ident">_mm256_avg_epu8</span>, <span class="ident">_mm256_blend_epi16</span>, <span class="ident">_mm_blend_epi32</span>,
@@ -461,5 +461,5 @@
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite"></div>
-    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div>
+    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>
