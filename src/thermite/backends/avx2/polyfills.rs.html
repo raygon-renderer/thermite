@@ -754,7 +754,7 @@
 <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
 <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_srai_epi64x</span>(<span class="ident">v</span>: <span class="ident">__m256i</span>, <span class="ident">cnt</span>: <span class="ident">i32</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
     <span class="kw">let</span> <span class="ident">m</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi64x</span>(<span class="number">1i64</span> <span class="op">&lt;</span><span class="op">&lt;</span> (<span class="number">63</span> <span class="op">-</span> <span class="ident">cnt</span>));
-    <span class="ident">_mm256_sub_epi64</span>(<span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_srli_epi64</span>(<span class="ident">v</span>, <span class="ident">cnt</span>), <span class="ident">m</span>), <span class="ident">m</span>)
+    <span class="ident">_mm256_sub_epi64</span>(<span class="ident">_mm256_xor_si256</span>(<span class="ident">_mm256_srl_epi64</span>(<span class="ident">v</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">cnt</span>)), <span class="ident">m</span>), <span class="ident">m</span>)
 }
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">divider</span>::<span class="kw-2">*</span>;
@@ -818,54 +818,54 @@
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu32x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">multiplier</span>: <span class="ident">u32</span>, <span class="ident">shift</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">if</span> <span class="ident">multiplier</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
-            <span class="kw">return</span> <span class="ident">_mm256_srli_epi32</span>(<span class="ident">numers</span>, <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="kw">return</span> <span class="ident">_mm256_srl_epi32</span>(<span class="ident">numers</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>));
         }
 
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu32x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi32</span>(<span class="ident">multiplier</span> <span class="kw">as</span> <span class="ident">i32</span>));
 
         <span class="kw">if</span> <span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!</span><span class="op">=</span> <span class="number">0</span> {
-            <span class="ident">_mm256_srli_epi32</span>(
+            <span class="ident">_mm256_srl_epi32</span>(
                 <span class="ident">_mm256_add_epi32</span>(<span class="ident">_mm256_srli_epi32</span>(<span class="ident">_mm256_sub_epi32</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
-                (<span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x1F</span>) <span class="kw">as</span> <span class="ident">i32</span>,
+                <span class="ident">_mm_cvtsi32_si128</span>((<span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x1F</span>) <span class="kw">as</span> <span class="ident">i32</span>),
             )
         } <span class="kw">else</span> {
-            <span class="ident">_mm256_srli_epi32</span>(<span class="ident">q</span>, <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>)
+            <span class="ident">_mm256_srl_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>))
         }
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu32x_bf</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">multiplier</span>: <span class="ident">u32</span>, <span class="ident">shift</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu32x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi32</span>(<span class="ident">multiplier</span> <span class="kw">as</span> <span class="ident">i32</span>));
-        <span class="ident">_mm256_srli_epi32</span>(
+        <span class="ident">_mm256_srl_epi32</span>(
             <span class="ident">_mm256_add_epi32</span>(<span class="ident">_mm256_srli_epi32</span>(<span class="ident">_mm256_sub_epi32</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
-            <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>,
+            <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>),
         )
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu64x_bf</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">multiplier</span>: <span class="ident">u64</span>, <span class="ident">shift</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi64x</span>(<span class="ident">multiplier</span> <span class="kw">as</span> <span class="ident">i64</span>));
-        <span class="ident">_mm256_srli_epi64</span>(
+        <span class="ident">_mm256_srl_epi64</span>(
             <span class="ident">_mm256_add_epi64</span>(<span class="ident">_mm256_srli_epi64</span>(<span class="ident">_mm256_sub_epi64</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
-            <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>,
+            <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>),
         )
     }
 
     <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
     <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">_mm256_div_epu64x</span>(<span class="ident">numers</span>: <span class="ident">__m256i</span>, <span class="ident">multiplier</span>: <span class="ident">u64</span>, <span class="ident">shift</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">__m256i</span> {
         <span class="kw">if</span> <span class="ident">multiplier</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
-            <span class="kw">return</span> <span class="ident">_mm256_srli_epi64</span>(<span class="ident">numers</span>, <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="kw">return</span> <span class="ident">_mm256_srl_epi64</span>(<span class="ident">numers</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>));
         }
 
         <span class="kw">let</span> <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_mullhi_epu64x</span>(<span class="ident">numers</span>, <span class="ident">_mm256_set1_epi64x</span>(<span class="ident">multiplier</span> <span class="kw">as</span> <span class="ident">i64</span>));
 
         <span class="kw">if</span> <span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x40</span> <span class="op">!</span><span class="op">=</span> <span class="number">0</span> {
-            <span class="ident">_mm256_srli_epi64</span>(
+            <span class="ident">_mm256_srl_epi64</span>(
                 <span class="ident">_mm256_add_epi64</span>(<span class="ident">_mm256_srli_epi64</span>(<span class="ident">_mm256_sub_epi64</span>(<span class="ident">numers</span>, <span class="ident">q</span>), <span class="number">1</span>), <span class="ident">q</span>),
-                (<span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x3F</span>) <span class="kw">as</span> <span class="ident">i32</span>,
+                <span class="ident">_mm_cvtsi32_si128</span>((<span class="ident">shift</span> <span class="op">&amp;</span> <span class="number">0x3F</span>) <span class="kw">as</span> <span class="ident">i32</span>),
             )
         } <span class="kw">else</span> {
-            <span class="ident">_mm256_srli_epi64</span>(<span class="ident">q</span>, <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>)
+            <span class="ident">_mm256_srl_epi64</span>(<span class="ident">q</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>))
         }
     }
 
@@ -884,7 +884,7 @@
                 <span class="ident">numers</span>,
                 <span class="ident">_mm256_and_si256</span>(<span class="ident">_mm256_srai_epi32</span>(<span class="ident">numers</span>, <span class="number">31</span>), <span class="ident">round_to_zero_tweak</span>),
             );
-            <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_srai_epi32</span>(<span class="ident">q</span>, <span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_sra_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i32</span>));
 
             <span class="kw">let</span> <span class="ident">sign</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>(((<span class="ident">shift</span> <span class="kw">as</span> <span class="ident">i8</span>) <span class="op">&gt;</span><span class="op">&gt;</span> <span class="number">7</span>) <span class="kw">as</span> <span class="ident">i32</span>);
 
@@ -901,7 +901,7 @@
             }
 
             <span class="comment">// q &gt;&gt;= shift</span>
-            <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_srai_epi32</span>(<span class="ident">q</span>, (<span class="ident">shift</span> <span class="op">&amp;</span> <span class="ident">SHIFT_MASK</span>) <span class="kw">as</span> <span class="ident">i32</span>);
+            <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_sra_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm_cvtsi32_si128</span>((<span class="ident">shift</span> <span class="op">&amp;</span> <span class="ident">SHIFT_MASK</span>) <span class="kw">as</span> <span class="ident">i32</span>));
             <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_add_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm256_srli_epi32</span>(<span class="ident">q</span>, <span class="number">31</span>)); <span class="comment">// q += (q &lt; 0)</span>
 
             <span class="ident">q</span>
@@ -968,7 +968,7 @@
         <span class="kw">let</span> <span class="ident">q_sign</span> <span class="op">=</span> <span class="ident">_mm256_srai_epi32</span>(<span class="ident">q</span>, <span class="number">31</span>); <span class="comment">// q_sign = q &gt;&gt; 31</span>
         <span class="kw">let</span> <span class="ident">mask</span> <span class="op">=</span> <span class="ident">_mm256_set1_epi32</span>((<span class="number">1i32</span> <span class="op">&lt;</span><span class="op">&lt;</span> <span class="ident">masked_shift</span>) <span class="op">-</span> <span class="ident">is_power_of_2</span>);
         <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_add_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm256_and_si256</span>(<span class="ident">q_sign</span>, <span class="ident">mask</span>)); <span class="comment">// q = q + (q_sign &amp; mask)</span>
-        <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_srai_epi32</span>(<span class="ident">q</span>, <span class="ident">masked_shift</span> <span class="kw">as</span> <span class="ident">i32</span>); <span class="comment">// q &gt;&gt;= shift</span>
+        <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_sra_epi32</span>(<span class="ident">q</span>, <span class="ident">_mm_cvtsi32_si128</span>(<span class="ident">masked_shift</span> <span class="kw">as</span> <span class="ident">i32</span>)); <span class="comment">// q &gt;&gt;= shift</span>
         <span class="ident">q</span> <span class="op">=</span> <span class="ident">_mm256_sub_epi32</span>(<span class="ident">_mm256_xor_si256</span>(<span class="ident">q</span>, <span class="ident">sign</span>), <span class="ident">sign</span>); <span class="comment">// q = (q ^ sign) - sign</span>
 
         <span class="ident">q</span>
