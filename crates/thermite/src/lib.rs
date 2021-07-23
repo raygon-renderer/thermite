@@ -1235,17 +1235,41 @@ impl SimdInstructionSet {
 
     /// True fused multiply-add instructions are only used on AVX2 and above, so this checks for that ergonomically.
     pub const fn has_true_fma(self) -> bool {
-        match self {
-            //SimdInstructionSet::AVX512F | SimdInstructionSet::AVX512FBW |
-            SimdInstructionSet::AVX2 => true,
-            _ => false,
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if self as u8 >= SimdInstructionSet::AVX2 as u8 {
+            return true;
         }
+
+        false
     }
 
     /// On older platforms, fused multiply-add instructions can be emulated (expensively),
     /// but only if the `"emulate_fma"` Cargo feature is enabled.
     pub const fn has_emulated_fma(self) -> bool {
         !self.has_true_fma() && cfg!(feature = "emulate_fma")
+    }
+
+    /// The number of general-purpose registers that can be expected to be allocated to algorithms
+    pub const fn num_registers(self) -> usize {
+        #[allow(unreachable_patterns)]
+        match self {
+            // #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            // SimdInstructionSet::AVX512 => 32,
+
+            //
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            SimdInstructionSet::Scalar => 8,
+
+            // x86 has at least 16 registers for xmms, ymms, zmms
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            _ => 16,
+
+            // 32x64-bit or 32x128-bit registers
+            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            SimdInstructionSet::NEON => 32,
+
+            _ => 1,
+        }
     }
 }
 

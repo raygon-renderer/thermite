@@ -823,9 +823,10 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
 
                 sum += c;
             }
+
             /*
-            // This ended up being quite slow due to the recursion, but I'll leave it here for reference
-            PrecisionPolicy::Average if P::POLICY.unroll_loops && !P::POLICY.avoid_recursion => {
+            // This is still a WIP, unsure if it will yield any worth.
+            PrecisionPolicy::Average if P::POLICY.unroll_loops => {
                 #[dispatch(S, thermite = "crate")]
                 #[inline(always)]
                 fn pairwise_join<S: Simd, V: Add<V, Output = V>, F>(n: usize, s: usize, e: usize, f: &mut F) -> V
@@ -841,13 +842,35 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                 #[dispatch(S, thermite = "crate")]
                 #[inline(always)]
                 #[rustfmt::skip]
-                fn pairwise<S: Simd, V: Add<V, Output = V>, F>(s: usize, e: usize, f: &mut F) -> V
+                fn pairwise<S: Simd, V: Add<V, Output = V>, F>(mut s: usize, e: usize, f: &mut F) -> V
                 where
                     F: FnMut(usize) -> V,
                 {
-                    let n = e - s;
-                    match n {
-                        0 => unsafe { core::hint::unreachable_unchecked() },
+                    let mut n = e - s;
+
+                    if n > 128 {
+                        return pairwise_join::<S, V, F>(n, s, e, f);
+                    }
+
+                    // first iteration populates sum to avoid a zero
+                    let mut sum: V = (((f(s + 0)  + f(s + 1))  + (f(s + 2)  + f(s + 3)))
+                                   + (( f(s + 4)  + f(s + 5))  + (f(s + 6)  + f(s + 7))))
+                                   + (((f(s + 8)  + f(s + 9))  + (f(s + 10) + f(s + 11)))
+                                   + (( f(s + 12) + f(s + 13)) + (f(s + 14) + f(s + 15))));
+                    s += 16;
+
+                    let e2 = e - 16;
+                    while s <= e2 {
+                        sum = sum + ((((f(s + 0)  + f(s + 1))  + (f(s + 2)  + f(s + 3)))
+                                  +  (( f(s + 4)  + f(s + 5))  + (f(s + 6)  + f(s + 7))))
+                                  +  (((f(s + 8)  + f(s + 9))  + (f(s + 10) + f(s + 11)))
+                                  +  (( f(s + 12) + f(s + 13)) + (f(s + 14) + f(s + 15)))));
+
+                        s += 16;
+                    }
+
+                    sum + match (e - s) {
+                        0  => return sum,
                         1  =>    f(s+0),
                         2  =>    f(s+0)  + f(s+1),
                         3  =>    f(s+0)  + f(s+1)   + f(s+2),
@@ -879,7 +902,7 @@ pub trait SimdVectorizedMathInternal<S: Simd>:
                             + (( f(s+4)  + f(s+5))  + (f(s+6)  + f(s+7))))
                             + (((f(s+8)  + f(s+9))  + (f(s+10) + f(s+11)))
                             + (( f(s+12) + f(s+13)) +  f(s+14))),
-                        _ => pairwise_join::<S, V, F>(n, s, e, f),
+                        _ => unsafe { core::hint::unreachable_unchecked() },
                     }
                 }
 

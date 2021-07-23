@@ -1,8 +1,5 @@
-
 [workspace]
-members = [
-    "crates/*"
-]
+members = ["crates/*"]
 
 [profile.dev]
 opt-level = 2
