@@ -1379,6 +1379,21 @@
 <span id="1376">1376</span>
 <span id="1377">1377</span>
 <span id="1378">1378</span>
+<span id="1379">1379</span>
+<span id="1380">1380</span>
+<span id="1381">1381</span>
+<span id="1382">1382</span>
+<span id="1383">1383</span>
+<span id="1384">1384</span>
+<span id="1385">1385</span>
+<span id="1386">1386</span>
+<span id="1387">1387</span>
+<span id="1388">1388</span>
+<span id="1389">1389</span>
+<span id="1390">1390</span>
+<span id="1391">1391</span>
+<span id="1392">1392</span>
+<span id="1393">1393</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 <span class="comment">// stdmind for f16c instructions, core_intrinsics for likely/unlikely</span>
@@ -1593,6 +1608,21 @@
         <span class="self">Self</span><span class="ident">::Element</span>: <span class="ident">element::CastFrom</span><span class="op">&lt;</span><span class="ident">E</span><span class="op">&gt;</span>,
     {
         <span class="self">Self</span><span class="ident">::splat</span>(<span class="ident">element::CastFrom::cast_from</span>(<span class="ident">value</span>))
+    }
+
+    <span class="doccomment">/// Maps each lane of the vector to a new vector using a scalar function</span>
+    <span class="attribute">#[<span class="ident">inline</span>(<span class="ident">always</span>)]</span>
+    <span class="kw">fn</span> <span class="ident">map_scalar</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="self">self</span>, <span class="kw-2">mut</span> <span class="ident">func</span>: <span class="ident">F</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>
+    <span class="kw">where</span>
+        <span class="ident">F</span>: <span class="ident">FnMut</span>(<span class="ident">usize</span>, <span class="self">Self</span><span class="ident">::Element</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span><span class="ident">::Element</span>,
+    {
+        <span class="kw">for</span> <span class="ident">i</span> <span class="kw">in</span> <span class="number">0</span>..<span class="self">Self</span><span class="ident">::NUM_ELEMENTS</span> {
+            <span class="kw">unsafe</span> {
+                <span class="self">self</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">replace_unchecked</span>(<span class="ident">i</span>, <span class="ident">func</span>(<span class="ident">i</span>, <span class="self">self</span>.<span class="ident">extract_unchecked</span>(<span class="ident">i</span>)));
+            }
+        }
+
+        <span class="self">self</span>
     }
 
     <span class="doccomment">/// Shuffles between two vectors based on the static indices provided in `INDICES`</span>
