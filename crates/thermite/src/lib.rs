@@ -213,6 +213,21 @@ pub trait SimdVectorBase<S: Simd + ?Sized>: 'static + Sized + Copy + Debug + Def
         Self::splat(element::CastFrom::cast_from(value))
     }
 
+    /// Maps each lane of the vector to a new vector using a scalar function
+    #[inline(always)]
+    fn map_scalar<F>(mut self, mut func: F) -> Self
+    where
+        F: FnMut(usize, Self::Element) -> Self::Element,
+    {
+        for i in 0..Self::NUM_ELEMENTS {
+            unsafe {
+                self = self.replace_unchecked(i, func(i, self.extract_unchecked(i)));
+            }
+        }
+
+        self
+    }
+
     /// Shuffles between two vectors based on the static indices provided in `INDICES`
     ///
     /// See the [`shuffle!`] macro for more information.
