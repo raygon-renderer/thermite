@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["thermite","thermite_complex","thermite_dispatch","thermite_hyperdual","thermite_special"];
+window.ALL_CRATES = ["thermite","thermite2","thermite_complex","thermite_dispatch","thermite_hyperdual","thermite_special"];

@@ -1,0 +1,463 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/thermite2/src/arch.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>arch.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../thermite2/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../settings.html" title="settings"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+</pre><pre class="rust">
+<span class="doccomment">//! Organized target-feature intrinsics</span>
+
+<span class="macro">macro_rules!</span> <span class="ident">import_intrinsics</span> {
+    ($(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>:<span class="ident">ident</span>),<span class="op">+</span>) <span class="op">=</span><span class="op">&gt;</span> {
+        <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86_64&quot;</span>)]</span>
+        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core::arch::x86_64</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
+
+        <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">target_arch</span> <span class="op">=</span> <span class="string">&quot;x86&quot;</span>)]</span>
+        <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">core::arch::x86</span>::{$(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">name</span>),<span class="op">+</span>};
+    };
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse</span> {
+    <span class="macro">import_intrinsics!</span> { <span class="ident">__m128</span>, <span class="ident">__m128d</span>, <span class="ident">__m128i</span> }
+
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_CMP_EQ_OQ</span>, <span class="ident">_CMP_EQ_OS</span>, <span class="ident">_CMP_EQ_UQ</span>, <span class="ident">_CMP_EQ_US</span>, <span class="ident">_CMP_FALSE_OQ</span>, <span class="ident">_CMP_FALSE_OS</span>, <span class="ident">_CMP_GE_OQ</span>, <span class="ident">_CMP_GE_OS</span>,
+        <span class="ident">_CMP_GT_OQ</span>, <span class="ident">_CMP_GT_OS</span>, <span class="ident">_CMP_LE_OQ</span>, <span class="ident">_CMP_LE_OS</span>, <span class="ident">_CMP_LT_OQ</span>, <span class="ident">_CMP_LT_OS</span>, <span class="ident">_CMP_NEQ_OQ</span>, <span class="ident">_CMP_NEQ_OS</span>,
+        <span class="ident">_CMP_NEQ_UQ</span>, <span class="ident">_CMP_NEQ_US</span>, <span class="ident">_CMP_NGE_UQ</span>, <span class="ident">_CMP_NGE_US</span>, <span class="ident">_CMP_NGT_UQ</span>, <span class="ident">_CMP_NGT_US</span>, <span class="ident">_CMP_NLE_UQ</span>, <span class="ident">_CMP_NLE_US</span>,
+        <span class="ident">_CMP_NLT_UQ</span>, <span class="ident">_CMP_NLT_US</span>, <span class="ident">_CMP_ORD_Q</span>, <span class="ident">_CMP_ORD_S</span>, <span class="ident">_CMP_TRUE_UQ</span>, <span class="ident">_CMP_TRUE_US</span>, <span class="ident">_CMP_UNORD_Q</span>, <span class="ident">_CMP_UNORD_S</span>,
+
+        <span class="ident">_MM_FROUND_CEIL</span>, <span class="ident">_MM_FROUND_CUR_DIRECTION</span>, <span class="ident">_MM_FROUND_FLOOR</span>, <span class="ident">_MM_FROUND_NEARBYINT</span>, <span class="ident">_MM_FROUND_NINT</span>,
+        <span class="ident">_MM_FROUND_NO_EXC</span>, <span class="ident">_MM_FROUND_RAISE_EXC</span>, <span class="ident">_MM_FROUND_RINT</span>, <span class="ident">_MM_FROUND_TO_NEAREST_INT</span>, <span class="ident">_MM_FROUND_TO_NEG_INF</span>,
+        <span class="ident">_MM_FROUND_TO_POS_INF</span>, <span class="ident">_MM_FROUND_TO_ZERO</span>, <span class="ident">_MM_FROUND_TRUNC</span>
+    }
+
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_add_ps</span>, <span class="ident">_mm_add_ss</span>, <span class="ident">_mm_and_ps</span>, <span class="ident">_mm_andnot_ps</span>, <span class="ident">_mm_cmpeq_ps</span>, <span class="ident">_mm_cmpeq_ss</span>, <span class="ident">_mm_cmpge_ps</span>, <span class="ident">_mm_cmpge_ss</span>,
+        <span class="ident">_mm_cmpgt_ps</span>, <span class="ident">_mm_cmpgt_ss</span>, <span class="ident">_mm_cmple_ps</span>, <span class="ident">_mm_cmple_ss</span>, <span class="ident">_mm_cmplt_ps</span>, <span class="ident">_mm_cmplt_ss</span>, <span class="ident">_mm_cmpneq_ps</span>,
+        <span class="ident">_mm_cmpneq_ss</span>, <span class="ident">_mm_cmpnge_ps</span>, <span class="ident">_mm_cmpnge_ss</span>, <span class="ident">_mm_cmpngt_ps</span>, <span class="ident">_mm_cmpngt_ss</span>, <span class="ident">_mm_cmpnle_ps</span>, <span class="ident">_mm_cmpnle_ss</span>,
+        <span class="ident">_mm_cmpnlt_ps</span>, <span class="ident">_mm_cmpnlt_ss</span>, <span class="ident">_mm_cmpord_ps</span>, <span class="ident">_mm_cmpord_ss</span>, <span class="ident">_mm_cmpunord_ps</span>, <span class="ident">_mm_cmpunord_ss</span>, <span class="ident">_mm_comieq_ss</span>,
+        <span class="ident">_mm_comige_ss</span>, <span class="ident">_mm_comigt_ss</span>, <span class="ident">_mm_comile_ss</span>, <span class="ident">_mm_comilt_ss</span>, <span class="ident">_mm_comineq_ss</span>, <span class="ident">_mm_cvt_si2ss</span>, <span class="ident">_mm_cvt_ss2si</span>,
+        <span class="ident">_mm_cvtsi32_ss</span>, <span class="ident">_mm_cvtss_f32</span>, <span class="ident">_mm_cvtss_si32</span>, <span class="ident">_mm_cvtt_ss2si</span>, <span class="ident">_mm_cvttss_si32</span>, <span class="ident">_mm_div_ps</span>, <span class="ident">_mm_div_ss</span>,
+        <span class="ident">_mm_load_ps</span>, <span class="ident">_mm_load_ps1</span>, <span class="ident">_mm_load_ss</span>, <span class="ident">_mm_load1_ps</span>, <span class="ident">_mm_loadr_ps</span>, <span class="ident">_mm_loadu_ps</span>, <span class="ident">_mm_max_ps</span>, <span class="ident">_mm_max_ss</span>,
+        <span class="ident">_mm_min_ps</span>, <span class="ident">_mm_min_ss</span>, <span class="ident">_mm_move_ss</span>, <span class="ident">_mm_movehl_ps</span>, <span class="ident">_mm_movelh_ps</span>, <span class="ident">_mm_movemask_ps</span>, <span class="ident">_mm_mul_ps</span>, <span class="ident">_mm_mul_ss</span>,
+        <span class="ident">_mm_or_ps</span>, <span class="ident">_mm_prefetch</span>, <span class="ident">_mm_rcp_ps</span>, <span class="ident">_mm_rcp_ss</span>, <span class="ident">_mm_rsqrt_ps</span>, <span class="ident">_mm_rsqrt_ss</span>, <span class="ident">_mm_set_ps</span>, <span class="ident">_mm_set_ps1</span>,
+        <span class="ident">_mm_set_ss</span>, <span class="ident">_mm_set1_ps</span>, <span class="ident">_mm_setcsr</span>, <span class="ident">_mm_setr_ps</span>, <span class="ident">_mm_setzero_ps</span>, <span class="ident">_mm_sfence</span>, <span class="ident">_mm_shuffle_ps</span>, <span class="ident">_mm_sqrt_ps</span>,
+        <span class="ident">_mm_sqrt_ss</span>, <span class="ident">_mm_store_ps</span>, <span class="ident">_mm_store_ps1</span>, <span class="ident">_mm_store_ss</span>, <span class="ident">_mm_store1_ps</span>, <span class="ident">_mm_storer_ps</span>, <span class="ident">_mm_storeu_ps</span>,
+        <span class="ident">_mm_stream_ps</span>, <span class="ident">_mm_sub_ps</span>, <span class="ident">_mm_sub_ss</span>, <span class="ident">_mm_ucomieq_ss</span>, <span class="ident">_mm_ucomige_ss</span>, <span class="ident">_mm_ucomigt_ss</span>, <span class="ident">_mm_ucomile_ss</span>,
+        <span class="ident">_mm_ucomilt_ss</span>, <span class="ident">_mm_ucomineq_ss</span>, <span class="ident">_mm_undefined_ps</span>, <span class="ident">_mm_unpackhi_ps</span>, <span class="ident">_mm_unpacklo_ps</span>, <span class="ident">_mm_xor_ps</span>, <span class="ident">_mm_cvtsi64_ss</span>,
+        <span class="ident">_mm_cvtss_si64</span>, <span class="ident">_mm_cvttss_si64</span>, <span class="ident">_mm_loadu_si64</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse2</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_add_epi16</span>, <span class="ident">_mm_add_epi32</span>, <span class="ident">_mm_add_epi64</span>, <span class="ident">_mm_add_epi8</span>, <span class="ident">_mm_add_pd</span>, <span class="ident">_mm_add_sd</span>, <span class="ident">_mm_adds_epi16</span>, <span class="ident">_mm_adds_epi8</span>,
+        <span class="ident">_mm_adds_epu16</span>, <span class="ident">_mm_adds_epu8</span>, <span class="ident">_mm_and_pd</span>, <span class="ident">_mm_and_si128</span>, <span class="ident">_mm_andnot_pd</span>, <span class="ident">_mm_andnot_si128</span>, <span class="ident">_mm_avg_epu16</span>,
+        <span class="ident">_mm_avg_epu8</span>, <span class="ident">_mm_bslli_si128</span>, <span class="ident">_mm_bsrli_si128</span>, <span class="ident">_mm_castpd_ps</span>, <span class="ident">_mm_castpd_si128</span>, <span class="ident">_mm_castps_pd</span>, <span class="ident">_mm_castps_si128</span>,
+        <span class="ident">_mm_castsi128_pd</span>, <span class="ident">_mm_castsi128_ps</span>, <span class="ident">_mm_clflush</span>, <span class="ident">_mm_cmpeq_epi16</span>, <span class="ident">_mm_cmpeq_epi32</span>, <span class="ident">_mm_cmpeq_epi8</span>, <span class="ident">_mm_cmpeq_pd</span>,
+        <span class="ident">_mm_cmpeq_sd</span>, <span class="ident">_mm_cmpge_pd</span>, <span class="ident">_mm_cmpge_sd</span>, <span class="ident">_mm_cmpgt_epi16</span>, <span class="ident">_mm_cmpgt_epi32</span>, <span class="ident">_mm_cmpgt_epi8</span>, <span class="ident">_mm_cmpgt_pd</span>,
+        <span class="ident">_mm_cmpgt_sd</span>, <span class="ident">_mm_cmple_pd</span>, <span class="ident">_mm_cmple_sd</span>, <span class="ident">_mm_cmplt_epi16</span>, <span class="ident">_mm_cmplt_epi32</span>, <span class="ident">_mm_cmplt_epi8</span>, <span class="ident">_mm_cmplt_pd</span>,
+        <span class="ident">_mm_cmplt_sd</span>, <span class="ident">_mm_cmpneq_pd</span>, <span class="ident">_mm_cmpneq_sd</span>, <span class="ident">_mm_cmpnge_pd</span>, <span class="ident">_mm_cmpnge_sd</span>, <span class="ident">_mm_cmpngt_pd</span>, <span class="ident">_mm_cmpngt_sd</span>,
+        <span class="ident">_mm_cmpnle_pd</span>, <span class="ident">_mm_cmpnle_sd</span>, <span class="ident">_mm_cmpnlt_pd</span>, <span class="ident">_mm_cmpnlt_sd</span>, <span class="ident">_mm_cmpord_pd</span>, <span class="ident">_mm_cmpord_sd</span>, <span class="ident">_mm_cmpunord_pd</span>,
+        <span class="ident">_mm_cmpunord_sd</span>, <span class="ident">_mm_comieq_sd</span>, <span class="ident">_mm_comige_sd</span>, <span class="ident">_mm_comigt_sd</span>, <span class="ident">_mm_comile_sd</span>, <span class="ident">_mm_comilt_sd</span>, <span class="ident">_mm_comineq_sd</span>,
+        <span class="ident">_mm_cvtepi32_pd</span>, <span class="ident">_mm_cvtepi32_ps</span>, <span class="ident">_mm_cvtpd_epi32</span>, <span class="ident">_mm_cvtpd_ps</span>, <span class="ident">_mm_cvtps_epi32</span>, <span class="ident">_mm_cvtps_pd</span>, <span class="ident">_mm_cvtsd_f64</span>,
+        <span class="ident">_mm_cvtsd_si32</span>, <span class="ident">_mm_cvtsd_ss</span>, <span class="ident">_mm_cvtsi128_si32</span>, <span class="ident">_mm_cvtsi128_si64</span>, <span class="ident">_mm_cvtsi128_si64x</span>, <span class="ident">_mm_cvtsi32_sd</span>,
+        <span class="ident">_mm_cvtsi32_si128</span>, <span class="ident">_mm_cvtsi64x_si128</span>, <span class="ident">_mm_cvtss_sd</span>, <span class="ident">_mm_cvttpd_epi32</span>, <span class="ident">_mm_cvttps_epi32</span>, <span class="ident">_mm_cvttsd_si32</span>,
+        <span class="ident">_mm_cvttsd_si64</span>, <span class="ident">_mm_cvttsd_si64x</span>, <span class="ident">_mm_div_pd</span>, <span class="ident">_mm_div_sd</span>, <span class="ident">_mm_extract_epi16</span>, <span class="ident">_mm_insert_epi16</span>, <span class="ident">_mm_lfence</span>,
+        <span class="ident">_mm_load_pd</span>, <span class="ident">_mm_load_pd1</span>, <span class="ident">_mm_load_sd</span>, <span class="ident">_mm_load_si128</span>, <span class="ident">_mm_load1_pd</span>, <span class="ident">_mm_loadh_pd</span>, <span class="ident">_mm_loadl_epi64</span>, <span class="ident">_mm_loadl_pd</span>,
+        <span class="ident">_mm_loadr_pd</span>, <span class="ident">_mm_loadu_pd</span>, <span class="ident">_mm_loadu_si128</span>, <span class="ident">_mm_madd_epi16</span>, <span class="ident">_mm_maskmoveu_si128</span>, <span class="ident">_mm_max_epi16</span>, <span class="ident">_mm_max_epu8</span>,
+        <span class="ident">_mm_max_pd</span>, <span class="ident">_mm_max_sd</span>, <span class="ident">_mm_mfence</span>, <span class="ident">_mm_min_epi16</span>, <span class="ident">_mm_min_epu8</span>, <span class="ident">_mm_min_pd</span>, <span class="ident">_mm_min_sd</span>, <span class="ident">_mm_move_epi64</span>,
+        <span class="ident">_mm_move_sd</span>, <span class="ident">_mm_movemask_epi8</span>, <span class="ident">_mm_movemask_pd</span>, <span class="ident">_mm_mul_epu32</span>, <span class="ident">_mm_mul_pd</span>, <span class="ident">_mm_mul_sd</span>, <span class="ident">_mm_mulhi_epi16</span>,
+        <span class="ident">_mm_mulhi_epu16</span>, <span class="ident">_mm_mullo_epi16</span>, <span class="ident">_mm_or_pd</span>, <span class="ident">_mm_or_si128</span>, <span class="ident">_mm_packs_epi16</span>, <span class="ident">_mm_packs_epi32</span>, <span class="ident">_mm_packus_epi16</span>,
+        <span class="ident">_mm_pause</span>, <span class="ident">_mm_sad_epu8</span>, <span class="ident">_mm_set_epi16</span>, <span class="ident">_mm_set_epi32</span>, <span class="ident">_mm_set_epi64x</span>, <span class="ident">_mm_set_epi8</span>, <span class="ident">_mm_set_pd</span>, <span class="ident">_mm_set_pd1</span>,
+        <span class="ident">_mm_set_sd</span>, <span class="ident">_mm_set1_epi16</span>, <span class="ident">_mm_set1_epi32</span>, <span class="ident">_mm_set1_epi64x</span>, <span class="ident">_mm_set1_epi8</span>, <span class="ident">_mm_set1_pd</span>, <span class="ident">_mm_setr_epi16</span>,
+        <span class="ident">_mm_setr_epi32</span>, <span class="ident">_mm_setr_epi8</span>, <span class="ident">_mm_setr_pd</span>, <span class="ident">_mm_setzero_pd</span>, <span class="ident">_mm_setzero_si128</span>, <span class="ident">_mm_shuffle_epi32</span>, <span class="ident">_mm_shuffle_pd</span>,
+        <span class="ident">_mm_shufflehi_epi16</span>, <span class="ident">_mm_shufflelo_epi16</span>, <span class="ident">_mm_sll_epi16</span>, <span class="ident">_mm_sll_epi32</span>, <span class="ident">_mm_sll_epi64</span>, <span class="ident">_mm_slli_epi16</span>,
+        <span class="ident">_mm_slli_epi32</span>, <span class="ident">_mm_slli_epi64</span>, <span class="ident">_mm_slli_si128</span>, <span class="ident">_mm_sqrt_pd</span>, <span class="ident">_mm_sqrt_sd</span>, <span class="ident">_mm_sra_epi16</span>, <span class="ident">_mm_sra_epi32</span>,
+        <span class="ident">_mm_srai_epi16</span>, <span class="ident">_mm_srai_epi32</span>, <span class="ident">_mm_srl_epi16</span>, <span class="ident">_mm_srl_epi32</span>, <span class="ident">_mm_srl_epi64</span>, <span class="ident">_mm_srli_epi16</span>, <span class="ident">_mm_srli_epi32</span>,
+        <span class="ident">_mm_srli_epi64</span>, <span class="ident">_mm_srli_si128</span>, <span class="ident">_mm_store_pd</span>, <span class="ident">_mm_store_pd1</span>, <span class="ident">_mm_store_sd</span>, <span class="ident">_mm_store_si128</span>, <span class="ident">_mm_store1_pd</span>,
+        <span class="ident">_mm_storeh_pd</span>, <span class="ident">_mm_storel_epi64</span>, <span class="ident">_mm_storel_pd</span>, <span class="ident">_mm_storer_pd</span>, <span class="ident">_mm_storeu_pd</span>, <span class="ident">_mm_storeu_si128</span>, <span class="ident">_mm_stream_pd</span>,
+        <span class="ident">_mm_stream_si128</span>, <span class="ident">_mm_stream_si32</span>, <span class="ident">_mm_stream_si64</span>, <span class="ident">_mm_sub_epi16</span>, <span class="ident">_mm_sub_epi32</span>, <span class="ident">_mm_sub_epi64</span>, <span class="ident">_mm_sub_epi8</span>,
+        <span class="ident">_mm_sub_pd</span>, <span class="ident">_mm_sub_sd</span>, <span class="ident">_mm_subs_epi16</span>, <span class="ident">_mm_subs_epi8</span>, <span class="ident">_mm_subs_epu16</span>, <span class="ident">_mm_subs_epu8</span>, <span class="ident">_mm_ucomieq_sd</span>,
+        <span class="ident">_mm_ucomige_sd</span>, <span class="ident">_mm_ucomigt_sd</span>, <span class="ident">_mm_ucomile_sd</span>, <span class="ident">_mm_ucomilt_sd</span>, <span class="ident">_mm_ucomineq_sd</span>, <span class="ident">_mm_undefined_pd</span>,
+        <span class="ident">_mm_undefined_si128</span>, <span class="ident">_mm_unpackhi_epi16</span>, <span class="ident">_mm_unpackhi_epi32</span>, <span class="ident">_mm_unpackhi_epi64</span>, <span class="ident">_mm_unpackhi_epi8</span>,
+        <span class="ident">_mm_unpackhi_pd</span>, <span class="ident">_mm_unpacklo_epi16</span>, <span class="ident">_mm_unpacklo_epi32</span>, <span class="ident">_mm_unpacklo_epi64</span>, <span class="ident">_mm_unpacklo_epi8</span>, <span class="ident">_mm_unpacklo_pd</span>,
+        <span class="ident">_mm_xor_pd</span>, <span class="ident">_mm_xor_si128</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse3</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse2</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_addsub_pd</span>, <span class="ident">_mm_addsub_ps</span>, <span class="ident">_mm_hadd_pd</span>, <span class="ident">_mm_hadd_ps</span>, <span class="ident">_mm_hsub_pd</span>, <span class="ident">_mm_hsub_ps</span>, <span class="ident">_mm_lddqu_si128</span>,
+        <span class="ident">_mm_loaddup_pd</span>, <span class="ident">_mm_movedup_pd</span>, <span class="ident">_mm_movehdup_ps</span>, <span class="ident">_mm_moveldup_ps</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">ssse3</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse3</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_abs_epi16</span>, <span class="ident">_mm_abs_epi32</span>, <span class="ident">_mm_abs_epi8</span>, <span class="ident">_mm_alignr_epi8</span>, <span class="ident">_mm_hadd_epi16</span>, <span class="ident">_mm_hadd_epi32</span>,
+        <span class="ident">_mm_hadds_epi16</span>, <span class="ident">_mm_hsub_epi16</span>, <span class="ident">_mm_hsub_epi32</span>, <span class="ident">_mm_hsubs_epi16</span>, <span class="ident">_mm_maddubs_epi16</span>, <span class="ident">_mm_mulhrs_epi16</span>,
+        <span class="ident">_mm_shuffle_epi8</span>, <span class="ident">_mm_sign_epi16</span>, <span class="ident">_mm_sign_epi32</span>, <span class="ident">_mm_sign_epi8</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse41</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::ssse3</span>::<span class="kw-2">*</span>;
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_blend_epi16</span>, <span class="ident">_mm_blend_pd</span>, <span class="ident">_mm_blend_ps</span>, <span class="ident">_mm_blendv_epi8</span>, <span class="ident">_mm_blendv_pd</span>, <span class="ident">_mm_blendv_ps</span>, <span class="ident">_mm_ceil_pd</span>,
+        <span class="ident">_mm_ceil_ps</span>, <span class="ident">_mm_ceil_sd</span>, <span class="ident">_mm_ceil_ss</span>, <span class="ident">_mm_cmpeq_epi64</span>, <span class="ident">_mm_cvtepi16_epi32</span>, <span class="ident">_mm_cvtepi16_epi64</span>,
+        <span class="ident">_mm_cvtepi32_epi64</span>, <span class="ident">_mm_cvtepi8_epi16</span>, <span class="ident">_mm_cvtepi8_epi32</span>, <span class="ident">_mm_cvtepi8_epi64</span>, <span class="ident">_mm_cvtepu16_epi32</span>,
+        <span class="ident">_mm_cvtepu16_epi64</span>, <span class="ident">_mm_cvtepu32_epi64</span>, <span class="ident">_mm_cvtepu8_epi16</span>, <span class="ident">_mm_cvtepu8_epi32</span>, <span class="ident">_mm_cvtepu8_epi64</span>, <span class="ident">_mm_dp_pd</span>,
+        <span class="ident">_mm_dp_ps</span>, <span class="ident">_mm_extract_epi32</span>, <span class="ident">_mm_extract_epi64</span>, <span class="ident">_mm_extract_epi8</span>, <span class="ident">_mm_extract_ps</span>, <span class="ident">_mm_floor_pd</span>, <span class="ident">_mm_floor_ps</span>,
+        <span class="ident">_mm_floor_sd</span>, <span class="ident">_mm_floor_ss</span>, <span class="ident">_mm_insert_epi32</span>, <span class="ident">_mm_insert_epi64</span>, <span class="ident">_mm_insert_epi8</span>, <span class="ident">_mm_insert_ps</span>, <span class="ident">_mm_max_epi32</span>,
+        <span class="ident">_mm_max_epi8</span>, <span class="ident">_mm_max_epu16</span>, <span class="ident">_mm_max_epu32</span>, <span class="ident">_mm_min_epi32</span>, <span class="ident">_mm_min_epi8</span>, <span class="ident">_mm_min_epu16</span>, <span class="ident">_mm_min_epu32</span>,
+        <span class="ident">_mm_minpos_epu16</span>, <span class="ident">_mm_mpsadbw_epu8</span>, <span class="ident">_mm_mul_epi32</span>, <span class="ident">_mm_mullo_epi32</span>, <span class="ident">_mm_packus_epi32</span>, <span class="ident">_mm_round_pd</span>,
+        <span class="ident">_mm_round_ps</span>, <span class="ident">_mm_round_sd</span>, <span class="ident">_mm_round_ss</span>, <span class="ident">_mm_test_all_ones</span>, <span class="ident">_mm_test_all_zeros</span>, <span class="ident">_mm_test_mix_ones_zeros</span>,
+        <span class="ident">_mm_testc_si128</span>, <span class="ident">_mm_testnzc_si128</span>, <span class="ident">_mm_testz_si128</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">sse42</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse41</span>::<span class="kw-2">*</span>;
+
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_cmpestra</span>, <span class="ident">_mm_cmpestrc</span>, <span class="ident">_mm_cmpestri</span>, <span class="ident">_mm_cmpestrm</span>, <span class="ident">_mm_cmpestro</span>, <span class="ident">_mm_cmpestrs</span>, <span class="ident">_mm_cmpestrz</span>,
+        <span class="ident">_mm_cmpgt_epi64</span>, <span class="ident">_mm_cmpistra</span>, <span class="ident">_mm_cmpistrc</span>, <span class="ident">_mm_cmpistri</span>, <span class="ident">_mm_cmpistrm</span>, <span class="ident">_mm_cmpistro</span>, <span class="ident">_mm_cmpistrs</span>,
+        <span class="ident">_mm_cmpistrz</span>, <span class="ident">_mm_crc32_u16</span>, <span class="ident">_mm_crc32_u32</span>, <span class="ident">_mm_crc32_u64</span>, <span class="ident">_mm_crc32_u8</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">f16c</span> {
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;nightly&quot;</span>)]</span>
+    <span class="macro">import_intrinsics!</span> { <span class="ident">_mm256_cvtph_ps</span>, <span class="ident">_mm256_cvtps_ph</span> }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">avx</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::f16c</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::sse42</span>::<span class="kw-2">*</span>;
+
+    <span class="macro">import_intrinsics!</span> { <span class="ident">__m256</span>, <span class="ident">__m256d</span>, <span class="ident">__m256i</span> }
+
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm256_add_pd</span>, <span class="ident">_mm256_add_ps</span>, <span class="ident">_mm256_addsub_pd</span>, <span class="ident">_mm256_addsub_ps</span>, <span class="ident">_mm256_and_pd</span>, <span class="ident">_mm256_and_ps</span>,
+        <span class="ident">_mm256_andnot_pd</span>, <span class="ident">_mm256_andnot_ps</span>, <span class="ident">_mm256_blend_pd</span>, <span class="ident">_mm256_blend_ps</span>, <span class="ident">_mm256_blendv_pd</span>, <span class="ident">_mm256_blendv_ps</span>,
+        <span class="ident">_mm256_broadcast_pd</span>, <span class="ident">_mm256_broadcast_ps</span>, <span class="ident">_mm256_broadcast_sd</span>, <span class="ident">_mm_broadcast_ss</span>, <span class="ident">_mm256_broadcast_ss</span>,
+        <span class="ident">_mm256_castpd_ps</span>, <span class="ident">_mm256_castpd_si256</span>, <span class="ident">_mm256_castpd128_pd256</span>, <span class="ident">_mm256_castpd256_pd128</span>, <span class="ident">_mm256_castps_pd</span>,
+        <span class="ident">_mm256_castps_si256</span>, <span class="ident">_mm256_castps128_ps256</span>, <span class="ident">_mm256_castps256_ps128</span>, <span class="ident">_mm256_castsi128_si256</span>,
+        <span class="ident">_mm256_castsi256_pd</span>, <span class="ident">_mm256_castsi256_ps</span>, <span class="ident">_mm256_castsi256_si128</span>, <span class="ident">_mm256_ceil_pd</span>, <span class="ident">_mm256_ceil_ps</span>,
+        <span class="ident">_mm_cmp_pd</span>, <span class="ident">_mm256_cmp_pd</span>, <span class="ident">_mm_cmp_ps</span>, <span class="ident">_mm256_cmp_ps</span>, <span class="ident">_mm_cmp_sd</span>, <span class="ident">_mm_cmp_ss</span>, <span class="ident">_mm256_cvtepi32_pd</span>,
+        <span class="ident">_mm256_cvtepi32_ps</span>, <span class="ident">_mm256_cvtpd_epi32</span>, <span class="ident">_mm256_cvtpd_ps</span>, <span class="ident">_mm256_cvtps_epi32</span>, <span class="ident">_mm256_cvtps_pd</span>,
+        <span class="ident">_mm256_cvtsd_f64</span>, <span class="ident">_mm256_cvtsi256_si32</span>, <span class="ident">_mm256_cvtss_f32</span>, <span class="ident">_mm256_cvttpd_epi32</span>, <span class="ident">_mm256_cvttps_epi32</span>,
+        <span class="ident">_mm256_div_pd</span>, <span class="ident">_mm256_div_ps</span>, <span class="ident">_mm256_dp_ps</span>, <span class="ident">_mm256_extract_epi32</span>, <span class="ident">_mm256_extract_epi64</span>,
+        <span class="ident">_mm256_extractf128_pd</span>, <span class="ident">_mm256_extractf128_ps</span>, <span class="ident">_mm256_extractf128_si256</span>, <span class="ident">_mm256_floor_pd</span>, <span class="ident">_mm256_floor_ps</span>,
+        <span class="ident">_mm256_hadd_pd</span>, <span class="ident">_mm256_hadd_ps</span>, <span class="ident">_mm256_hsub_pd</span>, <span class="ident">_mm256_hsub_ps</span>, <span class="ident">_mm256_insert_epi16</span>, <span class="ident">_mm256_insert_epi32</span>,
+        <span class="ident">_mm256_insert_epi64</span>, <span class="ident">_mm256_insert_epi8</span>, <span class="ident">_mm256_insertf128_pd</span>, <span class="ident">_mm256_insertf128_ps</span>,
+        <span class="ident">_mm256_insertf128_si256</span>, <span class="ident">_mm256_lddqu_si256</span>, <span class="ident">_mm256_load_pd</span>, <span class="ident">_mm256_load_ps</span>, <span class="ident">_mm256_load_si256</span>,
+        <span class="ident">_mm256_loadu_pd</span>, <span class="ident">_mm256_loadu_ps</span>, <span class="ident">_mm256_loadu_si256</span>, <span class="ident">_mm256_loadu2_m128</span>, <span class="ident">_mm256_loadu2_m128d</span>,
+        <span class="ident">_mm256_loadu2_m128i</span>, <span class="ident">_mm_maskload_pd</span>, <span class="ident">_mm256_maskload_pd</span>, <span class="ident">_mm_maskload_ps</span>, <span class="ident">_mm256_maskload_ps</span>,
+        <span class="ident">_mm_maskstore_pd</span>, <span class="ident">_mm256_maskstore_pd</span>, <span class="ident">_mm_maskstore_ps</span>, <span class="ident">_mm256_maskstore_ps</span>, <span class="ident">_mm256_max_pd</span>, <span class="ident">_mm256_max_ps</span>,
+        <span class="ident">_mm256_min_pd</span>, <span class="ident">_mm256_min_ps</span>, <span class="ident">_mm256_movedup_pd</span>, <span class="ident">_mm256_movehdup_ps</span>, <span class="ident">_mm256_moveldup_ps</span>, <span class="ident">_mm256_movemask_pd</span>,
+        <span class="ident">_mm256_movemask_ps</span>, <span class="ident">_mm256_mul_pd</span>, <span class="ident">_mm256_mul_ps</span>, <span class="ident">_mm256_or_pd</span>, <span class="ident">_mm256_or_ps</span>, <span class="ident">_mm_permute_pd</span>,
+        <span class="ident">_mm256_permute_pd</span>, <span class="ident">_mm_permute_ps</span>, <span class="ident">_mm256_permute_ps</span>, <span class="ident">_mm256_permute2f128_pd</span>, <span class="ident">_mm256_permute2f128_ps</span>,
+        <span class="ident">_mm256_permute2f128_si256</span>, <span class="ident">_mm_permutevar_pd</span>, <span class="ident">_mm256_permutevar_pd</span>, <span class="ident">_mm_permutevar_ps</span>, <span class="ident">_mm256_permutevar_ps</span>,
+        <span class="ident">_mm256_rcp_ps</span>, <span class="ident">_mm256_round_pd</span>, <span class="ident">_mm256_round_ps</span>, <span class="ident">_mm256_rsqrt_ps</span>, <span class="ident">_mm256_set_epi16</span>, <span class="ident">_mm256_set_epi32</span>,
+        <span class="ident">_mm256_set_epi64x</span>, <span class="ident">_mm256_set_epi8</span>, <span class="ident">_mm256_set_m128</span>, <span class="ident">_mm256_set_m128d</span>, <span class="ident">_mm256_set_m128i</span>, <span class="ident">_mm256_set_pd</span>,
+        <span class="ident">_mm256_set_ps</span>, <span class="ident">_mm256_set1_epi16</span>, <span class="ident">_mm256_set1_epi32</span>, <span class="ident">_mm256_set1_epi64x</span>, <span class="ident">_mm256_set1_epi8</span>, <span class="ident">_mm256_set1_pd</span>,
+        <span class="ident">_mm256_set1_ps</span>, <span class="ident">_mm256_setr_epi16</span>, <span class="ident">_mm256_setr_epi32</span>, <span class="ident">_mm256_setr_epi64x</span>, <span class="ident">_mm256_setr_epi8</span>, <span class="ident">_mm256_setr_m128</span>,
+        <span class="ident">_mm256_setr_m128d</span>, <span class="ident">_mm256_setr_m128i</span>, <span class="ident">_mm256_setr_pd</span>, <span class="ident">_mm256_setr_ps</span>, <span class="ident">_mm256_setzero_pd</span>, <span class="ident">_mm256_setzero_ps</span>,
+        <span class="ident">_mm256_setzero_si256</span>, <span class="ident">_mm256_shuffle_pd</span>, <span class="ident">_mm256_shuffle_ps</span>, <span class="ident">_mm256_sqrt_pd</span>, <span class="ident">_mm256_sqrt_ps</span>, <span class="ident">_mm256_store_pd</span>,
+        <span class="ident">_mm256_store_ps</span>, <span class="ident">_mm256_store_si256</span>, <span class="ident">_mm256_storeu_pd</span>, <span class="ident">_mm256_storeu_ps</span>, <span class="ident">_mm256_storeu_si256</span>,
+        <span class="ident">_mm256_storeu2_m128</span>, <span class="ident">_mm256_storeu2_m128d</span>, <span class="ident">_mm256_storeu2_m128i</span>, <span class="ident">_mm256_stream_pd</span>, <span class="ident">_mm256_stream_ps</span>,
+        <span class="ident">_mm256_stream_si256</span>, <span class="ident">_mm256_sub_pd</span>, <span class="ident">_mm256_sub_ps</span>, <span class="ident">_mm_testc_pd</span>, <span class="ident">_mm256_testc_pd</span>, <span class="ident">_mm_testc_ps</span>,
+        <span class="ident">_mm256_testc_ps</span>, <span class="ident">_mm256_testc_si256</span>, <span class="ident">_mm_testnzc_pd</span>, <span class="ident">_mm256_testnzc_pd</span>, <span class="ident">_mm_testnzc_ps</span>, <span class="ident">_mm256_testnzc_ps</span>,
+        <span class="ident">_mm256_testnzc_si256</span>, <span class="ident">_mm_testz_pd</span>, <span class="ident">_mm256_testz_pd</span>, <span class="ident">_mm_testz_ps</span>, <span class="ident">_mm256_testz_ps</span>, <span class="ident">_mm256_testz_si256</span>,
+        <span class="ident">_mm256_undefined_pd</span>, <span class="ident">_mm256_undefined_ps</span>, <span class="ident">_mm256_undefined_si256</span>, <span class="ident">_mm256_unpackhi_pd</span>, <span class="ident">_mm256_unpackhi_ps</span>,
+        <span class="ident">_mm256_unpacklo_pd</span>, <span class="ident">_mm256_unpacklo_ps</span>, <span class="ident">_mm256_xor_pd</span>, <span class="ident">_mm256_xor_ps</span>, <span class="ident">_mm256_zeroall</span>, <span class="ident">_mm256_zeroupper</span>,
+        <span class="ident">_mm256_zextpd128_pd256</span>, <span class="ident">_mm256_zextps128_ps256</span>, <span class="ident">_mm256_zextsi128_si256</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">fma</span> {
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm_fmadd_pd</span>, <span class="ident">_mm256_fmadd_pd</span>, <span class="ident">_mm_fmadd_ps</span>, <span class="ident">_mm256_fmadd_ps</span>, <span class="ident">_mm_fmadd_sd</span>, <span class="ident">_mm_fmadd_ss</span>, <span class="ident">_mm_fmaddsub_pd</span>,
+        <span class="ident">_mm256_fmaddsub_pd</span>, <span class="ident">_mm_fmaddsub_ps</span>, <span class="ident">_mm256_fmaddsub_ps</span>, <span class="ident">_mm_fmsub_pd</span>, <span class="ident">_mm256_fmsub_pd</span>, <span class="ident">_mm_fmsub_ps</span>,
+        <span class="ident">_mm256_fmsub_ps</span>, <span class="ident">_mm_fmsub_sd</span>, <span class="ident">_mm_fmsub_ss</span>, <span class="ident">_mm_fmsubadd_pd</span>, <span class="ident">_mm256_fmsubadd_pd</span>, <span class="ident">_mm_fmsubadd_ps</span>,
+        <span class="ident">_mm256_fmsubadd_ps</span>, <span class="ident">_mm_fnmadd_pd</span>, <span class="ident">_mm256_fnmadd_pd</span>, <span class="ident">_mm_fnmadd_ps</span>, <span class="ident">_mm256_fnmadd_ps</span>, <span class="ident">_mm_fnmadd_sd</span>,
+        <span class="ident">_mm_fnmadd_ss</span>, <span class="ident">_mm_fnmsub_pd</span>, <span class="ident">_mm256_fnmsub_pd</span>, <span class="ident">_mm_fnmsub_ps</span>, <span class="ident">_mm256_fnmsub_ps</span>, <span class="ident">_mm_fnmsub_sd</span>, <span class="ident">_mm_fnmsub_ss</span>
+    }
+}
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">avx2</span> {
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::avx</span>::<span class="kw-2">*</span>;
+    <span class="kw">pub</span> <span class="kw">use</span> <span class="kw">super</span><span class="ident">::fma</span>::<span class="kw-2">*</span>;
+
+    <span class="macro">import_intrinsics!</span> {
+        <span class="ident">_mm256_abs_epi16</span>, <span class="ident">_mm256_abs_epi32</span>, <span class="ident">_mm256_abs_epi8</span>, <span class="ident">_mm256_add_epi16</span>, <span class="ident">_mm256_add_epi32</span>, <span class="ident">_mm256_add_epi64</span>,
+        <span class="ident">_mm256_add_epi8</span>, <span class="ident">_mm256_adds_epi16</span>, <span class="ident">_mm256_adds_epi8</span>, <span class="ident">_mm256_adds_epu16</span>, <span class="ident">_mm256_adds_epu8</span>, <span class="ident">_mm256_alignr_epi8</span>,
+        <span class="ident">_mm256_and_si256</span>, <span class="ident">_mm256_andnot_si256</span>, <span class="ident">_mm256_avg_epu16</span>, <span class="ident">_mm256_avg_epu8</span>, <span class="ident">_mm256_blend_epi16</span>, <span class="ident">_mm_blend_epi32</span>,
+        <span class="ident">_mm256_blend_epi32</span>, <span class="ident">_mm256_blendv_epi8</span>, <span class="ident">_mm_broadcastb_epi8</span>, <span class="ident">_mm256_broadcastb_epi8</span>, <span class="ident">_mm_broadcastd_epi32</span>,
+        <span class="ident">_mm256_broadcastd_epi32</span>, <span class="ident">_mm_broadcastq_epi64</span>, <span class="ident">_mm256_broadcastq_epi64</span>, <span class="ident">_mm_broadcastsd_pd</span>, <span class="ident">_mm256_broadcastsd_pd</span>,
+        <span class="ident">_mm256_broadcastsi128_si256</span>, <span class="ident">_mm_broadcastss_ps</span>, <span class="ident">_mm256_broadcastss_ps</span>, <span class="ident">_mm_broadcastw_epi16</span>,
+        <span class="ident">_mm256_broadcastw_epi16</span>, <span class="ident">_mm256_bslli_epi128</span>, <span class="ident">_mm256_bsrli_epi128</span>, <span class="ident">_mm256_cmpeq_epi16</span>, <span class="ident">_mm256_cmpeq_epi32</span>,
+        <span class="ident">_mm256_cmpeq_epi64</span>, <span class="ident">_mm256_cmpeq_epi8</span>, <span class="ident">_mm256_cmpgt_epi16</span>, <span class="ident">_mm256_cmpgt_epi32</span>, <span class="ident">_mm256_cmpgt_epi64</span>,
+        <span class="ident">_mm256_cmpgt_epi8</span>, <span class="ident">_mm256_cvtepi16_epi32</span>, <span class="ident">_mm256_cvtepi16_epi64</span>, <span class="ident">_mm256_cvtepi32_epi64</span>, <span class="ident">_mm256_cvtepi8_epi16</span>,
+        <span class="ident">_mm256_cvtepi8_epi32</span>, <span class="ident">_mm256_cvtepi8_epi64</span>, <span class="ident">_mm256_cvtepu16_epi32</span>, <span class="ident">_mm256_cvtepu16_epi64</span>, <span class="ident">_mm256_cvtepu32_epi64</span>,
+        <span class="ident">_mm256_cvtepu8_epi16</span>, <span class="ident">_mm256_cvtepu8_epi32</span>, <span class="ident">_mm256_cvtepu8_epi64</span>, <span class="ident">_mm256_extract_epi16</span>, <span class="ident">_mm256_extract_epi8</span>,
+        <span class="ident">_mm256_extracti128_si256</span>, <span class="ident">_mm256_hadd_epi16</span>, <span class="ident">_mm256_hadd_epi32</span>, <span class="ident">_mm256_hadds_epi16</span>, <span class="ident">_mm256_hsub_epi16</span>,
+        <span class="ident">_mm256_hsub_epi32</span>, <span class="ident">_mm256_hsubs_epi16</span>, <span class="ident">_mm_i32gather_epi32</span>, <span class="ident">_mm_mask_i32gather_epi32</span>, <span class="ident">_mm256_i32gather_epi32</span>,
+        <span class="ident">_mm256_mask_i32gather_epi32</span>, <span class="ident">_mm_i32gather_epi64</span>, <span class="ident">_mm_mask_i32gather_epi64</span>, <span class="ident">_mm256_i32gather_epi64</span>,
+        <span class="ident">_mm256_mask_i32gather_epi64</span>, <span class="ident">_mm_i32gather_pd</span>, <span class="ident">_mm_mask_i32gather_pd</span>, <span class="ident">_mm256_i32gather_pd</span>,
+        <span class="ident">_mm256_mask_i32gather_pd</span>, <span class="ident">_mm_i32gather_ps</span>, <span class="ident">_mm_mask_i32gather_ps</span>, <span class="ident">_mm256_i32gather_ps</span>, <span class="ident">_mm256_mask_i32gather_ps</span>,
+        <span class="ident">_mm_i64gather_epi32</span>, <span class="ident">_mm_mask_i64gather_epi32</span>, <span class="ident">_mm256_i64gather_epi32</span>, <span class="ident">_mm256_mask_i64gather_epi32</span>,
+        <span class="ident">_mm_i64gather_epi64</span>, <span class="ident">_mm_mask_i64gather_epi64</span>, <span class="ident">_mm256_i64gather_epi64</span>, <span class="ident">_mm256_mask_i64gather_epi64</span>,
+        <span class="ident">_mm_i64gather_pd</span>, <span class="ident">_mm_mask_i64gather_pd</span>, <span class="ident">_mm256_i64gather_pd</span>, <span class="ident">_mm256_mask_i64gather_pd</span>, <span class="ident">_mm_i64gather_ps</span>,
+        <span class="ident">_mm_mask_i64gather_ps</span>, <span class="ident">_mm256_i64gather_ps</span>, <span class="ident">_mm256_mask_i64gather_ps</span>, <span class="ident">_mm256_inserti128_si256</span>, <span class="ident">_mm256_madd_epi16</span>,
+        <span class="ident">_mm256_maddubs_epi16</span>, <span class="ident">_mm_maskload_epi32</span>, <span class="ident">_mm256_maskload_epi32</span>, <span class="ident">_mm_maskload_epi64</span>, <span class="ident">_mm256_maskload_epi64</span>,
+        <span class="ident">_mm_maskstore_epi32</span>, <span class="ident">_mm256_maskstore_epi32</span>, <span class="ident">_mm_maskstore_epi64</span>, <span class="ident">_mm256_maskstore_epi64</span>, <span class="ident">_mm256_max_epi16</span>,
+        <span class="ident">_mm256_max_epi32</span>, <span class="ident">_mm256_max_epi8</span>, <span class="ident">_mm256_max_epu16</span>, <span class="ident">_mm256_max_epu32</span>, <span class="ident">_mm256_max_epu8</span>, <span class="ident">_mm256_min_epi16</span>,
+        <span class="ident">_mm256_min_epi32</span>, <span class="ident">_mm256_min_epi8</span>, <span class="ident">_mm256_min_epu16</span>, <span class="ident">_mm256_min_epu32</span>, <span class="ident">_mm256_min_epu8</span>, <span class="ident">_mm256_movemask_epi8</span>,
+        <span class="ident">_mm256_mpsadbw_epu8</span>, <span class="ident">_mm256_mul_epi32</span>, <span class="ident">_mm256_mul_epu32</span>, <span class="ident">_mm256_mulhi_epi16</span>, <span class="ident">_mm256_mulhi_epu16</span>, <span class="ident">_mm256_mulhrs_epi16</span>,
+        <span class="ident">_mm256_mullo_epi16</span>, <span class="ident">_mm256_mullo_epi32</span>, <span class="ident">_mm256_or_si256</span>, <span class="ident">_mm256_packs_epi16</span>, <span class="ident">_mm256_packs_epi32</span>, <span class="ident">_mm256_packus_epi16</span>,
+        <span class="ident">_mm256_packus_epi32</span>, <span class="ident">_mm256_permute2x128_si256</span>, <span class="ident">_mm256_permute4x64_epi64</span>, <span class="ident">_mm256_permute4x64_pd</span>,
+        <span class="ident">_mm256_permutevar8x32_epi32</span>, <span class="ident">_mm256_permutevar8x32_ps</span>, <span class="ident">_mm256_sad_epu8</span>, <span class="ident">_mm256_shuffle_epi32</span>, <span class="ident">_mm256_shuffle_epi8</span>,
+        <span class="ident">_mm256_shufflehi_epi16</span>, <span class="ident">_mm256_shufflelo_epi16</span>, <span class="ident">_mm256_sign_epi16</span>, <span class="ident">_mm256_sign_epi32</span>, <span class="ident">_mm256_sign_epi8</span>,
+        <span class="ident">_mm256_sll_epi16</span>, <span class="ident">_mm256_sll_epi32</span>, <span class="ident">_mm256_sll_epi64</span>, <span class="ident">_mm256_slli_epi16</span>, <span class="ident">_mm256_slli_epi32</span>, <span class="ident">_mm256_slli_epi64</span>,
+        <span class="ident">_mm256_slli_si256</span>, <span class="ident">_mm_sllv_epi32</span>, <span class="ident">_mm256_sllv_epi32</span>, <span class="ident">_mm_sllv_epi64</span>, <span class="ident">_mm256_sllv_epi64</span>, <span class="ident">_mm256_sra_epi16</span>,
+        <span class="ident">_mm256_sra_epi32</span>, <span class="ident">_mm256_srai_epi16</span>, <span class="ident">_mm256_srai_epi32</span>, <span class="ident">_mm_srav_epi32</span>, <span class="ident">_mm256_srav_epi32</span>, <span class="ident">_mm256_srl_epi16</span>,
+        <span class="ident">_mm256_srl_epi32</span>, <span class="ident">_mm256_srl_epi64</span>, <span class="ident">_mm256_srli_epi16</span>, <span class="ident">_mm256_srli_epi32</span>, <span class="ident">_mm256_srli_epi64</span>, <span class="ident">_mm256_srli_si256</span>,
+        <span class="ident">_mm_srlv_epi32</span>, <span class="ident">_mm256_srlv_epi32</span>, <span class="ident">_mm_srlv_epi64</span>, <span class="ident">_mm256_srlv_epi64</span>, <span class="ident">_mm256_sub_epi16</span>, <span class="ident">_mm256_sub_epi32</span>,
+        <span class="ident">_mm256_sub_epi64</span>, <span class="ident">_mm256_sub_epi8</span>, <span class="ident">_mm256_subs_epi16</span>, <span class="ident">_mm256_subs_epi8</span>, <span class="ident">_mm256_subs_epu16</span>, <span class="ident">_mm256_subs_epu8</span>,
+        <span class="ident">_mm256_unpackhi_epi16</span>, <span class="ident">_mm256_unpackhi_epi32</span>, <span class="ident">_mm256_unpackhi_epi64</span>, <span class="ident">_mm256_unpackhi_epi8</span>, <span class="ident">_mm256_unpacklo_epi16</span>,
+        <span class="ident">_mm256_unpacklo_epi32</span>, <span class="ident">_mm256_unpacklo_epi64</span>, <span class="ident">_mm256_unpacklo_epi8</span>, <span class="ident">_mm256_xor_si256</span>
+    }
+}
+</pre></div>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="thermite2" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>
