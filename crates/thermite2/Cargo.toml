@@ -1,0 +1,48 @@
+[package]
+name = "thermite2"
+version = "0.1.1-alpha.0"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+authors = ["novacrazy <novacrazy@gmail.com>"]
+repository = "https://github.com/raygon-renderer/thermite"
+documentation = "https://raygon-renderer.github.io/thermite/"
+edition = "2018"
+
+[features]
+default = ["alloc", "math", "rng", "emulate_fma", "static_init"]
+# neon = ["thermite-dispatch/neon"]
+# wasm32 = ["thermite-dispatch/wasm32"]
+alloc = []
+nightly = []
+math = []
+rng = []
+emulate_fma = []
+
+[dependencies]
+# thermite-dispatch = { path = "../dispatch" }
+paste = "1"
+half = "1.6.0"
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies.static_init]
+version = "1"
+optional = true
+default_features = false
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
+core_detect = "1.0.0"
+
+# [dev-dependencies]
+# criterion = "0.3"
+# libm = "0.2.1"
+# plotly = "0.6.0"
+# rand = "0.8"
+# rand_xoshiro = "0.6.0"
+# no-panic = "0.1"
+# thermite-special = { path = "../thermite-special" }
+# thermite-complex = { path = "../thermite-complex" }
+# num-complex = "0.4"
+
+# [[bench]]
+# name = "main"
+# harness = false
+
