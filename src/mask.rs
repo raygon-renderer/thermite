@@ -70,6 +70,12 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::new(values.into()))
     }
 
+    /// Create a mask from a vector of the underlying element type, without
+    /// verifying the values.
+    pub const fn from_unchecked(value: Vector<R>) -> Self {
+        Self(value.0)
+    }
+
     /// Returns `true` if **all** bits in the mask are `true`.
     #[inline(always)]
     pub fn all(self) -> bool {
@@ -90,20 +96,20 @@ impl<R: MaskRegister> Mask<R> {
 
     /// Use the mask to select elements from `truthy` or `falsy` vectors.
     #[inline(always)]
-    pub fn select<S>(self, truthy: Vector<S>, falsy: Vector<S>) -> Vector<S>
+    pub fn select<S>(self, falsy: Vector<S>, truthy: Vector<S>) -> Vector<S>
     where
         S: CastMaskRegister<R, Lanes = R::Lanes>,
     {
-        Vector(S::blendv(S::mask_from(self.0), truthy.0, falsy.0))
+        Vector(S::blendv(S::mask_from(self.0), falsy.0, truthy.0))
     }
 
     /// Use the mask to select elements from `truthy` or `falsy` masks.
     #[inline(always)]
-    pub fn select_mask<M>(self, truthy: Mask<M>, falsy: Mask<M>) -> Mask<M>
+    pub fn select_mask<M>(self, falsy: Mask<M>, truthy: Mask<M>) -> Mask<M>
     where
         M: CastMaskRegister<R, Lanes = R::Lanes>,
     {
-        Mask(M::blendv(M::mask_from(self.0), truthy.0, falsy.0))
+        Mask(M::blendv(M::mask_from(self.0), falsy.0, truthy.0))
     }
 }
 

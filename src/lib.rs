@@ -60,7 +60,7 @@ pub mod vector;
 pub mod backend;
 pub mod divider;
 pub mod mask;
-//pub mod math;
+pub mod math;
 pub mod register;
 pub mod simd;
 

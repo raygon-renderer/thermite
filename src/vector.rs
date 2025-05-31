@@ -520,6 +520,16 @@ impl<R: FloatRegister> Vector<R> {
     /// A vector of the smallest positive value in the element type.
     pub const EPSILON: Self = Self(R::EPSILON);
 
+    #[inline(always)]
+    pub fn is_infinite(self) -> Mask<R> {
+        Mask(R::is_infinite(self.0))
+    }
+
+    #[inline(always)]
+    pub fn is_nan(self) -> Mask<R> {
+        Mask(R::is_nan(self.0))
+    }
+
     // TODO: Move to math library?
     // #[inline(always)]
     // pub fn lerp(self, a: Self, b: Self) -> Self {

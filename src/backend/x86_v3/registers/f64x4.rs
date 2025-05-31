@@ -86,6 +86,8 @@ impl Register for F64x4V3 {
         unsafe { arch::_mm256_blendv_pd(lhs, rhs, mask) }
     }
 
+    const HAS_MSB_BLENDV: bool = true;
+
     #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
         unsafe {
@@ -318,8 +320,8 @@ impl SignedRegister for F64x4V3 {
 impl FloatRegister for F64x4V3 {
     const HAS_TRUE_FMA: bool = true;
 
-    // type Bits = super::U64x4V3;
-    // type Signed = super::I64x4V3;
+    type Bits = super::U64x4V3;
+    type Signed = super::I64x4V3;
 
     const NEG_ZERO: Self::Storage = reg::<Self, 4>([-0.0; 4]);
     const EPSILON: Self::Storage = reg::<Self, 4>([f64::EPSILON; 4]);
@@ -391,10 +393,8 @@ impl FloatRegister for F64x4V3 {
         unsafe { arch::_mm256_sqrt_pd(value) }
     }
 
-    #[inline(always)]
-    fn rcp(value: Self::Storage) -> Self::Storage {
-        Self::div(Self::ONE, value)
-    }
+    const HAS_APPROX_RCP: bool = false;
+    const HAS_APPROX_RSQRT: bool = false;
 
     #[inline(always)]
     fn floor(value: Self::Storage) -> Self::Storage {

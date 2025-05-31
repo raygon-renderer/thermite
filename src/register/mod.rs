@@ -52,6 +52,43 @@ where
     unsafe { core::mem::zeroed() }
 }
 
+pub trait Interoperable<A: MaskRegister<Lanes = Self::Lanes>, B: MaskRegister<Lanes = Self::Lanes>>: MaskRegister
+// bits
++ BitsRegister<Self>
++ BitsRegister<A>
++ BitsRegister<B>
+// casts
++ CastRegister<Self>
++ CastRegister<A>
++ CastRegister<B>
+// masks
++ CastMaskRegister<Self>
++ CastMaskRegister<A>
++ CastMaskRegister<B>
+where
+A: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>,
+B: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>
+{}
+
+impl<R, A, B> Interoperable<A, B> for R
+where
+    R: MaskRegister
+        + BitsRegister<Self>
+        + BitsRegister<A>
+        + BitsRegister<B>
+        + CastRegister<Self>
+        + CastRegister<A>
+        + CastRegister<B>
+        + CastMaskRegister<Self>
+        + CastMaskRegister<A>
+        + CastMaskRegister<B>,
+    A: MaskRegister<Lanes = R::Lanes>,
+    B: MaskRegister<Lanes = R::Lanes>,
+    A: BitsRegister<R> + CastRegister<R> + CastMaskRegister<R>,
+    B: BitsRegister<R> + CastRegister<R> + CastMaskRegister<R>,
+{
+}
+
 /// A trait for array length types representing the number of lanes in a SIMD register.
 pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> {}
 impl<T> Lanes for T where T: ArrayLength + core::ops::Shl<typenum::B1> {}
@@ -175,6 +212,9 @@ pub trait Register: Sized + 'static {
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         Self::or(Self::and(mask, lhs), Self::andnot(mask, rhs))
     }
+
+    /// Indicates if blendv only cares about the most significant bit (MSB) of the mask.
+    const HAS_MSB_BLENDV: bool;
 
     fn shr(value: Self::Storage, shift: u32) -> Self::Storage;
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage;
@@ -370,12 +410,12 @@ pub trait PartialOrdRegister: MaskRegister {
 
     #[inline(always)]
     fn lt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self::ge(rhs, lhs)
+        Self::gt(rhs, lhs)
     }
 
     #[inline(always)]
     fn le(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self::gt(rhs, lhs)
+        Self::ge(rhs, lhs)
     }
 
     #[inline(always)]
@@ -443,9 +483,11 @@ pub trait SignedRegister: NumericRegister {
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: num_traits::float::FloatCore {
-    type Bits;
-    type Signed;
+pub trait FloatElement: num_traits::float::FloatCore + From<i8> {
+    type Bits: MaskElement;
+    type Signed: MaskElement;
+
+    fn from_f32(value: f32) -> Self;
 
     fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
     fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
@@ -458,6 +500,7 @@ const _: () = {
     impl FloatElement for f32 {
         type Bits = u32;
         type Signed = i32;
+        #[inline(always)] fn from_f32(value: f32) -> Self { value }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, -acc) }
         #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, -rhs, acc) }
@@ -466,6 +509,7 @@ const _: () = {
     impl FloatElement for f64 {
         type Bits = u64;
         type Signed = i64;
+        #[inline(always)] fn from_f32(value: f32) -> Self { value as f64 }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, -acc) }
         #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, -rhs, acc) }
@@ -488,17 +532,13 @@ where
     lhs
 }
 
-pub trait FloatRegister: SignedRegister<Element: FloatElement> {
+pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<Self::Bits, Self::Signed> {
+    type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
+        + Interoperable<Self, Self::Signed>;
+    type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Signed>
+        + Interoperable<Self, Self::Bits>;
+
     const HAS_TRUE_FMA: bool;
-
-    // type Bits: CastMaskRegister<Self, Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
-    //     + BitsRegister<Self, Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
-    //     + BitsRegister<Self::Signed, Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
-    //     + UnsignedIntegerRegister;
-
-    // type Signed: SignedRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Signed>
-    //     + IntegerRegister
-    //     + CastRegister<Self>;
 
     const NEG_ZERO: Self::Storage;
     const INFINITY: Self::Storage;
@@ -580,12 +620,19 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> {
     }
 
     fn sqrt(value: Self::Storage) -> Self::Storage;
-    fn rcp(value: Self::Storage) -> Self::Storage;
+
+    #[inline(always)]
+    fn rcp(value: Self::Storage) -> Self::Storage {
+        Self::div(Self::ONE, value)
+    }
 
     #[inline(always)]
     fn rsqrt(value: Self::Storage) -> Self::Storage {
         Self::rcp(Self::sqrt(value))
     }
+
+    const HAS_APPROX_RSQRT: bool;
+    const HAS_APPROX_RCP: bool;
 
     fn floor(value: Self::Storage) -> Self::Storage;
     fn ceil(value: Self::Storage) -> Self::Storage;
@@ -687,3 +734,6 @@ pub trait UnsignedIntegerRegister: IntegerRegister {
 
     // TODO: Interleave bits?
 }
+
+pub trait SignedIntegerRegister: IntegerRegister + SignedRegister {}
+impl<T> SignedIntegerRegister for T where T: IntegerRegister + SignedRegister {}

@@ -52,13 +52,15 @@ impl Register for U64x2V3 {
 
     #[inline(always)]
     fn not(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_xor_si128(value, arch::_mm_set1_epi64x(!0)) }
+        unsafe { arch::_mm_xor_si128(value, arch::_mm_set1_epi8(-1)) }
     }
 
     #[inline(always)]
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_blendv_epi8(lhs, rhs, mask) }
     }
+
+    const HAS_MSB_BLENDV: bool = false;
 
     #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {

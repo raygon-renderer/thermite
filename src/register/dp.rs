@@ -150,6 +150,8 @@ where
         Self(R::blendv(mask.0, lhs.0, rhs.0), R::blendv(mask.1, lhs.1, rhs.1))
     }
 
+    const HAS_MSB_BLENDV: bool = R::HAS_MSB_BLENDV;
+
     #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
         Self(R::shl(value.0, shift), R::shl(value.1, shift))
@@ -402,6 +404,9 @@ where
 {
     const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
 
+    type Bits = DoublePumpRegister<R::Bits>;
+    type Signed = DoublePumpRegister<R::Signed>;
+
     const NEG_ZERO: Self::Storage = Self(R::NEG_ZERO, R::NEG_ZERO);
     const INFINITY: Self::Storage = Self(R::INFINITY, R::INFINITY);
     const NEG_INFINITY: Self::Storage = Self(R::NEG_INFINITY, R::NEG_INFINITY);
@@ -487,6 +492,9 @@ where
     fn rsqrt(value: Self::Storage) -> Self::Storage {
         Self(R::rsqrt(value.0), R::rsqrt(value.1))
     }
+
+    const HAS_APPROX_RSQRT: bool = R::HAS_APPROX_RSQRT;
+    const HAS_APPROX_RCP: bool = R::HAS_APPROX_RCP;
 
     #[inline(always)]
     fn rcp(value: Self::Storage) -> Self::Storage {

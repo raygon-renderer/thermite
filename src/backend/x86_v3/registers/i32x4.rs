@@ -52,13 +52,15 @@ impl Register for I32x4V3 {
 
     #[inline(always)]
     fn not(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_xor_si128(value, arch::_mm_setzero_si128()) }
+        unsafe { arch::_mm_xor_si128(value, arch::_mm_set1_epi8(-1)) }
     }
 
     #[inline(always)]
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_blendv_epi8(lhs, rhs, mask) }
     }
+
+    const HAS_MSB_BLENDV: bool = false;
 
     #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
@@ -176,11 +178,6 @@ impl PartialOrdRegister for I32x4V3 {
     #[inline(always)]
     fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_cmpgt_epi32(lhs, rhs) }
-    }
-
-    #[inline(always)]
-    fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_cmpgt_epi32(rhs, lhs) }
     }
 
     #[inline(always)]

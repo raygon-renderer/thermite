@@ -4,47 +4,15 @@ use generic_array::{
     ArrayLength,
     typenum::{U2, U4, U8, U16},
 };
+use num_traits::Signed;
 
 use crate::{
     Vector,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, MaskRegister, Register,
-        SignedRegister, UnsignedIntegerRegister,
+        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Interoperable, MaskRegister,
+        Register, SignedIntegerRegister, SignedRegister, UnsignedIntegerRegister,
     },
 };
-
-pub trait Interoperable<A: MaskRegister<Lanes = Self::Lanes>, B: MaskRegister<Lanes = Self::Lanes>>: MaskRegister
-// bits
-+ BitsRegister<Self>
-+ BitsRegister<A>
-+ BitsRegister<B>
-// casts
-+ CastRegister<Self>
-+ CastRegister<A>
-+ CastRegister<B>
-// masks
-+ CastMaskRegister<Self>
-+ CastMaskRegister<A>
-+ CastMaskRegister<B>
-
-{}
-
-impl<R, A, B> Interoperable<A, B> for R
-where
-    R: MaskRegister
-        + BitsRegister<Self>
-        + BitsRegister<A>
-        + BitsRegister<B>
-        + CastRegister<Self>
-        + CastRegister<A>
-        + CastRegister<B>
-        + CastMaskRegister<Self>
-        + CastMaskRegister<A>
-        + CastMaskRegister<B>,
-    A: MaskRegister<Lanes = R::Lanes>,
-    B: MaskRegister<Lanes = R::Lanes>,
-{
-}
 
 #[rustfmt::skip]
 pub trait NativeSimd {
@@ -67,52 +35,52 @@ pub trait NativeSimd {
 #[rustfmt::skip]
 pub trait Simd: NativeSimd {
     // 128/32-bit SIMD types
-    type f32x4: Interoperable<Self::i32x4, Self::u32x4, Lanes = U4, Element = f32> + FloatRegister
+    type f32x4: Interoperable<Self::i32x4, Self::u32x4, Lanes = U4, Element = f32> + FloatRegister<Bits = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::f64x4>;
-    type i32x4: Interoperable<Self::f32x4, Self::u32x4, Lanes = U4, Element = i32> + IntegerRegister + SignedRegister
+    type i32x4: Interoperable<Self::f32x4, Self::u32x4, Lanes = U4, Element = i32> + SignedIntegerRegister
         + CastRegister<Self::i64x4>;
     type u32x4: Interoperable<Self::f32x4, Self::i32x4, Lanes = U4, Element = u32> + UnsignedIntegerRegister
         + CastRegister<Self::u64x4>;
 
     // 256/32-bit SIMD types
-    type f32x8: Interoperable<Self::i32x8, Self::u32x8, Lanes = U8, Element = f32> + FloatRegister
+    type f32x8: Interoperable<Self::i32x8, Self::u32x8, Lanes = U8, Element = f32> + FloatRegister<Bits = Self::u32x8, Signed = Self::i32x8>
         + CastRegister<Self::f64x8>;
-    type i32x8: Interoperable<Self::f32x8, Self::u32x8, Lanes = U8, Element = i32> + IntegerRegister + SignedRegister
+    type i32x8: Interoperable<Self::f32x8, Self::u32x8, Lanes = U8, Element = i32> + SignedIntegerRegister
         + CastRegister<Self::i64x8>;
     type u32x8: Interoperable<Self::f32x8, Self::i32x8, Lanes = U8, Element = u32> + UnsignedIntegerRegister
         + CastRegister<Self::u64x8>;
 
     // 128/64-bit SIMD types
-    type f64x2: Interoperable<Self::i64x2, Self::u64x2, Lanes = U2, Element = f64> + FloatRegister;
-    type i64x2: Interoperable<Self::f64x2, Self::u64x2, Lanes = U2, Element = i64> + IntegerRegister + SignedRegister;
+    type f64x2: Interoperable<Self::i64x2, Self::u64x2, Lanes = U2, Element = f64> + FloatRegister<Bits = Self::u64x2, Signed = Self::i64x2>;
+    type i64x2: Interoperable<Self::f64x2, Self::u64x2, Lanes = U2, Element = i64> + SignedIntegerRegister;
     type u64x2: Interoperable<Self::f64x2, Self::i64x2, Lanes = U2, Element = u64> + UnsignedIntegerRegister;
 
     // 256/64-bit SIMD types
-    type f64x4: Interoperable<Self::i64x4, Self::u64x4, Lanes = U4, Element = f64> + FloatRegister
+    type f64x4: Interoperable<Self::i64x4, Self::u64x4, Lanes = U4, Element = f64> + FloatRegister<Bits = Self::u64x4, Signed = Self::i64x4>
         + CastRegister<Self::f32x4>;
-    type i64x4: Interoperable<Self::f64x4, Self::u64x4, Lanes = U4, Element = i64> + IntegerRegister + SignedRegister
+    type i64x4: Interoperable<Self::f64x4, Self::u64x4, Lanes = U4, Element = i64> + SignedIntegerRegister
         + CastRegister<Self::i32x4>;
     type u64x4: Interoperable<Self::f64x4, Self::i64x4, Lanes = U4, Element = u64> + UnsignedIntegerRegister
         + CastRegister<Self::u32x4>;
 
     // 512/64-bit SIMD types
-    type f64x8: Interoperable<Self::i64x8, Self::u64x8, Lanes = U8, Element = f64> + FloatRegister
+    type f64x8: Interoperable<Self::i64x8, Self::u64x8, Lanes = U8, Element = f64> + FloatRegister<Bits = Self::u64x8, Signed = Self::i64x8>
         + CastRegister<Self::f32x8>;
-    type i64x8: Interoperable<Self::f64x8, Self::u64x8, Lanes = U8, Element = i64> + IntegerRegister + SignedRegister
+    type i64x8: Interoperable<Self::f64x8, Self::u64x8, Lanes = U8, Element = i64> + SignedIntegerRegister
         + CastRegister<Self::i32x8>;
     type u64x8: Interoperable<Self::f64x8, Self::i64x8, Lanes = U8, Element = u64> + UnsignedIntegerRegister
         + CastRegister<Self::u32x8>;
 
     // 512/32-bit SIMD types
-    type f32x16: Interoperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32> + FloatRegister
+    type f32x16: Interoperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32> + FloatRegister<Bits = Self::u32x16, Signed = Self::i32x16>
         + CastRegister<Self::f64x16>;
-    type i32x16: Interoperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32> + IntegerRegister + SignedRegister
+    type i32x16: Interoperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32> + SignedIntegerRegister
         + CastRegister<Self::i64x16>;
     type u32x16: Interoperable<Self::f32x16, Self::i32x16, Lanes = U16, Element = u32> + UnsignedIntegerRegister
         + CastRegister<Self::u64x16>;
 
     // 1024/64-bit SIMD types
-    type f64x16: Interoperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64> + FloatRegister
+    type f64x16: Interoperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64> + FloatRegister<Bits = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::f32x16>;
     type i64x16: Interoperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64> + IntegerRegister + SignedRegister
         + CastRegister<Self::i32x16>;

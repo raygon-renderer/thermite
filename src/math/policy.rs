@@ -26,6 +26,24 @@ pub enum PrecisionPolicy {
     Reference = 9,
 }
 
+impl PrecisionPolicy {
+    pub const fn eq(self, other: PrecisionPolicy) -> bool {
+        (self as u8) == (other as u8)
+    }
+    pub const fn gt(self, other: PrecisionPolicy) -> bool {
+        (self as u8) > (other as u8)
+    }
+    pub const fn ge(self, other: PrecisionPolicy) -> bool {
+        (self as u8) >= (other as u8)
+    }
+    pub const fn lt(self, other: PrecisionPolicy) -> bool {
+        (self as u8) < (other as u8)
+    }
+    pub const fn le(self, other: PrecisionPolicy) -> bool {
+        (self as u8) <= (other as u8)
+    }
+}
+
 /// Customizable Policy Parameters
 pub struct PolicyParameters {
     /// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.
