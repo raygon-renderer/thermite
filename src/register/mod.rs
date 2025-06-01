@@ -476,6 +476,16 @@ pub trait SignedRegister: NumericRegister {
     }
 
     fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage;
+
+    /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
+    #[inline(always)]
+    fn select_negative(mut mask: Self::Storage, falsy: Self::Storage, truthy: Self::Storage) -> Self::Storage {
+        if !Self::HAS_MSB_BLENDV {
+            mask = Self::is_negative(mask);
+        }
+
+        Self::blendv(mask, falsy, truthy)
+    }
 }
 
 /// A trait for float element types that can be used in SIMD operations.

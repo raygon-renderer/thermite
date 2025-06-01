@@ -472,6 +472,11 @@ impl<R: SignedRegister> Vector<R> {
     pub fn conditional_negate(self, mask: Mask<R>) -> Self {
         Self(R::conditional_negate(self.0, mask.0))
     }
+
+    #[inline(always)]
+    pub fn select_negative(self, falsy: Self, truthy: Self) -> Self {
+        Self(R::select_negative(self.0, falsy.0, truthy.0))
+    }
 }
 
 impl<R: SignedRegister> num_traits::Signed for Vector<R>
