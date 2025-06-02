@@ -1,9 +1,10 @@
 use crate::{
-    Vector,
     mask::Mask,
     register::{FloatElement, FloatRegister, Register, SignedIntegerRegister},
+    vector::Vector,
 };
 
+use super::MathWithPolicy;
 use super::policy::{Policy, PolicyParameters, PrecisionPolicy};
 
 pub(crate) type Vf<R> = Vector<R>;
@@ -15,28 +16,28 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     fn poly<P: Policy, const N: usize>(x: Vf<Self>, coeffs: &[E; N]) -> Vf<Self> {
         if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             // basic Horner's method that's both compact and accurate, even without FMA
-            let mut res = Vf::<Self>::splat(coeffs[N - 1]);
+            let mut res = Vf::splat(coeffs[N - 1]);
             for &c in coeffs.iter().rev().skip(1) {
-                res = res.mul_adde(x, Vf::<Self>::splat(c));
+                res = res.mul_adde(x, Vf::splat(c));
             }
             return res;
         }
 
-        fast_polynomial::poly_f_n::<_, _, N>(x, |i| unsafe { Vf::<Self>::splat(*coeffs.get_unchecked(i)) })
+        fast_polynomial::poly_f_n::<_, _, N>(x, |i| unsafe { Vf::splat(*coeffs.get_unchecked(i)) })
     }
 
     #[inline(always)]
     fn poly_rev<P: Policy, const N: usize>(x: Vf<Self>, coeffs: &[E; N]) -> Vf<Self> {
         if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             // basic Horner's method that's both compact and accurate, even without FMA
-            let mut res = Vf::<Self>::splat(coeffs[0]);
+            let mut res = Vf::splat(coeffs[0]);
             for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(x, Vf::<Self>::splat(c));
+                res = res.mul_adde(x, Vf::splat(c));
             }
             return res;
         }
 
-        fast_polynomial::poly_f_n::<_, _, N>(x, |i| unsafe { Vf::<Self>::splat(*coeffs.get_unchecked(N - 1 - i)) })
+        fast_polynomial::poly_f_n::<_, _, N>(x, |i| unsafe { Vf::splat(*coeffs.get_unchecked(N - 1 - i)) })
     }
 
     #[inline(always)]
@@ -52,20 +53,19 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
             return n / d;
         }
 
-        let invert = x.cmp_gt(Vf::<Self>::ONE);
+        let invert = x.cmp_gt(Vf::ONE);
 
-        let mut n0 = Vf::<Self>::EMPTY;
-        let mut n1 = Vf::<Self>::EMPTY;
-
-        let mut d0 = Vf::<Self>::EMPTY;
-        let mut d1 = Vf::<Self>::EMPTY;
+        let mut n0 = Vf::EMPTY;
+        let mut n1 = Vf::EMPTY;
+        let mut d0 = Vf::EMPTY;
+        let mut d1 = Vf::EMPTY;
 
         if P::POLICY.avoid_branching || !invert.all() {
             n0 = Self::poly::<P, N>(x, numerator);
             d0 = Self::poly::<P, D>(x, denominator);
         }
 
-        let mut z = Vf::<Self>::EMPTY;
+        let mut z = Vf::EMPTY;
 
         if P::POLICY.avoid_branching || invert.any() {
             z = Self::reciprocal::<P>(x);
@@ -73,8 +73,8 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
             d1 = Self::poly_rev::<P, D>(z, denominator);
         }
 
-        let n = invert.select(n0, n1);
-        let d = invert.select(d0, d1);
+        let n = invert.select(n1, n0);
+        let d = invert.select(d1, d0);
 
         let res = n / d;
 
@@ -102,7 +102,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
                 if e == 0 {
                     // correction isn't actually needed for non-inverted case
-                    return invert.select(res, corrected);
+                    return invert.select(corrected, res);
                 }
 
                 u *= u;
@@ -124,13 +124,13 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     #[inline(always)]
     fn reciprocal<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
-            Vf::<Self>::ONE / x
+            Vf::ONE / x
         } else {
             let mut y = x.rcp();
 
             if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
                 // one iteration of Newton's method
-                y = y * x.nmul_adde(y, Vf::<Self>::TWO);
+                y = y * x.nmul_adde(y, Vf::TWO);
             }
 
             y
@@ -140,19 +140,17 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     #[inline(always)]
     fn invsqrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { !Self::HAS_APPROX_RSQRT || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            Vf::<Self>::ONE / x.sqrt()
+            Vf::ONE / x.sqrt()
         } else {
             let mut y = x.rsqrt();
 
-            if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-                return y;
+            if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+                let nx2 = Vf::splat(FloatElement::from_f32(-0.5));
+                let threehalfs = Vf::splat(FloatElement::from_f32(1.5));
+
+                // one iteration of Newton's method
+                y = y * (y * y).mul_adde(nx2, threehalfs);
             }
-
-            let nx2 = Vf::<Self>::splat(FloatElement::from_f32(-0.5));
-            let threehalfs = Vf::<Self>::splat(FloatElement::from_f32(1.5));
-
-            // one iteration of Newton's method
-            y = y * (y * y).mul_adde(nx2, threehalfs);
 
             y
         }
@@ -160,7 +158,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn powi<P: Policy>(mut x: Vf<Self>, mut e: i32) -> Vf<Self> {
-        let mut res = Vf::<Self>::ONE;
+        let mut res = Vf::ONE;
 
         if e < 0 {
             e = -e;
@@ -181,9 +179,9 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn powiv<P: Policy>(mut x: Vf<Self>, mut e: Vs<Self>) -> Vf<Self> {
-        let mut res = Vf::<Self>::ONE;
+        let mut res = Vf::ONE;
 
-        x = e.is_negative().select(x, Self::reciprocal::<P>(x));
+        x = e.is_negative().select(Self::reciprocal::<P>(x), x);
         e = e.abs();
 
         loop {
@@ -198,9 +196,9 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
                 e1 <<= const { core::mem::size_of::<<Self::Signed as Register>::Element>() as u32 * 8 - 1 };
 
                 // Blend the result based on the highest bit of e1
-                Mask::from_unchecked(e1).select(res, nx)
+                Mask::from_unchecked(e1).select(nx, res)
             } else {
-                e1.cmp_ne(Vs::<Self>::ZERO).select(res, nx)
+                e1.cmp_ne(Vs::<Self>::ZERO).select(nx, res)
             };
 
             x *= x;
@@ -228,12 +226,12 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
             let min = x.min(y);
             let t = min / max;
 
-            let mut res = max * t.mul_adde(t, Vf::<Self>::ONE).sqrt();
+            let mut res = max * t.mul_adde(t, Vf::ONE).sqrt();
 
             if P::POLICY.check_overflow {
                 // because these have already been abs, we can just use less-than
-                let inf = Vf::<Self>::INFINITY;
-                res = (x.cmp_lt(inf) & y.cmp_lt(inf) & t.cmp_lt(inf)).select(x + y, res);
+                let inf = Vf::INFINITY;
+                res = (x.cmp_lt(inf) & y.cmp_lt(inf) & t.cmp_lt(inf)).select(res, x + y);
             }
 
             res
@@ -292,3 +290,19 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
 pub mod pd;
 pub mod ps;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum ExpMode {
+    Exp = 0,
+    Expm1,
+    Exph,
+    Pow2,
+    Pow10,
+}
+
+const EXP_MODE_EXP: u8 = ExpMode::Exp as u8;
+const EXP_MODE_EXPM1: u8 = ExpMode::Expm1 as u8;
+const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
+const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
+const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;

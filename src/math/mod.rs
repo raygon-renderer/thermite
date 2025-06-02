@@ -14,6 +14,14 @@ use internal::MathInternal;
 use policy::{DefaultPolicy, Policy};
 
 pub trait MathWithPolicy<R: FloatRegister>: Sized {
+    fn poly_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self;
+    fn poly_rev_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self;
+    fn poly_rational_p<P: Policy, const N: usize, const D: usize>(
+        self,
+        numerator: &[R::Element; N],
+        denominator: &[R::Element; D],
+    ) -> Self;
+
     fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
     fn reciprocal_p<P: Policy>(self) -> Self;
     fn inverse_sqrt_p<P: Policy>(self) -> Self;
@@ -59,6 +67,20 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
 
 #[rustfmt::skip]
 pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
+    #[inline(always)] fn poly<const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
+        self.poly_p::<DefaultPolicy, N>(coeffs)
+    }
+    #[inline(always)] fn poly_rev<const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
+        self.poly_rev_p::<DefaultPolicy, N>(coeffs)
+    }
+    #[inline(always)] fn poly_rational<const N: usize, const D: usize>(
+        self,
+        numerator: &[R::Element; N],
+        denominator: &[R::Element; D],
+    ) -> Self {
+        self.poly_rational_p::<DefaultPolicy, N, D>(numerator, denominator)
+    }
+
     #[inline(always)] fn lerp(self, a: Self, b: Self) -> Self { self.lerp_p::<DefaultPolicy>(a, b) }
     #[inline(always)] fn reciprocal(self) -> Self { self.reciprocal_p::<DefaultPolicy>() }
     #[inline(always)] fn inverse_sqrt(self) -> Self { self.inverse_sqrt_p::<DefaultPolicy>() }
@@ -102,6 +124,20 @@ impl<E, R: MathInternal<E>> MathWithPolicy<R> for Vector<R>
 where
     R: FloatRegister<Element = E>, // redundant, but binds E
 {
+    #[inline(always)] fn poly_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
+        R::poly::<P, N>(self, coeffs)
+    }
+    #[inline(always)] fn poly_rev_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
+        R::poly_rev::<P, N>(self, coeffs)
+    }
+    #[inline(always)] fn poly_rational_p<P: Policy, const N: usize, const D: usize>(
+        self,
+        numerator: &[R::Element; N],
+        denominator: &[R::Element; D],
+    ) -> Self {
+        R::poly_rational::<P, N, D>(self, numerator, denominator)
+    }
+
     #[inline(always)] fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self { R::lerp::<P>(self, a, b) }
     #[inline(always)] fn reciprocal_p<P: Policy>(self) -> Self { R::reciprocal::<P>(self) }
     #[inline(always)] fn inverse_sqrt_p<P: Policy>(self) -> Self { R::invsqrt::<P>(self) }

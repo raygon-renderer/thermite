@@ -69,3 +69,20 @@ pub mod swizzle;
 
 pub use register::DoublePump;
 pub use vector::Vector;
+
+// borrows technique from https://github.com/rust-lang/hashbrown/pull/209
+#[inline]
+#[cold]
+fn cold() {}
+
+#[rustfmt::skip]
+#[inline(always)]
+pub fn likely(b: bool) -> bool {
+    if !b { cold() } b
+}
+
+#[rustfmt::skip]
+#[inline(always)]
+pub fn unlikely(b: bool) -> bool {
+    if b { cold() } b
+}

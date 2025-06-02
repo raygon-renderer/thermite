@@ -18,10 +18,12 @@ does not accrue such errors, at the cost of performance.
 pub enum PrecisionPolicy {
     /// Precision is not important, so prefer simpler or faster algorithms.
     Worst = 0,
+    /// Precision is not that important, so prefer faster algorithms.
+    Medium = 1,
     /// Precision is important, but not the focus, so avoid expensive fallbacks.
-    Average = 1,
+    Average = 2,
     /// Precision is very important, so do everything to improve it.
-    Best = 2,
+    Best = 3,
     /// Precision is the only factor, use infinite sums to compute reference solutions.
     Reference = 9,
 }
@@ -117,6 +119,13 @@ pub mod policies {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct UltraPerformance;
 
+    /// Optimize for performance at the cost of safety, but try to keep some precision.
+    ///
+    /// This avoids checking for special cases such as NaNs or overflow, but will still try to
+    /// provide a reasonable result for most inputs.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct HighPerformance;
+
     /// Optimize for performance, ideally without losing precision.
     ///
     /// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath),
@@ -144,9 +153,21 @@ pub mod policies {
 
     const fn extra_precision(p: PrecisionPolicy) -> PrecisionPolicy {
         match p {
-            PrecisionPolicy::Worst => PrecisionPolicy::Average,
+            PrecisionPolicy::Worst => PrecisionPolicy::Medium,
+            PrecisionPolicy::Medium => PrecisionPolicy::Average,
             PrecisionPolicy::Average => PrecisionPolicy::Best,
-            _ => PrecisionPolicy::Reference,
+            PrecisionPolicy::Best => PrecisionPolicy::Reference,
+            PrecisionPolicy::Reference => PrecisionPolicy::Reference, // no change
+        }
+    }
+
+    const fn less_precision(p: PrecisionPolicy) -> PrecisionPolicy {
+        match p {
+            PrecisionPolicy::Reference => PrecisionPolicy::Best,
+            PrecisionPolicy::Best => PrecisionPolicy::Average,
+            PrecisionPolicy::Average => PrecisionPolicy::Medium,
+            PrecisionPolicy::Medium => PrecisionPolicy::Worst,
+            PrecisionPolicy::Worst => PrecisionPolicy::Worst, // no change
         }
     }
 
@@ -167,6 +188,16 @@ pub mod policies {
             precision: PrecisionPolicy::Worst,
             avoid_branching: true,
             max_series_iterations: 1000,
+        };
+    }
+
+    impl Policy for HighPerformance {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: false,
+            unroll_loops: true,
+            precision: PrecisionPolicy::Medium,
+            avoid_branching: false,
+            max_series_iterations: 10000,
         };
     }
 
