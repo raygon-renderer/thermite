@@ -196,21 +196,21 @@ pub trait Register: Sized + 'static {
         lhs
     }
 
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 
     /// !lhs & rhs
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self::and(Self::not(lhs), rhs)
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        Self::bitand(Self::not(lhs), rhs)
     }
 
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
     fn not(value: Self::Storage) -> Self::Storage;
 
     #[inline(always)]
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self::or(Self::and(mask, lhs), Self::andnot(mask, rhs))
+        Self::bitor(Self::bitand(mask, lhs), Self::bitandnot(mask, rhs))
     }
 
     /// Indicates if blendv only cares about the most significant bit (MSB) of the mask.
@@ -405,7 +405,7 @@ pub trait PartialOrdRegister: MaskRegister {
         let gt = Self::gt(lhs, rhs);
         let eq = Self::eq(lhs, rhs);
 
-        Self::or(gt, eq)
+        Self::bitor(gt, eq)
     }
 
     #[inline(always)]
@@ -550,6 +550,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 
     const HAS_TRUE_FMA: bool;
 
+    const HALF: Self::Storage;
     const NEG_ZERO: Self::Storage;
     const INFINITY: Self::Storage;
     const NEG_INFINITY: Self::Storage;
@@ -578,7 +579,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
     #[inline(always)]
     fn is_normal(value: Self::Storage) -> Self::Storage {
         // !is_zero_or_subnormal(value) && is_finite(value)
-        Self::andnot(Self::is_zero_or_subnormal(value), Self::is_finite(value))
+        Self::bitandnot(Self::is_zero_or_subnormal(value), Self::is_finite(value))
     }
 
     #[inline(always)]
@@ -656,7 +657,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 
     #[inline(always)]
     fn combine_sign(value: Self::Storage, sign: Self::Storage) -> Self::Storage {
-        Self::xor(value, Self::and(sign, Self::NEG_ZERO))
+        Self::bitxor(value, Self::bitand(sign, Self::NEG_ZERO))
     }
 
     fn next_up(value: Self::Storage) -> Self::Storage;

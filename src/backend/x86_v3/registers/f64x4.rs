@@ -57,22 +57,22 @@ impl Register for F64x4V3 {
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_xor_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_and_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_andnot_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_or_pd(lhs, rhs) }
     }
 
@@ -292,28 +292,28 @@ impl SignedRegister for F64x4V3 {
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {
-        Self::xor(value, Self::NEG_ZERO)
+        Self::bitxor(value, Self::NEG_ZERO)
     }
 
     #[inline(always)]
     fn abs(value: Self::Storage) -> Self::Storage {
-        Self::andnot(Self::NEG_ZERO, value)
+        Self::bitandnot(Self::NEG_ZERO, value)
     }
 
     #[inline(always)]
     fn copysign(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         // take everything but the sign from lhs, and copy the sign from rhs
-        Self::or(Self::andnot(Self::NEG_ZERO, lhs), Self::and(Self::NEG_ZERO, rhs))
+        Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
     #[inline(always)]
     fn signum(value: Self::Storage) -> Self::Storage {
-        Self::or(Self::ONE, Self::and(value, Self::NEG_ZERO))
+        Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
     #[inline(always)]
     fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage {
-        Self::xor(value, Self::and(Self::NEG_ZERO, mask))
+        Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
@@ -323,6 +323,7 @@ impl FloatRegister for F64x4V3 {
     type Bits = super::U64x4V3;
     type Signed = super::I64x4V3;
 
+    const HALF: Self::Storage = reg::<Self, 4>([0.5; 4]);
     const NEG_ZERO: Self::Storage = reg::<Self, 4>([-0.0; 4]);
     const EPSILON: Self::Storage = reg::<Self, 4>([f64::EPSILON; 4]);
     const INFINITY: Self::Storage = reg::<Self, 4>([f64::INFINITY; 4]);
@@ -334,9 +335,9 @@ impl FloatRegister for F64x4V3 {
         let m = Self::splat(f64::from_bits(0xFF00_0000_0000_0000));
         let u = Self::shli::<1>(value);
 
-        Self::and(
-            Self::eq(Self::ZERO, Self::and(u, m)),
-            Self::ne(Self::ZERO, Self::andnot(m, u))
+        Self::bitand(
+            Self::eq(Self::ZERO, Self::bitand(u, m)),
+            Self::ne(Self::ZERO, Self::bitandnot(m, u))
         )
     }
 
@@ -344,7 +345,7 @@ impl FloatRegister for F64x4V3 {
     fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage {
         Self::eq(
             Self::ZERO,
-            Self::and(value, Self::splat(f64::from_bits(0x7F80_0000_0000_0000))),
+            Self::bitand(value, Self::splat(f64::from_bits(0x7F80_0000_0000_0000))),
         )
     }
 

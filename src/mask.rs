@@ -70,10 +70,37 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::new(values.into()))
     }
 
+    #[inline(always)]
+    pub fn cast<INTO: CastMaskRegister<R>>(self) -> Mask<INTO> {
+        Mask(INTO::mask_from(self.0))
+    }
+
+    #[inline(always)]
+    pub fn from_mask<FROM: MaskRegister>(mask: Mask<FROM>) -> Mask<R>
+    where
+        R: CastMaskRegister<FROM>,
+    {
+        Mask(R::mask_from(mask.0))
+    }
+
     /// Create a mask from a vector of the underlying element type, without
     /// verifying the values.
     pub const fn from_unchecked(value: Vector<R>) -> Self {
         Self(value.0)
+    }
+
+    /// Returns a Vector with the same bits as the mask.
+    #[inline(always)]
+    pub const fn value(self) -> Vector<R> {
+        Vector(self.0)
+    }
+
+    /// Returns !self & value
+    pub fn andnot(self, value: Vector<R>) -> Vector<R>
+    where
+        R: NumericRegister,
+    {
+        Vector(R::bitandnot(self.0, value.0))
     }
 
     /// Returns `true` if **all** bits in the mask are `true`.
@@ -94,18 +121,20 @@ impl<R: MaskRegister> Mask<R> {
         R::none(self.0)
     }
 
-    /// Use the mask to select elements from `truthy` or `falsy` vectors.
+    /// For each lane in mask, if the lane is `true`, the corresponding lane in `truthy` is selected,
+    /// otherwise the corresponding lane in `falsy` is selected.
     #[inline(always)]
-    pub fn select<S>(self, falsy: Vector<S>, truthy: Vector<S>) -> Vector<S>
+    pub fn select<S>(self, truthy: Vector<S>, falsy: Vector<S>) -> Vector<S>
     where
         S: CastMaskRegister<R, Lanes = R::Lanes>,
     {
         Vector(S::blendv(S::mask_from(self.0), falsy.0, truthy.0))
     }
 
-    /// Use the mask to select elements from `truthy` or `falsy` masks.
+    /// For each lane in mask, if the lane is `true`, the corresponding lane in `truthy` is selected,
+    /// otherwise the corresponding lane in `falsy` is selected.
     #[inline(always)]
-    pub fn select_mask<M>(self, falsy: Mask<M>, truthy: Mask<M>) -> Mask<M>
+    pub fn select_mask<M>(self, truthy: Mask<M>, falsy: Mask<M>) -> Mask<M>
     where
         M: CastMaskRegister<R, Lanes = R::Lanes>,
     {
@@ -140,14 +169,14 @@ impl<R: MaskRegister> BitAnd for Mask<R> {
 
     #[inline(always)]
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self(R::and(self.0, rhs.0))
+        Self(R::bitand(self.0, rhs.0))
     }
 }
 
 impl<R: MaskRegister> BitAndAssign for Mask<R> {
     #[inline(always)]
     fn bitand_assign(&mut self, rhs: Self) {
-        self.0 = R::and(self.0, rhs.0);
+        self.0 = R::bitand(self.0, rhs.0);
     }
 }
 
@@ -156,14 +185,14 @@ impl<R: MaskRegister> BitOr for Mask<R> {
 
     #[inline(always)]
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self(R::or(self.0, rhs.0))
+        Self(R::bitor(self.0, rhs.0))
     }
 }
 
 impl<R: MaskRegister> BitOrAssign for Mask<R> {
     #[inline(always)]
     fn bitor_assign(&mut self, rhs: Self) {
-        self.0 = R::or(self.0, rhs.0);
+        self.0 = R::bitor(self.0, rhs.0);
     }
 }
 
@@ -172,14 +201,14 @@ impl<R: MaskRegister> BitXor for Mask<R> {
 
     #[inline(always)]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self(R::xor(self.0, rhs.0))
+        Self(R::bitxor(self.0, rhs.0))
     }
 }
 
 impl<R: MaskRegister> BitXorAssign for Mask<R> {
     #[inline(always)]
     fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 = R::xor(self.0, rhs.0);
+        self.0 = R::bitxor(self.0, rhs.0);
     }
 }
 

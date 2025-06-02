@@ -31,22 +31,22 @@ impl Register for U64x2V3 {
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_and_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_andnot_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_or_si128(lhs, rhs) }
     }
 

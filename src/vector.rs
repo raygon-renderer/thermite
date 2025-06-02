@@ -473,8 +473,10 @@ impl<R: SignedRegister> Vector<R> {
         Self(R::conditional_negate(self.0, mask.0))
     }
 
+    /// Selects elements from `truthy` or `falsy` based on the mask,
+    /// where `true` in the mask selects from `truthy` and `false` selects from `falsy`.
     #[inline(always)]
-    pub fn select_negative(self, falsy: Self, truthy: Self) -> Self {
+    pub fn select_negative(self, truthy: Self, falsy: Self) -> Self {
         Self(R::select_negative(self.0, falsy.0, truthy.0))
     }
 }
@@ -514,6 +516,8 @@ where
 }
 
 impl<R: FloatRegister> Vector<R> {
+    /// A vector of the value "0.5" in the element type.
+    pub const HALF: Self = Self(R::HALF);
     /// A vector of the value "-0.0" in the element type.
     pub const NEG_ZERO: Self = Self(R::NEG_ZERO);
     /// A vector of the positive infinity value in the element type.
@@ -531,8 +535,18 @@ impl<R: FloatRegister> Vector<R> {
     }
 
     #[inline(always)]
+    pub fn is_finite(self) -> Mask<R> {
+        Mask(R::is_finite(self.0))
+    }
+
+    #[inline(always)]
     pub fn is_nan(self) -> Mask<R> {
         Mask(R::is_nan(self.0))
+    }
+
+    #[inline(always)]
+    pub fn is_zero_or_subnormal(self) -> Mask<R> {
+        Mask(R::is_zero_or_subnormal(self.0))
     }
 
     // TODO: Move to math library?
@@ -861,53 +875,28 @@ impl<R: NumericRegister> One for Vector<R> {
     }
 }
 
-impl<R: Register> BitAnd for Vector<R> {
-    type Output = Self;
+#[rustfmt::skip]
+macro_rules! impl_binary_op {
+    ($R:ident; $($trait:ident::$op:ident),* $(,)?) => {paste::paste!{$(
+        impl<R: $R> $trait<Self> for Vector<R> {
+            type Output = Self;
 
-    #[inline(always)]
-    fn bitand(self, rhs: Self) -> Self::Output {
-        Self(R::and(self.0, rhs.0))
-    }
+            #[inline(always)]
+            fn $op(self, rhs: Self) -> Self::Output {
+                Self(R::$op(self.0, rhs.0))
+            }
+        }
+
+        impl <R: $R> [<$trait Assign>] for Vector<R> {
+            #[inline(always)]
+            fn [<$op _assign>](&mut self, rhs: Self) {
+                self.0 = R::$op(self.0, rhs.0);
+            }
+        }
+    )*}};
 }
 
-impl<R: Register> BitAndAssign for Vector<R> {
-    #[inline(always)]
-    fn bitand_assign(&mut self, rhs: Self) {
-        self.0 = R::and(self.0, rhs.0);
-    }
-}
-
-impl<R: Register> BitOr for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(R::or(self.0, rhs.0))
-    }
-}
-
-impl<R: Register> BitOrAssign for Vector<R> {
-    #[inline(always)]
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 = R::or(self.0, rhs.0);
-    }
-}
-
-impl<R: Register> BitXor for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        Self(R::xor(self.0, rhs.0))
-    }
-}
-
-impl<R: Register> BitXorAssign for Vector<R> {
-    #[inline(always)]
-    fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 = R::xor(self.0, rhs.0);
-    }
-}
+impl_binary_op!(Register; BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 
 impl<R: Register> Not for Vector<R> {
     type Output = Self;
@@ -982,85 +971,7 @@ impl<R: Register> ShlAssign<GenericArray<u32, R::Lanes>> for Vector<R> {
     }
 }
 
-impl<R: NumericRegister> Add for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(R::add(self.0, rhs.0))
-    }
-}
-
-impl<R: NumericRegister> AddAssign for Vector<R> {
-    #[inline(always)]
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 = R::add(self.0, rhs.0);
-    }
-}
-
-impl<R: NumericRegister> Sub for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(R::sub(self.0, rhs.0))
-    }
-}
-
-impl<R: NumericRegister> SubAssign for Vector<R> {
-    #[inline(always)]
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0 = R::sub(self.0, rhs.0);
-    }
-}
-
-impl<R: NumericRegister> Mul for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self(R::mul(self.0, rhs.0))
-    }
-}
-
-impl<R: NumericRegister> MulAssign for Vector<R> {
-    #[inline(always)]
-    fn mul_assign(&mut self, rhs: Self) {
-        self.0 = R::mul(self.0, rhs.0);
-    }
-}
-
-impl<R: NumericRegister> Div for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn div(self, rhs: Self) -> Self::Output {
-        Self(R::div(self.0, rhs.0))
-    }
-}
-
-impl<R: NumericRegister> DivAssign for Vector<R> {
-    #[inline(always)]
-    fn div_assign(&mut self, rhs: Self) {
-        self.0 = R::div(self.0, rhs.0);
-    }
-}
-
-impl<R: NumericRegister> Rem for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn rem(self, rhs: Self) -> Self::Output {
-        Self(R::rem(self.0, rhs.0))
-    }
-}
-
-impl<R: NumericRegister> RemAssign for Vector<R> {
-    #[inline(always)]
-    fn rem_assign(&mut self, rhs: Self) {
-        self.0 = R::rem(self.0, rhs.0);
-    }
-}
+impl_binary_op!(NumericRegister; Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
 
 impl<R: SignedRegister> Neg for Vector<R> {
     type Output = Self;

@@ -31,22 +31,22 @@ impl Register for I32x4V3 {
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_and_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_andnot_si128(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_or_si128(lhs, rhs) }
     }
 
@@ -293,7 +293,7 @@ impl SignedRegister for I32x4V3 {
 
     #[inline(always)]
     fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage {
-        Self::add(Self::xor(value, mask), Self::shri::<31>(mask))
+        Self::add(Self::bitxor(value, mask), Self::shri::<31>(mask))
     }
 }
 
@@ -361,7 +361,7 @@ impl IntegerRegister for I32x4V3 {
 
     #[inline(always)]
     fn trailing_zeros(value: Self::Storage) -> Self::Storage {
-        Self::count_ones(Self::sub(Self::and(value, Self::neg(value)), Self::ONE))
+        Self::count_ones(Self::sub(Self::bitand(value, Self::neg(value)), Self::ONE))
     }
 
     #[inline(always)]

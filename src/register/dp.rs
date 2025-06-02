@@ -121,23 +121,23 @@ where
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self(R::xor(lhs.0, rhs.0), R::xor(lhs.1, rhs.1))
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        Self(R::bitxor(lhs.0, rhs.0), R::bitxor(lhs.1, rhs.1))
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self(R::and(lhs.0, rhs.0), R::and(lhs.1, rhs.1))
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        Self(R::bitand(lhs.0, rhs.0), R::bitand(lhs.1, rhs.1))
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self(R::andnot(lhs.0, rhs.0), R::andnot(lhs.1, rhs.1))
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        Self(R::bitandnot(lhs.0, rhs.0), R::bitandnot(lhs.1, rhs.1))
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self(R::or(lhs.0, rhs.0), R::or(lhs.1, rhs.1))
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        Self(R::bitor(lhs.0, rhs.0), R::bitor(lhs.1, rhs.1))
     }
 
     #[inline(always)]
@@ -407,6 +407,7 @@ where
     type Bits = DoublePumpRegister<R::Bits>;
     type Signed = DoublePumpRegister<R::Signed>;
 
+    const HALF: Self::Storage = Self(R::HALF, R::HALF);
     const NEG_ZERO: Self::Storage = Self(R::NEG_ZERO, R::NEG_ZERO);
     const INFINITY: Self::Storage = Self(R::INFINITY, R::INFINITY);
     const NEG_INFINITY: Self::Storage = Self(R::NEG_INFINITY, R::NEG_INFINITY);

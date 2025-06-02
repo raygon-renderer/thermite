@@ -31,22 +31,22 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_xor_si256(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_and_si256(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_andnot_si256(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_or_si256(lhs, rhs) }
     }
 
