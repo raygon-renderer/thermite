@@ -82,9 +82,11 @@ where
             y1 = x2
                 .poly_p::<P, 3>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
                 .mul_adde(x2 * x, x);
+
+            y2 = x_small.select(y1, y2);
         }
 
-        x_small.select(y1, y2).combine_sign(x0)
+        y2.combine_sign(x0)
     }
 
     #[inline(always)]
@@ -131,9 +133,11 @@ where
                 2.06390887954E-2,
                 -5.70498872745E-3,
             ]).mul_adde(x2 * x, x);
+
+            y2 = x_small.select(y1, y2);
         }
 
-        x_small.select(y1, y2).combine_sign(x0)
+        y2.combine_sign(x0)
     }
 
     #[inline(always)]
@@ -146,24 +150,195 @@ where
         asin_f_internal::<P, Self, true>(x)
     }
 
-    fn atan<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+    #[inline(always)]
+    fn atan<P: Policy>(y: Vf<Self>) -> Vf<Self> {
+        let t = y.abs();
+
+        let not_small = t.cmp_ge(Vf::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
+        let not_big = t.cmp_le(Vf::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
+
+        let s = not_big.select(Vf::FRAC_PI_4, Vf::FRAC_PI_2) & not_small.value(); // select(not_small, s, 0.0);
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        // big:    z = -1.0 / t;
+
+        // this trick avoids having to place a zero in any register
+        let a = (not_big.value() & t) + (not_small.value() & Vf::NEG_ONE);
+        let b = (not_big.value() & Vf::ONE) + (not_small.value() & t);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        z2.poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .mul_adde(z2 * z, z + s)
+            .combine_sign(y)
     }
 
+    #[inline(always)]
     fn atan2<P: Policy>(y: Vf<Self>, x: Vf<Self>) -> Vf<Self> {
-        todo!()
+        let neg_one = Vf::NEG_ONE;
+        let zero = Vf::ZERO;
+
+        let x1 = x.abs();
+        let y1 = y.abs();
+
+        let swap_xy = y1.cmp_gt(x1);
+
+        let mut x2 = swap_xy.select(y1, x1);
+        let mut y2 = swap_xy.select(x1, y1);
+
+        if P::POLICY.check_overflow {
+            let both_infinite = (x.is_infinite() & y.is_infinite());
+
+            if crate::unlikely(both_infinite.any()) {
+                x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+                y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+            }
+        }
+
+        // x = y = 0 will produce NAN. No problem, fixed below
+        let t = y2 / x2;
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        let not_small = t.cmp_ge(Vf::splat(SQRT_2 - 1.0));
+
+        let a = t + (not_small.value() & neg_one);
+        let b = Vf::ONE + (not_small.value() & t);
+
+        let s = not_small.value() & Vf::FRAC_PI_4;
+
+        let z = a / b;
+        let z2 = z * z;
+
+        let mut re = z2
+            .poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .mul_adde(z2 * z, z + s);
+
+        re = swap_xy.select(Vf::FRAC_PI_2 - re, re);
+        re = (x | y).cmp_eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
+        re = x.select_negative(Vf::PI - re, re); // also for x = -0.
+
+        re
     }
 
-    fn asinh<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+    #[inline(always)]
+    fn asinh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+        let x = x0.abs();
+        let x2 = x0 * x0;
+
+        let x_small = x.cmp_le(Vf::splat(0.51));
+
+        let mut y1 = Vf::EMPTY;
+        let mut y2 = Vf::EMPTY;
+
+        if P::POLICY.avoid_branching || !x_small.all() {
+            y2 = ((x2 + Vf::ONE).sqrt() + x).ln_p::<P>();
+
+            if P::POLICY.check_overflow {
+                let x_huge = x.cmp_gt(Vf::splat(1e10));
+
+                if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
+                    y2 = x_huge.select(x.ln_p::<P>() + Vf::LN_2, y2);
+                }
+            }
+        }
+
+        if P::POLICY.avoid_branching || x_small.any() {
+            y1 = x2
+                .poly_p::<P, 4>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
+                .mul_adde(x2 * x, x);
+
+            y2 = x_small.select(y1, y2);
+        }
+
+        y2.combine_sign(x0)
     }
 
-    fn acosh<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+    #[inline(always)]
+    fn acosh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+        let one = Vf::ONE;
+
+        let x1 = x0 - one;
+
+        let x_small = x1.cmp_lt(Vf::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
+
+        let mut y1 = Vf::EMPTY;
+        let mut y2 = Vf::EMPTY;
+
+        // if not all are small
+        if P::POLICY.avoid_branching || !x_small.all() {
+            y2 = (x0.mul_sube(x0, one).sqrt() + x0).ln_p::<P>();
+
+            if P::POLICY.check_overflow {
+                let x_huge = x1.cmp_gt(Vf::splat(1e10));
+
+                if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
+                    y2 = x_huge.select(x0.ln_p::<P>() + Vf::LN_2, y2);
+                }
+            }
+        }
+
+        // if any are small
+        if P::POLICY.avoid_branching || x_small.any() {
+            y1 = x1.sqrt()
+                * x1.poly_p::<P, 5>(&[
+                    1.4142135263E0,
+                    -1.1784741703E-1,
+                    2.6454905019E-2,
+                    -7.5272886713E-3,
+                    1.7596881071E-3,
+                ]);
+
+            if P::POLICY.check_overflow {
+                // result is NaN if less-than 1
+                y1 = x0.cmp_lt(one).select(Vf::NAN, y1);
+            }
+
+            y2 = x_small.select(y1, y2);
+        }
+
+        y2
     }
 
-    fn atanh<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+    #[inline(always)]
+    fn atanh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+        let x = x0.abs();
+
+        let x_small = x.cmp_lt(Vf::splat(0.5));
+
+        let mut y1 = Vf::EMPTY;
+        let mut y2 = Vf::EMPTY;
+
+        if P::POLICY.avoid_branching || !x_small.all() {
+            let one = Vf::ONE;
+
+            y2 = ((one + x) / (one - x)).ln_p::<P>() * Vf::splat(0.5);
+
+            if P::POLICY.check_overflow {
+                let y3 = x.cmp_eq(one).select(Vf::INFINITY, Vf::NAN);
+                y2 = x.cmp_ge(one).select(y3, y2);
+            }
+        }
+
+        if P::POLICY.avoid_branching || x_small.any() {
+            let x2 = x * x;
+
+            y1 = x2
+                .poly_p::<P, 5>(&[
+                    3.33337300303E-1,
+                    1.99782164500E-1,
+                    1.46691431730E-1,
+                    8.24370301058E-2,
+                    1.81740078349E-1,
+                ])
+                .mul_adde(x2 * x, x);
+
+            y2 = x_small.select(y1, y2);
+        }
+
+        y2.combine_sign(x0)
     }
 
     #[inline(always)]
@@ -301,10 +476,8 @@ where
         let xzero = x0.is_zero_or_subnormal();
         let xsign = x0.is_negative();
 
-        if crate::unlikely((overflow | underflow).any()) {
-            z = underflow.select(zero, z);
-            z = overflow.select(Vf::INFINITY, z);
-        }
+        z = underflow.select(zero, z);
+        z = overflow.select(Vf::INFINITY, z);
 
         let yzero = y.cmp_eq(zero);
         let yneg = y.cmp_lt(zero);
@@ -383,7 +556,7 @@ where
     #[inline(always)]
     fn erf<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
         if const { P::POLICY.precision.eq(PrecisionPolicy::Reference) } {
-            // Use erf(x) = 1 - erfc(x)
+            // Use erf(x) = 1 - erfc(x), since erfc has a good reference implementation
             return Vf::ONE - Self::erfc::<P>(x0);
         }
 
@@ -474,6 +647,7 @@ where
         y.combine_sign(x0)
     }
 
+    #[inline(always)]
     fn erfc<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
         if const { P::POLICY.precision.lt(PrecisionPolicy::Reference) } {
             // Use erfc(x) = 1 - erf(x)
@@ -510,8 +684,46 @@ where
         x0.select_negative(Vf::TWO - y, y)
     }
 
+    #[inline(always)]
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!("erfinv")
+        // (-1, 1) range
+        let x = x.clamp(Vf::splat(-0.99999), Vf::splat(0.99999));
+
+        let w = -x.nmul_adde(x, Vf::ONE).ln_p::<P>();
+
+        let ge5 = w.cmp_ge(Vf::splat(5.0));
+
+        let w0 = w - Vf::splat(2.5);
+        let mut p0 = w0.poly_p::<P, 9>(&[
+            1.50140941,
+            0.246640727,
+            -0.00417768164,
+            -0.00125372503,
+            0.00021858087,
+            -4.39150654e-06,
+            -3.5233877e-06,
+            3.43273939e-07,
+            2.81022636e-08,
+        ]);
+
+        if P::POLICY.avoid_branching || crate::unlikely(ge5.any()) {
+            let w1 = w.sqrt() - Vf::splat(3.0);
+            let p1 = w1.poly_p::<P, 9>(&[
+                2.83297682,
+                1.00167406,
+                0.00943887047,
+                -0.0076224613,
+                0.00573950773,
+                -0.00367342844,
+                0.00134934322,
+                0.000100950558,
+                -0.000200214257,
+            ]);
+
+            p0 = ge5.select(p1, p0);
+        }
+
+        p0 * x
     }
 }
 
@@ -719,8 +931,8 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
 
     let blend = x.cmp_gt(Vf::splat(SQRT_2 * 0.5));
 
-    //x = x.conditional_add(x, !blend);
-    //e = e.conditional_add(Vs::<R>::ONE, blend);
+    x = blend.select(x, x + x); // x.conditional_add(x, !blend)
+    e = blend.select(e + Vs::<R>::ONE, e); // e.conditional_add(Vs::<R>::ONE, blend)
 
     let fe: Vf<R> = e.cast();
 
@@ -730,8 +942,7 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
         e.cmp_eq(Vs::<R>::ZERO).select(x0, xp1)
     } else {
-        // log(x). Expand around 1.0
-        xp1
+        xp1 // log(x). Expand around 1.0
     };
 
     let x2 = x * x;

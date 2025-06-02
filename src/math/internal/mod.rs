@@ -262,7 +262,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
     fn asin<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn acos<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    fn atan<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+    fn atan<P: Policy>(y: Vf<Self>) -> Vf<Self>;
     fn atan2<P: Policy>(y: Vf<Self>, x: Vf<Self>) -> Vf<Self>;
 
     fn asinh<P: Policy>(x: Vf<Self>) -> Vf<Self>;
