@@ -10,11 +10,16 @@ where
     #[inline(always)]
     fn sincos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
         if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+            // Max error about 0.00092
+            // https://stackoverflow.com/a/28050328/2083075
             #[inline(always)]
             fn fast_sin_cos<R: MathInternal<f32>, const SINE: bool>(mut x: Vf<R>) -> Vf<R> {
                 let quarter = Vf::splat(0.25);
                 let half = Vf::splat(0.5);
-                let p = Vf::splat(0.225);
+
+                // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
+                // increases average error but decreases max error
+                let p = Vf::splat(0.22400815333595678); // original P = 0.225
 
                 // encourage instruction-level parallelism
                 if SINE {
