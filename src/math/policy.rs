@@ -108,9 +108,30 @@ pub mod policies {
     use super::{Policy, PolicyParameters, PrecisionPolicy};
 
     /// Policy adapter that increases the precision requires by one level,
-    /// e.g.: `Worst` -> `Average`, `Average` -> `Best`
+    /// e.g.: `Worst` -> `Medium`, `Medium` -> `Average`, `Average` -> `Best`, `Best` -> `Reference`
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ExtraPrecision<P: Policy>(PhantomData<P>);
+
+    /// Policy adapter that decreases the precision required by one level,
+    /// e.g.: `Reference` -> `Best`, `Best` -> `Average`, `Average` -> `Medium`, `Medium` -> `Worst`
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct LessPrecision<P: Policy>(PhantomData<P>);
+
+    /// Policy adapter that modifies the base policy to change overflow checking.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct CheckOverflow<P: Policy, const CHECK_OVERFLOW: bool>(PhantomData<P>);
+
+    /// Policy adapter that modifies the base policy to change loop unrolling.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct UnrollLoops<P: Policy, const UNROLL_LOOPS: bool>(PhantomData<P>);
+
+    /// Policy adapter that modifies the base policy to change branching behavior.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct AvoidBranching<P: Policy, const AVOID_BRANCHING: bool>(PhantomData<P>);
+
+    /// Policy adapter that modifies the base policy to change the maximum number of iterations for series expansions.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct MaxSeriesIterations<P: Policy, const MAX_SERIES_ITERATIONS: usize>(PhantomData<P>);
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
     ///
@@ -178,6 +199,56 @@ pub mod policies {
             precision: extra_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
             max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy> Policy for LessPrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: less_precision(P::POLICY.precision),
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy, const CHECK_OVERFLOW: bool> Policy for CheckOverflow<P, CHECK_OVERFLOW> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: CHECK_OVERFLOW,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy, const UNROLL_LOOPS: bool> Policy for UnrollLoops<P, UNROLL_LOOPS> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: UNROLL_LOOPS,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy, const AVOID_BRANCHING: bool> Policy for AvoidBranching<P, AVOID_BRANCHING> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: AVOID_BRANCHING,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy, const MAX_SERIES_ITERATIONS: usize> Policy for MaxSeriesIterations<P, MAX_SERIES_ITERATIONS> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: MAX_SERIES_ITERATIONS,
         };
     }
 
