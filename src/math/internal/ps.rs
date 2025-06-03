@@ -9,6 +9,36 @@ where
 {
     #[inline(always)]
     fn sincos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+            #[inline(always)]
+            fn fast_sin_cos<R: MathInternal<f32>, const SINE: bool>(mut x: Vf<R>) -> Vf<R> {
+                let quarter = Vf::splat(0.25);
+                let half = Vf::splat(0.5);
+                let p = Vf::splat(0.225);
+
+                // encourage instruction-level parallelism
+                if SINE {
+                    x = (x - half) - x.floor();
+                } else {
+                    x = (x - quarter) - (x + quarter).floor();
+                }
+
+                // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here,
+                // also move the *= into the FMA to encourage instruction-level parallelism
+                //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
+                x = x.abs().mul_sube(Vf::splat(16.0) * x, Vf::splat(8.0));
+
+                x.mul_adde(x.abs().mul_sube(p, p), x)
+            }
+
+            let x = xx * Vf::splat(FRAC_1_PI / 2.0);
+
+            let sine = fast_sin_cos::<R, true>(x);
+            let cosine = fast_sin_cos::<R, false>(x);
+
+            return (sine, cosine);
+        }
+
         let xa = xx.abs();
 
         let frac_2_pi = Vf::<Self>::FRAC_2_PI;
