@@ -1,5 +1,8 @@
-use crate::math::{consts::FloatConsts as _, policy::policies::ExtraPrecision};
-use core::f32::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
+use crate::math::{
+    consts::FloatConsts,
+    policy::policies::{ExtraPrecision, MediumPrecision},
+};
+use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
@@ -9,22 +12,17 @@ where
 {
     #[inline(always)]
     fn sincos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
-        if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             // Max error about 0.00092
             // https://stackoverflow.com/a/28050328/2083075
             #[inline(always)]
             fn fast_sin_cos<R: MathInternal<f32>, const SINE: bool>(mut x: Vf<R>) -> Vf<R> {
-                let quarter = Vf::splat(0.25);
-                let half = Vf::splat(0.5);
-
-                // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
-                // increases average error but decreases max error
-                let p = Vf::splat(0.22400815333595678); // original P = 0.225
-
                 // encourage instruction-level parallelism
                 if SINE {
-                    x = (x - half) - x.floor();
+                    x = (x - Vf::HALF) - x.floor();
                 } else {
+                    let quarter = Vf::splat(0.25);
+
                     x = (x - quarter) - (x + quarter).floor();
                 }
 
@@ -32,6 +30,10 @@ where
                 // also move the *= into the FMA to encourage instruction-level parallelism
                 //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
                 x = x.abs().mul_sube(Vf::splat(16.0) * x, Vf::splat(8.0));
+
+                // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
+                // increases average error but decreases max error
+                let p = Vf::splat(0.22400815333595678); // original P = 0.225
 
                 x.mul_adde(x.abs().mul_sube(p, p), x)
             }
@@ -403,8 +405,10 @@ where
 
     #[inline(always)]
     fn powf<P: Policy>(x0: Vf<Self>, y: Vf<Self>) -> Vf<Self> {
-        if P::POLICY.precision == PrecisionPolicy::Worst {
-            return (x0.log2_p::<P>() * y).exp2_p::<P>();
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            // the "Worst" log2 precision is _terrible_, so just use medium
+            // to give anything reasonable back
+            return (x0.log2_p::<MediumPrecision<P>>() * y).exp2_p::<P>();
         }
 
         // define constants
@@ -580,12 +584,12 @@ where
 
     #[inline(always)]
     fn log2<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_f_internal::<P, Self, false>(x) * Vf::<Self>::LOG2_E
+        ln_2_internal::<P, Self>(x)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_f_internal::<P, Self, false>(x) * Vf::<Self>::LOG10_2
+        ln_10_internal::<P, Self>(x)
     }
 
     #[inline(always)]
@@ -766,6 +770,32 @@ where
 fn asin_f_internal<P: Policy, R: MathInternal<f32>, const ACOS: bool>(x: Vf<R>) -> Vf<R> {
     let xa = x.abs();
 
+    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        /* Based on http://www.pouet.net/topic.php?which=9132&page=2
+         * 85% accurate (ULP 0)
+         * Examined 2130706434 values of acos:
+         *   15.2000597 avg ULP diff, 4492 max ULP, 4.51803e-05 max error // without "denormal crush"
+         * Examined 2130706434 values of acos:
+         *   15.2007108 avg ULP diff, 4492 max ULP, 4.51803e-05 max error // with "denormal crush"
+         */
+        let mut m = xa.min(Vf::ONE); // clamp
+
+        if P::POLICY.check_overflow {
+            m = Vf::ONE - (Vf::ONE - m); // crush denormals
+        }
+
+        let a0 = (Vf::ONE - m).sqrt();
+        let a1 = m.poly_p::<P, 4>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
+
+        if !ACOS {
+            // Max error is 4.51133e-05 (ULPS are higher because we are consistently off by a little amount).
+            return a0.nmul_adde(a1, Vf::FRAC_PI_2).copysign(x);
+        } else {
+            let a = a0 * a1;
+            return x.select_negative(Vf::PI - a, a);
+        }
+    }
+
     let is_big = xa.cmp_gt(Vf::<R>::HALF);
 
     // TODO: Branch to avoid sqrt?
@@ -930,9 +960,44 @@ fn exponent<R: MathInternal<f32>>(x: Vf<R>) -> Vs<R> {
 }
 
 #[inline(always)]
+fn ln_2_internal<P: Policy, R: MathInternal<f32>>(x: Vf<R>) -> Vf<R> {
+    if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+        // // https://github.com/nadavrot/fast_log/blob/83bd112c330976c291300eaa214e668f809367ab/src/log_approx.cc#L47
+        // return fraction2::<R>(x).poly_p::<P, 4>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
+        //     + (exponent::<R>(x) + Vs::<R>::ONE).cast();
+
+        // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L384
+        // between 1e-4 and 1000, avg error: 0.00536, max error 0.0573 at 31.999878
+        return Vf::from(Vs::<R>::from_bits(x)).mul_sube(Vf::splat(1.1920928955078125e-7), Vf::splat(126.94269504));
+    }
+
+    ln_f_internal::<P, R, false>(x) * Vf::LOG2_E
+}
+
+#[inline(always)]
+fn ln_10_internal<P: Policy, R: MathInternal<f32>>(x: Vf<R>) -> Vf<R> {
+    if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+        // ln(x) * LOG10_E
+        // between 1e-4 and 1000, avg error: 0.00212, max error 0.0173 at 31.999878
+        return Vf::from(Vs::<R>::from_bits(x)).mul_sube(Vf::splat(3.5885571887588505e-8), Vf::splat(38.213558906));
+    }
+
+    ln_f_internal::<P, R, false>(x) * Vf::LOG10_E
+}
+
+#[inline(always)]
 fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> Vf<R> {
-    if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+    if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+        let x1 = if P1 { x0 + Vf::ONE } else { x0 };
+
+        // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L393
+        // between 1e-4 and 1000, avg error: 0.0536, max error 0.0397 at 3.9999847
+        return Vf::from(Vs::<R>::from_bits(x1)).mul_sube(Vf::splat(8.2629582881927490e-8), Vf::splat(87.989971088));
+    }
+
+    if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
         // https://stackoverflow.com/a/39822314/2083075
+        // natural log on [0x1.f7a5ecp-127, 0x1.fffffep127]. Maximum relative error 9.4529e-5
 
         let a = Vs::<R>::from_bits(x0);
         let e = (a - Vs::<R>::splat(0x3f2aaaab)) & Vs::<R>::splat(0xff800000u32 as i32);
@@ -957,9 +1022,8 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
 
     let ln2f_hi = Vf::splat(0.693359375);
     let ln2f_lo = Vf::splat(-2.12194440E-4);
-    let one = Vf::ONE;
 
-    let x1 = if P1 { x0 + one } else { x0 };
+    let x1 = if P1 { x0 + Vf::ONE } else { x0 };
 
     let mut x = fraction2::<R>(x1);
     let mut e = exponent::<R>(x1);
@@ -971,7 +1035,7 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
 
     let fe: Vf<R> = e.cast();
 
-    let xp1 = x - one;
+    let xp1 = x - Vf::ONE;
 
     x = if P1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0

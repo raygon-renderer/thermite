@@ -119,6 +119,18 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
 
 impl<M, R: FloatRegister> Math<R> for M where M: MathWithPolicy<R> {}
 
+impl<E, R: MathInternal<E>> num_traits::Inv for Vector<R>
+where
+    R: FloatRegister<Element = E>,
+{
+    type Output = Self;
+
+    #[inline(always)]
+    fn inv(self) -> Self {
+        self.reciprocal_p::<DefaultPolicy>()
+    }
+}
+
 #[rustfmt::skip]
 impl<E, R: MathInternal<E>> MathWithPolicy<R> for Vector<R>
 where
