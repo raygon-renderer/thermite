@@ -133,6 +133,22 @@ pub mod policies {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct MaxSeriesIterations<P: Policy, const MAX_SERIES_ITERATIONS: usize>(PhantomData<P>);
 
+    /// Policy for worst precision, which is the least precise and fastest.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct WorstPrecision<P: Policy>(PhantomData<P>);
+    /// Policy for medium precision, which is a balance between performance and precision.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct MediumPrecision<P: Policy>(PhantomData<P>);
+    /// Policy for average precision, which is more precise than medium but less than best.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct AveragePrecision<P: Policy>(PhantomData<P>);
+    /// Policy for best precision, which is the most precise and may be slower.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct BestPrecision<P: Policy>(PhantomData<P>);
+    /// Policy for reference precision, which is the most precise and may be very slow.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ReferencePrecision<P: Policy>(PhantomData<P>);
+
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
     ///
     /// On instruction sets with FMA, this usually doesn't hurt precision too much, but will still avoid overflow/underflow checking,
@@ -249,6 +265,56 @@ pub mod policies {
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
             max_series_iterations: MAX_SERIES_ITERATIONS,
+        };
+    }
+
+    impl<P: Policy> Policy for WorstPrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: PrecisionPolicy::Worst,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy> Policy for MediumPrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: PrecisionPolicy::Medium,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy> Policy for AveragePrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: PrecisionPolicy::Average,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy> Policy for BestPrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: PrecisionPolicy::Best,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
+        };
+    }
+
+    impl<P: Policy> Policy for ReferencePrecision<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: PrecisionPolicy::Reference,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_series_iterations: P::POLICY.max_series_iterations,
         };
     }
 
