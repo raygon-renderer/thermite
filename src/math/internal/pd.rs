@@ -64,7 +64,7 @@ where
         let signcos = Vf::from_bits(((q + Vu::<R>::ONE) & Vu::<R>::splat(2)) << 62);
 
         // combine signs
-        (sin1.combine_sign(signsin), cos1 ^ signcos)
+        (sin1.mul_sign(signsin), cos1 ^ signcos)
     }
 
     #[inline(always)]
@@ -346,7 +346,7 @@ fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x
         re = x.select_negative(Vf::PI - re, re);
     }
 
-    re.combine_sign(y)
+    re.mul_sign(y)
 }
 
 #[inline(always)]
@@ -422,11 +422,11 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
 
     if ACOS {
         let z1 = x.select_negative(Vf::PI - z1, z1);
-        let z2 = Vf::FRAC_PI_2 - z2.combine_sign(x);
+        let z2 = Vf::FRAC_PI_2 - z2.mul_sign(x);
         is_big.select(z1, z2)
     } else {
         let z1 = Vf::FRAC_PI_2 - z1;
-        is_big.select(z1, z2).combine_sign(x)
+        is_big.select(z1, z2).mul_sign(x)
     }
 }
 

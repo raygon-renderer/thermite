@@ -698,7 +698,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
     }
 
     #[inline(always)]
-    fn combine_sign(value: Self::Storage, sign: Self::Storage) -> Self::Storage {
+    fn mul_sign(value: Self::Storage, sign: Self::Storage) -> Self::Storage {
         Self::bitxor(value, Self::bitand(sign, Self::NEG_ZERO))
     }
 

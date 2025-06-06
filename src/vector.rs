@@ -753,8 +753,8 @@ impl<R: FloatRegister> Vector<R> {
 
     /// Effectively `self * sign.signum()`, multiplying the sign bits.
     #[inline(always)]
-    pub fn combine_sign(self, sign: Self) -> Self {
-        Self(R::combine_sign(self.0, sign.0))
+    pub fn mul_sign(self, sign: Self) -> Self {
+        Self(R::mul_sign(self.0, sign.0))
     }
 
     /// Returns zero with the sign of `self`, i.e.: only the sign bit

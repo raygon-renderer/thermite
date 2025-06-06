@@ -90,7 +90,7 @@ where
         let signsin = Vf::<Self>::from_bits(q.shli::<30>()) ^ xx;
         let signcos = Vf::<Self>::from_bits(((q + Vu::<Self>::ONE) & Vu::<Self>::TWO).shli::<30>());
 
-        (sin1.combine_sign(signsin), (cos1 ^ signcos))
+        (sin1.mul_sign(signsin), (cos1 ^ signcos))
     }
 
     #[inline(always)]
@@ -108,7 +108,7 @@ where
             y2 -= Vf::<Self>::splat(0.25) / y2;
 
             if const { P::POLICY.avoid_precision_branches() } {
-                return y2.combine_sign(x0);
+                return y2.mul_sign(x0);
             }
         }
 
@@ -123,7 +123,7 @@ where
             y2 = x_small.select(y1, y2);
         }
 
-        y2.combine_sign(x0)
+        y2.mul_sign(x0)
     }
 
     #[inline(always)]
@@ -155,7 +155,7 @@ where
             }
 
             if P::POLICY.avoid_precision_branches() {
-                return y2.combine_sign(x0);
+                return y2.mul_sign(x0);
             }
         }
 
@@ -174,7 +174,7 @@ where
             y2 = x_small.select(y1, y2);
         }
 
-        y2.combine_sign(x0)
+        y2.mul_sign(x0)
     }
 
     #[inline(always)]
@@ -209,7 +209,7 @@ where
 
         z2.poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s)
-            .combine_sign(y)
+            .mul_sign(y)
     }
 
     #[inline(always)]
@@ -290,7 +290,7 @@ where
             y2 = x_small.select(y1, y2);
         }
 
-        y2.combine_sign(x0)
+        y2.mul_sign(x0)
     }
 
     #[inline(always)]
@@ -375,7 +375,7 @@ where
             y2 = x_small.select(y1, y2);
         }
 
-        y2.combine_sign(x0)
+        y2.mul_sign(x0)
     }
 
     #[inline(always)]
@@ -683,7 +683,7 @@ where
             PrecisionPolicy::Reference => unreachable!("Reference precision handled above"),
         };
 
-        y.combine_sign(x0)
+        y.mul_sign(x0)
     }
 
     #[inline(always)]
@@ -817,13 +817,13 @@ fn asin_f_internal<P: Policy, R: MathInternal<f32>, const ACOS: bool>(x: Vf<R>) 
 
     if ACOS {
         let z1 = x.select_negative(Vf::<R>::PI - z1, z1);
-        let z2 = Vf::<R>::FRAC_PI_2 - z.combine_sign(x);
+        let z2 = Vf::<R>::FRAC_PI_2 - z.mul_sign(x);
 
         is_big.select(z1, z2)
     } else {
         let z1 = Vf::<R>::FRAC_PI_2 - z1;
 
-        is_big.select(z1, z).combine_sign(x)
+        is_big.select(z1, z).mul_sign(x)
     }
 }
 
