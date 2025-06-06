@@ -12,7 +12,7 @@ use core::ops::{
     Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
-use num_traits::{MulAdd, MulAddAssign, Num, One, SaturatingAdd, SaturatingSub, Zero};
+use num_traits::{MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, Zero};
 
 /// SIMD Vector type.
 ///
@@ -446,6 +446,20 @@ impl<R: NumericRegister> Vector<R> {
     }
 }
 
+impl<R: NumericRegister> core::iter::Sum for Vector<R> {
+    #[inline(always)]
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vector::ZERO, |acc, vec| acc + vec)
+    }
+}
+
+impl<R: NumericRegister> core::iter::Product for Vector<R> {
+    #[inline(always)]
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vector::ONE, |acc, vec| acc * vec)
+    }
+}
+
 impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
     #[inline(always)]
     fn max_value() -> Self {
@@ -737,10 +751,17 @@ impl<R: FloatRegister> Vector<R> {
         Self(R::fract(self.0))
     }
 
-    /// Effectively `self * sign.signum()`
+    /// Effectively `self * sign.signum()`, multiplying the sign bits.
     #[inline(always)]
     pub fn combine_sign(self, sign: Self) -> Self {
         Self(R::combine_sign(self.0, sign.0))
+    }
+
+    /// Returns zero with the sign of `self`, i.e.: only the sign bit
+    /// is set.
+    #[inline(always)]
+    pub fn signed_zero(self) -> Self {
+        Self(R::signed_zero(self.0))
     }
 
     /// Returns the next representable value greater than the current value.
@@ -754,6 +775,14 @@ impl<R: FloatRegister> Vector<R> {
     pub fn next_down(self) -> Self {
         Self(R::next_down(self.0))
     }
+}
+
+impl<R: NumericRegister> num_traits::ConstZero for Vector<R> {
+    const ZERO: Self = Self(R::ZERO);
+}
+
+impl<R: NumericRegister> num_traits::ConstOne for Vector<R> {
+    const ONE: Self = Self(R::ONE);
 }
 
 #[rustfmt::skip]
@@ -794,15 +823,6 @@ where
     #[inline(always)]
     fn LOG2_10() -> Self where Self: Sized + Div<Self, Output = Self> {
         Self::splat(num_traits::FloatConst::LOG2_10())
-    }
-}
-
-impl<R: FloatRegister> num_traits::Inv for Vector<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn inv(self) -> Self {
-        Self(R::rcp(self.0))
     }
 }
 
@@ -1060,6 +1080,32 @@ impl<R: FloatRegister> MulAddAssign for Vector<R> {
     }
 }
 
+impl<R: IntegerRegister> SaturatingAdd for Vector<R> {
+    #[inline(always)]
+    fn saturating_add(&self, v: &Self) -> Self {
+        Self(R::saturating_add(self.0, v.0))
+    }
+}
+
+impl<R: IntegerRegister> SaturatingSub for Vector<R> {
+    #[inline(always)]
+    fn saturating_sub(&self, v: &Self) -> Self {
+        Self(R::saturating_sub(self.0, v.0))
+    }
+}
+
+impl<R: IntegerRegister> Saturating for Vector<R> {
+    #[inline(always)]
+    fn saturating_add(self, v: Self) -> Self {
+        Self(R::saturating_add(self.0, v.0))
+    }
+
+    #[inline(always)]
+    fn saturating_sub(self, v: Self) -> Self {
+        Self(R::saturating_sub(self.0, v.0))
+    }
+}
+
 impl<R: IntegerRegister> Vector<R> {
     /// Perform saturating addition for each element of the vectors.
     #[inline(always)]
@@ -1195,7 +1241,7 @@ macro_rules! impl_swizzle3 {
         /// will ignore the 4th lane of the register, leaving it unchanged.
         pub trait Swizzle3 { $(impl_swizzle3!(DECL $(#[$meta])* $a $b $c);)* }
 
-        impl<R: LinAlg3Register + PermuteRegister<Lanes = generic_array::typenum::consts::U4>> Swizzle3 for Vector<R> {
+        impl<R: LinAlg3Register + PermuteRegister> Swizzle3 for Vector<R> {
             $(impl_swizzle3!(IMPL $a $b $c);)*
         }
     }

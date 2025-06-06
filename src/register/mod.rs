@@ -702,6 +702,11 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
         Self::bitxor(value, Self::bitand(sign, Self::NEG_ZERO))
     }
 
+    #[inline(always)]
+    fn signed_zero(value: Self::Storage) -> Self::Storage {
+        Self::bitand(Self::NEG_ZERO, value)
+    }
+
     fn next_up(value: Self::Storage) -> Self::Storage;
     fn next_down(value: Self::Storage) -> Self::Storage;
 }
@@ -709,7 +714,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 /// Extensions to the `FloatRegister` trait for the most common 3D linear algebra operations.
 ///
 /// This is only available on 4-lane registers.
-pub trait LinAlg3Register: FloatRegister {
+pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> {
     fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Element;
     fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
     fn zero4(value: Self::Storage) -> Self::Storage;
