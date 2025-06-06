@@ -31,6 +31,26 @@ impl Register for F64x2V3 {
     }
 
     #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_load_pd(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_loadu_pd(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_store_pd(ptr, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_storeu_pd(ptr, value) }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_pd(lhs, rhs) }
     }

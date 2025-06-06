@@ -33,6 +33,26 @@ impl Register for F32x4V3 {
     }
 
     #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_load_ps(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_loadu_ps(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_store_ps(ptr, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_storeu_ps(ptr, value) }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_ps(lhs, rhs) }
     }

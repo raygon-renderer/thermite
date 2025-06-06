@@ -31,6 +31,26 @@ impl Register for F64x4V3 {
     }
 
     #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm256_load_pd(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm256_loadu_pd(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm256_store_pd(ptr, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm256_storeu_pd(ptr, value) }
+    }
+
+    #[inline(always)]
     fn join(
         lo: <Self::HalfRegister as Register>::Storage,
         hi: <Self::HalfRegister as Register>::Storage,

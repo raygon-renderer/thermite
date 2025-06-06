@@ -92,6 +92,68 @@ impl<R: Register> Vector<R> {
         Self(register::reg::<R, N>(values))
     }
 
+    /// Load a vector from an **aligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    #[inline(always)]
+    pub unsafe fn load(ptr: *const R::Element) -> Self {
+        unsafe { Self(R::load(ptr)) }
+    }
+
+    /// Load a vector from an **unaligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid and points to a memory region
+    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
+    #[inline(always)]
+    pub unsafe fn load_unaligned(ptr: *const R::Element) -> Self {
+        unsafe { Self(R::load_unaligned(ptr)) }
+    }
+
+    /// Store the vector to an **aligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    #[inline(always)]
+    pub unsafe fn store(self, ptr: *mut R::Element) {
+        // SAFETY: The caller must ensure that the pointer is valid and aligned.
+        unsafe { R::store(ptr, self.0) }
+    }
+
+    /// Store the vector to an **unaligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid and points to a memory region
+    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
+    #[inline(always)]
+    pub unsafe fn store_unaligned(self, ptr: *mut R::Element) {
+        // SAFETY: The caller must ensure that the pointer is valid.
+        unsafe { R::store_unaligned(ptr, self.0) }
+    }
+
+    /// Transforms a slice of element values into a slice of vectors, with
+    /// alignment and length checks. A prefix and/or suffix slice may be returned if the slice is
+    /// not aligned or if the length is not a multiple of the number of lanes in the vector.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let (&[], values, &[]) = i32x4::from_slice(&[1, 2, 3, 4]) else {
+    ///     panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
+    /// };
+    ///
+    /// assert_eq!(values, &[i32x4::new([1, 2, 3, 4])]);
+    /// ```
+    #[inline(always)]
+    pub fn from_slice(values: &[R::Element]) -> (&[R::Element], &[Self], &[R::Element]) {
+        // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
+        // which is really all that's needed to consider it a slice of registers.
+        unsafe { values.align_to::<Self>() }
+    }
+
     /// Create a new vector from an array of elements.
     #[inline(always)]
     pub fn from_array(values: impl Into<GenericArray<R::Element, R::Lanes>>) -> Self {

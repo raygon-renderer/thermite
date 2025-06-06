@@ -107,6 +107,48 @@ pub trait Register: Sized + 'static {
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self::Storage;
     fn splat(value: Self::Element) -> Self::Storage;
 
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * core::mem::size_of::<Self::Element>()`.
+    #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe {
+            // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
+            core::ptr::read(ptr as *const Self::Storage)
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * core::mem::size_of::<Self::Element>()`.
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        // SAFETY: This is safe as long as the pointer is valid and of the correct length.
+        unsafe { core::ptr::read_unaligned(ptr as *const Self::Storage) }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * core::mem::size_of::<Self::Element>()`.
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
+        unsafe { core::ptr::write(ptr as *mut Self::Storage, value) }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * core::mem::size_of::<Self::Element>()`.
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        // SAFETY: This is safe as long as the pointer is valid and of the correct length.
+        unsafe { core::ptr::write_unaligned(ptr as *mut Self::Storage, value) }
+    }
+
     #[inline(always)]
     fn join(
         lo: <Self::HalfRegister as Register>::Storage,

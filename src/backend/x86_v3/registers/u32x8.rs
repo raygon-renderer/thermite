@@ -31,6 +31,26 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm256_load_si256(ptr as *const _) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm256_loadu_si256(ptr as *const _) }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm256_store_si256(ptr as *mut _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm256_storeu_si256(ptr as *mut _, value) }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_xor_si256(lhs, rhs) }
     }

@@ -121,6 +121,37 @@ where
     }
 
     #[inline(always)]
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { Self(R::load(ptr), R::load(ptr.add(core::mem::size_of::<R::Storage>()))) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe {
+            Self(
+                R::load_unaligned(ptr),
+                R::load_unaligned(ptr.add(core::mem::size_of::<R::Storage>())),
+            )
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe {
+            R::store(ptr, value.0);
+            R::store(ptr.add(core::mem::size_of::<R::Storage>()), value.1);
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe {
+            R::store_unaligned(ptr, value.0);
+            R::store_unaligned(ptr.add(core::mem::size_of::<R::Storage>()), value.1);
+        }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         Self(R::bitxor(lhs.0, rhs.0), R::bitxor(lhs.1, rhs.1))
     }
