@@ -22,7 +22,11 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
         denominator: &[R::Element; D],
     ) -> Self;
 
+    fn step_p<P: Policy>(self, edge: Self) -> Self;
     fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
+    fn smoothstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self;
+    fn smootherstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self;
+    fn inverse_smoothstep_p<P: Policy>(self) -> Self;
     fn reciprocal_p<P: Policy>(self) -> Self;
     fn inverse_sqrt_p<P: Policy>(self) -> Self;
     fn powi_p<P: Policy>(self, e: i32) -> Self;
@@ -81,7 +85,11 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
         self.poly_rational_p::<DefaultPolicy, N, D>(numerator, denominator)
     }
 
+    #[inline(always)] fn step(self, edge: Self) -> Self { self.step_p::<DefaultPolicy>(edge) }
     #[inline(always)] fn lerp(self, a: Self, b: Self) -> Self { self.lerp_p::<DefaultPolicy>(a, b) }
+    #[inline(always)] fn smoothstep(self, a: Self, b: Self) -> Self { self.smoothstep_p::<DefaultPolicy, true>(a, b) }
+    #[inline(always)] fn smootherstep(self, a: Self, b: Self) -> Self { self.smootherstep_p::<DefaultPolicy, true>(a, b) }
+    #[inline(always)] fn inverse_smoothstep(self) -> Self { self.inverse_smoothstep_p::<DefaultPolicy>() }
     #[inline(always)] fn reciprocal(self) -> Self { self.reciprocal_p::<DefaultPolicy>() }
     #[inline(always)] fn inverse_sqrt(self) -> Self { self.inverse_sqrt_p::<DefaultPolicy>() }
     #[inline(always)] fn powi(self, e: i32) -> Self { self.powi_p::<DefaultPolicy>(e) }
@@ -150,7 +158,11 @@ where
         R::poly_rational::<P, N, D>(self, numerator, denominator)
     }
 
+    #[inline(always)] fn step_p<P: Policy>(self, edge: Self) -> Self { R::step::<P>(self, edge) }
     #[inline(always)] fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self { R::lerp::<P>(self, a, b) }
+    #[inline(always)] fn smoothstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self { R::smoothstep::<P, SCALE>(self, a, b) }
+    #[inline(always)] fn smootherstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self { R::smootherstep::<P, SCALE>(self, a, b) }
+    #[inline(always)] fn inverse_smoothstep_p<P: Policy>(self) -> Self { R::inverse_smoothstep::<P>(self) }
     #[inline(always)] fn reciprocal_p<P: Policy>(self) -> Self { R::reciprocal::<P>(self) }
     #[inline(always)] fn inverse_sqrt_p<P: Policy>(self) -> Self { R::invsqrt::<P>(self) }
     #[inline(always)] fn powi_p<P: Policy>(self, e: i32) -> Self { R::powi::<P>(self, e) }

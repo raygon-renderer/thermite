@@ -122,6 +122,77 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
+    fn step<P: Policy>(x: Vf<Self>, t: Vf<Self>) -> Vf<Self> {
+        // bitwise AND is much faster than blendv
+        x.cmp_ge(t).value() & Vf::ONE
+    }
+
+    #[inline(always)]
+    fn smoothstep<P: Policy, const SCALE: bool>(x: Vf<Self>, a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
+        let mut t = x;
+
+        if SCALE {
+            let xa = t - a;
+            let ba = b - a;
+
+            t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+                xa * ba.rcp()
+            } else {
+                xa / ba
+            };
+        }
+
+        if P::POLICY.check_overflow {
+            t = t.clamp(Vf::<Self>::ZERO, Vf::<Self>::ONE);
+        }
+
+        let three = Vf::splat(FloatElement::from_f32(3.0));
+
+        // NOTE: The order of the muls is important here for instruction-level parallelism.
+        (t * t) * t.nmul_adde(Vf::TWO, three)
+    }
+
+    #[inline(always)]
+    fn inverse_smoothstep<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        let mut t = x.nmul_adde(Vf::<Self>::TWO, Vf::<Self>::ONE).asin_p::<P>();
+
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            t *= Vf::<Self>::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
+        } else {
+            // exact division for higher precisions
+            t /= Vf::<Self>::splat(FloatElement::from_f32(3.0));
+        }
+
+        Vf::HALF - t.sin_p::<P>()
+    }
+
+    #[inline(always)]
+    fn smootherstep<P: Policy, const SCALE: bool>(x: Vf<Self>, a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
+        let mut t = x;
+
+        if SCALE {
+            let xa = t - a;
+            let ba = b - a;
+
+            t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+                xa * ba.rcp()
+            } else {
+                xa / ba
+            };
+        }
+
+        if P::POLICY.check_overflow {
+            t = t.clamp(Vf::<Self>::ZERO, Vf::<Self>::ONE);
+        }
+
+        let six = Vf::splat(FloatElement::from_f32(6.0));
+        let ten = Vf::splat(FloatElement::from_f32(10.0));
+        let neg_fifteen = Vf::splat(FloatElement::from_f32(-15.0));
+
+        (t * t * t) * x.mul_adde(six, neg_fifteen).mul_adde(x, ten)
+    }
+
+    #[inline(always)]
     fn reciprocal<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             Vf::ONE / x
