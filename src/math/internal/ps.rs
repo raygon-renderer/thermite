@@ -188,8 +188,35 @@ where
     }
 
     #[inline(always)]
-    fn atan<P: Policy>(y: Vf<Self>) -> Vf<Self> {
-        let t = y.abs();
+    fn atan<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        let t = x.abs();
+
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            /* http://mathforum.org/library/drmath/view/62672.html
+             * Examined 4278190080 values of atan:
+             *   2.36864877 avg ULP diff, 302 max ULP, 6.55651e-06 max error      // (with  denormals)
+             * Examined 4278190080 values of atan:
+             *   171160502 avg ULP diff, 855638016 max ULP, 6.55651e-06 max error // (crush denormals)
+             */
+            let a = t;
+
+            let gt1 = a.cmp_gt(Vf::ONE);
+
+            let mut s = gt1.select(a.reciprocal_p::<ExtraPrecision<P>>(), a);
+
+            s = Vf::ONE - (Vf::ONE - s); // crush denormals
+
+            let t = s * s;
+
+            // place the s * 0.43157974 in the FMA to encourage instruction-level parallelism
+            let r = t.mul_adde(s * Vf::splat(0.43157974), Vf::ONE)
+                / t.mul_add(Vf::splat(0.05831938), Vf::splat(0.76443945))
+                    .mul_add(t, Vf::ONE);
+
+            let r = gt1.select(Vf::FRAC_PI_2 - r, r);
+
+            return r.copysign(x);
+        }
 
         let not_small = t.cmp_ge(Vf::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
         let not_big = t.cmp_le(Vf::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
@@ -209,7 +236,7 @@ where
 
         z2.poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s)
-            .mul_sign(y)
+            .mul_sign(x)
     }
 
     #[inline(always)]
@@ -222,16 +249,45 @@ where
 
         let swap_xy = y1.cmp_gt(x1);
 
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let (a, b) = (x1, y1);
+
+            let n = swap_xy.select(b, a);
+            let d = swap_xy.select(a, b);
+
+            let mut k = n / d;
+
+            if P::POLICY.check_overflow {
+                let b_eq_zero = b.cmp_eq(Vf::ZERO);
+                let ab_eq = a.cmp_eq(b);
+
+                k = ab_eq.select(Vf::ONE, k);
+                k = b_eq_zero.select(Vf::ZERO, k);
+            }
+
+            let s = Vf::ONE - (Vf::ONE - k); // crush denormals
+
+            let t = s * s;
+
+            let mut r = t.mul_adde(s * Vf::splat(0.43157974), Vf::ONE)
+                / t.mul_add(Vf::splat(0.05831938), Vf::splat(0.76443945))
+                    .mul_add(t, Vf::ONE);
+
+            r = swap_xy.select(Vf::FRAC_PI_2 - r, r);
+            r = x.select_negative(Vf::PI - r, r);
+
+            return r.copysign(y);
+        }
+
         let mut x2 = swap_xy.select(y1, x1);
         let mut y2 = swap_xy.select(x1, y1);
 
         if P::POLICY.check_overflow {
             let both_infinite = (x.is_infinite() & y.is_infinite());
 
-            if crate::unlikely(both_infinite.any()) {
-                x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
-                y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
-            }
+            //if crate::unlikely(both_infinite.any())
+            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
         }
 
         // x = y = 0 will produce NAN. No problem, fixed below
@@ -280,6 +336,10 @@ where
                     y2 = x_huge.select(x.ln_p::<P>() + Vf::LN_2, y2);
                 }
             }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.mul_sign(x0);
+            }
         }
 
         if P::POLICY.avoid_branching || x_small.any() {
@@ -314,6 +374,10 @@ where
                 if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x0.ln_p::<P>() + Vf::LN_2, y2);
                 }
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2;
             }
         }
 
@@ -356,6 +420,10 @@ where
             if P::POLICY.check_overflow {
                 let y3 = x.cmp_eq(one).select(Vf::INFINITY, Vf::NAN);
                 y2 = x.cmp_ge(one).select(y3, y2);
+            }
+
+            if P::POLICY.avoid_precision_branches() {
+                return y2.mul_sign(x0);
             }
         }
 
@@ -414,12 +482,12 @@ where
         // define constants
         let ln2f_hi = Vf::<R>::splat(0.693359375); // log(2), split in two for extended precision
         let ln2f_lo = Vf::<R>::splat(-2.12194440e-4);
-        let log2e = Vf::<R>::LOG2_E;
-        let ln2 = Vf::<R>::LN_2;
+        let log2e = Vf::LOG2_E;
+        let ln2 = Vf::LN_2;
 
-        let zero = Vf::<R>::ZERO;
-        let one = Vf::<R>::ONE;
-        let half = Vf::<R>::HALF;
+        let zero = Vf::ZERO;
+        let one = Vf::ONE;
+        let half = Vf::HALF;
 
         let x1 = x0.abs();
 
@@ -717,10 +785,18 @@ where
         let n = a0 * b0 * c0 * d0 * e0 * f0;
         let d = a1 * b1 * c1 * d1 * e1 * f1;
 
-        let y = n / d * (-x2).exp2_p::<P>();
+        let m = n / d;
+        let e = (-x2).exp_p::<P>();
 
         // if x<0 then 2 - y, else y
-        x0.select_negative(Vf::TWO - y, y)
+        if R::HAS_TRUE_FMA {
+            // exploit instruction-level parallelism if FMA is available
+            x0.select_negative(m.nmul_add(e, Vf::TWO), m * e)
+        } else {
+            let y = m * e;
+
+            x0.select_negative(Vf::TWO - y, y)
+        }
     }
 
     #[inline(always)]
@@ -787,12 +863,17 @@ fn asin_f_internal<P: Policy, R: MathInternal<f32>, const ACOS: bool>(x: Vf<R>) 
         let a0 = (Vf::ONE - m).sqrt();
         let a1 = m.poly_p::<P, 4>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
 
-        if !ACOS {
-            // Max error is 4.51133e-05 (ULPS are higher because we are consistently off by a little amount).
-            return a0.nmul_adde(a1, Vf::FRAC_PI_2).copysign(x);
-        } else {
+        if ACOS {
+            if R::HAS_TRUE_FMA {
+                // if FMA is available we can at least exploit instruction-level parallelism
+                return x.select_negative(a0.nmul_add(a1, Vf::PI), a0 * a1);
+            }
+
             let a = a0 * a1;
             return x.select_negative(Vf::PI - a, a);
+        } else {
+            // Max error is 4.51133e-05 (ULPS are higher because we are consistently off by a little amount).
+            return a0.nmul_adde(a1, Vf::FRAC_PI_2).copysign(x);
         }
     }
 
@@ -852,6 +933,7 @@ fn exp_f_internal<P: Policy, R: MathInternal<f32>, const MODE: u8>(x0: Vf<R>) ->
 
     let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
         // https://stackoverflow.com/a/10792321 with a better 2^f fit
+        // max. rel. error <= 1.73e-3 on [-87,88]
 
         // Compute t such that b^x = 2^t
         let t = match MODE {
@@ -865,7 +947,7 @@ fn exp_f_internal<P: Policy, R: MathInternal<f32>, const MODE: u8>(x0: Vf<R>) ->
         let f = t - fi;
 
         // if the exponent exceeds this method's limitations, then it's far outside of the valid range for exp
-        let i: Vs<R> = fi.fast_cast(); // unsafe { fi.to_int_fast() };
+        let i: Vs<R> = fi.fast_cast();
 
         // polynomial approximation of 2^f
         let cf = f.poly_p::<P, 4>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
@@ -899,7 +981,7 @@ fn exp_f_internal<P: Policy, R: MathInternal<f32>, const MODE: u8>(x0: Vf<R>) ->
                 x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
                 x *= Vf::LN_10;
             }
-            EXP_MODE_EXP | EXP_MODE_POW2 | EXP_MODE_POW10 => {
+            EXP_MODE_EXP | EXP_MODE_EXPM1 | EXP_MODE_EXPH => {
                 let ln2f_hi = Vf::<R>::splat(0.693359375);
                 let ln2f_lo = Vf::<R>::splat(-2.12194440e-4);
 
@@ -991,7 +1073,7 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
         let x1 = if P1 { x0 + Vf::ONE } else { x0 };
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L393
-        // between 1e-4 and 1000, avg error: 0.0536, max error 0.0397 at 3.9999847
+        // between 1e-4 and 1000, avg error: 0.00536, max error 0.0397 at 3.9999847
         return Vf::from(Vs::<R>::from_bits(x1)).mul_sube(Vf::splat(8.2629582881927490e-8), Vf::splat(87.989971088));
     }
 

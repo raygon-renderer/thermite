@@ -78,8 +78,7 @@ impl PolicyParameters {
     /// Returns true if the policy says to avoid branches at the cost of precision
     #[inline(always)]
     pub const fn avoid_precision_branches(self) -> bool {
-        // cheat the const-comparison here by casting to u8
-        self.avoid_branching && self.precision as u8 == PrecisionPolicy::Worst as u8
+        self.avoid_branching && self.precision.le(PrecisionPolicy::Worst)
     }
 }
 
