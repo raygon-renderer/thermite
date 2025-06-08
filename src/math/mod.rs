@@ -127,12 +127,14 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
 
 impl<M, R: FloatRegister> Math<R> for M where M: MathWithPolicy<R> {}
 
-impl<E, R: MathInternal<E>> num_traits::Inv for Vector<R>
+impl<E, R> num_traits::Inv for Vector<R>
 where
-    R: FloatRegister<Element = E>,
+    R: MathInternal<E, Element = E>,
 {
     type Output = Self;
 
+    /// Returns the multiplicative inverse of the vector,
+    /// by calling `reciprocal_p` with the default policy.
     #[inline(always)]
     fn inv(self) -> Self {
         self.reciprocal_p::<DefaultPolicy>()
@@ -140,9 +142,9 @@ where
 }
 
 #[rustfmt::skip]
-impl<E, R: MathInternal<E>> MathWithPolicy<R> for Vector<R>
+impl<E, R> MathWithPolicy<R> for Vector<R>
 where
-    R: FloatRegister<Element = E>, // redundant, but binds E
+    R: MathInternal<E, Element = E>
 {
     #[inline(always)] fn poly_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
         R::poly::<P, N>(self, coeffs)
