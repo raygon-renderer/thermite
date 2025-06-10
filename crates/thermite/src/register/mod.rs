@@ -95,8 +95,8 @@ impl<T> Lanes for T where T: ArrayLength + core::ops::Shl<typenum::B1> {}
 
 pub trait Register: Sized + 'static {
     type Lanes: Lanes;
-    type Element: Copy + Default + PartialEq + PartialOrd + core::fmt::Debug;
-    type Storage: Copy + core::fmt::Debug;
+    type Element: Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug;
+    type Storage: Sized + Copy + core::fmt::Debug;
 
     // Note: These don't require :Register because it would introduce recursive type bounds.
     type HalfRegister;

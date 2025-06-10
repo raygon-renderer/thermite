@@ -1,0 +1,21 @@
+[package]
+name = "thermite"
+version = "0.1.0"
+edition = "2024"
+categories = ["no_std"]
+
+[features]
+nightly = []
+document_registers = []
+default = ["document_registers"]
+
+[dependencies]
+fast_polynomial = { version = "0.3.0", default-features = false }
+generic-array = "1.2.0"
+libm = "0.2.13"
+paste = "1.0.15"
+num-traits = { version = "0.2.19", default-features = false }
+
+[dev-dependencies]
+glam = "0.30.3"
+num-traits = { version = "0.2.19", default-features = true }

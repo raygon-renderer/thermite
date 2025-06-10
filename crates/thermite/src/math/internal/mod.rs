@@ -1,5 +1,6 @@
 use crate::{
     mask::Mask,
+    math::{consts::FloatConsts, policy::policies::ExtraPrecision},
     register::{FloatElement, FloatRegister, Register, SignedIntegerRegister},
     vector::Vector,
 };
@@ -11,7 +12,7 @@ pub(crate) type Vf<R> = Vector<R>;
 pub(crate) type Vu<R> = Vector<<R as FloatRegister>::Bits>;
 pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
 
-pub trait MathInternal<E>: FloatRegister<Element = E> {
+pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     #[inline(always)]
     fn poly<P: Policy, const N: usize>(x: Vf<Self>, coeffs: &[E; N]) -> Vf<Self> {
         if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
@@ -79,7 +80,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
         let res = n / d;
 
         // no correction needed if same degree
-        if N == D {
+        if const { N == D } {
             return res;
         }
 
@@ -128,10 +129,10 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
-    fn smoothstep<P: Policy, const SCALE: bool>(x: Vf<Self>, a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
+    fn smoothstep<P: Policy>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
         let mut t = x;
 
-        if SCALE {
+        if let Some((a, b)) = edges {
             let xa = t - a;
             let ba = b - a;
 
@@ -167,10 +168,10 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
-    fn smootherstep<P: Policy, const SCALE: bool>(x: Vf<Self>, a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
+    fn smootherstep<P: Policy>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
         let mut t = x;
 
-        if SCALE {
+        if let Some((a, b)) = edges {
             let xa = t - a;
             let ba = b - a;
 
@@ -357,6 +358,38 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn erfc<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+
+    // fn tgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+    // fn lgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+    // fn digamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+    // fn beta<P: Policy>(x: Vf<Self>, y: Vf<Self>) -> Vf<Self>;
+
+    #[inline(always)]
+    fn gaussian<P: Policy>(x: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
+        let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            x * c.reciprocal_p::<P>()
+        } else {
+            x / c
+        };
+
+        a * (Vf::splat(FloatElement::from_f32(-0.5)) * xc * xc).exp_p::<P>()
+    }
+
+    #[inline(always)]
+    fn gaussian_integral<P: Policy>(x0: Vf<Self>, x1: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
+        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
+        let common = Vf::SQRT_FRAC_PI_2 * a * c;
+        let denom = Vf::SQRT_2 * c;
+
+        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            let d = denom.reciprocal_p::<ExtraPrecision<P>>();
+            (x1 * d, x0 * d)
+        } else {
+            (x1 / denom, x0 / denom)
+        };
+
+        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
+    }
 }
 
 pub mod pd;

@@ -5,6 +5,7 @@ pub mod policy;
 
 use crate::{
     Vector,
+    math::consts::FloatConsts,
     register::{FloatRegister, Register},
 };
 
@@ -22,10 +23,14 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
         denominator: &[R::Element; D],
     ) -> Self;
 
+    /// Returns 1 if `self` is greater than or equal to `edge`, otherwise returns 0.
     fn step_p<P: Policy>(self, edge: Self) -> Self;
+    /// Linearly interpolates between `a` and `b` based on the value of `self`.
     fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
-    fn smoothstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self;
-    fn smootherstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self;
+    /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
+    fn smoothstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self;
+    /// Even more smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
+    fn smootherstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self;
     fn inverse_smoothstep_p<P: Policy>(self) -> Self;
     fn reciprocal_p<P: Policy>(self) -> Self;
     fn inverse_sqrt_p<P: Policy>(self) -> Self;
@@ -67,6 +72,9 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn erf_p<P: Policy>(self) -> Self;
     fn erfc_p<P: Policy>(self) -> Self;
     fn erfinv_p<P: Policy>(self) -> Self;
+
+    fn gaussian_p<P: Policy>(self, a: Self, c: Self) -> Self;
+    fn gaussian_integral_p<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self;
 }
 
 #[rustfmt::skip]
@@ -87,8 +95,8 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
 
     #[inline(always)] fn step(self, edge: Self) -> Self { self.step_p::<DefaultPolicy>(edge) }
     #[inline(always)] fn lerp(self, a: Self, b: Self) -> Self { self.lerp_p::<DefaultPolicy>(a, b) }
-    #[inline(always)] fn smoothstep(self, a: Self, b: Self) -> Self { self.smoothstep_p::<DefaultPolicy, true>(a, b) }
-    #[inline(always)] fn smootherstep(self, a: Self, b: Self) -> Self { self.smootherstep_p::<DefaultPolicy, true>(a, b) }
+    #[inline(always)] fn smoothstep(self, edges: Option<(Self, Self)>) -> Self { self.smoothstep_p::<DefaultPolicy>(edges) }
+    #[inline(always)] fn smootherstep(self, edges: Option<(Self, Self)>) -> Self { self.smootherstep_p::<DefaultPolicy>(edges) }
     #[inline(always)] fn inverse_smoothstep(self) -> Self { self.inverse_smoothstep_p::<DefaultPolicy>() }
     #[inline(always)] fn reciprocal(self) -> Self { self.reciprocal_p::<DefaultPolicy>() }
     #[inline(always)] fn inverse_sqrt(self) -> Self { self.inverse_sqrt_p::<DefaultPolicy>() }
@@ -123,6 +131,8 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn erf(self) -> Self { self.erf_p::<DefaultPolicy>() }
     #[inline(always)] fn erfc(self) -> Self { self.erfc_p::<DefaultPolicy>() }
     #[inline(always)] fn erfinv(self) -> Self { self.erfinv_p::<DefaultPolicy>() }
+    #[inline(always)] fn gaussian(self, a: Self, c: Self) -> Self { self.gaussian_p::<DefaultPolicy>(a, c) }
+    #[inline(always)] fn gaussian_integral(x0: Self, x1: Self, a: Self, c: Self) -> Self { Self::gaussian_integral_p::<DefaultPolicy>(x0, x1, a, c) }
 }
 
 impl<M, R: FloatRegister> Math<R> for M where M: MathWithPolicy<R> {}
@@ -130,6 +140,7 @@ impl<M, R: FloatRegister> Math<R> for M where M: MathWithPolicy<R> {}
 impl<E, R> num_traits::Inv for Vector<R>
 where
     R: MathInternal<E, Element = E>,
+    E: FloatConsts,
 {
     type Output = Self;
 
@@ -144,7 +155,8 @@ where
 #[rustfmt::skip]
 impl<E, R> MathWithPolicy<R> for Vector<R>
 where
-    R: MathInternal<E, Element = E>
+    R: MathInternal<E, Element = E>,
+    E: FloatConsts,
 {
     #[inline(always)] fn poly_p<P: Policy, const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
         R::poly::<P, N>(self, coeffs)
@@ -162,8 +174,8 @@ where
 
     #[inline(always)] fn step_p<P: Policy>(self, edge: Self) -> Self { R::step::<P>(self, edge) }
     #[inline(always)] fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self { R::lerp::<P>(self, a, b) }
-    #[inline(always)] fn smoothstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self { R::smoothstep::<P, SCALE>(self, a, b) }
-    #[inline(always)] fn smootherstep_p<P: Policy, const SCALE: bool>(self, a: Self, b: Self) -> Self { R::smootherstep::<P, SCALE>(self, a, b) }
+    #[inline(always)] fn smoothstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self { R::smoothstep::<P>(self, edges) }
+    #[inline(always)] fn smootherstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self { R::smootherstep::<P>(self, edges) }
     #[inline(always)] fn inverse_smoothstep_p<P: Policy>(self) -> Self { R::inverse_smoothstep::<P>(self) }
     #[inline(always)] fn reciprocal_p<P: Policy>(self) -> Self { R::reciprocal::<P>(self) }
     #[inline(always)] fn inverse_sqrt_p<P: Policy>(self) -> Self { R::invsqrt::<P>(self) }
@@ -198,4 +210,6 @@ where
     #[inline(always)] fn erf_p<P: Policy>(self) -> Self { R::erf::<P>(self) }
     #[inline(always)] fn erfc_p<P: Policy>(self) -> Self { R::erfc::<P>(self) }
     #[inline(always)] fn erfinv_p<P: Policy>(self) -> Self { R::erfinv::<P>(self) }
+    #[inline(always)] fn gaussian_p<P: Policy>(self, a: Self, c: Self) -> Self { R::gaussian::<P>(self, a, c) }
+    #[inline(always)] fn gaussian_integral_p<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self { R::gaussian_integral::<P>(x0, x1, a, c) }
 }
