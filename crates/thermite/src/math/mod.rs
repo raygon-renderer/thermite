@@ -1,15 +1,16 @@
 #![allow(clippy::excessive_precision)]
 
-pub mod consts;
+mod consts;
 pub mod policy;
+
+pub use consts::FloatConsts;
 
 use crate::{
     Vector,
-    math::consts::FloatConsts,
     register::{FloatRegister, Register},
 };
 
-pub mod internal;
+mod internal;
 
 use internal::MathInternal;
 use policy::{DefaultPolicy, Policy};
@@ -41,6 +42,7 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn sin_p<P: Policy>(self) -> Self;
     fn cos_p<P: Policy>(self) -> Self;
     fn tan_p<P: Policy>(self) -> Self;
+    fn sin_pix_p<P: Policy>(self) -> Self;
 
     fn sinh_p<P: Policy>(self) -> Self;
     fn cosh_p<P: Policy>(self) -> Self;
@@ -107,6 +109,7 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn sin(self) -> Self { self.sin_p::<DefaultPolicy>() }
     #[inline(always)] fn cos(self) -> Self { self.cos_p::<DefaultPolicy>() }
     #[inline(always)] fn tan(self) -> Self { self.tan_p::<DefaultPolicy>() }
+    #[inline(always)] fn sin_pix(self) -> Self { self.sin_pix_p::<DefaultPolicy>() }
     #[inline(always)] fn sinh(self) -> Self { self.sinh_p::<DefaultPolicy>() }
     #[inline(always)] fn cosh(self) -> Self { self.cosh_p::<DefaultPolicy>() }
     #[inline(always)] fn tanh(self) -> Self { self.tanh_p::<DefaultPolicy>() }
@@ -186,6 +189,7 @@ where
     #[inline(always)] fn sin_p<P: Policy>(self) -> Self { R::sin::<P>(self) }
     #[inline(always)] fn cos_p<P: Policy>(self) -> Self { R::cos::<P>(self) }
     #[inline(always)] fn tan_p<P: Policy>(self) -> Self { R::tan::<P>(self) }
+    #[inline(always)] fn sin_pix_p<P: Policy>(self) -> Self { R::sin_pix::<P>(self) }
     #[inline(always)] fn sinh_p<P: Policy>(self) -> Self { R::sinh::<P>(self) }
     #[inline(always)] fn cosh_p<P: Policy>(self) -> Self { R::cosh::<P>(self) }
     #[inline(always)] fn tanh_p<P: Policy>(self) -> Self { R::tanh::<P>(self) }

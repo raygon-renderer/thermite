@@ -328,6 +328,29 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         s / c
     }
 
+    #[inline(always)]
+    fn sin_pix<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        let (x, xs) = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let x = x.abs();
+            let mut fl = x.floor();
+
+            let is_odd = (fl % Vf::TWO).cmp_ne(Vf::ZERO);
+
+            fl += Vf::ONE & is_odd.value(); // only add one if odd
+
+            let sign = Vf::NEG_ZERO & is_odd.value();
+            let mut dist = (x - fl) ^ sign; // flip the sign if odd
+
+            dist -= Vf::ONE & dist.cmp_gt(Vf::HALF).value(); // if dist > 0.5, flip the sign
+
+            (x ^ sign, dist)
+        } else {
+            (x, x)
+        };
+
+        x * (xs * Vf::PI).sin_p::<P>()
+    }
+
     fn sinh<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn cosh<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn tanh<P: Policy>(x: Vf<Self>) -> Vf<Self>;
