@@ -48,7 +48,7 @@ where
 
         let xa = xx.abs();
 
-        let frac_2_pi = Vf::<Self>::FRAC_2_PI;
+        let frac_2_pi = Vf::FRAC_2_PI;
 
         let y = (xa * frac_2_pi).round();
         let q: Vu<Self> = Vs::<Self>::fast_from(y).into_bits();
@@ -72,7 +72,7 @@ where
         ])
         .mul_adde(x2 * x, x);
 
-        let one_half = const { Vf::<Self>::splat_const(0.5) };
+        let one_half = const { Vf::splat_const(0.5) };
 
         #[rustfmt::skip]
         let mut c = x2.poly_p::<P, 3>(&[
@@ -80,15 +80,15 @@ where
             -1.388731625493765E-3,
             2.443315711809948E-5,
         ])
-        .mul_adde(x2 * x2, one_half.nmul_adde(x2, Vf::<Self>::ONE));
+        .mul_adde(x2 * x2, one_half.nmul_adde(x2, Vf::ONE));
 
         let swap = (q & Vu::<Self>::ONE).cmp_ne(Vu::<Self>::ZERO);
 
         let sin1 = swap.select(c, s);
         let cos1 = swap.select(s, c);
 
-        let signsin = Vf::<Self>::from_bits(q.shli::<30>()) ^ xx;
-        let signcos = Vf::<Self>::from_bits(((q + Vu::<Self>::ONE) & Vu::<Self>::TWO).shli::<30>());
+        let signsin = Vf::from_bits(q.shli::<30>()) ^ xx;
+        let signcos = Vf::from_bits(((q + Vu::<Self>::ONE) & Vu::<Self>::TWO).shli::<30>());
 
         (sin1.mul_sign(signsin), (cos1 ^ signcos))
     }
@@ -97,15 +97,15 @@ where
     fn sinh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
         let x = x0.abs();
 
-        let x_small = x.cmp_lt(Vf::<Self>::ONE);
+        let x_small = x.cmp_lt(Vf::ONE);
 
-        let mut y1 = Vf::<Self>::EMPTY;
-        let mut y2 = Vf::<Self>::EMPTY;
+        let mut y1 = Vf::EMPTY;
+        let mut y2 = Vf::EMPTY;
 
         // if not all are small, use exponential functions
         if P::POLICY.avoid_branching || !x_small.all() {
             y2 = Self::exph::<P>(x);
-            y2 -= Vf::<Self>::splat(0.25) / y2;
+            y2 -= Vf::splat(0.25) / y2;
 
             if const { P::POLICY.avoid_precision_branches() } {
                 return y2.mul_sign(x0);
@@ -129,19 +129,19 @@ where
     #[inline(always)]
     fn cosh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
         let y = Self::exph::<P>(x0.abs());
-        y + Vf::<Self>::splat(0.25) / y
+        y + Vf::splat(0.25) / y
     }
 
     #[inline(always)]
     #[rustfmt::skip]
     fn tanh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
-        let one = Vf::<Self>::ONE;
+        let one = Vf::ONE;
 
         let x = x0.abs();
-        let x_small = x.cmp_lt(Vf::<Self>::splat(0.625));
+        let x_small = x.cmp_lt(Vf::splat(0.625));
 
-        let mut y1 = Vf::<Self>::EMPTY;
-        let mut y2 = Vf::<Self>::EMPTY;
+        let mut y1 = Vf::EMPTY;
+        let mut y2 = Vf::EMPTY;
 
         // if not all are small
         if P::POLICY.avoid_branching || !x_small.all() {
@@ -151,7 +151,7 @@ where
             y2 = (y2 - one) / (y2 + one);
 
             if P::POLICY.check_overflow {
-                y2 = x.cmp_gt(Vf::<Self>::splat(44.4)).select(one, y2);
+                y2 = x.cmp_gt(Vf::splat(44.4)).select(one, y2);
             }
 
             if P::POLICY.avoid_precision_branches() {

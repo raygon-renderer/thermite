@@ -118,7 +118,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
             t.mul_add(b - a, a) // Fast and accurate, if available
         } else {
-            (Vf::<Self>::ONE - t) * a + t * b // Accurate but slower than FMA
+            (Vf::ONE - t) * a + t * b // Accurate but slower than FMA
         }
     }
 
@@ -144,7 +144,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         }
 
         if P::POLICY.check_overflow {
-            t = t.clamp(Vf::<Self>::ZERO, Vf::<Self>::ONE);
+            t = t.clamp(Vf::ZERO, Vf::ONE);
         }
 
         let three = Vf::splat(FloatElement::from_f32(3.0));
@@ -155,13 +155,13 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn inverse_smoothstep<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let mut t = x.nmul_adde(Vf::<Self>::TWO, Vf::<Self>::ONE).asin_p::<P>();
+        let mut t = x.nmul_adde(Vf::TWO, Vf::ONE).asin_p::<P>();
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            t *= Vf::<Self>::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
+            t *= Vf::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
         } else {
             // exact division for higher precisions
-            t /= Vf::<Self>::splat(FloatElement::from_f32(3.0));
+            t /= Vf::splat(FloatElement::from_f32(3.0));
         }
 
         Vf::HALF - t.sin_p::<P>()
@@ -183,7 +183,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         }
 
         if P::POLICY.check_overflow {
-            t = t.clamp(Vf::<Self>::ZERO, Vf::<Self>::ONE);
+            t = t.clamp(Vf::ZERO, Vf::ONE);
         }
 
         let six = Vf::splat(FloatElement::from_f32(6.0));
@@ -203,6 +203,24 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
             if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
                 // one iteration of Newton's method
                 y = y * x.nmul_adde(y, Vf::TWO);
+            }
+
+            y
+        }
+    }
+
+    #[inline(always)]
+    fn reciprocal_adde<P: Policy>(x: Vf<Self>, a: Vf<Self>) -> Vf<Self> {
+        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            a + Vf::ONE / x
+        } else {
+            let mut y = x.rcp();
+
+            if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+                // one iteration of Newton's method
+                y = y.mul_adde(x.nmul_adde(y, Vf::TWO), a);
+            } else {
+                y += a;
             }
 
             y
