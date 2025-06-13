@@ -1138,10 +1138,9 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
         1.1676998740E-1,
         -1.1514610310E-1,
         7.0376836292E-2,
-    ]) * x2;
+    ]);
 
-    res = fe.mul_adde(ln2f_lo, res);
-    res += x2.nmul_adde(Vf::HALF, x);
+    res = fe.mul_adde(ln2f_lo, res.mul_adde(x2, x2.nmul_adde(Vf::HALF, x)));
     res = fe.mul_adde(ln2f_hi, res);
 
     if const { !P::POLICY.check_overflow } {
