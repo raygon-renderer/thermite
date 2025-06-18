@@ -70,6 +70,8 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn ln1p_p<P: Policy>(self) -> Self;
     fn log2_p<P: Policy>(self) -> Self;
     fn log10_p<P: Policy>(self) -> Self;
+    fn ln1m_expnx_p<P: Policy>(self) -> Self;
+    fn ln1m_expnx_ext_p<P: Policy>(self, lnx: Self) -> Self;
 
     fn erf_p<P: Policy>(self) -> Self;
     fn erfc_p<P: Policy>(self) -> Self;
@@ -131,6 +133,8 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn ln1p(self) -> Self { self.ln1p_p::<DefaultPolicy>() }
     #[inline(always)] fn log2(self) -> Self { self.log2_p::<DefaultPolicy>() }
     #[inline(always)] fn log10(self) -> Self { self.log10_p::<DefaultPolicy>() }
+    #[inline(always)] fn ln1m_expnx(self) -> Self { self.ln1m_expnx_p::<DefaultPolicy>() }
+    #[inline(always)] fn ln1m_expnx_ext(self, lnx: Self) -> Self { self.ln1m_expnx_ext_p::<DefaultPolicy>(lnx) }
     #[inline(always)] fn erf(self) -> Self { self.erf_p::<DefaultPolicy>() }
     #[inline(always)] fn erfc(self) -> Self { self.erfc_p::<DefaultPolicy>() }
     #[inline(always)] fn erfinv(self) -> Self { self.erfinv_p::<DefaultPolicy>() }
@@ -211,6 +215,8 @@ where
     #[inline(always)] fn ln1p_p<P: Policy>(self) -> Self { R::ln1p::<P>(self) }
     #[inline(always)] fn log2_p<P: Policy>(self) -> Self { R::log2::<P>(self) }
     #[inline(always)] fn log10_p<P: Policy>(self) -> Self { R::log10::<P>(self) }
+    #[inline(always)] fn ln1m_expnx_p<P: Policy>(self) -> Self { R::ln1m_expnx::<P>(self) }
+    #[inline(always)] fn ln1m_expnx_ext_p<P: Policy>(self, lnx: Self) -> Self { R::ln1m_expnx_ext::<P>(self, lnx) }
     #[inline(always)] fn erf_p<P: Policy>(self) -> Self { R::erf::<P>(self) }
     #[inline(always)] fn erfc_p<P: Policy>(self) -> Self { R::erfc::<P>(self) }
     #[inline(always)] fn erfinv_p<P: Policy>(self) -> Self { R::erfinv::<P>(self) }

@@ -173,6 +173,16 @@ where
     }
 
     #[inline(always)]
+    fn ln1m_expnx<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    }
+
+    #[inline(always)]
+    fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, _lnx: Vf<Self>) -> Vf<Self> {
+        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    }
+
+    #[inline(always)]
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         todo!()
     }

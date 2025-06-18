@@ -661,6 +661,66 @@ where
     }
 
     #[inline(always)]
+    fn ln1m_expnx<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            return Self::ln1m_expnx_ext::<P>(x, x.ln_p::<P>());
+        }
+
+        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    }
+
+    #[inline(always)]
+    fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, lnx: Vf<Self>) -> Vf<Self> {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            const X1: f32 = 9.1;
+            const X2: f32 = 16.3;
+
+            const B: f32 = 1.0 / (X2 - X1); // b
+            const AB: f32 = X1 / (X2 - X1); // a*b where a=x1
+
+            // combined into fma
+            //let u1 = (x - Vf::splat(x1)) * Vf::splat(1.0 / (x2 - x1));
+            let u1 = x.mul_sube(Vf::splat(B), Vf::splat(AB));
+
+            // clamp
+            let mut u1 = u1.min(Vf::ONE).max(Vf::ZERO);
+
+            if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
+                u1 = u1.smoothstep_p::<P>(None);
+            }
+
+            // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 3, 5}]
+            // let c = x.poly_p::<P, 4>(&[-0.000165121, 0.501311, 0.0308712, 0.0123851])
+            //     / x.poly_p::<P, 5>(&[1.0, 0.149063, 0.0346305, 0.00306313, -0.0000128591]);
+
+            // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 5, 7}]
+            let c = x.poly_p::<P, 6>(&[0.0, 0.5, 0.0439145, 0.0116566, 0.000713523, 0.0000392684])
+                / x.poly_p::<P, 8>(&[
+                    1.0,
+                    0.171161,
+                    0.0375791,
+                    0.0038616,
+                    0.000283035,
+                    7.93625e-6,
+                    -1.02103e-8,
+                    7.10327e-12,
+                ]);
+
+            // bring to zero on the tail
+            let mut res = u1.lerp_p::<P>(lnx - c, Vf::ZERO);
+
+            if P::POLICY.check_overflow {
+                res = res.cmp_lt(Vf::ZERO).select(Vf::NAN, res);
+                res = res.cmp_eq(Vf::ZERO).select(Vf::NEG_INFINITY, res);
+            }
+
+            return res;
+        }
+
+        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    }
+
+    #[inline(always)]
     fn erf<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
         if const { P::POLICY.precision.eq(PrecisionPolicy::Reference) } {
             // Use erf(x) = 1 - erfc(x), since erfc has a good reference implementation

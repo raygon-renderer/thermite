@@ -396,6 +396,14 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     fn log2<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn log10<P: Policy>(x: Vf<Self>) -> Vf<Self>;
 
+    /// ln(1 - e^(-x))
+    #[inline(always)]
+    fn ln1m_expnx<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    }
+
+    fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, lnx: Vf<Self>) -> Vf<Self>;
+
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn erfc<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self>;
