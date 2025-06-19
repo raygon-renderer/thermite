@@ -51,6 +51,33 @@ impl Register for I32x8V3 {
     }
 
     #[inline(always)]
+    fn split(
+        value: Self::Storage,
+    ) -> (
+        <Self::HalfRegister as Register>::Storage,
+        <Self::HalfRegister as Register>::Storage,
+    )
+    where
+        Self::HalfRegister: Register,
+    {
+        let lo = unsafe { arch::_mm256_castsi256_si128(value) };
+        let hi = unsafe { arch::_mm256_extracti128_si256(value, 1) };
+
+        (lo, hi)
+    }
+
+    #[inline(always)]
+    fn join(
+        lo: <Self::HalfRegister as Register>::Storage,
+        hi: <Self::HalfRegister as Register>::Storage,
+    ) -> Self::Storage
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe { arch::_mm256_setr_m128i(lo, hi) }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_xor_si256(lhs, rhs) }
     }

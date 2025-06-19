@@ -28,7 +28,7 @@ impl Register for F32x8V3 {
     where
         Self::HalfRegister: Register,
     {
-        unsafe { arch::_mm256_set_m128(hi, lo) }
+        unsafe { arch::_mm256_setr_m128(lo, hi) }
     }
 
     #[inline(always)]
@@ -41,7 +41,7 @@ impl Register for F32x8V3 {
     where
         Self::HalfRegister: Register,
     {
-        let lo = unsafe { arch::_mm256_extractf128_ps(value, 0) };
+        let lo = unsafe { arch::_mm256_castps256_ps128(value) };
         let hi = unsafe { arch::_mm256_extractf128_ps(value, 1) };
         (lo, hi)
     }

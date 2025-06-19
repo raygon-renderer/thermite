@@ -58,7 +58,7 @@ impl Register for F64x4V3 {
     where
         Self::HalfRegister: Register,
     {
-        unsafe { arch::_mm256_set_m128d(hi, lo) }
+        unsafe { arch::_mm256_setr_m128d(lo, hi) }
     }
 
     #[inline(always)]
@@ -71,7 +71,7 @@ impl Register for F64x4V3 {
     where
         Self::HalfRegister: Register,
     {
-        let lo = unsafe { arch::_mm256_extractf128_pd(value, 0) };
+        let lo = unsafe { arch::_mm256_castpd256_pd128(value) };
         let hi = unsafe { arch::_mm256_extractf128_pd(value, 1) };
         (lo, hi)
     }
