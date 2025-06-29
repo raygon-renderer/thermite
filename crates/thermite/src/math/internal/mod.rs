@@ -347,6 +347,42 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
+    fn sinc<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        let n = x.sin_p::<P>();
+
+        let mut y = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            n * x.reciprocal_p::<P>()
+        } else {
+            n / x
+        };
+
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let x2 = x * x;
+            let x4 = x2 * x2;
+
+            let mut small_res = Vf::ONE;
+
+            // Taylor series expansion for small x
+            small_res -= x2 / Vf::splat(FloatElement::from_f32(6.0));
+            small_res += x4 / Vf::splat(FloatElement::from_f32(120.0));
+
+            let is_small = x.abs().cmp_le(Vf::FOURTH_ROOT_EPSILON);
+
+            // NOTE: Taylor series is naturally 1 at x = 0, so we can use it directly
+            y = is_small.select(small_res, y);
+        } else {
+            // Otherwise we check for zero exactly
+            y = x.cmp_eq(Vf::ZERO).select(Vf::ONE, y);
+        }
+
+        if P::POLICY.check_overflow {
+            y = x.is_infinite().select(Vf::ZERO, y);
+        }
+
+        y
+    }
+
+    #[inline(always)]
     fn sin_pix<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         let (x, xs) = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             let x = x.abs();

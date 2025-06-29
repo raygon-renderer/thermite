@@ -42,6 +42,7 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn sin_p<P: Policy>(self) -> Self;
     fn cos_p<P: Policy>(self) -> Self;
     fn tan_p<P: Policy>(self) -> Self;
+    fn sinc_p<P: Policy>(self) -> Self;
     fn sin_pix_p<P: Policy>(self) -> Self;
 
     fn sinh_p<P: Policy>(self) -> Self;
@@ -97,12 +98,25 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
         self.poly_rational_p::<DefaultPolicy, N, D>(numerator, denominator)
     }
 
+    /// Returns 1 if `self` is greater than or equal to `edge`, otherwise returns 0.
     #[inline(always)] fn step(self, edge: Self) -> Self { self.step_p::<DefaultPolicy>(edge) }
+    /// Linearly interpolates between `a` and `b` based on the value of `self` as the interpolation factor.
     #[inline(always)] fn lerp(self, a: Self, b: Self) -> Self { self.lerp_p::<DefaultPolicy>(a, b) }
+    /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
     #[inline(always)] fn smoothstep(self, edges: Option<(Self, Self)>) -> Self { self.smoothstep_p::<DefaultPolicy>(edges) }
+    /// Even more smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
     #[inline(always)] fn smootherstep(self, edges: Option<(Self, Self)>) -> Self { self.smootherstep_p::<DefaultPolicy>(edges) }
+    /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
     #[inline(always)] fn inverse_smoothstep(self) -> Self { self.inverse_smoothstep_p::<DefaultPolicy>() }
+    /// Returns the multiplicative inverse of `self`, which is `1 / self`.
+    ///
+    /// If using the policy version, you may select lower precision policies for extra performance,
+    /// at the cost of accuracy.
     #[inline(always)] fn reciprocal(self) -> Self { self.reciprocal_p::<DefaultPolicy>() }
+    /// Returns the inverse square root of `self`, which is `1 / sqrt(self)`.
+    ///
+    /// If using the policy version, you may select lower precision policies for extra performance,
+    /// at the cost of accuracy.
     #[inline(always)] fn inverse_sqrt(self) -> Self { self.inverse_sqrt_p::<DefaultPolicy>() }
     #[inline(always)] fn powi(self, e: i32) -> Self { self.powi_p::<DefaultPolicy>(e) }
     #[inline(always)] fn powiv(self, e: Vector<R::Signed>) -> Self { self.powiv_p::<DefaultPolicy>(e) }
@@ -111,6 +125,7 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn sin(self) -> Self { self.sin_p::<DefaultPolicy>() }
     #[inline(always)] fn cos(self) -> Self { self.cos_p::<DefaultPolicy>() }
     #[inline(always)] fn tan(self) -> Self { self.tan_p::<DefaultPolicy>() }
+    #[inline(always)] fn sinc(self) -> Self { self.sinc_p::<DefaultPolicy>() }
     #[inline(always)] fn sin_pix(self) -> Self { self.sin_pix_p::<DefaultPolicy>() }
     #[inline(always)] fn sinh(self) -> Self { self.sinh_p::<DefaultPolicy>() }
     #[inline(always)] fn cosh(self) -> Self { self.cosh_p::<DefaultPolicy>() }
@@ -133,6 +148,11 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn ln1p(self) -> Self { self.ln1p_p::<DefaultPolicy>() }
     #[inline(always)] fn log2(self) -> Self { self.log2_p::<DefaultPolicy>() }
     #[inline(always)] fn log10(self) -> Self { self.log10_p::<DefaultPolicy>() }
+
+    /// Returns the natural logarithm of `1 - exp(-x)`, which depending on the policy may be
+    /// an approximation more performant than the exact calculation. If you're using a policy with below
+    /// average precision, and happen to have `ln(x)` available, you can use [`ln1m_expnx_ext`](Math::ln1m_expnx_ext) instead
+    /// to provide that.
     #[inline(always)] fn ln1m_expnx(self) -> Self { self.ln1m_expnx_p::<DefaultPolicy>() }
     #[inline(always)] fn ln1m_expnx_ext(self, lnx: Self) -> Self { self.ln1m_expnx_ext_p::<DefaultPolicy>(lnx) }
     #[inline(always)] fn erf(self) -> Self { self.erf_p::<DefaultPolicy>() }
@@ -193,6 +213,7 @@ where
     #[inline(always)] fn sin_p<P: Policy>(self) -> Self { R::sin::<P>(self) }
     #[inline(always)] fn cos_p<P: Policy>(self) -> Self { R::cos::<P>(self) }
     #[inline(always)] fn tan_p<P: Policy>(self) -> Self { R::tan::<P>(self) }
+    #[inline(always)] fn sinc_p<P: Policy>(self) -> Self { R::sinc::<P>(self) }
     #[inline(always)] fn sin_pix_p<P: Policy>(self) -> Self { R::sin_pix::<P>(self) }
     #[inline(always)] fn sinh_p<P: Policy>(self) -> Self { R::sinh::<P>(self) }
     #[inline(always)] fn cosh_p<P: Policy>(self) -> Self { R::cosh::<P>(self) }
