@@ -641,7 +641,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 
     #[inline(always)]
     fn nmul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::neg(Self::mul_adde(lhs, rhs, acc))
+        Self::mul_sube(Self::neg(lhs), rhs, acc)
     }
 
     #[inline]
@@ -699,7 +699,7 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 
     #[inline(always)]
     fn mul_sign(value: Self::Storage, sign: Self::Storage) -> Self::Storage {
-        Self::bitxor(value, Self::bitand(sign, Self::NEG_ZERO))
+        Self::bitxor(value, Self::signed_zero(sign))
     }
 
     #[inline(always)]
