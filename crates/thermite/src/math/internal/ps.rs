@@ -26,10 +26,9 @@ where
                     x = (x - quarter) - (x + quarter).floor();
                 }
 
-                // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here,
-                // also move the *= into the FMA to encourage instruction-level parallelism
+                // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
                 //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
-                x = x.abs().mul_sube(Vf::splat(16.0) * x, Vf::splat(8.0));
+                x *= x.abs().mul_sube(Vf::splat(16.0), Vf::splat(8.0));
 
                 // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
                 // increases average error but decreases max error
