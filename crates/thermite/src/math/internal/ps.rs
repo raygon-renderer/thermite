@@ -47,9 +47,7 @@ where
 
         let xa = xx.abs();
 
-        let frac_2_pi = Vf::FRAC_2_PI;
-
-        let y = (xa * frac_2_pi).round();
+        let y = (xa * Vf::FRAC_2_PI).round();
         let q: Vu<Self> = Vs::<Self>::fast_from(y).into_bits();
 
         let dp1f = const { Vector::splat_const(0.78515625 * 2.0) };
@@ -71,15 +69,13 @@ where
         ])
         .mul_adde(x2 * x, x);
 
-        let one_half = const { Vf::splat_const(0.5) };
-
         #[rustfmt::skip]
         let mut c = x2.poly_p::<P, 3>(&[
             4.166664568298827E-2,
             -1.388731625493765E-3,
             2.443315711809948E-5,
         ])
-        .mul_adde(x2 * x2, one_half.nmul_adde(x2, Vf::ONE));
+        .mul_adde(x2 * x2, x2.nmul_adde(Vf::HALF, Vf::ONE));
 
         let swap = (q & Vu::<Self>::ONE).cmp_ne(Vu::<Self>::ZERO);
 
@@ -87,9 +83,9 @@ where
         let cos1 = swap.select(s, c);
 
         let signsin = Vf::from_bits(q.shli::<30>()) ^ xx;
-        let signcos = Vf::from_bits(((q + Vu::<Self>::ONE) & Vu::<Self>::TWO).shli::<30>());
+        let signcos = Vf::from_bits((q + Vu::<Self>::ONE).shri::<1>().shli::<31>());
 
-        (sin1.mul_sign(signsin), (cos1 ^ signcos))
+        (sin1.mul_sign(signsin), cos1 ^ signcos)
     }
 
     #[inline(always)]
@@ -98,7 +94,6 @@ where
 
         let x_small = x.cmp_lt(Vf::ONE);
 
-        let mut y1 = Vf::EMPTY;
         let mut y2 = Vf::EMPTY;
 
         // if not all are small, use exponential functions
@@ -115,7 +110,7 @@ where
         if P::POLICY.avoid_branching || x_small.any() {
             let x2 = x * x;
 
-            y1 = x2
+            let y1 = x2
                 .poly_p::<P, 3>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
                 .mul_adde(x2 * x, x);
 
@@ -139,7 +134,6 @@ where
         let x = x0.abs();
         let x_small = x.cmp_lt(Vf::splat(0.625));
 
-        let mut y1 = Vf::EMPTY;
         let mut y2 = Vf::EMPTY;
 
         // if not all are small
@@ -162,7 +156,7 @@ where
         if P::POLICY.avoid_branching || x_small.any() {
             let x2 = x * x;
 
-            y1 = x2.poly_p::<P, 5>(&[
+            let y1 = x2.poly_p::<P, 5>(&[
                 -3.33332819422E-1,
                 1.33314422036E-1,
                 -5.37397155531E-2,
@@ -671,6 +665,7 @@ where
     #[inline(always)]
     fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, lnx: Vf<Self>) -> Vf<Self> {
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            // determined empirically
             const X1: f32 = 9.1;
             const X2: f32 = 16.3;
 
@@ -693,8 +688,9 @@ where
             //     / x.poly_p::<P, 5>(&[1.0, 0.149063, 0.0346305, 0.00306313, -0.0000128591]);
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 5, 7}]
-            let c = x.poly_p::<P, 6>(&[0.0, 0.5, 0.0439145, 0.0116566, 0.000713523, 0.0000392684])
-                / x.poly_p::<P, 8>(&[
+            let c = x.poly_rational_p::<P, 6, 8>(
+                &[0.0, 0.5, 0.0439145, 0.0116566, 0.000713523, 0.0000392684],
+                &[
                     1.0,
                     0.171161,
                     0.0375791,
@@ -703,7 +699,8 @@ where
                     7.93625e-6,
                     -1.02103e-8,
                     7.10327e-12,
-                ]);
+                ],
+            );
 
             // bring to zero on the tail
             let mut res = u1.lerp_p::<P>(lnx - c, Vf::ZERO);
