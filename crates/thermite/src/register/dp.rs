@@ -482,7 +482,7 @@ where
 
     #[inline(always)]
     fn mul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self(R::mul_sube(lhs.0, rhs.0, acc.0), R::nmul_sube(lhs.1, rhs.1, acc.1))
+        Self(R::mul_sube(lhs.0, rhs.0, acc.0), R::mul_sube(lhs.1, rhs.1, acc.1))
     }
 
     #[inline(always)]
