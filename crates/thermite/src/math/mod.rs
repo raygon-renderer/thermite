@@ -32,6 +32,11 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn smoothstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self;
     /// Even more smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
     fn smootherstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self;
+    /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided, with infinite differentiability.
+    ///
+    /// This is a more advanced version of `smoothstep` that provides a mathematically smoother transition, C-infinitely differentiable.
+    fn smooth_interpolator_p<P: Policy>(self, edges: Option<(Self, Self)>, k: Self) -> Self;
+    /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
     fn inverse_smoothstep_p<P: Policy>(self) -> Self;
     fn reciprocal_p<P: Policy>(self) -> Self;
     fn inverse_sqrt_p<P: Policy>(self) -> Self;
@@ -87,9 +92,11 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn poly<const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
         self.poly_p::<DefaultPolicy, N>(coeffs)
     }
+
     #[inline(always)] fn poly_rev<const N: usize>(self, coeffs: &[R::Element; N]) -> Self {
         self.poly_rev_p::<DefaultPolicy, N>(coeffs)
     }
+
     #[inline(always)] fn poly_rational<const N: usize, const D: usize>(
         self,
         numerator: &[R::Element; N],
@@ -106,6 +113,10 @@ pub trait Math<R: FloatRegister>: MathWithPolicy<R> {
     #[inline(always)] fn smoothstep(self, edges: Option<(Self, Self)>) -> Self { self.smoothstep_p::<DefaultPolicy>(edges) }
     /// Even more smoothly interpolates between the given edges, which default to 0 and 1 if not provided.
     #[inline(always)] fn smootherstep(self, edges: Option<(Self, Self)>) -> Self { self.smootherstep_p::<DefaultPolicy>(edges) }
+    /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided, with infinite differentiability.
+    ///
+    /// This is a more advanced version of `smoothstep` that provides a mathematically smoother transition, C-infinitely differentiable.
+    #[inline(always)] fn smooth_interpolator(self, edges: Option<(Self, Self)>, k: Self) -> Self { self.smooth_interpolator_p::<DefaultPolicy>(edges, k) }
     /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
     #[inline(always)] fn inverse_smoothstep(self) -> Self { self.inverse_smoothstep_p::<DefaultPolicy>() }
     /// Returns the multiplicative inverse of `self`, which is `1 / self`.
@@ -203,6 +214,7 @@ where
     #[inline(always)] fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self { R::lerp::<P>(self, a, b) }
     #[inline(always)] fn smoothstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self { R::smoothstep::<P>(self, edges) }
     #[inline(always)] fn smootherstep_p<P: Policy>(self, edges: Option<(Self, Self)>) -> Self { R::smootherstep::<P>(self, edges) }
+    #[inline(always)] fn smooth_interpolator_p<P: Policy>(self, edges: Option<(Self, Self)>, k: Self) -> Self { R::smooth_interpolator::<P>(self, edges, k) }
     #[inline(always)] fn inverse_smoothstep_p<P: Policy>(self) -> Self { R::inverse_smoothstep::<P>(self) }
     #[inline(always)] fn reciprocal_p<P: Policy>(self) -> Self { R::reciprocal::<P>(self) }
     #[inline(always)] fn inverse_sqrt_p<P: Policy>(self) -> Self { R::invsqrt::<P>(self) }

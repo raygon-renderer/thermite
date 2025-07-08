@@ -194,6 +194,54 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
+    fn smooth_interpolator<P: Policy>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>, k: Vf<Self>) -> Vf<Self> {
+        let mut t = x;
+
+        if let Some((a, b)) = edges {
+            let xa = t - a;
+            let ba = b - a;
+
+            t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+                xa * ba.rcp()
+            } else {
+                xa / ba
+            };
+        }
+
+        let kt = k * t;
+
+        // (2x-1) / (kx^2-kx)
+        let e = t.mul_sube(Vf::TWO, Vf::ONE) / kt.mul_sube(t, kt);
+
+        // exp(e) + 1
+        let d = e.exp_p::<P>() + Vf::ONE;
+
+        // 1/(exp(e) + 1)
+        let mut res = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            // even with the worst precision policy, add a bit more accuracy
+            d.reciprocal_p::<ExtraPrecision<P>>()
+        } else {
+            Vf::ONE / d // otherwise, use full precision
+        };
+
+        let overflow = e.is_infinite();
+
+        // If the denominator is small enough, it could cause overflow,
+        // however that only really happens when t is very close to 0 or 1,
+        // or when k is very small. So approximate it with a step function.
+        if P::POLICY.avoid_branching || crate::unlikely(overflow.any()) {
+            res = overflow.select(t.step_p::<P>(Vf::HALF), res);
+        }
+
+        // these are important since the Exp formulation is discontinuous at 0 and 1,
+        // and this maintains the asymptotes when t is outside the range [0, 1]
+        res = t.cmp_ge(Vf::ONE).select(Vf::ONE, res);
+        res = t.cmp_le(Vf::ZERO).select(Vf::ZERO, res);
+
+        res
+    }
+
+    #[inline(always)]
     fn reciprocal<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             Vf::ONE / x
