@@ -92,6 +92,21 @@ impl<R: Register> Vector<R> {
         Self(register::reg::<R, N>(values))
     }
 
+    /// Broadcast the value of a single lane across all lanes of the vector.
+    #[inline(always)]
+    pub fn broadcast<const I: usize>(self) -> Self {
+        Self(R::broadcast::<I>(self.0))
+    }
+
+    /// Broadcast the value of a single lane across all lanes of the vector.
+    ///
+    /// # Panics
+    /// If `idx` is out of bounds for the vector's lanes.
+    #[inline(always)]
+    pub fn broadcastv(self, idx: usize) -> Self {
+        Self(R::broadcastv(self.0, idx))
+    }
+
     /// Load a vector from an **aligned** pointer to its elements.
     ///
     /// # SAFETY

@@ -2,7 +2,10 @@
 
 pub mod dp;
 
-use generic_array::{ArrayLength, GenericArray, IntoArrayLength, typenum};
+use generic_array::{
+    ArrayLength, GenericArray, IntoArrayLength,
+    typenum::{self, Unsigned},
+};
 
 pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePump;
 
@@ -107,6 +110,17 @@ pub trait Register: Sized + 'static {
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self::Storage;
     fn splat(value: Self::Element) -> Self::Storage;
 
+    #[inline(always)]
+    fn broadcast<const I: usize>(value: Self::Storage) -> Self::Storage {
+        Self::splat(Self::extract::<I>(value))
+    }
+
+    #[inline(always)]
+    fn broadcastv(value: Self::Storage, idx: usize) -> Self::Storage {
+        // NOTE: Slice indexing checks bounds, so this is safe.
+        Self::splat(Self::as_array(&value)[idx])
+    }
+
     /// # SAFETY
     ///
     /// The pointer must be valid, aligned, and point to a memory location
@@ -205,11 +219,25 @@ pub trait Register: Sized + 'static {
 
     #[inline(always)]
     fn extract<const I: usize>(value: Self::Storage) -> Self::Element {
+        const {
+            assert!(
+                I < <Self::Lanes as Unsigned>::USIZE,
+                "Index out of bounds for register lane extraction"
+            );
+        }
+
         Self::as_array(&value)[I]
     }
 
     #[inline(always)]
     fn insert<const I: usize>(mut value: Self::Storage, element: Self::Element) -> Self::Storage {
+        const {
+            assert!(
+                I < <Self::Lanes as Unsigned>::USIZE,
+                "Index out of bounds for register lane insertion"
+            );
+        }
+
         Self::as_array_mut(&mut value)[I] = element;
         value
     }
@@ -263,6 +291,8 @@ pub trait Register: Sized + 'static {
 
     fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
     fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
+
+    fn reverse(value: Self::Storage) -> Self::Storage;
 }
 
 pub trait ShuffleRegister: Register {
@@ -724,6 +754,9 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> {
     fn max_element3(value: Self::Storage) -> Self::Element;
     fn sum_elements3(value: Self::Storage) -> Self::Element;
     fn prod_elements3(value: Self::Storage) -> Self::Element;
+
+    // /// Quaternion multiplication.
+    // fn quat4_product(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 }
 
 pub trait IntegerRegister: NumericRegister + ShiftRegister {
