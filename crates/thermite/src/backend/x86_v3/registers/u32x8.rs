@@ -128,6 +128,12 @@ impl Register for U32x8V3 {
     fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
         unsafe { arch::_mm256_srlv_epi32(value, core::mem::transmute(shifts.into())) }
     }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        let (lo, hi) = Self::split(value);
+        Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
+    }
 }
 
 impl ShiftRegister for U32x8V3 {

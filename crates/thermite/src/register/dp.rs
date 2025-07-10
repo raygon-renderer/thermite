@@ -204,6 +204,11 @@ where
         let [shift_lo, shift_hi] = Self::split_array(shifts.into());
         Self(R::shrv(value.0, shift_lo), R::shrv(value.1, shift_hi))
     }
+
+    #[inline(always)]
+    fn reverse(mut value: Self::Storage) -> Self::Storage {
+        Self(R::reverse(value.1), R::reverse(value.0))
+    }
 }
 
 impl<R: ShiftRegister> ShiftRegister for DoublePumpRegister<R>

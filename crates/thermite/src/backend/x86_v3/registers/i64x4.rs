@@ -128,6 +128,11 @@ impl Register for I64x4V3 {
     fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
         unsafe { arch::_mm256_sllv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts.into()))) }
     }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_permute4x64_epi64::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
+    }
 }
 
 impl ShiftRegister for I64x4V3 {

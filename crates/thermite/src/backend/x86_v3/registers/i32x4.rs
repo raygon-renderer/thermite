@@ -101,6 +101,11 @@ impl Register for I32x4V3 {
     fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
         unsafe { arch::_mm_srlv_epi32(value, core::mem::transmute(shifts.into())) }
     }
+
+    #[inline(always)]
+    fn reverse(mut value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
+    }
 }
 
 impl ShiftRegister for I32x4V3 {

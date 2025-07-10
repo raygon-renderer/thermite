@@ -272,6 +272,12 @@ impl<R: Register> Vector<R> {
 
         dst
     }
+
+    /// Reverse the order of the elements in the vector.
+    #[inline(always)]
+    pub fn reverse(self) -> Self {
+        Self(R::reverse(self.0))
+    }
 }
 
 impl<R: Register> Vector<R> {

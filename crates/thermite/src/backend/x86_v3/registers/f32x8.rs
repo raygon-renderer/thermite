@@ -147,6 +147,12 @@ impl Register for F32x8V3 {
             ))
         }
     }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        let (lo, hi) = Self::split(value);
+        Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
+    }
 }
 
 impl ShiftRegister for F32x8V3 {

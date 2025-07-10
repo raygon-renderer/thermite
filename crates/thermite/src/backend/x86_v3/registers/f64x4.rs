@@ -147,6 +147,11 @@ impl Register for F64x4V3 {
             ))
         }
     }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
+    }
 }
 
 impl ShiftRegister for F64x4V3 {

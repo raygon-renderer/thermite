@@ -1,5 +1,3 @@
-use core::arch::x86_64::{_mm_cmpeq_epi32, _mm_cmplt_epi32};
-
 use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
 use crate::register::{
@@ -122,6 +120,11 @@ impl Register for F32x4V3 {
                 core::mem::transmute(shifts.into()),
             ))
         }
+    }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_permute_ps(value, 0b11_01_10_00) }
     }
 }
 

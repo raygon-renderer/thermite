@@ -121,6 +121,11 @@ impl Register for F64x2V3 {
             ))
         }
     }
+
+    #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_permute_pd(value, 0b01) }
+    }
 }
 
 impl ShiftRegister for F64x2V3 {

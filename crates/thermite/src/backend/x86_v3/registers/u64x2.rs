@@ -101,6 +101,11 @@ impl Register for U64x2V3 {
     fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
         unsafe { arch::_mm_sllv_epi64(value, arch::u32x2_to_i64x2(shifts.into())) }
     }
+
+    #[inline(always)]
+    fn reverse(mut value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE_R!(2, 3, 0, 1) }>(value) }
+    }
 }
 
 impl ShiftRegister for U64x2V3 {
