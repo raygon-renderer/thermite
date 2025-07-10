@@ -552,7 +552,7 @@ where
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
-        let ei = Vs::<R>::from(ee);
+        let ei: Vs<R> = ee.fast_cast();
 
         // biased exponent of result:
         let ej = ei + (Vs::<R>::from_bits(z.abs()) >> 23);
