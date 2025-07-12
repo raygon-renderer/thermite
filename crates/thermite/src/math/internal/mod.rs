@@ -489,7 +489,12 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, lnx: Vf<Self>) -> Vf<Self>;
 
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    fn erfc<P: Policy>(x: Vf<Self>) -> Vf<Self>;
+
+    #[inline(always)]
+    fn erfc<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        Vf::ONE - Self::erf::<P>(x) // erfc(x) = 1 - erf(x), fallback implementation
+    }
+
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self>;
 
     // fn tgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;

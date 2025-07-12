@@ -573,17 +573,90 @@ where
 
     #[inline(always)]
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+        let x2 = x * x;
+        let res = x * x2.poly_rational_p::<P, 6, 6>(
+            &[
+                5.55923013010394962768e4,
+                7.00332514112805075473e3,
+                2.23200534594684319226e3,
+                9.00260197203842689217e1,
+                9.60497373987051638749e0,
+                0.0,
+            ],
+            &[
+                4.92673942608635921086e4,
+                2.26290000613890934246e4,
+                4.59432382970980127987e3,
+                5.21357949780152679795e2,
+                3.35617141647503099647e1,
+                1.00000000000000000000e0,
+            ],
+        );
+
+        if P::POLICY.check_overflow {
+            // x^2 highest point in the polynomial, use x2 to avoid needing absolute value
+            // TODO: Find more exact value?
+            x2.cmp_gt(Vf::splat(8.135455562428929)).select(x.signum(), res)
+        } else {
+            res
+        }
     }
 
     #[inline(always)]
-    fn erfc<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
-    }
+    fn erfinv<P: Policy>(y: Vf<Self>) -> Vf<Self> {
+        let a = y.abs();
 
-    #[inline(always)]
-    fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+        let w = -a.nmul_adde(a, Vf::ONE).ln_p::<P>();
+
+        // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
+        let mut p0 = (w - Vf::splat(2.5)).poly_p::<P, 14>(&[
+            1.501409350414994,
+            0.2466402709383954,
+            -0.0041773392840529855,
+            -0.001252754693878528,
+            0.00021818504236422313,
+            -0.000005055953518603739,
+            -0.000003451228003698613,
+            4.691555466910589e-7,
+            1.565009183876413e-8,
+            -7.498144332533493e-9,
+            2.378447620687541e-9,
+            4.340759057762667e-10,
+            -1.1526825105953649e-11,
+            -3.605158594283844e-12,
+        ]);
+
+        let w_big = w.cmp_ge(Vf::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
+
+        if P::POLICY.avoid_branching || crate::unlikely(w_big.any()) {
+            let mut p1 = (w.sqrt() - Vf::splat(3.0)).poly_p::<P, 16>(&[
+                2.914513093490991,
+                1.5466942804733321,
+                1.5950004257395263,
+                2.559965578101086,
+                2.3489887347568135,
+                0.7600225853251197,
+                -0.9258061028319879,
+                -1.574375166164548,
+                -1.2294848322739875,
+                -0.6192716293714041,
+                -0.21681459128064842,
+                -0.05369968979686224,
+                -0.009288117987439485,
+                -0.0010722580888930223,
+                -0.00007449590390143766,
+                -0.0000023620166848468398,
+            ]);
+
+            if P::POLICY.check_overflow {
+                p1 = a.cmp_eq(Vf::ONE).select(Vf::INFINITY, p1); // erfinv(x == 1) = inf
+                p1 = a.cmp_gt(Vf::ONE).select(Vf::NAN, p1); // erfinv(x > 1) = NaN
+            }
+
+            p0 = w_big.select(p1, p0);
+        }
+
+        p0 * y
     }
 }
 
