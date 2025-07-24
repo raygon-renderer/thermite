@@ -21,6 +21,7 @@ pub trait SpecialMathWithPolicy<R: FloatRegister>: MathWithPolicy<R> {
 
     fn tgamma_p<P: Policy>(self) -> Self;
     fn lgamma_p<P: Policy>(self) -> Self;
+    fn lgamma_r_p<P: Policy>(self) -> (Self, Self);
     fn digamma_p<P: Policy>(self) -> Self;
     fn beta_p<P: Policy>(self, y: Self) -> Self;
 
@@ -47,8 +48,12 @@ pub trait SpecialMath<R: FloatRegister>: SpecialMathWithPolicy<R> {
     /// **NOTE**: The Gamma function is not defined for negative integers.
     #[inline(always)] fn tgamma(self) -> Self { self.tgamma_p::<DefaultPolicy>() }
 
-    /// Computes the natural log of the Gamma function (`ln(Γ(x))`) for any real positive input, for each value in a vector.
+    /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector.
     #[inline(always)] fn lgamma(self) -> Self { self.lgamma_p::<DefaultPolicy>() }
+
+    /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector,
+    /// and returns the sign of the Gamma function from before the absolute value was taken.
+    #[inline(always)] fn lgamma_r(self) -> (Self, Self) { self.lgamma_r_p::<DefaultPolicy>() }
 
     /// Computes the Digamma function `ψ(x)`, the first derivative of `ln(Γ(x))`, or `ln(Γ(x)) d/dx`
     #[inline(always)] fn digamma(self) -> Self { self.digamma_p::<DefaultPolicy>() }
@@ -144,7 +149,12 @@ where
 
     #[inline(always)]
     fn lgamma_p<P: Policy>(self) -> Self {
-        todo!()
+        R::lgamma::<P>(self).0
+    }
+
+    #[inline(always)]
+    fn lgamma_r_p<P: Policy>(self) -> (Self, Self) {
+        R::lgamma::<P>(self)
     }
 
     #[inline(always)]
