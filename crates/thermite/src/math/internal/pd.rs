@@ -26,7 +26,7 @@ where
         let x2 = x * x;
         let x4 = x2 * x2;
 
-        let mut s = x2.poly_p::<P, 6>(&[
+        let mut s = x2.poly_p::<P, _>(&[
             -1.66666666666666307295E-1,
             8.33333333332211858878E-3,
             -1.98412698295895385996E-4,
@@ -35,7 +35,7 @@ where
             1.58962301576546568060E-10,
         ]);
 
-        let mut c = x2.poly_p::<P, 6>(&[
+        let mut c = x2.poly_p::<P, _>(&[
             4.16666666666665929218E-2,
             -1.38888888888730564116E-3,
             2.48015872888517045348E-5,
@@ -89,7 +89,7 @@ where
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_rational_p::<P, 4, 4>(
+            let y1 = x2.poly_rational_p::<P, _, _>(
                 &[
                     -3.51754964808151394800E5,
                     -1.15614435765005216044E4,
@@ -141,7 +141,7 @@ where
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_rational_p::<P, 3, 4>(
+            let y1 = x2.poly_rational_p::<P, _, _>(
                 &[
                     -1.61468768441708447952E3,
                     -9.92877231001918586564E1,
@@ -204,7 +204,7 @@ where
 
         if P::POLICY.avoid_branching || x_small.any() {
             let y1 = x2
-                .poly_rational_p::<P, 5, 5>(
+                .poly_rational_p::<P, _, _>(
                     &[
                         -5.56682227230859640450E0,
                         -9.09030533308377316566E0,
@@ -259,7 +259,7 @@ where
 
         if P::POLICY.avoid_branching || x_small.any() {
             let mut y1 = x1.sqrt()
-                * x1.poly_rational_p::<P, 5, 6>(
+                * x1.poly_rational_p::<P, _, _>(
                     &[
                         1.10855947270161294369E5,
                         1.08102874834699867335E5,
@@ -312,7 +312,7 @@ where
             let x2 = x * x;
 
             let y1 = x2
-                .poly_rational_p::<P, 5, 6>(
+                .poly_rational_p::<P, _, _>(
                     &[
                         -3.09092539379866942570E1,
                         6.54566728676544377376E1,
@@ -380,7 +380,7 @@ where
         let x2 = x * x;
 
         #[rustfmt::skip]
-        let lg1 = (x2 * x) * x.poly_rational_p::<P, 7, 7>(
+        let lg1 = (x2 * x) * x.poly_rational_p::<P, _, _>(
             &[
                 2.0039553499201281259648E1,
                 5.7112963590585538103336E1,
@@ -437,7 +437,7 @@ where
         x = e3.nmul_adde(Vf::LN_2, x); // x -= e3 * VM_LN2;
 
         // Taylor coefficients for exp function, 1/n!
-        let mut z = x.poly_p::<P, 14>(&[
+        let mut z = x.poly_p::<P, _>(&[
             1.0, // + 1
             1.0, // 1x
             1.0 / 2.0,
@@ -574,7 +574,7 @@ where
     #[inline(always)]
     fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         let x2 = x * x;
-        let res = x * x2.poly_rational_p::<P, 6, 6>(
+        let res = x * x2.poly_rational_p::<P, _, _>(
             &[
                 5.55923013010394962768e4,
                 7.00332514112805075473e3,
@@ -609,7 +609,7 @@ where
         let w = -a.nmul_adde(a, Vf::ONE).ln_p::<P>();
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - Vf::splat(2.5)).poly_p::<P, 14>(&[
+        let mut p0 = (w - Vf::splat(2.5)).poly_p::<P, _>(&[
             1.501409350414994,
             0.2466402709383954,
             -0.0041773392840529855,
@@ -629,7 +629,7 @@ where
         let w_big = w.cmp_ge(Vf::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if P::POLICY.avoid_branching || crate::unlikely(w_big.any()) {
-            let mut p1 = (w.sqrt() - Vf::splat(3.0)).poly_p::<P, 16>(&[
+            let mut p1 = (w.sqrt() - Vf::splat(3.0)).poly_p::<P, _>(&[
                 2.914513093490991,
                 1.5466942804733321,
                 1.5950004257395263,
@@ -708,14 +708,14 @@ fn ln_d_internal<R: MathInternal<f64>, P: Policy, const P1: bool>(x0: Vf<R>) -> 
     let x3 = x * x2;
 
     let mut res =
-        x3 * x.poly_p::<P, 6>(&[
+        x3 * x.poly_p::<P, _>(&[
             7.70838733755885391666E0,
             1.79368678507819816313E1,
             1.44989225341610930846E1,
             4.70579119878881725854E0,
             4.97494994976747001425E-1,
             1.01875663804580931796E-4,
-        ]) / x.poly_p::<P, 6>(&[
+        ]) / x.poly_p::<P, _>(&[
             2.31251620126765340583E1,
             7.11544750618563894466E1,
             8.29875266912776603211E1,
@@ -735,7 +735,7 @@ fn ln_d_internal<R: MathInternal<f64>, P: Policy, const P1: bool>(x0: Vf<R>) -> 
     let overflow = !x1.is_finite();
     let underflow = x1.cmp_lt(Vf::splat(2.2250738585072014E-308));
 
-    if crate::likely((overflow | underflow).none()) {
+    if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
         return res;
     }
 
@@ -793,13 +793,13 @@ fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x
 
     let zz = z * z;
 
-    let re0 = zz.poly_p::<P, 5>(&[
+    let re0 = zz.poly_p::<P, _>(&[
         -6.485021904942025371773E1,
         -1.228866684490136173410E2,
         -7.500855792314704667340E1,
         -1.615753718733365076637E1,
         -8.750608600031904122785E-1,
-    ]) / zz.poly_p::<P, 6>(&[
+    ]) / zz.poly_p::<P, _>(&[
         1.945506571482613964425E2,
         4.853903996359136964868E2,
         4.328810604912902668951E2,
@@ -843,7 +843,7 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
 
     // if not all are big (if any are small)
     if P::POLICY.avoid_branching || !is_big.all() {
-        px = x1.poly_p::<P, 6>(&[
+        px = x1.poly_p::<P, _>(&[
             -8.198089802484824371615E0,
             1.956261983317594739197E1,
             -1.626247967210700244449E1,
@@ -852,7 +852,7 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
             4.253011369004428248960E-3,
         ]);
 
-        qx = x1.poly_p::<P, 6>(&[
+        qx = x1.poly_p::<P, _>(&[
             -4.918853881490881290097E1,
             1.395105614657485689735E2,
             -1.471791292232726029859E2,
@@ -866,7 +866,7 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
     if P::POLICY.avoid_branching || is_big.any() {
         xb = (x1 + x1).sqrt();
 
-        rx = x1.poly_p::<P, 5>(&[
+        rx = x1.poly_p::<P, _>(&[
             2.853665548261061424989E1,
             -2.556901049652824852289E1,
             6.968710824104713396794E0,
@@ -874,7 +874,7 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
             2.967721961301243206100E-3,
         ]);
 
-        sx = x1.poly_p::<P, 5>(&[
+        sx = x1.poly_p::<P, _>(&[
             3.424398657913078477438E2,
             -3.838770957603691357202E2,
             1.470656354026814941758E2,
@@ -957,7 +957,7 @@ fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) ->
 
     // Taylor coefficients, 1/n!
     // Not using minimax approximation because we prioritize precision close to x = 0
-    let mut z = x.poly_p::<P, 14>(&[
+    let mut z = x.poly_p::<P, _>(&[
         0.0,
         1.0,
         1.0 / 2.0,

@@ -62,7 +62,7 @@ where
         let x2 = x * x;
 
         #[rustfmt::skip]
-        let mut s = x2.poly_p::<P, 3>(&[
+        let mut s = x2.poly_p::<P, _>(&[
             -1.6666654611E-1,
             8.3321608736E-3,
             -1.9515295891E-4,
@@ -70,7 +70,7 @@ where
         .mul_adde(x2 * x, x);
 
         #[rustfmt::skip]
-        let mut c = x2.poly_p::<P, 3>(&[
+        let mut c = x2.poly_p::<P, _>(&[
             4.166664568298827E-2,
             -1.388731625493765E-3,
             2.443315711809948E-5,
@@ -111,7 +111,7 @@ where
             let x2 = x * x;
 
             let y1 = x2
-                .poly_p::<P, 3>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
+                .poly_p::<P, _>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
                 .mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
@@ -156,7 +156,7 @@ where
         if P::POLICY.avoid_branching || x_small.any() {
             let x2 = x * x;
 
-            let y1 = x2.poly_p::<P, 5>(&[
+            let y1 = x2.poly_p::<P, _>(&[
                 -3.33332819422E-1,
                 1.33314422036E-1,
                 -5.37397155531E-2,
@@ -227,7 +227,7 @@ where
         let z = a / b;
         let z2 = z * z;
 
-        z2.poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+        z2.poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s)
             .mul_sign(x)
     }
@@ -299,7 +299,7 @@ where
         let z2 = z * z;
 
         let mut re = z2
-            .poly_p::<P, 4>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
             .mul_adde(z2 * z, z + s);
 
         re = swap_xy.select(Vf::FRAC_PI_2 - re, re);
@@ -337,7 +337,7 @@ where
 
         if P::POLICY.avoid_branching || x_small.any() {
             y1 = x2
-                .poly_p::<P, 4>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
+                .poly_p::<P, _>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
                 .mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
@@ -377,7 +377,7 @@ where
         // if any are small
         if P::POLICY.avoid_branching || x_small.any() {
             y1 = x1.sqrt()
-                * x1.poly_p::<P, 5>(&[
+                * x1.poly_p::<P, _>(&[
                     1.4142135263E0,
                     -1.1784741703E-1,
                     2.6454905019E-2,
@@ -424,7 +424,7 @@ where
             let x2 = x * x;
 
             y1 = x2
-                .poly_p::<P, 5>(&[
+                .poly_p::<P, _>(&[
                     3.33337300303E-1,
                     1.99782164500E-1,
                     1.46691431730E-1,
@@ -496,7 +496,7 @@ where
         let x2 = x * x;
 
         // logarithm expansion
-        let mut lg1 = x.poly_p::<P, 9>(&[
+        let mut lg1 = x.poly_p::<P, _>(&[
             3.3333331174E-1,
             -2.4999993993E-1,
             2.0000714765E-1,
@@ -547,7 +547,7 @@ where
 
         // Taylor expansion of exp
         let z = x
-            .poly_p::<P, 6>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
             .mul_adde(x * x, x + one);
 
         // contributions to exponent
@@ -684,11 +684,11 @@ where
             }
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 3, 5}]
-            // let c = x.poly_p::<P, 4>(&[-0.000165121, 0.501311, 0.0308712, 0.0123851])
-            //     / x.poly_p::<P, 5>(&[1.0, 0.149063, 0.0346305, 0.00306313, -0.0000128591]);
+            // let c = x.poly_p::<P, _>(&[-0.000165121, 0.501311, 0.0308712, 0.0123851])
+            //     / x.poly_p::<P, _>(&[1.0, 0.149063, 0.0346305, 0.00306313, -0.0000128591]);
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 5, 7}]
-            let c = x.poly_rational_p::<P, 6, 8>(
+            let c = x.poly_rational_p::<P, _, _>(
                 &[0.0, 0.5, 0.0439145, 0.0116566, 0.000713523, 0.0000392684],
                 &[
                     1.0,
@@ -732,7 +732,7 @@ where
         let y = match P::POLICY.precision {
             // 5 * 10^-4 accuracy
             PrecisionPolicy::Worst => {
-                let t = x.poly_p::<P, 5>(&[1.0, 0.278393, 0.230389, 0.000972, 0.078108]);
+                let t = x.poly_p::<P, _>(&[1.0, 0.278393, 0.230389, 0.000972, 0.078108]);
                 let t2 = t * t;
                 let t4 = t2 * t2;
 
@@ -751,7 +751,7 @@ where
 
             // 3 * 10^-7 accuracy
             PrecisionPolicy::Medium | PrecisionPolicy::Average => {
-                let r = x.poly_p::<P, 7>(&[
+                let r = x.poly_p::<P, _>(&[
                     1.0,
                     0.0705230784,
                     0.0422820123,
@@ -778,7 +778,7 @@ where
             //
             //     let e = t * (-x * x).exp_p::<P>(); // e^(-x^2)
             //
-            //     let y = t.poly_p::<P, 5>(&[0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429]);
+            //     let y = t.poly_p::<P, _>(&[0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429]);
             //
             //     y.nmul_adde(e, Vf::ONE)
             // }
@@ -788,7 +788,7 @@ where
                 // 1 / (1 + 1/2|x|)
                 let t = x.mul_adde(Vf::HALF, Vf::ONE).reciprocal_p::<P>();
 
-                let r0 = t.poly_p::<P, 10>(&[
+                let r0 = t.poly_p::<P, _>(&[
                     -1.26551223,
                     1.00002368,
                     0.37409196,
@@ -865,7 +865,7 @@ where
         let ge5 = w.cmp_ge(Vf::splat(5.0));
 
         let w0 = w - Vf::splat(2.5);
-        let mut p0 = w0.poly_p::<P, 9>(&[
+        let mut p0 = w0.poly_p::<P, _>(&[
             1.50140941,
             0.246640727,
             -0.00417768164,
@@ -879,7 +879,7 @@ where
 
         if P::POLICY.avoid_branching || crate::unlikely(ge5.any()) {
             let w1 = w.sqrt() - Vf::splat(3.0);
-            let p1 = w1.poly_p::<P, 9>(&[
+            let p1 = w1.poly_p::<P, _>(&[
                 2.83297682,
                 1.00167406,
                 0.00943887047,
@@ -917,7 +917,7 @@ fn asin_f_internal<P: Policy, R: MathInternal<f32>, const ACOS: bool>(x: Vf<R>) 
         }
 
         let a0 = (Vf::ONE - m).sqrt();
-        let a1 = m.poly_p::<P, 4>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
+        let a1 = m.poly_p::<P, _>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
 
         if ACOS {
             if R::HAS_TRUE_FMA {
@@ -941,7 +941,7 @@ fn asin_f_internal<P: Policy, R: MathInternal<f32>, const ACOS: bool>(x: Vf<R>) 
     let x4 = is_big.select(x1.sqrt(), xa);
 
     #[rustfmt::skip]
-    let z = x3.poly_p::<P, 5>(&[
+    let z = x3.poly_p::<P, _>(&[
         1.6666752422E-1,
         7.4953002686E-2,
         4.5470025998E-2,
@@ -1006,7 +1006,7 @@ fn exp_f_internal<P: Policy, R: MathInternal<f32>, const MODE: u8>(x0: Vf<R>) ->
         let i: Vs<R> = fi.fast_cast();
 
         // polynomial approximation of 2^f
-        let cf = f.poly_p::<P, 4>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
+        let cf = f.poly_p::<P, _>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
 
         // scale 2^f by 2^i
         let ci = Vs::<R>::from_bits(cf) + (i << 23);
@@ -1054,7 +1054,7 @@ fn exp_f_internal<P: Policy, R: MathInternal<f32>, const MODE: u8>(x0: Vf<R>) ->
         }
 
         let mut z = x
-            .poly_p::<P, 6>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
             .mul_adde(x * x, x);
 
         let n2 = pow2n_f::<R>(r);
@@ -1101,7 +1101,7 @@ fn exponent<R: MathInternal<f32>>(x: Vf<R>) -> Vs<R> {
 fn ln_2_internal<P: Policy, R: MathInternal<f32>>(x: Vf<R>) -> Vf<R> {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // // https://github.com/nadavrot/fast_log/blob/83bd112c330976c291300eaa214e668f809367ab/src/log_approx.cc#L47
-        // return fraction2::<R>(x).poly_p::<P, 4>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
+        // return fraction2::<R>(x).poly_p::<P, _>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
         //     + (exponent::<R>(x) + Vs::<R>::ONE).cast();
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L384
@@ -1183,7 +1183,7 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
     };
 
     let x2 = x * x;
-    let mut res = x.poly_p::<P, 10>(&[
+    let mut res = x.poly_p::<P, _>(&[
         0.0, // multiply all by x
         3.3333331174E-1,
         -2.4999993993E-1,
@@ -1206,7 +1206,7 @@ fn ln_f_internal<P: Policy, R: MathInternal<f32>, const P1: bool>(x0: Vf<R>) -> 
     let overflow = !x1.is_finite();
     let underflow = x1.cmp_lt(Vf::<R>::splat(1.17549435e-38));
 
-    if crate::likely((overflow | underflow).none()) {
+    if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
         return res;
     }
 
