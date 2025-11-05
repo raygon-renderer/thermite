@@ -307,7 +307,7 @@ pub trait BlendRegister: Register {
     fn blend<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 }
 
-pub trait SwizzleRegister: Register {
+pub trait SwizzleRegister: MaskRegister {
     fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
 
     // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
@@ -323,45 +323,51 @@ pub trait SwizzleRegister: Register {
 
         let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
         let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
-        let mut blend: GenericArray<u32, Self::Lanes> = GenericArray::default();
+
+        let mut blend_mask = <Self as MaskRegister>::FALSY;
+
+        let blend = Self::as_array_mut(&mut blend_mask);
 
         for (i, &idx) in idxs.iter().enumerate() {
             if idx < Self::Lanes::USIZE as u32 {
                 a_idxs[i] = idx;
                 b_idxs[i] = i as u32;
-                blend[i] = 0;
+                blend[i] = MaskElement::FALSY;
             } else {
                 a_idxs[i] = i as u32;
                 b_idxs[i] = idx - Self::Lanes::USIZE as u32;
-                blend[i] = !0;
+                blend[i] = MaskElement::TRUTHY;
             }
         }
 
         let tmp_a = Self::permutev(a, a_idxs);
         let tmp_b = Self::permutev(b, b_idxs);
 
-        let blend = unsafe { generic_array::const_transmute(blend) };
-
-        Self::blendv(blend, tmp_a, tmp_b)
+        Self::blendv(blend_mask, tmp_a, tmp_b)
     }
 }
 
 pub trait MaskElement: Sized + 'static {
+    const FALSY: Self;
+    const TRUTHY: Self;
+
     fn to_bool(self) -> bool;
-    fn from_bool(value: bool) -> Self;
+
+    #[inline(always)]
+    fn from_bool(value: bool) -> Self {
+        if value { Self::TRUTHY } else { Self::FALSY }
+    }
 }
 
 macro_rules! impl_mask_element {
     ($($t:ty),+) => {$(
         impl MaskElement for $t {
+            const FALSY: Self = 0;
+            const TRUTHY: Self = !0;
+
             #[inline(always)]
             fn to_bool(self) -> bool {
                 self != 0
-            }
-
-            #[inline(always)]
-            fn from_bool(value: bool) -> Self {
-                if value { 1 } else { 0 }
             }
         }
     )+};
@@ -370,26 +376,22 @@ macro_rules! impl_mask_element {
 impl_mask_element!(u8, u16, u32, u64, i8, i16, i32, i64);
 
 impl MaskElement for f32 {
+    const FALSY: Self = f32::from_bits(0);
+    const TRUTHY: Self = f32::from_bits(!0);
+
     #[inline(always)]
     fn to_bool(self) -> bool {
         self.to_bits() != 0
-    }
-
-    #[inline(always)]
-    fn from_bool(value: bool) -> Self {
-        f32::from_bits(if value { !0 } else { 0 })
     }
 }
 
 impl MaskElement for f64 {
+    const FALSY: Self = f64::from_bits(0);
+    const TRUTHY: Self = f64::from_bits(!0);
+
     #[inline(always)]
     fn to_bool(self) -> bool {
         self.to_bits() != 0
-    }
-
-    #[inline(always)]
-    fn from_bool(value: bool) -> Self {
-        f64::from_bits(if value { !0 } else { 0 })
     }
 }
 

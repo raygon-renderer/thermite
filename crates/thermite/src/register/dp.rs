@@ -1,8 +1,8 @@
 use core::ops::Shl;
 
 use super::{
-    BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister,
-    NumericRegister, PartialOrdRegister, Register, ShiftRegister, SignedRegister, SwizzleRegister,
+    BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes, LinAlg3Register, MaskElement,
+    MaskRegister, NumericRegister, PartialOrdRegister, Register, ShiftRegister, SignedRegister, SwizzleRegister,
     UnsignedIntegerRegister,
 };
 
@@ -705,21 +705,27 @@ where
             // lanes will always be a power of two, so subtracting one creates a mask
             let mask = <R::Lanes as Unsigned>::U32 - 1;
 
-            // TODO: Replace with masks when they're implemented
             // mask out all indices to be within the range of R
             idxs.iter_mut().for_each(|idx| *idx &= mask);
 
             Self::split_array(idxs)
         };
 
-        let [blend_lo, blend_hi] = {
-            let mut idxs = idxs.clone();
+        let (blend_lo, blend_hi) = {
+            let mut blends = Self::EMPTY; // mask register
 
-            // TODO: Replace with masks when they're implemented
-            idxs.iter_mut()
-                .for_each(|idx| *idx = if *idx < <R::Lanes as Unsigned>::U32 { 0 } else { !0 });
+            idxs.iter()
+                .zip(Self::as_array_mut(&mut blends))
+                .for_each(|(idx, blend)| {
+                    // hopefully compiles to cmov or similar
+                    *blend = if *idx < <R::Lanes as Unsigned>::U32 {
+                        MaskElement::FALSY
+                    } else {
+                        MaskElement::TRUTHY
+                    };
+                });
 
-            Self::split_array(idxs)
+            Self::split(blends)
         };
 
         let DoublePumpRegister(lo, hi) = value;
@@ -730,17 +736,8 @@ where
         let res_hi_from_lo: R::Storage = R::permutev(lo, pidx_hi.clone());
         let res_hi_from_hi: R::Storage = R::permutev(hi, pidx_hi);
 
-        let low: R::Storage = R::blendv(
-            unsafe { generic_array::const_transmute(blend_lo) },
-            res_lo_from_lo,
-            res_lo_from_hi,
-        );
-
-        let high: R::Storage = R::blendv(
-            unsafe { generic_array::const_transmute(blend_hi) },
-            res_hi_from_lo,
-            res_hi_from_hi,
-        );
+        let low: R::Storage = R::blendv(blend_lo, res_lo_from_lo, res_lo_from_hi);
+        let high: R::Storage = R::blendv(blend_hi, res_hi_from_lo, res_hi_from_hi);
 
         Self(low, high)
     }
