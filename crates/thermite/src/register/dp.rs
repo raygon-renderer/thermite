@@ -780,57 +780,8 @@ where
 // TODO: Improve the swizzling here when some generic variant is available
 impl<R: FloatRegister> LinAlg3Register for DoublePumpRegister<R>
 where
-    Self: FloatRegister<Lanes = typenum::U4>,
+    Self: FloatRegister<Lanes = typenum::U4> + SwizzleRegister,
 {
-    #[inline(always)]
-    fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Element {
-        let v = Self::mul(lhs, rhs);
-
-        let a = Self::extract::<0>(v);
-        let b = Self::extract::<1>(v);
-        let c = Self::extract::<2>(v);
-
-        a + b + c
-    }
-
-    #[inline(always)]
-    fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        let lhszxy = Self::new(
-            [
-                Self::extract::<2>(lhs),
-                Self::extract::<0>(lhs),
-                Self::extract::<1>(lhs),
-                Self::extract::<3>(lhs),
-            ]
-            .into(),
-        );
-
-        let rhszxy = Self::new(
-            [
-                Self::extract::<2>(rhs),
-                Self::extract::<0>(rhs),
-                Self::extract::<1>(rhs),
-                Self::extract::<3>(rhs),
-            ]
-            .into(),
-        );
-
-        let lhszxy_rhs = Self::mul(lhszxy, rhs);
-        let rhszxy_lhs = Self::mul(rhszxy, lhs);
-
-        let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
-
-        Self::new(
-            [
-                Self::extract::<2>(sub),
-                Self::extract::<0>(sub),
-                Self::extract::<1>(sub),
-                Self::extract::<3>(sub),
-            ]
-            .into(),
-        )
-    }
-
     #[inline(always)]
     fn zero4(value: Self::Storage) -> Self::Storage {
         Self::insert::<3>(value, num_traits::Zero::zero())

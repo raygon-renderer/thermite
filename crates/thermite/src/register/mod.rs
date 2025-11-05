@@ -329,13 +329,13 @@ pub trait SwizzleRegister: MaskRegister {
         let blend = Self::as_array_mut(&mut blend_mask);
 
         for (i, &idx) in idxs.iter().enumerate() {
-            if idx < Self::Lanes::USIZE as u32 {
+            if idx < Self::Lanes::U32 {
                 a_idxs[i] = idx;
                 b_idxs[i] = i as u32;
                 blend[i] = MaskElement::FALSY;
             } else {
                 a_idxs[i] = i as u32;
-                b_idxs[i] = idx - Self::Lanes::USIZE as u32;
+                b_idxs[i] = idx - Self::Lanes::U32;
                 blend[i] = MaskElement::TRUTHY;
             }
         }
@@ -746,9 +746,25 @@ pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<S
 /// Extensions to the `FloatRegister` trait for the most common 3D linear algebra operations.
 ///
 /// This is only available on 4-lane registers.
-pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> {
-    fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Element;
-    fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
+pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + SwizzleRegister {
+    #[inline(always)]
+    fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Element {
+        Self::sum_elements3(Self::mul(lhs, rhs))
+    }
+
+    #[inline(always)]
+    fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        let lhszxy = Self::permutev(lhs, [2, 0, 1, 3]);
+        let rhszxy = Self::permutev(rhs, [2, 0, 1, 3]);
+
+        let lhszxy_rhs = Self::mul(lhszxy, rhs);
+        let rhszxy_lhs = Self::mul(rhszxy, lhs);
+
+        let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
+
+        Self::permutev(sub, [2, 0, 1, 3])
+    }
+
     fn zero4(value: Self::Storage) -> Self::Storage;
     fn one4(value: Self::Storage) -> Self::Storage;
 

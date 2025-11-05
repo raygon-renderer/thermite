@@ -180,6 +180,16 @@ impl PermuteRegister for F64x4V3 {
     }
 }
 
+impl SwizzleRegister for F64x4V3 {
+    #[inline(always)]
+    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+        unsafe {
+            let idxs: arch::__m128i = core::mem::transmute(idxs.into());
+            arch::_mm256_permutevar_pd(value, arch::_mm256_cvtepu32_epi64(idxs))
+        }
+    }
+}
+
 impl MaskRegister for F64x4V3 {
     const FALSY: Self::Storage = reg::<Self, 4>([f64::from_bits(0); 4]);
     const TRUTHY: Self::Storage = reg::<Self, 4>([f64::from_bits(!0); 4]);
