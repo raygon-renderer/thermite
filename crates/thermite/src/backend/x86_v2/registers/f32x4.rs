@@ -85,12 +85,12 @@ impl Register for F32x4SSE41 {
     }
 
     #[inline(always)]
-    fn shlv(mut value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shlv(mut value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         // TODO: use _mm_sllv_epi32 doesn't exist on SSE4.1, so we may want to emulate it
         // more intelligently later.
         Self::as_array_mut(&mut value)
             .iter_mut()
-            .zip(shifts.into())
+            .zip(shifts)
             .for_each(|(v, s)| {
                 let mut vi = v.to_bits();
                 vi <<= s;
@@ -101,10 +101,10 @@ impl Register for F32x4SSE41 {
     }
 
     #[inline(always)]
-    fn shrv(mut value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shrv(mut value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         Self::as_array_mut(&mut value)
             .iter_mut()
-            .zip(shifts.into())
+            .zip(shifts)
             .for_each(|(v, s)| {
                 let mut vi = v.to_bits();
                 vi >>= s;
@@ -142,11 +142,11 @@ impl PermuteRegister for F32x4SSE41 {
 }
 
 impl SwizzleRegister for F32x4SSE41 {
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castsi128_ps(crate::backend::sse41::polyfills::_mm_permutevarx_epi32(
                 arch::_mm_castps_si128(value),
-                core::mem::transmute(idxs.into()),
+                core::mem::transmute(idxs),
             ))
         }
     }

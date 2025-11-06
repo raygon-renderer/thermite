@@ -60,13 +60,13 @@ impl Register for F32x1Scalar {
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        Self::shr(value, shifts.into()[0])
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        Self::shr(value, shifts[0])
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        Self::shl(value, shifts.into()[0])
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        Self::shl(value, shifts[0])
     }
 }
 

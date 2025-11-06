@@ -129,21 +129,21 @@ impl Register for F64x4V3 {
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm256_castsi256_pd(arch::_mm256_sllv_epi64(
                 arch::_mm256_castpd_si256(value),
-                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts.into())),
+                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts)),
             ))
         }
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm256_castsi256_pd(arch::_mm256_srlv_epi64(
                 arch::_mm256_castpd_si256(value),
-                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts.into())),
+                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts)),
             ))
         }
     }
@@ -182,9 +182,9 @@ impl PermuteRegister for F64x4V3 {
 
 impl SwizzleRegister for F64x4V3 {
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs.into());
+            let idxs: arch::__m128i = core::mem::transmute(idxs);
             arch::_mm256_permutevar_pd(value, arch::_mm256_cvtepu32_epi64(idxs))
         }
     }
@@ -195,8 +195,8 @@ impl MaskRegister for F64x4V3 {
     const TRUTHY: Self::Storage = reg::<Self, 4>([f64::from_bits(!0); 4]);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm256_castsi256_pd(arch::_mm256_cvtboolx4_to_epi64_mask_v3(value.into())) }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm256_castsi256_pd(arch::_mm256_cvtboolx4_to_epi64_mask_v3(value)) }
     }
 
     #[inline(always)]

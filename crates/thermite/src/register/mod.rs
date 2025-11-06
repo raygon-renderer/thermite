@@ -266,6 +266,25 @@ pub trait Register: Sized + 'static {
         lhs
     }
 
+    #[inline(always)]
+    fn fold<F>(first: Self::Element, value: Self::Storage, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        Self::as_array(&value).iter().fold(first, |acc, &v| f(acc, v))
+    }
+
+    #[inline(always)]
+    fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        Self::as_array(&value)
+            .iter()
+            .skip(1)
+            .fold(Self::extract::<0>(value), |acc, &v| f(acc, v))
+    }
+
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
     fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 
@@ -289,8 +308,8 @@ pub trait Register: Sized + 'static {
     fn shr(value: Self::Storage, shift: u32) -> Self::Storage;
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage;
 
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
 
     fn reverse(value: Self::Storage) -> Self::Storage;
 }
@@ -308,17 +327,10 @@ pub trait BlendRegister: Register {
 }
 
 pub trait SwizzleRegister: MaskRegister {
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
-
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     a: Self::Storage,
-    //     b: Self::Storage,
-    // ) -> Self::Storage;
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage;
 
     #[inline(always)]
-    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let idxs: GenericArray<u32, Self::Lanes> = idxs.into();
-
+    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         use typenum::Unsigned;
 
         let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
@@ -405,10 +417,8 @@ pub trait MaskRegister: Register<Element: MaskElement> {
     }
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
         // NOTE: This is a fallback implementation.
-
-        let value = value.into();
         let mut result = Self::EMPTY;
 
         {
@@ -754,19 +764,26 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
 
     #[inline(always)]
     fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        let lhszxy = Self::permutev(lhs, [2, 0, 1, 3]);
-        let rhszxy = Self::permutev(rhs, [2, 0, 1, 3]);
+        let lhszxy = Self::permutev(lhs, GenericArray::from_array([2, 0, 1, 3]));
+        let rhszxy = Self::permutev(rhs, GenericArray::from_array([2, 0, 1, 3]));
 
         let lhszxy_rhs = Self::mul(lhszxy, rhs);
         let rhszxy_lhs = Self::mul(rhszxy, lhs);
 
         let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
 
-        Self::permutev(sub, [2, 0, 1, 3])
+        Self::permutev(sub, GenericArray::from_array([2, 0, 1, 3]))
     }
 
-    fn zero4(value: Self::Storage) -> Self::Storage;
-    fn one4(value: Self::Storage) -> Self::Storage;
+    #[inline(always)]
+    fn zero4(value: Self::Storage) -> Self::Storage {
+        Self::insert::<3>(value, num_traits::Zero::zero())
+    }
+
+    #[inline(always)]
+    fn one4(value: Self::Storage) -> Self::Storage {
+        Self::insert::<3>(value, num_traits::One::one())
+    }
 
     fn min_element3(value: Self::Storage) -> Self::Element;
     fn max_element3(value: Self::Storage) -> Self::Element;
@@ -801,9 +818,9 @@ pub trait IntegerRegister: NumericRegister + ShiftRegister {
         Self::ror(value, IMM8 as u32)
     }
 
-    fn rolv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
-    fn rorv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage;
-    //fn rotatev(value: Self::Storage, shifts: impl Into<GenericArray<i32, Self::Lanes>>) -> Self::Storage;
+    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
+    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
+    //fn rotatev(value: Self::Storage, shifts: GenericArray<i32, Self::Lanes>) -> Self::Storage;
 
     fn reverse_bits(value: Self::Storage) -> Self::Storage;
     fn count_ones(value: Self::Storage) -> Self::Storage;

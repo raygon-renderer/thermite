@@ -93,13 +93,13 @@ impl Register for I32x4V3 {
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_sllv_epi32(value, core::mem::transmute(shifts.into())) }
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_sllv_epi32(value, core::mem::transmute(shifts)) }
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_srlv_epi32(value, core::mem::transmute(shifts.into())) }
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_srlv_epi32(value, core::mem::transmute(shifts)) }
     }
 
     #[inline(always)]
@@ -150,11 +150,11 @@ impl PermuteRegister for I32x4V3 {
 
 impl SwizzleRegister for I32x4V3 {
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castps_si128(arch::_mm_permutevar_ps(
                 arch::_mm_castsi128_ps(value),
-                core::mem::transmute(idxs.into()),
+                core::mem::transmute(idxs),
             ))
         }
     }
@@ -179,8 +179,8 @@ impl MaskRegister for I32x4V3 {
     const TRUTHY: Self::Storage = reg::<Self, 4>([-1; 4]);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_cvtboolx4_to_epi32_mask_v2(value.into()) }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_cvtboolx4_to_epi32_mask_v2(value) }
     }
 
     #[inline(always)]
@@ -344,13 +344,13 @@ impl IntegerRegister for I32x4V3 {
     }
 
     #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_rolv_epi32x_v3(value, core::mem::transmute(shifts.into())) }
+    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_rolv_epi32x_v3(value, core::mem::transmute(shifts)) }
     }
 
     #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_rorv_epi32x_v3(value, core::mem::transmute(shifts.into())) }
+    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_rorv_epi32x_v3(value, core::mem::transmute(shifts)) }
     }
 
     #[inline(always)]

@@ -152,6 +152,25 @@ where
     }
 
     #[inline(always)]
+    fn fold<F>(first: Self::Element, value: Self::Storage, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        R::fold(R::fold(first, value.0, &f), value.1, &f)
+    }
+
+    #[inline(always)]
+    fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        let lo = R::reduce(value.0, &f);
+        let hi = R::reduce(value.1, &f);
+
+        f(lo, hi)
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         Self(R::bitxor(lhs.0, rhs.0), R::bitxor(lhs.1, rhs.1))
     }
@@ -194,14 +213,14 @@ where
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts.into());
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        let [shift_lo, shift_hi] = Self::split_array(shifts);
         Self(R::shlv(value.0, shift_lo), R::shlv(value.1, shift_hi))
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts.into());
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        let [shift_lo, shift_hi] = Self::split_array(shifts);
         Self(R::shrv(value.0, shift_lo), R::shrv(value.1, shift_hi))
     }
 
@@ -234,8 +253,8 @@ where
     const FALSY: Self::Storage = Self(R::FALSY, R::FALSY);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        let [lhs, rhs] = Self::split_array(value.into());
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        let [lhs, rhs] = Self::split_array(value);
         Self(R::new_mask(lhs), R::new_mask(rhs))
     }
 
@@ -619,14 +638,14 @@ where
     }
 
     #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts.into());
+    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        let [shift_lo, shift_hi] = Self::split_array(shifts);
         Self(R::rolv(value.0, shift_lo), R::rolv(value.1, shift_hi))
     }
 
     #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts.into());
+    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        let [shift_lo, shift_hi] = Self::split_array(shifts);
         Self(R::rorv(value.0, shift_lo), R::rorv(value.1, shift_hi))
     }
 
@@ -696,9 +715,7 @@ where
     typenum::Double<R::Lanes>: Lanes,
 {
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        let idxs = idxs.into();
-
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         let [pidx_lo, pidx_hi] = {
             let mut idxs = idxs.clone();
 
@@ -782,16 +799,6 @@ impl<R: FloatRegister> LinAlg3Register for DoublePumpRegister<R>
 where
     Self: FloatRegister<Lanes = typenum::U4> + SwizzleRegister,
 {
-    #[inline(always)]
-    fn zero4(value: Self::Storage) -> Self::Storage {
-        Self::insert::<3>(value, num_traits::Zero::zero())
-    }
-
-    #[inline(always)]
-    fn one4(value: Self::Storage) -> Self::Storage {
-        Self::insert::<3>(value, num_traits::One::one())
-    }
-
     #[inline(always)]
     fn min_element3(value: Self::Storage) -> Self::Element {
         let mut a = Self::extract::<0>(value);

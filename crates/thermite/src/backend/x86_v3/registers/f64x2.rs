@@ -103,21 +103,21 @@ impl Register for F64x2V3 {
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castsi128_pd(arch::_mm_sllv_epi64(
                 arch::_mm_castpd_si128(value),
-                arch::u32x2_to_i64x2(shifts.into()),
+                arch::u32x2_to_i64x2(shifts),
             ))
         }
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castsi128_pd(arch::_mm_srlv_epi64(
                 arch::_mm_castpd_si128(value),
-                arch::u32x2_to_i64x2(shifts.into()),
+                arch::u32x2_to_i64x2(shifts),
             ))
         }
     }
@@ -125,6 +125,16 @@ impl Register for F64x2V3 {
     #[inline(always)]
     fn reverse(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_permute_pd(value, 0b01) }
+    }
+
+    #[inline(always)]
+    fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        let arr = Self::as_array(&value);
+
+        f(arr[0], arr[1])
     }
 }
 
@@ -159,8 +169,8 @@ impl MaskRegister for F64x2V3 {
     const TRUTHY: Self::Storage = reg::<Self, 2>([f64::from_bits(!0); 2]);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_pd(arch::_mm_cvtboolx2_to_epi64_mask_v2(value.into())) }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_castsi128_pd(arch::_mm_cvtboolx2_to_epi64_mask_v2(value)) }
     }
 
     #[inline(always)]

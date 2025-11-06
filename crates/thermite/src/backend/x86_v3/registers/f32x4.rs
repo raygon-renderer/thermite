@@ -103,21 +103,21 @@ impl Register for F32x4V3 {
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castsi128_ps(arch::_mm_sllv_epi32(
                 arch::_mm_castps_si128(value),
-                core::mem::transmute(shifts.into()),
+                core::mem::transmute(shifts),
             ))
         }
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             arch::_mm_castsi128_ps(arch::_mm_srlv_epi32(
                 arch::_mm_castps_si128(value),
-                core::mem::transmute(shifts.into()),
+                core::mem::transmute(shifts),
             ))
         }
     }
@@ -156,8 +156,8 @@ impl PermuteRegister for F32x4V3 {
 
 impl SwizzleRegister for F32x4V3 {
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs.into())) }
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs)) }
     }
 
     // #[inline(always)]
@@ -173,9 +173,9 @@ impl SwizzleRegister for F32x4V3 {
     // }
 
     #[inline(always)]
-    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs.into());
+            let idxs: arch::__m128i = core::mem::transmute(idxs);
 
             let four = arch::_mm_set1_epi32(4);
 
@@ -198,8 +198,8 @@ impl MaskRegister for F32x4V3 {
     const TRUTHY: Self::Storage = reg::<Self, 4>([f32::from_bits(!0); 4]);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_ps(arch::_mm_cvtboolx4_to_epi32_mask_v2(value.into())) }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_castsi128_ps(arch::_mm_cvtboolx4_to_epi32_mask_v2(value)) }
     }
 
     #[inline(always)]

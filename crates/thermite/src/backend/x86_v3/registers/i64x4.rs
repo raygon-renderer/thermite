@@ -120,13 +120,13 @@ impl Register for I64x4V3 {
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm256_srlv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts.into()))) }
+    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm256_srlv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts))) }
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm256_sllv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts.into()))) }
+    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm256_sllv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts))) }
     }
 
     #[inline(always)]
@@ -152,8 +152,8 @@ impl MaskRegister for I64x4V3 {
     const TRUTHY: Self::Storage = reg::<Self, 4>([-1; 4]);
 
     #[inline(always)]
-    fn new_mask(value: impl Into<GenericArray<bool, Self::Lanes>>) -> Self::Storage {
-        unsafe { arch::_mm256_cvtboolx4_to_epi64_mask_v3(value.into()) }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm256_cvtboolx4_to_epi64_mask_v3(value) }
     }
 
     #[inline(always)]
@@ -317,17 +317,17 @@ impl IntegerRegister for I64x4V3 {
     }
 
     #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
-            let shifts: arch::__m128i = core::mem::transmute(shifts.into());
+            let shifts: arch::__m128i = core::mem::transmute(shifts);
             arch::_mm256_rolv_epi64x_v3(value, arch::_mm256_cvtepi32_epi64(shifts))
         }
     }
 
     #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: impl Into<GenericArray<u32, Self::Lanes>>) -> Self::Storage {
+    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
-            let shifts: arch::__m128i = core::mem::transmute(shifts.into());
+            let shifts: arch::__m128i = core::mem::transmute(shifts);
             arch::_mm256_rorv_epi64x_v3(value, arch::_mm256_cvtepi32_epi64(shifts))
         }
     }
