@@ -94,12 +94,12 @@ impl Register for I64x2V3 {
 
     #[inline(always)]
     fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm_srlv_epi64(value, arch::u32x2_to_i64x2(shifts.into())) }
+        unsafe { arch::_mm_srlv_epi64(value, arch::u32x2_to_i64x2(shifts)) }
     }
 
     #[inline(always)]
     fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm_sllv_epi64(value, arch::u32x2_to_i64x2(shifts.into())) }
+        unsafe { arch::_mm_sllv_epi64(value, arch::u32x2_to_i64x2(shifts)) }
     }
 
     #[inline(always)]
@@ -149,7 +149,7 @@ impl MaskRegister for I64x2V3 {
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm_cvtboolx2_to_epi64_mask_v2(value.into()) }
+        unsafe { arch::_mm_cvtboolx2_to_epi64_mask_v2(value) }
     }
 
     #[inline(always)]
@@ -320,12 +320,12 @@ impl IntegerRegister for I64x2V3 {
 
     #[inline(always)]
     fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm_rolv_epi64x_v3(value, arch::u32x2_to_i64x2(shifts.into())) }
+        unsafe { arch::_mm_rolv_epi64x_v3(value, arch::u32x2_to_i64x2(shifts)) }
     }
 
     #[inline(always)]
     fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm_rorv_epi64x_v3(value, arch::u32x2_to_i64x2(shifts.into())) }
+        unsafe { arch::_mm_rorv_epi64x_v3(value, arch::u32x2_to_i64x2(shifts)) }
     }
 
     fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
