@@ -1,9 +1,11 @@
+#![warn(missing_docs, clippy::missing_safety_doc)]
+
 use crate::{
     Vector,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedRegister,
-        SwizzleRegister, UnsignedIntegerRegister,
+        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register, MaskElement,
+        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister,
+        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -43,7 +45,10 @@ const _: () = {
 
 use generic_array::{GenericArray, typenum::Unsigned};
 
-pub trait Selectable {}
+#[cfg(feature = "const-default")]
+impl<R: MaskRegister> const_default::ConstDefault for Mask<R> {
+    const DEFAULT: Self = Self::FALSY;
+}
 
 impl<R: MaskRegister> Mask<R> {
     /// The number of lanes in the mask register.
@@ -63,11 +68,41 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::new_mask(values.into()))
     }
 
+    #[inline(always)]
+    pub fn splat(value: bool) -> Self {
+        if value { Self::TRUTHY } else { Self::FALSY }
+    }
+
     /// Create a mask from an array of values of the underlying element type. It's best to
     /// have every bit in truthy values be `1` and every bit in falsy values be `0`.
     #[inline(always)]
     pub fn new_unchecked(values: impl Into<GenericArray<R::Element, R::Lanes>>) -> Self {
         Self(R::new(values.into()))
+    }
+
+    /// Broadcast the value of a single lane across all lanes of the mask.
+    #[inline(always)]
+    pub fn broadcast<const I: usize>(self) -> Self {
+        Self(R::broadcast::<I>(self.0))
+    }
+
+    /// Broadcast the value of a single lane across all lanes of the mask.
+    ///
+    /// # Panics
+    /// If `idx` is out of bounds for the mask's lanes.
+    #[inline(always)]
+    pub fn broadcastv(self, idx: usize) -> Self {
+        Self(R::broadcastv(self.0, idx))
+    }
+
+    #[inline(always)]
+    pub fn insert<const LANE: usize>(mut self, value: bool) -> Self {
+        Self(R::insert::<LANE>(self.0, MaskElement::from_bool(value)))
+    }
+
+    #[inline(always)]
+    pub fn extract<const LANE: usize>(self) -> bool {
+        MaskElement::to_bool(R::extract::<LANE>(self.0))
     }
 
     #[inline(always)]
@@ -83,8 +118,14 @@ impl<R: MaskRegister> Mask<R> {
         Mask(R::mask_from(mask.0))
     }
 
+    #[inline(always)]
+    pub fn reverse(self) -> Self {
+        Self(R::reverse(self.0))
+    }
+
     /// Create a mask from a vector of the underlying element type, without
     /// verifying the values.
+    #[inline(always)]
     pub const fn from_unchecked(value: Vector<R>) -> Self {
         Self(value.0)
     }

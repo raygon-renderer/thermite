@@ -68,6 +68,7 @@ pub mod simd;
 pub mod swizzle;
 
 pub use register::DoublePump;
+pub use swizzle::Swizzle;
 pub use vector::Vector;
 
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209

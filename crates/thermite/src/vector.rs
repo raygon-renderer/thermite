@@ -1,3 +1,7 @@
+#![warn(missing_docs, clippy::missing_safety_doc)]
+
+//! Vector type and operations, where each vector wraps a low-level SIMD register type.
+
 use crate::{
     mask::Mask,
     register::{
@@ -22,6 +26,7 @@ use num_traits::{MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, Satu
 pub struct Vector<R: Register>(pub(crate) R::Storage);
 
 impl<R: Register> Clone for Vector<R> {
+    #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
@@ -47,14 +52,14 @@ const _: () = {
 
 use generic_array::{GenericArray, typenum::Unsigned};
 
+#[cfg(feature = "const-default")]
+impl<R: Register> const_default::ConstDefault for Vector<R> {
+    const DEFAULT: Self = Self::EMPTY;
+}
+
 impl<R: Register> Vector<R> {
     /// Number of lanes in the vector.
     pub const LANES: usize = <R::Lanes as Unsigned>::USIZE;
-
-    // #[inline(always)]
-    // pub fn into_register(self) -> R::Storage {
-    //     self.0
-    // }
 
     /// Create a new vector from a single element by splatting it across all lanes.
     ///
@@ -264,34 +269,26 @@ impl<R: Register> Vector<R> {
         Self(R::insert::<I>(self.0, element))
     }
 
-    /// Shuffle the vector with another vector using the given indices.
-    #[inline(always)]
-    pub fn shuffle(self, b: Self, indices: impl Into<GenericArray<usize, R::Lanes>>) -> Self {
-        let indices: GenericArray<usize, R::Lanes> = indices.into();
-
-        for idx in &indices {
-            assert!(*idx < (Self::LANES * 2), "Index out of bounds");
-        }
-
-        let a = self.as_array();
-        let b = b.as_array();
-        let mut dst = Self::empty();
-
-        for (to, from) in indices.into_iter().enumerate() {
-            dst[to] = if from < Self::LANES {
-                unsafe { *a.get_unchecked(from) }
-            } else {
-                unsafe { *b.get_unchecked(from - Self::LANES) }
-            };
-        }
-
-        dst
-    }
-
     /// Reverse the order of the elements in the vector.
     #[inline(always)]
     pub fn reverse(self) -> Self {
         Self(R::reverse(self.0))
+    }
+
+    #[inline(always)]
+    fn fold<F>(self, init: R::Element, f: F) -> R::Element
+    where
+        F: Fn(R::Element, R::Element) -> R::Element,
+    {
+        R::fold(init, self.0, f)
+    }
+
+    #[inline(always)]
+    fn reduce<F>(self, f: F) -> R::Element
+    where
+        F: Fn(R::Element, R::Element) -> R::Element,
+    {
+        R::reduce(self.0, f)
     }
 }
 
@@ -319,6 +316,8 @@ impl<R: Register> Vector<R> {
         Vector(INTO::fast_cast_from(self.0))
     }
 
+    /// Cast the input vector to a different type, converting the elements
+    /// as necessary.
     #[inline(always)]
     pub fn from<FROM: Register>(value: Vector<FROM>) -> Vector<R>
     where
@@ -327,6 +326,15 @@ impl<R: Register> Vector<R> {
         Vector(R::cast_from(value.0))
     }
 
+    /// Like [`Vector::from`], but potentially uses faster
+    /// conversion methods if available, at the cost of
+    /// potentially losing precision or only working with a subset of the
+    /// values possible in the original type. If outside of that,
+    /// junk may be returned.
+    ///
+    /// If you know your value is within the range of the target type,
+    /// this is a good way to convert it without the overhead of
+    /// fully conforming to the type's range.
     #[inline(always)]
     pub fn fast_from<FROM: Register>(value: Vector<FROM>) -> Vector<R>
     where
@@ -354,11 +362,13 @@ impl<R: Register> Vector<R> {
 }
 
 impl<R: ShiftRegister> Vector<R> {
+    /// For each lane in the vector, shift left by the immediate value.
     #[inline(always)]
     pub fn shli<const IMM8: i32>(self) -> Self {
         Self(R::shli::<IMM8>(self.0))
     }
 
+    /// For each lane in the vector, shift right by the immediate value.
     #[inline(always)]
     pub fn shri<const IMM8: i32>(self) -> Self {
         Self(R::shri::<IMM8>(self.0))
@@ -493,8 +503,6 @@ impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
     }
 }
 
-//impl<R: NumericRegister> num_traits::ConstOne for Vector<R> where
-
 impl<R: PartialOrdRegister> PartialEq for Vector<R> {
     /// Compare two vectors for equality, returning true only if all elements are equal.
     #[inline(always)]
@@ -626,21 +634,25 @@ impl<R: FloatRegister> Vector<R> {
     /// A vector of the smallest positive value in the element type.
     pub const EPSILON: Self = Self(R::EPSILON);
 
+    /// Check if each element in the vector is infinite, returning a mask.
     #[inline(always)]
     pub fn is_infinite(self) -> Mask<R> {
         Mask(R::is_infinite(self.0))
     }
 
+    /// Check if each element in the vector is finite, returning a mask.
     #[inline(always)]
     pub fn is_finite(self) -> Mask<R> {
         Mask(R::is_finite(self.0))
     }
 
+    /// Check if each element in the vector is NaN, returning a mask.
     #[inline(always)]
     pub fn is_nan(self) -> Mask<R> {
         Mask(R::is_nan(self.0))
     }
 
+    /// Check if each element in the vector is zero or subnormal, returning a mask.
     #[inline(always)]
     pub fn is_zero_or_subnormal(self) -> Mask<R> {
         Mask(R::is_zero_or_subnormal(self.0))
@@ -1557,56 +1569,4 @@ impl_swizzle4! {
     [w w w y],
     [w w w z],
     [w w w w]
-}
-
-impl<R: SwizzleRegister> Vector<R> {
-    // #[doc(hidden)]
-    // #[inline(always)]
-    // pub fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(self, other: Self) -> Self {
-    //     Self(R::swizzle_i::<AIMM8, BIMM8, BLEND>(self.0, other.0))
-    // }
-
-    #[inline(always)]
-    pub fn permutev(self, idxs: impl Into<GenericArray<u32, R::Lanes>>) -> Self {
-        Self(R::permutev(self.0, idxs.into()))
-    }
-
-    #[inline(always)]
-    pub fn swizzle(self, other: Self, idxs: impl Into<GenericArray<u32, R::Lanes>>) -> Self {
-        Self(R::swizzle(self.0, other.0, idxs.into()))
-    }
-}
-
-#[macro_export]
-macro_rules! swizzle {
-    ($a:expr, $b:expr, [$($i:literal),* $(,)?]) => {{
-        #[inline(always)]
-        fn __do_swizzle2<R: $crate::register::SwizzleRegister>(a: $crate::Vector<R>, b: $crate::Vector<R>) -> $crate::Vector<R> {
-            const { assert!($crate::Vector::<R>::LANES == [$($i),*].len(), "Swizzle mask must be the same length of the vector") }
-
-            // const C: (i32, i32, i32) = $crate::swizzle::double_swizzle([$($i),*]);
-
-            // if const { C.0 == -1 } {
-                a.swizzle(b, const { unsafe {
-                    $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, R::Lanes>>([$($i),*])
-                }})
-            // } else {
-            //     a.swizzle_i::<{C.0}, {C.1}, {C.2}>(b)
-            // }
-        }
-
-        __do_swizzle2($a, $b)
-    }};
-
-
-    ($a:expr, [$($i:literal),* $(,)?]) => {{
-        #[inline(always)]
-        fn __do_swizzle1<R: $crate::register::SwizzleRegister>(a: $crate::Vector<R>) -> $crate::Vector<R> {
-            a.permutev(const { unsafe {
-                $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, R::Lanes>>([$($i),*])
-            }})
-        }
-
-        __do_swizzle1($a)
-    }};
 }

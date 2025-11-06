@@ -16,6 +16,8 @@ libm = "0.2.13"
 paste = "1.0.15"
 num-traits = { version = "0.2.19", default-features = false }
 
+const-default = { version = "1.0.0", optional = true, default-features = false }
+
 [dev-dependencies]
 glam = "0.30.3"
 num-traits = { version = "0.2.19", default-features = true }
