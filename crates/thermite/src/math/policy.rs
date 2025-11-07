@@ -44,6 +44,18 @@ impl PrecisionPolicy {
     pub const fn le(self, other: PrecisionPolicy) -> bool {
         (self as u8) <= (other as u8)
     }
+
+    /// Returns the multiple of `EPSILON` to use as the tolerance for this precision policy.
+    #[inline(always)]
+    pub const fn tolerance(self) -> i64 {
+        match self {
+            PrecisionPolicy::Worst => 100_000,
+            PrecisionPolicy::Medium => 10_000,
+            PrecisionPolicy::Average => 100,
+            PrecisionPolicy::Best => 20,
+            PrecisionPolicy::Reference => 8,
+        }
+    }
 }
 
 /// Customizable Policy Parameters
@@ -71,7 +83,7 @@ pub struct PolicyParameters {
     ///
     /// Note that this is the upper limit allowed for pathological cases, and many loops will
     /// terminate dynamically before this.
-    pub max_series_iterations: usize,
+    pub max_iterations: usize,
 }
 
 impl PolicyParameters {
@@ -94,7 +106,7 @@ impl Policy for MyPolicy {
         unroll_loops: false,
         precision: PrecisionPolicy::Average,
         avoid_branching: true,
-        max_series_iterations: 10000,
+        max_iterations: 10000,
     };
 }
 
@@ -128,9 +140,9 @@ pub mod policies {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AvoidBranching<P: Policy, const AVOID_BRANCHING: bool>(PhantomData<P>);
 
-    /// Policy adapter that modifies the base policy to change the maximum number of iterations for series expansions.
+    /// Policy adapter that modifies the base policy to change the maximum number of iterations for numerical methods.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct MaxSeriesIterations<P: Policy, const MAX_SERIES_ITERATIONS: usize>(PhantomData<P>);
+    pub struct MaxIterations<P: Policy, const MAX_ITERATIONS: usize>(PhantomData<P>);
 
     /// Policy for worst precision, which is the least precise and fastest.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -147,6 +159,11 @@ pub mod policies {
     /// Policy for reference precision, which is the most precise and may be very slow.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ReferencePrecision<P: Policy>(PhantomData<P>);
+
+    /// Takes the precision of the second policy only if it is less than the first policy,
+    /// but otherwise uses the first policy's other parameters.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct CmpLessPrecision<A: Policy, B: Policy>(PhantomData<(A, B)>);
 
     /// Optimize for performance at the cost of precision and safety (doesn't handle special cases such as NaNs or overflow).
     ///
@@ -213,7 +230,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: extra_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -223,7 +240,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: less_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -233,7 +250,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -243,7 +260,7 @@ pub mod policies {
             unroll_loops: UNROLL_LOOPS,
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -253,17 +270,17 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: P::POLICY.precision,
             avoid_branching: AVOID_BRANCHING,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
-    impl<P: Policy, const MAX_SERIES_ITERATIONS: usize> Policy for MaxSeriesIterations<P, MAX_SERIES_ITERATIONS> {
+    impl<P: Policy, const MAX_ITERATIONS: usize> Policy for MaxIterations<P, MAX_ITERATIONS> {
         const POLICY: PolicyParameters = PolicyParameters {
             check_overflow: P::POLICY.check_overflow,
             unroll_loops: P::POLICY.unroll_loops,
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: MAX_SERIES_ITERATIONS,
+            max_iterations: MAX_ITERATIONS,
         };
     }
 
@@ -273,7 +290,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: PrecisionPolicy::Worst,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -283,7 +300,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: PrecisionPolicy::Medium,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -293,7 +310,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: PrecisionPolicy::Average,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -303,7 +320,7 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: PrecisionPolicy::Best,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
         };
     }
 
@@ -313,7 +330,21 @@ pub mod policies {
             unroll_loops: P::POLICY.unroll_loops,
             precision: PrecisionPolicy::Reference,
             avoid_branching: P::POLICY.avoid_branching,
-            max_series_iterations: P::POLICY.max_series_iterations,
+            max_iterations: P::POLICY.max_iterations,
+        };
+    }
+
+    impl<A: Policy, B: Policy> Policy for CmpLessPrecision<A, B> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: A::POLICY.check_overflow,
+            unroll_loops: A::POLICY.unroll_loops,
+            precision: if B::POLICY.precision.lt(A::POLICY.precision) {
+                B::POLICY.precision
+            } else {
+                A::POLICY.precision
+            },
+            avoid_branching: A::POLICY.avoid_branching,
+            max_iterations: A::POLICY.max_iterations,
         };
     }
 
@@ -323,7 +354,7 @@ pub mod policies {
             unroll_loops: true,
             precision: PrecisionPolicy::Worst,
             avoid_branching: true,
-            max_series_iterations: 1000,
+            max_iterations: 1000,
         };
     }
 
@@ -333,7 +364,7 @@ pub mod policies {
             unroll_loops: true,
             precision: PrecisionPolicy::Medium,
             avoid_branching: false,
-            max_series_iterations: 10000,
+            max_iterations: 10000,
         };
     }
 
@@ -343,7 +374,7 @@ pub mod policies {
             unroll_loops: true,
             precision: PrecisionPolicy::Average,
             avoid_branching: false,
-            max_series_iterations: 10000,
+            max_iterations: 10000,
         };
     }
 
@@ -353,7 +384,7 @@ pub mod policies {
             unroll_loops: true,
             precision: PrecisionPolicy::Best,
             avoid_branching: false,
-            max_series_iterations: 50000,
+            max_iterations: 50000,
         };
     }
 
@@ -366,7 +397,7 @@ pub mod policies {
             // debatable, but for WASM it can't use
             // instruction-level parallelism anyway.
             avoid_branching: false,
-            max_series_iterations: 10000,
+            max_iterations: 10000,
         };
     }
 
@@ -376,11 +407,13 @@ pub mod policies {
             unroll_loops: true,
             precision: PrecisionPolicy::Reference,
             avoid_branching: false,
-            max_series_iterations: 100000,
+            max_iterations: 100000,
         };
     }
 }
 
 use policies::*;
+
+use crate::{math::FloatConsts, register::FloatElement};
 
 pub type DefaultPolicy = Performance;

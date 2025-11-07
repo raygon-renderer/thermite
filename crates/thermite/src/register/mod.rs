@@ -56,21 +56,21 @@ where
 }
 
 pub trait Interoperable<A: MaskRegister<Lanes = Self::Lanes>, B: MaskRegister<Lanes = Self::Lanes>>: MaskRegister
-// bits
-+ BitsRegister<Self>
-+ BitsRegister<A>
-+ BitsRegister<B>
-// casts
-+ CastRegister<Self>
-+ CastRegister<A>
-+ CastRegister<B>
-// masks
-+ CastMaskRegister<Self>
-+ CastMaskRegister<A>
-+ CastMaskRegister<B>
+    // bits
+    + BitsRegister<Self>
+    + BitsRegister<A>
+    + BitsRegister<B>
+    // casts
+    + CastRegister<Self>
+    + CastRegister<A>
+    + CastRegister<B>
+    // masks
+    + CastMaskRegister<Self>
+    + CastMaskRegister<A>
+    + CastMaskRegister<B>
 where
-A: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>,
-B: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>
+    A: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>,
+    B: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>
 {}
 
 impl<R, A, B> Interoperable<A, B> for R
@@ -127,10 +127,8 @@ pub trait Register: Sized + 'static {
     /// of at least length `Self::Lanes::USIZE * core::mem::size_of::<Self::Element>()`.
     #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
-        unsafe {
-            // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
-            core::ptr::read(ptr as *const Self::Storage)
-        }
+        // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
+        unsafe { core::ptr::read(ptr as *const Self::Storage) }
     }
 
     /// # SAFETY
@@ -577,11 +575,16 @@ pub trait SignedRegister: NumericRegister {
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: num_traits::float::FloatCore + From<i8> {
+pub trait FloatElement: num_traits::float::FloatCore + From<i8> + core::fmt::Display {
     type Bits: MaskElement;
     type Signed: MaskElement;
 
+    // maximum u32 that can be exactly represented in this float type without loss of precision
+    const MAX_U64: u64;
+
     fn from_f32(value: f32) -> Self;
+
+    fn from_i64(value: i64) -> Self;
 
     fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
     fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
@@ -594,6 +597,17 @@ const _: () = {
     impl FloatElement for f32 {
         type Bits = u32;
         type Signed = i32;
+
+        const MAX_U64: u64 = 1 << 23;
+
+        fn from_i64(value: i64) -> Self {
+            if value.unsigned_abs() < Self::MAX_U64 {
+                value as f32 // safe to convert directly
+            } else {
+                panic!("Value {value} exceeds maximum exact representable i64 in this float type");
+            }
+        }
+
         #[inline(always)] fn from_f32(value: f32) -> Self { value }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, -acc) }
@@ -603,6 +617,17 @@ const _: () = {
     impl FloatElement for f64 {
         type Bits = u64;
         type Signed = i64;
+
+        const MAX_U64: u64 = 1 << 53;
+
+        fn from_i64(value: i64) -> Self {
+            if value.unsigned_abs() < Self::MAX_U64 {
+                value as f64 // safe to convert directly
+            } else {
+                panic!("Value {value} exceeds maximum exact representable i64 in this float type");
+            }
+        }
+
         #[inline(always)] fn from_f32(value: f32) -> Self { value as f64 }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, -acc) }

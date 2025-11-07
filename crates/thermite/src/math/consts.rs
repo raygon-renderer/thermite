@@ -1,4 +1,10 @@
 pub trait FloatConsts {
+    /// Zero (0)
+    const ZERO: Self;
+
+    /// One (1)
+    const ONE: Self;
+
     /// Euler’s number (e)
     const E: Self;
 
@@ -77,6 +83,9 @@ pub trait FloatConsts {
     /// sqrt(e)
     const SQRT_E: Self;
 
+    /// The machine epsilon
+    const EPSILON: Self;
+
     /// The square root of the machine epsilon (sqrt(epsilon))
     const SQRT_EPSILON: Self;
 
@@ -111,6 +120,8 @@ macro_rules! impl_consts {
 }
 
 impl_consts!(
+    ZERO,
+    ONE,
     E,
     EGAMMA,
     FRAC_1_PI,
@@ -137,6 +148,7 @@ impl_consts!(
     SQRT_2,
     SQRT_3,
     SQRT_E,
+    EPSILON,
     SQRT_EPSILON,
     FOURTH_ROOT_EPSILON,
     TAU,
@@ -145,12 +157,15 @@ impl_consts!(
     PHI
 );
 
+use crate::register::FloatElement;
 use crate::{Vector, register::FloatRegister};
 use core::f32::consts as f32c;
 use core::f64::consts as f64c;
 
 impl_consts! {@
     f32 {
+        ZERO = 0.0f32,
+        ONE = 1.0f32,
         E = f32c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
         FRAC_1_PI = f32c::FRAC_1_PI,
@@ -177,6 +192,7 @@ impl_consts! {@
         SQRT_2 = f32c::SQRT_2,
         SQRT_3 = 1.732050807568877293527446341505872367,
         SQRT_E = 1.6487212707001281468486507878141635716537761007101480115750793116,
+        EPSILON = core::f32::EPSILON,
         SQRT_EPSILON = 0.0003452669836517821464776144458809047877858776827733458406716232,
         FOURTH_ROOT_EPSILON = 0.0185813611894226453755641436815143067322274318448624272659973571195104883,
         TAU = f32c::TAU,
@@ -188,6 +204,8 @@ impl_consts! {@
 
 impl_consts! {@
     f64 {
+        ZERO = 0.0f64,
+        ONE = 1.0f64,
         E = f64c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
         FRAC_1_PI = f64c::FRAC_1_PI,
@@ -214,6 +232,7 @@ impl_consts! {@
         SQRT_2 = f64c::SQRT_2,
         SQRT_3 = 1.732050807568877293527446341505872367,
         SQRT_E = 1.6487212707001281468486507878141635716537761007101480115750793116,
+        EPSILON = core::f64::EPSILON,
         SQRT_EPSILON = 1.4901161193847656314265919999999999861416556075118966152884e-8,
         FOURTH_ROOT_EPSILON = 0.000122070312500000000263233208319999999148543320525530928655351028080390676,
         TAU = f64c::TAU,

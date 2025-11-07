@@ -680,7 +680,7 @@ where
             let mut u1 = u1.min(Vf::ONE).max(Vf::ZERO);
 
             if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
-                u1 = u1.smoothstep_p::<P>(None);
+                u1 = u1.smoothstep_p::<P, 2>(None);
             }
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 3, 5}]

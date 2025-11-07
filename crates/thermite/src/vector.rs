@@ -396,11 +396,11 @@ impl<R: PartialOrdRegister> Vector<R> {
     #[inline(always)] pub fn cmp_le1(self, rhs: R::Element) -> Mask<R> { Mask(R::le(self.0, R::splat(rhs))) }
     /// For each lane in the vector, return a mask indicating whether that lane is greater than the provided value.
     #[inline(always)] pub fn cmp_gt1(self, rhs: R::Element) -> Mask<R> { Mask(R::gt(self.0, R::splat(rhs))) }
-    /// /// For each lane in the vector, return a mask indicating whether that lane is greater than or equal to the provided value.
+    /// For each lane in the vector, return a mask indicating whether that lane is greater than or equal to the provided value.
     #[inline(always)] pub fn cmp_ge1(self, rhs: R::Element) -> Mask<R> { Mask(R::ge(self.0, R::splat(rhs))) }
-    /// /// For each lane in the vector, return a mask indicating whether that lane is equal to the provided value.
+    /// For each lane in the vector, return a mask indicating whether that lane is equal to the provided value.
     #[inline(always)] pub fn cmp_eq1(self, rhs: R::Element) -> Mask<R> { Mask(R::eq(self.0, R::splat(rhs))) }
-    /// /// For each lane in the vector, return a mask indicating whether that lane is not equal to the provided value.
+    /// For each lane in the vector, return a mask indicating whether that lane is not equal to the provided value.
     #[inline(always)] pub fn cmp_ne1(self, rhs: R::Element) -> Mask<R> { Mask(R::ne(self.0, R::splat(rhs))) }
 }
 

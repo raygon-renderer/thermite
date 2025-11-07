@@ -1,6 +1,8 @@
+use core::marker::PhantomData;
+
 use crate::{
     mask::Mask,
-    math::{consts::FloatConsts, policy::policies::ExtraPrecision},
+    math::{Math, consts::FloatConsts, policy::policies::ExtraPrecision},
     register::{FloatElement, FloatRegister, Register, SignedIntegerRegister},
     vector::Vector,
 };
@@ -114,6 +116,40 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
+    fn newtons_method<P: Policy, F>(
+        mut x: Vf<Self>,
+        tolerance: Vf<Self>,
+        bounds: Option<(Vf<Self>, Vf<Self>)>,
+        f: F,
+    ) -> Vf<Self>
+    where
+        F: Fn(Vf<Self>) -> (Vf<Self>, Vf<Self>),
+    {
+        for _ in 0..P::POLICY.max_iterations {
+            let (y, y_prime) = f(x);
+            let delta = y / y_prime;
+
+            let mut stop = delta.abs().cmp_le(tolerance);
+
+            if P::POLICY.check_overflow {
+                stop |= y_prime.abs().cmp_le(tolerance);
+            }
+
+            if stop.all() {
+                break;
+            }
+
+            x = stop.select(x, x - delta);
+
+            if let Some((min, max)) = bounds {
+                x = x.clamp(min, max);
+            }
+        }
+
+        x
+    }
+
+    #[inline(always)]
     fn lerp<P: Policy>(t: Vf<Self>, a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
         if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
             t.mul_add(b - a, a) // Fast and accurate, if available
@@ -129,7 +165,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
-    fn smoothstep<P: Policy>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
+    fn smoothstep<P: Policy, const N: usize>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
         let mut t = x;
 
         if let Some((a, b)) = edges {
@@ -147,50 +183,121 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
             t = t.clamp(Vf::ZERO, Vf::ONE);
         }
 
-        let three = Vf::splat(FloatElement::from_f32(3.0));
-
-        // NOTE: The order of the muls is important here for instruction-level parallelism.
-        (t * t) * t.nmul_adde(Vf::TWO, three)
-    }
-
-    #[inline(always)]
-    fn inverse_smoothstep<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let mut t = x.nmul_adde(Vf::TWO, Vf::ONE).asin_p::<P>();
-
-        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            t *= Vf::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
-        } else {
-            // exact division for higher precisions
-            t /= Vf::splat(FloatElement::from_f32(3.0));
+        match N {
+            // t was already scaled to between the edges
+            0 => Self::step::<P>(t, Vf::HALF),
+            1 => t, // linear
+            _ => {
+                t.powi(N as i32)
+                    * const { Smoothstep::<E, N>::COEFFICIENTS }
+                        .into_iter()
+                        .fold(Vf::ZERO, |res, c| res.mul_adde(t, Vf::splat(E::from_i64(c))))
+            }
         }
-
-        Vf::HALF - t.sin_p::<P>()
     }
 
     #[inline(always)]
-    fn smootherstep<P: Policy>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
+    fn smoothstep_derivative<P: Policy, const N: usize>(x: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
         let mut t = x;
+        let mut dt_dx = Vf::ONE;
 
         if let Some((a, b)) = edges {
             let xa = t - a;
             let ba = b - a;
 
-            t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-                xa * ba.rcp()
+            (dt_dx, t) = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+                let bar = ba.rcp();
+
+                (bar, xa * bar)
             } else {
-                xa / ba
+                (Vf::ONE / ba, xa / ba)
             };
         }
 
-        if P::POLICY.check_overflow {
-            t = t.clamp(Vf::ZERO, Vf::ONE);
+        match N {
+            // derivative of step function is infinite at 0.5, so-called Dirac delta function
+            0 => t.cmp_eq(Vf::HALF).select(Vf::INFINITY, Vf::ZERO),
+            1 => dt_dx,
+            _ => {
+                if P::POLICY.check_overflow {
+                    t = t.clamp(Vf::ZERO, Vf::ONE);
+                }
+
+                let y =
+                    const { Smoothstep::<E, N>::COEFFICIENTS }
+                        .into_iter()
+                        .enumerate()
+                        .fold(Vf::ZERO, |res, (k, c)| {
+                            // order - k for derivative coefficient
+                            res.mul_adde(t, Vf::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
+                        });
+
+                y * dt_dx * t.powi((N - 1) as i32)
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn inverse_smoothstep<P: Policy, const N: usize>(y: Vf<Self>, edges: Option<(Vf<Self>, Vf<Self>)>) -> Vf<Self> {
+        let mut ba = Vf::ONE;
+        let mut bar = Vf::ONE;
+        let mut bar_a = Vf::ONE; // (b - a) * a
+
+        // Start with an initial guess of 0.5, since that'll have the largest derivative
+        let mut x0 = Vf::HALF;
+
+        if let Some((a, b)) = edges {
+            ba = b - a;
+
+            if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+                bar = ba.rcp();
+                bar_a = bar * a;
+            } else {
+                bar = Vf::ONE / ba;
+                bar_a = a / ba;
+            }
+
+            match N {
+                0 => return y.step_p::<P>(Vf::HALF).mul_adde(ba, a),
+                1 => return y.mul_adde(ba, a),
+
+                // remember to scale the initial guess to fit the edges
+                _ => x0 = x0.mul_add(ba, a),
+            }
         }
 
-        let six = Vf::splat(FloatElement::from_f32(6.0));
-        let ten = Vf::splat(FloatElement::from_f32(10.0));
-        let neg_fifteen = Vf::splat(FloatElement::from_f32(-15.0));
+        match N {
+            0 => return y.step_p::<P>(Vf::HALF),
+            1 => return y,
+            _ => {}
+        }
 
-        (t * t * t) * x.mul_adde(six, neg_fifteen).mul_adde(x, ten)
+        let bounds = edges.or(Some((Vf::ZERO, Vf::ONE)));
+
+        let tolerance = E::from_i64(P::POLICY.precision.tolerance()) * E::EPSILON;
+
+        Self::newtons_method::<P, _>(x0, Vf::splat(tolerance), bounds, |x: Vf<Self>| {
+            let mut t = x;
+            let mut dt_dx = bar;
+
+            if edges.is_some() {
+                // adjust by precalculated scales
+                t = t.mul_sube(bar, bar_a);
+            }
+
+            let xn1 = t.powi((N - 1) as i32);
+
+            #[rustfmt::skip]
+            let (fx, fpx) = const { Smoothstep::<E, N>::COEFFICIENTS }.into_iter().enumerate().fold(
+                (Vf::ZERO, Vf::ZERO),
+                |(fx, fpx), (k, c)| {(
+                    fx.mul_adde(t, Vf::splat(E::from_i64(c))),
+                    fpx.mul_adde(t, Vf::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64))),
+                )},
+            );
+
+            (t.mul_sube(xn1 * fx, y), fpx * dt_dx * xn1)
+        })
     }
 
     #[inline(always)]
@@ -198,14 +305,8 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         let mut t = x;
 
         if let Some((a, b)) = edges {
-            let xa = t - a;
-            let ba = b - a;
-
-            t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-                xa * ba.rcp()
-            } else {
-                xa / ba
-            };
+            // rescale t to [0, 1]
+            t = (t - a) / (b - a);
         }
 
         let kt = k * t;
@@ -216,13 +317,8 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         // exp(e) + 1
         let d = e.exp_p::<P>() + Vf::ONE;
 
-        // 1/(exp(e) + 1)
-        let mut res = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            // even with the worst precision policy, add a bit more accuracy
-            d.reciprocal_p::<ExtraPrecision<P>>()
-        } else {
-            Vf::ONE / d // otherwise, use full precision
-        };
+        // 1/(exp(e) + 1), it's important this is done in extra precision
+        let mut res = d.reciprocal_p::<ExtraPrecision<P>>();
 
         let overflow = e.is_infinite();
 
@@ -239,6 +335,32 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         res = t.cmp_le(Vf::ZERO).select(Vf::ZERO, res);
 
         res
+    }
+
+    #[inline(always)]
+    fn smooth_interpolator_inverse<P: Policy>(
+        mut y: Vf<Self>,
+        edges: Option<(Vf<Self>, Vf<Self>)>,
+        k: Vf<Self>,
+    ) -> Vf<Self> {
+        // k ln(1/y - 1)
+        let l = k * (y.reciprocal_p::<P>() - Vf::ONE).ln_p::<P>();
+
+        // ((l + 2) - sqrt(l^2 + 4)) / 2l
+        let a = (l + Vf::TWO);
+        let b = l.mul_adde(l, Vf::splat(E::from_i64(4))).sqrt();
+        let mut t = (a - b) / (Vf::TWO * l);
+
+        // handle out-of-bounds inputs
+        t = y.cmp_ge(Vf::ONE).select(Vf::ONE, t);
+        t = y.cmp_le(Vf::ZERO).select(Vf::ZERO, t);
+
+        if let Some((a, b)) = edges {
+            // rescale t to the original edges
+            t = t.mul_adde(b - a, a);
+        }
+
+        t
     }
 
     #[inline(always)]
@@ -548,3 +670,45 @@ const EXP_MODE_EXPM1: u8 = ExpMode::Expm1 as u8;
 const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
 const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
 const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
+
+const fn binomial(a: i32, b: i32) -> i64 {
+    if b <= 0 {
+        return 1;
+    }
+
+    let mut res: i64 = 1;
+    let mut i = 0;
+
+    while i < b {
+        let n: i64 = res * (a - i) as i64;
+        res = n / (i + 1) as i64;
+
+        i += 1;
+    }
+
+    res
+}
+
+struct Smoothstep<F: FloatElement, const N: usize>(PhantomData<[F; N]>);
+impl<F: FloatElement, const N: usize> Smoothstep<F, N> {
+    // ensure these coefficients are generated at compile time
+    const COEFFICIENTS: [i64; N] = const {
+        let mut coeffs = [0; N];
+        let n = (N - 1) as i32;
+
+        let mut k = 0;
+        while k < N {
+            let c = binomial(-1 - n, k as i32) * binomial(n + n + 1, n - k as i32);
+
+            if c.unsigned_abs() > F::MAX_U64 {
+                panic!("Binomial coefficient overflow");
+            }
+
+            // store in reverse order for easier polynomial evaluation
+            coeffs[N - k - 1] = c;
+            k += 1;
+        }
+
+        coeffs
+    };
+}
