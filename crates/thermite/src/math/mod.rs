@@ -242,14 +242,30 @@ decl_math! {
     /// average precision, and happen to have `ln(x)` available, you can use [`ln1m_expnx_ext`](Math::ln1m_expnx_ext) instead
     /// to provide that.
     fn ln1m_expnx[][](self: Self) -> Self;
+
+    /// Returns `ln(1 - exp(lnx))`, which depending on the policy may be
+    /// an approximation more performant than the exact calculation. If you're using a policy with below
+    /// average precision, it's recommended to use this function instead of [`ln1m_expnx`](Math::ln1m_expnx) to provide `ln(x)` directly.
+    ///
+    /// Although not obvious, `ln(x)` is used internally for the approximation, and if it's already available,
+    /// you may as well use this function to avoid recomputing it.
     fn ln1m_expnx_ext[][](self: Self, lnx: Self) -> Self;
+
     /// Computes the error function.
     fn erf[][](self: Self) -> Self;
     /// Computes the complementary error function.
     fn erfc[][](self: Self) -> Self;
     /// Computes the inverse error function.
     fn erfinv[][](self: Self) -> Self;
+
+    /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+    ///
+    /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
     fn gaussian[][](self: Self, a: Self, c: Self) -> Self;
+
+    /// Computes the definite integral of the Gaussian function from `x0` to `x1`, with amplitude `a` and standard deviation `c`.
+    ///
+    /// The position `b` is assumed to be zero. For a non-zero position, use `x0 - b` and `x1 - b` as the input limits.
     fn gaussian_integral[][](x0: Self, x1: Self, a: Self, c: Self) -> Self;
 }
 

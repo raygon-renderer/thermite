@@ -724,11 +724,6 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
 
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self>;
 
-    // fn tgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    // fn lgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    // fn digamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    // fn beta<P: Policy>(x: Vf<Self>, y: Vf<Self>) -> Vf<Self>;
-
     #[inline(always)]
     fn gaussian<P: Policy>(x: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
         let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
