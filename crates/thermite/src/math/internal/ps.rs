@@ -1,6 +1,9 @@
-use crate::math::{
-    consts::FloatConsts,
-    policy::policies::{ExtraPrecision, MediumPrecision},
+use crate::{
+    divider::Divider,
+    math::{
+        consts::FloatConsts,
+        policy::policies::{ExtraPrecision, MediumPrecision},
+    },
 };
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
@@ -629,8 +632,63 @@ where
         (x0.is_nan() | y.is_nan()).select(x0 + y, z1)
     }
 
+    #[inline(always)]
     fn cbrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+        let b1 = Vu::<Self>::splat(709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
+        let b2 = Vu::<Self>::splat(642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
+        let m = Vu::<Self>::splat(0x7fffffff); // u32::MAX >> 1
+
+        let x1p24 = x * Vf::splat(f32::from_bits(0x4b800000)); // 0x1p24f === 2 ^ 24
+
+        let hx0 = x.into_bits() & m;
+
+        let x_small = hx0.cmp_lt(Vu::<Self>::splat(0x00800000));
+
+        let xs = x_small.select(x1p24, x);
+        let b = x_small.select(b2, b1);
+
+        let mut ui = xs.into_bits();
+        let mut hx = ui & m;
+
+        hx = hx / Divider::u32(3) + b;
+
+        ui &= Vu::<Self>::splat(0x80000000);
+        ui |= hx;
+
+        let mut t = Vf::<Self>::from_bits(ui);
+
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
+            // let mut td = t.cast::<Vf64<S>>();
+            // let xd = x.cast::<Vf64<S>>();
+
+            // // First iteration accurate to 16 bits, second iteration to 47 bits.
+            // for _ in 0..2 {
+            //     let r = td * td * td;
+            //     let rxd = xd + r;
+            //     td *= (xd + rxd) / (r + rxd);
+            // }
+
+            // t = <Vf32<S> as SimdFromCast<S, Vf64<S>>>::from_cast(td);
+
+            todo!()
+        } else {
+            let two = Vf::TWO;
+
+            // couple iterations of Newton's method
+            // This isn't perfect, as it's only limited to single-precision,
+            // but the fused multiply-adds helps
+            for _ in 0..2 {
+                let t3 = t * t * t;
+                t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+            }
+        }
+
+        if !P::POLICY.check_overflow {
+            return x.cmp_eq(Vf::ZERO).select(x, t);
+        }
+
+        // cbrt(NaN,INF,+-0) is itself
+        (hx0.cmp_gt(Vu::<Self>::splat(0x7f800000)) | hx0.cmp_eq(Vu::<Self>::ZERO)).select(x, t)
     }
 
     #[inline(always)]
