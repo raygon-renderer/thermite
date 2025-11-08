@@ -9,7 +9,7 @@ use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
-type VfExtented<R> = Vector<<R as FloatRegister>::ExtendedPrecision>;
+type VfExtended<R> = Vector<<R as FloatRegister>::ExtendedPrecision>;
 
 impl<R> MathInternal<f32> for R
 where
@@ -660,8 +660,8 @@ where
         let mut t = Vf::<Self>::from_bits(ui);
 
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
-            let mut td: VfExtented<Self> = t.cast();
-            let xd: VfExtented<Self> = x.cast();
+            let mut td: VfExtended<Self> = t.cast();
+            let xd: VfExtended<Self> = x.cast();
 
             // First iteration accurate to 16 bits, second iteration to 47 bits.
             for _ in 0..2 {
