@@ -9,6 +9,8 @@ use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
+type VfExtented<R> = Vector<<R as FloatRegister>::ExtendedPrecision>;
+
 impl<R> MathInternal<f32> for R
 where
     R: FloatRegister<Element = f32>,
@@ -658,19 +660,17 @@ where
         let mut t = Vf::<Self>::from_bits(ui);
 
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
-            // let mut td = t.cast::<Vf64<S>>();
-            // let xd = x.cast::<Vf64<S>>();
+            let mut td: VfExtented<Self> = t.cast();
+            let xd: VfExtented<Self> = x.cast();
 
-            // // First iteration accurate to 16 bits, second iteration to 47 bits.
-            // for _ in 0..2 {
-            //     let r = td * td * td;
-            //     let rxd = xd + r;
-            //     td *= (xd + rxd) / (r + rxd);
-            // }
+            // First iteration accurate to 16 bits, second iteration to 47 bits.
+            for _ in 0..2 {
+                let r = td * td * td;
+                let rxd = xd + r;
+                td *= (xd + rxd) / (r + rxd);
+            }
 
-            // t = <Vf32<S> as SimdFromCast<S, Vf64<S>>>::from_cast(td);
-
-            todo!()
+            t = td.cast();
         } else {
             let two = Vf::TWO;
 

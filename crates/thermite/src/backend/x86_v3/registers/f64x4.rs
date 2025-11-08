@@ -357,6 +357,7 @@ impl FloatRegister for F64x4V3 {
 
     type Bits = super::U64x4V3;
     type Signed = super::I64x4V3;
+    type ExtendedPrecision = Self; // f64 is the highest precision available
 
     const HALF: Self::Storage = reg::<Self, 4>([0.5; 4]);
     const NEG_ZERO: Self::Storage = reg::<Self, 4>([-0.0; 4]);

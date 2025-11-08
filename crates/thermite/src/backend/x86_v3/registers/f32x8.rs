@@ -384,6 +384,7 @@ impl FloatRegister for F32x8V3 {
 
     type Bits = super::U32x8V3;
     type Signed = super::I32x8V3;
+    type ExtendedPrecision = DoublePumpRegister<super::F64x4V3>;
 
     const HALF: Self::Storage = reg::<Self, 8>([0.5; 8]);
     const NEG_ZERO: Self::Storage = reg::<Self, 8>([-0.0; 8]);

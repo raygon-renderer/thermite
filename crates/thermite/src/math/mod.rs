@@ -39,6 +39,9 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     /// infinite differentiability.
     fn smoothstep_p<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
 
+    /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
+    fn inverse_smoothstep_p<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+
     fn smoothstep_derivative_p<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
 
     /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided, with infinite differentiability.
@@ -52,8 +55,7 @@ pub trait MathWithPolicy<R: FloatRegister>: Sized {
     fn step_p<P: Policy>(self, edge: Self) -> Self;
     /// Linearly interpolates between `a` and `b` based on the value of `self`.
     fn lerp_p<P: Policy>(self, a: Self, b: Self) -> Self;
-    /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
-    fn inverse_smoothstep_p<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+
     fn reciprocal_p<P: Policy>(self) -> Self;
     fn inverse_sqrt_p<P: Policy>(self) -> Self;
     fn powi_p<P: Policy>(self, e: i32) -> Self;

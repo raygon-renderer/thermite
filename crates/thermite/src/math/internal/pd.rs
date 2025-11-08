@@ -1,4 +1,7 @@
-use crate::math::{consts::FloatConsts as _, policy::policies::ExtraPrecision};
+use crate::{
+    divider::Divider,
+    math::{consts::FloatConsts as _, policy::policies::ExtraPrecision},
+};
 use core::f64::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -538,7 +541,60 @@ where
 
     #[inline(always)]
     fn cbrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        todo!()
+        let b1 = Vu::<Self>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
+        let b2 = Vu::<Self>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
+        let m = Vu::<Self>::splat(0x7fffffff); // u32::MAX >> 1
+
+        let x1p54 = x * Vf::<Self>::splat(f64::from_bits(0x4350000000000000)); // 0x1p54 === 2 ^ 54
+
+        let hx0 = (x.into_bits() >> 32) & m;
+
+        let x_small = hx0.cmp_lt(Vu::<Self>::splat(0x00100000));
+
+        let xs = x_small.select(x1p54, x); // note that this upcasts
+        let b = x_small.select(b2, b1);
+
+        let mut ui = xs.into_bits();
+        let mut hx = (ui >> 32) & m;
+
+        hx = hx / Divider::u64(3) + b;
+
+        ui &= Vu::<Self>::splat(1 << 63);
+        ui |= hx << 32;
+
+        let mut t = Vf::<Self>::from_bits(ui);
+
+        let r = (t * t) * (t / x); // encourage ILP
+        let r2 = r * r;
+
+        t *= r.poly_p::<P, _>(&[
+            1.87595182427177009643,   /* 0x3ffe03e6, 0x0f61e692 */
+            -1.88497979543377169875,  /* 0xbffe28e0, 0x92f02420 */
+            1.621429720105354466140,  /* 0x3ff9f160, 0x4a49d6c2 */
+            -0.758397934778766047437, /* 0xbfe844cb, 0xbee751d9 */
+            0.145996192886612446982,  /* 0x3fc2b000, 0xd4e4edd7 */
+        ]);
+
+        ui = t.into_bits();
+        ui = (ui + Vu::<Self>::splat(0x80000000)) & Vu::<Self>::splat(0xffffffffc0000000);
+        t = Vf::<Self>::from_bits(ui);
+
+        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
+            // original form, 5 simple ops, 2 divisions
+            ((x / (t * t)) - t) / ((t + t) + (x / (t * t)))
+        } else {
+            // fast form, 3 simple ops, 1 division, 1 fma
+            let t3 = t * t * t;
+            (x - t3) / t3.mul_add(Vf::<Self>::TWO, x)
+        };
+
+        t = r.mul_adde(t, t);
+
+        if !P::POLICY.check_overflow {
+            return x.cmp_eq(Vf::<Self>::ZERO).select(x, t);
+        }
+
+        (hx0.cmp_gt(Vu::<Self>::splat(0x7f800000)) | hx0.cmp_eq(Vu::<Self>::ZERO)).select(x, t)
     }
 
     #[inline(always)]

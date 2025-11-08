@@ -461,6 +461,7 @@ where
 
     type Bits = DoublePumpRegister<R::Bits>;
     type Signed = DoublePumpRegister<R::Signed>;
+    type ExtendedPrecision = DoublePumpRegister<R::ExtendedPrecision>;
 
     const HALF: Self::Storage = Self(R::HALF, R::HALF);
     const NEG_ZERO: Self::Storage = Self(R::NEG_ZERO, R::NEG_ZERO);

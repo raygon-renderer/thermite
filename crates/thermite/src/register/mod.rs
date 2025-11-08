@@ -585,7 +585,6 @@ pub trait FloatElement: num_traits::float::FloatCore + From<i8> + core::fmt::Dis
     const MAX_U64: u64;
 
     fn from_f32(value: f32) -> Self;
-
     fn from_i64(value: i64) -> Self;
 
     fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
@@ -655,11 +654,18 @@ where
     lhs
 }
 
-pub trait FloatRegister: SignedRegister<Element: FloatElement> + Interoperable<Self::Bits, Self::Signed> {
+pub trait FloatRegister:
+    SignedRegister<Element: FloatElement> + Interoperable<Self::Bits, Self::Signed> + CastRegister<Self::ExtendedPrecision>
+{
     type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
         + Interoperable<Self, Self::Signed>;
     type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Signed>
         + Interoperable<Self, Self::Bits>;
+
+    /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
+    /// and this associated type provides that capability. If no higher-precision type is available,
+    /// this type should be the same as `Self` as a safe fallback.
+    type ExtendedPrecision: FloatRegister<Lanes = Self::Lanes> + CastRegister<Self>;
 
     const HAS_TRUE_FMA: bool;
 

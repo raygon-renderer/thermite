@@ -360,6 +360,7 @@ impl FloatRegister for F32x4V3 {
 
     type Bits = super::U32x4V3;
     type Signed = super::I32x4V3;
+    type ExtendedPrecision = super::F64x4V3;
 
     const HALF: Self::Storage = reg::<Self, 4>([0.5; 4]);
     const NEG_ZERO: Self::Storage = reg::<Self, 4>([-0.0; 4]);
