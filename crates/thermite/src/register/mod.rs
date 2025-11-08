@@ -600,6 +600,7 @@ const _: () = {
 
         const MAX_U64: u64 = 1 << 23;
 
+        #[inline(always)]
         fn from_i64(value: i64) -> Self {
             if value.unsigned_abs() < Self::MAX_U64 {
                 value as f32 // safe to convert directly
@@ -620,6 +621,7 @@ const _: () = {
 
         const MAX_U64: u64 = 1 << 53;
 
+        #[inline(always)]
         fn from_i64(value: i64) -> Self {
             if value.unsigned_abs() < Self::MAX_U64 {
                 value as f64 // safe to convert directly
