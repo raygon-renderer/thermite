@@ -112,7 +112,7 @@ where
 
         let gh = Vf::splat(LANCZOS_G - 0.5);
 
-        let lanczos_sum = z.poly_rational_p::<P, 6, 6>(&LANCZOS_P, &LANCZOS_Q);
+        let lanczos_sum = z.poly_rational_p::<P, _, _>(&LANCZOS_P, &LANCZOS_Q);
 
         let zgh = z + gh;
         let lzgh = zgh.ln_p::<P>();
@@ -156,7 +156,7 @@ where
             let x = reflect.select(Vf::ONE - z, z);
 
             // PadeApproximate[Ln[Gamma[x+1]], {x,5.000000001,7,9}]
-            let mut y = x.poly_rational_p::<P, 8, 10>(
+            let mut y = x.poly_rational_p::<P, _, _>(
                 &[
                     -6.740081381906293e-8,
                     -0.0063027,
@@ -216,7 +216,7 @@ where
         let b = z - Vf::HALF;
         let g = Vf::splat(LANCZOS_G);
 
-        let mut lanczos_sum = z.poly_rational_p::<P, 6, 6>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q);
+        let mut lanczos_sum = z.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q);
 
         // Full A term
         let mut a = (b + g).ln_p::<P>() - Vf::ONE;
