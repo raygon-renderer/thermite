@@ -26,7 +26,7 @@ where
                 if SINE {
                     x = (x - Vf::HALF) - x.floor();
                 } else {
-                    let quarter = Vf::splat(0.25);
+                    let quarter = const { Vf::splat_const(0.25) };
 
                     x = (x - quarter) - (x + quarter).floor();
                 }
@@ -37,7 +37,7 @@ where
 
                 // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
                 // increases average error but decreases max error
-                let p = Vf::splat(0.22400815333595678); // original P = 0.225
+                let p = const { Vf::splat_const(0.22400815333595678) }; // original P = 0.225
 
                 x.mul_adde(x.abs().mul_sube(p, p), x)
             }
@@ -652,6 +652,8 @@ where
         let mut ui = xs.into_bits();
         let mut hx = ui & m;
 
+        // NOTE: Using the branched divider with a constant
+        // leads to better codegen when the branch is inlined.
         hx = hx / Divider::u32(3) + b;
 
         ui &= Vu::<Self>::splat(0x80000000);

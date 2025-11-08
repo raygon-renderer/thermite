@@ -40,13 +40,30 @@ pub struct Divider<T> {
     shift: u8,
 }
 
-/// Divider without branching, useful for dynamic divisors.
+/// Divider without branching, useful for dynamic divisors where branches can be expensive,
+/// at the cost of some extra work compared to the branching [`Divider`].
 ///
 /// However, when used with constant input, this may perform extra unnecessary work that could
-/// be removed in the branching [`Divider`]
+/// be removed in the branching [`Divider`].
+///
+/// Furthermore, the unsigned version of this divider does not support a divisor of 1,
+/// due to the way the algorithm works.
 #[repr(transparent)]
 #[derive(Copy, PartialEq)]
 pub struct BranchfreeDivider<T>(Divider<T>);
+
+/// Error return by `TryFrom` implementations when the divisor is unsupported
+/// by the branchfree divider. See the documentation of [`BranchfreeDivider`] for details.
+#[derive(Debug, Clone, Copy)]
+pub struct UnsupportedDivisor;
+
+impl core::fmt::Display for UnsupportedDivisor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "unsupported divisor")
+    }
+}
+
+impl core::error::Error for UnsupportedDivisor {}
 
 impl<T: Copy> Clone for BranchfreeDivider<T> {
     fn clone(&self) -> Self {
@@ -111,17 +128,24 @@ macro_rules! impl_unsigned_divider {
     ($($t:ty => $dt:ty),*) => {
         paste::paste! {$(
             impl BranchfreeDivider<$t> {
-                /// See docs for [`BranchfreeDivider`] and [`Divider`]
+                /// Create a new branchfree divider for the given divisor.
+                ///
+                /// # Panics
+                ///
+                /// Panics if `d == 1`, as unsigned division by 1 is not supported in branchfree mode due
+                /// to the way the algorithm works.
                 #[inline(always)]
-                pub fn [<$t>](d: $t) -> Self {
-                    Divider::<$t>::[<$t _branchfree>](d)
+                pub const fn [<$t>](d: $t) -> Self {
+                    BranchfreeDivider(Divider::[<$t _internal>](d, true))
                 }
-            }
 
-            impl From<$t> for BranchfreeDivider<$t> {
+                /// Try to create a new branchfree divider for the given divisor.
+                ///
+                /// The unsigned branchfree divider does not support a divisor of 1, so this returns
+                /// `None` in that case.
                 #[inline(always)]
-                fn from(d: $t) -> Self {
-                    Divider::<$t>::[<$t _branchfree>](d)
+                pub const fn [<try_ $t>](d: $t) -> Option<Self> {
+                    if d == 1 { None } else { Some(Self::[<$t>](d)) }
                 }
             }
 
@@ -132,20 +156,23 @@ macro_rules! impl_unsigned_divider {
                 }
             }
 
+            impl TryFrom<$t> for BranchfreeDivider<$t> {
+                type Error = UnsupportedDivisor;
+
+                #[inline(always)]
+                fn try_from(d: $t) -> Result<Self, Self::Error> {
+                    Self::[<try_ $t>](d).ok_or(UnsupportedDivisor)
+                }
+            }
+
             impl Divider<$t> {
-                /// See docs for [`Divider`]
+                /// Create a new divider for the given divisor.
                 #[inline(always)]
                 pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
                 }
 
-                /// See docs for [`BranchfreeDivider`] and [`Divider`]
-                #[inline]
-                pub const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
-                    BranchfreeDivider(Self::[<$t _internal>](d, true))
-                }
-
-                #[inline]
+                #[inline(always)]
                 const fn [<$t _internal>](d: $t, bf: bool) -> Self {
                     if d == 0 {
                         return Divider { multiplier: 0, shift: 0 };
@@ -203,17 +230,19 @@ macro_rules! impl_signed_divider {
     ($($t:ty => $ut:ty => $udt:ty),*) => {
         paste::paste!{$(
             impl BranchfreeDivider<$t> {
-                /// See docs for [`BranchfreeDivider`] and [`Divider`]
+                /// Create a new branchfree divider for the given divisor.
+                ///
+                /// Unlike the unsigned version, this does support a divisor of 1.
                 #[inline(always)]
-                pub fn [<$t>](d: $t) -> Self {
-                    Divider::<$t>::[<$t _branchfree>](d)
+                pub const fn [<$t>](d: $t) -> Self {
+                    BranchfreeDivider(Divider::[<$t _internal>](d, true))
                 }
             }
 
             impl From<$t> for BranchfreeDivider<$t> {
                 #[inline(always)]
                 fn from(d: $t) -> Self {
-                    Divider::<$t>::[<$t _branchfree>](d)
+                    BranchfreeDivider::[<$t>](d)
                 }
             }
 
@@ -225,19 +254,13 @@ macro_rules! impl_signed_divider {
             }
 
             impl Divider<$t> {
-                /// See docs for [`Divider`]
+                /// Create a new divider for the given divisor.
                 #[inline(always)]
                 pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
                 }
 
-                /// See docs for [`BranchfreeDivider`] and [`Divider`]
-                #[inline]
-                pub const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
-                    BranchfreeDivider(Self::[<$t _internal>](d, true))
-                }
-
-                #[inline]
+                #[inline(always)]
                 const fn [<$t _internal>](d: $t, bf: bool) -> Self {
                     if d == 0 {
                         return Divider { multiplier: 0, shift: 0 };

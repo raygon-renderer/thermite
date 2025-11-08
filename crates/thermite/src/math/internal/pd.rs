@@ -557,6 +557,8 @@ where
         let mut ui = xs.into_bits();
         let mut hx = (ui >> 32) & m;
 
+        // NOTE: Using the branched divider with a constant
+        // leads to better codegen when the branch is inlined.
         hx = hx / Divider::u64(3) + b;
 
         ui &= Vu::<Self>::splat(1 << 63);

@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(clippy::missing_transmute_annotations, unused, clippy::let_and_return)]
 
+#[doc(hidden)]
 pub extern crate generic_array;
 
 /// Creates a shuffle mask for various instructions. Note
@@ -67,6 +68,8 @@ pub mod simd;
 #[doc(hidden)]
 pub mod swizzle;
 
+pub use divider::{BranchfreeDivider, Divider};
+pub use mask::Mask;
 pub use register::DoublePump;
 pub use swizzle::Swizzle;
 pub use vector::Vector;

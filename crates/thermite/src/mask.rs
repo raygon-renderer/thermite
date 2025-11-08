@@ -181,6 +181,21 @@ impl<R: MaskRegister> Mask<R> {
     {
         Mask(M::blendv(M::mask_from(self.0), falsy.0, truthy.0))
     }
+
+    /// For each lane of the mask, if the lane is `true`, swap the corresponding lanes in `a` and `b`.
+    #[inline(always)]
+    pub fn swap<S>(self, a: &mut Vector<S>, b: &mut Vector<S>)
+    where
+        S: CastMaskRegister<R, Lanes = R::Lanes>,
+    {
+        let mask = S::mask_from(self.0);
+
+        let a2 = S::blendv(mask, a.0, b.0);
+        let b2 = S::blendv(mask, b.0, a.0);
+
+        a.0 = a2;
+        b.0 = b2;
+    }
 }
 
 impl<R: MaskRegister> From<bool> for Mask<R> {

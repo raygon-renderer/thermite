@@ -16,6 +16,11 @@ pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
 
 pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     #[inline(always)]
+    fn tolerance<P: Policy>() -> Vf<Self> {
+        Vf::splat(E::from_i64(P::POLICY.precision.tolerance()) * E::EPSILON)
+    }
+
+    #[inline(always)]
     fn poly<P: Policy, const N: usize>(x: Vf<Self>, coeffs: &[E; N]) -> Vf<Self> {
         if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             // basic Horner's method that's both compact and accurate, even without FMA
@@ -115,15 +120,96 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         res
     }
 
+    fn sum_f<P: Policy, F>(start: i64, end: i64, mut f: F) -> Result<Vf<Self>, Vf<Self>>
+    where
+        F: FnMut(i64) -> Vf<Self>,
+    {
+        let mut sum = Vf::<Self>::ZERO;
+        let mut c = Vf::<Self>::ZERO; // Kahan summation compensation
+        let mut n = start;
+
+        let tolerance = Self::tolerance::<P>();
+
+        let mut converged = false;
+
+        for _ in 0..P::POLICY.max_iterations {
+            if n >= end {
+                break;
+            }
+
+            let mut delta = f(n);
+            let abs_delta = delta.abs();
+
+            if abs_delta.cmp_le(tolerance).all() {
+                converged = true;
+                break;
+            }
+
+            let t = sum + delta;
+
+            if P::POLICY.precision.ge(PrecisionPolicy::Best) {
+                // if |sum| >= |input[i]| then
+                //     c += (sum - t) + input[i] // If sum is bigger, low-order digits of input[i] are lost.
+                // else
+                //     c += (input[i] - t) + sum // Else low-order digits of sum are lost.
+                // endif
+                sum.abs().cmp_lt(abs_delta).swap(&mut sum, &mut delta);
+
+                c += (sum - t) + delta;
+            }
+
+            sum = t;
+            n += 1;
+        }
+
+        if P::POLICY.precision.ge(PrecisionPolicy::Best) {
+            sum += c; // apply any remaining compensation
+        }
+
+        match converged {
+            true => Ok(sum),
+            false => Err(sum),
+        }
+    }
+
+    fn prod_f<P: Policy, F>(start: i64, end: i64, mut f: F) -> Result<Vf<Self>, Vf<Self>>
+    where
+        F: FnMut(i64) -> Vf<Self>,
+    {
+        let mut prod = Vf::ONE;
+        let mut n = start;
+
+        let tolerance = Self::tolerance::<P>();
+
+        for _ in 0..P::POLICY.max_iterations {
+            if n >= end {
+                break;
+            }
+
+            let new_prod = prod * f(n);
+
+            let delta = new_prod - prod;
+
+            if delta.abs().cmp_le(tolerance).all() {
+                return Ok(prod);
+            }
+
+            prod = new_prod;
+            n += 1;
+        }
+
+        Err(prod)
+    }
+
     #[inline(always)]
     fn newtons_method<P: Policy, F>(
         mut x: Vf<Self>,
         tolerance: Vf<Self>,
         bounds: Option<(Vf<Self>, Vf<Self>)>,
-        f: F,
+        mut f: F,
     ) -> Vf<Self>
     where
-        F: Fn(Vf<Self>) -> (Vf<Self>, Vf<Self>),
+        F: FnMut(Vf<Self>) -> (Vf<Self>, Vf<Self>),
     {
         for _ in 0..P::POLICY.max_iterations {
             let (y, y_prime) = f(x);
@@ -295,9 +381,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
 
         let bounds = edges.or(Some((Vf::ZERO, Vf::ONE)));
 
-        let tolerance = E::from_i64(P::POLICY.precision.tolerance()) * E::EPSILON;
-
-        Self::newtons_method::<P, _>(x0, Vf::splat(tolerance), bounds, |x: Vf<Self>| {
+        Self::newtons_method::<P, _>(x0, Self::tolerance::<P>(), bounds, |x: Vf<Self>| {
             let mut t = x;
             let mut dt_dx = bar;
 
@@ -419,7 +503,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
-    fn invsqrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+    fn inverse_sqrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { !Self::HAS_APPROX_RSQRT || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             Vf::ONE / x.sqrt()
         } else {
