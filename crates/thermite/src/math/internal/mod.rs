@@ -261,7 +261,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
                 0 => return y.step_p::<P>(Vf::HALF).mul_adde(ba, a),
                 1 => return y.mul_adde(ba, a),
 
-                // remember to scale the initial guess to fit the edges
+                // scale the initial guess to fit the edges
                 _ => x0 = x0.mul_add(ba, a),
             }
         }
@@ -269,6 +269,27 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         match N {
             0 => return y.step_p::<P>(Vf::HALF),
             1 => return y,
+
+            // N=2 has a closed-form solution
+            2 => {
+                let mut t = y.nmul_adde(Vf::TWO, Vf::ONE).asin_p::<P>();
+
+                if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+                    t *= Vf::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
+                } else {
+                    // exact division for higher precisions
+                    t /= Vf::splat(FloatElement::from_f32(3.0));
+                }
+
+                t = Vf::HALF - t.sin_p::<P>();
+
+                if let Some((a, _)) = edges {
+                    // rescale to original edges
+                    t = t.mul_adde(ba, a);
+                }
+
+                return t;
+            }
             _ => {}
         }
 
