@@ -350,6 +350,19 @@ impl IntegerRegister for U32x8V3 {
     }
 
     #[inline(always)]
+    fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
+        unsafe { arch::_mm256_div_epu32x(value, divider.multiplier(), divider.shift()) }
+    }
+
+    #[inline(always)]
+    fn div_branchfree(
+        value: Self::Storage,
+        divider: crate::divider::BranchfreeDivider<Self::Element>,
+    ) -> Self::Storage {
+        unsafe { arch::_mm256_div_epu32x_bf(value, divider.multiplier(), divider.shift()) }
+    }
+
+    #[inline(always)]
     fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe { arch::_mm256_rolv_epi32x_v3(value, core::mem::transmute(shifts)) }
     }

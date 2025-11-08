@@ -6,27 +6,27 @@ use super::*;
 // Copyright (C) 2010 - 2019 ridiculous_fish, <libdivide@ridiculousfish.com>
 // Copyright (C) 2016 - 2019 Kim Walisch, <kim.walisch@gmail.com>
 
-#[rustfmt::skip]
-    #[inline(always)]
-    pub unsafe fn _mm256_mullhi_epu64x(x: __m256i, y: __m256i) -> __m256i {
-        let lomask  = _mm256_set1_epi64x(0xffffffff);
-        let xh      = _mm256_shuffle_epi32(x, 0xB1);    // x0l, x0h, x1l, x1h
-        let yh      = _mm256_shuffle_epi32(y, 0xB1);    // y0l, y0h, y1l, y1h
-        let w0      = _mm256_mul_epu32(x, y);           // x0l*y0l, x1l*y1l
-        let w1      = _mm256_mul_epu32(x, yh);          // x0l*y0h, x1l*y1h
-        let w2      = _mm256_mul_epu32(xh, y);          // x0h*y0l, x1h*y0l
-        let w3      = _mm256_mul_epu32(xh, yh);         // x0h*y0h, x1h*y1h
-        let w0h     = _mm256_srli_epi64(w0, 32);
-        let s1      = _mm256_add_epi64(w1, w0h);
-        let s1l     = _mm256_and_si256(s1, lomask);
-        let s1h     = _mm256_srli_epi64(s1, 32);
-        let s2      = _mm256_add_epi64(w2, s1l);
-        let s2h     = _mm256_srli_epi64(s2, 32);
-        let mut hi  = _mm256_add_epi64(w3, s1h);
-                hi  = _mm256_add_epi64(hi, s2h);
+#[inline(always)]
+pub unsafe fn _mm256_mullhi_epu64x(x: __m256i, y: __m256i) -> __m256i {
+    let lomask = _mm256_set1_epi64x(0xffffffff);
+    let xh = _mm256_shuffle_epi32(x, 0xB1); // x0l, x0h, x1l, x1h
+    let yh = _mm256_shuffle_epi32(y, 0xB1); // y0l, y0h, y1l, y1h
+    let w0 = _mm256_mul_epu32(x, y); // x0l*y0l, x1l*y1l
+    let w1 = _mm256_mul_epu32(x, yh); // x0l*y0h, x1l*y1h
+    let w2 = _mm256_mul_epu32(xh, y); // x0h*y0l, x1h*y0l
+    let w3 = _mm256_mul_epu32(xh, yh); // x0h*y0h, x1h*y1h
+    let w0h = _mm256_srli_epi64(w0, 32);
+    let s1 = _mm256_add_epi64(w1, w0h);
+    let s1l = _mm256_and_si256(s1, lomask);
+    let s1h = _mm256_srli_epi64(s1, 32);
+    let s2 = _mm256_add_epi64(w2, s1l);
+    let s2h = _mm256_srli_epi64(s2, 32);
+    let mut hi = _mm256_add_epi64(w3, s1h);
 
-        hi
-    }
+    hi = _mm256_add_epi64(hi, s2h);
+
+    hi
+}
 
 #[inline(always)]
 pub unsafe fn _mm256_mullhi_epu32x(a: __m256i, b: __m256i) -> __m256i {
@@ -113,8 +113,8 @@ pub unsafe fn _mm256_div_epi32x(numers: __m256i, multiplier: i32, shift: u8) -> 
     const SHIFT_MASK: u8 = crate::divider::Divider::<u32>::SHIFT_MASK;
 
     if multiplier == 0 {
-        let shift = shift & SHIFT_MASK;
-        let mask = (1 << shift) - 1;
+        let masked_shift = shift & SHIFT_MASK;
+        let mask = (1 << masked_shift) - 1;
 
         let round_to_zero_tweak = _mm256_set1_epi32(mask);
 
@@ -123,7 +123,7 @@ pub unsafe fn _mm256_div_epi32x(numers: __m256i, multiplier: i32, shift: u8) -> 
             numers,
             _mm256_and_si256(_mm256_srai_epi32(numers, 31), round_to_zero_tweak),
         );
-        q = _mm256_sra_epi32(q, _mm_cvtsi32_si128(shift as i32));
+        q = _mm256_sra_epi32(q, _mm_cvtsi32_si128(masked_shift as i32));
 
         let sign = _mm256_set1_epi32(((shift as i8) >> 7) as i32);
 
@@ -152,8 +152,8 @@ pub unsafe fn _mm256_div_epi64x(numers: __m256i, multiplier: i64, shift: u8) -> 
     const SHIFT_MASK: u8 = crate::divider::Divider::<u64>::SHIFT_MASK;
 
     if multiplier == 0 {
-        let shift = shift & SHIFT_MASK;
-        let mask = (1i64 << shift) - 1;
+        let masked_shift = shift & SHIFT_MASK;
+        let mask = (1i64 << masked_shift) - 1;
 
         let round_to_zero_tweak = _mm256_set1_epi64x(mask);
 
@@ -162,7 +162,7 @@ pub unsafe fn _mm256_div_epi64x(numers: __m256i, multiplier: i64, shift: u8) -> 
             numers,
             _mm256_and_si256(_mm256_signbits_epi64x_v3(numers), round_to_zero_tweak),
         );
-        q = _mm256_srai_epi64x_v3(q, shift as i32);
+        q = _mm256_srai_epi64x_v3(q, masked_shift as i32);
 
         let sign = _mm256_set1_epi32(((shift as i8) >> 7) as i32);
 
@@ -202,10 +202,10 @@ pub unsafe fn _mm256_div_epi32x_bf(numers: __m256i, multiplier: i32, shift: u8) 
     // If q is non-negative, we have nothing to do
     // If q is negative, we want to add either (2**shift)-1 if d is
     // a power of 2, or (2**shift) if it is not a power of 2
-    let is_power_of_2 = (multiplier == 0) as i32;
+    let is_power_of_2 = (multiplier == 0) as u32;
 
     let q_sign = _mm256_srai_epi32(q, 31); // q_sign = q >> 31
-    let mask = _mm256_set1_epi32((1i32 << masked_shift) - is_power_of_2);
+    let mask = _mm256_set1_epi32((1u32 << masked_shift).wrapping_sub(is_power_of_2) as i32);
     q = _mm256_add_epi32(q, _mm256_and_si256(q_sign, mask)); // q = q + (q_sign & mask)
     q = _mm256_sra_epi32(q, _mm_cvtsi32_si128(masked_shift as i32)); // q >>= shift
     q = _mm256_sub_epi32(_mm256_xor_si256(q, sign), sign); // q = (q ^ sign) - sign
@@ -228,10 +228,10 @@ pub unsafe fn _mm256_div_epi64x_bf(numers: __m256i, multiplier: i64, shift: u8) 
     // If q is non-negative, we have nothing to do.
     // If q is negative, we want to add either (2**shift)-1 if d is
     // a power of 2, or (2**shift) if it is not a power of 2.
-    let is_power_of_2 = (multiplier == 0) as i64;
+    let is_power_of_2 = (multiplier == 0) as u64;
 
     let q_sign = _mm256_signbits_epi64x_v3(q); // q_sign = q >> 63
-    let mask = _mm256_set1_epi64x((1i64 << masked_shift) - is_power_of_2);
+    let mask = _mm256_set1_epi64x((1u64 << masked_shift).wrapping_sub(is_power_of_2) as i64);
     q = _mm256_add_epi64(q, _mm256_and_si256(q_sign, mask)); // q = q + (q_sign & mask)
     q = _mm256_srai_epi64x_v3(q, masked_shift as i32); // q >>= shift
     q = _mm256_sub_epi64(_mm256_xor_si256(q, sign), sign); // q = (q ^ sign) - sign

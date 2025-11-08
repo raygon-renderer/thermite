@@ -83,3 +83,10 @@ pub unsafe fn _mm_set1_epu32x(v: u32) -> __m128i {
 pub unsafe fn _mm_set1_epu64x(v: u64) -> __m128i {
     _mm_set1_epi64x(v as i64)
 }
+
+/// POLYFILL: Shift right and sign extend 64-bit integers
+#[inline(always)]
+pub unsafe fn _mm_srai_epi64x_v1(v: __m128i, cnt: i32) -> __m128i {
+    let m = _mm_set1_epi64x(1i64 << (63 - cnt));
+    _mm_sub_epi64(_mm_xor_si128(_mm_srl_epi64(v, _mm_cvtsi32_si128(cnt)), m), m)
+}

@@ -276,7 +276,15 @@ impl<R: Register> Vector<R> {
     }
 
     #[inline(always)]
-    fn fold<F>(self, init: R::Element, f: F) -> R::Element
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: Fn(R::Element) -> R::Element,
+    {
+        Self(R::map(self.0, f))
+    }
+
+    #[inline(always)]
+    pub fn fold<F>(self, init: R::Element, f: F) -> R::Element
     where
         F: Fn(R::Element, R::Element) -> R::Element,
     {
@@ -284,7 +292,7 @@ impl<R: Register> Vector<R> {
     }
 
     #[inline(always)]
-    fn reduce<F>(self, f: F) -> R::Element
+    pub fn reduce<F>(self, f: F) -> R::Element
     where
         F: Fn(R::Element, R::Element) -> R::Element,
     {
@@ -1182,6 +1190,24 @@ impl<R: IntegerRegister> Vector<R> {
     #[inline(always)]
     pub fn count_zeros(self) -> Self {
         Self(R::count_zeros(self.0))
+    }
+}
+
+impl<R: IntegerRegister> Div<crate::divider::Divider<R::Element>> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: crate::divider::Divider<R::Element>) -> Self::Output {
+        Self(R::div_branched(self.0, rhs))
+    }
+}
+
+impl<R: IntegerRegister> Div<crate::divider::BranchfreeDivider<R::Element>> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: crate::divider::BranchfreeDivider<R::Element>) -> Self::Output {
+        Self(R::div_branchfree(self.0, rhs))
     }
 }
 

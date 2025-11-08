@@ -317,6 +317,19 @@ impl IntegerRegister for I64x4V3 {
     }
 
     #[inline(always)]
+    fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
+        unsafe { arch::_mm256_div_epi64x(value, divider.multiplier(), divider.shift()) }
+    }
+
+    #[inline(always)]
+    fn div_branchfree(
+        value: Self::Storage,
+        divider: crate::divider::BranchfreeDivider<Self::Element>,
+    ) -> Self::Storage {
+        unsafe { arch::_mm256_div_epi64x_bf(value, divider.multiplier(), divider.shift()) }
+    }
+
+    #[inline(always)]
     fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
             let shifts: arch::__m128i = core::mem::transmute(shifts);

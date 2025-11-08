@@ -7,6 +7,8 @@ use generic_array::{
     typenum::{self, Unsigned},
 };
 
+use crate::divider::{BranchfreeDivider, Divider};
+
 pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePump;
 
 #[inline(always)]
@@ -827,6 +829,9 @@ pub trait IntegerRegister: NumericRegister + ShiftRegister {
 
     fn wrapping_sum(value: Self::Storage) -> Self::Element;
     fn wrapping_product(value: Self::Storage) -> Self::Element;
+
+    fn div_branched(value: Self::Storage, divider: Divider<Self::Element>) -> Self::Storage;
+    fn div_branchfree(value: Self::Storage, divider: BranchfreeDivider<Self::Element>) -> Self::Storage;
 
     /// Rotate bits left
     fn rol(value: Self::Storage, shift: u32) -> Self::Storage;

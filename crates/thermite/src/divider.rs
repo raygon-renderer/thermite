@@ -16,7 +16,7 @@ macro_rules! decl_div_half {
             #[inline(always)]
             const fn [<div_ $dt _ $t _to_ $t>](u1: $t, u0: $t, v: $t) -> ($t, $t) {
                 let v = v as $dt;
-                let n = ((u1 as $dt) << (core::mem::size_of::<$t>() * 8)) | (u0 as $dt);
+                let n = ((u1 as $dt) << <$t>::BITS) | (u0 as $dt);
                 let res = (n / v) as $t; // truncate
                 let rem = n.wrapping_sub((res as $dt).wrapping_mul(v));
                 (res, rem as $t)
@@ -98,9 +98,9 @@ pub(crate) const NEG_DIVISOR: u8 = 0x80;
 macro_rules! impl_shift_mask {
     ($($ty:ty),*) => {$(
         impl Divider<$ty> {
-            const BITS: u32 = 8 * core::mem::size_of::<$ty>() as u32;
+            const BITS: u32 = <$ty>::BITS as u32;
             /// !log2(N::BITS)
-            pub(crate) const SHIFT_MASK: u8 = !(<$ty>::MAX << Self::BITS.trailing_zeros()) as u8;
+            pub(crate) const SHIFT_MASK: u8 = !(<$ty>::MAX << <$ty>::BITS.trailing_zeros()) as u8;
         }
     )*};
 }
@@ -113,8 +113,22 @@ macro_rules! impl_unsigned_divider {
             impl BranchfreeDivider<$t> {
                 /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline(always)]
-                pub const fn [<$t>](d: $t) -> Self {
+                pub fn [<$t>](d: $t) -> Self {
                     Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
+            impl From<$t> for BranchfreeDivider<$t> {
+                #[inline(always)]
+                fn from(d: $t) -> Self {
+                    Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
+            impl From<$t> for Divider<$t> {
+                #[inline(always)]
+                fn from(d: $t) -> Self {
+                    Self::[<$t>](d)
                 }
             }
 
@@ -128,9 +142,7 @@ macro_rules! impl_unsigned_divider {
                 /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline]
                 pub const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
-                    let mut divider = Self::[<$t _internal>](d, true);
-                    divider.shift &= Self::SHIFT_MASK;
-                    BranchfreeDivider(divider)
+                    BranchfreeDivider(Self::[<$t _internal>](d, true))
                 }
 
                 #[inline]
@@ -139,42 +151,48 @@ macro_rules! impl_unsigned_divider {
                         return Divider { multiplier: 0, shift: 0 };
                     }
 
+                    if bf && d == 1 {
+                        panic!("branchfree divider must be != 1");
+                    }
+
                     let floor_log_2_d = Self::BITS - 1 - d.leading_zeros();
 
                     if d.is_power_of_two() {
-                        Divider {
+                        return Divider {
                             multiplier: 0,
                             // We need to subtract 1 from the shift value in case of an unsigned
                             // branchfree divider because there is a hardcoded right shift by 1
                             // in its division algorithm.
                             shift: (floor_log_2_d - bf as u32) as u8,
-                        }
+                        };
+                    }
+
+                    let k = 1 << floor_log_2_d;
+                    let (mut proposed_m, rem) = [<div_ $dt _ $t _to_ $t>](k, 0, d);
+
+                    let e = d.wrapping_sub(rem);
+
+                    let mut shift;
+
+                    if !bf && e < k {
+                        shift = floor_log_2_d as u8;
                     } else {
-                        let k = 1 << floor_log_2_d;
-                        let (mut proposed_m, rem) = [<div_ $dt _ $t _to_ $t>](k, 0, d);
+                        proposed_m = proposed_m.wrapping_add(proposed_m);
+                        let rem2 = rem.wrapping_add(rem);
 
-                        let e = d.wrapping_sub(rem);
-
-                        let shift;
-
-                        if !bf && e < k {
-                            shift = floor_log_2_d as u8;
-                        } else {
-                            proposed_m = proposed_m.wrapping_add(proposed_m);
-                            let rem2 = rem.wrapping_add(rem);
-
-                            if rem2 >= d || rem2 < rem {
-                                proposed_m = proposed_m.wrapping_add(1);
-                            }
-
-                            shift = floor_log_2_d as u8 | ADD_MARKER;
+                        if rem2 >= d || rem2 < rem {
+                            proposed_m = proposed_m.wrapping_add(1);
                         }
 
-                        Divider {
-                            multiplier: proposed_m.wrapping_add(1),
-                            shift,
+                        shift = floor_log_2_d as u8;
+
+                        if !bf {
+                            // instead of masking out the ADD_MARKER bit, we just don't set it
+                            shift |= ADD_MARKER;
                         }
                     }
+
+                    Divider { multiplier: proposed_m.wrapping_add(1), shift }
                 }
             }
         )*}
@@ -187,24 +205,36 @@ macro_rules! impl_signed_divider {
             impl BranchfreeDivider<$t> {
                 /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline(always)]
-                pub const fn [<$t>](d: $t) -> Self {
+                pub fn [<$t>](d: $t) -> Self {
                     Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
+            impl From<$t> for BranchfreeDivider<$t> {
+                #[inline(always)]
+                fn from(d: $t) -> Self {
+                    Divider::<$t>::[<$t _branchfree>](d)
+                }
+            }
+
+            impl From<$t> for Divider<$t> {
+                #[inline(always)]
+                fn from(d: $t) -> Self {
+                    Self::[<$t>](d)
                 }
             }
 
             impl Divider<$t> {
                 /// See docs for [`Divider`]
                 #[inline(always)]
-                const fn [<$t>](d: $t) -> Self {
+                pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
                 }
 
                 /// See docs for [`BranchfreeDivider`] and [`Divider`]
                 #[inline]
-                const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
-                    let mut divider = Self::[<$t _internal>](d, true);
-                    divider.shift &= Divider::<$ut>::SHIFT_MASK;
-                    BranchfreeDivider(divider)
+                pub const fn [<$t _branchfree>](d: $t) -> BranchfreeDivider<$t> {
+                    BranchfreeDivider(Self::[<$t _internal>](d, true))
                 }
 
                 #[inline]
@@ -213,60 +243,65 @@ macro_rules! impl_signed_divider {
                         return Divider { multiplier: 0, shift: 0 };
                     }
 
-                    let abs_d = d.unsigned_abs() as $ut;
+                    let abs_d = d.unsigned_abs();
 
-                    let floor_log_2_d = Divider::<$ut>::BITS - 1 - d.leading_zeros();
+                    let floor_log_2_d = Divider::<$ut>::BITS - 1 - abs_d.leading_zeros();
 
                     if abs_d.is_power_of_two() {
-                        Divider {
+                        return Divider {
                             multiplier: 0,
                             shift: floor_log_2_d as u8 | if d < 0 { NEG_DIVISOR } else { 0 },
-                        }
-                    } else {
-                        let (mut proposed_m, rem) = [<div_ $udt _ $ut _to_ $ut>](1 << (floor_log_2_d - 1), 0, abs_d);
-
-                        let e = abs_d.wrapping_sub(rem);
-
-                        let mut shift;
-
-                        if !bf && e < (1 << floor_log_2_d) {
-                            shift = (floor_log_2_d - 1) as u8;
-                        } else {
-                            proposed_m = proposed_m.wrapping_add(proposed_m);
-                            let rem2 = rem.wrapping_add(rem);
-
-                            if rem2 >= abs_d || rem2 < rem {
-                                proposed_m = proposed_m.wrapping_add(1);
-                            }
-
-                            shift = floor_log_2_d as u8 | ADD_MARKER;
-                        }
-
-                        proposed_m = proposed_m.wrapping_add(1);
-
-                        let mut multiplier = proposed_m as $t;
-
-                        if d < 0 {
-                            shift |= NEG_DIVISOR;
-
-                            if !bf {
-                                multiplier = -multiplier;
-                            }
-                        }
-
-                        Divider { multiplier, shift }
+                        };
                     }
+
+                    let (mut proposed_m, rem) = [<div_ $udt _ $ut _to_ $ut>](1 << (floor_log_2_d - 1), 0, abs_d);
+
+                    let e = abs_d.wrapping_sub(rem);
+
+                    let mut shift;
+
+                    if !bf && e < (1 << floor_log_2_d) {
+                        shift = (floor_log_2_d - 1) as u8;
+                    } else {
+                        proposed_m = proposed_m.wrapping_add(proposed_m);
+                        let rem2 = rem.wrapping_add(rem);
+
+                        if rem2 >= abs_d || rem2 < rem {
+                            proposed_m = proposed_m.wrapping_add(1);
+                        }
+
+                        shift = floor_log_2_d as u8 | ADD_MARKER;
+                    }
+
+                    proposed_m = proposed_m.wrapping_add(1);
+
+                    let mut multiplier = proposed_m as $t;
+
+                    if d < 0 {
+                        shift |= NEG_DIVISOR;
+
+                        if !bf {
+                            multiplier = -multiplier;
+                        }
+                    }
+
+                    Divider { multiplier, shift }
                 }
             }
         )*}
     }
 }
 
-impl_unsigned_divider!(u8 => u16, u16 => u32, u32 => u64, u64 => u128);
+impl_unsigned_divider! {
+    //u8 => u16,
+    //u16 => u32,
+    u32 => u64,
+    u64 => u128
+}
 
 impl_signed_divider! {
-    i8 => u8 => u16,
-    i16 => u16 => u32,
+    //i8 => u8 => u16,
+    //i16 => u16 => u32,
     i32 => u32 => u64,
     i64 => u64 => u128
 }

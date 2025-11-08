@@ -618,6 +618,19 @@ where
     }
 
     #[inline(always)]
+    fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
+        Self(R::div_branched(value.0, divider), R::div_branched(value.1, divider))
+    }
+
+    #[inline(always)]
+    fn div_branchfree(
+        value: Self::Storage,
+        divider: crate::divider::BranchfreeDivider<Self::Element>,
+    ) -> Self::Storage {
+        Self(R::div_branchfree(value.0, divider), R::div_branchfree(value.1, divider))
+    }
+
+    #[inline(always)]
     fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
         Self(R::rol(value.0, shift), R::rol(value.1, shift))
     }

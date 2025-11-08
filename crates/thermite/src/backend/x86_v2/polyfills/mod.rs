@@ -9,11 +9,13 @@ pub use crate::backend::x86_v1::polyfills::*;
 pub mod bits;
 pub mod casts;
 pub mod cmp;
+pub mod divider;
 pub mod math;
 
 pub use bits::*;
 pub use casts::*;
 pub use cmp::*;
+pub use divider::*;
 pub use math::*;
 
 #[inline(always)]
