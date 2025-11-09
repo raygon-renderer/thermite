@@ -121,6 +121,28 @@ where
     }
 
     #[inline(always)]
+    fn broadcast<const I: usize>(value: Self::Storage) -> Self::Storage {
+        let r = if const { I < R::Lanes::USIZE } {
+            R::broadcast::<I>(value.0)
+        } else {
+            R::broadcastv(value.1, const { I - Self::Lanes::USIZE })
+        };
+
+        Self(r, r)
+    }
+
+    #[inline(always)]
+    fn broadcastv(value: Self::Storage, idx: usize) -> Self::Storage {
+        let r = if idx < R::Lanes::USIZE {
+            R::broadcastv(value.0, idx)
+        } else {
+            R::broadcastv(value.1, idx - R::Lanes::USIZE)
+        };
+
+        Self(r, r)
+    }
+
+    #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
         unsafe { Self(R::load(ptr), R::load(ptr.add(R::Lanes::USIZE))) }
     }
