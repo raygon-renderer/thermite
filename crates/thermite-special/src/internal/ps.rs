@@ -147,7 +147,7 @@ where
     }
 
     #[inline(always)]
-    fn lgamma<P: Policy>(mut z: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+    fn lgamma_r<P: Policy>(mut z: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
         let mut signum = Vf::ONE;
 
         let reflect = z.is_negative();
@@ -240,6 +240,53 @@ where
         let y = reflect.select(Vf::LN_PI - res, res);
 
         (y, signum)
+    }
+
+    fn beta<P: Policy>(a: Vf<Self>, b: Vf<Self>) -> Vf<Self> {
+        let is_valid = a.cmp_gt(Vf::ZERO) & b.cmp_gt(Vf::ZERO);
+
+        if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {
+            return Vf::NAN;
+        }
+
+        let c = a + b;
+
+        // if a < b then swap
+        let (a, b) = (a.max(b), a.min(b));
+
+        let mut result = a.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
+            * (b.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
+                / c.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q));
+
+        let gh = Vf::splat(LANCZOS_G - 0.5);
+
+        let agh = a + gh;
+        let bgh = b + gh;
+        let cgh = c + gh;
+
+        let agh_d_cgh = agh / cgh;
+        let bgh_d_cgh = bgh / cgh;
+        let agh_p_bgh = agh * bgh;
+        let cgh_p_cgh = cgh * cgh;
+
+        let base = cgh
+            .cmp_gt(Vf::splat(1e10))
+            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
+
+        let denom = if P::POLICY.precision > PrecisionPolicy::Average {
+            Vf::SQRT_E / bgh.sqrt()
+        } else {
+            // bump up the precision a little to improve beta function accuracy
+            Vf::SQRT_E * bgh.inverse_sqrt_p::<ExtraPrecision<P>>()
+        };
+
+        result *= agh_d_cgh.powf_p::<P>(a - Vf::HALF - b) * (base.powf_p::<P>(b) * denom);
+
+        if P::POLICY.check_overflow {
+            result = is_valid.select(result, Vf::NAN);
+        }
+
+        result
     }
 }
 

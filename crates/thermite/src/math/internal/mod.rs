@@ -723,33 +723,6 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     }
 
     fn erfinv<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-
-    #[inline(always)]
-    fn gaussian<P: Policy>(x: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
-        let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            x * c.reciprocal_p::<P>()
-        } else {
-            x / c
-        };
-
-        a * (Vf::splat(FloatElement::from_f32(-0.5)) * xc * xc).exp_p::<P>()
-    }
-
-    #[inline(always)]
-    fn gaussian_integral<P: Policy>(x0: Vf<Self>, x1: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
-        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
-        let common = Vf::SQRT_FRAC_PI_2 * a * c;
-        let denom = Vf::SQRT_2 * c;
-
-        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            let d = denom.reciprocal_p::<ExtraPrecision<P>>();
-            (x1 * d, x0 * d)
-        } else {
-            (x1 / denom, x0 / denom)
-        };
-
-        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
-    }
 }
 
 pub mod pd;

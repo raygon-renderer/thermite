@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 thermite = { path = "../thermite/" }
+paste = "1"
 
 [dev-dependencies]
 libm = "0.2.15"

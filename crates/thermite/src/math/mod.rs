@@ -10,9 +10,11 @@ use crate::{
     register::{FloatRegister, Register},
 };
 
-mod internal;
+#[doc(hidden)]
+pub mod internal;
 
 use internal::MathInternal;
+
 use policy::{DefaultPolicy, Policy};
 
 // Helper macro to declare math traits and implementations
@@ -257,16 +259,6 @@ decl_math! {
     fn erfc[][](self: Self) -> Self;
     /// Computes the inverse error function.
     fn erfinv[][](self: Self) -> Self;
-
-    /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
-    ///
-    /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
-    fn gaussian[][](self: Self, a: Self, c: Self) -> Self;
-
-    /// Computes the definite integral of the Gaussian function from `x0` to `x1`, with amplitude `a` and standard deviation `c`.
-    ///
-    /// The position `b` is assumed to be zero. For a non-zero position, use `x0 - b` and `x1 - b` as the input limits.
-    fn gaussian_integral[][](x0: Self, x1: Self, a: Self, c: Self) -> Self;
 }
 
 impl<E, R> num_traits::Inv for Vector<R>
