@@ -361,10 +361,10 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
                 let mut t = y.nmul_adde(Vf::TWO, Vf::ONE).asin_p::<P>();
 
                 if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-                    t *= Vf::splat(<Self::Element as FloatElement>::from_f32(1.0) / FloatElement::from_f32(3.0));
+                    t *= Vf::splat(E::ONE / E::from_f64(3.0));
                 } else {
                     // exact division for higher precisions
-                    t /= Vf::splat(FloatElement::from_f32(3.0));
+                    t /= Vf::splat(E::from_f64(3.0));
                 }
 
                 t = Vf::HALF - t.sin_p::<P>();
@@ -510,8 +510,8 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
             let mut y = x.rsqrt();
 
             if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-                let nx2 = Vf::splat(FloatElement::from_f32(-0.5));
-                let threehalfs = Vf::splat(FloatElement::from_f32(1.5));
+                let nx2 = Vf::splat(E::from_f64(-0.5));
+                let threehalfs = Vf::splat(E::from_f64(1.5));
 
                 // one iteration of Newton's method
                 y = y * (y * y).mul_adde(nx2, threehalfs);
@@ -638,8 +638,8 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
             let mut small_res = Vf::ONE;
 
             // Taylor series expansion for small x
-            small_res -= x2 / Vf::splat(FloatElement::from_f32(6.0));
-            small_res += x4 / Vf::splat(FloatElement::from_f32(120.0));
+            small_res -= x2 / Vf::splat(E::from_f64(6.0));
+            small_res += x4 / Vf::splat(E::from_f64(120.0));
 
             let is_small = x.abs().cmp_le(Vf::FOURTH_ROOT_EPSILON);
 

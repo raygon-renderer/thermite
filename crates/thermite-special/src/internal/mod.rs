@@ -170,7 +170,7 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
             x / c
         };
 
-        a * (Vf::splat(E::from_f32(-0.5)) * xc * xc).exp_p::<P>()
+        a * (Vf::splat(E::from_f64(-0.5)) * xc * xc).exp_p::<P>()
     }
 
     fn beta<P: Policy>(a: Vf<Self>, b: Vf<Self>) -> Vf<Self>;

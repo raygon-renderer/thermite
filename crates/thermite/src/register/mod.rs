@@ -584,7 +584,7 @@ pub trait FloatElement: num_traits::float::FloatCore + From<i8> + core::fmt::Dis
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;
 
-    fn from_f32(value: f32) -> Self;
+    fn from_f64(value: f64) -> Self;
     fn from_i64(value: i64) -> Self;
 
     fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
@@ -610,7 +610,7 @@ const _: () = {
             }
         }
 
-        #[inline(always)] fn from_f32(value: f32) -> Self { value }
+        #[inline(always)] fn from_f64(value: f64) -> Self { value as f32 }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, -acc) }
         #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, -rhs, acc) }
@@ -631,7 +631,7 @@ const _: () = {
             }
         }
 
-        #[inline(always)] fn from_f32(value: f32) -> Self { value as f64 }
+        #[inline(always)] fn from_f64(value: f64) -> Self { value }
         #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, acc) }
         #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, -acc) }
         #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, -rhs, acc) }
