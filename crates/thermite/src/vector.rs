@@ -193,7 +193,7 @@ impl<R: Register> Vector<R> {
         Self::EMPTY
     }
 
-    /// Join together low and high vectors to create a register of double the size.
+    /// Join together low and high vectors to create a register of double the width.
     #[inline(always)]
     pub fn join(low: Vector<R::HalfRegister>, high: Vector<R::HalfRegister>) -> Self
     where
@@ -202,7 +202,7 @@ impl<R: Register> Vector<R> {
         Self(R::join(low.0, high.0))
     }
 
-    /// Split the double pump register into two vectors, low and high.
+    /// Split the double-width register into two vectors, low and high.
     #[inline(always)]
     pub fn split(self) -> (Vector<R::HalfRegister>, Vector<R::HalfRegister>)
     where
@@ -212,8 +212,8 @@ impl<R: Register> Vector<R> {
         (Vector(low), Vector(high))
     }
 
-    /// Concatenate two Vectors into one vector of twice the size. If a native register of
-    /// this size is available, it'll use that, otherwise it'll use a double pump register that
+    /// Concatenate two Vectors into one vector of twice the width. If a native register of
+    /// this width is available, it'll use that, otherwise it'll use a double-width register that
     /// is just two of the original registers working together. This can be nested.
     #[inline(always)]
     pub fn concat(self, other: Self) -> Vector<R::DoubleRegister>
@@ -275,6 +275,9 @@ impl<R: Register> Vector<R> {
         Self(R::reverse(self.0))
     }
 
+    /// Apply a function to each element in the vector, returning a new vector with the results.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
     #[inline(always)]
     pub fn map<F>(self, f: F) -> Self
     where
@@ -283,6 +286,9 @@ impl<R: Register> Vector<R> {
         Self(R::map(self.0, f))
     }
 
+    /// Fold the elements of the vector using the provided function and initial value.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
     #[inline(always)]
     pub fn fold<F>(self, init: R::Element, f: F) -> R::Element
     where
@@ -291,6 +297,9 @@ impl<R: Register> Vector<R> {
         R::fold(init, self.0, f)
     }
 
+    /// Reduce the elements of the vector using the provided function.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
     #[inline(always)]
     pub fn reduce<F>(self, f: F) -> R::Element
     where
@@ -1260,6 +1269,7 @@ macro_rules! impl_swizzle4 {
     }};
 
     (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
+        #[allow(missing_docs)]
         $(#[$meta])* fn [<$a $b $c $d>](self) -> Self;
     }};
 
@@ -1291,6 +1301,7 @@ macro_rules! impl_swizzle3 {
     }};
 
     (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident) => {paste::paste! {
+        #[allow(missing_docs)]
         $(#[$meta])* fn [<$a $b $c>](self) -> Self;
     }};
 

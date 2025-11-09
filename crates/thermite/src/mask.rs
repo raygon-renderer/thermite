@@ -1,5 +1,11 @@
 #![warn(missing_docs, clippy::missing_safety_doc)]
 
+//! SIMD Mask Vector Type and Operations.
+//!
+//! These mask vectors are used to represent boolean values in SIMD operations, where each lane
+//! of the vector corresponds to a boolean value (true or false). The underlying representation
+//! uses all bits set to '1' for `true` and all bits set to '0' for `false`.
+
 use crate::{
     Vector,
     register::{
@@ -13,8 +19,11 @@ use crate::{
 /// all '1's' or '0's' bits in the underlying register.
 ///
 /// This is a wrapper around the underlying mask register type. It provides a way to create and manipulate masks
-/// for SIMD operations. See [`new`](Mask::new), [`new_unchecked`](Mask::new_unchecked),
+/// for SIMD operations. See [`new`](Mask::new), [`new_unchecked`](Mask::new_unchecked), [`splat`](Mask::splat),
 /// and [`From<bool>/From<Vector<R>>`](Mask::from) for creating masks from values.
+///
+/// Masks are created by certain operations on vectors, such as comparisons, and can be used
+/// to select elements from vectors based on the mask values.
 #[repr(transparent)]
 pub struct Mask<R: MaskRegister>(pub(crate) R::Storage);
 
@@ -68,8 +77,9 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::new_mask(values.into()))
     }
 
+    /// Create a mask with all bits set to the same boolean value.
     #[inline(always)]
-    pub fn splat(value: bool) -> Self {
+    pub const fn splat(value: bool) -> Self {
         if value { Self::TRUTHY } else { Self::FALSY }
     }
 
@@ -95,21 +105,67 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::broadcastv(self.0, idx))
     }
 
+    /// Load a mask from an **aligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    #[inline(always)]
+    pub unsafe fn load(ptr: *const R::Element) -> Self {
+        unsafe { Self(R::load(ptr)) }
+    }
+
+    /// Load a mask from an **unaligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid and points to a memory region
+    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
+    #[inline(always)]
+    pub unsafe fn load_unaligned(ptr: *const R::Element) -> Self {
+        unsafe { Self(R::load_unaligned(ptr)) }
+    }
+
+    /// Store the mask to an **aligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    #[inline(always)]
+    pub unsafe fn store(self, ptr: *mut R::Element) {
+        // SAFETY: The caller must ensure that the pointer is valid and aligned.
+        unsafe { R::store(ptr, self.0) }
+    }
+
+    /// Store the mask to an **unaligned** pointer to its elements.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid and points to a memory region
+    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
+    #[inline(always)]
+    pub unsafe fn store_unaligned(self, ptr: *mut R::Element) {
+        // SAFETY: The caller must ensure that the pointer is valid.
+        unsafe { R::store_unaligned(ptr, self.0) }
+    }
+
+    /// Insert a boolean mask value into a specific lane of the mask.
     #[inline(always)]
     pub fn insert<const LANE: usize>(mut self, value: bool) -> Self {
         Self(R::insert::<LANE>(self.0, MaskElement::from_bool(value)))
     }
 
+    /// Extract the boolean mask value from a specific lane of the mask.
     #[inline(always)]
     pub fn extract<const LANE: usize>(self) -> bool {
         MaskElement::to_bool(R::extract::<LANE>(self.0))
     }
 
+    /// Cast this mask to another mask type.
     #[inline(always)]
     pub fn cast<INTO: CastMaskRegister<R>>(self) -> Mask<INTO> {
         Mask(INTO::mask_from(self.0))
     }
 
+    /// Create a mask by casting from another mask type.
     #[inline(always)]
     pub fn from_mask<FROM: MaskRegister>(mask: Mask<FROM>) -> Mask<R>
     where
@@ -118,6 +174,7 @@ impl<R: MaskRegister> Mask<R> {
         Mask(R::mask_from(mask.0))
     }
 
+    /// Reverses the order of the lanes in the mask.
     #[inline(always)]
     pub fn reverse(self) -> Self {
         Self(R::reverse(self.0))
@@ -136,7 +193,38 @@ impl<R: MaskRegister> Mask<R> {
         Vector(self.0)
     }
 
+    /// Join together low and high masks to create a register of double the width.
+    #[inline(always)]
+    pub fn join(low: Mask<R::HalfRegister>, high: Mask<R::HalfRegister>) -> Self
+    where
+        R::HalfRegister: MaskRegister<Element = R::Element, DoubleRegister = R>,
+    {
+        Self(R::join(low.0, high.0))
+    }
+
+    /// Split the double-width register into two masks, low and high.
+    #[inline(always)]
+    pub fn split(self) -> (Mask<R::HalfRegister>, Mask<R::HalfRegister>)
+    where
+        R::HalfRegister: MaskRegister<Element = R::Element, DoubleRegister = R>,
+    {
+        let (low, high) = R::split(self.0);
+        (Mask(low), Mask(high))
+    }
+
+    /// Concatenate two Vectors into one vector of twice the width. If a native register of
+    /// this width is available, it'll use that, otherwise it'll use a double-width register that
+    /// is just two of the original registers working together. This can be nested.
+    #[inline(always)]
+    pub fn concat(self, other: Self) -> Mask<R::DoubleRegister>
+    where
+        R::DoubleRegister: MaskRegister<HalfRegister = R, Element = R::Element>,
+    {
+        Mask(R::concat(self.0, other.0))
+    }
+
     /// Returns !self & value
+    #[inline(always)]
     pub fn andnot(self, value: Vector<R>) -> Vector<R>
     where
         R: NumericRegister,
