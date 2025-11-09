@@ -122,24 +122,19 @@ where
 
     #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
-        unsafe { Self(R::load(ptr), R::load(ptr.add(core::mem::size_of::<R::Storage>()))) }
+        unsafe { Self(R::load(ptr), R::load(ptr.add(R::Lanes::USIZE))) }
     }
 
     #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
-        unsafe {
-            Self(
-                R::load_unaligned(ptr),
-                R::load_unaligned(ptr.add(core::mem::size_of::<R::Storage>())),
-            )
-        }
+        unsafe { Self(R::load_unaligned(ptr), R::load_unaligned(ptr.add(R::Lanes::USIZE))) }
     }
 
     #[inline(always)]
     unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
         unsafe {
             R::store(ptr, value.0);
-            R::store(ptr.add(core::mem::size_of::<R::Storage>()), value.1);
+            R::store(ptr.add(R::Lanes::USIZE), value.1);
         }
     }
 
@@ -147,7 +142,7 @@ where
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
         unsafe {
             R::store_unaligned(ptr, value.0);
-            R::store_unaligned(ptr.add(core::mem::size_of::<R::Storage>()), value.1);
+            R::store_unaligned(ptr.add(R::Lanes::USIZE), value.1);
         }
     }
 
