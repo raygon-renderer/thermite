@@ -2,7 +2,8 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum};
 
 use crate::register::{
     CastRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShiftRegister, ShuffleRegister, SignedRegister, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    ShiftRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
+    dp::DoublePumpRegister, empty_reg, reg,
 };
 
 use super::arch;
@@ -17,6 +18,9 @@ impl Register for I64x4V3 {
     type Storage = arch::__m256i;
     type HalfRegister = super::I64x2V3;
     type DoubleRegister = DoublePumpRegister<Self>;
+
+    type SCOUNT = super::I64x4V3;
+    type UCOUNT = super::U64x4V3;
 
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
@@ -110,6 +114,13 @@ impl Register for I64x4V3 {
     const HAS_MSB_BLENDV: bool = false;
 
     #[inline(always)]
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_permute4x64_epi64::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
+    }
+}
+
+impl ShiftRegister for I64x4V3 {
+    #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
         unsafe { arch::_mm256_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
     }
@@ -120,22 +131,15 @@ impl Register for I64x4V3 {
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm256_srlv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts))) }
+    fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        unsafe { arch::_mm256_srlv_epi64(value, shifts) }
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe { arch::_mm256_sllv_epi64(value, arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts))) }
+    fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        unsafe { arch::_mm256_sllv_epi64(value, shifts) }
     }
 
-    #[inline(always)]
-    fn reverse(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_permute4x64_epi64::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
-    }
-}
-
-impl ShiftRegister for I64x4V3 {
     #[inline(always)]
     fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_slli_epi64(value, IMM8) }
@@ -144,6 +148,31 @@ impl ShiftRegister for I64x4V3 {
     #[inline(always)]
     fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_srli_epi64(value, IMM8) }
+    }
+
+    #[inline(always)]
+    fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        unsafe { arch::_mm256_rolv_epi64x_v3(value, shifts) }
+    }
+
+    #[inline(always)]
+    fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        unsafe { arch::_mm256_rorv_epi64x_v3(value, shifts) }
+    }
+
+    #[inline(always)]
+    fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
+        unsafe { arch::_mm256_rolv_epi64x_v3(value, arch::_mm256_set1_epi64x(shift as i64)) }
+    }
+
+    #[inline(always)]
+    fn ror(value: Self::Storage, shift: u32) -> Self::Storage {
+        unsafe { arch::_mm256_rorv_epi64x_v3(value, arch::_mm256_set1_epi64x(shift as i64)) }
+    }
+
+    #[inline(always)]
+    fn reverse_bits(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_reverse_bits_epi64x_v3(value) }
     }
 }
 
@@ -330,37 +359,6 @@ impl IntegerRegister for I64x4V3 {
     }
 
     #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            let shifts: arch::__m128i = core::mem::transmute(shifts);
-            arch::_mm256_rolv_epi64x_v3(value, arch::_mm256_cvtepi32_epi64(shifts))
-        }
-    }
-
-    #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            let shifts: arch::__m128i = core::mem::transmute(shifts);
-            arch::_mm256_rorv_epi64x_v3(value, arch::_mm256_cvtepi32_epi64(shifts))
-        }
-    }
-
-    #[inline(always)]
-    fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe { arch::_mm256_rolv_epi64x_v3(value, arch::_mm256_set1_epi64x(shift as i64)) }
-    }
-
-    #[inline(always)]
-    fn ror(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe { arch::_mm256_rorv_epi64x_v3(value, arch::_mm256_set1_epi64x(shift as i64)) }
-    }
-
-    #[inline(always)]
-    fn reverse_bits(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_reverse_bits_epi64x_v3(value) }
-    }
-
-    #[inline(always)]
     fn count_ones(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_popcnt_epi64x_v3(value) }
     }
@@ -390,6 +388,23 @@ impl IntegerRegister for I64x4V3 {
     #[inline(always)]
     fn trailing_ones(value: Self::Storage) -> Self::Storage {
         Self::trailing_zeros(Self::not(value))
+    }
+}
+
+impl SignedIntegerRegister for I64x4V3 {
+    #[inline(always)]
+    fn srai<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_srai_epi64x_v3(value, IMM8) }
+    }
+
+    #[inline(always)]
+    fn sra(value: Self::Storage, shift: u32) -> Self::Storage {
+        unsafe { arch::_mm256_srai_epi64x_v3(value, shift as i32) }
+    }
+
+    #[inline(always)]
+    fn srav(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        unsafe { arch::_mm256_srav_epi64x_v3(value, shifts) }
     }
 }
 

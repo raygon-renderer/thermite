@@ -65,6 +65,8 @@ macro_rules! MM_SHUFFLE_R {
     }};
 }
 
+#[macro_use]
+pub mod simd;
 pub mod vector;
 
 pub mod backend;
@@ -72,7 +74,6 @@ pub mod divider;
 pub mod mask;
 pub mod math;
 pub mod register;
-pub mod simd;
 
 #[doc(hidden)]
 pub mod swizzle;

@@ -2,7 +2,7 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
 use crate::register::{
     CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShiftRegister, ShuffleRegister, SignedRegister, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    ShiftRegister, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 use super::arch;
@@ -17,6 +17,9 @@ impl Register for F32x8V3 {
     type Storage = arch::__m256;
     type HalfRegister = super::f32x4::F32x4V3;
     type DoubleRegister = DoublePumpRegister<Self>;
+
+    type UCOUNT = super::U32x8V3;
+    type SCOUNT = super::I32x8V3;
 
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
@@ -109,61 +112,9 @@ impl Register for F32x8V3 {
     const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_ps(arch::_mm256_sll_epi32(
-                arch::_mm256_castps_si256(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_ps(arch::_mm256_srl_epi32(
-                arch::_mm256_castps_si256(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_ps(arch::_mm256_sllv_epi32(
-                arch::_mm256_castps_si256(value),
-                core::mem::transmute(shifts),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_ps(arch::_mm256_srlv_epi32(
-                arch::_mm256_castps_si256(value),
-                core::mem::transmute(shifts),
-            ))
-        }
-    }
-
-    #[inline(always)]
     fn reverse(value: Self::Storage) -> Self::Storage {
         let (lo, hi) = Self::split(value);
         Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
-    }
-}
-
-impl ShiftRegister for F32x8V3 {
-    #[inline(always)]
-    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_castsi256_ps(arch::_mm256_slli_epi32(arch::_mm256_castps_si256(value), IMM8)) }
-    }
-
-    #[inline(always)]
-    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_castsi256_ps(arch::_mm256_srli_epi32(arch::_mm256_castps_si256(value), IMM8)) }
     }
 }
 
@@ -186,19 +137,6 @@ impl SwizzleRegister for F32x8V3 {
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }
     }
-
-    // #[inline(always)]
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     a: Self::Storage,
-    //     b: Self::Storage,
-    // ) -> Self::Storage {
-    //     unsafe {
-    //         let tmp_a = arch::_mm256_permutevar8x32_ps(a, const { super::shuffle_to_m256i(AIMM8) });
-    //         let tmp_b = arch::_mm256_permutevar8x32_ps(b, const { super::shuffle_to_m256i(BIMM8) });
-
-    //         arch::_mm256_blend_ps(tmp_a, tmp_b, BLEND)
-    //     }
-    // }
 
     #[inline(always)]
     fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
@@ -393,21 +331,7 @@ impl FloatRegister for F32x8V3 {
     const NEG_INFINITY: Self::Storage = reg::<Self, 8>([f32::NEG_INFINITY; 8]);
     const NAN: Self::Storage = reg::<Self, 8>([f32::NAN; 8]);
 
-    #[inline(always)] #[rustfmt::skip]
-    fn is_subnormal(value: Self::Storage) -> Self::Storage {
-        let m = Self::splat(f32::from_bits(0xFF000000));
-        let u = Self::shli::<1>(value);
-
-        Self::bitand(
-            Self::eq(Self::ZERO, Self::bitand(u, m)),
-            Self::ne(Self::ZERO, Self::bitandnot(m, u))
-        )
-    }
-
-    #[inline(always)]
-    fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage {
-        Self::eq(Self::ZERO, Self::bitand(value, Self::splat(f32::from_bits(0x7F800000))))
-    }
+    const EXP_MASK: Storage<Self::Bits> = reg::<Self::Bits, 8>([0x7F800000; 8]);
 
     #[inline(always)]
     fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {

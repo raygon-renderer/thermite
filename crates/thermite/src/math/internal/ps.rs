@@ -596,7 +596,7 @@ where
 
         if xsign.any() {
             let yint = y.cmp_eq(y.round());
-            yodd = y << 31;
+            yodd = Vf::from_bits(y.into_bits::<Self::Bits>() << 31);
 
             let z0 = x0.cmp_eq(zero).select(z, Vf::NAN);
             let z1 = yint.select(z | yodd, z0);
@@ -1031,7 +1031,7 @@ fn pow2n_f<R: MathInternal<f32>>(n: Vf<R>) -> Vf<R> {
     let pow2_23 = Vf::<R>::splat(8388608.0);
     let bias = Vf::<R>::splat(127.0);
 
-    (n + (bias + pow2_23)) << 23
+    Vf::<R>::from_bits(Vu::<R>::from_bits(n + (bias + pow2_23)) << 23)
 }
 
 #[inline(always)]

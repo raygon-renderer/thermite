@@ -68,17 +68,17 @@ impl Simd for X86V3 {
     type i64x4 = I64x4V3;
     type u64x4 = U64x4V3;
 
-    type f64x8 = DoublePumpRegister<F64x4V3>;
-    type i64x8 = DoublePumpRegister<I64x4V3>;
-    type u64x8 = DoublePumpRegister<U64x4V3>;
+    type f64x8 = DoublePumpRegister<Self::f64x4>;
+    type i64x8 = DoublePumpRegister<Self::i64x4>;
+    type u64x8 = DoublePumpRegister<Self::u64x4>;
 
-    type f32x16 = DoublePumpRegister<F32x8V3>;
-    type i32x16 = DoublePumpRegister<I32x8V3>;
-    type u32x16 = DoublePumpRegister<U32x8V3>;
+    // type f32x16 = DoublePumpRegister<Self::f32x8>;
+    // type i32x16 = DoublePumpRegister<Self::i32x8>;
+    // type u32x16 = DoublePumpRegister<Self::u32x8>;
 
-    type f64x16 = DoublePumpRegister<Self::f64x8>;
-    type i64x16 = DoublePumpRegister<Self::i64x8>;
-    type u64x16 = DoublePumpRegister<Self::u64x8>;
+    // type f64x16 = DoublePumpRegister<Self::f64x8>;
+    // type i64x16 = DoublePumpRegister<Self::i64x8>;
+    // type u64x16 = DoublePumpRegister<Self::u64x8>;
 }
 
 const fn shuffle_to_m256i(bitmask: i32) -> arch::__m256i {

@@ -1,8 +1,12 @@
-use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
+use generic_array::{
+    GenericArray,
+    sequence::GenericSequence,
+    typenum::{self, Unsigned},
+};
 
 use crate::register::{
-    FloatRegister, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShiftRegister, ShuffleRegister, SignedRegister, SwizzleRegister, empty_reg, reg,
+    BitsRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
+    Register, ShiftRegister, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, empty_reg, reg,
 };
 
 use super::arch;
@@ -11,12 +15,15 @@ use super::arch;
 pub struct F32x4V3;
 
 impl Register for F32x4V3 {
-    type Lanes = generic_array::typenum::U4;
+    type Lanes = typenum::U4;
 
     type Element = f32;
     type Storage = arch::__m128;
     type HalfRegister = ();
     type DoubleRegister = super::F32x8V3;
+
+    type UCOUNT = super::U32x4V3;
+    type SCOUNT = super::I32x4V3;
 
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
@@ -83,60 +90,8 @@ impl Register for F32x4V3 {
     const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_sll_epi32(
-                arch::_mm_castps_si128(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_srl_epi32(
-                arch::_mm_castps_si128(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_sllv_epi32(
-                arch::_mm_castps_si128(value),
-                core::mem::transmute(shifts),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_srlv_epi32(
-                arch::_mm_castps_si128(value),
-                core::mem::transmute(shifts),
-            ))
-        }
-    }
-
-    #[inline(always)]
     fn reverse(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_permute_ps(value, 0b11_01_10_00) }
-    }
-}
-
-impl ShiftRegister for F32x4V3 {
-    #[inline(always)]
-    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_ps(arch::_mm_slli_epi32(arch::_mm_castps_si128(value), IMM8)) }
-    }
-
-    #[inline(always)]
-    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_ps(arch::_mm_srli_epi32(arch::_mm_castps_si128(value), IMM8)) }
     }
 }
 
@@ -159,18 +114,6 @@ impl SwizzleRegister for F32x4V3 {
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs)) }
     }
-
-    // #[inline(always)]
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     a: Self::Storage,
-    //     b: Self::Storage,
-    // ) -> Self::Storage {
-    //     unsafe {
-    //         let tmp_a = arch::_mm_shuffle_ps(a, a, AIMM8);
-    //         let tmp_b = arch::_mm_shuffle_ps(b, b, BIMM8);
-    //         arch::_mm_blend_ps(tmp_a, tmp_b, BLEND)
-    //     }
-    // }
 
     #[inline(always)]
     fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
@@ -369,21 +312,7 @@ impl FloatRegister for F32x4V3 {
     const NEG_INFINITY: Self::Storage = reg::<Self, 4>([f32::NEG_INFINITY; 4]);
     const NAN: Self::Storage = reg::<Self, 4>([f32::NAN; 4]);
 
-    #[inline(always)] #[rustfmt::skip]
-    fn is_subnormal(value: Self::Storage) -> Self::Storage {
-        let m = Self::splat(f32::from_bits(0xFF00_0000));
-        let u = Self::shli::<1>(value);
-
-        Self::bitand(
-            Self::eq(Self::ZERO, Self::bitand(u, m)),
-            Self::ne(Self::ZERO, Self::bitandnot(m, u))
-        )
-    }
-
-    #[inline(always)]
-    fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage {
-        Self::eq(Self::ZERO, Self::bitand(value, Self::splat(f32::from_bits(0x7F800000))))
-    }
+    const EXP_MASK: Storage<Self::Bits> = reg::<Self::Bits, 4>([0x7F800000; 4]);
 
     #[inline(always)]
     fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
@@ -405,25 +334,25 @@ impl FloatRegister for F32x4V3 {
         unsafe { arch::_mm_fnmsub_ps(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
-    fn mul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::mul_add(lhs, rhs, acc)
-    }
+    // #[inline(always)]
+    // fn mul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    //     Self::mul_add(lhs, rhs, acc)
+    // }
 
-    #[inline(always)]
-    fn mul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::mul_sub(lhs, rhs, acc)
-    }
+    // #[inline(always)]
+    // fn mul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    //     Self::mul_sub(lhs, rhs, acc)
+    // }
 
-    #[inline(always)]
-    fn nmul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::nmul_add(lhs, rhs, acc)
-    }
+    // #[inline(always)]
+    // fn nmul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    //     Self::nmul_add(lhs, rhs, acc)
+    // }
 
-    #[inline(always)]
-    fn nmul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::nmul_sub(lhs, rhs, acc)
-    }
+    // #[inline(always)]
+    // fn nmul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    //     Self::nmul_sub(lhs, rhs, acc)
+    // }
 
     #[inline(always)]
     fn sqrt(value: Self::Storage) -> Self::Storage {

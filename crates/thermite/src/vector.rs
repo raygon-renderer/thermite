@@ -6,8 +6,8 @@ use crate::{
     mask::Mask,
     register::{
         self, BitsRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedRegister, SwizzleRegister,
-        UnsignedIntegerRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedIntegerRegister,
+        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -438,6 +438,26 @@ impl<R: ShiftRegister> Vector<R> {
     #[inline(always)]
     pub fn shri<const IMM8: i32>(self) -> Self {
         Self(R::shri::<IMM8>(self.0))
+    }
+}
+
+impl<R: SignedIntegerRegister> Vector<R> {
+    /// For each lane in the vector, right shift in sign bits by the immediate value.
+    #[inline(always)]
+    pub fn srai<const IMM8: i32>(self) -> Self {
+        Self(R::srai::<IMM8>(self.0))
+    }
+
+    /// For each lane in the vector, right shift in sign bits by the given value.
+    #[inline(always)]
+    pub fn sra(self, shift: u32) -> Self {
+        Self(R::sra(self.0, shift))
+    }
+
+    /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
+    #[inline(always)]
+    pub fn srav(self, shifts: Vector<R::UCOUNT>) -> Self {
+        Self(R::srav(self.0, shifts.0))
     }
 }
 
@@ -1088,7 +1108,7 @@ impl<R: Register> Not for Vector<R> {
     }
 }
 
-impl<R: Register> Shr<u32> for Vector<R> {
+impl<R: ShiftRegister> Shr<u32> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1097,25 +1117,25 @@ impl<R: Register> Shr<u32> for Vector<R> {
     }
 }
 
-impl<R: Register> Shr<GenericArray<u32, R::Lanes>> for Vector<R> {
+impl<R: ShiftRegister> Shr<Vector<R::UCOUNT>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shr(self, rhs: GenericArray<u32, R::Lanes>) -> Self::Output {
-        Self(R::shrv(self.0, rhs))
+    fn shr(self, rhs: Vector<R::UCOUNT>) -> Self::Output {
+        Self(R::shrv(self.0, rhs.0))
     }
 }
 
-impl<R: Register> Shl<GenericArray<u32, R::Lanes>> for Vector<R> {
+impl<R: ShiftRegister> Shl<Vector<R::UCOUNT>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shl(self, rhs: GenericArray<u32, R::Lanes>) -> Self::Output {
-        Self(R::shlv(self.0, rhs))
+    fn shl(self, rhs: Vector<R::UCOUNT>) -> Self::Output {
+        Self(R::shlv(self.0, rhs.0))
     }
 }
 
-impl<R: Register> Shl<u32> for Vector<R> {
+impl<R: ShiftRegister> Shl<u32> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1124,31 +1144,31 @@ impl<R: Register> Shl<u32> for Vector<R> {
     }
 }
 
-impl<R: Register> ShlAssign<u32> for Vector<R> {
+impl<R: ShiftRegister> ShlAssign<u32> for Vector<R> {
     #[inline(always)]
     fn shl_assign(&mut self, rhs: u32) {
         self.0 = R::shl(self.0, rhs);
     }
 }
 
-impl<R: Register> ShrAssign<u32> for Vector<R> {
+impl<R: ShiftRegister> ShrAssign<u32> for Vector<R> {
     #[inline(always)]
     fn shr_assign(&mut self, rhs: u32) {
         self.0 = R::shr(self.0, rhs);
     }
 }
 
-impl<R: Register> ShrAssign<GenericArray<u32, R::Lanes>> for Vector<R> {
+impl<R: ShiftRegister> ShrAssign<Vector<R::UCOUNT>> for Vector<R> {
     #[inline(always)]
-    fn shr_assign(&mut self, rhs: GenericArray<u32, R::Lanes>) {
-        self.0 = R::shrv(self.0, rhs);
+    fn shr_assign(&mut self, rhs: Vector<R::UCOUNT>) {
+        self.0 = R::shrv(self.0, rhs.0);
     }
 }
 
-impl<R: Register> ShlAssign<GenericArray<u32, R::Lanes>> for Vector<R> {
+impl<R: ShiftRegister> ShlAssign<Vector<R::UCOUNT>> for Vector<R> {
     #[inline(always)]
-    fn shl_assign(&mut self, rhs: GenericArray<u32, R::Lanes>) {
-        self.0 = R::shlv(self.0, rhs);
+    fn shl_assign(&mut self, rhs: Vector<R::UCOUNT>) {
+        self.0 = R::shlv(self.0, rhs.0);
     }
 }
 

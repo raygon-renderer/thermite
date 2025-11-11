@@ -1,8 +1,10 @@
 use core::ops::Shl;
 
+use crate::register::{Element, SignedIntegerRegister};
+
 use super::{
-    BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes, LinAlg3Register, MaskElement,
-    MaskRegister, NumericRegister, PartialOrdRegister, Register, ShiftRegister, SignedRegister, SwizzleRegister,
+    BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister,
+    NumericRegister, PartialOrdRegister, Register, ShiftRegister, SignedRegister, Storage, SwizzleRegister,
     UnsignedIntegerRegister,
 };
 
@@ -79,6 +81,9 @@ where
 
     type HalfRegister = R;
     type DoubleRegister = DoublePumpRegister<Self>;
+
+    type SCOUNT = DoublePumpRegister<R::SCOUNT>;
+    type UCOUNT = DoublePumpRegister<R::UCOUNT>;
 
     const EMPTY: Self::Storage = Self(R::EMPTY, R::EMPTY);
 
@@ -220,28 +225,6 @@ where
     const HAS_MSB_BLENDV: bool = R::HAS_MSB_BLENDV;
 
     #[inline(always)]
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
-        Self(R::shl(value.0, shift), R::shl(value.1, shift))
-    }
-
-    #[inline(always)]
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
-        Self(R::shr(value.0, shift), R::shr(value.1, shift))
-    }
-
-    #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts);
-        Self(R::shlv(value.0, shift_lo), R::shlv(value.1, shift_hi))
-    }
-
-    #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts);
-        Self(R::shrv(value.0, shift_lo), R::shrv(value.1, shift_hi))
-    }
-
-    #[inline(always)]
     fn reverse(mut value: Self::Storage) -> Self::Storage {
         Self(R::reverse(value.1), R::reverse(value.0))
     }
@@ -259,6 +242,61 @@ where
     #[inline(always)]
     fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         Self(R::shri::<IMM8>(value.0), R::shri::<IMM8>(value.1))
+    }
+
+    #[inline(always)]
+    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
+        Self(R::shl(value.0, shift), R::shl(value.1, shift))
+    }
+
+    #[inline(always)]
+    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
+        Self(R::shr(value.0, shift), R::shr(value.1, shift))
+    }
+
+    #[inline(always)]
+    fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        Self(R::shlv(value.0, shifts.0), R::shlv(value.1, shifts.1))
+    }
+
+    #[inline(always)]
+    fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        Self(R::shrv(value.0, shifts.0), R::shrv(value.1, shifts.1))
+    }
+
+    #[inline(always)]
+    fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
+        Self(R::rol(value.0, shift), R::rol(value.1, shift))
+    }
+
+    #[inline(always)]
+    fn ror(value: Self::Storage, shift: u32) -> Self::Storage {
+        Self(R::ror(value.0, shift), R::ror(value.1, shift))
+    }
+
+    #[inline(always)]
+    fn roli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        Self(R::roli::<IMM8>(value.0), R::roli::<IMM8>(value.1))
+    }
+
+    #[inline(always)]
+    fn rori<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        Self(R::rori::<IMM8>(value.0), R::rori::<IMM8>(value.1))
+    }
+
+    #[inline(always)]
+    fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        Self(R::rolv(value.0, shifts.0), R::rolv(value.1, shifts.1))
+    }
+
+    #[inline(always)]
+    fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        Self(R::rorv(value.0, shifts.0), R::rorv(value.1, shifts.1))
+    }
+
+    #[inline(always)]
+    fn reverse_bits(value: Self::Storage) -> Self::Storage {
+        Self(R::reverse_bits(value.0), R::reverse_bits(value.1))
     }
 }
 
@@ -487,6 +525,8 @@ where
     const NAN: Self::Storage = Self(R::NAN, R::NAN);
     const EPSILON: Self::Storage = Self(R::EPSILON, R::EPSILON);
 
+    const EXP_MASK: Storage<Self::Bits> = DoublePumpRegister(R::EXP_MASK, R::EXP_MASK);
+
     #[inline(always)]
     fn is_nan(value: Self::Storage) -> Self::Storage {
         Self(R::is_nan(value.0), R::is_nan(value.1))
@@ -649,43 +689,6 @@ where
     }
 
     #[inline(always)]
-    fn rol(value: Self::Storage, shift: u32) -> Self::Storage {
-        Self(R::rol(value.0, shift), R::rol(value.1, shift))
-    }
-
-    #[inline(always)]
-    fn ror(value: Self::Storage, shift: u32) -> Self::Storage {
-        Self(R::ror(value.0, shift), R::ror(value.1, shift))
-    }
-
-    #[inline(always)]
-    fn roli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        Self(R::roli::<IMM8>(value.0), R::roli::<IMM8>(value.1))
-    }
-
-    #[inline(always)]
-    fn rori<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        Self(R::rori::<IMM8>(value.0), R::rori::<IMM8>(value.1))
-    }
-
-    #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts);
-        Self(R::rolv(value.0, shift_lo), R::rolv(value.1, shift_hi))
-    }
-
-    #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        let [shift_lo, shift_hi] = Self::split_array(shifts);
-        Self(R::rorv(value.0, shift_lo), R::rorv(value.1, shift_hi))
-    }
-
-    #[inline(always)]
-    fn reverse_bits(value: Self::Storage) -> Self::Storage {
-        Self(R::reverse_bits(value.0), R::reverse_bits(value.1))
-    }
-
-    #[inline(always)]
     fn count_ones(value: Self::Storage) -> Self::Storage {
         Self(R::count_ones(value.0), R::count_ones(value.1))
     }
@@ -738,6 +741,26 @@ where
     #[inline(always)]
     fn parity(value: Self::Storage) -> Self::Storage {
         Self(R::parity(value.0), R::parity(value.1))
+    }
+}
+
+impl<R: SignedIntegerRegister> SignedIntegerRegister for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    #[inline(always)]
+    fn srai<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        Self(R::srai::<IMM8>(value.0), R::srai::<IMM8>(value.1))
+    }
+
+    #[inline(always)]
+    fn sra(value: Self::Storage, shift: u32) -> Self::Storage {
+        Self(R::sra(value.0, shift), R::sra(value.1, shift))
+    }
+
+    #[inline(always)]
+    fn srav(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+        Self(R::srav(value.0, shifts.0), R::srav(value.1, shifts.1))
     }
 }
 

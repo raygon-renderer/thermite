@@ -18,6 +18,9 @@ impl Register for F64x4V3 {
     type HalfRegister = super::F64x2V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    type SCOUNT = super::I64x4V3;
+    type UCOUNT = super::U64x4V3;
+
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
     #[inline(always)]
@@ -109,60 +112,8 @@ impl Register for F64x4V3 {
     const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_pd(arch::_mm256_sll_epi64(
-                arch::_mm256_castpd_si256(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_pd(arch::_mm256_srl_epi64(
-                arch::_mm256_castpd_si256(value),
-                arch::_mm_cvtsi32_si128(shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_pd(arch::_mm256_sllv_epi64(
-                arch::_mm256_castpd_si256(value),
-                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts)),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm256_castsi256_pd(arch::_mm256_srlv_epi64(
-                arch::_mm256_castpd_si256(value),
-                arch::_mm256_cvtepu32_epi64(core::mem::transmute(shifts)),
-            ))
-        }
-    }
-
-    #[inline(always)]
     fn reverse(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
-    }
-}
-
-impl ShiftRegister for F64x4V3 {
-    #[inline(always)]
-    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_castsi256_pd(arch::_mm256_slli_epi64(arch::_mm256_castpd_si256(value), IMM8)) }
-    }
-
-    #[inline(always)]
-    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm256_castsi256_pd(arch::_mm256_srli_epi64(arch::_mm256_castpd_si256(value), IMM8)) }
     }
 }
 
@@ -366,24 +317,7 @@ impl FloatRegister for F64x4V3 {
     const NEG_INFINITY: Self::Storage = reg::<Self, 4>([f64::NEG_INFINITY; 4]);
     const NAN: Self::Storage = reg::<Self, 4>([f64::NAN; 4]);
 
-    #[inline(always)] #[rustfmt::skip]
-    fn is_subnormal(value: Self::Storage) -> Self::Storage {
-        let m = Self::splat(f64::from_bits(0xFF00_0000_0000_0000));
-        let u = Self::shli::<1>(value);
-
-        Self::bitand(
-            Self::eq(Self::ZERO, Self::bitand(u, m)),
-            Self::ne(Self::ZERO, Self::bitandnot(m, u))
-        )
-    }
-
-    #[inline(always)]
-    fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage {
-        Self::eq(
-            Self::ZERO,
-            Self::bitand(value, Self::splat(f64::from_bits(0x7F80_0000_0000_0000))),
-        )
-    }
+    const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 4>([0x7FF0_0000_0000_0000; 4]);
 
     #[inline(always)]
     fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {

@@ -21,23 +21,6 @@ pub use divider::*;
 pub use math::*;
 
 #[inline(always)]
-pub unsafe fn u32x2_to_i64x2(value: GenericArray<u32, typenum::U2>) -> __m128i {
-    _mm_cvtepi32_epi64(_mm_setr_epi32(value[0] as i32, value[1] as i32, 0, 0))
-    //_mm_set_epi64x(value[1] as i64, value[0] as i64)
-}
-
-#[inline(always)]
-pub unsafe fn u32x4_to_i64x4(value: GenericArray<u32, typenum::U4>) -> __m256i {
-    //_mm256_set_epi64x(value[3] as i64, value[2] as i64, value[1] as i64, value[0] as i64)
-    _mm256_cvtepi32_epi64(_mm_setr_epi32(
-        value[0] as i32,
-        value[1] as i32,
-        value[2] as i32,
-        value[3] as i32,
-    ))
-}
-
-#[inline(always)]
 pub unsafe fn _mm256_blendv_epi32x_v3(ymm0: __m256i, ymm1: __m256i, mask: __m256i) -> __m256i {
     _mm256_castps_si256(_mm256_blendv_ps(
         _mm256_castsi256_ps(ymm0),

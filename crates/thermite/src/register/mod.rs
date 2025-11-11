@@ -101,6 +101,8 @@ where
 pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> {}
 impl<T> Lanes for T where T: ArrayLength + core::ops::Shl<typenum::B1> {}
 
+pub(crate) type Storage<R> = <R as Register>::Storage;
+
 pub trait Register: Sized + 'static {
     type Lanes: Lanes;
     type Element: Element;
@@ -109,6 +111,13 @@ pub trait Register: Sized + 'static {
     // Note: These don't require :Register because it would introduce recursive type bounds.
     type HalfRegister;
     type DoubleRegister;
+
+    /// Unsigned integer register type with the same number of lanes, used for
+    /// variable shifts and other operations.
+    type UCOUNT: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::UCOUNT>;
+
+    /// Signed integer register type with the same number of lanes.
+    type SCOUNT: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::SCOUNT>;
 
     const EMPTY: Self::Storage;
 
@@ -302,17 +311,11 @@ pub trait Register: Sized + 'static {
 
     #[inline(always)]
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        Self::bitor(Self::bitand(mask, lhs), Self::bitandnot(mask, rhs))
+        Self::bitor(Self::bitandnot(mask, lhs), Self::bitand(mask, rhs))
     }
 
     /// Indicates if blendv only cares about the most significant bit (MSB) of the mask.
     const HAS_MSB_BLENDV: bool;
-
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage;
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage;
-
-    fn shrv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
-    fn shlv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
 
     fn reverse(value: Self::Storage) -> Self::Storage;
 }
@@ -347,11 +350,11 @@ pub trait SwizzleRegister: MaskRegister {
             if idx < Self::Lanes::U32 {
                 a_idxs[i] = idx;
                 b_idxs[i] = i as u32;
-                blend[i] = MaskElement::FALSY;
+                blend[i] = Element::FALSY;
             } else {
                 a_idxs[i] = i as u32;
                 b_idxs[i] = idx - Self::Lanes::U32;
-                blend[i] = MaskElement::TRUTHY;
+                blend[i] = Element::TRUTHY;
             }
         }
 
@@ -362,52 +365,38 @@ pub trait SwizzleRegister: MaskRegister {
     }
 }
 
-pub trait MaskElement: Sized + 'static {
-    const FALSY: Self;
-    const TRUTHY: Self;
+pub trait ShiftRegister: Register {
+    fn shr(value: Self::Storage, shift: u32) -> Self::Storage;
+    fn shl(value: Self::Storage, shift: u32) -> Self::Storage;
 
-    fn to_bool(self) -> bool;
+    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage;
+    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage;
 
+    fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage;
+    fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage;
+
+    /// Rotate bits left
+    fn rol(value: Self::Storage, shift: u32) -> Self::Storage;
+    /// Rotate bits right
+    fn ror(value: Self::Storage, shift: u32) -> Self::Storage;
+
+    /// Rotate bits left by a constant amount
     #[inline(always)]
-    fn from_bool(value: bool) -> Self {
-        if value { Self::TRUTHY } else { Self::FALSY }
+    fn roli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        Self::rol(value, IMM8 as u32)
     }
-}
 
-macro_rules! impl_mask_element {
-    ($($t:ty),+) => {$(
-        impl MaskElement for $t {
-            const FALSY: Self = 0;
-            const TRUTHY: Self = !0;
-
-            #[inline(always)]
-            fn to_bool(self) -> bool {
-                self != 0
-            }
-        }
-    )+};
-}
-
-impl_mask_element!(u8, u16, u32, u64, i8, i16, i32, i64);
-
-impl MaskElement for f32 {
-    const FALSY: Self = f32::from_bits(0);
-    const TRUTHY: Self = f32::from_bits(!0);
-
+    /// Rotate bits right by a constant amount
     #[inline(always)]
-    fn to_bool(self) -> bool {
-        self.to_bits() != 0
+    fn rori<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+        Self::ror(value, IMM8 as u32)
     }
-}
 
-impl MaskElement for f64 {
-    const FALSY: Self = f64::from_bits(0);
-    const TRUTHY: Self = f64::from_bits(!0);
+    fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage;
+    fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage;
+    //fn rotatev(value: Self::Storage, shifts: GenericArray<i32, Self::Lanes>) -> Self::Storage;
 
-    #[inline(always)]
-    fn to_bool(self) -> bool {
-        self.to_bits() != 0
-    }
+    fn reverse_bits(value: Self::Storage) -> Self::Storage;
 }
 
 pub trait MaskRegister: Register {
@@ -476,11 +465,6 @@ pub trait BitsRegister<FROM: Register>: Register {
 /// such that the masks retain 0 or !0 values for the appropriate lanes.
 pub trait CastMaskRegister<FROM: MaskRegister>: MaskRegister {
     fn mask_from(value: FROM::Storage) -> Self::Storage;
-}
-
-pub trait ShiftRegister: Register {
-    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage;
-    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage;
 }
 
 pub trait PartialOrdRegister: MaskRegister {
@@ -679,6 +663,8 @@ pub trait FloatRegister:
     const NAN: Self::Storage;
     const EPSILON: Self::Storage;
 
+    const EXP_MASK: Storage<Self::Bits>;
+
     #[inline(always)]
     fn is_nan(value: Self::Storage) -> Self::Storage {
         // easiest way to check for NaN is to check if it's not equal to itself
@@ -695,33 +681,94 @@ pub trait FloatRegister:
         Self::lt(Self::abs(value), Self::INFINITY)
     }
 
-    fn is_subnormal(value: Self::Storage) -> Self::Storage;
-    fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage;
+    #[inline(always)]
+    fn is_subnormal(value: Self::Storage) -> Self::Storage {
+        // we're operating in the integer domain here
+        let bits: Storage<Self::Bits> = <Self::Bits as BitsRegister<Self>>::from_bits(value);
+
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+        let rest = Self::Bits::bitandnot(Self::EXP_MASK, bits); // extract mantissa + sign bits
+
+        // shift mantissa to remove sign bit, and even though it's offset
+        // it'll still work since we're just checking for zero
+        let mantissa = Self::Bits::shli::<1>(rest);
+
+        // use eq here for both since there's always an instruction for that
+        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
+        let mantissa_is_zero = Self::Bits::eq(mantissa, Self::Bits::ZERO);
+
+        // float is subnormal if mantissa != 0 && exp == 0, and by using bitandnot we can avoid using ne above
+        let is_subnormal = Self::Bits::bitandnot(mantissa_is_zero, exp_is_zero);
+
+        // convert back to float register
+        <Self as BitsRegister<Self::Bits>>::from_bits(is_subnormal)
+    }
+
+    #[inline(always)]
+    fn is_zero_or_subnormal(value: Self::Storage) -> Self::Storage {
+        // we're operating in the integer domain here
+        let bits: Storage<Self::Bits> = <Self::Bits as BitsRegister<Self>>::from_bits(value);
+
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+
+        // zero or subnormal if exp == 0, very simple
+        let is_zero_or_subnormal = Self::Bits::eq(exp, Self::Bits::ZERO);
+
+        // convert back to float register
+        <Self as BitsRegister<Self::Bits>>::from_bits(is_zero_or_subnormal)
+    }
 
     #[inline(always)]
     fn is_normal(value: Self::Storage) -> Self::Storage {
-        // !is_zero_or_subnormal(value) && is_finite(value)
-        Self::bitandnot(Self::is_zero_or_subnormal(value), Self::is_finite(value))
+        let bits = <Self::Bits as BitsRegister<Self>>::from_bits(value);
+
+        // "normal" is defined as not zero/subnormal, not infinite, and not NaN
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+
+        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
+        let exp_is_max = Self::Bits::eq(exp, Self::EXP_MASK);
+
+        // normal if exp != 0 && exp != max, so 0 < exp < max is the normal range
+        let is_normal = Self::Bits::bitandnot(exp_is_max, exp_is_zero);
+
+        // convert back to float register
+        <Self as BitsRegister<Self::Bits>>::from_bits(is_normal)
     }
 
     #[inline(always)]
     fn mul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::add(Self::mul(lhs, rhs), acc)
+        if Self::HAS_TRUE_FMA {
+            Self::mul_add(lhs, rhs, acc)
+        } else {
+            Self::add(Self::mul(lhs, rhs), acc)
+        }
     }
 
     #[inline(always)]
     fn mul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::sub(Self::mul(lhs, rhs), acc)
+        if Self::HAS_TRUE_FMA {
+            Self::mul_sub(lhs, rhs, acc)
+        } else {
+            Self::sub(Self::mul(lhs, rhs), acc)
+        }
     }
 
     #[inline(always)]
     fn nmul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::sub(acc, Self::mul(lhs, rhs))
+        if Self::HAS_TRUE_FMA {
+            Self::nmul_add(lhs, rhs, acc)
+        } else {
+            Self::sub(acc, Self::mul(lhs, rhs))
+        }
     }
 
     #[inline(always)]
     fn nmul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::mul_sube(Self::neg(lhs), rhs, acc)
+        if Self::HAS_TRUE_FMA {
+            Self::nmul_sub(lhs, rhs, acc)
+        } else {
+            Self::mul_sube(Self::neg(lhs), rhs, acc)
+        }
     }
 
     #[inline]
@@ -842,28 +889,6 @@ pub trait IntegerRegister: NumericRegister + ShiftRegister {
     fn div_branched(value: Self::Storage, divider: Divider<Self::Element>) -> Self::Storage;
     fn div_branchfree(value: Self::Storage, divider: BranchfreeDivider<Self::Element>) -> Self::Storage;
 
-    /// Rotate bits left
-    fn rol(value: Self::Storage, shift: u32) -> Self::Storage;
-    /// Rotate bits right
-    fn ror(value: Self::Storage, shift: u32) -> Self::Storage;
-
-    /// Rotate bits left by a constant amount
-    #[inline(always)]
-    fn roli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        Self::rol(value, IMM8 as u32)
-    }
-
-    /// Rotate bits right by a constant amount
-    #[inline(always)]
-    fn rori<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        Self::ror(value, IMM8 as u32)
-    }
-
-    fn rolv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
-    fn rorv(value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage;
-    //fn rotatev(value: Self::Storage, shifts: GenericArray<i32, Self::Lanes>) -> Self::Storage;
-
-    fn reverse_bits(value: Self::Storage) -> Self::Storage;
     fn count_ones(value: Self::Storage) -> Self::Storage;
 
     #[inline(always)]
@@ -902,5 +927,8 @@ pub trait UnsignedIntegerRegister: IntegerRegister {
     // TODO: Interleave bits?
 }
 
-pub trait SignedIntegerRegister: IntegerRegister + SignedRegister {}
-impl<T> SignedIntegerRegister for T where T: IntegerRegister + SignedRegister {}
+pub trait SignedIntegerRegister: IntegerRegister + SignedRegister {
+    fn srai<const IMM8: i32>(value: Self::Storage) -> Self::Storage;
+    fn sra(value: Self::Storage, shift: u32) -> Self::Storage;
+    fn srav(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage;
+}
