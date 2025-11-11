@@ -90,3 +90,25 @@ pub unsafe fn _mm_srai_epi64x_v1(v: __m128i, cnt: i32) -> __m128i {
     let m = _mm_set1_epi64x(1i64 << (63 - cnt));
     _mm_sub_epi64(_mm_xor_si128(_mm_srl_epi64(v, _mm_cvtsi32_si128(cnt)), m), m)
 }
+
+/// POLYFILL: Shift right 64-bit integers (variable)
+///
+/// https://stackoverflow.com/a/38608465/2083075
+#[inline(always)]
+pub unsafe fn _mm_srlv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let count_high = _mm_unpackhi_epi64(shifts, shifts); // move higher 64 bits to lower 64 bits
+
+    let shifted_low = _mm_srl_epi64(value, shifts); // uses lower 64 bits of shifts
+    let mut shifted_high = _mm_srl_epi64(value, count_high); // shift value by higher 64 bits (now in lower 64 bits)
+
+    shifted_high = _mm_unpackhi_epi64(shifted_high, shifted_high); // move result to higher 64 bits
+
+    _mm_unpacklo_epi64(shifted_high, shifted_low) // combine results
+}
+
+/// POLYFILL: Shift right and sign extend 64-bit integers (variable)
+#[inline(always)]
+pub unsafe fn _mm_srav_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let m = _mm_srlv_epi64x_v1(_mm_set1_epu64x(1 << 63), shifts);
+    _mm_sub_epi64(_mm_xor_si128(_mm_srlv_epi64x_v1(value, shifts), m), m)
+}

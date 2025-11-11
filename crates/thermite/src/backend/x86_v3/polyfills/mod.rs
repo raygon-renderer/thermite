@@ -62,6 +62,20 @@ pub unsafe fn _mm256_srai_epi64x_v3(v: __m256i, cnt: i32) -> __m256i {
     _mm256_sub_epi64(_mm256_xor_si256(_mm256_srl_epi64(v, _mm_cvtsi32_si128(cnt)), m), m)
 }
 
+/// POLYFILL: Shift right and sign extend 64-bit integers (variable)
+#[inline(always)]
+pub unsafe fn _mm_srav_epi64x_v3(value: __m128i, shifts: __m128i) -> __m128i {
+    let m = _mm_srlv_epi64(_mm_set1_epu64x(1 << 63), shifts);
+    _mm_sub_epi64(_mm_xor_si128(_mm_srlv_epi64(value, shifts), m), m)
+}
+
+/// POLYFILL: Shift right and sign extend 64-bit integers (variable)
+#[inline(always)]
+pub unsafe fn _mm256_srav_epi64x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let m = _mm256_srlv_epi64(_mm256_set1_epu64x(1 << 63), shifts);
+    _mm256_sub_epi64(_mm256_xor_si256(_mm256_srlv_epi64(value, shifts), m), m)
+}
+
 #[inline(always)]
 pub unsafe fn _mm256_set1_epu32x(value: u32) -> __m256i {
     _mm256_set1_epi32(value as i32)
