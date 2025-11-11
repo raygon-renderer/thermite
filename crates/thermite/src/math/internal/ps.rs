@@ -16,21 +16,12 @@ where
     R: FloatRegister<Element = f32>,
 {
     #[inline(always)]
-    fn sincos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+    fn sin_cos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            // Max error about 0.00092
+            // Max error about 0.00092, avg error about 0.00053
             // https://stackoverflow.com/a/28050328/2083075
             #[inline(always)]
-            fn fast_sin_cos<R: MathInternal<f32>, const SINE: bool>(mut x: Vf<R>) -> Vf<R> {
-                // encourage instruction-level parallelism
-                if SINE {
-                    x = (x - Vf::HALF) - x.floor();
-                } else {
-                    let quarter = const { Vf::splat_const(0.25) };
-
-                    x = (x - quarter) - (x + quarter).floor();
-                }
-
+            fn inner<R: MathInternal<f32>>(mut x: Vf<R>) -> Vf<R> {
                 // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
                 //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
                 x *= x
@@ -44,10 +35,12 @@ where
                 x.mul_adde(x.abs().mul_sube(p, p), x)
             }
 
-            let x = xx * Vf::splat(FRAC_1_PI / 2.0);
+            let x = xx * const { Vf::splat_const(FRAC_1_PI / 2.0) };
 
-            let sine = fast_sin_cos::<R, true>(x);
-            let cosine = fast_sin_cos::<R, false>(x);
+            let quarter = const { Vf::splat_const(0.25) };
+
+            let sine = inner::<R>((x - Vf::HALF) - x.floor());
+            let cosine = inner::<R>((x - quarter) - (x + quarter).floor());
 
             return (sine, cosine);
         }

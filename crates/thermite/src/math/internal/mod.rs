@@ -603,21 +603,21 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         }
     }
 
-    fn sincos<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>);
+    fn sin_cos<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>);
 
     #[inline(always)]
     fn sin<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        Self::sincos::<P>(x).0
+        Self::sin_cos::<P>(x).0
     }
 
     #[inline(always)]
     fn cos<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        Self::sincos::<P>(x).1
+        Self::sin_cos::<P>(x).1
     }
 
     #[inline(always)]
     fn tan<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let (s, c) = Self::sincos::<P>(x);
+        let (s, c) = Self::sin_cos::<P>(x);
         s / c
     }
 

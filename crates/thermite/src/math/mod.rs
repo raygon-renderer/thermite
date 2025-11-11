@@ -183,7 +183,7 @@ decl_math! {
     fn hypot[][](self: Self, other: Self) -> Self;
 
     /// Trigonometric sine and cosine, together. This may be more efficient than calling `sin` and `cos` separately.
-    fn sincos[][](self: Self) -> (Self, Self);
+    fn sin_cos[][](self: Self) -> (Self, Self);
     /// Trigonometric sine
     fn sin[][](self: Self) -> Self;
     /// Trigonometric cosine

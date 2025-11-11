@@ -11,7 +11,7 @@ where
     R: FloatRegister<Element = f64>,
 {
     #[inline(always)]
-    fn sincos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+    fn sin_cos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
         let dp1 = Vf::splat(7.853981554508209228515625E-1 * 2.0);
         let dp2 = Vf::splat(7.94662735614792836714E-9 * 2.0);
         let dp3 = Vf::splat(3.06161699786838294307E-17 * 2.0);
