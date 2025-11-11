@@ -972,7 +972,7 @@ impl<R: Register> IndexMut<usize> for Vector<R> {
 }
 
 impl<R: NumericRegister> Zero for Vector<R> {
-    /// Returns true if all elements in the vector are zero.
+    /// Returns true if **all** elements in the vector are zero.
     #[inline(always)]
     fn is_zero(&self) -> bool {
         R::all(R::eq(self.0, R::ZERO))
@@ -990,7 +990,7 @@ impl<R: NumericRegister> Zero for Vector<R> {
 }
 
 impl<R: NumericRegister> One for Vector<R> {
-    /// Returns true if all elements in the vector are one.
+    /// Returns true if **all** elements in the vector are one.
     #[inline(always)]
     fn is_one(&self) -> bool {
         R::all(R::eq(self.0, R::ONE))
@@ -1278,6 +1278,7 @@ macro_rules! impl_swizzle4 {
         /// of the vector.
         pub trait Swizzle4 { $(impl_swizzle4!(DECL $(#[$meta])* $a $b $c $d);)* }
 
+        /// Implements 4-lane swizzling for vectors.
         impl<R: PermuteRegister<Lanes = generic_array::typenum::consts::U4>> Swizzle4 for Vector<R> {
             $(impl_swizzle4!(IMPL $a $b $c $d);)*
         }
@@ -1311,6 +1312,7 @@ macro_rules! impl_swizzle3 {
         /// will ignore the 4th lane of the register, leaving it unchanged.
         pub trait Swizzle3 { $(impl_swizzle3!(DECL $(#[$meta])* $a $b $c);)* }
 
+        /// Implements 3-lane swizzling for vectors support 3-lane linear algebra operations.
         impl<R: LinAlg3Register + PermuteRegister> Swizzle3 for Vector<R> {
             $(impl_swizzle3!(IMPL $a $b $c);)*
         }

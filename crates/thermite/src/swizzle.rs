@@ -47,9 +47,13 @@ pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32
 }
 */
 
+/// Trait for swizzling and permuting vector types. Use the [`swizzle!`] macro for convenient usage.
 pub trait Swizzle<R: Register> {
+    /// Swizzle lanes from two vectors according to the given indices.
     fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self;
-    fn permutev(self, indices: GenericArray<u32, R::Lanes>) -> Self;
+
+    /// Permute lanes from a single vector according to the given indices.
+    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self;
 }
 
 impl<R: Register> Swizzle<R> for Vector<R>
@@ -62,7 +66,7 @@ where
     }
 
     #[inline(always)]
-    fn permutev(self, indices: GenericArray<u32, R::Lanes>) -> Self {
+    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self {
         Vector(R::permutev(self.0, indices))
     }
 }
@@ -77,7 +81,7 @@ where
     }
 
     #[inline(always)]
-    fn permutev(self, indices: GenericArray<u32, R::Lanes>) -> Self {
+    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self {
         Mask(R::permutev(self.0, indices))
     }
 }
@@ -111,7 +115,7 @@ macro_rules! swizzle {
         #[inline(always)]
         fn __do_swizzle1<R: $crate::register::SwizzleRegister, S: $crate::swizzle::Swizzle<R>>(a: S) -> S {
             use $crate::{swizzle::Swizzle, generic_array::typenum::Unsigned};
-            a.permutev(const {
+            a.permute(const {
                 let idxs = [$($i),*];
                 assert!(R::Lanes::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
                 unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, R::Lanes>>(idxs) }
@@ -122,5 +126,5 @@ macro_rules! swizzle {
     }};
 
     ($a:expr, $b:expr, $idxs:expr) => { $crate::swizzle::Swizzle::swizzle($a, $b, $idxs) };
-    ($a:expr, $idxs:expr) => { $crate::swizzle::Swizzle::permutev($a, $idxs) };
+    ($a:expr, $idxs:expr) => { $crate::swizzle::Swizzle::permute($a, $idxs) };
 }
