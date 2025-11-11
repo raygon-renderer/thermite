@@ -152,7 +152,7 @@ impl FloatRegister for [<F $width x1Scalar>] {
     type ExtendedPrecision = super::F64x1Scalar;
 
     // best guess we can do
-    const HAS_TRUE_FMA: bool = cfg!(target_feature = "fma");
+    const HAS_TRUE_FMA: bool = cfg!(any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"));
 
     const HALF: Self::Storage = 0.5;
     const NEG_ZERO: Self::Storage = -0.0;
