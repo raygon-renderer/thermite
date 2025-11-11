@@ -113,16 +113,26 @@ pub(crate) const ADD_MARKER: u8 = 0x40;
 pub(crate) const NEG_DIVISOR: u8 = 0x80;
 
 macro_rules! impl_shift_mask {
-    ($($ty:ty),*) => {$(
+    ($($ty:ty => $ut:ty),*) => {$(
         impl Divider<$ty> {
             const BITS: u32 = <$ty>::BITS as u32;
+
             /// !log2(N::BITS)
-            pub(crate) const SHIFT_MASK: u8 = !(<$ty>::MAX << <$ty>::BITS.trailing_zeros()) as u8;
+            pub(crate) const SHIFT_MASK: u8 = !(<$ut>::MAX << <$ty>::BITS.trailing_zeros()) as u8;
         }
     )*};
 }
 
-impl_shift_mask!(u8, u16, u32, u64);
+impl_shift_mask! {
+    u8 => u8,
+    u16 => u16,
+    u32 => u32,
+    u64 => u64,
+    i8 => u8,
+    i16 => u16,
+    i32 => u32,
+    i64 => u64
+}
 
 macro_rules! impl_unsigned_divider {
     ($($t:ty => $dt:ty),*) => {
@@ -147,6 +157,13 @@ macro_rules! impl_unsigned_divider {
                 pub const fn [<try_ $t>](d: $t) -> Option<Self> {
                     if d == 1 { None } else { Some(Self::[<$t>](d)) }
                 }
+
+                #[inline(always)]
+                pub fn divide(self, x: $t) -> $t {
+                    let q = Divider::<$t>::mullhi(x, self.multiplier());
+                    let t = x.wrapping_sub(q) >> 1;
+                    t.wrapping_add(q) >> self.shift()
+                }
             }
 
             impl From<$t> for Divider<$t> {
@@ -170,6 +187,24 @@ macro_rules! impl_unsigned_divider {
                 #[inline(always)]
                 pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
+                }
+
+                #[inline(always)]
+                pub fn divide(self, x: $t) -> $t {
+                    let multiplier = self.multiplier();
+                    let shift = self.shift();
+
+                    if multiplier == 0 {
+                        return x >> shift;
+                    }
+
+                    let mut q = Self::mullhi(x, multiplier);
+
+                    if (shift & ADD_MARKER) != 0 {
+                        q = (x.wrapping_sub(q) >> 1).wrapping_add(q);
+                    }
+
+                    q >> (shift & Divider::<$t>::SHIFT_MASK)
                 }
 
                 #[inline(always)]
@@ -237,6 +272,25 @@ macro_rules! impl_signed_divider {
                 pub const fn [<$t>](d: $t) -> Self {
                     BranchfreeDivider(Divider::[<$t _internal>](d, true))
                 }
+
+                #[inline(always)]
+                pub fn divide(self, x: $t) -> $t {
+                    let multiplier = self.multiplier();
+                    let shift = self.shift();
+
+                    let masked_shift = shift & Divider::<$t>::SHIFT_MASK;
+
+                    let mut q = Divider::<$t>::mullhi(x, multiplier).wrapping_add(x);
+
+                    let is_power_of_2: $ut = (multiplier == 0) as $ut;
+                    let q_sign = q >> (Divider::<$t>::BITS - 1); // extends sign to fill bits
+
+                    q = q.wrapping_add( q_sign & ((1 as $ut) << masked_shift).wrapping_sub(is_power_of_2) as $t );
+
+                    let sign = ((shift as i8) >> 7) as $t; // take last bit as sign, to convert this to 0 or -1
+
+                    ((q >> masked_shift) ^ sign) - sign
+                }
             }
 
             impl From<$t> for BranchfreeDivider<$t> {
@@ -258,6 +312,33 @@ macro_rules! impl_signed_divider {
                 #[inline(always)]
                 pub const fn [<$t>](d: $t) -> Self {
                     Self::[<$t _internal>](d, false)
+                }
+
+                pub fn divide(self, x: $t) -> $t {
+                    let multiplier = self.multiplier();
+                    let shift = self.shift();
+
+                    let masked_shift = shift & Divider::<$t>::SHIFT_MASK;
+
+                    // take last bit as sign, to convert this to 0 or -1
+                    let sign = ((shift as i8) >> 7) as $t;
+
+                    if multiplier == 0 {
+                        let mask = ((1 as $ut) << masked_shift).wrapping_sub(1) as $t;
+                        let uq = x.wrapping_add((x >> (Self::BITS - 1)) & mask);
+
+                        return ((uq as $t >> masked_shift) ^ sign) - sign;
+                    }
+
+                    let mut uq = Self::mullhi(x, multiplier) as $ut;
+
+                    if (shift & ADD_MARKER) != 0 {
+                        uq = uq.wrapping_add(x as $ut ^ sign as $ut).wrapping_sub(sign as $ut);
+                    }
+
+                    let q = uq as $t >> masked_shift;
+
+                    q + (q < 0) as $t
                 }
 
                 #[inline(always)]
@@ -315,6 +396,17 @@ macro_rules! impl_signed_divider {
     }
 }
 
+macro_rules! impl_divider {
+    ($($t:ty => $dt:ty),*) => {paste::paste! {$(
+        impl Divider<$t> {
+            #[inline(always)]
+            pub(crate) const fn mullhi(x: $t, y: $t) -> $t {
+                (((x as $dt) * (y as $dt)) >> <$t>::BITS) as $t
+            }
+        }
+    )*}};
+}
+
 impl_unsigned_divider! {
     //u8 => u16,
     //u16 => u32,
@@ -327,4 +419,15 @@ impl_signed_divider! {
     //i16 => u16 => u32,
     i32 => u32 => u64,
     i64 => u64 => u128
+}
+
+impl_divider! {
+    //u8 => u16,
+    //u16 => u32,
+    u32 => u64,
+    u64 => u128,
+    //i8 => i16,
+    //i16 => i32,
+    i32 => i64,
+    i64 => i128
 }
