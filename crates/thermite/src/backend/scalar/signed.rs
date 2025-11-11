@@ -44,7 +44,7 @@ impl Register for [<I $width x1Scalar>] {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
     #[inline(always)]
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        core::hint::select_unpredictable((mask >> 31) != 0, rhs, lhs)
+        core::hint::select_unpredictable((mask >> (<$i>::BITS - 1)) != 0, rhs, lhs)
     }
 
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
