@@ -1,5 +1,14 @@
 #![no_std]
 #![allow(clippy::missing_transmute_annotations, unused, clippy::let_and_return)]
+// used for more intelligent const splat
+#![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]
+#![cfg_attr(feature = "nightly", allow(internal_features))]
+
+#[cfg(feature = "nightly")]
+#[rustversion::not(nightly)]
+fn nightly_check() {
+    compile_error!("The `nightly` feature requires a nightly compiler.");
+}
 
 #[doc(hidden)]
 pub extern crate generic_array;

@@ -63,8 +63,56 @@ impl<R: Register> Vector<R> {
 
     /// Create a new vector from a single element by splatting it across all lanes.
     ///
+    /// If you're seeing this documentation, you are using the `nightly` feature on the nightly branch of Rust.
+    /// This version of `splat` uses `const_eval_select` to choose the best implementation
+    /// based on whether it's used in a const context or not.
+    #[cfg(feature = "nightly")]
+    #[rustversion::nightly]
+    #[inline(always)]
+    pub const fn splat(value: R::Element) -> Self {
+        // On nightly, we can use const_eval_select to choose the best implementation
+        // based on whether we're in a const context or not.
+        #[inline(always)]
+        const fn splat_const_impl<R: Register>(value: R::Element) -> Vector<R> {
+            Vector(register::reg_splat::<R>(value))
+        }
+
+        #[inline(always)]
+        fn splat_runtime_impl<R: Register>(value: R::Element) -> Vector<R> {
+            Vector(R::splat(value))
+        }
+
+        // SAFETY: This is safe because both branches return the same type.
+        unsafe { core::intrinsics::const_eval_select((value,), splat_const_impl, splat_runtime_impl) }
+    }
+
+    /// **READ DOCS** Create a new vector from a single element by splatting it across all lanes.
+    ///
+    /// If you're seeing this documentation, you are using the `nightly` feature on the nightly branch of Rust,
+    /// in which case this is the same as [`Vector::splat`], which is `const` and automatically chooses the
+    /// best implementation based on whether it's used in a const context or not.
+    ///
+    /// Without the nightly features, this is still a `const` version of [`Vector::splat`]. However, if
+    /// used with any dynamic value it will likely produce suboptimal code. Use this only if you
+    /// need to use it in a const context that will be precalculated at compile time. You don't
+    /// have to worry about that, though, since the nightly version of this function will
+    /// just work as expected.
+    #[cfg(feature = "nightly")]
+    #[rustversion::nightly]
+    #[inline(always)]
+    pub const fn splat_const(value: R::Element) -> Self {
+        Self::splat(value)
+    }
+
+    /// Create a new vector from a single element by splatting it across all lanes.
+    ///
     /// If you **NEED** to use this in a const-context, use [`Vector::splat_const`] instead, but
     /// it has downsides if used in non-const contexts.
+    ///
+    /// If you using the nightly branch of Rust, _and_ the `nightly` crate feature,
+    /// this version of `splat` will be `const` and automatically choose the
+    /// best implementation based on whether it's used in a const context or not.
+    #[cfg(not(feature = "nightly"))]
     #[inline(always)]
     pub fn splat(value: R::Element) -> Self {
         Self(R::splat(value))
@@ -79,6 +127,7 @@ impl<R: Register> Vector<R> {
     /// Wrap this call in a `const { }` block to ensure it is evaluated at compile time. This function
     /// is marked as `#[inline(never)]` to intentionally disallow optimizations and make it easier to
     /// debug.
+    #[cfg(not(feature = "nightly"))]
     #[inline(never)]
     pub const fn splat_const(value: R::Element) -> Self {
         Self(register::reg_splat::<R>(value))
