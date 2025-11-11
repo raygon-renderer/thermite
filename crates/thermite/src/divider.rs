@@ -408,26 +408,26 @@ macro_rules! impl_divider {
 }
 
 impl_unsigned_divider! {
-    //u8 => u16,
-    //u16 => u32,
+    u8 => u16,
+    u16 => u32,
     u32 => u64,
     u64 => u128
 }
 
 impl_signed_divider! {
-    //i8 => u8 => u16,
-    //i16 => u16 => u32,
+    i8 => u8 => u16,
+    i16 => u16 => u32,
     i32 => u32 => u64,
     i64 => u64 => u128
 }
 
 impl_divider! {
-    //u8 => u16,
-    //u16 => u32,
+    u8 => u16,
+    u16 => u32,
     u32 => u64,
     u64 => u128,
-    //i8 => i16,
-    //i16 => i32,
+    i8 => i16,
+    i16 => i32,
     i32 => i64,
     i64 => i128
 }
