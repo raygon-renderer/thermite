@@ -67,6 +67,7 @@ macro_rules! MM_SHUFFLE_R {
 
 #[macro_use]
 pub mod simd;
+pub mod isa;
 pub mod vector;
 
 pub mod backend;
