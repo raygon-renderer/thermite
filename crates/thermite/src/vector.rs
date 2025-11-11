@@ -5,8 +5,8 @@
 use crate::{
     mask::Mask,
     register::{
-        self, BitsRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedIntegerRegister,
+        self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
         SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
@@ -427,7 +427,7 @@ impl<R: Register> Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> Vector<R> {
+impl<R: BitshiftRegister> Vector<R> {
     /// For each lane in the vector, shift left by the immediate value.
     #[inline(always)]
     pub fn shli<const IMM8: i32>(self) -> Self {
@@ -1108,7 +1108,7 @@ impl<R: Register> Not for Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> Shr<u32> for Vector<R> {
+impl<R: BitshiftRegister> Shr<u32> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1117,7 +1117,7 @@ impl<R: ShiftRegister> Shr<u32> for Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> Shr<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> Shr<Vector<R::UCOUNT>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1126,7 +1126,7 @@ impl<R: ShiftRegister> Shr<Vector<R::UCOUNT>> for Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> Shl<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> Shl<Vector<R::UCOUNT>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1135,7 +1135,7 @@ impl<R: ShiftRegister> Shl<Vector<R::UCOUNT>> for Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> Shl<u32> for Vector<R> {
+impl<R: BitshiftRegister> Shl<u32> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -1144,28 +1144,28 @@ impl<R: ShiftRegister> Shl<u32> for Vector<R> {
     }
 }
 
-impl<R: ShiftRegister> ShlAssign<u32> for Vector<R> {
+impl<R: BitshiftRegister> ShlAssign<u32> for Vector<R> {
     #[inline(always)]
     fn shl_assign(&mut self, rhs: u32) {
         self.0 = R::shl(self.0, rhs);
     }
 }
 
-impl<R: ShiftRegister> ShrAssign<u32> for Vector<R> {
+impl<R: BitshiftRegister> ShrAssign<u32> for Vector<R> {
     #[inline(always)]
     fn shr_assign(&mut self, rhs: u32) {
         self.0 = R::shr(self.0, rhs);
     }
 }
 
-impl<R: ShiftRegister> ShrAssign<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> ShrAssign<Vector<R::UCOUNT>> for Vector<R> {
     #[inline(always)]
     fn shr_assign(&mut self, rhs: Vector<R::UCOUNT>) {
         self.0 = R::shrv(self.0, rhs.0);
     }
 }
 
-impl<R: ShiftRegister> ShlAssign<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> ShlAssign<Vector<R::UCOUNT>> for Vector<R> {
     #[inline(always)]
     fn shl_assign(&mut self, rhs: Vector<R::UCOUNT>) {
         self.0 = R::shlv(self.0, rhs.0);

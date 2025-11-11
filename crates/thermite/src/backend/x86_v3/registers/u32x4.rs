@@ -1,7 +1,7 @@
 use generic_array::{GenericArray, sequence::GenericSequence, typenum};
 
 use crate::register::{
-    IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister,
+    BitshiftRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
     ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, empty_reg, reg,
 };
 
@@ -145,7 +145,7 @@ impl SwizzleRegister for U32x4V3 {
     // }
 }
 
-impl ShiftRegister for U32x4V3 {
+impl BitshiftRegister for U32x4V3 {
     #[inline(always)]
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
         unsafe { arch::_mm_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }

@@ -1,8 +1,8 @@
 use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
 use crate::register::{
-    CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShiftRegister, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    BitshiftRegister, CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
+    Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 use super::arch;

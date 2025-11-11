@@ -365,7 +365,7 @@ pub trait SwizzleRegister: MaskRegister {
     }
 }
 
-pub trait ShiftRegister: Register {
+pub trait BitshiftRegister: Register {
     fn shr(value: Self::Storage, shift: u32) -> Self::Storage;
     fn shl(value: Self::Storage, shift: u32) -> Self::Storage;
 
@@ -879,7 +879,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
     // fn quat4_product(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 }
 
-pub trait IntegerRegister: NumericRegister + ShiftRegister {
+pub trait IntegerRegister: NumericRegister + BitshiftRegister {
     fn saturating_add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
     fn saturating_sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 

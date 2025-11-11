@@ -5,8 +5,8 @@ use generic_array::{
 };
 
 use crate::register::{
-    BitsRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register, MaskRegister, NumericRegister,
-    PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedIntegerRegister,
+    BitsRegister, BitshiftRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register, MaskRegister,
+    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
     SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
@@ -54,7 +54,7 @@ impl Register for [<I $width x1Scalar>] {
     }
 }
 
-impl ShiftRegister for [<I $width x1Scalar>] {
+impl BitshiftRegister for [<I $width x1Scalar>] {
     // NOTE: We do _NOT_ want arithmetic shift here, so we cast to unsigned first
     #[inline(always)] fn shl(value: Self::Storage, shift: u32) -> Self::Storage { ((value as $u) << shift) as $i }
     #[inline(always)] fn shr(value: Self::Storage, shift: u32) -> Self::Storage { ((value as $u) >> shift) as $i }

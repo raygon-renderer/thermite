@@ -9,8 +9,8 @@
 use crate::{
     Vector,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister,
+        BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister,
+        LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
         SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };

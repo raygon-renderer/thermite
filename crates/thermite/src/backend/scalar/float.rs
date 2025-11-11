@@ -5,8 +5,8 @@ use generic_array::{
 };
 
 use crate::register::{
-    BitsRegister, Element, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister,
-    PermuteRegister, Register, ShiftRegister, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+    BitsRegister, BitshiftRegister, Element, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
+    PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
     dp::DoublePumpRegister, empty_reg, reg,
 };
 

@@ -5,8 +5,8 @@ use generic_array::{
 };
 
 use crate::register::{
-    BitsRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
-    Register, ShiftRegister, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, empty_reg, reg,
+    BitsRegister, BitshiftRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister,
+    PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, empty_reg, reg,
 };
 
 use super::arch;

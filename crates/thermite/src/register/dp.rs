@@ -3,9 +3,9 @@ use core::ops::Shl;
 use crate::register::{Element, SignedIntegerRegister};
 
 use super::{
-    BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister,
-    NumericRegister, PartialOrdRegister, Register, ShiftRegister, SignedRegister, Storage, SwizzleRegister,
-    UnsignedIntegerRegister,
+    BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes,
+    LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedRegister, Storage,
+    SwizzleRegister, UnsignedIntegerRegister,
 };
 
 use generic_array::{
@@ -230,7 +230,7 @@ where
     }
 }
 
-impl<R: ShiftRegister> ShiftRegister for DoublePumpRegister<R>
+impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {

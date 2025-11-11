@@ -1,7 +1,7 @@
 use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
 use crate::register::{
-    FloatRegister, LinAlg3Register, NumericRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister,
+    FloatRegister, LinAlg3Register, NumericRegister, PermuteRegister, Register, BitshiftRegister, ShuffleRegister,
     SignedRegister, SwizzleRegister, dp::DoublePumpRegister,
 };
 
@@ -115,7 +115,7 @@ impl Register for F32x4SSE41 {
     }
 }
 
-impl ShiftRegister for F32x4SSE41 {
+impl BitshiftRegister for F32x4SSE41 {
     #[inline(always)]
     fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_castsi128_ps(arch::_mm_slli_epi32(arch::_mm_castps_si128(value), IMM8)) }

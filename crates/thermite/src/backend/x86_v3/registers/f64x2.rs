@@ -1,7 +1,7 @@
 use generic_array::{GenericArray, sequence::GenericSequence, typenum};
 
 use crate::register::{
-    FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister,
+    BitshiftRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
     ShuffleRegister, SignedRegister, SwizzleRegister, empty_reg, reg,
 };
 
