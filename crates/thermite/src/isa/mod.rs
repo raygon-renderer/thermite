@@ -1,3 +1,5 @@
+//! Instruction Set Architecture detection and utilities
+
 /// Enum of supported instruction sets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
@@ -35,6 +37,7 @@ pub enum InstructionSet {
 mod detector;
 
 impl InstructionSet {
+    /// Detect the current instruction set at runtime. This result is cached for future calls.
     #[cfg(not(all(feature = "wasm32", target_arch = "wasm32")))]
     pub fn get() -> InstructionSet {
         static DETECTOR: detector::DetectInstructionSet = detector::DetectInstructionSet::new();
@@ -42,11 +45,14 @@ impl InstructionSet {
         DETECTOR.get_or_init()
     }
 
+    /// Detect the current instruction set at runtime. This result is cached for future calls.
     #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
     pub fn get() -> InstructionSet {
         InstructionSet::WASM32
     }
 
+    /// Returns an estimate of the number of SIMD registers available
+    /// for the given instruction set.
     #[inline(always)]
     pub const fn num_registers(&self) -> usize {
         match self {
@@ -66,10 +72,11 @@ impl InstructionSet {
             InstructionSet::NEON => 32,
 
             #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
-            InstructionSet::WASM32 => 16,
+            InstructionSet::WASM32 => 16, // TODO: Verify
         }
     }
 
+    /// Returns whether the given instruction set supports Fused Multiply-Add (FMA) operations.
     #[inline(always)]
     pub const fn has_fma(&self) -> bool {
         match self {

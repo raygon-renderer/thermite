@@ -8,8 +8,8 @@ const INITIALIZING: u8 = 1;
 const INITIALIZED: u8 = 2;
 
 pub struct DetectInstructionSet {
-    isa: UnsafeCell<Option<InstructionSet>>,
     state: AtomicU8,
+    isa: UnsafeCell<Option<InstructionSet>>,
 }
 
 // SAFETY: We ensure proper synchronization using atomic operations
