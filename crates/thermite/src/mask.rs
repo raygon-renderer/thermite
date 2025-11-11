@@ -9,7 +9,7 @@
 use crate::{
     Vector,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register, MaskElement,
+        BitsRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register,
         MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShiftRegister, ShuffleRegister,
         SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
@@ -150,13 +150,13 @@ impl<R: MaskRegister> Mask<R> {
     /// Insert a boolean mask value into a specific lane of the mask.
     #[inline(always)]
     pub fn insert<const LANE: usize>(mut self, value: bool) -> Self {
-        Self(R::insert::<LANE>(self.0, MaskElement::from_bool(value)))
+        Self(R::insert::<LANE>(self.0, Element::from_bool(value)))
     }
 
     /// Extract the boolean mask value from a specific lane of the mask.
     #[inline(always)]
     pub fn extract<const LANE: usize>(self) -> bool {
-        MaskElement::to_bool(R::extract::<LANE>(self.0))
+        Element::to_bool(R::extract::<LANE>(self.0))
     }
 
     /// Cast this mask to another mask type.

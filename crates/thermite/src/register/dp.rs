@@ -767,9 +767,9 @@ where
                 .for_each(|(idx, blend)| {
                     // hopefully compiles to cmov or similar
                     *blend = if *idx < <R::Lanes as Unsigned>::U32 {
-                        MaskElement::FALSY
+                        Element::FALSY
                     } else {
-                        MaskElement::TRUTHY
+                        Element::TRUTHY
                     };
                 });
 

@@ -1,6 +1,9 @@
 //! Low-level SIMD Register interface
 
 pub mod dp;
+pub mod element;
+
+pub use element::Element;
 
 use generic_array::{
     ArrayLength, GenericArray, IntoArrayLength,
@@ -100,7 +103,7 @@ impl<T> Lanes for T where T: ArrayLength + core::ops::Shl<typenum::B1> {}
 
 pub trait Register: Sized + 'static {
     type Lanes: Lanes;
-    type Element: Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug;
+    type Element: Element;
     type Storage: Sized + Copy + core::fmt::Debug;
 
     // Note: These don't require :Register because it would introduce recursive type bounds.
@@ -407,7 +410,7 @@ impl MaskElement for f64 {
     }
 }
 
-pub trait MaskRegister: Register<Element: MaskElement> {
+pub trait MaskRegister: Register {
     const TRUTHY: Self::Storage;
     const FALSY: Self::Storage;
 
@@ -578,8 +581,8 @@ pub trait SignedRegister: NumericRegister {
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
 pub trait FloatElement: num_traits::float::FloatCore + From<i8> + core::fmt::Display {
-    type Bits: MaskElement;
-    type Signed: MaskElement;
+    type Bits: Element;
+    type Signed: Element;
 
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;
