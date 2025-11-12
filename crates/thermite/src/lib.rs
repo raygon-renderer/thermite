@@ -1,4 +1,5 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+//
 #![allow(clippy::missing_transmute_annotations, unused, clippy::let_and_return)]
 // used for more intelligent const splat
 #![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]

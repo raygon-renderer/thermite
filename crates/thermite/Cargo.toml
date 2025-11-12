@@ -6,6 +6,7 @@ categories = ["no_std"]
 
 [features]
 nightly = []
+std = []                         # required for decent scalar support
 document_registers = []
 default = ["document_registers"]
 neon = []
