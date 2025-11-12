@@ -1,8 +1,11 @@
 use generic_array::{GenericArray, sequence::GenericSequence, typenum};
 
-use crate::register::{
-    BitshiftRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShuffleRegister, SignedRegister, SwizzleRegister, empty_reg, reg,
+use crate::{
+    isa::InstructionSet,
+    register::{
+        BitshiftRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedRegister, SwizzleRegister, empty_reg, reg,
+    },
 };
 
 use super::arch;
@@ -17,6 +20,8 @@ impl Register for F64x2V3 {
     type Storage = arch::__m128d;
     type HalfRegister = ();
     type DoubleRegister = super::F64x4V3;
+
+    const ISA: InstructionSet = InstructionSet::X86V3;
 
     type SCOUNT = super::I64x2V3;
     type UCOUNT = super::U64x2V3;

@@ -4,6 +4,7 @@ use generic_array::{
     typenum::{self, Unsigned},
 };
 
+use crate::isa::InstructionSet;
 use crate::register::{
     BitsRegister, BitshiftRegister, Element, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
@@ -23,6 +24,8 @@ impl Register for [<F $width x1Scalar>] {
     type Storage = [<f $width>];
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
+
+    const ISA: InstructionSet = InstructionSet::Scalar;
 
     type SCOUNT = super::[<I $width x1Scalar>];
     type UCOUNT = super::[<U $width x1Scalar>];

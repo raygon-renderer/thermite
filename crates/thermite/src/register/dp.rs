@@ -1,6 +1,9 @@
 use core::ops::Shl;
 
-use crate::register::{Element, SignedIntegerRegister};
+use crate::{
+    isa::InstructionSet,
+    register::{Element, SignedIntegerRegister},
+};
 
 use super::{
     BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes,
@@ -78,6 +81,8 @@ where
     type Lanes = typenum::Double<R::Lanes>;
     type Element = R::Element;
     type Storage = DoublePumpRegister<R>;
+
+    const ISA: InstructionSet = R::ISA;
 
     type HalfRegister = R;
     type DoubleRegister = DoublePumpRegister<Self>;
@@ -768,41 +773,26 @@ impl<R: SwizzleRegister> SwizzleRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    #[cfg(not(target_feature = "sse4.1"))]
     #[inline(always)]
     fn permutev(value: Self::Storage, mut idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        // this is a fallback for pre-SSE4.1 targets, which don't have full float permute/blend support,
-        // so we have to do it the naive way of extracting and inserting each lane individually.
-
         // mask out all indices to be within the range of R
         idxs.iter_mut().for_each(|idx| *idx &= <R::Lanes as Unsigned>::U32 - 1);
 
-        let mut dst = Self::EMPTY;
+        if const { matches!(Self::ISA, InstructionSet::Scalar) } {
+            let mut dst = Self::EMPTY;
 
-        let src = Self::as_array(&value);
+            let src = Self::as_array(&value);
 
-        for (dst, &idx) in Self::iter_mut(&mut dst).zip(&idxs) {
-            unsafe {
-                core::hint::assert_unchecked((idx as usize) < src.len());
+            for (dst, &idx) in Self::iter_mut(&mut dst).zip(&idxs) {
+                unsafe {
+                    core::hint::assert_unchecked((idx as usize) < src.len());
 
-                *dst = *src.get_unchecked(idx as usize)
+                    *dst = *src.get_unchecked(idx as usize)
+                }
             }
+
+            return dst;
         }
-
-        dst
-    }
-
-    #[cfg(target_feature = "sse4.1")]
-    #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        let [pidx_lo, pidx_hi] = {
-            let mut idxs = idxs.clone();
-
-            // mask out all indices to be within the range of R
-            idxs.iter_mut().for_each(|idx| *idx &= <R::Lanes as Unsigned>::U32 - 1);
-
-            Self::split_array(idxs)
-        };
 
         let (blend_lo, blend_hi) = {
             let mut blends = Self::EMPTY; // mask register
@@ -820,6 +810,8 @@ where
 
             Self::split(blends)
         };
+
+        let [pidx_lo, pidx_hi] = Self::split_array(idxs);
 
         let DoublePumpRegister(lo, hi) = value;
 

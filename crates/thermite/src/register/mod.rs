@@ -10,7 +10,10 @@ use generic_array::{
     typenum::{self, Unsigned},
 };
 
-use crate::divider::{BranchfreeDivider, Divider};
+use crate::{
+    divider::{BranchfreeDivider, Divider},
+    isa::InstructionSet,
+};
 
 pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePump;
 
@@ -107,6 +110,8 @@ pub trait Register: Sized + 'static {
     type Lanes: Lanes;
     type Element: Element;
     type Storage: Sized + Copy + core::fmt::Debug;
+
+    const ISA: InstructionSet;
 
     // Note: These don't require :Register because it would introduce recursive type bounds.
     type HalfRegister;
@@ -335,37 +340,31 @@ pub trait BlendRegister: Register {
 pub trait SwizzleRegister: MaskRegister {
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage;
 
-    #[cfg(not(target_feature = "sse4.1"))]
-    #[inline(always)]
-    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        // Fallback implementation for pre-SSE4.1 targets without good f32 permute/blend support.
-        // on initial tests it doesn't optimize terribly, but it's not great either.
-
-        let mut result = Self::EMPTY;
-
-        let a_array = Self::as_array(&a);
-        let b_array = Self::as_array(&b);
-        let result_array = Self::as_array_mut(&mut result);
-
-        let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
-
-        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
-            let idx = idx & mask;
-
-            *dst = if idx < Self::Lanes::U32 {
-                a_array[idx as usize]
-            } else {
-                b_array[(idx - Self::Lanes::U32) as usize]
-            };
-        }
-
-        result
-    }
-
-    #[cfg(target_feature = "sse4.1")]
     #[inline(always)]
     fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         use typenum::Unsigned;
+
+        if const { matches!(Self::ISA, InstructionSet::Scalar) } {
+            let mut result = Self::EMPTY;
+
+            let a_array = Self::as_array(&a);
+            let b_array = Self::as_array(&b);
+            let result_array = Self::as_array_mut(&mut result);
+
+            let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
+
+            for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+                let idx = idx & mask;
+
+                *dst = if idx < Self::Lanes::U32 {
+                    a_array[idx as usize]
+                } else {
+                    b_array[(idx - Self::Lanes::U32) as usize]
+                };
+            }
+
+            return result;
+        }
 
         let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
         let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
