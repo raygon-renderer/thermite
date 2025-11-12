@@ -181,8 +181,8 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
         let common = Vf::SQRT_FRAC_PI_2 * a * c;
         let denom = Vf::SQRT_2 * c;
 
-        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            let d = denom.reciprocal_p::<ExtraPrecision<P>>();
+        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let d = denom.reciprocal_p::<P>();
             (x1 * d, x0 * d)
         } else {
             (x1 / denom, x0 / denom)

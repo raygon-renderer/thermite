@@ -470,7 +470,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn reciprocal<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             Vf::ONE / x
         } else {
             let mut y = x.rcp();
@@ -486,7 +486,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(x: Vf<Self>, a: Vf<Self>) -> Vf<Self> {
-        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             a + Vf::ONE / x
         } else {
             let mut y = x.rcp();
