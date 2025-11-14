@@ -6,9 +6,9 @@ use generic_array::{
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitsRegister, BitshiftRegister, Element, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
-    PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-    dp::DoublePumpRegister, empty_reg, reg,
+    BitsRegister, BitshiftRegister, Element, FloatElement, FloatRegister, LinAlg3Register, MaskRegister,
+    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+    SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -149,7 +149,6 @@ impl SignedRegister for [<F $width x1Scalar>] {
     }
 }
 
-#[cfg(feature = "std")]
 impl FloatRegister for [<F $width x1Scalar>] {
     type Bits = super::[<U $width x1Scalar>];
     type Signed = super::[<I $width x1Scalar>];
@@ -170,68 +169,22 @@ impl FloatRegister for [<F $width x1Scalar>] {
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
-    #[inline(always)] fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { lhs.mul_add(rhs, acc) }
-    #[inline(always)] fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { lhs.mul_add(rhs, -acc) }
-    #[inline(always)] fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { (-lhs).mul_add(rhs, acc) }
+    #[inline(always)] fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_mul_add(lhs, rhs, acc) }
+    #[inline(always)] fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_mul_sub(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_nmul_add(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_nmul_sub(lhs, rhs, acc) }
 
-    #[inline(always)]
-    fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        if Self::HAS_TRUE_FMA {
-            (-lhs).mul_add(rhs, -acc)
-        } else {
-            // if no FMA, LLVM may fail to simplify the above correctly,
-            // so we rewrite it in terms of mul_sube
-            Self::mul_sub(Self::neg(lhs), rhs, acc)
-        }
-    }
-
-    #[inline(always)] fn sqrt(value: Self::Storage) -> Self::Storage { value.sqrt() }
-    #[inline(always)] fn floor(value: Self::Storage) -> Self::Storage { value.floor() }
-    #[inline(always)] fn ceil(value: Self::Storage) -> Self::Storage { value.ceil() }
-    #[inline(always)] fn round(value: Self::Storage) -> Self::Storage { value.round() }
-    #[inline(always)] fn trunc(value: Self::Storage) -> Self::Storage { value.trunc() }
-    #[inline(always)] fn fract(value: Self::Storage) -> Self::Storage { value.fract() }
-    #[inline(always)] fn next_up(value: Self::Storage) -> Self::Storage { value.next_up() }
-    #[inline(always)] fn next_down(value: Self::Storage) -> Self::Storage { value.next_down() }
-}
-
-#[cfg(not(feature = "std"))]
-impl FloatRegister for [<F $width x1Scalar>] {
-    type Bits = super::[<U $width x1Scalar>];
-    type Signed = super::[<I $width x1Scalar>];
-    type ExtendedPrecision = super::F64x1Scalar;
-
-    // best guess we can do
-    const HAS_TRUE_FMA: bool = false;
-
-    const HALF: Self::Storage = 0.5;
-    const NEG_ZERO: Self::Storage = -0.0;
-    const INFINITY: Self::Storage = $f::INFINITY;
-    const NEG_INFINITY: Self::Storage = $f::NEG_INFINITY;
-    const NAN: Self::Storage = $f::NAN;
-    const EPSILON: Self::Storage = $f::EPSILON;
-
-    const EXP_MASK: Storage<Self::Bits> = $f::INFINITY.to_bits(); // all exponent bits set
-
-    const HAS_APPROX_RSQRT: bool = false;
-    const HAS_APPROX_RCP: bool = false;
-
-    #[inline(always)] fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { libm::[<fma $($s)?>](lhs, rhs, acc) }
-    #[inline(always)] fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { libm::[<fma $($s)?>](lhs, rhs, -acc) }
-    #[inline(always)] fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { libm::[<fma $($s)?>](-lhs, rhs, acc) }
-    #[inline(always)] fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { libm::[<fma $($s)?>](-lhs, rhs, -acc) }
-
-    #[inline(always)] fn sqrt(value: Self::Storage) -> Self::Storage { libm::[<sqrt $($s)?>](value) }
-    #[inline(always)] fn floor(value: Self::Storage) -> Self::Storage { libm::[<floor $($s)?>](value) }
-    #[inline(always)] fn ceil(value: Self::Storage) -> Self::Storage { libm::[<ceil $($s)?>](value) }
-    #[inline(always)] fn round(value: Self::Storage) -> Self::Storage { libm::[<round $($s)?>](value) }
-    #[inline(always)] fn trunc(value: Self::Storage) -> Self::Storage { libm::[<trunc $($s)?>](value) }
-    //#[inline(always)] fn fract(value: Self::Storage) -> Self::Storage { libm::[<fract $($s)?>](value) }
-    #[inline(always)] fn next_up(value: Self::Storage) -> Self::Storage { libm::[<nextafter $($s)?>](value, $f::INFINITY) }
-    #[inline(always)] fn next_down(value: Self::Storage) -> Self::Storage { libm::[<nextafter $($s)?>](value, $f::NEG_INFINITY) }
+    #[inline(always)] fn sqrt(value: Self::Storage) -> Self::Storage { FloatElement::sqrt(value) }
+    #[inline(always)] fn floor(value: Self::Storage) -> Self::Storage { FloatElement::floor(value) }
+    #[inline(always)] fn ceil(value: Self::Storage) -> Self::Storage { FloatElement::ceil(value) }
+    #[inline(always)] fn round(value: Self::Storage) -> Self::Storage { FloatElement::round(value) }
+    #[inline(always)] fn trunc(value: Self::Storage) -> Self::Storage { FloatElement::trunc(value) }
+    #[inline(always)] fn fract(value: Self::Storage) -> Self::Storage { FloatElement::fract(value) }
+    #[inline(always)] fn next_up(value: Self::Storage) -> Self::Storage { FloatElement::next_up(value) }
+    #[inline(always)] fn next_down(value: Self::Storage) -> Self::Storage { FloatElement::next_down(value) }
 }
 
 }}} // end macro
 
-decl_float_scalar!(f32: f => 32);
+decl_float_scalar!(f32 => 32);
 decl_float_scalar!(f64 => 64);

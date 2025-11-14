@@ -3,7 +3,7 @@
 pub mod dp;
 pub mod element;
 
-pub use element::Element;
+pub use element::{Element, FloatElement};
 
 use generic_array::{
     ArrayLength, GenericArray, IntoArrayLength,
@@ -585,73 +585,6 @@ pub trait SignedRegister: NumericRegister {
         Self::blendv(mask, falsy, truthy)
     }
 }
-
-/// A trait for float element types that can be used in SIMD operations.
-///
-/// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
-/// when they aren't available in the target architecture. Sometimes it's essential to have these
-/// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: num_traits::float::FloatCore + From<i8> + core::fmt::Display {
-    type Bits: Element;
-    type Signed: Element;
-
-    // maximum u32 that can be exactly represented in this float type without loss of precision
-    const MAX_U64: u64;
-
-    fn from_f64(value: f64) -> Self;
-    fn from_i64(value: i64) -> Self;
-
-    fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
-}
-
-#[rustfmt::skip]
-const _: () = {
-    impl FloatElement for f32 {
-        type Bits = u32;
-        type Signed = i32;
-
-        const MAX_U64: u64 = 1 << 23;
-
-        #[inline(always)]
-        fn from_i64(value: i64) -> Self {
-            if value.unsigned_abs() < Self::MAX_U64 {
-                value as f32 // safe to convert directly
-            } else {
-                panic!("Value {value} exceeds maximum exact representable i64 in this float type");
-            }
-        }
-
-        #[inline(always)] fn from_f64(value: f64) -> Self { value as f32 }
-        #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, acc) }
-        #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, rhs, -acc) }
-        #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, -rhs, acc) }
-        #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fmaf(lhs, -rhs, -acc) }
-    }
-    impl FloatElement for f64 {
-        type Bits = u64;
-        type Signed = i64;
-
-        const MAX_U64: u64 = 1 << 53;
-
-        #[inline(always)]
-        fn from_i64(value: i64) -> Self {
-            if value.unsigned_abs() < Self::MAX_U64 {
-                value as f64 // safe to convert directly
-            } else {
-                panic!("Value {value} exceeds maximum exact representable i64 in this float type");
-            }
-        }
-
-        #[inline(always)] fn from_f64(value: f64) -> Self { value }
-        #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, acc) }
-        #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, rhs, -acc) }
-        #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, -rhs, acc) }
-        #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::fma(lhs, -rhs, -acc) }
-    }
-};
 
 #[inline(always)]
 fn zip_ternary<R: FloatRegister, F>(mut lhs: R::Storage, rhs: R::Storage, acc: R::Storage, f: F) -> R::Storage

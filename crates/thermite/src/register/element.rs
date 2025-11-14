@@ -73,3 +73,112 @@ impl Element for f64 {
         self.to_bits() != 0
     }
 }
+
+/// A trait for float element types that can be used in SIMD operations.
+///
+/// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
+/// when they aren't available in the target architecture. Sometimes it's essential to have these
+/// fallbacks for correctness, given FMAs rounding behavior.
+pub trait FloatElement:
+    Element + num_traits::float::FloatCore + From<i8> + core::fmt::Display + crate::math::FloatConsts
+{
+    type Bits: Element;
+    type Signed: Element;
+
+    // maximum u32 that can be exactly represented in this float type without loss of precision
+    const MAX_U64: u64;
+
+    fn from_f64(value: f64) -> Self;
+    fn from_i64(value: i64) -> Self;
+
+    fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
+    fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
+    fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
+    fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
+
+    fn sqrt(value: Self) -> Self;
+    fn floor(value: Self) -> Self;
+    fn ceil(value: Self) -> Self;
+    fn round(value: Self) -> Self;
+    fn trunc(value: Self) -> Self;
+
+    #[inline(always)]
+    fn fract(value: Self) -> Self {
+        value - value.trunc() // fallback implementation
+    }
+
+    fn next_up(value: Self) -> Self;
+    fn next_down(value: Self) -> Self;
+}
+
+macro_rules! impl_float_element {
+    ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty, $max_u64:expr) => {paste::paste! {
+        #[cfg(feature = "std")]
+        impl FloatElement for $t {
+            type Bits = $bits;
+            type Signed = $signed;
+
+            const MAX_U64: u64 = $max_u64;
+
+            #[inline(always)]
+            fn from_i64(value: i64) -> Self {
+                if value.unsigned_abs() < Self::MAX_U64 {
+                    value as $t // safe to convert directly
+                } else {
+                    panic!("Value exceeds maximum exact representable i64 in this float type");
+                }
+            }
+
+            #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
+
+            #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, acc) }
+            #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, -acc) }
+            #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(-rhs, acc) }
+            #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(-rhs, -acc) }
+
+            #[inline(always)] fn sqrt(value: Self) -> Self { value.sqrt() }
+            #[inline(always)] fn floor(value: Self) -> Self { value.floor() }
+            #[inline(always)] fn ceil(value: Self) -> Self { value.ceil() }
+            #[inline(always)] fn round(value: Self) -> Self { value.round() }
+            #[inline(always)] fn trunc(value: Self) -> Self { value.trunc() }
+            #[inline(always)] fn fract(value: Self) -> Self { value.fract() }
+            #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
+            #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
+        }
+
+        #[cfg(not(feature = "std"))]
+        impl FloatElement for $t {
+            type Bits = $bits;
+            type Signed = $signed;
+
+            const MAX_U64: u64 = $max_u64;
+
+            #[inline(always)]
+            fn from_i64(value: i64) -> Self {
+                if value.unsigned_abs() < Self::MAX_U64 {
+                    value as $t // safe to convert directly
+                } else {
+                    panic!("Value exceeds maximum exact representable i64 in this float type");
+                }
+            }
+
+            #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
+
+            #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, acc) }
+            #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, -acc) }
+            #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, -rhs, acc) }
+            #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, -rhs, -acc) }
+
+            #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
+            #[inline(always)] fn floor(value: Self) -> Self { libm::[<floor $($f)?>](value) }
+            #[inline(always)] fn ceil(value: Self) -> Self { libm::[<ceil $($f)?>](value) }
+            #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
+            #[inline(always)] fn trunc(value: Self) -> Self { libm::[<trunc $($f)?>](value) }
+            #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
+            #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
+        }
+    }};
+}
+
+impl_float_element!(f32: f => u32, i32, 1 << 23);
+impl_float_element!(f64 => u64, i64, 1 << 53);
