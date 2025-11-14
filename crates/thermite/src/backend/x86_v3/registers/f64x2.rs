@@ -254,6 +254,7 @@ impl NumericRegister for F64x2V3 {
 
 impl SignedRegister for F64x2V3 {
     const NEG_ONE: Self::Storage = reg::<Self, 2>([-1.0; 2]);
+    const MIN_POSITIVE: Self::Storage = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {

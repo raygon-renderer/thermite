@@ -5,7 +5,7 @@ use crate::{
     register::{
         BitshiftRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
         Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
-        dp::DoublePumpRegister, empty_reg, reg,
+        dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -313,6 +313,7 @@ impl NumericRegister for I32x4V3 {
 
 impl SignedRegister for I32x4V3 {
     const NEG_ONE: Self::Storage = reg::<Self, 4>([-1; 4]);
+    const MIN_POSITIVE: Self::Storage = reg_splat::<Self>(1);
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {

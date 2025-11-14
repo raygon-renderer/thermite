@@ -295,6 +295,7 @@ impl NumericRegister for F32x8V3 {
 
 impl SignedRegister for F32x8V3 {
     const NEG_ONE: Self::Storage = reg::<Self, 8>([-1.0; 8]);
+    const MIN_POSITIVE: Self::Storage = reg::<Self, 8>([f32::MIN_POSITIVE; 8]);
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {

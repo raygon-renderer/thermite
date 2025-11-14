@@ -473,6 +473,7 @@ where
     typenum::Double<R::Lanes>: Lanes,
 {
     const NEG_ONE: Self::Storage = Self(R::NEG_ONE, R::NEG_ONE);
+    const MIN_POSITIVE: Self::Storage = Self(R::MIN_POSITIVE, R::MIN_POSITIVE);
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {

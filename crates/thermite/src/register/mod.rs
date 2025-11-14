@@ -562,6 +562,7 @@ pub trait SignedRegister: NumericRegister {
     fn copysign(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage;
 
     const NEG_ONE: Self::Storage;
+    const MIN_POSITIVE: Self::Storage;
 
     #[inline(always)]
     fn is_negative(value: Self::Storage) -> Self::Storage {

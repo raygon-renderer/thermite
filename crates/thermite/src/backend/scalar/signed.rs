@@ -148,6 +148,7 @@ impl NumericRegister for [<I $width x1Scalar>] {
 
 impl SignedRegister for [<I $width x1Scalar>] {
     const NEG_ONE: Self::Storage = -1;
+    const MIN_POSITIVE: Self::Storage = 1;
 
     #[inline(always)] fn neg(value: Self::Storage) -> Self::Storage { -value }
     #[inline(always)] fn abs(value: Self::Storage) -> Self::Storage { value.abs() }

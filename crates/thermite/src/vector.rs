@@ -522,6 +522,12 @@ impl<R: NumericRegister> Vector<R> {
     /// A vector of the value "2" in the element type.
     pub const TWO: Self = Self(R::TWO);
 
+    /// For each element in the vector, return a mask indicating whether that element is zero.
+    #[inline(always)]
+    pub fn is_zero(self) -> Mask<R> {
+        Mask(R::eq(self.0, R::ZERO))
+    }
+
     /// Returns a vector where each element is the index of the lane as that element type.
     ///
     /// `[0, 1, 2, 3]`, etc.
@@ -621,6 +627,9 @@ impl<R: UnsignedIntegerRegister> num_traits::Unsigned for Vector<R> where R::Ele
 impl<R: SignedRegister> Vector<R> {
     /// A vector of the value "-1" in the element type.
     pub const NEG_ONE: Self = Self(R::NEG_ONE);
+
+    /// A vector of the smallest positive (non-zero) value in the element type.
+    pub const MIN_POSITIVE: Self = Self(R::MIN_POSITIVE);
 
     /// Take the absolute value of the vector, element-wise.
     #[inline(always)]
@@ -742,6 +751,18 @@ impl<R: FloatRegister> Vector<R> {
     #[inline(always)]
     pub fn is_zero_or_subnormal(self) -> Mask<R> {
         Mask(R::is_zero_or_subnormal(self.0))
+    }
+
+    /// Check if each element in the vector is normal, returning a mask.
+    #[inline(always)]
+    pub fn is_normal(self) -> Mask<R> {
+        Mask(R::is_normal(self.0))
+    }
+
+    /// Check if each element in the vector is subnormal, returning a mask.
+    #[inline(always)]
+    pub fn is_subnormal(self) -> Mask<R> {
+        Mask(R::is_subnormal(self.0))
     }
 
     // TODO: Move to math library?
