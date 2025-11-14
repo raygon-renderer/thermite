@@ -694,7 +694,7 @@ where
     }
 
     #[inline(always)]
-    fn ln1p<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+    fn ln_1p<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         ln_f_internal::<P, Self, true>(x)
     }
 

@@ -1699,3 +1699,56 @@ impl_swizzle4! {
     [w w w z],
     [w w w w]
 }
+
+/// Implements conversion from Vector<R> to primitive types by extracting
+/// the first lane and converting that. Other lanes are ignored.
+#[rustfmt::skip]
+impl<R: Register> num_traits::ToPrimitive for Vector<R>
+where
+    R::Element: num_traits::ToPrimitive,
+{
+    #[inline(always)] fn to_isize(&self) -> Option<isize> { self.extract::<0>().to_isize() }
+    #[inline(always)] fn to_i8(&self) -> Option<i8> { self.extract::<0>().to_i8() }
+    #[inline(always)] fn to_i16(&self) -> Option<i16> { self.extract::<0>().to_i16() }
+    #[inline(always)] fn to_i32(&self) -> Option<i32> { self.extract::<0>().to_i32() }
+    #[inline(always)] fn to_i128(&self) -> Option<i128> { self.extract::<0>().to_i128() }
+    #[inline(always)] fn to_usize(&self) -> Option<usize> { self.extract::<0>().to_usize() }
+    #[inline(always)] fn to_u8(&self) -> Option<u8> { self.extract::<0>().to_u8() }
+    #[inline(always)] fn to_u16(&self) -> Option<u16> { self.extract::<0>().to_u16() }
+    #[inline(always)] fn to_u32(&self) -> Option<u32> { self.extract::<0>().to_u32() }
+    #[inline(always)] fn to_u128(&self) -> Option<u128> { self.extract::<0>().to_u128() }
+    #[inline(always)] fn to_f32(&self) -> Option<f32> { self.extract::<0>().to_f32() }
+    #[inline(always)] fn to_f64(&self) -> Option<f64> { self.extract::<0>().to_f64() }
+    #[inline(always)] fn to_i64(&self) -> Option<i64> { self.extract::<0>().to_i64() }
+    #[inline(always)] fn to_u64(&self) -> Option<u64> { self.extract::<0>().to_u64() }
+}
+
+impl<R: Register> num_traits::NumCast for Vector<R>
+where
+    R::Element: num_traits::NumCast,
+{
+    #[inline(always)]
+    fn from<T: num_traits::ToPrimitive>(n: T) -> Option<Self> {
+        Some(Self::splat(num_traits::NumCast::from(n)?))
+    }
+}
+
+#[cfg(feature = "partial-ord")]
+impl<R: PartialOrdRegister> PartialOrd for Vector<R> {
+    /// Partial comparison between two vectors, returning `None` if
+    /// the vectors are not fully ordered. Only returns `Some(Ordering)` if
+    /// all lanes are less than, greater than, or equal.
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        let is_less = R::all(R::lt(self.0, other.0));
+        let is_greater = R::all(R::gt(self.0, other.0));
+        let is_equal = R::all(R::eq(self.0, other.0));
+
+        match (is_less, is_greater, is_equal) {
+            (true, false, false) => Some(core::cmp::Ordering::Less),
+            (false, true, false) => Some(core::cmp::Ordering::Greater),
+            (false, false, true) => Some(core::cmp::Ordering::Equal),
+            _ => None,
+        }
+    }
+}

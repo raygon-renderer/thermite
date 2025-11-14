@@ -233,11 +233,22 @@ decl_math! {
     /// Returns the natural logarithm of `self`.
     fn ln[][](self: Self) -> Self;
     /// Returns `ln(1 + x)` of `self`.
-    fn ln1p[][](self: Self) -> Self;
+    fn ln_1p[][](self: Self) -> Self;
     /// Returns the base-2 logarithm of `self`.
     fn log2[][](self: Self) -> Self;
     /// Returns the base-10 logarithm of `self`.
     fn log10[][](self: Self) -> Self;
+
+    /// Returns the logarithm of `self` with respect to the given `base`.
+    fn log[][](self: Self, base: Self) -> Self;
+
+    /// Returns the logarithm of `self` with respect to the given integer base `N`.
+    ///
+    /// This is efficient for bases <=32 using a lookup table, and falls back to the general `log(x)/libm::log(N)`
+    /// implementation for larger bases.
+    ///
+    /// For bases 0 and 1, the result is 0 and Infinity respectively.
+    fn log_n[const N: usize][N](self: Self) -> Self;
 
     /// Returns `ln(1 - exp(-x))`, which depending on the policy may be
     /// an approximation more performant than the exact calculation. If you're using a policy with below

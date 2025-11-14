@@ -5,10 +5,12 @@ edition = "2024"
 categories = ["no_std"]
 
 [features]
-nightly = []
-std = []                         # required for decent scalar support
-document_registers = []
 default = ["document_registers"]
+nightly = []
+std = ["num-traits/std"]         # required for decent scalar support
+partial-ord = []                 # Implements PartialOrd for Vector, only if all lanes are that order
+float-trait = ["partial-ord"]    # Implements the Float/FloatCore traits as best as possible
+document_registers = []
 neon = []
 wasm32 = []
 
