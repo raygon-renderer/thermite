@@ -187,22 +187,22 @@ impl NumericRegister for F64x2V3 {
 
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm_reduce_pd!(value; _mm_min_pd _mm_min_sd)
+        _mm_reduce_pd_v2!(value; _mm_min_pd _mm_min_sd)
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm_reduce_pd!(value; _mm_max_pd _mm_max_sd)
+        _mm_reduce_pd_v2!(value; _mm_max_pd _mm_max_sd)
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm_reduce_pd!(value; _mm_add_pd _mm_add_sd)
+        _mm_reduce_pd_v2!(value; _mm_add_pd _mm_add_sd)
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm_reduce_pd!(value; _mm_mul_pd _mm_mul_sd)
+        _mm_reduce_pd_v2!(value; _mm_mul_pd _mm_mul_sd)
     }
 
     #[inline(always)]

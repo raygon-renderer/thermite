@@ -298,22 +298,22 @@ impl NumericRegister for U32x8V3 {
 
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_min_epu32 _mm_min_epu32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_min_epu32 _mm_min_epu32) as u32
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_max_epu32 _mm_max_epu32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_max_epu32 _mm_max_epu32) as u32
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_add_epi32 _mm_add_epi32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_add_epi32 _mm_add_epi32) as u32
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_mullo_epi32 _mm_mullo_epi32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_mullo_epi32 _mm_mullo_epi32) as u32
     }
 
     #[inline(always)]
@@ -375,12 +375,12 @@ impl IntegerRegister for U32x8V3 {
 
     #[inline(always)]
     fn wrapping_sum(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_add_epi32 _mm_add_epi32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_add_epi32 _mm_add_epi32) as u32
     }
 
     #[inline(always)]
     fn wrapping_product(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi32!(value; _mm_mullo_epi32 _mm_mullo_epi32) as u32
+        _mm256_reduce_epi32_v3!(value; _mm_mullo_epi32 _mm_mullo_epi32) as u32
     }
 
     #[inline(always)]

@@ -228,22 +228,22 @@ impl NumericRegister for I64x4V3 {
 
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_min_epi64x_v2 _mm_min_epi64x_v2)
+        _mm256_reduce_epi64_v3!(value; _mm_min_epi64x_v2 _mm_min_epi64x_v2)
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_max_epi64x_v2 _mm_max_epi64x_v2)
+        _mm256_reduce_epi64_v3!(value; _mm_max_epi64x_v2 _mm_max_epi64x_v2)
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_add_epi64 _mm_add_epi64)
+        _mm256_reduce_epi64_v3!(value; _mm_add_epi64 _mm_add_epi64)
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2)
+        _mm256_reduce_epi64_v3!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2)
     }
 
     #[inline(always)]
@@ -343,12 +343,12 @@ impl IntegerRegister for I64x4V3 {
 
     #[inline(always)]
     fn wrapping_sum(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_add_epi64 _mm_add_epi64)
+        _mm256_reduce_epi64_v3!(value; _mm_add_epi64 _mm_add_epi64)
     }
 
     #[inline(always)]
     fn wrapping_product(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2)
+        _mm256_reduce_epi64_v3!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2)
     }
 
     #[inline(always)]

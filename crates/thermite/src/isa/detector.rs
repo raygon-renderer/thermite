@@ -61,7 +61,7 @@ impl DetectInstructionSet {
             best = InstructionSet::X86V4; // TODO: Check if more AVX512 features are needed
         } else if core_detect::is_x86_feature_detected!("avx2") && core_detect::is_x86_feature_detected!("fma") {
             best = InstructionSet::X86V3;
-        } else if core_detect::is_x86_feature_detected!("sse4.1") && core_detect::is_x86_feature_detected!("popcnt") {
+        } else if core_detect::is_x86_feature_detected!("sse4.2") && core_detect::is_x86_feature_detected!("popcnt") {
             best = InstructionSet::X86V2;
         } else if core_detect::is_x86_feature_detected!("sse2") {
             best = InstructionSet::X86V1;

@@ -11,7 +11,7 @@ pub enum InstructionSet {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     X86V1,
 
-    /// x86/x86_64 SIMD instruction set level 2 (SSE4.1)
+    /// x86/x86_64 SIMD instruction set level 2 (SSE4.2 + POPCNT)
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     X86V2,
 

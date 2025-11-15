@@ -228,22 +228,22 @@ impl NumericRegister for U64x4V3 {
 
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_min_epu64x_v2 _mm_min_epu64x_v2) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_min_epu64x_v2 _mm_min_epu64x_v2) as u64
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_max_epu64x_v2 _mm_max_epu64x_v2) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_max_epu64x_v2 _mm_max_epu64x_v2) as u64
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_add_epi64 _mm_add_epi64) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_add_epi64 _mm_add_epi64) as u64
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2) as u64
     }
 
     #[inline(always)]
@@ -305,12 +305,12 @@ impl IntegerRegister for U64x4V3 {
 
     #[inline(always)]
     fn wrapping_sum(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_add_epi64 _mm_add_epi64) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_add_epi64 _mm_add_epi64) as u64
     }
 
     #[inline(always)]
     fn wrapping_product(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_epi64!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2) as u64
+        _mm256_reduce_epi64_v3!(value; _mm_mullo_epi64x_v2 _mm_mullo_epi64x_v2) as u64
     }
 
     #[inline(always)]

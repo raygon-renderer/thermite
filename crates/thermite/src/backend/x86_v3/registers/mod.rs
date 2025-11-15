@@ -2,9 +2,6 @@
 
 use super::arch;
 
-#[macro_use]
-mod macros;
-
 pub mod f32x4;
 pub mod f32x8;
 pub mod f64x2;

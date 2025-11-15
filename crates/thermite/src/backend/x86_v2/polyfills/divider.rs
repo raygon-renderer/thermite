@@ -74,8 +74,6 @@ pub unsafe fn _mm_div_epu32x(numers: __m128i, multiplier: u32, shift: u8) -> __m
 
 #[inline(always)]
 pub unsafe fn _mm_div_epu32x_bf(numers: __m128i, multiplier: u32, shift: u8) -> __m128i {
-    //println!("bf div u32x4: multiplier={}, shift={}", multiplier, shift);
-
     let q = _mm_mullhi_epu32x(numers, _mm_set1_epi32(multiplier as i32));
     _mm_srl_epi32(
         _mm_add_epi32(_mm_srli_epi32(_mm_sub_epi32(numers, q), 1), q),

@@ -2,6 +2,9 @@
 
 #![allow(non_camel_case_types)]
 
+#[macro_use]
+mod macros;
+
 pub mod arch {
     pub use super::polyfills::*;
     pub use crate::backend::x86::avx2::*;

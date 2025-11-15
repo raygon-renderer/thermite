@@ -1,16 +1,19 @@
-macro_rules! decl_vectors {
-    ($($name:ident = $ty:ty),* $(,)?) => {
-        $(
-            #[allow(private_interfaces, non_camel_case_types)]
-            pub type $name = $ty;
-        )*
-    };
-}
+#[macro_use]
+mod macros;
 
 pub mod scalar;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod x86;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[macro_use]
 pub mod x86_v1;
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[macro_use]
 pub mod x86_v2;
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[macro_use]
 pub mod x86_v3;

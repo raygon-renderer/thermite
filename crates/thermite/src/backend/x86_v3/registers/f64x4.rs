@@ -214,22 +214,22 @@ impl NumericRegister for F64x4V3 {
 
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd!(value; _mm_min_pd _mm_min_sd)
+        _mm256_reduce_pd_v3!(value; _mm_min_pd _mm_min_sd)
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd!(value; _mm_max_pd _mm_max_sd)
+        _mm256_reduce_pd_v3!(value; _mm_max_pd _mm_max_sd)
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd!(value; _mm_add_pd _mm_add_sd)
+        _mm256_reduce_pd_v3!(value; _mm_add_pd _mm_add_sd)
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd!(value; _mm_mul_pd _mm_mul_sd)
+        _mm256_reduce_pd_v3!(value; _mm_mul_pd _mm_mul_sd)
     }
 
     #[inline(always)]
@@ -448,22 +448,22 @@ impl LinAlg3Register for F64x4V3 {
 
     #[inline(always)]
     fn min_element3(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd3!(value; _mm_min_sd)
+        _mm256_reduce_pd3_v3!(value; _mm_min_sd)
     }
 
     #[inline(always)]
     fn max_element3(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd3!(value; _mm_max_sd)
+        _mm256_reduce_pd3_v3!(value; _mm_max_sd)
     }
 
     #[inline(always)]
     fn sum_elements3(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd3!(value; _mm_add_sd)
+        _mm256_reduce_pd3_v3!(value; _mm_add_sd)
     }
 
     #[inline(always)]
     fn prod_elements3(value: Self::Storage) -> Self::Element {
-        _mm256_reduce_pd3!(value; _mm_mul_sd)
+        _mm256_reduce_pd3_v3!(value; _mm_mul_sd)
     }
 }
 
