@@ -108,8 +108,8 @@ impl MaskRegister for [<U $width x1Scalar>] {
         if value[0] { Self::TRUTHY } else { Self::FALSY }
     }
 
-    #[inline(always)] fn all(value: Self::Storage) -> bool { value.to_bool() }
-    #[inline(always)] fn any(value: Self::Storage) -> bool { value.to_bool() }
+    #[inline(always)] fn all(value: Self::Storage) -> bool { value != 0 }
+    #[inline(always)] fn any(value: Self::Storage) -> bool { value != 0 }
     #[inline(always)] fn none(value: Self::Storage) -> bool { value == 0 }
 }
 

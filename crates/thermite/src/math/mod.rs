@@ -286,3 +286,63 @@ where
         self.reciprocal()
     }
 }
+
+impl<E, R> num_traits::Pow<i32> for Vector<R>
+where
+    R: MathInternal<E, Element = E>,
+    E: FloatConsts,
+{
+    type Output = Self;
+
+    /// Raises each element of the vector to the signed integer power `exp`,
+    /// by calling [`Math::powi`].
+    ///
+    /// Use [`Math::powiv`] to raise to a vector of integer powers.
+    #[inline(always)]
+    fn pow(self, exp: i32) -> Self {
+        self.powi(exp)
+    }
+}
+
+impl<E, R> num_traits::Pow<Self> for Vector<R>
+where
+    R: MathInternal<E, Element = E>,
+    E: FloatConsts,
+{
+    type Output = Self;
+
+    /// Raises each element of the vector to the power of the corresponding element in `exp`,
+    /// by calling [`Math::powf`].
+    #[inline(always)]
+    fn pow(self, exp: Self) -> Self {
+        self.powf(exp)
+    }
+}
+
+impl<R> num_traits::Pow<f32> for Vector<R>
+where
+    R: MathInternal<f32, Element = f32>,
+{
+    type Output = Self;
+
+    /// Raises each element of the vector to the power of the `f32` scalar `exp`,
+    /// by calling [`Math::powf`].
+    #[inline(always)]
+    fn pow(self, exp: f32) -> Self {
+        self.powf(Vector::splat(exp))
+    }
+}
+
+impl<R> num_traits::Pow<f64> for Vector<R>
+where
+    R: MathInternal<f64, Element = f64>,
+{
+    type Output = Self;
+
+    /// Raises each element of the vector to the power of the `f64` scalar `exp`,
+    /// by calling [`Math::powf`].
+    #[inline(always)]
+    fn pow(self, exp: f64) -> Self {
+        self.powf(Vector::splat(exp))
+    }
+}

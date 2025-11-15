@@ -16,7 +16,10 @@ use core::ops::{
     Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
-use num_traits::{MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, Zero};
+use num_traits::{
+    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd,
+    WrappingMul, WrappingSub, Zero,
+};
 
 /// SIMD Vector type.
 ///
@@ -917,11 +920,11 @@ impl<R: FloatRegister> Vector<R> {
     }
 }
 
-impl<R: NumericRegister> num_traits::ConstZero for Vector<R> {
+impl<R: NumericRegister> ConstZero for Vector<R> {
     const ZERO: Self = Self(R::ZERO);
 }
 
-impl<R: NumericRegister> num_traits::ConstOne for Vector<R> {
+impl<R: NumericRegister> ConstOne for Vector<R> {
     const ONE: Self = Self(R::ONE);
 }
 
@@ -1243,6 +1246,27 @@ impl<R: IntegerRegister> Saturating for Vector<R> {
     #[inline(always)]
     fn saturating_sub(self, v: Self) -> Self {
         Self(R::saturating_sub(self.0, v.0))
+    }
+}
+
+impl<R: IntegerRegister> WrappingAdd for Vector<R> {
+    #[inline(always)]
+    fn wrapping_add(&self, v: &Self) -> Self {
+        Self(R::add(self.0, v.0))
+    }
+}
+
+impl<R: IntegerRegister> WrappingSub for Vector<R> {
+    #[inline(always)]
+    fn wrapping_sub(&self, v: &Self) -> Self {
+        Self(R::sub(self.0, v.0))
+    }
+}
+
+impl<R: IntegerRegister> WrappingMul for Vector<R> {
+    #[inline(always)]
+    fn wrapping_mul(&self, v: &Self) -> Self {
+        Self(R::mul(self.0, v.0))
     }
 }
 
@@ -1752,3 +1776,30 @@ impl<R: PartialOrdRegister> PartialOrd for Vector<R> {
         }
     }
 }
+
+macro_rules! impl_unsigned_pow {
+    ($($t:ty),* $(,)?) => {$(
+        impl<R: NumericRegister> num_traits::Pow<$t> for Vector<R> {
+            type Output = Self;
+
+            #[inline(always)]
+            fn pow(self, mut e: $t) -> Self::Output {
+                let mut res = Self::ONE;
+                let mut x = self;
+
+                while e != 0 {
+                    if e & 1 != 0 {
+                        res *= x;
+                    }
+
+                    x *= x;
+                    e >>= 1;
+                }
+
+                res
+            }
+        })*
+    };
+}
+
+impl_unsigned_pow!(u8, u16, u32, u64, usize);
