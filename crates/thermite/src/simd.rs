@@ -81,21 +81,21 @@ pub trait Simd: NativeSimd {
     type u64x8: Interoperable<Self::f64x8, Self::i64x8, Lanes = U8, Element = u64, UCOUNT = Self::u64x8, SCOUNT = Self::i64x8>
         + UnsignedIntegerRegister + CastRegister<Self::u32x8>;
 
-    // // 512/32-bit SIMD types
-    // type f32x16: Interoperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
-    //     + FloatRegister<Bits = Self::u32x16, Signed = Self::i32x16> + CastRegister<Self::f64x16>;
-    // type i32x16: Interoperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
-    //     + SignedIntegerRegister + CastRegister<Self::i64x16>;
-    // type u32x16: Interoperable<Self::f32x16, Self::i32x16, Lanes = U16, Element = u32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
-    //     + UnsignedIntegerRegister + CastRegister<Self::u64x16>;
+    // 512/32-bit SIMD types
+    type f32x16: Interoperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
+        + FloatRegister<Bits = Self::u32x16, Signed = Self::i32x16> + CastRegister<Self::f64x16>;
+    type i32x16: Interoperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
+        + SignedIntegerRegister + CastRegister<Self::i64x16>;
+    type u32x16: Interoperable<Self::f32x16, Self::i32x16, Lanes = U16, Element = u32, UCOUNT = Self::u32x16, SCOUNT = Self::i32x16>
+        + UnsignedIntegerRegister + CastRegister<Self::u64x16>;
 
-    // // 1024/64-bit SIMD types
-    // type f64x16: Interoperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
-    //     + FloatRegister<Bits = Self::u64x16, Signed = Self::i64x16> + CastRegister<Self::f32x16>;
-    // type i64x16: Interoperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
-    //     + IntegerRegister + SignedRegister + CastRegister<Self::i32x16>;
-    // type u64x16: Interoperable<Self::f64x16, Self::i64x16, Lanes = U16, Element = u64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
-    //     + UnsignedIntegerRegister + CastRegister<Self::u32x16>;
+    // 1024/64-bit SIMD types
+    type f64x16: Interoperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
+        + FloatRegister<Bits = Self::u64x16, Signed = Self::i64x16> + CastRegister<Self::f32x16>;
+    type i64x16: Interoperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
+        + IntegerRegister + SignedRegister + CastRegister<Self::i32x16>;
+    type u64x16: Interoperable<Self::f64x16, Self::i64x16, Lanes = U16, Element = u64, UCOUNT = Self::u64x16, SCOUNT = Self::i64x16>
+        + UnsignedIntegerRegister + CastRegister<Self::u32x16>;
 }
 
 pub type f32xN<S> = Vector<<S as NativeSimd>::f32xN>;
@@ -126,13 +126,13 @@ pub type f64x8<S> = Vector<<S as Simd>::f64x8>;
 pub type i64x8<S> = Vector<<S as Simd>::i64x8>;
 pub type u64x8<S> = Vector<<S as Simd>::u64x8>;
 
-// pub type f32x16<S> = Vector<<S as Simd>::f32x16>;
-// pub type i32x16<S> = Vector<<S as Simd>::i32x16>;
-// pub type u32x16<S> = Vector<<S as Simd>::u32x16>;
+pub type f32x16<S> = Vector<<S as Simd>::f32x16>;
+pub type i32x16<S> = Vector<<S as Simd>::i32x16>;
+pub type u32x16<S> = Vector<<S as Simd>::u32x16>;
 
-// pub type f64x16<S> = Vector<<S as Simd>::f64x16>;
-// pub type i64x16<S> = Vector<<S as Simd>::i64x16>;
-// pub type u64x16<S> = Vector<<S as Simd>::u64x16>;
+pub type f64x16<S> = Vector<<S as Simd>::f64x16>;
+pub type i64x16<S> = Vector<<S as Simd>::i64x16>;
+pub type u64x16<S> = Vector<<S as Simd>::u64x16>;
 
 macro_rules! decl_aliases {
     ($simd:ty) => {

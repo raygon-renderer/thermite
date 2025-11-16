@@ -48,6 +48,14 @@ impl Simd for Scalar {
     type f64x8 = DoublePumpRegister<Self::f64x4>;
     type i64x8 = DoublePumpRegister<Self::i64x4>;
     type u64x8 = DoublePumpRegister<Self::u64x4>;
+
+    type f32x16 = DoublePumpRegister<Self::f32x8>;
+    type i32x16 = DoublePumpRegister<Self::i32x8>;
+    type u32x16 = DoublePumpRegister<Self::u32x8>;
+
+    type f64x16 = DoublePumpRegister<Self::f64x8>;
+    type i64x16 = DoublePumpRegister<Self::i64x8>;
+    type u64x16 = DoublePumpRegister<Self::u64x8>;
 }
 
 decl_aliases!(Scalar);

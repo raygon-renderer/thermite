@@ -1,26 +1,40 @@
-use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
+use generic_array::{
+    GenericArray,
+    sequence::GenericSequence,
+    typenum::{self, Unsigned},
+};
 
-use crate::register::{
-    FloatRegister, LinAlg3Register, NumericRegister, PermuteRegister, Register, BitshiftRegister, ShuffleRegister,
-    SignedRegister, SwizzleRegister, dp::DoublePumpRegister,
+use crate::{
+    isa::InstructionSet,
+    register::{
+        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+        dp::DoublePumpRegister, empty_reg, reg,
+    },
 };
 
 use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
-pub struct F32x4SSE41;
+pub struct F32x4V2;
 
-impl Register for F32x4SSE41 {
-    type Lanes = generic_array::typenum::U4;
+impl Register for F32x4V2 {
+    type Lanes = typenum::U4;
 
     type Element = f32;
     type Storage = arch::__m128;
-
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const ISA: InstructionSet = InstructionSet::X86V2;
+
+    type UCOUNT = super::U32x4V2;
+    type SCOUNT = super::I32x4V2;
+
+    const EMPTY: Self::Storage = empty_reg::<Self>();
+
     #[inline(always)]
-    fn new(value: generic_array::GenericArray<f32, Self::Lanes>) -> Self::Storage {
+    fn new(value: GenericArray<f32, Self::Lanes>) -> Self::Storage {
         unsafe { arch::_mm_loadu_ps(value.as_ptr()) }
     }
 
@@ -30,27 +44,42 @@ impl Register for F32x4SSE41 {
     }
 
     #[inline(always)]
-    fn empty() -> Self::Storage {
-        unsafe { arch::_mm_undefined_ps() }
+    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_load_ps(ptr) }
     }
 
     #[inline(always)]
-    fn xor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_loadu_ps(ptr) }
+    }
+
+    #[inline(always)]
+    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_store_ps(ptr, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_storeu_ps(ptr, value) }
+    }
+
+    #[inline(always)]
+    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_ps(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn and(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_and_ps(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn andnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_andnot_ps(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn or(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_or_ps(lhs, rhs) }
     }
 
@@ -64,147 +93,140 @@ impl Register for F32x4SSE41 {
         unsafe { arch::_mm_blendv_ps(lhs, rhs, mask) }
     }
 
-    #[inline(always)]
-    fn shl(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_sll_epi32(
-                arch::_mm_castps_si128(value),
-                arch::_mm_set_epi32(0, 0, 0, shift as i32),
-            ))
-        }
-    }
+    const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
-    fn shr(value: Self::Storage, shift: u32) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(arch::_mm_srl_epi32(
-                arch::_mm_castps_si128(value),
-                arch::_mm_set_epi32(0, 0, 0, shift as i32),
-            ))
-        }
-    }
-
-    #[inline(always)]
-    fn shlv(mut value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        // TODO: use _mm_sllv_epi32 doesn't exist on SSE4.1, so we may want to emulate it
-        // more intelligently later.
-        Self::as_array_mut(&mut value)
-            .iter_mut()
-            .zip(shifts)
-            .for_each(|(v, s)| {
-                let mut vi = v.to_bits();
-                vi <<= s;
-                *v = f32::from_bits(vi);
-            });
-
-        value
-    }
-
-    #[inline(always)]
-    fn shrv(mut value: Self::Storage, shifts: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        Self::as_array_mut(&mut value)
-            .iter_mut()
-            .zip(shifts)
-            .for_each(|(v, s)| {
-                let mut vi = v.to_bits();
-                vi >>= s;
-                *v = f32::from_bits(vi);
-            });
-
-        value
+    fn reverse(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_shuffle_ps(value, value, 0b11_01_10_00) }
     }
 }
 
-impl BitshiftRegister for F32x4SSE41 {
-    #[inline(always)]
-    fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_ps(arch::_mm_slli_epi32(arch::_mm_castps_si128(value), IMM8)) }
-    }
-
-    #[inline(always)]
-    fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_castsi128_ps(arch::_mm_srli_epi32(arch::_mm_castps_si128(value), IMM8)) }
-    }
-}
-
-impl ShuffleRegister for F32x4SSE41 {
+impl ShuffleRegister for F32x4V2 {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_shuffle_ps(lhs, rhs, IMM8) }
     }
 }
 
-impl PermuteRegister for F32x4SSE41 {
+impl PermuteRegister for F32x4V2 {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_shuffle_ps(value, value, IMM8) }
     }
 }
 
-impl SwizzleRegister for F32x4SSE41 {
+impl SwizzleRegister for F32x4V2 {
+    const HAS_PERMUTEV: bool = true;
+
+    #[inline(always)]
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
-        unsafe {
-            arch::_mm_castsi128_ps(crate::backend::sse41::polyfills::_mm_permutevarx_epi32(
-                arch::_mm_castps_si128(value),
-                core::mem::transmute(idxs),
-            ))
-        }
+        unsafe { arch::_mm_permutevar_ps_v2(value, core::mem::transmute(idxs)) }
     }
 
     #[inline(always)]
-    fn swizzle2<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-        a: Self::Storage,
-        b: Self::Storage,
-    ) -> Self::Storage {
+    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
-            arch::_mm_blend_ps(
-                arch::_mm_shuffle_ps(a, a, AIMM8),
-                arch::_mm_shuffle_ps(b, b, BIMM8),
-                BLEND,
-            )
+            let idxs: arch::__m128i = core::mem::transmute(idxs);
+
+            let four = arch::_mm_set1_epi32(4);
+
+            // NOTE: Because of lt, this is reversed
+            let blend = arch::_mm_cmplt_epi32(idxs, four);
+            let a_idxs = arch::_mm_and_si128(idxs, arch::_mm_set1_epi32(0b11));
+            let b_idxs = arch::_mm_sub_epi32(idxs, four);
+
+            let tmp_a = arch::_mm_permutevar_ps_v2(a, a_idxs);
+            let tmp_b = arch::_mm_permutevar_ps_v2(b, b_idxs);
+
+            // NOTE: Again, reversed
+            arch::_mm_blendv_ps(tmp_b, tmp_a, arch::_mm_castsi128_ps(blend))
         }
     }
 }
 
-impl NumericRegister for F32x4SSE41 {
+impl MaskRegister for F32x4V2 {
+    const FALSY: Self::Storage = reg::<Self, 4>([0.0; 4]);
+    const TRUTHY: Self::Storage = reg::<Self, 4>([f32::from_bits(!0); 4]);
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+        unsafe { arch::_mm_castsi128_ps(arch::_mm_cvtboolx4_to_epi32_mask_v2(value)) }
+    }
+
+    #[inline(always)]
+    fn all(value: Self::Storage) -> bool {
+        unsafe { arch::_mm_movemask_ps(value) == 0b1111 }
+    }
+
+    #[inline(always)]
+    fn any(value: Self::Storage) -> bool {
+        unsafe { arch::_mm_movemask_ps(value) != 0 }
+    }
+
+    #[inline(always)]
+    fn none(value: Self::Storage) -> bool {
+        unsafe { arch::_mm_movemask_ps(value) == 0 }
+    }
+}
+
+impl PartialOrdRegister for F32x4V2 {
+    #[inline(always)]
+    fn lt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmplt_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn le(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmple_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmpgt_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmpge_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmpeq_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_cmpneq_ps(lhs, rhs) }
+    }
+}
+
+impl NumericRegister for F32x4V2 {
+    const ZERO: Self::Storage = reg::<Self, 4>([0.0; 4]);
+    const ONE: Self::Storage = reg::<Self, 4>([1.0; 4]);
+    const TWO: Self::Storage = reg::<Self, 4>([2.0; 4]);
+
+    const MIN: Self::Storage = reg::<Self, 4>([f32::MIN; 4]);
+    const MAX: Self::Storage = reg::<Self, 4>([f32::MAX; 4]);
+
     #[inline(always)]
     fn min_element(value: Self::Storage) -> Self::Element {
-        _mm_reduce_ps!(value; _mm_min_ps _mm_min_ss)
+        _mm_reduce_ps_v2!(value; _mm_min_ps _mm_min_ss)
     }
 
     #[inline(always)]
     fn max_element(value: Self::Storage) -> Self::Element {
-        _mm_reduce_ps!(value; _mm_max_ps _mm_max_ss)
+        _mm_reduce_ps_v2!(value; _mm_max_ps _mm_max_ss)
     }
 
     #[inline(always)]
     fn sum_elements(value: Self::Storage) -> Self::Element {
-        _mm_reduce_ps!(value; _mm_add_ps _mm_add_ss)
+        _mm_reduce_ps_v2!(value; _mm_add_ps _mm_add_ss)
     }
 
     #[inline(always)]
     fn prod_elements(value: Self::Storage) -> Self::Element {
-        _mm_reduce_ps!(value; _mm_mul_ps _mm_mul_ss)
-    }
-
-    #[inline(always)]
-    fn max_value() -> Self::Storage {
-        Self::splat(f32::MAX)
-    }
-
-    #[inline(always)]
-    fn min_value() -> Self::Storage {
-        Self::splat(f32::MIN)
-    }
-
-    #[inline(always)]
-    fn one() -> Self::Storage {
-        Self::splat(1.0)
-    }
-
-    #[inline(always)]
-    fn zero() -> Self::Storage {
-        Self::splat(0.0)
+        _mm_reduce_ps_v2!(value; _mm_mul_ps _mm_mul_ss)
     }
 
     #[inline(always)]
@@ -254,65 +276,52 @@ impl NumericRegister for F32x4SSE41 {
     }
 }
 
-impl SignedRegister for F32x4SSE41 {
-    #[inline(always)]
-    fn neg_one() -> Self::Storage {
-        Self::splat(-1.0)
-    }
+impl SignedRegister for F32x4V2 {
+    const NEG_ONE: Self::Storage = reg::<Self, 4>([-1.0; 4]);
+    const MIN_POSITIVE: Self::Storage = reg::<Self, 4>([f32::MIN_POSITIVE; 4]);
 
     #[inline(always)]
     fn neg(value: Self::Storage) -> Self::Storage {
-        Self::xor(value, Self::splat(f32::from_bits(0x8000_0000)))
+        Self::bitxor(value, Self::NEG_ZERO)
     }
 
     #[inline(always)]
     fn abs(value: Self::Storage) -> Self::Storage {
-        Self::and(value, Self::splat(f32::from_bits(0x7fffffff)))
+        Self::bitandnot(Self::NEG_ZERO, value)
     }
 
     #[inline(always)]
     fn copysign(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        let sign_mask = Self::splat(f32::from_bits(0x8000_0000));
-
         // take everything but the sign from lhs, and copy the sign from rhs
-        Self::or(Self::andnot(sign_mask, lhs), Self::and(sign_mask, rhs))
+        Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
     #[inline(always)]
     fn signum(value: Self::Storage) -> Self::Storage {
-        // copy sign bit to 1.0
-        Self::or(
-            Self::splat(1.0),
-            Self::and(value, Self::splat(f32::from_bits(0x8000_0000))),
-        )
+        Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
+    }
+
+    #[inline(always)]
+    fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage {
+        Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
-impl FloatRegister for F32x4SSE41 {
-    #[inline(always)]
-    fn neg_zero() -> Self::Storage {
-        Self::splat(-0.0)
-    }
+impl FloatRegister for F32x4V2 {
+    const HAS_TRUE_FMA: bool = false;
 
-    #[inline(always)]
-    fn epsilon() -> Self::Storage {
-        Self::splat(f32::EPSILON)
-    }
+    type Bits = super::U32x4V2;
+    type Signed = super::I32x4V2;
+    type ExtendedPrecision = DoublePumpRegister<super::F64x2V2>;
 
-    #[inline(always)]
-    fn infinity() -> Self::Storage {
-        Self::splat(f32::INFINITY)
-    }
+    const HALF: Self::Storage = reg::<Self, 4>([0.5; 4]);
+    const NEG_ZERO: Self::Storage = reg::<Self, 4>([-0.0; 4]);
+    const EPSILON: Self::Storage = reg::<Self, 4>([f32::EPSILON; 4]);
+    const INFINITY: Self::Storage = reg::<Self, 4>([f32::INFINITY; 4]);
+    const NEG_INFINITY: Self::Storage = reg::<Self, 4>([f32::NEG_INFINITY; 4]);
+    const NAN: Self::Storage = reg::<Self, 4>([f32::NAN; 4]);
 
-    #[inline(always)]
-    fn neg_infinity() -> Self::Storage {
-        Self::splat(f32::NEG_INFINITY)
-    }
-
-    #[inline(always)]
-    fn nan() -> Self::Storage {
-        Self::splat(f32::NAN)
-    }
+    const EXP_MASK: Storage<Self::Bits> = reg::<Self::Bits, 4>([0x7F800000; 4]);
 
     #[inline(always)]
     fn sqrt(value: Self::Storage) -> Self::Storage {
@@ -328,6 +337,9 @@ impl FloatRegister for F32x4SSE41 {
     fn rcp(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_rcp_ps(value) }
     }
+
+    const HAS_APPROX_RSQRT: bool = true;
+    const HAS_APPROX_RCP: bool = true;
 
     #[inline(always)]
     fn floor(value: Self::Storage) -> Self::Storage {
@@ -348,26 +360,68 @@ impl FloatRegister for F32x4SSE41 {
     fn trunc(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_round_ps(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
+
+    #[inline(always)]
+    fn next_up(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_nextupps_v2(value) }
+    }
+
+    #[inline(always)]
+    fn next_down(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_nextdownps_v2(value) }
+    }
 }
 
-impl LinAlg3Register for F32x4SSE41 {
+impl LinAlg3Register for F32x4V2 {
     #[inline(always)]
     fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> f32 {
-        unsafe { crate::backend::sse41::polyfills::dot3_sse41(lhs, rhs) }
+        unsafe { arch::dot3_v1(lhs, rhs) }
     }
 
     #[inline(always)]
     fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        unsafe { crate::backend::sse41::polyfills::cross3_sse41(lhs, rhs) }
+        unsafe { arch::cross3_v1(lhs, rhs) }
     }
 
     #[inline(always)]
     fn zero4(value: Self::Storage) -> Self::Storage {
-        unsafe { crate::backend::sse41::polyfills::zero4_sse41(value) }
+        unsafe { arch::zero4_v2(value) }
     }
 
     #[inline(always)]
     fn one4(value: Self::Storage) -> Self::Storage {
-        unsafe { crate::backend::sse41::polyfills::one4_sse41(value) }
+        unsafe { arch::one4_v2(value) }
+    }
+
+    #[inline(always)]
+    fn min_element3(value: Self::Storage) -> Self::Element {
+        _mm_reduce_ps3_v1!(value; _mm_min_ss)
+    }
+
+    #[inline(always)]
+    fn max_element3(value: Self::Storage) -> Self::Element {
+        _mm_reduce_ps3_v1!(value; _mm_max_ss)
+    }
+
+    #[inline(always)]
+    fn sum_elements3(value: Self::Storage) -> Self::Element {
+        _mm_reduce_ps3_v1!(value; _mm_add_ss)
+    }
+
+    #[inline(always)]
+    fn prod_elements3(value: Self::Storage) -> Self::Element {
+        _mm_reduce_ps3_v1!(value; _mm_mul_ss)
+    }
+}
+
+impl CastRegister<F32x4V2> for DoublePumpRegister<super::F64x2V2> {
+    #[inline(always)]
+    fn cast_from(value: <F32x4V2 as Register>::Storage) -> Self::Storage {
+        unsafe {
+            let lo = arch::_mm_cvtps_pd(value);
+            let hi = arch::_mm_cvtps_pd(arch::_mm_movehl_ps(value, value));
+
+            DoublePumpRegister::join(lo, hi)
+        }
     }
 }
