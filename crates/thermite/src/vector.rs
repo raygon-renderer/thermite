@@ -3,6 +3,7 @@
 //! Vector type and operations, where each vector wraps a low-level SIMD register type.
 
 use crate::{
+    divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
     mask::Mask,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
@@ -1286,6 +1287,44 @@ impl<R: IntegerRegister> WrappingMul for Vector<R> {
 }
 
 impl<R: IntegerRegister> Vector<R> {
+    /// Use this vector as the denominators for a vectorized division operation.
+    ///
+    /// This creates a `VectorDivider` which can then be used to perform
+    /// vectorized integer division with the `Div` trait. Note that for unsigned
+    /// integer types, `1` is not a valid denominator and will cause a panic.
+    ///
+    /// This operation itself is NOT vectorized and is `O(n)` in the number of lanes.
+    /// It is designed to be calculated once and then reused for multiple division operations.
+    ///
+    /// # Panics
+    ///
+    /// If unsigned, integer values of `1` present in the vector
+    /// denominators will cause a panic.
+    #[inline(always)]
+    pub fn to_divider(self) -> VectorDivider<R>
+    where
+        R::Element: Denominator,
+    {
+        VectorDivider::new(self)
+    }
+
+    /// Try to use this vector as the denominators for a vectorized division operation.
+    ///
+    /// This creates a `VectorDivider` which can then be used to perform
+    /// vectorized integer division with the `Div` trait. If any of the
+    /// denominators are unsupported (such as `1` for unsigned integers),
+    /// an error is returned.
+    ///
+    /// This operation itself is NOT vectorized and is `O(n)` in the number of lanes.
+    /// It is designed to be calculated once and then reused for multiple division operations.
+    #[inline(always)]
+    pub fn try_to_divider(self) -> Result<VectorDivider<R>, UnsupportedDivisor>
+    where
+        R::Element: Denominator,
+    {
+        VectorDivider::try_new(self)
+    }
+
     /// Perform saturating addition for each element of the vectors.
     #[inline(always)]
     pub fn saturating_add(self, rhs: Self) -> Self {
@@ -1331,21 +1370,30 @@ impl<R: IntegerRegister> Vector<R> {
     }
 }
 
-impl<R: IntegerRegister> Div<crate::divider::Divider<R::Element>> for Vector<R> {
+impl<R: IntegerRegister> Div<Divider<R::Element>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn div(self, rhs: crate::divider::Divider<R::Element>) -> Self::Output {
+    fn div(self, rhs: Divider<R::Element>) -> Self::Output {
         Self(R::div_branched(self.0, rhs))
     }
 }
 
-impl<R: IntegerRegister> Div<crate::divider::BranchfreeDivider<R::Element>> for Vector<R> {
+impl<R: IntegerRegister> Div<BranchfreeDivider<R::Element>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn div(self, rhs: crate::divider::BranchfreeDivider<R::Element>) -> Self::Output {
+    fn div(self, rhs: BranchfreeDivider<R::Element>) -> Self::Output {
         Self(R::div_branchfree(self.0, rhs))
+    }
+}
+
+impl<R: IntegerRegister> Div<VectorDivider<R>> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: VectorDivider<R>) -> Self::Output {
+        Self(R::divv_branchfree(self.0, rhs))
     }
 }
 

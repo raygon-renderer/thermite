@@ -166,6 +166,15 @@ impl IntegerRegister for [<U $width x1Scalar>] {
         divider.divide(value)
     }
 
+    #[inline(always)]
+    fn divv_branchfree(value: Self::Storage, dividers: crate::divider::vector::VectorDivider<Self>) -> Self::Storage {
+        let m = dividers.multipliers;
+        let s = dividers.shifts;
+
+        // reconstitute scalar branchfree divider
+        crate::divider::BranchfreeDivider::<$i>::new(m.0, s.0 as i8 as u8).divide(value)
+    }
+
     #[inline(always)] fn count_ones(value: Self::Storage) -> Self::Storage { value.count_ones() as _ }
     #[inline(always)] fn count_zeros(value: Self::Storage) -> Self::Storage { value.count_ones() as _ }
     #[inline(always)] fn leading_zeros(value: Self::Storage) -> Self::Storage { value.leading_zeros() as _ }

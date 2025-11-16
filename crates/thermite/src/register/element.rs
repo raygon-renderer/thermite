@@ -18,6 +18,8 @@ pub trait Element: Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::
     fn from_bool(value: bool) -> Self {
         if value { Self::TRUTHY } else { Self::FALSY }
     }
+
+    fn from_i8(value: i8) -> Self;
 }
 
 macro_rules! impl_element {
@@ -31,6 +33,9 @@ macro_rules! impl_element {
 
             #[inline(always)]
             fn to_bool(self) -> bool { self != 0 }
+
+            #[inline(always)]
+            fn from_i8(value: i8) -> Self { value as $t }
         }
     )+};
 }
@@ -59,6 +64,11 @@ impl Element for f32 {
     fn to_bool(self) -> bool {
         self.to_bits() != 0
     }
+
+    #[inline(always)]
+    fn from_i8(value: i8) -> Self {
+        value as f32
+    }
 }
 
 impl Element for f64 {
@@ -71,6 +81,11 @@ impl Element for f64 {
     #[inline(always)]
     fn to_bool(self) -> bool {
         self.to_bits() != 0
+    }
+
+    #[inline(always)]
+    fn from_i8(value: i8) -> Self {
+        value as f64
     }
 }
 

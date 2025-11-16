@@ -369,6 +369,11 @@ impl IntegerRegister for I64x2V2 {
     }
 
     #[inline(always)]
+    fn divv_branchfree(value: Self::Storage, dividers: crate::divider::vector::VectorDivider<Self>) -> Self::Storage {
+        unsafe { arch::_mm_divv_epi64x_bf_v1(value, dividers.multipliers.0, dividers.shifts.0) }
+    }
+
+    #[inline(always)]
     fn count_ones(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_popcnt_epi64x_v2(value) }
     }

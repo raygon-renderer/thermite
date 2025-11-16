@@ -386,6 +386,11 @@ impl IntegerRegister for I32x4V3 {
     }
 
     #[inline(always)]
+    fn divv_branchfree(value: Self::Storage, dividers: crate::divider::vector::VectorDivider<Self>) -> Self::Storage {
+        unsafe { arch::_mm_divv_epi32x_bf_v2(value, dividers.multipliers.0, dividers.shifts.0) }
+    }
+
+    #[inline(always)]
     fn count_ones(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_popcnt_epi32x_v2(value) }
     }

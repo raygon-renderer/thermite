@@ -77,3 +77,51 @@ pub unsafe fn _mm_div_epi32x_bf_v2(numers: __m128i, multiplier: i32, shift: u8) 
 
     q
 }
+
+#[inline(always)]
+pub unsafe fn _mm_divv_epi32x_bf_v2(numers: __m128i, multipliers: __m128i, shifts: __m128i) -> __m128i {
+    const SHIFT_MASK: u8 = crate::divider::Divider::<u32>::SHIFT_MASK;
+
+    let masked_shift = _mm_and_si128(shifts, _mm_set1_epi32(SHIFT_MASK as i32));
+
+    let sign = _mm_srai_epi32(shifts, 31); // must be arithmetic shift
+    let mut q = _mm_mullhi_epi32x_v2(numers, multipliers);
+    q = _mm_add_epi32(q, numers); // q += numers
+
+    // If q is non-negative, we have nothing to do
+    // If q is negative, we want to add either (2**shift)-1 if d is
+    // a power of 2, or (2**shift) if it is not a power of 2
+    let is_power_of_2 = _mm_cmpeq_epi32(multipliers, _mm_setzero_si128());
+
+    let q_sign = _mm_srai_epi32(q, 31); // q_sign = q >> 31
+    let mask = _mm_sub_epi32(_mm_sllv_epi32x_v1(_mm_set1_epi32(1), masked_shift), is_power_of_2);
+    q = _mm_add_epi32(q, _mm_and_si128(q_sign, mask)); // q = q + (q_sign & mask)
+    q = _mm_srav_epi32x_v1(q, masked_shift); // q >>= shift
+    q = _mm_sub_epi32(_mm_xor_si128(q, sign), sign); // q = (q ^ sign) - sign
+
+    q
+}
+
+#[inline(always)]
+pub unsafe fn _mm_divv_epi64x_bf_v2(numers: __m128i, multipliers: __m128i, shifts: __m128i) -> __m128i {
+    const SHIFT_MASK: u8 = crate::divider::Divider::<u64>::SHIFT_MASK;
+
+    let masked_shift = _mm_and_si128(shifts, _mm_set1_epi64x(SHIFT_MASK as i64));
+
+    let sign = _mm_srai_epi64x_v1(shifts, 63); // must be arithmetic shift
+    let mut q = _mm_mullhi_epi64x_v1(numers, multipliers);
+    q = _mm_add_epi64(q, numers); // q += numers
+
+    // If q is non-negative, we have nothing to do.
+    // If q is negative, we want to add either (2**shift)-1 if d is
+    // a power of 2, or (2**shift) if it is not a power of 2.
+    let is_power_of_2 = _mm_cmpeq_epi64(multipliers, _mm_setzero_si128());
+
+    let q_sign = _mm_srai_epi64x_v1(q, 63); // q_sign = q >> 63
+    let mask = _mm_sub_epi64(_mm_sllv_epi64x_v1(_mm_set1_epi64x(1), masked_shift), is_power_of_2);
+    q = _mm_add_epi64(q, _mm_and_si128(q_sign, mask)); // q = q + (q_sign & mask)
+    q = _mm_srav_epi64x_v1(q, masked_shift); // q >>= shift
+    q = _mm_sub_epi64(_mm_xor_si128(q, sign), sign); // q = (q ^ sign) - sign
+
+    q
+}

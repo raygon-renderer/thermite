@@ -11,7 +11,7 @@ use generic_array::{
 };
 
 use crate::{
-    divider::{BranchfreeDivider, Divider},
+    divider::{BranchfreeDivider, Divider, vector::VectorDivider},
     isa::InstructionSet,
 };
 
@@ -867,6 +867,7 @@ pub trait IntegerRegister: NumericRegister + BitshiftRegister {
 
     fn div_branched(value: Self::Storage, divider: Divider<Self::Element>) -> Self::Storage;
     fn div_branchfree(value: Self::Storage, divider: BranchfreeDivider<Self::Element>) -> Self::Storage;
+    fn divv_branchfree(value: Self::Storage, dividers: VectorDivider<Self>) -> Self::Storage;
 
     fn count_ones(value: Self::Storage) -> Self::Storage;
 

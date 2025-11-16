@@ -120,6 +120,10 @@ impl PermuteRegister for F64x2V3 {
     }
 }
 
+impl SwizzleRegister for F64x2V3 {
+    const HAS_PERMUTEV: bool = false;
+}
+
 impl MaskRegister for F64x2V3 {
     const FALSY: Self::Storage = reg::<Self, 2>([f64::from_bits(0); 2]);
     const TRUTHY: Self::Storage = reg::<Self, 2>([f64::from_bits(!0); 2]);

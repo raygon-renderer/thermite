@@ -8,6 +8,8 @@
 
 #![allow(unused)]
 
+pub mod vector;
+
 use core::ops::Deref;
 
 macro_rules! decl_div_half {
@@ -26,6 +28,21 @@ macro_rules! decl_div_half {
 }
 
 decl_div_half!(u64 => u128, u32 => u64, u16 => u32, u8 => u16);
+
+/// Trait for types that can be used as denominators in dividers.
+pub trait Denominator: Sized {
+    /// Create a divider for this denominator.
+    fn to_divider(self) -> Divider<Self>;
+
+    /// Create a branchfree divider for this denominator.
+    fn to_branchfree_divider(self) -> BranchfreeDivider<Self>;
+
+    /// Try to create a branchfree divider for this denominator.
+    ///
+    /// Branchfree dividers may not support all divisors, see the documentation of
+    /// [`BranchfreeDivider`] for details.
+    fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor>;
+}
 
 /// Divider recommended for constant divisors.
 ///
@@ -182,6 +199,23 @@ macro_rules! impl_unsigned_divider {
                 }
             }
 
+            impl Denominator for $t {
+                #[inline(always)]
+                fn to_divider(self) -> Divider<Self> {
+                    Divider::[<$t>](self)
+                }
+
+                #[inline(always)]
+                fn to_branchfree_divider(self) -> BranchfreeDivider<Self> {
+                    BranchfreeDivider::[<$t>](self)
+                }
+
+                #[inline(always)]
+                fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor> {
+                    BranchfreeDivider::[<try_ $t>](self).ok_or(UnsupportedDivisor)
+                }
+            }
+
             impl Divider<$t> {
                 /// Create a new divider for the given divisor.
                 #[inline(always)]
@@ -307,6 +341,23 @@ macro_rules! impl_signed_divider {
                 }
             }
 
+            impl Denominator for $t {
+                #[inline(always)]
+                fn to_divider(self) -> Divider<Self> {
+                    Divider::[<$t>](self)
+                }
+
+                #[inline(always)]
+                fn to_branchfree_divider(self) -> BranchfreeDivider<Self> {
+                    BranchfreeDivider::[<$t>](self)
+                }
+
+                #[inline(always)]
+                fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor> {
+                    Ok(BranchfreeDivider::[<$t>](self))
+                }
+            }
+
             impl Divider<$t> {
                 /// Create a new divider for the given divisor.
                 #[inline(always)]
@@ -402,6 +453,18 @@ macro_rules! impl_divider {
             #[inline(always)]
             pub(crate) const fn mullhi(x: $t, y: $t) -> $t {
                 (((x as $dt) * (y as $dt)) >> <$t>::BITS) as $t
+            }
+
+            #[inline(always)]
+            pub(crate) const fn new(m: $t, s: u8) -> Self {
+                Divider { multiplier: m, shift: s }
+            }
+        }
+
+        impl BranchfreeDivider<$t> {
+            #[inline(always)]
+            pub(crate) const fn new(m: $t, s: u8) -> Self {
+                BranchfreeDivider(Divider { multiplier: m, shift: s })
             }
         }
     )*}};

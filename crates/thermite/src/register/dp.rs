@@ -1,6 +1,7 @@
 use core::ops::Shl;
 
 use crate::{
+    divider::vector::VectorDivider,
     isa::InstructionSet,
     register::{Element, SignedIntegerRegister},
 };
@@ -27,7 +28,7 @@ use generic_array::{
 /// type f32x32 = DoublePump<f32x16>;
 /// ```
 #[repr(C)]
-pub struct DoublePumpRegister<R: Register>(R::Storage, R::Storage);
+pub struct DoublePumpRegister<R: Register>(pub(crate) R::Storage, pub(crate) R::Storage);
 
 const _: () = {
     use core::fmt;
@@ -692,6 +693,12 @@ where
         divider: crate::divider::BranchfreeDivider<Self::Element>,
     ) -> Self::Storage {
         Self(R::div_branchfree(value.0, divider), R::div_branchfree(value.1, divider))
+    }
+
+    #[inline(always)]
+    fn divv_branchfree(value: Self::Storage, dividers: VectorDivider<Self>) -> Self::Storage {
+        let (lo, hi) = dividers.split();
+        Self(R::divv_branchfree(value.0, lo), R::divv_branchfree(value.1, hi))
     }
 
     #[inline(always)]
