@@ -15,39 +15,6 @@ pub unsafe fn _mm_cvtepu32_psx_v2(x: __m128i) -> __m128 {
     xmm0
 }
 
-/// Only works for inputs in the range: [-2^51, 2^51]
-#[inline(always)]
-pub unsafe fn _mm_cvtpd_epi64x_limited_v2(mut x: __m128d) -> __m128i {
-    // https://stackoverflow.com/a/41148578/2083075
-    let m = _mm_set1_pd(0x0018000000000000u64 as i64 as f64);
-    x = _mm_add_pd(x, m);
-    _mm_sub_epi64(_mm_castpd_si128(x), _mm_castpd_si128(m))
-}
-
-/// Only works for inputs in the range: [0, 2^52)
-#[inline(always)]
-pub unsafe fn _mm_cvtpd_epu64x_limited_v2(x: __m128d) -> __m128i {
-    // https://stackoverflow.com/a/41148578/2083075
-    let m = _mm_set1_pd(0x0010000000000000u64 as i64 as f64);
-    _mm_castpd_si128(_mm_xor_pd(_mm_add_pd(x, m), m))
-}
-
-/// Only works for inputs in the range: [-2^51, 2^51]
-#[inline(always)]
-pub unsafe fn _mm_cvtepi64_pdx_limited_v2(mut x: __m128i) -> __m128d {
-    // https://stackoverflow.com/a/41223013/2083075
-    let m = _mm_set1_pd(0x0018000000000000u64 as i64 as f64);
-    _mm_sub_pd(_mm_castsi128_pd(_mm_add_epi64(x, _mm_castpd_si128(m))), m)
-}
-
-/// Only works for inputs in the range: [0, 2^52)
-#[inline(always)]
-pub unsafe fn _mm_cvtepu64_pdx_limited_v2(mut x: __m128i) -> __m128d {
-    // https://stackoverflow.com/a/41223013/2083075
-    let m = _mm_set1_pd(0x0010000000000000u64 as i64 as f64);
-    _mm_sub_pd(_mm_castsi128_pd(_mm_or_si128(x, _mm_castpd_si128(m))), m)
-}
-
 #[inline(always)]
 pub unsafe fn _mm_cvtpd_epi64x_v2(x: __m128d) -> __m128i {
     let x0 = _mm_cvttsd_si64(x);
@@ -142,4 +109,32 @@ pub unsafe fn _mm_cvtboolx2_to_epi64_mask_v2(
 
     // take 1-byte mask, convert it to epi64, then compare it with zero to fill gaps
     _mm_cmpgt_epi64(_mm_cvtepi8_epi64(mask), _mm_setzero_si128())
+}
+
+#[inline(always)]
+pub unsafe fn _mm_cvtepi64_epi32x_v2(a: __m128i, b: __m128i) -> __m128i {
+    // a = [ a3 | a2 | a1 | a0 ] (32-bit dwords)
+    // 64-bit ints are [a3|a2] and [a1|a0]. We want a2 and a0.
+
+    // b = [ b3 | b2 | b1 | b0 ]
+    // 64-bit ints are [b3|b2] and [b1|b0]. We want b2 and b0.
+
+    // 1. Create a vector with [a2|a0] in the low 64 bits.
+    // _MM_SHUFFLE(z, y, x, w) creates [ a[z] | a[y] | a[x] | a[w] ]
+    // We use _MM_SHUFFLE(3, 2, 2, 0) to create [ a3 | a2 | a2 | a0 ].
+    // The low 64 bits are [a2|a0].
+    let a_shuffled = _mm_shuffle_epi32::<{ MM_SHUFFLE!(3, 2, 2, 0) }>(a);
+
+    // 2. Create a vector with [b2|b0] in the high 64 bits.
+    // We use _MM_SHUFFLE(2, 0, 1, 0) to create [ b2 | b0 | b1 | b0 ].
+    // The high 64 bits are [b2|b0].
+    let b_shuffled = _mm_shuffle_epi32::<{ MM_SHUFFLE!(2, 0, 1, 0) }>(b);
+
+    // 3. Blend them.
+    // The mask 0xF0 = 0b11110000 selects 16-bit words.
+    // It takes the high 4 words (64 bits) from b_shuffled.
+    // It takes the low 4 words (64 bits) from a_shuffled.
+    // Result: [ b_shuffled_high64 | a_shuffled_low64 ]
+    // Result: [ b2 | b0 | a2 | a0 ]
+    _mm_blend_epi16(a_shuffled, b_shuffled, 0xF0)
 }

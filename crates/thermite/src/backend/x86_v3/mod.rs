@@ -18,5 +18,4 @@ use crate::{register::DoublePump, vector::Vector};
 pub use registers::X86V3;
 
 decl_aliases!(X86V3);
-
 pub use self::aliases::*;

@@ -320,26 +320,6 @@ impl FloatRegister for F64x2V3 {
     }
 
     #[inline(always)]
-    fn mul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::mul_add(lhs, rhs, acc)
-    }
-
-    #[inline(always)]
-    fn mul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::mul_sub(lhs, rhs, acc)
-    }
-
-    #[inline(always)]
-    fn nmul_adde(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::nmul_add(lhs, rhs, acc)
-    }
-
-    #[inline(always)]
-    fn nmul_sube(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
-        Self::nmul_sub(lhs, rhs, acc)
-    }
-
-    #[inline(always)]
     fn sqrt(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_sqrt_pd(value) }
     }

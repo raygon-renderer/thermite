@@ -138,6 +138,8 @@ impl PermuteRegister for F64x4V3 {
 }
 
 impl SwizzleRegister for F64x4V3 {
+    const HAS_PERMUTEV: bool = true;
+
     #[inline(always)]
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {

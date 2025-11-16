@@ -774,12 +774,14 @@ impl<R: SwizzleRegister> SwizzleRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
+    const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
+
     #[inline(always)]
     fn permutev(value: Self::Storage, mut idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         // mask out all indices to be within the range of R
         idxs.iter_mut().for_each(|idx| *idx &= <R::Lanes as Unsigned>::U32 - 1);
 
-        if const { matches!(Self::ISA, InstructionSet::Scalar) } {
+        if const { !Self::HAS_PERMUTEV } {
             let mut dst = Self::EMPTY;
 
             let src = Self::as_array(&value);

@@ -79,6 +79,8 @@ impl PermuteRegister for [<F $width x1Scalar>] {
 }
 
 impl SwizzleRegister for [<F $width x1Scalar>] {
+    const HAS_PERMUTEV: bool = false;
+
     #[inline(always)]
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         value

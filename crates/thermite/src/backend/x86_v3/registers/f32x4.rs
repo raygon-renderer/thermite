@@ -111,11 +111,13 @@ impl ShuffleRegister for F32x4V3 {
 impl PermuteRegister for F32x4V3 {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_shuffle_ps(value, value, IMM8) }
+        unsafe { arch::_mm_permute_ps(value, IMM8) }
     }
 }
 
 impl SwizzleRegister for F32x4V3 {
+    const HAS_PERMUTEV: bool = true;
+
     #[inline(always)]
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs)) }
@@ -414,12 +416,12 @@ impl FloatRegister for F32x4V3 {
 impl LinAlg3Register for F32x4V3 {
     #[inline(always)]
     fn dot3(lhs: Self::Storage, rhs: Self::Storage) -> f32 {
-        unsafe { arch::dot3_v2(lhs, rhs) }
+        unsafe { arch::dot3_v1(lhs, rhs) }
     }
 
     #[inline(always)]
     fn cross3(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
-        unsafe { arch::cross3_v2(lhs, rhs) }
+        unsafe { arch::cross3_v1(lhs, rhs) }
     }
 
     #[inline(always)]

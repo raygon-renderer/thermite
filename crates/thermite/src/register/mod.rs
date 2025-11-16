@@ -338,13 +338,31 @@ pub trait BlendRegister: Register {
 }
 
 pub trait SwizzleRegister: MaskRegister {
-    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage;
+    const HAS_PERMUTEV: bool;
+
+    #[inline(always)]
+    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+        let mut result = Self::EMPTY;
+
+        let value_array = Self::as_array(&value);
+        let result_array = Self::as_array_mut(&mut result);
+
+        let mask = (<Self::Lanes as Unsigned>::U32) - 1;
+
+        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+            let idx = idx & mask;
+
+            *dst = value_array[idx as usize];
+        }
+
+        result
+    }
 
     #[inline(always)]
     fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         use typenum::Unsigned;
 
-        if const { matches!(Self::ISA, InstructionSet::Scalar) } {
+        if const { !Self::HAS_PERMUTEV } {
             let mut result = Self::EMPTY;
 
             let a_array = Self::as_array(&a);

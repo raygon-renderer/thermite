@@ -47,35 +47,11 @@ pub unsafe fn _mm_subs_epi64x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
     )
 }
 
-/// Borrowed from glam
-#[inline(always)]
-pub unsafe fn dot3_v2(lhs: __m128, rhs: __m128) -> f32 {
-    let x2_y2_z2_w2 = _mm_mul_ps(lhs, rhs);
-    let y2_0_0_0 = _mm_shuffle_ps(x2_y2_z2_w2, x2_y2_z2_w2, 0b00_00_00_01);
-    let z2_0_0_0 = _mm_shuffle_ps(x2_y2_z2_w2, x2_y2_z2_w2, 0b00_00_00_10);
-    let x2y2_0_0_0 = _mm_add_ss(x2_y2_z2_w2, y2_0_0_0);
-    _mm_cvtss_f32(_mm_add_ss(x2y2_0_0_0, z2_0_0_0))
-}
-
-/// Borrowed from glam
-#[inline(always)]
-pub unsafe fn cross3_v2(lhs: __m128, rhs: __m128) -> __m128 {
-    // x  <-  a.y*b.z - a.z*b.y
-    // y  <-  a.z*b.x - a.x*b.z
-    // z  <-  a.x*b.y - a.y*b.x
-    // We can save a shuffle by grouping it in this wacky order:
-    // (self.zxy() * rhs - self * rhs.zxy()).zxy()
-    let lhszxy = _mm_shuffle_ps(lhs, lhs, 0b11_01_00_10);
-    let rhszxy = _mm_shuffle_ps(rhs, rhs, 0b11_01_00_10);
-    let lhszxy_rhs = _mm_mul_ps(lhszxy, rhs);
-    let rhszxy_lhs = _mm_mul_ps(rhszxy, lhs);
-    let sub = _mm_sub_ps(lhszxy_rhs, rhszxy_lhs);
-    _mm_shuffle_ps(sub, sub, 0b11_01_00_10)
-}
-
 #[inline(always)]
 pub unsafe fn zero4_v2(value: __m128) -> __m128 {
     // NOTE: Compiler may choose to replace the set1 with `xorps xmm, xmm`
+    // this may be better than the SSE2 version that uses `andps` with a mask
+    // for the last lane, simply because xorps can be paired with other instructions.
     unsafe { _mm_blend_ps(value, _mm_set1_ps(0.0), 0b1000) }
 }
 

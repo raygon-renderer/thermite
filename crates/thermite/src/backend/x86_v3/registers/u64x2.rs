@@ -159,7 +159,7 @@ impl BitshiftRegister for U64x2V3 {
 
     #[inline(always)]
     fn reverse_bits(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_reverse_bits_epi64x_v2(value) }
+        unsafe { arch::_mm_reverse_bits_epi64x_v1(value) }
     }
 }
 
@@ -320,7 +320,7 @@ impl IntegerRegister for U64x2V3 {
 
     #[inline(always)]
     fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
-        unsafe { arch::_mm_div_epu64x(value, divider.multiplier(), divider.shift()) }
+        unsafe { arch::_mm_div_epu64x_v1(value, divider.multiplier(), divider.shift()) }
     }
 
     #[inline(always)]
@@ -328,7 +328,7 @@ impl IntegerRegister for U64x2V3 {
         value: Self::Storage,
         divider: crate::divider::BranchfreeDivider<Self::Element>,
     ) -> Self::Storage {
-        unsafe { arch::_mm_div_epu64x_bf(value, divider.multiplier(), divider.shift()) }
+        unsafe { arch::_mm_div_epu64x_bf_v1(value, divider.multiplier(), divider.shift()) }
     }
 
     #[inline(always)]
@@ -365,7 +365,7 @@ impl IntegerRegister for U64x2V3 {
 impl UnsignedIntegerRegister for U64x2V3 {
     #[inline(always)]
     fn next_power_of_two_m1(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_np2_m1_epu64x_v2(value) }
+        unsafe { arch::_mm_np2_m1_epu64x_v1(value) }
     }
 
     #[inline(always)]

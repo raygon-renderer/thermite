@@ -69,13 +69,13 @@ impl Simd for X86V3 {
     type i64x8 = DoublePumpRegister<Self::i64x4>;
     type u64x8 = DoublePumpRegister<Self::u64x4>;
 
-    // type f32x16 = DoublePumpRegister<Self::f32x8>;
-    // type i32x16 = DoublePumpRegister<Self::i32x8>;
-    // type u32x16 = DoublePumpRegister<Self::u32x8>;
+    type f32x16 = DoublePumpRegister<Self::f32x8>;
+    type i32x16 = DoublePumpRegister<Self::i32x8>;
+    type u32x16 = DoublePumpRegister<Self::u32x8>;
 
-    // type f64x16 = DoublePumpRegister<Self::f64x8>;
-    // type i64x16 = DoublePumpRegister<Self::i64x8>;
-    // type u64x16 = DoublePumpRegister<Self::u64x8>;
+    type f64x16 = DoublePumpRegister<Self::f64x8>;
+    type i64x16 = DoublePumpRegister<Self::i64x8>;
+    type u64x16 = DoublePumpRegister<Self::u64x8>;
 }
 
 const fn shuffle_to_m256i(bitmask: i32) -> arch::__m256i {
@@ -166,10 +166,10 @@ impl_type_casts! {
     U32x8V3 as F32x8V3 => _mm256_cvtepu32_psx_v3, // i32x8 -> f32x8
 
     // f64x2 casts
-    F64x2V3 as I64x2V3 => _mm_cvtpd_epi64x_v2 | _mm_cvtpd_epi64x_limited_v2, // f64x2 -> i64x2
-    F64x2V3 as U64x2V3 => _mm_cvtpd_epu64x_limited_v2, // f64x2 -> u64x2
-    I64x2V3 as F64x2V3 => _mm_cvtepi64_pdx_v2 | _mm_cvtepi64_pdx_limited_v2, // i64x2 -> f64x2
-    U64x2V3 as F64x2V3 => _mm_cvtepu64_pdx_v2 | _mm_cvtepu64_pdx_limited_v2, // u64x2 -> f64x2
+    F64x2V3 as I64x2V3 => _mm_cvtpd_epi64x_v2 | _mm_cvtpd_epi64x_limited_v1, // f64x2 -> i64x2
+    F64x2V3 as U64x2V3 => _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
+    I64x2V3 as F64x2V3 => _mm_cvtepi64_pdx_v2 | _mm_cvtepi64_pdx_limited_v1, // i64x2 -> f64x2
+    U64x2V3 as F64x2V3 => _mm_cvtepu64_pdx_v2 | _mm_cvtepu64_pdx_limited_v1, // u64x2 -> f64x2
 
     // f64x4 casts
     F64x4V3 as I64x4V3 => _mm256_cvtpd_epi64x_v3 | _mm256_cvtpd_epi64x_limited_v3, // f64x4 -> i64x4

@@ -4,6 +4,18 @@ use generic_array::GenericArray;
 
 use super::arch::*;
 
+pub mod bits;
+pub mod casts;
+pub mod cmp;
+pub mod divider;
+pub mod math;
+
+pub use bits::*;
+pub use casts::*;
+pub use cmp::*;
+pub use divider::*;
+pub use math::*;
+
 #[inline(always)]
 pub unsafe fn _mm_blendv_epi8x_v1(xmm0: __m128i, xmm1: __m128i, mask: __m128i) -> __m128i {
     _mm_or_si128(_mm_and_si128(mask, xmm0), _mm_andnot_si128(mask, xmm1))
@@ -26,52 +38,28 @@ pub unsafe fn _mm_cmpeq_epi64x_v1(a: __m128i, b: __m128i) -> __m128i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm_mullo_epi64x_v1(xmm0: __m128i, xmm1: __m128i) -> __m128i {
-    let xmm2 = _mm_srli_epi64(xmm1, 32);
-    let xmm3 = _mm_srli_epi64(xmm0, 32);
-
-    let xmm2 = _mm_mul_epu32(xmm2, xmm0);
-    let xmm3 = _mm_mul_epu32(xmm1, xmm3);
-
-    let xmm2 = _mm_add_epi64(xmm3, xmm2);
-    let xmm2 = _mm_slli_epi64(xmm2, 32);
-
-    let xmm0 = _mm_mul_epu32(xmm1, xmm0);
-    let xmm0 = _mm_add_epi64(xmm0, xmm2);
-
-    xmm0
+pub unsafe fn _mm_setr_epi64x(a: i64, b: i64) -> __m128i {
+    _mm_set_epi64x(b, a)
 }
 
-// SSE2 Version
 #[inline(always)]
-pub unsafe fn _mm_adds_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
-    let res = _mm_add_epi32(lhs, rhs);
-
-    _mm_blendv_epi8x_v1(
-        res,
-        _mm_blendv_epi8x_v1(
-            _mm_set1_epi32(i32::MIN),
-            _mm_set1_epi32(i32::MAX),
-            _mm_signbits_epi32x_v1(res),
-        ),
-        _mm_xor_si128(rhs, _mm_cmpgt_epi32(lhs, res)),
-    )
+pub unsafe fn _mm_set_epu32x(a: u32, b: u32, c: u32, d: u32) -> __m128i {
+    _mm_set_epi32(a as i32, b as i32, c as i32, d as i32)
 }
 
-// SSE2 Version
 #[inline(always)]
-pub unsafe fn _mm_subs_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
-    let res = _mm_sub_epi32(lhs, rhs);
+pub unsafe fn _mm_set_epu64x(a: u64, b: u64) -> __m128i {
+    _mm_set_epi64x(a as i64, b as i64)
+}
 
-    _mm_blendv_epi8x_v1(
-        res,
-        _mm_blendv_epi8x_v1(
-            _mm_set1_epi32(i32::MIN),
-            _mm_set1_epi32(i32::MAX),
-            _mm_signbits_epi32x_v1(res),
-        ),
-        _mm_xor_si128(_mm_cmpgt_epi32(rhs, _mm_setzero_si128()), _mm_cmpgt_epi32(lhs, res)),
-    )
+#[inline(always)]
+pub unsafe fn _mm_setr_epu32x(a: u32, b: u32, c: u32, d: u32) -> __m128i {
+    _mm_setr_epi32(a as i32, b as i32, c as i32, d as i32)
+}
+
+#[inline(always)]
+pub unsafe fn _mm_setr_epu64x(a: u64, b: u64) -> __m128i {
+    _mm_setr_epi64x(a as i64, b as i64)
 }
 
 #[inline(always)]
@@ -82,33 +70,4 @@ pub unsafe fn _mm_set1_epu32x(v: u32) -> __m128i {
 #[inline(always)]
 pub unsafe fn _mm_set1_epu64x(v: u64) -> __m128i {
     _mm_set1_epi64x(v as i64)
-}
-
-/// POLYFILL: Shift right and sign extend 64-bit integers
-#[inline(always)]
-pub unsafe fn _mm_srai_epi64x_v1(v: __m128i, cnt: i32) -> __m128i {
-    let m = _mm_set1_epi64x(1i64 << (63 - cnt));
-    _mm_sub_epi64(_mm_xor_si128(_mm_srl_epi64(v, _mm_cvtsi32_si128(cnt)), m), m)
-}
-
-/// POLYFILL: Shift right 64-bit integers (variable)
-///
-/// https://stackoverflow.com/a/38608465/2083075
-#[inline(always)]
-pub unsafe fn _mm_srlv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let count_high = _mm_unpackhi_epi64(shifts, shifts); // move higher 64 bits to lower 64 bits
-
-    let shifted_low = _mm_srl_epi64(value, shifts); // uses lower 64 bits of shifts
-    let mut shifted_high = _mm_srl_epi64(value, count_high); // shift value by higher 64 bits (now in lower 64 bits)
-
-    shifted_high = _mm_unpackhi_epi64(shifted_high, shifted_high); // move result to higher 64 bits
-
-    _mm_unpacklo_epi64(shifted_high, shifted_low) // combine results
-}
-
-/// POLYFILL: Shift right and sign extend 64-bit integers (variable)
-#[inline(always)]
-pub unsafe fn _mm_srav_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let m = _mm_srlv_epi64x_v1(_mm_set1_epu64x(1 << 63), shifts);
-    _mm_sub_epi64(_mm_xor_si128(_mm_srlv_epi64x_v1(value, shifts), m), m)
 }

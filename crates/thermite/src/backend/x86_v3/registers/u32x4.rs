@@ -125,6 +125,8 @@ impl PermuteRegister for U32x4V3 {
 }
 
 impl SwizzleRegister for U32x4V3 {
+    const HAS_PERMUTEV: bool = true;
+
     #[inline(always)]
     fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
         unsafe {
@@ -193,7 +195,7 @@ impl BitshiftRegister for U32x4V3 {
 
     #[inline(always)]
     fn reverse_bits(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_reverse_bits_epi32x_v2(value) }
+        unsafe { arch::_mm_reverse_bits_epi32x_v1(value) }
     }
 
     #[inline(always)]
@@ -356,7 +358,7 @@ impl IntegerRegister for U32x4V3 {
 
     #[inline(always)]
     fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
-        unsafe { arch::_mm_div_epu32x(value, divider.multiplier(), divider.shift()) }
+        unsafe { arch::_mm_div_epu32x_v1(value, divider.multiplier(), divider.shift()) }
     }
 
     #[inline(always)]
@@ -364,7 +366,7 @@ impl IntegerRegister for U32x4V3 {
         value: Self::Storage,
         divider: crate::divider::BranchfreeDivider<Self::Element>,
     ) -> Self::Storage {
-        unsafe { arch::_mm_div_epu32x_bf(value, divider.multiplier(), divider.shift()) }
+        unsafe { arch::_mm_div_epu32x_bf_v1(value, divider.multiplier(), divider.shift()) }
     }
 
     #[inline(always)]
@@ -387,7 +389,7 @@ impl IntegerRegister for U32x4V3 {
 impl UnsignedIntegerRegister for U32x4V3 {
     #[inline(always)]
     fn next_power_of_two_m1(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_np2_m1_epu32x_v2(value) }
+        unsafe { arch::_mm_np2_m1_epu32x_v1(value) }
     }
 
     #[inline(always)]
