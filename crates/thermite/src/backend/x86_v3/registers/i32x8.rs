@@ -127,6 +127,19 @@ impl Register for I32x8V3 {
         let (lo, hi) = Self::split(value);
         Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe {
+            let v0 = arch::_mm256_unpacklo_epi32(a, b);
+            let v1 = arch::_mm256_unpackhi_epi32(a, b);
+
+            let real_lo = arch::_mm256_permute2f128_si256(v0, v1, 0x20);
+            let real_hi = arch::_mm256_permute2f128_si256(v0, v1, 0x31);
+
+            (real_lo, real_hi)
+        }
+    }
 }
 
 impl BitshiftRegister for I32x8V3 {

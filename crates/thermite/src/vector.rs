@@ -342,6 +342,22 @@ impl<R: Register> Vector<R> {
         Self(R::reverse(self.0))
     }
 
+    /// Unpack and interleave elements from two vectors.
+    ///
+    /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, a1, a2, a3]` and `b = [b0, b1, b2, b3]`, the result will be
+    /// `([a0, b0, a1, b1], [a2, b2, a3, b3])`.
+    ///
+    /// # Note
+    ///
+    /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
+    /// this will preserve the order of all elements, not just 128-bit chunks.
+    #[inline(always)]
+    pub fn unpack(self, other: Self) -> (Self, Self) {
+        let (a, b) = R::unpack(self.0, other.0);
+        (Self(a), Self(b))
+    }
+
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.

@@ -99,6 +99,11 @@ impl Register for F32x4V2 {
     fn reverse(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_shuffle_ps(value, value, 0b11_01_10_00) }
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
+    }
 }
 
 impl ShuffleRegister for F32x4V2 {

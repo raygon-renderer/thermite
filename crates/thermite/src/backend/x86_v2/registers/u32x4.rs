@@ -99,6 +99,11 @@ impl Register for U32x4V2 {
     fn reverse(mut value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
+    }
 }
 
 impl ShuffleRegister for U32x4V2 {

@@ -126,6 +126,19 @@ impl Register for I64x4V3 {
     fn reverse(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm256_permute4x64_epi64::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe {
+            let v0 = arch::_mm256_unpacklo_epi64(a, b);
+            let v1 = arch::_mm256_unpackhi_epi64(a, b);
+
+            let real_lo = arch::_mm256_permute2f128_si256(v0, v1, 0x20);
+            let real_hi = arch::_mm256_permute2f128_si256(v0, v1, 0x31);
+
+            (real_lo, real_hi)
+        }
+    }
 }
 
 impl BitshiftRegister for I64x4V3 {

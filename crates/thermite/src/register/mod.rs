@@ -346,6 +346,8 @@ pub trait Register: Sized + 'static {
     const HAS_MSB_BLENDV: bool;
 
     fn reverse(value: Self::Storage) -> Self::Storage;
+
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage);
 }
 
 pub trait ShuffleRegister: Register {

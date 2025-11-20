@@ -217,6 +217,15 @@ impl<R: MaskRegister> Mask<R> {
         Self(R::reverse(self.0))
     }
 
+    /// Unpacks and interleaves the lanes of two masks into two new masks.
+    ///
+    /// See [`Vector::unpack`](crate::Vector::unpack) for more details.
+    #[inline(always)]
+    pub fn unpack(self, other: Self) -> (Self, Self) {
+        let (low, high) = R::unpack(self.0, other.0);
+        (Self(low), Self(high))
+    }
+
     /// Create a mask from a vector of the underlying element type, without
     /// verifying the values.
     #[inline(always)]

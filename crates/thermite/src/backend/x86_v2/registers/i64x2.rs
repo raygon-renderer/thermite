@@ -101,6 +101,11 @@ impl Register for I64x2V2 {
     }
 
     #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+    }
+
+    #[inline(always)]
     fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,

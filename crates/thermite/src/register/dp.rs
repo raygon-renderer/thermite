@@ -234,6 +234,14 @@ where
     fn reverse(mut value: Self::Storage) -> Self::Storage {
         Self(R::reverse(value.1), R::reverse(value.0))
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        let (r1_lo, r1_hi) = R::unpack(a.0, b.0);
+        let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
+
+        (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
+    }
 }
 
 impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>

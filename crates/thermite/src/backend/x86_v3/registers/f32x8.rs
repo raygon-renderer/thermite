@@ -122,6 +122,23 @@ impl Register for F32x8V3 {
         let (lo, hi) = Self::split(value);
         Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        unsafe {
+            // 1. Unpack: Generate the ABAB pattern (but swizzled lanes)
+            // Latency: ~1 cycle
+            let v0 = arch::_mm256_unpacklo_ps(a, b);
+            let v1 = arch::_mm256_unpackhi_ps(a, b);
+
+            // 2. Permute: Fix the lane ordering
+            // Latency: ~3 cycles
+            let real_lo = arch::_mm256_permute2f128_ps(v0, v1, 0x20);
+            let real_hi = arch::_mm256_permute2f128_ps(v0, v1, 0x31);
+
+            (real_lo, real_hi)
+        }
+    }
 }
 
 impl ShuffleRegister for F32x8V3 {
