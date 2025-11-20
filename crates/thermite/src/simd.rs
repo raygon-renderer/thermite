@@ -167,6 +167,14 @@ macro_rules! decl_aliases {
             pub type f64x8 = crate::simd::f64x8<$simd>;
             pub type i64x8 = crate::simd::i64x8<$simd>;
             pub type u64x8 = crate::simd::u64x8<$simd>;
+
+            pub type f32x16 = crate::simd::f32x16<$simd>;
+            pub type i32x16 = crate::simd::i32x16<$simd>;
+            pub type u32x16 = crate::simd::u32x16<$simd>;
+
+            pub type f64x16 = crate::simd::f64x16<$simd>;
+            pub type i64x16 = crate::simd::i64x16<$simd>;
+            pub type u64x16 = crate::simd::u64x16<$simd>;
         }
     };
 }

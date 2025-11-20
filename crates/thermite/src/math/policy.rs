@@ -181,7 +181,7 @@ pub mod policies {
 
     /// Optimize for performance, ideally without losing precision.
     ///
-    /// This is the default policy for [`SimdVectorizedMath`](super::SimdVectorizedMath),
+    /// This is the default policy for [`Math`](crate::math::Math),
     /// and tries to provide as much precision and performance as possible.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Performance;

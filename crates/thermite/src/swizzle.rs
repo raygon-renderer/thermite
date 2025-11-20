@@ -47,7 +47,7 @@ pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32
 }
 */
 
-/// Trait for swizzling and permuting vector types. Use the [`swizzle!`] macro for convenient usage.
+/// Trait for swizzling and permuting vector types. Use the [`swizzle!`](crate::swizzle!) macro for convenient usage.
 pub trait Swizzle<R: Register> {
     /// Swizzle lanes from two vectors according to the given indices.
     fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self;

@@ -25,7 +25,7 @@ pub const unsafe fn identity<T>(x: T) -> T {
 /// instruction for arbitrary register-controlled shuffles available to SSE4.1
 /// effectively recreating _mm_permutevar_ps/_mm_permutevar_epi32
 ///
-/// An alternative implementation is here: https://stackoverflow.com/a/56033645/2083075
+/// An alternative implementation is here: <https://stackoverflow.com/a/56033645/2083075>
 /// but that uses _mm_mullo_epi32 which has a 10 cycle latency on some CPUs,
 /// whereas these use only _mm_shuffle_epi8 and simple arithmetic/logical ops,
 /// which are much faster.

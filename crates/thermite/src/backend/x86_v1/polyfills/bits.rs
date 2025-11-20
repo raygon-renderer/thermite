@@ -9,7 +9,7 @@ pub unsafe fn _mm_srai_epi64x_v1(v: __m128i, cnt: i32) -> __m128i {
 
 /// POLYFILL: Shift right 64-bit integers (variable)
 ///
-/// https://stackoverflow.com/a/38608465/2083075
+/// <https://stackoverflow.com/a/38608465/2083075>
 #[inline(always)]
 pub unsafe fn _mm_srlv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
     let count_high = _mm_unpackhi_epi64(shifts, shifts); // move higher 64 bits to lower 64 bits
