@@ -30,3 +30,7 @@ core_detect = "1"
 [dev-dependencies]
 glam = "0.30.3"
 num-traits = { version = "0.2.19", default-features = true }
+
+[package.metadata.docs.rs]
+features = ["const-default", "document_registers", "std"]
+rustdoc-args = ["--cfg", "docsrs"]
