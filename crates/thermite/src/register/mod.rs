@@ -100,9 +100,32 @@ where
 {
 }
 
+// 1. Define our storage unit width
+type BitsPerWord = typenum::U32; // We are storing bits in u32 chunks
+
+// 2. Calculate the "Minus One" part of the ceiling formula: (y - 1)
+// 32 - 1 = 31
+type RoundUpConst = typenum::U31;
+
+/// Defines the number of u32 words needed to hold a bitmask for a register with `Lanes` lanes.
+pub type MaskWordCount<Lanes> = typenum::Quot<typenum::Sum<Lanes, RoundUpConst>, BitsPerWord>;
+
 /// A trait for array length types representing the number of lanes in a SIMD register.
-pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> {}
-impl<T> Lanes for T where T: ArrayLength + core::ops::Shl<typenum::B1> {}
+pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst> {
+    /// For a register of `Self` lanes, this is the number of `u32` words needed to hold a bitmask.
+    ///
+    /// Used in [`Mask::bitmask()`](crate::Mask::bitmask).
+    type BitmaskLength: ArrayLength;
+}
+
+impl<T> Lanes for T
+where
+    T: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst>,
+    typenum::Sum<T, RoundUpConst>: core::ops::Div<BitsPerWord>,
+    MaskWordCount<T>: ArrayLength,
+{
+    type BitmaskLength = MaskWordCount<T>;
+}
 
 pub(crate) type Storage<R> = <R as Register>::Storage;
 
@@ -479,6 +502,10 @@ pub trait MaskRegister: Register {
     fn none(value: Self::Storage) -> bool {
         !Self::any(value)
     }
+
+    fn native_bitmask(value: Self::Storage) -> Option<u64>;
+
+    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>);
 }
 
 /// A trait for registers that can be cast to/from other registers,

@@ -103,6 +103,16 @@ impl MaskRegister for [<F $width x1Scalar>] {
 
     #[inline(always)] fn all(value: Self::Storage) -> bool { value.to_bool() }
     #[inline(always)] fn any(value: Self::Storage) -> bool { value.to_bool() }
+
+    #[inline(always)]
+    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+        Some(value.to_bool() as u64)
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+        view.set(0, value.to_bool());
+    }
 }
 
 impl PartialOrdRegister for [<F $width x1Scalar>] {

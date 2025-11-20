@@ -9,7 +9,7 @@
 use crate::{
     Vector,
     register::{
-        BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister,
+        BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister, Lanes,
         LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
         SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
@@ -54,7 +54,6 @@ const _: () = {
 
 use generic_array::{GenericArray, typenum::Unsigned};
 
-#[cfg(feature = "const-default")]
 impl<R: MaskRegister> const_default::ConstDefault for Mask<R> {
     const DEFAULT: Self = Self::FALSY;
 }
@@ -172,6 +171,44 @@ impl<R: MaskRegister> Mask<R> {
         R: CastMaskRegister<FROM>,
     {
         Mask(R::mask_from(mask.0))
+    }
+
+    /// Returns a bitmask representation of the mask as a native integer type, if supported.
+    ///
+    /// The bitmask will have one bit per lane in the register, with the least significant bit
+    /// corresponding to lane 0.
+    ///
+    /// If the register does not support native bitmask extraction, or it exceeds 64 lanes,
+    /// this will return `None`.
+    #[inline(always)]
+    pub fn native_bitmask(&self) -> Option<u64> {
+        R::native_bitmask(self.0)
+    }
+
+    /// Returns a bitmask representation of the mask as a [`GenericBitArray`](generic_array::GenericBitArray).
+    ///
+    /// The length of this bitmask is determined by the number of lanes in the register, as
+    /// `ceil(LANES / 32)`, but with typenum's type-level integers. `u32` was chosen as the storage
+    /// type for better compatibility with the actual SIMD operations on most platforms.
+    #[inline(always)]
+    pub fn bitmask(&self) -> generic_array::GenericBitArray<u32, <R::Lanes as Lanes>::BitmaskLength>
+    where
+        generic_array::GenericArray<u32, <R::Lanes as Lanes>::BitmaskLength>: bitvec::view::BitViewSized<Store = u32>,
+    {
+        let mut bitmask = generic_array::GenericBitArray::ZERO;
+
+        // try to use native bitmask if available
+        if let Some(native) = self.native_bitmask() {
+            let bits = unsafe { core::mem::transmute::<u64, [u32; 2]>(native) };
+            let bits = bitvec::slice::BitSlice::<u32>::from_slice(&bits);
+
+            bitmask[..Self::LANES].copy_from_bitslice(&bits[..Self::LANES]);
+        } else {
+            // otherwise fill bitmask using the register's method
+            R::fill_bitmask(self.0, &mut bitmask[..Self::LANES]);
+        }
+
+        bitmask
     }
 
     /// Reverses the order of the lanes in the mask.

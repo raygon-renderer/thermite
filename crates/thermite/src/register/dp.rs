@@ -340,6 +340,36 @@ where
     fn none(value: Self::Storage) -> bool {
         R::none(value.0) && R::none(value.1)
     }
+
+    #[inline(always)]
+    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+        if Self::Lanes::USIZE <= 64 {
+            let lo = R::native_bitmask(value.0)?;
+            let hi = R::native_bitmask(value.1)?;
+
+            Some(lo | (hi << R::Lanes::U64))
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+        // try to use native bitmask if available
+        if let Some(native) = Self::native_bitmask(value) {
+            use bitvec::slice::BitSlice;
+
+            let bits = unsafe { core::mem::transmute::<u64, [u32; 2]>(native) };
+            let bits = BitSlice::<u32>::from_slice(&bits);
+
+            view[..Self::Lanes::USIZE].copy_from_bitslice(&bits[..Self::Lanes::USIZE]);
+        } else {
+            // otherwise divide and conquer
+            let lane_count = R::Lanes::USIZE;
+            R::fill_bitmask(value.0, &mut view[..lane_count]);
+            R::fill_bitmask(value.1, &mut view[lane_count..]);
+        }
+    }
 }
 
 impl<FROM: MaskRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>

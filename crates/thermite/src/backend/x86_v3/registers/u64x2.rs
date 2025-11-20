@@ -1,4 +1,8 @@
-use generic_array::{GenericArray, sequence::GenericSequence, typenum};
+use generic_array::{
+    GenericArray,
+    sequence::GenericSequence,
+    typenum::{self, Unsigned},
+};
 
 use crate::{
     isa::InstructionSet,
@@ -204,6 +208,18 @@ impl MaskRegister for U64x2V3 {
     #[inline(always)]
     fn none(value: Self::Storage) -> bool {
         unsafe { arch::_mm_movemask_epi8(value) == 0 }
+    }
+
+    #[inline(always)]
+    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+        Some(unsafe { arch::_mm_movemask_pd(arch::_mm_castsi128_pd(value)) as u64 })
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+        let mask = unsafe { arch::_mm_movemask_pd(arch::_mm_castsi128_pd(value)) as u32 };
+        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
+        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
 }
 

@@ -56,7 +56,6 @@ const _: () = {
 
 use generic_array::{GenericArray, typenum::Unsigned};
 
-#[cfg(feature = "const-default")]
 impl<R: Register> const_default::ConstDefault for Vector<R> {
     const DEFAULT: Self = Self::EMPTY;
 }
@@ -1787,7 +1786,7 @@ impl_swizzle4! {
     [w w w w]
 }
 
-/// Implements conversion from Vector<R> to primitive types by extracting
+/// Implements conversion from `Vector<R>` to primitive types by extracting
 /// the first lane and converting that. Other lanes are ignored.
 #[rustfmt::skip]
 impl<R: Register> num_traits::ToPrimitive for Vector<R>
