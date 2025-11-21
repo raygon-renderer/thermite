@@ -148,6 +148,11 @@ impl Register for F64x4V3 {
             (real_lo, real_hi)
         }
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_bswap_pdx_v3(value) }
+    }
 }
 
 impl ShuffleRegister for F64x4V3 {

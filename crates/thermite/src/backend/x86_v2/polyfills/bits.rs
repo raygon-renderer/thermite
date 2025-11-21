@@ -80,3 +80,27 @@ pub unsafe fn _mm_rorv_epi64x_v2(value: __m128i, shifts: __m128i) -> __m128i {
 
 //     r
 // }
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_epi32x_v2(x: __m128i) -> __m128i {
+    // Mask: 3 2 1 0  7 6 5 4  11 10 9 8  15 14 13 12
+    let mask = _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
+    _mm_shuffle_epi8(x, mask)
+}
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_epi64x_v2(x: __m128i) -> __m128i {
+    // Mask: 7 6 5 4 3 2 1 0  15 14 13 12 11 10 9 8
+    let mask = _mm_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
+    _mm_shuffle_epi8(x, mask)
+}
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_psx_v2(x: __m128) -> __m128 {
+    _mm_castsi128_ps(_mm_bswap_epi32x_v2(_mm_castps_si128(x)))
+}
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_pdx_v2(x: __m128d) -> __m128d {
+    _mm_castsi128_pd(_mm_bswap_epi64x_v2(_mm_castpd_si128(x)))
+}

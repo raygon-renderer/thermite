@@ -60,6 +60,11 @@ impl Register for [<U $width x1Scalar>] {
     fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
         (a, b) // no-op for scalar
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        value.swap_bytes()
+    }
 }
 
 impl BitshiftRegister for [<U $width x1Scalar>] {

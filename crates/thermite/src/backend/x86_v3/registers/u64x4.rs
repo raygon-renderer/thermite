@@ -149,6 +149,11 @@ impl Register for U64x4V3 {
             (real_lo, real_hi)
         }
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_bswap_epi64x_v3(value) }
+    }
 }
 
 impl BitshiftRegister for U64x4V3 {

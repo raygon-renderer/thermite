@@ -157,3 +157,33 @@ pub unsafe fn _mm256_rorv_epi64x_v3(value: __m256i, shifts: __m256i) -> __m256i 
     let inv_shifts = _mm256_sub_epi64(_mm256_set1_epi64x(64), shifts);
     _mm256_or_si256(_mm256_srlv_epi64(value, shifts), _mm256_sllv_epi64(value, inv_shifts))
 }
+
+#[inline(always)]
+pub unsafe fn _mm256_bswap_epi32x_v3(x: __m256i) -> __m256i {
+    // Note: vpshufb works within 128-bit lanes.
+    // We repeat the 128-bit mask for both lanes.
+    let mask = _mm256_setr_epi8(
+        3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12, // Lane 1
+        3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12, // Lane 2
+    );
+    _mm256_shuffle_epi8(x, mask)
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_bswap_epi64x_v3(x: __m256i) -> __m256i {
+    let mask = _mm256_setr_epi8(
+        7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, // Lane 1
+        7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, // Lane 2
+    );
+    _mm256_shuffle_epi8(x, mask)
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_bswap_psx_v3(x: __m256) -> __m256 {
+    _mm256_castsi256_ps(_mm256_bswap_epi32x_v3(_mm256_castps_si256(x)))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_bswap_pdx_v3(x: __m256d) -> __m256d {
+    _mm256_castsi256_pd(_mm256_bswap_epi64x_v3(_mm256_castpd_si256(x)))
+}

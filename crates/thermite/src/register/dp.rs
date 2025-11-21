@@ -164,6 +164,11 @@ where
     }
 
     #[inline(always)]
+    unsafe fn load_stream(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { Self(R::load_stream(ptr), R::load_stream(ptr.add(R::Lanes::USIZE))) }
+    }
+
+    #[inline(always)]
     unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
         unsafe {
             R::store(ptr, value.0);
@@ -176,6 +181,14 @@ where
         unsafe {
             R::store_unaligned(ptr, value.0);
             R::store_unaligned(ptr.add(R::Lanes::USIZE), value.1);
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn store_stream(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe {
+            R::store_stream(ptr, value.0);
+            R::store_stream(ptr.add(R::Lanes::USIZE), value.1);
         }
     }
 
@@ -241,6 +254,11 @@ where
         let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
 
         (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
+    }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        Self(R::swap_bytes(value.0), R::swap_bytes(value.1))
     }
 }
 

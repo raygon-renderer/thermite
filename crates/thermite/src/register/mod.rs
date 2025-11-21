@@ -368,6 +368,9 @@ pub trait Register: Sized + 'static {
     fn reverse(value: Self::Storage) -> Self::Storage;
 
     fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage);
+
+    /// Swap the byte order of each element in the register.
+    fn swap_bytes(value: Self::Storage) -> Self::Storage;
 }
 
 pub trait ShuffleRegister: Register {

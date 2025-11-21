@@ -70,6 +70,11 @@ impl Register for [<F $width x1Scalar>] {
     fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
         (a, b) // no-op for scalar
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        $f::from_bits(value.to_bits().swap_bytes())
+    }
 }
 
 impl ShuffleRegister for [<F $width x1Scalar>] {

@@ -114,6 +114,11 @@ impl Register for U32x4V2 {
     fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
         unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_bswap_epi32x_v2(value) }
+    }
 }
 
 impl ShuffleRegister for U32x4V2 {

@@ -150,6 +150,11 @@ impl Register for I32x8V3 {
             (real_lo, real_hi)
         }
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm256_bswap_epi32x_v3(value) }
+    }
 }
 
 impl BitshiftRegister for I32x8V3 {

@@ -186,3 +186,25 @@ pub unsafe fn _mm_np2_m1_epu64x_v1(mut value: __m128i) -> __m128i {
 
     value
 }
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_epi32x_v1(x: __m128i) -> __m128i {
+    let t = _mm_or_si128(_mm_slli_epi16(x, 8), _mm_srli_epi16(x, 8));
+    _mm_or_si128(_mm_slli_epi32(t, 16), _mm_srli_epi32(t, 16))
+}
+
+#[inline(always)]
+pub unsafe fn _mm_bswap_epi64x_v1(x: __m128i) -> __m128i {
+    // swap bytes in each 32-bit half, then swap the halves
+    _mm_shuffle_epi32::<{ MM_SHUFFLE!(2, 3, 0, 1) }>(_mm_bswap_epi32x_v1(x))
+}
+
+#[inline(always)]
+pub unsafe fn sse2_bswap_psx_v1(x: __m128) -> __m128 {
+    _mm_castsi128_ps(_mm_bswap_epi32x_v1(_mm_castps_si128(x)))
+}
+
+#[inline(always)]
+pub unsafe fn sse2_bswap_pdx_v1(x: __m128d) -> __m128d {
+    _mm_castsi128_pd(_mm_bswap_epi64x_v1(_mm_castpd_si128(x)))
+}

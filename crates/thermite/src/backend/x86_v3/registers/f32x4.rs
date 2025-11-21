@@ -114,6 +114,11 @@ impl Register for F32x4V3 {
     fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
         unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
     }
+
+    #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_bswap_psx_v2(value) }
+    }
 }
 
 impl ShuffleRegister for F32x4V3 {

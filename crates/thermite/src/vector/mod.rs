@@ -414,6 +414,12 @@ impl<R: Register> Vector<R> {
         (Self(a), Self(b))
     }
 
+    /// Swap the byte order of each element in the vector. i.e., converts between little-endian and big-endian.
+    #[inline(always)]
+    pub fn swap_bytes(self) -> Self {
+        Self(R::swap_bytes(self.0))
+    }
+
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.

@@ -116,6 +116,11 @@ impl Register for F64x2V2 {
     }
 
     #[inline(always)]
+    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_bswap_pdx_v2(value) }
+    }
+
+    #[inline(always)]
     fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
