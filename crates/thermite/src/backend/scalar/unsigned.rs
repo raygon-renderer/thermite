@@ -55,6 +55,11 @@ impl Register for [<U $width x1Scalar>] {
     fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         if mask != 0 { rhs } else { lhs }
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        (a, b) // no-op for scalar
+    }
 }
 
 impl BitshiftRegister for [<U $width x1Scalar>] {

@@ -79,6 +79,12 @@ macro_rules! decl_math {
 }
 
 decl_math! {
+    /// Converts angles from radians to degrees.
+    fn to_degrees[][](self: Self) -> Self;
+
+    /// Converts angles from degrees to radians.
+    fn to_radians[][](self: Self) -> Self;
+
     /// Returns the precision tolerance based on the selected policy. This is a good
     /// default tolerance to use for numerical methods.
     fn tolerance[][]() -> Self;
@@ -157,7 +163,14 @@ decl_math! {
     fn step[][](self: Self, edge: Self) -> Self;
 
     /// Linearly interpolates between `a` and `b` based on the value of `self`.
+    ///
+    /// This operation is not clamped.
     fn lerp[][](self: Self, a: Self, b: Self) -> Self;
+
+    /// Scales `self` from the input range `[in_min, in_max]` to the output range `[out_min, out_max]`.
+    ///
+    /// This operation is not clamped.
+    fn scale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
     /// Returns the multiplicative inverse of `self`, which is `1 / self`.
     ///

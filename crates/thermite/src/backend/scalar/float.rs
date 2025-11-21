@@ -65,6 +65,11 @@ impl Register for [<F $width x1Scalar>] {
     #[inline(always)] fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         if mask != 0.0 { rhs } else { lhs }
     }
+
+    #[inline(always)]
+    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+        (a, b) // no-op for scalar
+    }
 }
 
 impl ShuffleRegister for [<F $width x1Scalar>] {

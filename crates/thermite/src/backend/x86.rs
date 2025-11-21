@@ -111,7 +111,7 @@ pub mod sse41 {
         _mm_max_epi8, _mm_max_epu16, _mm_max_epu32, _mm_min_epi32, _mm_min_epi8, _mm_min_epu16, _mm_min_epu32,
         _mm_minpos_epu16, _mm_mpsadbw_epu8, _mm_mul_epi32, _mm_mullo_epi32, _mm_packus_epi32, _mm_round_pd,
         _mm_round_ps, _mm_round_sd, _mm_round_ss, _mm_test_all_ones, _mm_test_all_zeros, _mm_test_mix_ones_zeros,
-        _mm_testc_si128, _mm_testnzc_si128, _mm_testz_si128
+        _mm_testc_si128, _mm_testnzc_si128, _mm_testz_si128, _mm_stream_load_si128
     }
 }
 
@@ -226,6 +226,6 @@ pub mod avx2 {
         _mm_srlv_epi32, _mm256_srlv_epi32, _mm_srlv_epi64, _mm256_srlv_epi64, _mm256_sub_epi16, _mm256_sub_epi32,
         _mm256_sub_epi64, _mm256_sub_epi8, _mm256_subs_epi16, _mm256_subs_epi8, _mm256_subs_epu16, _mm256_subs_epu8,
         _mm256_unpackhi_epi16, _mm256_unpackhi_epi32, _mm256_unpackhi_epi64, _mm256_unpackhi_epi8, _mm256_unpacklo_epi16,
-        _mm256_unpacklo_epi32, _mm256_unpacklo_epi64, _mm256_unpacklo_epi8, _mm256_xor_si256
+        _mm256_unpacklo_epi32, _mm256_unpacklo_epi64, _mm256_unpacklo_epi8, _mm256_xor_si256, _mm256_stream_load_si256
     }
 }

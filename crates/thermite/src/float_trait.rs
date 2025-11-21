@@ -10,7 +10,10 @@ use crate::{
 };
 
 #[rustfmt::skip]
-impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R> {
+impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R>
+where
+    Self: FloatConsts,
+{
     #[inline(always)] fn infinity() -> Self { Self::INFINITY }
     #[inline(always)] fn neg_infinity() -> Self { Self::NEG_INFINITY }
     #[inline(always)] fn nan() -> Self { Self::NAN }
@@ -37,8 +40,8 @@ impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R> {
         }
     }
 
-    #[inline(always)] fn to_degrees(self) -> Self { self * Self::splat(FloatElement::from_f64(f64::PI / 180.0)) }
-    #[inline(always)] fn to_radians(self) -> Self { self * Self::splat(FloatElement::from_f64(180.0 / f64::PI)) }
+    #[inline(always)] fn to_degrees(self) -> Self { self * Self::FRAC_180_PI }
+    #[inline(always)] fn to_radians(self) -> Self { self * Self::FRAC_PI_180 }
     #[inline(always)] fn integer_decode(self) -> (u64, i16, i8) { self.extract::<0>().integer_decode() }
 
     #[inline(always)] fn is_nan(self) -> bool { self.is_nan().any()}
@@ -79,8 +82,8 @@ where
     #[inline(always)] fn epsilon() -> Self { Self::EPSILON }
     #[inline(always)] fn is_subnormal(self) -> bool { self.is_subnormal().any() }
 
-    #[inline(always)] fn to_degrees(self) -> Self { self * Self::splat(FloatElement::from_f64(180.0 / f64::PI)) }
-    #[inline(always)] fn to_radians(self) -> Self { self * Self::splat(FloatElement::from_f64(f64::PI / 180.0)) }
+    #[inline(always)] fn to_degrees(self) -> Self { self * Self::FRAC_180_PI }
+    #[inline(always)] fn to_radians(self) -> Self { self * Self::FRAC_PI_180 }
 
     #[inline(always)] fn clamp(self, min: Self, max: Self) -> Self { self.clamp(min, max) }
     #[inline(always)] fn copysign(self, sign: Self) -> Self { self.copysign(sign) }

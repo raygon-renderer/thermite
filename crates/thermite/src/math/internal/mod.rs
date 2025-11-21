@@ -16,6 +16,16 @@ pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
 
 pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     #[inline(always)]
+    fn to_degrees<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        x * Vf::FRAC_180_PI
+    }
+
+    #[inline(always)]
+    fn to_radians<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        x * Vf::FRAC_PI_180
+    }
+
+    #[inline(always)]
     fn tolerance<P: Policy>() -> Vf<Self> {
         Vf::splat(E::from_i64(P::POLICY.precision.tolerance()) * E::EPSILON)
     }
@@ -242,6 +252,27 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         } else {
             (Vf::ONE - t) * a + t * b // Accurate but slower than FMA
         }
+    }
+
+    #[inline(always)]
+    fn scale<P: Policy>(
+        x: Vf<Self>,
+        in_min: Vf<Self>,
+        in_max: Vf<Self>,
+        out_min: Vf<Self>,
+        out_max: Vf<Self>,
+    ) -> Vf<Self> {
+        let in_range = in_max - in_min;
+
+        let mut t = x - in_min;
+
+        t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            t * in_range.rcp()
+        } else {
+            t / in_range
+        };
+
+        Self::lerp::<P>(t, out_min, out_max)
     }
 
     #[inline(always)]

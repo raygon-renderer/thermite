@@ -47,6 +47,12 @@ pub trait FloatConsts {
     /// π/8
     const FRAC_PI_8: Self;
 
+    /// π/180
+    const FRAC_PI_180: Self;
+
+    /// 180/π
+    const FRAC_180_PI: Self;
+
     /// ln(2)
     const LN_2: Self;
 
@@ -136,6 +142,8 @@ impl_consts!(
     FRAC_PI_4,
     FRAC_PI_6,
     FRAC_PI_8,
+    FRAC_PI_180,
+    FRAC_180_PI,
     LN_2,
     LN_10,
     LN_PI,
@@ -180,6 +188,8 @@ impl_consts! {@
         FRAC_PI_4 = f32c::FRAC_PI_4,
         FRAC_PI_6 = f32c::FRAC_PI_6,
         FRAC_PI_8 = f32c::FRAC_PI_8,
+        FRAC_PI_180 = f32c::PI / 180.0,
+        FRAC_180_PI = 180.0 / f32c::PI,
         LN_2 = f32c::LN_2,
         LN_10 = f32c::LN_10,
         LN_PI = 1.1447298858494001741434273513530587116472948129153115715136230714,
@@ -220,6 +230,8 @@ impl_consts! {@
         FRAC_PI_4 = f64c::FRAC_PI_4,
         FRAC_PI_6 = f64c::FRAC_PI_6,
         FRAC_PI_8 = f64c::FRAC_PI_8,
+        FRAC_PI_180 = f64c::PI / 180.0,
+        FRAC_180_PI = 180.0 / f64c::PI,
         LN_2 = f64c::LN_2,
         LN_10 = f64c::LN_10,
         LN_PI = 1.1447298858494001741434273513530587116472948129153115715136230714,
