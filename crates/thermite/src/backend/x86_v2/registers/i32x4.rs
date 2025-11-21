@@ -340,6 +340,16 @@ impl SignedRegister for I32x4V2 {
     }
 
     #[inline(always)]
+    fn is_negative(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_srai_epi32::<31>(value) }
+    }
+
+    #[inline(always)]
+    fn is_positive(value: Self::Storage) -> Self::Storage {
+        Self::not(Self::is_negative(value))
+    }
+
+    #[inline(always)]
     fn abs(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_abs_epi32(value) }
     }

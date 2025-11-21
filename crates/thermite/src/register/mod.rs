@@ -697,6 +697,43 @@ pub trait FloatRegister:
     const EXP_MASK: Storage<Self::Bits>;
 
     #[inline(always)]
+    fn total_order(value: Self::Storage) -> <Self::Signed as Register>::Storage {
+        // value ^ (is_negative(value) >> 1), where is_negative produces all 1s for negative and all 0s for positive,
+        // usually by shifting the sign bit to fill the register using an arithmetic shift right
+
+        // Original algorithm from Rust's f32/f64 total_cmp implementation:
+        //
+        // In case of negatives, flip all the bits except the sign
+        // to achieve a similar layout as two's complement integers
+        //
+        // Why does this work? IEEE 754 floats consist of three fields:
+        // Sign bit, exponent and mantissa. The set of exponent and mantissa
+        // fields as a whole have the property that their bitwise order is
+        // equal to the numeric magnitude where the magnitude is defined.
+        // The magnitude is not normally defined on NaN values, but
+        // IEEE 754 totalOrder defines the NaN values also to follow the
+        // bitwise order. This leads to order explained in the doc comment.
+        // However, the representation of magnitude is the same for negative
+        // and positive numbers – only the sign bit is different.
+        // To easily compare the floats as signed integers, we need to
+        // flip the exponent and mantissa bits in case of negative numbers.
+        // We effectively convert the numbers to "two's complement" form.
+        //
+        // To do the flipping, we construct a mask and XOR against it.
+        // We branchlessly calculate an "all-ones except for the sign bit"
+        // mask from negative-signed values: right shifting sign-extends
+        // the integer, so we "fill" the mask with sign bits, and then
+        // convert to unsigned to push one more zero bit.
+        // On positive values, the mask is all zeros, so it's a no-op.
+
+        let signed_bits = <Self::Signed as BitsRegister<Self>>::from_bits(value);
+        let is_negative = <Self::Signed as SignedRegister>::is_negative(signed_bits);
+        let mask = <Self::Signed as BitshiftRegister>::shri::<1>(is_negative);
+
+        <Self::Signed as Register>::bitxor(signed_bits, mask)
+    }
+
+    #[inline(always)]
     fn is_nan(value: Self::Storage) -> Self::Storage {
         // easiest way to check for NaN is to check if it's not equal to itself
         Self::ne(value, value)

@@ -1011,6 +1011,41 @@ impl<R: FloatRegister> Vector<R> {
     pub fn next_down(self) -> Self {
         Self(R::next_down(self.0))
     }
+
+    /// Return a signed integer vector that is capable of encapsulating
+    /// the "total order" of the floating point values in this vector,
+    /// such that when compared as integers, the ordering is the same
+    /// as the floating point ordering, including NaNs, in the following order:
+    ///
+    /// - negative quiet NaN
+    /// - negative signaling NaN
+    /// - negative infinity
+    /// - negative numbers
+    /// - negative subnormal numbers
+    /// - negative zero
+    /// - positive zero
+    /// - positive subnormal numbers
+    /// - positive numbers
+    /// - positive infinity
+    /// - positive signaling NaN
+    /// - positive quiet NaN.
+    ///
+    /// This is useful for sorting floating point numbers in a way that
+    /// is consistent and well-defined. However, it may differ from
+    /// the default floating point comparison behavior of the platform.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use thermite::backend::scalar::f32x4;
+    /// let x = f32x4::NAN;
+    /// let y = f32x4::ONE;
+    /// let total_lt = x.total_order().cmp_lt(y.total_order());
+    /// assert!(total_lt.none()); // NaN is not less than 1.0 in total order
+    /// ```
+    #[inline(always)]
+    pub fn total_order(self) -> Vector<R::Signed> {
+        Vector(R::total_order(self.0))
+    }
 }
 
 impl<R: NumericRegister> ConstZero for Vector<R> {
