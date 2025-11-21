@@ -22,6 +22,8 @@ use num_traits::{
     WrappingMul, WrappingSub, Zero,
 };
 
+pub mod streaming;
+
 /// SIMD Vector type.
 ///
 /// This wraps a low-level register type and provides a vector-like interface, including
@@ -199,6 +201,19 @@ impl<R: Register> Vector<R> {
         unsafe { Self(R::load_unaligned(ptr)) }
     }
 
+    /// Load a vector from a pointer to its elements using non-temporal (streaming) loads.
+    ///
+    /// The memory region should not be accessed frequently by the CPU,
+    /// as non-temporal loads are intended for data that will not be reused soon.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    #[inline(always)]
+    pub unsafe fn load_stream(ptr: *const R::Element) -> Self {
+        unsafe { Self(R::load_stream(ptr)) }
+    }
+
     /// Store the vector to an **aligned** pointer to its elements.
     ///
     /// # SAFETY
@@ -221,6 +236,19 @@ impl<R: Register> Vector<R> {
         unsafe { R::store_unaligned(ptr, self.0) }
     }
 
+    /// Store the vector to a pointer to its elements using non-temporal (streaming) stores.
+    ///
+    /// The memory region should not be accessed frequently by the CPU,
+    /// as non-temporal stores are intended for data that will not be reused soon.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `R::Lanes` elements long.
+    pub unsafe fn store_stream(self, ptr: *mut R::Element) {
+        // SAFETY: The caller must ensure that the pointer is valid and aligned.
+        unsafe { R::store_stream(ptr, self.0) }
+    }
+
     /// Transforms a slice of element values into a slice of vectors, with
     /// alignment and length checks. A prefix and/or suffix slice may be returned if the slice is
     /// not aligned or if the length is not a multiple of the number of lanes in the vector.
@@ -239,6 +267,34 @@ impl<R: Register> Vector<R> {
         // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
         // which is really all that's needed to consider it a slice of registers.
         unsafe { values.align_to::<Self>() }
+    }
+
+    /// Iterate over a slice of element values as Vectors using non-temporal (streaming) loads.
+    ///
+    /// # Panics
+    ///
+    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
+    pub fn stream_slice<'a>(values: &'a [R::Element]) -> impl Iterator<Item = streaming::StreamingVector<'a, R>> {
+        let (&[], values, &[]) = (unsafe { values.align_to::<R::Storage>() }) else {
+            panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
+        };
+
+        values.iter().map(|v| streaming::StreamingVector(v))
+    }
+
+    /// Iterate over a mutable slice of element values as Vectors using non-temporal (streaming) loads and stores.
+    ///
+    /// # Panics
+    ///
+    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
+    pub fn stream_slice_mut<'a>(
+        values: &'a mut [R::Element],
+    ) -> impl Iterator<Item = streaming::StreamingVectorMut<'a, R>> {
+        let (&mut [], values, &mut []) = (unsafe { values.align_to_mut::<R::Storage>() }) else {
+            panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
+        };
+
+        values.iter_mut().map(|v| streaming::StreamingVectorMut(v))
     }
 
     /// Create a new vector from an array of elements.
