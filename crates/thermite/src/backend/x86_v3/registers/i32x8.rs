@@ -64,6 +64,16 @@ impl Register for I32x8V3 {
     }
 
     #[inline(always)]
+    unsafe fn load_stream(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm256_stream_load_si256(ptr as _) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_stream(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm256_stream_si256(ptr as _, value) }
+    }
+
+    #[inline(always)]
     fn split(
         value: Self::Storage,
     ) -> (

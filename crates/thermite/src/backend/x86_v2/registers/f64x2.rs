@@ -64,6 +64,16 @@ impl Register for F64x2V2 {
     }
 
     #[inline(always)]
+    unsafe fn load_stream(ptr: *const Self::Element) -> Self::Storage {
+        unsafe { arch::_mm_castsi128_pd(arch::_mm_stream_load_si128(ptr as _)) }
+    }
+
+    #[inline(always)]
+    unsafe fn store_stream(ptr: *mut Self::Element, value: Self::Storage) {
+        unsafe { arch::_mm_stream_pd(ptr, value) }
+    }
+
+    #[inline(always)]
     fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_xor_pd(lhs, rhs) }
     }
