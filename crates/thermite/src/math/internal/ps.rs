@@ -203,8 +203,8 @@ where
 
             // place the s * 0.43157974 in the FMA to encourage instruction-level parallelism
             let r = t.mul_adde(s * Vf::splat(0.43157974), Vf::ONE)
-                / t.mul_add(Vf::splat(0.05831938), Vf::splat(0.76443945))
-                    .mul_add(t, Vf::ONE);
+                / t.mul_adde(Vf::splat(0.05831938), Vf::splat(0.76443945))
+                    .mul_adde(t, Vf::ONE);
 
             let r = gt1.select(Vf::FRAC_PI_2 - r, r);
 
@@ -263,8 +263,8 @@ where
             let t = s * s;
 
             let mut r = t.mul_adde(s * Vf::splat(0.43157974), Vf::ONE)
-                / t.mul_add(Vf::splat(0.05831938), Vf::splat(0.76443945))
-                    .mul_add(t, Vf::ONE);
+                / t.mul_adde(Vf::splat(0.05831938), Vf::splat(0.76443945))
+                    .mul_adde(t, Vf::ONE);
 
             r = swap_xy.select(Vf::FRAC_PI_2 - r, r);
             r = x.select_negative(Vf::PI - r, r);

@@ -379,7 +379,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
                 1 => return y.mul_adde(ba, a),
 
                 // scale the initial guess to fit the edges
-                _ => x0 = x0.mul_add(ba, a),
+                _ => x0 = x0.mul_adde(ba, a),
             }
         }
 

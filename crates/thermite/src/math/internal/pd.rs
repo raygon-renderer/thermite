@@ -23,7 +23,7 @@ where
 
         // Reduce by extended precision modular arithmetic
         // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
-        let x = y.nmul_add(dp3, y.nmul_add(dp2, y.nmul_add(dp1, xa)));
+        let x = y.nmul_adde(dp3, y.nmul_adde(dp2, y.nmul_adde(dp1, xa)));
 
         // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
         let x2 = x * x;
@@ -583,7 +583,8 @@ where
 
         let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
             // original form, 5 simple ops, 2 divisions
-            ((x / (t * t)) - t) / ((t + t) + (x / (t * t)))
+            let xtt = x / (t * t);
+            (xtt - t) / ((t + t) + xtt)
         } else {
             // fast form, 3 simple ops, 1 division, 1 fma
             let t3 = t * t * t;
