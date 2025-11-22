@@ -1,4 +1,6 @@
-use core::ops::Shl;
+//! Double-pumped registers for wider SIMD operations.
+
+#![warn(missing_docs, clippy::missing_safety_doc)]
 
 use crate::{
     divider::vector::VectorDivider,
@@ -46,15 +48,16 @@ const _: () = {
     }
 };
 
+#[doc(hidden)]
 pub trait DoublePumpVector {
-    type DoublePump;
+    type DoublePumped;
 }
 
 impl<R: Register> DoublePumpVector for crate::vector::Vector<R>
 where
     R::DoubleRegister: Register,
 {
-    type DoublePump = crate::vector::Vector<R::DoubleRegister>;
+    type DoublePumped = crate::vector::Vector<R::DoubleRegister>;
 }
 
 impl<R: Register> Clone for DoublePumpRegister<R> {
@@ -850,9 +853,9 @@ where
             let src = Self::as_array(&value);
 
             for (dst, &idx) in Self::iter_mut(&mut dst).zip(&idxs) {
+                // SAFETY: We have masked the indices above to be within bounds
                 unsafe {
                     core::hint::assert_unchecked((idx as usize) < src.len());
-
                     *dst = *src.get_unchecked(idx as usize)
                 }
             }
@@ -892,13 +895,6 @@ where
 
         Self(low, high)
     }
-
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     _a: Self::Storage,
-    //     _b: Self::Storage,
-    // ) -> Self::Storage {
-    //     unimplemented!()
-    // }
 }
 
 impl<FROM: Register, INTO: CastRegister<FROM>> CastRegister<DoublePumpRegister<FROM>> for DoublePumpRegister<INTO>

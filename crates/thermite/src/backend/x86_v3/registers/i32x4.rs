@@ -360,7 +360,7 @@ impl SignedRegister for I32x4V3 {
 
     #[inline(always)]
     fn is_negative(value: Self::Storage) -> Self::Storage {
-        unsafe { arch::_mm_srai_epi32::<31>(value) }
+        unsafe { arch::_mm_signbits_epi32x_v1(value) }
     }
 
     #[inline(always)]

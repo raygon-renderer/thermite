@@ -341,6 +341,11 @@ impl SignedRegister for I64x2V3 {
     }
 
     #[inline(always)]
+    fn is_negative(value: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_signbits_epi64x_v1(value) }
+    }
+
+    #[inline(always)]
     fn abs(value: Self::Storage) -> Self::Storage {
         unsafe {
             let sign = arch::_mm_signbits_epi64x_v1(value);

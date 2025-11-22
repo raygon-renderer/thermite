@@ -87,7 +87,7 @@ pub use divider::{BranchfreeDivider, Divider};
 pub use mask::Mask;
 pub use register::DoublePump;
 pub use swizzle::Swizzle;
-pub use vector::Vector;
+pub use vector::{MaskOf, Vector};
 
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
 #[inline]

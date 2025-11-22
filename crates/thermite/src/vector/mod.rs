@@ -7,8 +7,8 @@ use crate::{
     mask::Mask,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
-        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
+        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        SignedIntegerRegister, SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -30,6 +30,27 @@ pub mod streaming;
 /// operator overloading and element-wise operations.
 #[repr(transparent)]
 pub struct Vector<R: Register>(pub(crate) R::Storage);
+
+#[doc(hidden)]
+pub trait MaskOfVector {
+    type MaskRegister: MaskRegister;
+}
+
+impl<R: MaskRegister> MaskOfVector for Vector<R> {
+    type MaskRegister = R;
+}
+
+/// The mask type corresponding to a given vector type.
+///
+/// # Example
+/// ```
+/// # use thermite::vector::{Vector, MaskOf};
+/// # use thermite::backend::scalar::*;
+/// fn example(x: f32x4) -> MaskOf<f32x4> {
+///     x.is_negative()
+/// }
+/// ```
+pub type MaskOf<V> = Mask<<V as MaskOfVector>::MaskRegister>;
 
 impl<R: Register> Clone for Vector<R> {
     #[inline(always)]

@@ -15,7 +15,8 @@ use crate::{
     isa::InstructionSet,
 };
 
-pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePump;
+/// Helper type alias for double-pumped vectors.
+pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePumped;
 
 #[inline(always)]
 pub(crate) const fn reg<R: Register, const N: usize>(values: [R::Element; N]) -> R::Storage
