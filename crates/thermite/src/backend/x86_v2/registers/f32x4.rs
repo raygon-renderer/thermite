@@ -355,21 +355,25 @@ impl FloatRegister for F32x4V2 {
 
     const EXP_MASK: Storage<Self::Bits> = reg::<Self::Bits, 4>([0x7F800000; 4]);
 
+    #[cfg(not(feature = "disable_fma_emulation"))]
     #[inline(always)]
     fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_fmadd_psx_v1(lhs, rhs, acc) }
     }
 
+    #[cfg(not(feature = "disable_fma_emulation"))]
     #[inline(always)]
     fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_fmadd_psx_v1(lhs, rhs, Self::neg(acc)) }
     }
 
+    #[cfg(not(feature = "disable_fma_emulation"))]
     #[inline(always)]
     fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_fmadd_psx_v1(Self::neg(lhs), rhs, acc) }
     }
 
+    #[cfg(not(feature = "disable_fma_emulation"))]
     #[inline(always)]
     fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_fmadd_psx_v1(Self::neg(lhs), rhs, Self::neg(acc)) }
