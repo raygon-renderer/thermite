@@ -24,6 +24,9 @@ use num_traits::{
 
 pub mod streaming;
 
+#[cfg(feature = "float-trait")]
+mod float_trait;
+
 /// SIMD Vector type.
 ///
 /// This wraps a low-level register type and provides a vector-like interface, including
@@ -882,12 +885,6 @@ impl<R: FloatRegister> Vector<R> {
         Mask(R::is_subnormal(self.0))
     }
 
-    // TODO: Move to math library?
-    // #[inline(always)]
-    // pub fn lerp(self, a: Self, b: Self) -> Self {
-    //     self.mul_adde(b - a, a) // t * (b - a) + a
-    // }
-
     /// Maybe fused Multiply-Add operation.
     ///
     /// If the instruction set does not support fused-multiply-add
@@ -1473,14 +1470,14 @@ impl<R: IntegerRegister> Vector<R> {
     /// For each element in the vector, rotate the bits to the left by the given
     /// number of bits.
     #[inline(always)]
-    pub fn rol(self, shift: u32) -> Self {
+    pub fn rotate_left(self, shift: u32) -> Self {
         Self(R::rol(self.0, shift))
     }
 
     /// For each element in the vector, rotate the bits to the right by the given
     /// number of bits.
     #[inline(always)]
-    pub fn ror(self, shift: u32) -> Self {
+    pub fn rotate_right(self, shift: u32) -> Self {
         Self(R::ror(self.0, shift))
     }
 

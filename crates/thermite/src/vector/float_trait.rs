@@ -100,6 +100,8 @@ where
     #[inline(always)] fn is_finite(self) -> bool { self.is_finite().all() }
     #[inline(always)] fn is_normal(self) -> bool { self.is_normal().all() }
 
+    /// Follows the logic of most important classification in the order:
+    /// NaN (any) > Infinite (any) > Zero (all) > Subnormal (any) > Normal
     #[inline(always)] fn classify(self) -> core::num::FpCategory { num_traits::float::FloatCore::classify(self) }
 
     #[inline(always)] fn floor(self) -> Self { self.floor() }
@@ -110,8 +112,10 @@ where
     #[inline(always)] fn abs(self) -> Self { self.abs() }
     #[inline(always)] fn signum(self) -> Self { self.signum() }
 
-    #[inline(always)] fn is_sign_positive(self) -> bool { self.is_positive().all() }
+    /// Returns true if **any** lane is negative, false otherwise.
     #[inline(always)] fn is_sign_negative(self) -> bool { self.is_negative().any() }
+    /// Returns true if **all** lanes are positive, false otherwise.
+    #[inline(always)] fn is_sign_positive(self) -> bool { self.is_positive().all() }
 
     #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { self.mul_add(a, b) }
     #[inline(always)] fn recip(self) -> Self { Self::ONE / self }

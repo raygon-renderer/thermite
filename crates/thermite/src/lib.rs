@@ -80,9 +80,6 @@ pub mod register;
 #[doc(hidden)]
 pub mod swizzle;
 
-#[cfg(feature = "float-trait")]
-mod float_trait;
-
 pub use divider::{BranchfreeDivider, Divider};
 pub use mask::Mask;
 pub use register::DoublePump;

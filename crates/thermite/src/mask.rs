@@ -201,7 +201,6 @@ impl<R: MaskRegister> Mask<R> {
         if let Some(native) = self.native_bitmask() {
             let bits = unsafe { core::mem::transmute::<u64, [u32; 2]>(native) };
             let bits = bitvec::slice::BitSlice::<u32>::from_slice(&bits);
-
             bitmask[..Self::LANES].copy_from_bitslice(&bits[..Self::LANES]);
         } else {
             // otherwise fill bitmask using the register's method
