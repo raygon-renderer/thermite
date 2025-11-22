@@ -285,3 +285,88 @@ pub unsafe fn _mm_nextdownpd_v1(value: __m128d) -> __m128d {
 
     _mm_castsi128_pd(_mm_blendv_epi8x_v1(next_bits, bits, unchanged))
 }
+
+#[inline(always)]
+pub unsafe fn _mm_fmadd_psx_v1(x: __m128, m: __m128, a: __m128) -> __m128 {
+    // 1. Split 128-bit packed float (4 lanes) into two sets of doubles (2 lanes each)
+    // Low 2 floats -> doubles
+    let x_lo = _mm_cvtps_pd(x);
+    let m_lo = _mm_cvtps_pd(m);
+    let a_lo = _mm_cvtps_pd(a);
+
+    // High 2 floats -> doubles (move high half to low, then convert)
+    let x_hi = _mm_cvtps_pd(_mm_movehl_ps(x, x));
+    let m_hi = _mm_cvtps_pd(_mm_movehl_ps(m, m));
+    let a_hi = _mm_cvtps_pd(_mm_movehl_ps(a, a));
+
+    // 2. Perform operation in f64 (Infinite precision relative to f32)
+    // (x * m) is exact here. + a performs the arithmetic.
+    let res_lo = _mm_add_pd(_mm_mul_pd(x_lo, m_lo), a_lo);
+    let res_hi = _mm_add_pd(_mm_mul_pd(x_hi, m_hi), a_hi);
+
+    // 3. Convert back to f32.
+    // This conversion applies the single mandatory IEEE-754 rounding step.
+    let out_lo = _mm_cvtpd_ps(res_lo);
+    let out_hi = _mm_cvtpd_ps(res_hi);
+
+    // 4. Shuffle high results back into the upper lanes
+    _mm_movelh_ps(out_lo, out_hi)
+}
+
+#[inline(always)]
+pub unsafe fn _mm_fmadd_pdx_v1(x: __m128d, m: __m128d, a: __m128d) -> __m128d {
+    // Constants for Veltkamp's splitting (2^27 + 1)
+    let splitter = _mm_set1_pd(134217729.0);
+
+    // 1. Veltkamp's Split for 'x'
+    // Splits x into x_h and x_l such that x = x_h + x_l exactly.
+    // x_h has 26 bits of precision.
+    let c_x = _mm_mul_pd(x, splitter);
+    let x_h = _mm_sub_pd(c_x, _mm_sub_pd(c_x, x));
+    let x_l = _mm_sub_pd(x, x_h);
+
+    // 2. Veltkamp's Split for 'm'
+    let c_m = _mm_mul_pd(m, splitter);
+    let m_h = _mm_sub_pd(c_m, _mm_sub_pd(c_m, m));
+    let m_l = _mm_sub_pd(m, m_h);
+
+    // 3. Dekker's Exact Product
+    // p = x * m (standard rounded product)
+    let p = _mm_mul_pd(x, m);
+
+    // Calculate the error term 'e' of the multiplication.
+    // e = ((x_h * m_h - p) + x_h * m_l + x_l * m_h) + x_l * m_l
+    // This formula relies on the distributive property and the split parts.
+    let t1 = _mm_mul_pd(x_h, m_h);
+    let t2 = _mm_sub_pd(t1, p);
+    let t3 = _mm_mul_pd(x_h, m_l);
+    let t4 = _mm_mul_pd(x_l, m_h);
+    let t5 = _mm_mul_pd(x_l, m_l);
+
+    let e = _mm_add_pd(_mm_add_pd(_mm_add_pd(t2, t3), t4), t5);
+
+    // At this point, x * m = p + e (exactly, in 106 bits of precision)
+
+    // 4. Knuth's TwoSum (Adding 'a' to the exact product)
+    // We want result = (p + e) + a
+    // First, add 'a' to the main product 'p'.
+    let sum = _mm_add_pd(p, a);
+
+    // Recover the rounding error from the addition: sum = p + a + err
+    // Using Knuth's method (6 FLOPs, no branches):
+    // v = sum - p
+    // err = (p - (sum - v)) + (a - v)
+    let v = _mm_sub_pd(sum, p);
+    let z = _mm_sub_pd(sum, v); // Virtual p
+    let err_a = _mm_sub_pd(a, v);
+    let err_p = _mm_sub_pd(p, z);
+    let err_add = _mm_add_pd(err_p, err_a);
+
+    // 5. Final Combination
+    // The total true result is approximately: sum + e + err_add.
+    // We add the errors (e + err_add) and add that to the main sum.
+    // This final add applies the correct rounding direction.
+    let total_error = _mm_add_pd(e, err_add);
+
+    _mm_add_pd(sum, total_error)
+}

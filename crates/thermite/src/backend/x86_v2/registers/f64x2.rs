@@ -341,6 +341,26 @@ impl FloatRegister for F64x2V2 {
     const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 2>([0x7FF0_0000_0000_0000; 2]);
 
     #[inline(always)]
+    fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, acc) }
+    }
+
+    #[inline(always)]
+    fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, Self::neg(acc)) }
+    }
+
+    #[inline(always)]
+    fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, acc) }
+    }
+
+    #[inline(always)]
+    fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+        unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, Self::neg(acc)) }
+    }
+
+    #[inline(always)]
     fn sqrt(value: Self::Storage) -> Self::Storage {
         unsafe { arch::_mm_sqrt_pd(value) }
     }
