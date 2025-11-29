@@ -14,10 +14,7 @@ use crate::register::{
 #[rustfmt::skip]
 macro_rules! decl_float_scalar { ($f:ty $(: $s:ident)? => $width:literal) => {paste::paste! {
 
-#[cfg_attr(not(feature = "document_registers"), doc(hidden))]
-pub struct [<F $width x1Scalar>];
-
-impl Register for [<F $width x1Scalar>] {
+impl Register for [<f $width>] {
     type Lanes = typenum::U1;
 
     type Element = [<f $width>];
@@ -27,8 +24,8 @@ impl Register for [<F $width x1Scalar>] {
 
     const ISA: InstructionSet = InstructionSet::Scalar;
 
-    type SCOUNT = super::[<I $width x1Scalar>];
-    type UCOUNT = super::[<U $width x1Scalar>];
+    type ISize = [<i $width>];
+    type USize = [<u $width>];
 
     const EMPTY: Self::Storage = 0.0;
 
@@ -77,18 +74,18 @@ impl Register for [<F $width x1Scalar>] {
     }
 }
 
-impl ShuffleRegister for [<F $width x1Scalar>] {
+impl ShuffleRegister for [<f $width>] {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
-impl PermuteRegister for [<F $width x1Scalar>] {
+impl PermuteRegister for [<f $width>] {
     #[inline(always)] fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value }
 }
 
-impl SwizzleRegister for [<F $width x1Scalar>] {
+impl SwizzleRegister for [<f $width>] {
     const HAS_PERMUTEV: bool = false;
 
     #[inline(always)]
@@ -102,13 +99,13 @@ impl SwizzleRegister for [<F $width x1Scalar>] {
     }
 }
 
-impl MaskRegister for [<F $width x1Scalar>] {
+impl MaskRegister for [<f $width>] {
     const TRUTHY: Self::Storage = Element::TRUTHY;
     const FALSY: Self::Storage = Element::FALSY;
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
-        if value[0] { Self::TRUTHY } else { Self::FALSY }
+        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
     #[inline(always)] fn all(value: Self::Storage) -> bool { value.to_bool() }
@@ -125,7 +122,7 @@ impl MaskRegister for [<F $width x1Scalar>] {
     }
 }
 
-impl PartialOrdRegister for [<F $width x1Scalar>] {
+impl PartialOrdRegister for [<f $width>] {
     #[inline(always)] fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs > rhs) }
     #[inline(always)] fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs == rhs) }
     #[inline(always)] fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs >= rhs) }
@@ -134,7 +131,7 @@ impl PartialOrdRegister for [<F $width x1Scalar>] {
     #[inline(always)] fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs != rhs) }
 }
 
-impl NumericRegister for [<F $width x1Scalar>] {
+impl NumericRegister for [<f $width>] {
     const ZERO: Self::Storage = 0.0;
     const ONE: Self::Storage = 1.0;
     const TWO: Self::Storage = 2.0;
@@ -157,7 +154,7 @@ impl NumericRegister for [<F $width x1Scalar>] {
     #[inline(always)] fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.max(rhs) }
 }
 
-impl SignedRegister for [<F $width x1Scalar>] {
+impl SignedRegister for [<f $width>] {
     const NEG_ONE: Self::Storage = -1.0;
     const MIN_POSITIVE: Self::Storage = <$f>::MIN_POSITIVE;
 
@@ -172,10 +169,10 @@ impl SignedRegister for [<F $width x1Scalar>] {
     }
 }
 
-impl FloatRegister for [<F $width x1Scalar>] {
-    type Bits = super::[<U $width x1Scalar>];
-    type Signed = super::[<I $width x1Scalar>];
-    type ExtendedPrecision = super::F64x1Scalar;
+impl FloatRegister for [<f $width>] {
+    type Bits = [<u $width>];
+    type Signed = [<i $width>];
+    type ExtendedPrecision = f64;
 
     // best guess we can do
     const HAS_TRUE_FMA: bool = cfg!(any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"));

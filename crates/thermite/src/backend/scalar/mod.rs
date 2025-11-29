@@ -4,10 +4,6 @@ pub mod float;
 pub mod signed;
 pub mod unsigned;
 
-pub use float::{F32x1Scalar, F64x1Scalar};
-pub use signed::{I32x1Scalar, I64x1Scalar};
-pub use unsigned::{U32x1Scalar, U64x1Scalar};
-
 use crate::{
     register::{Element, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
@@ -19,27 +15,27 @@ impl NativeSimd for Scalar {
     type Native32Width = generic_array::typenum::U1;
     type Native64Width = generic_array::typenum::U1;
 
-    type f32xN = F32x1Scalar;
-    type i32xN = I32x1Scalar;
-    type u32xN = U32x1Scalar;
+    type f32xN = f32;
+    type i32xN = i32;
+    type u32xN = u32;
 
-    type f64xN = F64x1Scalar;
-    type i64xN = I64x1Scalar;
-    type u64xN = U64x1Scalar;
+    type f64xN = f64;
+    type i64xN = i64;
+    type u64xN = u64;
 }
 
 impl Simd for Scalar {
-    type f32x4 = DoublePumpRegister<DoublePumpRegister<F32x1Scalar>>;
-    type i32x4 = DoublePumpRegister<DoublePumpRegister<I32x1Scalar>>;
-    type u32x4 = DoublePumpRegister<DoublePumpRegister<U32x1Scalar>>;
+    type f32x4 = DoublePumpRegister<DoublePumpRegister<f32>>;
+    type i32x4 = DoublePumpRegister<DoublePumpRegister<i32>>;
+    type u32x4 = DoublePumpRegister<DoublePumpRegister<u32>>;
 
     type f32x8 = DoublePumpRegister<Self::f32x4>;
     type i32x8 = DoublePumpRegister<Self::i32x4>;
     type u32x8 = DoublePumpRegister<Self::u32x4>;
 
-    type f64x2 = DoublePumpRegister<F64x1Scalar>;
-    type i64x2 = DoublePumpRegister<I64x1Scalar>;
-    type u64x2 = DoublePumpRegister<U64x1Scalar>;
+    type f64x2 = DoublePumpRegister<f64>;
+    type i64x2 = DoublePumpRegister<i64>;
+    type u64x2 = DoublePumpRegister<u64>;
 
     type f64x4 = DoublePumpRegister<Self::f64x2>;
     type i64x4 = DoublePumpRegister<Self::i64x2>;
@@ -105,53 +101,53 @@ macro_rules! impl_nontrivial_casts {
 }
 
 impl_easy_casts! {
-    F32x1Scalar as I32x1Scalar,
-    F32x1Scalar as U32x1Scalar,
-    F32x1Scalar as F32x1Scalar,
+    f32 as i32,
+    f32 as u32,
+    f32 as f32,
 
-    I32x1Scalar as F32x1Scalar,
-    I32x1Scalar as U32x1Scalar,
-    I32x1Scalar as I32x1Scalar,
+    i32 as f32,
+    i32 as u32,
+    i32 as i32,
 
-    U32x1Scalar as F32x1Scalar,
-    U32x1Scalar as I32x1Scalar,
-    U32x1Scalar as U32x1Scalar,
+    u32 as f32,
+    u32 as i32,
+    u32 as u32,
 
-    I64x1Scalar as F64x1Scalar,
-    I64x1Scalar as U64x1Scalar,
-    I64x1Scalar as I64x1Scalar,
+    i64 as f64,
+    i64 as u64,
+    i64 as i64,
 
-    U64x1Scalar as F64x1Scalar,
-    U64x1Scalar as I64x1Scalar,
-    U64x1Scalar as U64x1Scalar,
+    u64 as f64,
+    u64 as i64,
+    u64 as u64,
 
-    F64x1Scalar as I64x1Scalar,
-    F64x1Scalar as U64x1Scalar,
-    F64x1Scalar as F64x1Scalar
+    f64 as i64,
+    f64 as u64,
+    f64 as f64
 }
 
 impl_nontrivial_casts! {
-    F32x1Scalar as I64x1Scalar,
-    F32x1Scalar as U64x1Scalar,
-    F32x1Scalar as F64x1Scalar,
+    f32 as i64,
+    f32 as u64,
+    f32 as f64,
 
-    I64x1Scalar as F32x1Scalar,
-    I64x1Scalar as I32x1Scalar,
-    I64x1Scalar as U32x1Scalar,
+    i64 as f32,
+    i64 as i32,
+    i64 as u32,
 
-    U32x1Scalar as F64x1Scalar,
-    U32x1Scalar as U64x1Scalar,
-    U32x1Scalar as I64x1Scalar,
+    u32 as f64,
+    u32 as u64,
+    u32 as i64,
 
-    F64x1Scalar as F32x1Scalar,
-    F64x1Scalar as I32x1Scalar,
-    F64x1Scalar as U32x1Scalar,
+    f64 as f32,
+    f64 as i32,
+    f64 as u32,
 
-    I32x1Scalar as F64x1Scalar,
-    I32x1Scalar as I64x1Scalar,
-    I32x1Scalar as U64x1Scalar,
+    i32 as f64,
+    i32 as i64,
+    i32 as u64,
 
-    U64x1Scalar as F32x1Scalar,
-    U64x1Scalar as U32x1Scalar,
-    U64x1Scalar as I32x1Scalar
+    u64 as f32,
+    u64 as u32,
+    u64 as i32
 }

@@ -14,10 +14,7 @@ use crate::register::{
 #[rustfmt::skip]
 macro_rules! decl_signed_scalar { ($i:ty: $u:ty => $width:literal) => {paste::paste! {
 
-#[cfg_attr(not(feature = "document_registers"), doc(hidden))]
-pub struct [<I $width x1Scalar>];
-
-impl Register for [<I $width x1Scalar>] {
+impl Register for [<i $width>] {
     type Lanes = typenum::U1;
 
     type Element = $i;
@@ -27,8 +24,8 @@ impl Register for [<I $width x1Scalar>] {
 
     const ISA: InstructionSet = InstructionSet::Scalar;
 
-    type SCOUNT = super::[<I $width x1Scalar>];
-    type UCOUNT = super::[<U $width x1Scalar>];
+    type ISize = [<i $width>];
+    type USize = [<u $width>];
 
     const EMPTY: Self::Storage = 0;
 
@@ -67,38 +64,38 @@ impl Register for [<I $width x1Scalar>] {
     }
 }
 
-impl BitshiftRegister for [<I $width x1Scalar>] {
+impl BitshiftRegister for [<i $width>] {
     // NOTE: We do _NOT_ want arithmetic shift here, so we cast to unsigned first
     #[inline(always)] fn shl(value: Self::Storage, shift: u32) -> Self::Storage { ((value as $u) << shift) as $i }
     #[inline(always)] fn shr(value: Self::Storage, shift: u32) -> Self::Storage { ((value as $u) >> shift) as $i }
-    #[inline(always)] fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { ((value as $u) << shifts) as $i }
-    #[inline(always)] fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { ((value as $u) >> shifts) as $i }
+    #[inline(always)] fn shlv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { ((value as $u) << shifts) as $i }
+    #[inline(always)] fn shrv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { ((value as $u) >> shifts) as $i }
     #[inline(always)] fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage { ((value as $u) << IMM8 as u32) as $i }
     #[inline(always)] fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage { ((value as $u) >> IMM8 as u32) as $i }
 
-    #[inline(always)] fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { Self::rol(value, shifts as _) }
-    #[inline(always)] fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { Self::ror(value, shifts as _) }
+    #[inline(always)] fn rolv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::rol(value, shifts as _) }
+    #[inline(always)] fn rorv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::ror(value, shifts as _) }
     #[inline(always)] fn rol(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_left(shift) }
     #[inline(always)] fn ror(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_right(shift) }
 
     #[inline(always)] fn reverse_bits(value: Self::Storage) -> Self::Storage { value.reverse_bits() }
 }
 
-impl ShuffleRegister for [<I $width x1Scalar>] {
+impl ShuffleRegister for [<i $width>] {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
-impl PermuteRegister for [<I $width x1Scalar>] {
+impl PermuteRegister for [<i $width>] {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         value
     }
 }
 
-impl SwizzleRegister for [<I $width x1Scalar>] {
+impl SwizzleRegister for [<i $width>] {
     const HAS_PERMUTEV: bool = false;
 
     #[inline(always)]
@@ -112,13 +109,13 @@ impl SwizzleRegister for [<I $width x1Scalar>] {
     }
 }
 
-impl MaskRegister for [<I $width x1Scalar>] {
+impl MaskRegister for [<i $width>] {
     const TRUTHY: Self::Storage = Element::TRUTHY;
     const FALSY: Self::Storage = Element::FALSY;
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
-        if value[0] { Self::TRUTHY } else { Self::FALSY }
+        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
     #[inline(always)] fn all(value: Self::Storage) -> bool { value.to_bool() }
@@ -136,7 +133,7 @@ impl MaskRegister for [<I $width x1Scalar>] {
     }
 }
 
-impl PartialOrdRegister for [<I $width x1Scalar>] {
+impl PartialOrdRegister for [<i $width>] {
     #[inline(always)] fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs > rhs) }
     #[inline(always)] fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs == rhs) }
     #[inline(always)] fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs >= rhs) }
@@ -145,7 +142,7 @@ impl PartialOrdRegister for [<I $width x1Scalar>] {
     #[inline(always)] fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs != rhs) }
 }
 
-impl NumericRegister for [<I $width x1Scalar>] {
+impl NumericRegister for [<i $width>] {
     const ZERO: Self::Storage = 0;
     const ONE: Self::Storage = 1;
     const TWO: Self::Storage = 2;
@@ -168,7 +165,7 @@ impl NumericRegister for [<I $width x1Scalar>] {
     #[inline(always)] fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.max(rhs) }
 }
 
-impl SignedRegister for [<I $width x1Scalar>] {
+impl SignedRegister for [<i $width>] {
     const NEG_ONE: Self::Storage = -1;
     const MIN_POSITIVE: Self::Storage = 1;
 
@@ -189,7 +186,7 @@ impl SignedRegister for [<I $width x1Scalar>] {
     }
 }
 
-impl IntegerRegister for [<I $width x1Scalar>] {
+impl IntegerRegister for [<i $width>] {
     #[inline(always)] fn saturating_add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_add(rhs) }
     #[inline(always)] fn saturating_sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_sub(rhs) }
     #[inline(always)] fn wrapping_sum(value: Self::Storage) -> Self::Element { value }
@@ -225,11 +222,11 @@ impl IntegerRegister for [<I $width x1Scalar>] {
     #[inline(always)] fn trailing_ones(value: Self::Storage) -> Self::Storage { value.trailing_ones() as _ }
 }
 
-impl SignedIntegerRegister for [<I $width x1Scalar>] {
+impl SignedIntegerRegister for [<i $width>] {
     // NOTE: These _do_ use arithmetic shift
     #[inline(always)] fn srai<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value >> IMM8 }
     #[inline(always)] fn sra(value: Self::Storage, shift: u32) -> Self::Storage { value >> shift }
-    #[inline(always)] fn srav(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { value >> shifts }
+    #[inline(always)] fn srav(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { value >> shifts }
 }
 
 }}} // end macro

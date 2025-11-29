@@ -14,10 +14,7 @@ use crate::register::{
 #[rustfmt::skip]
 macro_rules! decl_unsigned_scalar { ($i:ty => $width:literal) => {paste::paste! {
 
-#[cfg_attr(not(feature = "document_registers"), doc(hidden))]
-pub struct [<U $width x1Scalar>];
-
-impl Register for [<U $width x1Scalar>] {
+impl Register for [<u $width>] {
     type Lanes = typenum::U1;
 
     type Element = $i;
@@ -27,8 +24,8 @@ impl Register for [<U $width x1Scalar>] {
 
     const ISA: InstructionSet = InstructionSet::Scalar;
 
-    type SCOUNT = super::[<I $width x1Scalar>];
-    type UCOUNT = super::[<U $width x1Scalar>];
+    type ISize = [<i $width>];
+    type USize = [<u $width>];
 
     const EMPTY: Self::Storage = 0;
 
@@ -67,37 +64,37 @@ impl Register for [<U $width x1Scalar>] {
     }
 }
 
-impl BitshiftRegister for [<U $width x1Scalar>] {
+impl BitshiftRegister for [<u $width>] {
     #[inline(always)] fn shl(value: Self::Storage, shift: u32) -> Self::Storage { value << shift }
     #[inline(always)] fn shr(value: Self::Storage, shift: u32) -> Self::Storage { value >> shift }
-    #[inline(always)] fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { value << shifts }
-    #[inline(always)] fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { value >> shifts }
+    #[inline(always)] fn shlv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { value << shifts }
+    #[inline(always)] fn shrv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { value >> shifts }
     #[inline(always)] fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value << IMM8 }
     #[inline(always)] fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value >> IMM8 }
 
-    #[inline(always)] fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { Self::rol(value, shifts as _) }
-    #[inline(always)] fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage { Self::ror(value, shifts as _) }
+    #[inline(always)] fn rolv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::rol(value, shifts as _) }
+    #[inline(always)] fn rorv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::ror(value, shifts as _) }
     #[inline(always)] fn rol(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_left(shift) }
     #[inline(always)] fn ror(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_right(shift) }
 
     #[inline(always)] fn reverse_bits(value: Self::Storage) -> Self::Storage { value.reverse_bits() }
 }
 
-impl ShuffleRegister for [<U $width x1Scalar>] {
+impl ShuffleRegister for [<u $width>] {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
-impl PermuteRegister for [<U $width x1Scalar>] {
+impl PermuteRegister for [<u $width>] {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
         value
     }
 }
 
-impl SwizzleRegister for [<U $width x1Scalar>] {
+impl SwizzleRegister for [<u $width>] {
     const HAS_PERMUTEV: bool = false;
 
     #[inline(always)]
@@ -111,13 +108,13 @@ impl SwizzleRegister for [<U $width x1Scalar>] {
     }
 }
 
-impl MaskRegister for [<U $width x1Scalar>] {
+impl MaskRegister for [<u $width>] {
     const TRUTHY: Self::Storage = Element::TRUTHY;
     const FALSY: Self::Storage = Element::FALSY;
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
-        if value[0] { Self::TRUTHY } else { Self::FALSY }
+        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
     #[inline(always)] fn all(value: Self::Storage) -> bool { value != 0 }
@@ -135,7 +132,7 @@ impl MaskRegister for [<U $width x1Scalar>] {
     }
 }
 
-impl PartialOrdRegister for [<U $width x1Scalar>] {
+impl PartialOrdRegister for [<u $width>] {
     #[inline(always)] fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs > rhs) }
     #[inline(always)] fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs == rhs) }
     #[inline(always)] fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs >= rhs) }
@@ -144,7 +141,7 @@ impl PartialOrdRegister for [<U $width x1Scalar>] {
     #[inline(always)] fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs != rhs) }
 }
 
-impl NumericRegister for [<U $width x1Scalar>] {
+impl NumericRegister for [<u $width>] {
     const ZERO: Self::Storage = 0;
     const ONE: Self::Storage = 1;
     const TWO: Self::Storage = 2;
@@ -167,7 +164,7 @@ impl NumericRegister for [<U $width x1Scalar>] {
     #[inline(always)] fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.max(rhs) }
 }
 
-impl IntegerRegister for [<U $width x1Scalar>] {
+impl IntegerRegister for [<u $width>] {
     #[inline(always)] fn saturating_add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_add(rhs) }
     #[inline(always)] fn saturating_sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_sub(rhs) }
     #[inline(always)] fn wrapping_sum(value: Self::Storage) -> Self::Element { value }
@@ -203,7 +200,7 @@ impl IntegerRegister for [<U $width x1Scalar>] {
     #[inline(always)] fn trailing_ones(value: Self::Storage) -> Self::Storage { value.trailing_ones() as _ }
 }
 
-impl UnsignedIntegerRegister for [<U $width x1Scalar>] {
+impl UnsignedIntegerRegister for [<u $width>] {
     #[inline(always)]
     fn next_power_of_two_m1(value: Self::Storage) -> Self::Storage {
         if value == 0 { 0 } else { value.next_power_of_two() - 1 }
