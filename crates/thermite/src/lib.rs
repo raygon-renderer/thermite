@@ -11,7 +11,7 @@ fn nightly_check() {
     compile_error!("The `nightly` feature requires a nightly compiler.");
 }
 
-#[doc(hidden)]
+pub extern crate bitvec;
 pub extern crate generic_array;
 
 /// Creates a shuffle mask for various instructions. Note

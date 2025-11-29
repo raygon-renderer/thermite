@@ -16,6 +16,7 @@ use crate::{
 use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct I64x2V2;
 
 impl Register for I64x2V2 {
@@ -28,8 +29,8 @@ impl Register for I64x2V2 {
 
     const ISA: InstructionSet = InstructionSet::X86V2;
 
-    type SCOUNT = super::I64x2V2;
-    type UCOUNT = super::U64x2V2;
+    type ISize = super::I64x2V2;
+    type USize = super::U64x2V2;
 
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
@@ -143,12 +144,12 @@ impl BitshiftRegister for I64x2V2 {
     }
 
     #[inline(always)]
-    fn shrv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+    fn shrv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage {
         unsafe { arch::_mm_srlv_epi64x_v1(value, shifts) }
     }
 
     #[inline(always)]
-    fn shlv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+    fn shlv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage {
         unsafe { arch::_mm_sllv_epi64x_v1(value, shifts) }
     }
 
@@ -163,12 +164,12 @@ impl BitshiftRegister for I64x2V2 {
     }
 
     #[inline(always)]
-    fn rolv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+    fn rolv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage {
         unsafe { arch::_mm_rolv_epi64x_v2(value, shifts) }
     }
 
     #[inline(always)]
-    fn rorv(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+    fn rorv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage {
         unsafe { arch::_mm_rorv_epi64x_v2(value, shifts) }
     }
 
@@ -459,7 +460,7 @@ impl SignedIntegerRegister for I64x2V2 {
     }
 
     #[inline(always)]
-    fn srav(value: Self::Storage, shifts: Storage<Self::UCOUNT>) -> Self::Storage {
+    fn srav(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage {
         unsafe { arch::_mm_srav_epi64x_v1(value, shifts) }
     }
 }

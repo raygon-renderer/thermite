@@ -12,6 +12,15 @@ pub struct VectorDivider<R: Register> {
     pub shifts: Vector<R>,
 }
 
+impl<R: Register> Clone for VectorDivider<R> {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<R: Register> Copy for VectorDivider<R> {}
+
 impl<R: Register> VectorDivider<DoublePumpRegister<R>>
 where
     typenum::Double<R::Lanes>: Lanes,

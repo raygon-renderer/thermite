@@ -8,7 +8,7 @@ use crate::{
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
         MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedIntegerRegister, SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -18,10 +18,11 @@ use core::ops::{
 };
 
 use num_traits::{
-    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd,
+    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, Signed, WrappingAdd,
     WrappingMul, WrappingSub, Zero,
 };
 
+//pub mod generic;
 pub mod streaming;
 
 #[cfg(feature = "float-trait")]
@@ -32,7 +33,7 @@ mod float_trait;
 /// This wraps a low-level register type and provides a vector-like interface, including
 /// operator overloading and element-wise operations.
 #[repr(transparent)]
-pub struct Vector<R: Register>(pub(crate) R::Storage);
+pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
 #[doc(hidden)]
 pub trait MaskOfVector {
@@ -390,7 +391,7 @@ impl<R: Register> Vector<R> {
 
     /// Returns a mutable slice of the vector's elements.
     #[inline(always)]
-    pub fn as_slice_mut(&mut self) -> &mut [R::Element] {
+    pub fn as_mut_slice(&mut self) -> &mut [R::Element] {
         R::as_array_mut(&mut self.0).as_mut_slice()
     }
 
@@ -402,7 +403,7 @@ impl<R: Register> Vector<R> {
 
     /// Extract a single element from the vector at the given index.
     #[inline(always)]
-    pub fn extract<const I: usize>(&self) -> R::Element {
+    pub fn extract<const I: usize>(self) -> R::Element {
         const { assert!(I < Self::LANES, "Index out of bounds") };
 
         R::extract::<I>(self.0)
@@ -559,6 +560,18 @@ impl<R: BitshiftRegister> Vector<R> {
     pub fn shri<const IMM8: i32>(self) -> Self {
         Self(R::shri::<IMM8>(self.0))
     }
+
+    /// For each lane in the vector, shift left by the given value.
+    #[inline(always)]
+    pub fn shlv(self, shifts: Vector<R::USize>) -> Self {
+        Self(R::shlv(self.0, shifts.0))
+    }
+
+    /// For each lane in the vector, shift right by the given value.
+    #[inline(always)]
+    pub fn shrv(self, shifts: Vector<R::USize>) -> Self {
+        Self(R::shrv(self.0, shifts.0))
+    }
 }
 
 impl<R: SignedIntegerRegister> Vector<R> {
@@ -576,7 +589,7 @@ impl<R: SignedIntegerRegister> Vector<R> {
 
     /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
     #[inline(always)]
-    pub fn srav(self, shifts: Vector<R::UCOUNT>) -> Self {
+    pub fn srav(self, shifts: Vector<R::USize>) -> Self {
         Self(R::srav(self.0, shifts.0))
     }
 }
@@ -801,9 +814,9 @@ impl<R: SignedRegister> Vector<R> {
     }
 }
 
-impl<R: SignedRegister> num_traits::Signed for Vector<R>
+impl<R: SignedRegister> Signed for Vector<R>
 where
-    R::Element: num_traits::Signed,
+    R::Element: Signed,
 {
     #[inline(always)]
     fn abs(&self) -> Self {
@@ -1269,6 +1282,16 @@ macro_rules! impl_binary_op {
 
 impl_binary_op!(Register; BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 
+impl<R: Register> Vector<R> {
+    /// For each lane in the vector, perform a bitwise AND NOT operation.
+    ///
+    /// This is equivalent to `!self & rhs`.
+    #[inline(always)]
+    pub fn bitandnot(self, rhs: Self) -> Self {
+        Self(R::bitandnot(self.0, rhs.0))
+    }
+}
+
 impl<R: Register> Not for Vector<R> {
     type Output = Self;
 
@@ -1287,20 +1310,20 @@ impl<R: BitshiftRegister> Shr<u32> for Vector<R> {
     }
 }
 
-impl<R: BitshiftRegister> Shr<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> Shr<Vector<R::USize>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shr(self, rhs: Vector<R::UCOUNT>) -> Self::Output {
+    fn shr(self, rhs: Vector<R::USize>) -> Self::Output {
         Self(R::shrv(self.0, rhs.0))
     }
 }
 
-impl<R: BitshiftRegister> Shl<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> Shl<Vector<R::USize>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shl(self, rhs: Vector<R::UCOUNT>) -> Self::Output {
+    fn shl(self, rhs: Vector<R::USize>) -> Self::Output {
         Self(R::shlv(self.0, rhs.0))
     }
 }
@@ -1328,16 +1351,16 @@ impl<R: BitshiftRegister> ShrAssign<u32> for Vector<R> {
     }
 }
 
-impl<R: BitshiftRegister> ShrAssign<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> ShrAssign<Vector<R::USize>> for Vector<R> {
     #[inline(always)]
-    fn shr_assign(&mut self, rhs: Vector<R::UCOUNT>) {
+    fn shr_assign(&mut self, rhs: Vector<R::USize>) {
         self.0 = R::shrv(self.0, rhs.0);
     }
 }
 
-impl<R: BitshiftRegister> ShlAssign<Vector<R::UCOUNT>> for Vector<R> {
+impl<R: BitshiftRegister> ShlAssign<Vector<R::USize>> for Vector<R> {
     #[inline(always)]
-    fn shl_assign(&mut self, rhs: Vector<R::UCOUNT>) {
+    fn shl_assign(&mut self, rhs: Vector<R::USize>) {
         self.0 = R::shlv(self.0, rhs.0);
     }
 }
@@ -1497,6 +1520,16 @@ impl<R: IntegerRegister> Vector<R> {
     #[inline(always)]
     pub fn count_zeros(self) -> Self {
         Self(R::count_zeros(self.0))
+    }
+
+    /// For each element in the vector, count the number of leading ones.
+    pub fn leading_ones(self) -> Self {
+        Self(R::leading_ones(self.0))
+    }
+
+    /// For each element in the vector, count the number of leading zeros.
+    pub fn leading_zeros(self) -> Self {
+        Self(R::leading_zeros(self.0))
     }
 }
 

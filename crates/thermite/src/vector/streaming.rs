@@ -4,11 +4,14 @@
 
 use core::ops::Deref;
 
-use crate::{Vector, register::Register};
+use crate::{
+    Vector,
+    register::{Register, Storage},
+};
 
 /// Wrapper around an immutable vector reference for non-temporal (streaming) loads.
 #[repr(transparent)]
-pub struct StreamingVector<'a, R: Register>(pub(crate) &'a R::Storage);
+pub struct StreamingVector<'a, R: Register>(pub(crate) &'a Storage<R>);
 
 impl<R: Register> Clone for StreamingVector<'_, R> {
     fn clone(&self) -> Self {
@@ -20,7 +23,7 @@ impl<R: Register> Copy for StreamingVector<'_, R> {}
 
 /// Wrapper around a mutable vector reference for non-temporal (streaming) loads and stores.
 #[repr(transparent)]
-pub struct StreamingVectorMut<'a, R: Register>(pub(crate) &'a mut R::Storage);
+pub struct StreamingVectorMut<'a, R: Register>(pub(crate) &'a mut Storage<R>);
 
 impl<'a, R: Register> Deref for StreamingVectorMut<'a, R> {
     type Target = StreamingVector<'a, R>;

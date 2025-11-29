@@ -11,7 +11,7 @@ use crate::{
     register::{
         BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister, Lanes,
         LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
+        SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -25,7 +25,7 @@ use crate::{
 /// Masks are created by certain operations on vectors, such as comparisons, and can be used
 /// to select elements from vectors based on the mask values.
 #[repr(transparent)]
-pub struct Mask<R: MaskRegister>(pub(crate) R::Storage);
+pub struct Mask<R: MaskRegister>(pub(crate) Storage<R>);
 
 impl<R: MaskRegister> Clone for Mask<R> {
     #[inline(always)]

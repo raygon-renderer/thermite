@@ -15,6 +15,7 @@ use crate::{
 use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct F64x2V3;
 
 impl Register for F64x2V3 {
@@ -27,8 +28,8 @@ impl Register for F64x2V3 {
 
     const ISA: InstructionSet = InstructionSet::X86V3;
 
-    type SCOUNT = super::I64x2V3;
-    type UCOUNT = super::U64x2V3;
+    type ISize = super::I64x2V3;
+    type USize = super::U64x2V3;
 
     const EMPTY: Self::Storage = empty_reg::<Self>();
 
