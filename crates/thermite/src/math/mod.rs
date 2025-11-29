@@ -79,6 +79,12 @@ macro_rules! decl_math {
 }
 
 decl_math! {
+    /// Computes `self * 2^exp` efficiently.
+    fn ldexp[][](self: Self, exp: Vector<R::Signed>) -> Self;
+
+    /// Decomposes `self` into its normalized fraction and an integral power of two.
+    fn frexp[][](self: Self) -> (Self, Vector<R::Signed>);
+
     /// Converts angles from radians to degrees.
     fn to_degrees[][](self: Self) -> Self;
 

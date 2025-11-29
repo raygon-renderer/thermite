@@ -16,6 +16,62 @@ pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
 
 pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
     #[inline(always)]
+    fn ldexp<P: Policy>(x: Vf<Self>, exp: Vs<Self>) -> Vf<Self> {
+        let bits: Vu<Self> = x.into_bits();
+
+        // (bits >> mantissa) & mask
+        let biased_exp =
+            Vs::<Self>::from_bits((bits >> E::MANTISSA) & const { Vu::<Self>::splat_const(E::EXP_LSB_MASK) });
+
+        let mut exp = biased_exp + exp; // offset exponent
+
+        if const { P::POLICY.check_overflow } {
+            // clamp exponent between 0 and MAX_BIASED_EXP
+            exp = exp
+                .max(Vs::<Self>::ZERO)
+                .min(const { Vs::<Self>::splat_const(E::MAX_BIASED_EXP) });
+        }
+
+        let sign_mantissa = Vs::<Self>::from_bits(bits & const { Vu::<Self>::splat_const(E::SIGN_MANTISSA_MASK) });
+
+        let mut result = (exp << E::MANTISSA) | sign_mantissa;
+
+        if const { P::POLICY.check_overflow } {
+            let is_underflow = exp.cmp_le(Vs::<Self>::ZERO);
+            let input_was_subnormal = biased_exp.cmp_eq(Vs::<Self>::ZERO);
+
+            // result = !(is_underflow | input_was_subnormal) & result
+            result = (is_underflow | input_was_subnormal).value().bitandnot(result);
+        }
+
+        Vf::from_bits(result)
+    }
+
+    #[inline(always)]
+    fn frexp<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vs<Self>) {
+        let bits: Vu<Self> = x.into_bits();
+
+        // (bits >> mantissa) & mask
+        let biased_exp =
+            Vs::<Self>::from_bits((bits >> E::MANTISSA) & const { Vu::<Self>::splat_const(E::EXP_LSB_MASK) });
+
+        let mut exp: Vs<Self> = biased_exp - const { Vs::<Self>::splat_const(E::EXP_BIAS) };
+
+        // extract sign and mantissa, then give it the correct exponent
+        let sign_mantissa: Vu<Self> = bits & const { Vu::<Self>::splat_const(E::SIGN_MANTISSA_MASK) };
+        let mut fraction = sign_mantissa | const { Vu::<Self>::splat_const(E::HALF_EXP_BITS) };
+
+        if const { P::POLICY.check_overflow } {
+            // if input was zero or subnormal, set fraction to zero and exponent to zero
+            let is_normal = biased_exp.cmp_ne(Vector::ZERO).value();
+            exp &= is_normal;
+            fraction &= Vu::<Self>::from_bits(is_normal);
+        }
+
+        (Vf::from_bits(fraction), exp)
+    }
+
+    #[inline(always)]
     fn to_degrees<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         x * Vf::FRAC_180_PI
     }
