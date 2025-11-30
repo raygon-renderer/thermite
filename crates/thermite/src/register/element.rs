@@ -93,10 +93,13 @@ pub trait FloatElement: Element + num_traits::float::FloatCore + From<i8> + core
     const MAX_BIASED_EXP: Self::Signed;
     const EXP_LSB_MASK: Self::Bits;
     const SIGN_MANTISSA_MASK: Self::Bits;
+
     const HALF_EXP_BITS: Self::Bits;
+    const FREXP_BIAS_OFFSET: Self::Signed;
 
     fn from_f64(value: f64) -> Self;
     fn from_i64(value: i64) -> Self;
+    fn from_signed(value: Self::Signed) -> Self;
 
     fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
     fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
@@ -119,13 +122,20 @@ pub trait FloatElement: Element + num_traits::float::FloatCore + From<i8> + core
 }
 
 macro_rules! impl_float_element {
+    (CONSTS $($const:ident: $const_ty:ty = $value:expr;)+) => {paste::paste! {
+        $(const $const: $const_ty = $value;)+
+
+        const FREXP_BIAS_OFFSET: Self::Signed = Self::EXP_BIAS - 1;
+        const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA) as _;
+    }};
+
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
         #[cfg(feature = "std")]
         impl FloatElement for $t {
             type Bits = $bits;
             type Signed = $signed;
 
-            $(const $const: $const_ty = $value;)*
+            impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
 
             #[inline(always)]
             fn from_i64(value: i64) -> Self {
@@ -137,6 +147,7 @@ macro_rules! impl_float_element {
             }
 
             #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
+            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
 
             #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, acc) }
             #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, -acc) }
@@ -158,7 +169,7 @@ macro_rules! impl_float_element {
             type Bits = $bits;
             type Signed = $signed;
 
-            $(const $const: $const_ty = $value;)*
+            impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
 
             const MAX_U64: u64 = (1u64 << (Self::MANTISSA + 1));
 
@@ -172,6 +183,7 @@ macro_rules! impl_float_element {
             }
 
             #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
+            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
 
             #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, acc) }
             #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, -acc) }
@@ -199,12 +211,6 @@ impl_float_element!(f32: f => u32, i32 {
 
     // Clear bits 23-30
     SIGN_MANTISSA_MASK: u32 = 0x807F_FFFF;
-
-    // // Bias (127) - 1
-    // FREXP_BIAS_OFFSET: i32 = 126;
-
-    // 126 << 23
-    HALF_EXP_BITS: u32 = 0x3F00_0000;
 });
 
 impl_float_element!(f64 => u64, i64 {
@@ -217,10 +223,4 @@ impl_float_element!(f64 => u64, i64 {
 
     // Clear bits 52-62
     SIGN_MANTISSA_MASK: u64 = 0x800F_FFFF_FFFF_FFFF;
-
-    // Bias (1023) - 1
-    // FREXP_BIAS_OFFSET: i32 = 1022;
-
-    // 1022 << 52
-    HALF_EXP_BITS: u64 = 0x3FE0_0000_0000_0000;
 });

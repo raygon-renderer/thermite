@@ -55,7 +55,7 @@ pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
         let biased_exp =
             Vs::<Self>::from_bits((bits >> E::MANTISSA) & const { Vu::<Self>::splat_const(E::EXP_LSB_MASK) });
 
-        let mut exp: Vs<Self> = biased_exp - const { Vs::<Self>::splat_const(E::EXP_BIAS) };
+        let mut exp: Vs<Self> = biased_exp - const { Vs::<Self>::splat_const(E::FREXP_BIAS_OFFSET) };
 
         // extract sign and mantissa, then give it the correct exponent
         let sign_mantissa: Vu<Self> = bits & const { Vu::<Self>::splat_const(E::SIGN_MANTISSA_MASK) };
