@@ -1,10 +1,11 @@
-#![no_std]
+// #![no_std]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use thermite::{
-    Vector,
+    Mask, Vector,
+    mask::Selectable,
     math::FloatConsts,
-    register::{FloatElement, FloatRegister},
+    register::{CastMaskRegister, CastRegister, FloatElement, FloatRegister, MaskRegister},
 };
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
@@ -15,12 +16,10 @@ use num_traits::{
 
 //pub mod polyfills;
 //pub mod reg;
-mod consts;
+pub mod consts;
 use consts::SplitFloatConsts;
 
 mod math;
-
-pub trait SplitConsts {}
 
 pub trait CompensatedElement: FloatElement + Signed + FloatConsts + SplitFloatConsts<Self> {
     /// for Veltkamp's splitting
@@ -39,9 +38,38 @@ pub trait CompensatedRegister: FloatRegister<Element: CompensatedElement> {}
 
 impl<R: FloatRegister> CompensatedRegister for R where R::Element: CompensatedElement {}
 
+#[repr(C)]
 pub struct Compensated<R: CompensatedRegister> {
     value: Vector<R>,
     error: Vector<R>,
+}
+
+const _: () = {
+    use core::fmt;
+
+    impl<R: CompensatedRegister> fmt::Debug for Compensated<R> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("Compensated")
+                .field("value", &self.value)
+                .field("error", &self.error)
+                .finish()
+        }
+    }
+};
+
+impl<R: CompensatedRegister> Selectable<R> for Compensated<R> {
+    #[inline(always)]
+    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    where
+        R: CastMaskRegister<M, Lanes = M::Lanes>,
+    {
+        let mask: Mask<R> = mask.cast(); // do this upfront for both parts
+
+        Compensated {
+            value: mask.select(truthy.value, falsy.value),
+            error: mask.select(truthy.error, falsy.error),
+        }
+    }
 }
 
 impl<R: CompensatedRegister> Clone for Compensated<R> {
@@ -111,6 +139,17 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
+    pub fn cast<T>(self) -> Compensated<T>
+    where
+        T: CastRegister<R> + CompensatedRegister,
+    {
+        Compensated {
+            value: self.value.cast(),
+            error: self.error.cast(),
+        }
+    }
+
+    #[inline(always)]
     pub(crate) fn renormalized(value: Vector<R>, error: Vector<R>) -> Self {
         let sum = value + error;
         let err = error + (value - sum);
@@ -133,7 +172,7 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
-    fn min(self, other: Self) -> Self {
+    pub fn min(self, other: Self) -> Self {
         let mask = self.value().cmp_lt(other.value());
         Compensated {
             value: mask.select(self.value, other.value),
@@ -142,7 +181,7 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
-    fn max(self, other: Self) -> Self {
+    pub fn max(self, other: Self) -> Self {
         let mask = self.value().cmp_gt(other.value());
         Compensated {
             value: mask.select(self.value, other.value),
@@ -151,7 +190,7 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
-    fn clamp(self, min: Self, max: Self) -> Self {
+    pub fn clamp(self, min: Self, max: Self) -> Self {
         let x = self.value();
         let min_value = min.value();
         let max_value = max.value();
