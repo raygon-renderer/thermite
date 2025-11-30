@@ -36,12 +36,25 @@ mod float_trait;
 pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
 #[doc(hidden)]
-pub trait MaskOfVector {
+pub trait IMaskOf {
     type MaskRegister: MaskRegister;
 }
 
-impl<R: MaskRegister> MaskOfVector for Vector<R> {
+#[doc(hidden)]
+pub trait IRegisterOf {
+    type Register: Register;
+}
+
+impl<R: MaskRegister> IMaskOf for Vector<R> {
     type MaskRegister = R;
+}
+
+impl<R: Register> IRegisterOf for Vector<R> {
+    type Register = R;
+}
+
+impl<R: MaskRegister> IRegisterOf for Mask<R> {
+    type Register = R;
 }
 
 /// The mask type corresponding to a given vector type.
@@ -54,7 +67,10 @@ impl<R: MaskRegister> MaskOfVector for Vector<R> {
 ///     x.is_negative()
 /// }
 /// ```
-pub type MaskOf<V> = Mask<<V as MaskOfVector>::MaskRegister>;
+pub type MaskOf<V> = Mask<<V as IMaskOf>::MaskRegister>;
+
+/// The register type corresponding to a given vector or mask type.
+pub type RegisterOf<V> = <V as IRegisterOf>::Register;
 
 impl<R: Register> Clone for Vector<R> {
     #[inline(always)]

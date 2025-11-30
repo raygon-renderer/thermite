@@ -25,7 +25,7 @@ use crate::{
 /// Masks are created by certain operations on vectors, such as comparisons, and can be used
 /// to select elements from vectors based on the mask values.
 #[repr(transparent)]
-pub struct Mask<R: MaskRegister>(pub(crate) Storage<R>);
+pub struct Mask<R: MaskRegister>(#[doc(hidden)] pub Storage<R>);
 
 impl<R: MaskRegister> Clone for Mask<R> {
     #[inline(always)]
@@ -298,21 +298,12 @@ impl<R: MaskRegister> Mask<R> {
     /// For each lane in mask, if the lane is `true`, the corresponding lane in `truthy` is selected,
     /// otherwise the corresponding lane in `falsy` is selected.
     #[inline(always)]
-    pub fn select<S>(self, truthy: Vector<S>, falsy: Vector<S>) -> Vector<S>
+    pub fn select<T, S>(self, truthy: T, falsy: T) -> T
     where
+        T: Selectable<S>,
         S: CastMaskRegister<R, Lanes = R::Lanes>,
     {
-        Vector(S::blendv(S::mask_from(self.0), falsy.0, truthy.0))
-    }
-
-    /// For each lane in mask, if the lane is `true`, the corresponding lane in `truthy` is selected,
-    /// otherwise the corresponding lane in `falsy` is selected.
-    #[inline(always)]
-    pub fn select_mask<M>(self, truthy: Mask<M>, falsy: Mask<M>) -> Mask<M>
-    where
-        M: CastMaskRegister<R, Lanes = R::Lanes>,
-    {
-        Mask(M::blendv(M::mask_from(self.0), falsy.0, truthy.0))
+        T::select(self, truthy, falsy)
     }
 
     /// For each lane of the mask, if the lane is `true`, swap the corresponding lanes in `a` and `b`.
@@ -328,6 +319,35 @@ impl<R: MaskRegister> Mask<R> {
 
         a.0 = a2;
         b.0 = b2;
+    }
+}
+
+/// Trait for types that support selection based on a mask.
+pub trait Selectable<R: Register> {
+    /// For each lane in `mask`, if the lane is `true`, the corresponding lane in `truthy` is selected,
+    /// otherwise the corresponding lane in `falsy` is selected.
+    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    where
+        R: CastMaskRegister<M, Lanes = M::Lanes>;
+}
+
+impl<R: MaskRegister> Selectable<R> for Vector<R> {
+    #[inline(always)]
+    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    where
+        R: CastMaskRegister<M, Lanes = M::Lanes>,
+    {
+        Vector(R::blendv(R::mask_from(mask.0), falsy.0, truthy.0))
+    }
+}
+
+impl<R: MaskRegister> Selectable<R> for Mask<R> {
+    #[inline(always)]
+    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    where
+        R: CastMaskRegister<M, Lanes = M::Lanes>,
+    {
+        Mask(R::blendv(R::mask_from(mask.0), falsy.0, truthy.0))
     }
 }
 
