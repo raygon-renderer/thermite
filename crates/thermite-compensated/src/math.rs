@@ -1,7 +1,9 @@
 #![allow(unused)]
 
+use num_traits::{MulAdd as _, Signed};
+
 use super::{Compensated, CompensatedRegister};
-use num_traits::MulAdd as _;
+
 use thermite::{
     Mask, Vector,
     math::{
@@ -240,16 +242,121 @@ where
         self.mul_add(self, y * y).sqrt() // TODO: Check for overflow/underflow
     }
 
+    #[inline(always)]
     fn sin_cos_p<P: Policy>(self) -> (Self, Self) {
-        todo!()
+        // 1. Argument Reduction
+        // Reduce x to r in [-pi/4, pi/4]
+        // k = round(x / (pi/2))
+
+        // 1a. Calculate k = round(x / (pi/2)) = round(x * (2/pi))
+        let k = (self * Self::FRAC_2_PI).value().round();
+        let k_comp = Self::new(k);
+
+        // 1b. Compute r = x - k * (pi/2)
+        // We must use the Compensated constant FRAC_PI_2 for high precision subtraction.
+        // x - (k * PI/2)
+        let r = k_comp.mul_add(-Self::FRAC_PI_2, self);
+
+        let r2 = -(r * r); // -r^2, used for iterative multiplication
+
+        // 2. Series Expansion
+        // sin(r) = r - r^3/3! + r^5/5! ...
+        // cos(r) = 1 - r^2/2! + r^4/4! ...
+
+        // Initialize sums and terms
+        // Term indices:
+        // k=1: sin term needs /2*3, cos term needs /1*2
+
+        let mut sin = r;
+        let mut term_s = r;
+
+        let mut cos = Self::ONE;
+        let mut term_c = Self::ONE;
+
+        let shift = if P::POLICY.unroll_loops { 1 } else { 0 }; // Conservative unroll
+        let mut i = 1;
+
+        // Approx 20 iterations sufficient for full compensated precision
+        let max_i = (P::POLICY.max_iterations >> shift) + 1;
+
+        while i < max_i {
+            let next_i = i + (1 << shift);
+            let prev_s = sin;
+            let prev_c = cos;
+
+            for k in i..next_i {
+                let k2 = (2 * k) as i64;
+
+                // Update Cosine Term: prev_term * (-r^2) / ((2k-1)*2k)
+                let div_c = (k2 - 1) * k2;
+                term_c *= r2 / Compensated::splat(FloatElement::from_i64(div_c));
+                cos += term_c;
+
+                // Update Sine Term: prev_term * (-r^2) / (2k*(2k+1))
+                let div_s = k2 * (k2 + 1);
+                term_s *= r2 / Compensated::splat(FloatElement::from_i64(div_s));
+                sin += term_s;
+            }
+
+            if (prev_s.cmp_eq(sin) & prev_c.cmp_eq(cos)).all() {
+                // println!("trig converged at i={}", next_i - 1);
+                break;
+            }
+
+            i = next_i;
+        }
+
+        // 3. Reconstruction
+        // Determine the final sin/cos based on the quadrant k.
+        // The quadrant mapping for sin(x) / cos(x) where x = k * pi/2 + r:
+        // k % 4 == 0:  sin ->  s,   cos ->  c
+        // k % 4 == 1:  sin ->  c,   cos -> -s
+        // k % 4 == 2:  sin -> -s,   cos -> -c
+        // k % 4 == 3:  sin -> -c,   cos ->  s
+
+        // Use integer mask logic on k.
+        // We can check the low 2 bits of k.
+        let k_int: Vector<R::Signed> = k.cast();
+
+        // Construct bitmasks
+        let bit0 = (k_int & Vector::ONE).cmp_ne(Vector::ZERO); // true if k % 2 != 0 (quadrants 1, 3)
+        let bit1 = (k_int & Vector::TWO).cmp_ne(Vector::ZERO); // true if k % 4 >= 2 (quadrants 2, 3)
+
+        // Swap sin/cos if k is odd (quadrants 1, 3)
+        let mut final_sin = bit0.select(cos, sin);
+        let mut final_cos = bit0.select(sin, cos); // Note: sign is handled next
+
+        // Sign logic:
+        // Sin sign: positive in 0, 1. Negative in 2, 3. -> invert if bit1 is true.
+        // Cos sign: positive in 0, 3. Negative in 1, 2. -> invert if (bit0 ^ bit1) is true.
+
+        let neg_sin = bit1;
+        let neg_cos = bit0 ^ bit1;
+
+        // prepare for conditional negate
+        let neg_sin = neg_sin.cast();
+        let neg_cos = neg_cos.cast();
+
+        final_sin.value = final_sin.value.conditional_negate(neg_sin);
+        final_sin.error = final_sin.error.conditional_negate(neg_sin);
+
+        final_cos.value = final_cos.value.conditional_negate(neg_cos);
+        final_cos.error = final_cos.error.conditional_negate(neg_cos);
+
+        // Zero check: if input was zero, result should be exact zero/one
+        // (This is implicitly handled by series, but overflow checks might be needed for large inputs)
+
+        (final_sin, final_cos)
     }
 
+    #[inline(always)]
     fn sin_p<P: Policy>(self) -> Self {
-        todo!()
+        self.sin_cos_p::<P>().0
     }
 
+    #[inline(always)]
     fn cos_p<P: Policy>(self) -> Self {
-        todo!()
+        self.sin_cos_p::<P>().1
     }
 
     #[inline(always)]
@@ -267,44 +374,196 @@ where
         self * (self * Self::PI).sin_p::<P>()
     }
 
+    #[inline(always)]
     fn sinh_p<P: Policy>(self) -> Self {
-        todo!()
+        // (e^x - e^-x) / 2
+        // For small x, precision loss occurs with explicit subtract.
+        // Use expm1: (expm1(x) - expm1(-x)) / 2
+        let e_plus = self.exp_m1_p::<P>();
+        let e_minus = (-self).exp_m1_p::<P>();
+        (e_plus - e_minus) * Self::HALF
     }
 
+    #[inline(always)]
     fn cosh_p<P: Policy>(self) -> Self {
-        todo!()
+        // (e^x + e^-x) / 2
+        let e_plus = self.exp_p::<P>();
+        let e_minus = (-self).exp_p::<P>();
+        (e_plus + e_minus) * Self::HALF
     }
 
+    #[inline(always)]
     fn tanh_p<P: Policy>(self) -> Self {
-        todo!()
+        // (e^2x - 1) / (e^2x + 1)
+        let e2x_m1 = (self * Self::TWO).exp_m1_p::<P>();
+        e2x_m1 / (e2x_m1 + Self::TWO)
     }
 
+    #[inline(always)]
     fn asin_p<P: Policy>(self) -> Self {
-        todo!()
+        // asin(x) = atan(x / sqrt(1 - x^2))
+        let one = Self::ONE;
+        // (1-x)*(1+x) is generally more accurate than 1-x^2 near 1
+        let omx2 = (one - self) * (one + self);
+        let denom = omx2.sqrt();
+
+        // if x=1, denom=0, atan approaches pi/2, handled correctly by atan2 ideally,
+        // but simple division might return Inf. atan(Inf) = pi/2.
+        // We use atan2 to handle the denom=0 case safely if needed, but atan_p handles Inf.
+
+        // Check domain? if |x| > 1, omx2 is negative, sqrt is NaN.
+        // Existing logic propagates NaN.
+        (self / denom).atan_p::<P>()
     }
 
+    #[inline(always)]
     fn acos_p<P: Policy>(self) -> Self {
-        todo!()
+        // acos(x) = pi/2 - asin(x)
+        Self::FRAC_PI_2 - self.asin_p::<P>()
     }
 
+    #[inline(always)]
     fn atan_p<P: Policy>(self) -> Self {
-        todo!()
+        let x = self;
+        let abs_x = x.abs();
+
+        // Constants
+        // tan(pi/8) = sqrt(2) - 1
+        let tan_pi_8 = Self::SQRT_2 - Self::ONE;
+
+        // 1. Argument Reduction
+        // Goal: reduce x to [0, tan(pi/8)] approx [0, 0.414]
+
+        // Check if x > 1
+        let gt_1 = abs_x.value().cmp_gt(Vector::ONE);
+
+        // if x > 1: x = 1/x
+        // We will compute pi/2 - atan(1/x) later
+        let mut curr = gt_1.select(Self::ONE / abs_x, abs_x);
+
+        // Check if x > tan(pi/8)
+        let gt_tan_pi8 = curr.value().cmp_gt(tan_pi_8.value());
+
+        // if x > tan(pi/8): x = (x-1)/(x+1)
+        // We will add pi/4 later
+        let shifted = (curr - Self::ONE) / (curr + Self::ONE);
+
+        curr = gt_tan_pi8.select(shifted, curr);
+
+        // 2. Series Evaluation
+        // z - z^3/3 + z^5/5 ...
+
+        let z = curr;
+        let z2 = -(z * z); // negative for alternating series subtraction
+
+        let mut sum = z;
+        let mut term = z;
+
+        let shift = if P::POLICY.unroll_loops { 2 } else { 0 };
+
+        let mut i = 1;
+        let max_i = (P::POLICY.max_iterations >> shift) + 1;
+
+        // atan is very slow to converge
+        while i < max_i {
+            let next_i = i + (1 << shift);
+            let prev = sum;
+
+            for k in i..next_i {
+                let div = (2 * k) + 1; // 3, 5, 7...
+
+                term *= z2;
+                sum += term / Compensated::splat(FloatElement::from_i64(div as i64));
+            }
+
+            if prev.cmp_eq(sum).all() {
+                // println!("atan converged at i={}", next_i - 1);
+                break;
+            }
+
+            i = next_i;
+        }
+
+        // 3. Reconstruction
+
+        // If we did the tan(pi/8) shift, add pi/4
+        // sum = sum + pi/4
+        sum = gt_tan_pi8.select(sum + Self::FRAC_PI_4, sum);
+
+        // If we did the >1 inversion, subtract from pi/2
+        // sum = pi/2 - sum
+        sum = gt_1.select(Self::FRAC_PI_2 - sum, sum);
+
+        // Restore Sign
+        let xv = x.value();
+
+        sum.value = sum.value.mul_sign(xv);
+        sum.error = sum.error.mul_sign(xv);
+
+        sum
     }
 
+    #[inline(always)]
     fn atan2_p<P: Policy>(self, x: Self) -> Self {
-        todo!()
+        // y = self
+        let y = self;
+        let x_value = x.value();
+        let zero = Self::ZERO;
+
+        // Handle x = 0
+        let x_is_zero = x_value.cmp_eq(Vector::ZERO);
+
+        // If x=0, y>0 -> pi/2, y<0 -> -pi/2
+        // We can cheat: atan2(y, 0) is roughly atan(Inf * sign(y))
+        // But doing it explicitly is cleaner.
+
+        let pi_2 = Self::FRAC_PI_2;
+        let y_is_neg = y.value().cmp_lt(Vector::ZERO);
+        let on_axis_res = y_is_neg.select(-pi_2, pi_2);
+
+        // Standard case
+        let z = y / x;
+        let mut res = z.atan_p::<P>();
+
+        // Adjust quadrant based on x and y
+        // if x < 0:
+        //   if y >= 0: res += pi
+        //   if y < 0:  res -= pi
+
+        let x_is_neg = x_value.cmp_lt(Vector::ZERO);
+        let offset = Self::PI.conditional_negate(x_is_neg);
+
+        res = x_is_neg.select(res + offset, res);
+
+        x_is_zero.select(on_axis_res, res)
     }
 
     fn asinh_p<P: Policy>(self) -> Self {
-        todo!()
+        // ln(x + sqrt(x^2 + 1))
+        // To avoid overflow for large x, use ln(2|x|) + ... or similar,
+        // but for now direct implementation:
+        // if x is negative, asinh(-x) = -asinh(x)
+
+        let x_abs = self.abs();
+        let y = x_abs + (x_abs * x_abs + Self::ONE).sqrt();
+        let res = y.ln_p::<P>();
+
+        let is_neg = self.value().cmp_lt(Vector::ZERO);
+        is_neg.select(-res, res)
     }
 
     fn acosh_p<P: Policy>(self) -> Self {
-        todo!()
+        // ln(x + sqrt(x^2 - 1))
+        // defined for x >= 1
+        (self + (self * self - Self::ONE).sqrt()).ln_p::<P>()
     }
 
     fn atanh_p<P: Policy>(self) -> Self {
-        todo!()
+        // 0.5 * ln((1+x)/(1-x))
+        let one = Self::ONE;
+        let num = one + self;
+        let den = one - self;
+        (num / den).ln_p::<P>() * Self::HALF
     }
 
     #[inline(always)]
@@ -334,7 +593,7 @@ where
 
     #[inline(always)]
     fn powf_p<P: Policy>(self, e: Self) -> Self {
-        (e * self.ln_p::<P>()).exp_p::<P>()
+        (e * self.log2_p::<P>()).exp2_p::<P>()
     }
 
     #[inline(always)]
@@ -378,11 +637,20 @@ where
     }
 
     fn log_p<P: Policy>(self, base: Self) -> Self {
-        todo!()
+        self.log2_p::<P>() / base.log2_p::<P>()
     }
 
     fn log_n_p<P: Policy, const N: usize>(self) -> Self {
-        todo!()
+        match N {
+            0 => Self::ZERO,     // log(x)/log(0) = log(x)/-infinity = 0
+            1 => Self::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
+            2 => self.log2_p::<P>(),
+            10 => self.log10_p::<P>(),
+            n if n <= 32 => {
+                todo!("LOG_TABLE")
+            }
+            _ => self.ln_p::<P>() / Self::splat(FloatElement::from_i64(N as i64)).ln_p::<P>(),
+        }
     }
 
     fn ln1m_expnx_p<P: Policy>(self) -> Self {
@@ -489,23 +757,24 @@ where
         let mut sum = Self::ZERO;
         let mut term = Self::ONE;
 
-        let threshold = Self::tolerance_p::<P>().value();
-
         let shift = if P::POLICY.unroll_loops { 2 } else { 0 };
 
         let mut i = 1;
         let max_i = (P::POLICY.max_iterations >> shift) + 1;
 
-        // Taylor series expansion, 4 iterations at a time as a form of loop unrolling
+        // Taylor series expansion
         while i < max_i {
-            let next_i = i + (1 << shift); // i + 4 if unrolling, else i + 1
+            let next_i = i + (1 << shift);
+
+            let prev_sum = sum;
 
             for i in i..next_i {
                 term *= r / Compensated::splat(FloatElement::from_i64(i as i64));
                 sum += term;
             }
 
-            if term.value().abs().cmp_lt(threshold).all() {
+            if prev_sum.cmp_eq(sum).all() {
+                // println!("exp converged at i={}", next_i - 1);
                 break;
             }
 
@@ -603,10 +872,16 @@ where
 
         // 6. Series Expansion: 2 * (z + z^3/3 + z^5/5 + ...)
 
-        let mut sum = z;
-        let mut term = z; // Current z^(2i+1)
+        // Create initial term and sum based on mode,
+        // this essentially distributes the multiplication ahead of time
+        // for improved accuracy.
+        let mut sum = match MODE {
+            LOG_MODE_LOG2 => z * Self::LOG2_E,   // Convert ln to log2
+            LOG_MODE_LOG10 => z * Self::LOG10_E, // Convert ln to log10
+            _ => z,                              // natural log
+        };
 
-        let threshold = Self::tolerance_p::<P>().value();
+        let mut term = sum; // Current z^(2i+1)
 
         let shift = if P::POLICY.unroll_loops { 2 } else { 0 };
         let mut i = 1;
@@ -618,18 +893,17 @@ where
         while i < max_i {
             let next_i = i + (1 << shift);
 
-            let mut last_term = term;
+            let prev_sum = sum;
 
             for j in i..next_i {
                 let div = (j * 2) + 1; // 3, 5, 7...
 
                 term *= z_sq;
-                last_term = term / Compensated::splat(FloatElement::from_i64(div as i64));
-                sum += last_term;
+                sum += term / Compensated::splat(FloatElement::from_i64(div as i64));
             }
 
-            // we track the last term added for convergence
-            if last_term.value().abs().cmp_lt(threshold).all() {
+            if prev_sum.cmp_eq(sum).all() {
+                // println!("log converged at i={}", next_i - 1);
                 break;
             }
 
@@ -644,8 +918,8 @@ where
 
         // 7. Reconstruction: ln(x) = ln(m) + k * scale
         let mut res = match MODE {
-            LOG_MODE_LOG2 => ln_m.mul_add(Self::LOG2_E, k),
-            LOG_MODE_LOG10 => ln_m.mul_add(Self::LOG10_E, k * Self::LOG10_2),
+            LOG_MODE_LOG2 => ln_m + k,
+            LOG_MODE_LOG10 => ln_m + (k * Self::LOG10_2),
             _ => ln_m + (k * Self::LN_2),
         };
 

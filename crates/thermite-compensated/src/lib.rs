@@ -22,16 +22,17 @@ use consts::SplitFloatConsts;
 mod math;
 
 pub trait CompensatedElement: FloatElement + Signed + FloatConsts + SplitFloatConsts<Self> {
-    /// for Veltkamp's splitting
+    /// for Veltkamp's splitting, defined as 2^(ceil(p/2)) + 1,
+    /// where p is the number of bits in the significand.
     const SPLITTER: Self;
 }
 
 impl CompensatedElement for f32 {
-    const SPLITTER: Self = ((1u64 << 27) + 1) as f32; // 2^27 + 1
+    const SPLITTER: Self = ((1u64 << 12) + 1) as f32; // 2^12 + 1
 }
 
 impl CompensatedElement for f64 {
-    const SPLITTER: Self = ((1u64 << 53) + 1) as f64; // 2^53 + 1
+    const SPLITTER: Self = ((1u64 << 27) + 1) as f64; // 2^27 + 1
 }
 
 pub trait CompensatedRegister: FloatRegister<Element: CompensatedElement> {}
@@ -142,10 +143,20 @@ impl<R: CompensatedRegister> Compensated<R> {
     pub fn cast<T>(self) -> Compensated<T>
     where
         T: CastRegister<R> + CompensatedRegister,
+        R: CastRegister<T>,
     {
+        let value = self.value.cast();
+
+        let error = if const { size_of::<T::Element>() < size_of::<R::Element>() } {
+            // accumulate downcasting error
+            self.error + (self.value - value.cast())
+        } else {
+            self.error
+        };
+
         Compensated {
-            value: self.value.cast(),
-            error: self.error.cast(),
+            value,
+            error: error.cast(),
         }
     }
 
@@ -202,6 +213,19 @@ impl<R: CompensatedRegister> Compensated<R> {
         let error = is_lt.select(min.error, is_gt.select(max.error, self.error));
 
         Compensated { value, error }
+    }
+
+    #[inline(always)]
+    pub fn cmp_eq(&self, other: Self) -> Mask<R> {
+        self.value.cmp_eq(other.value) & self.error.cmp_eq(other.error)
+    }
+
+    #[inline(always)]
+    pub fn conditional_negate(self, mask: Mask<R>) -> Self {
+        Compensated {
+            value: self.value.conditional_negate(mask),
+            error: self.error.conditional_negate(mask),
+        }
     }
 }
 
