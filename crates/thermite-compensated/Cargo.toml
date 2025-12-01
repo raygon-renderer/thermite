@@ -6,9 +6,11 @@ edition = "2024"
 [features]
 default = ["float-trait"]
 float-trait = ["thermite/float-trait"]
+special = ["dep:thermite-special"]
 
 [dependencies]
 thermite = { path = "../thermite" }
+thermite-special = { path = "../thermite-special", optional = true }
 fast_polynomial = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 hexf = "0.2.1"

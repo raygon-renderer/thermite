@@ -2,6 +2,8 @@
 
 use num_traits::{MulAdd as _, Signed};
 
+use crate::CompensatedElement;
+
 use super::{Compensated, CompensatedRegister};
 
 use thermite::{
@@ -10,12 +12,13 @@ use thermite::{
         FloatConsts, MathWithPolicy,
         policy::{Policy, PrecisionPolicy},
     },
-    register::{Element, FloatElement, FloatRegister},
+    register::{Element, FloatElement, FloatRegister, Register},
 };
 
 impl<R: CompensatedRegister> MathWithPolicy<R> for Compensated<R>
 where
     Vector<R>: MathWithPolicy<R>,
+    R::Element: CompensatedRegister<Element = R::Element>,
 {
     #[inline(always)]
     fn ldexp_p<P: Policy>(self, exp: Vector<<R as FloatRegister>::Signed>) -> Self {
@@ -99,11 +102,37 @@ where
         todo!()
     }
 
-    fn newtons_method_p<P: Policy, F>(self, tolerance: Self, bounds: Option<(Self, Self)>, f: F) -> Self
+    #[inline(always)]
+    fn newtons_method_p<P: Policy, F>(self, tolerance: Self, bounds: Option<(Self, Self)>, mut f: F) -> Self
     where
         F: FnMut(Self) -> (Self, Self),
     {
-        todo!()
+        let mut x = self;
+        let tolerance = tolerance.value();
+
+        for i in 0..P::POLICY.max_iterations {
+            let (y, y_prime) = f(x);
+            let delta = y / y_prime;
+
+            let mut stop = delta.value().abs().cmp_le(tolerance);
+
+            if P::POLICY.check_overflow {
+                stop |= y_prime.value().abs().cmp_le(tolerance);
+            }
+
+            if stop.all() {
+                // println!("Converged in {} iterations", i);
+                break;
+            }
+
+            x = stop.select(x, x - delta);
+
+            if let Some((min, max)) = bounds {
+                x = x.clamp(min, max);
+            }
+        }
+
+        x
     }
 
     #[inline(always)]
@@ -233,8 +262,40 @@ where
         res
     }
 
-    fn powiv_p<P: Policy>(self, e: Vector<R::Signed>) -> Self {
-        todo!()
+    #[inline(always)]
+    fn powiv_p<P: Policy>(self, mut e: Vector<R::Signed>) -> Self {
+        let mut x = self;
+        let mut res = Self::ONE;
+
+        x = e.is_negative().select(x.reciprocal_p::<P>(), x);
+        e = e.abs();
+
+        loop {
+            let mut e1 = e & Vector::ONE;
+
+            let nx = res * x;
+
+            // NOTE: e1 is bitcast to Self when `select` is used, so we use it for the MSB_BLENDV hack
+            // requirements
+            res = if <R as Register>::HAS_MSB_BLENDV {
+                // Move the lowest bit to the highest bit position
+                e1 <<= const { core::mem::size_of::<<R::Signed as Register>::Element>() as u32 * 8 - 1 };
+
+                // Blend the result based on the highest bit of e1
+                Mask::from_unchecked(e1).select(nx, res)
+            } else {
+                e1.cmp_ne(Vector::ZERO).select(nx, res)
+            };
+
+            x *= x;
+            e >>= 1;
+
+            if e.cmp_ne(Vector::ZERO).none() {
+                return res;
+            }
+        }
+
+        res
     }
 
     #[inline(always)]
@@ -599,19 +660,11 @@ where
     #[inline(always)]
     fn cbrt_p<P: Policy>(self) -> Self {
         let s = MathWithPolicy::cbrt_p::<P>(self.value);
-
-        // s^2
-        let (p2, e2) = super::two_prod(s, s);
-        // s^3
-        let (p3, e3_base) = super::two_prod(p2, s);
-
+        let (p2, e2) = super::two_prod(s, s); // s^2
+        let (p3, e3_base) = super::two_prod(p2, s); // s^3
         let e3 = s.mul_adde(e2, e3_base); // (s * e2) + e3_base
-
-        // residual
-        let r = (self.value - p3) + (self.error - e3);
-
-        // derivative = 3s^2
-        let deriv = Vector::<R>::splat(Element::from_i8(3)) * p2;
+        let r = (self.value - p3) + (self.error - e3); // residual
+        let deriv = Vector::<R>::splat(Element::from_i8(3)) * p2; // derivative = 3s^2
 
         Self::renormalized(s, r / deriv)
     }
@@ -661,16 +714,157 @@ where
         todo!()
     }
 
+    #[inline(always)]
     fn erf_p<P: Policy>(self) -> Self {
-        todo!()
+        self.erf_internal_p::<P>().0
     }
 
+    #[inline(always)]
     fn erfc_p<P: Policy>(self) -> Self {
-        todo!()
+        self.erf_internal_p::<P>().1
     }
 
+    #[inline(always)]
     fn erfinv_p<P: Policy>(self) -> Self {
-        todo!()
+        // High-performance erfinv using Halley's Method seeded by Winitzki's approximation.
+        // This converges in ~3 iterations for 106-bit precision.
+        // However, for very small |y|, we can do better with the Maclaurin series expansion,
+        // despite more iterations, since it avoids expensive calls to log/exp/sqrt functions.
+
+        let y = self;
+        let abs_y = y.abs();
+        let y_value = y.value();
+        let abs_y_value = abs_y.value();
+
+        if abs_y_value
+            .cmp_le(const { Vector::splat_const(CompensatedElement::MAX_ERFINV_SERIES) })
+            .all()
+        {
+            // For small |y|, use the Maclaurin series expansion for better performance,
+            // since it doesn't need to call log/exp/sqrt/etc. functions.
+
+            // Maclaurin series for erf_inv(y):
+            // erf_inv(y) = sum_{k=0 to inf} (c_k / (2k+1)) * (sqrt(pi)/2 * y)^(2k+1)
+            // where c_0 = 1, c_k = sum_{m=0 to k-1} (c_m * c_{k-1-m}) / ((m+1)(2m+1))
+
+            let w = abs_y * Self::FRAC_SQRT_PI_2; // Variable w = (sqrt(pi)/2) * |y|
+            let w2 = w * w;
+
+            let mut sum = w; // Initial term (k=0): c_0 = 1, term = w
+            let mut w_pow = w; // Stores w^(2k+1)
+
+            const MAX_COEFFS: usize = 64;
+
+            // Scalar Coefficient history buffer
+            // We need this to compute the convolution for the next c_k.
+            // 64 terms is generally sufficient for convergence where defined,
+            // though it gets slow near |y| ~ 1.
+            let mut coeffs = [Compensated::<R::Element>::ZERO; MAX_COEFFS];
+
+            coeffs[0] = Compensated::ONE; // c_0 = 1
+
+            let max_k = P::POLICY.max_iterations.min(MAX_COEFFS - 1);
+
+            for k in 1..max_k {
+                let prev = sum;
+
+                let mut c_k = Compensated::ZERO;
+
+                for m in 0..k {
+                    // Term: (c_m * c_{k-1-m}) / ((m+1)(2m+1))
+                    let num = coeffs[m] * coeffs[k - 1 - m];
+
+                    let m_i = m as i64;
+                    let den_i = (m_i + 1) * (2 * m_i + 1);
+
+                    c_k += num / Compensated::splat(FloatElement::from_i64(den_i));
+                }
+
+                coeffs[k] = c_k;
+
+                // Term = (c_k / (2k+1)) * w^(2k+1)
+                w_pow *= w2; // Next odd power of w
+
+                let k_term_den = (2 * k + 1) as i64;
+
+                let c_kv = Compensated {
+                    value: Vector::splat(c_k.value.extract::<0>()),
+                    error: Vector::splat(c_k.error.extract::<0>()),
+                };
+
+                sum += (c_kv * w_pow) / Compensated::splat(FloatElement::from_i64(k_term_den));
+
+                if prev.cmp_eq(sum).all() {
+                    break;
+                }
+            }
+
+            // Restore sign: erf_inv(-y) = -erf_inv(y)
+            sum.value = sum.value.mul_sign(y_value);
+            sum.error = sum.error.mul_sign(y_value);
+
+            return sum;
+        }
+
+        // Detect singularities
+        let is_zero = abs_y_value.cmp_eq(Vector::ZERO);
+        let is_one = abs_y_value.cmp_eq(Vector::ONE);
+
+        // 1. Initial Guess via Winitzki's Approximation, using non-compensated math
+        //    since the initial guess does not need to be incredibly accurate.
+        // Relative error < 0.00035 across the domain.
+        // Original: x ~ sqrt( sqrt(T1^2 - T2) - T1 )
+        // Stable:   x ~ sqrt( -T2 / (sqrt(T1^2 - T2) + T1) )
+        // This avoids catastrophic cancellation when y -> 0 (and thus T2 -> 0).
+
+        // Constants
+        let a = Vector::<R>::splat(FloatElement::from_f64(0.147)); // a = 0.147
+        let c = Vector::FRAC_2_PI / a; // C = 2 / (pi * a)
+        // L = ln(1 - y^2), use ln_1p for accuracy: ln(1 - y^2) = ln_1p(-y^2)
+        let l = (-(y * y).value()).ln_1p_p::<P>();
+
+        let half_l = l * Vector::HALF;
+        let t1 = c + half_l;
+        let t2 = l / a;
+
+        // Stable Winitzki guess
+        let root_term = t1.mul_add(t1, -t2).sqrt();
+        let inner = -t2 / (root_term + t1);
+
+        // Clamp inner to 0 to avoid NaN if y ~ 0 results in tiny negative due to noise
+        let mut x = Self::new(inner.max(Vector::ZERO).sqrt());
+
+        // 2. Halley's Method Iterations (Cubic Convergence)
+        // x_{n+1} = x_n - u / (1 + x_n * u) where u = f(x_n) / f'(x_n)
+        let tolerance = Self::tolerance_p::<P>().value();
+
+        let skip = is_zero | is_one; // cannot be solved as roots
+
+        for i in 0..P::POLICY.max_iterations {
+            let f = x.erf_p::<P>() - abs_y; // Work with absolute y for stability
+
+            // f / f'(x) = f * (sqrt(pi)/2) * exp(x^2)
+            let u = f * (Self::FRAC_SQRT_PI_2 * (x * x).exp_p::<P>());
+
+            // Halley step: u / (1 + x*u)
+            // Note: f''/f' = -2x, so the Halley term simplifies to this.
+            let step = u / x.mul_add(u, Self::ONE);
+
+            if (skip | step.value().abs().cmp_le(tolerance)).all() {
+                // println!("erf_inv converged in Halley in {} iterations", i);
+                break;
+            }
+
+            x -= step;
+        }
+
+        x = is_zero.select(Self::ZERO, is_one.select(Self::INFINITY, x));
+
+        // Restore sign: erf_inv(-y) = -erf_inv(y)
+        x.value = x.value.mul_sign(y_value);
+        x.error = x.error.mul_sign(y_value);
+
+        x
     }
 }
 
@@ -707,7 +901,182 @@ const LOG_MODE_LN1P: u8 = LogMode::Ln1p as u8;
 impl<R: CompensatedRegister> Compensated<R>
 where
     Vector<R>: MathWithPolicy<R>,
+    R::Element: CompensatedRegister<Element = R::Element>,
 {
+    #[inline(always)]
+    fn erf_internal_p<P: Policy>(self) -> (Self, Self) {
+        let x = self;
+        let abs_x = x.abs();
+
+        let use_series = abs_x.value().cmp_lt(Vector::splat(FloatElement::from_f64(3.0))); // threshold can be tuned
+
+        let use_only_series = use_series.all();
+        let use_only_cf = use_series.none();
+
+        // --- Init Series (erf) ---
+        // erf(x) = 2/sqrt(pi) * (x - x^3/3 + x^5/10 ...)
+        let x2 = -(x * x); // -x^2 for alternating series
+        let mut sum_s = abs_x;
+        let mut term_s = abs_x;
+
+        // --- Init Continued Fraction (erfc) ---
+        // Lentz's method vars
+        let tiny = Self::MIN_POSITIVE;
+        let mut f = tiny;
+        let mut a = Self::ONE; // a_1 = 1
+        let mut c = tiny;
+        let mut d = Self::ZERO;
+        let b = abs_x; // `b` in Lentz's method is |x|
+
+        let shift = if P::POLICY.unroll_loops { 2 } else { 0 };
+        let mut i = 1;
+        let max_i = (P::POLICY.max_iterations >> shift) + 1;
+
+        // the inner loops are expensive, so avoid unnecessary work
+
+        #[rustfmt::skip]
+        let () = match (use_only_series, use_only_cf) {
+            (true, false) => while i < max_i {
+                let next_i = i + (1 << shift);
+                let prev_s = sum_s;
+
+                for k in i..next_i {
+                    // --- Series Update ---
+                    // term *= -x^2 * (2k-1) / (k * (2k+1))
+                    let k_f = k as i64;
+                    let k2_p1 = (2 * k + 1) as i64;
+                    let k2_m1 = (2 * k - 1) as i64;
+
+                    let num = FloatElement::from_i64(k2_m1);
+                    let den = FloatElement::from_i64(k_f * k2_p1);
+
+                    term_s *= x2 * (Compensated::splat(num) / Compensated::splat(den));
+                    sum_s += term_s;
+                }
+
+                if prev_s.cmp_eq(sum_s).all() {
+                    // println!("erf converged at i={}", next_i - 1);
+                    break;
+                }
+
+                i = next_i;
+            },
+            (false, true) => while i < max_i {
+                let next_i = i + (1 << shift);
+                let prev_f = f;
+
+                for k in i..next_i {
+                    // --- CF Update ---
+                    // Lentz coefficients: a_k = (k-1)/2
+                    if k > 1 {
+                        a = Self::splat(FloatElement::from_i64((k - 1) as i64)) * Self::HALF;
+                    }
+
+                    // Lentz steps: D = b + a*D, C = b + a/C
+                    d = a.mul_add(d, b); // D = b + a*D
+
+                    d = d.max(tiny); // if D<=0 -> tiny
+
+                    c = b + a / c;
+                    c = c.max(tiny); // if C<=0 -> tiny
+
+                    d = Self::ONE / d;
+
+                    f *= c * d;
+                }
+
+                if prev_f.cmp_eq(f).all() {
+                    // println!("erfc converged at i={}", next_i - 1);
+                    break;
+                }
+
+                i = next_i;
+            },
+            _ => while i < max_i {
+                let next_i = i + (1 << shift);
+                let prev_s = sum_s;
+                let prev_f = f;
+
+                for k in i..next_i {
+                    // --- Series Update ---
+                    // term *= -x^2 * (2k-1) / (k * (2k+1))
+                    let k_f = k as i64;
+                    let k2_p1 = (2 * k + 1) as i64;
+                    let k2_m1 = (2 * k - 1) as i64;
+
+                    let num = FloatElement::from_i64(k2_m1);
+                    let den = FloatElement::from_i64(k_f * k2_p1);
+
+                    // Compute ratio.
+                    let s_ratio = x2 * (Compensated::splat(num) / Compensated::splat(den));
+
+                    term_s *= s_ratio; // overflow doesn't matter if we don't use this
+                    sum_s = use_series.select(sum_s + term_s, sum_s); // but avoid overflowing the sum
+
+                    // --- CF Update ---
+                    // Lentz coefficients: a_k = (k-1)/2
+                    if k > 1 {
+                        a = Self::splat(FloatElement::from_i64((k - 1) as i64)) * Self::HALF;
+                    }
+
+                    // Lentz steps: D = b + a*D, C = b + a/C
+                    d = a.mul_add(d, b); // D = b + a*D
+
+                    d = d.max(tiny); // if D<=0 -> tiny
+
+                    c = b + a / c;
+                    c = c.max(tiny); // if C<=0 -> tiny
+
+                    d = Self::ONE / d;
+
+                    f = use_series.select(f, f * c * d);
+                }
+
+                let series_converged = use_only_cf || prev_s.cmp_eq(sum_s).all();
+                let cf_converged = use_only_series || prev_f.cmp_eq(f).all();
+
+                if series_converged && cf_converged {
+                    // println!("erf converged at i={}", next_i - 1);
+                    break;
+                }
+
+                i = next_i;
+            },
+        };
+
+        // --- Finalize ---
+
+        // 1. Result from Series
+        let res_erf_s = sum_s * Self::FRAC_2_SQRT_PI;
+
+        // 2. Result from CF (if used)
+        // erfc = e^(-x^2)/sqrt(pi) * f
+        let res_erfc_c = if !use_only_series {
+            // avoid doing exp if not needed
+            f * (-x * x).exp_p::<P>() * Self::FRAC_1_SQRT_PI
+        } else {
+            Self::ZERO
+        };
+
+        // 3. Select based on Method
+        // If series used: erf = res_erf_s,         erfc = 1 - res_erf_s
+        // If CF used:     erf = 1 - res_erfc_c,    erfc = res_erfc_c
+
+        let erf_val = use_series.select(res_erf_s, Self::ONE - res_erfc_c);
+        let erfc_val = use_series.select(Self::ONE - res_erf_s, res_erfc_c);
+
+        // 4. Symmetry for x < 0
+        // erf(-x) = -erf(x)
+        // erfc(-x) = 2 - erfc(x)
+
+        let is_neg = x.value().is_negative();
+
+        let final_erf = erf_val.conditional_negate(is_neg); // is_neg.select(-erf_val, erf_val);
+        let final_erfc = is_neg.select(Self::TWO - erfc_val, erfc_val);
+
+        (final_erf, final_erfc)
+    }
+
     #[inline(always)]
     fn exp_internal_p<P: Policy, const MODE: u8>(mut self) -> Self {
         let mut is_inf = Mask::<R>::FALSY;

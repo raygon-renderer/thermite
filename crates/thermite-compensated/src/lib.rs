@@ -25,14 +25,22 @@ pub trait CompensatedElement: FloatElement + Signed + FloatConsts + SplitFloatCo
     /// for Veltkamp's splitting, defined as 2^(ceil(p/2)) + 1,
     /// where p is the number of bits in the significand.
     const SPLITTER: Self;
+
+    /// Empirical maximum |x| for which the erf_inv Maclaurin series converges
+    /// within 64 terms to full precision.
+    const MAX_ERFINV_SERIES: Self;
 }
 
 impl CompensatedElement for f32 {
     const SPLITTER: Self = ((1u64 << 12) + 1) as f32; // 2^12 + 1
+
+    const MAX_ERFINV_SERIES: Self = 0.75;
 }
 
 impl CompensatedElement for f64 {
     const SPLITTER: Self = ((1u64 << 27) + 1) as f64; // 2^27 + 1
+
+    const MAX_ERFINV_SERIES: Self = 0.545;
 }
 
 pub trait CompensatedRegister: FloatRegister<Element: CompensatedElement> {}
