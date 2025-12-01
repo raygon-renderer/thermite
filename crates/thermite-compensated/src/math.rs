@@ -232,12 +232,28 @@ where
 
     #[inline(always)]
     fn reciprocal_p<P: Policy>(self) -> Self {
-        Self::ONE / self
+        let q = self.value.reciprocal_p::<P>();
+
+        let (p, e_prod) = crate::two_prod(q, self.value);
+        let e1 = Vector::ONE - p;
+
+        let err = if const { !R::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            // assume q is accurate enough that we can ignore p_lo and avoid the extra division
+            q * self.error.nmul_adde(q, e1) // r / self.value
+        } else {
+            // calculate the remainder r and include it in the error term,
+            // unfortunately we must use a real division here if reciprocal is approximate,
+            // which kind of defeats the purpose of using an approximate reciprocal in the first place,
+            // but at least we get a better error term.
+            self.error.nmul_adde(q, e1 - e_prod) / self.value
+        };
+
+        Self::renormalized(q, err)
     }
 
     #[inline(always)]
     fn inverse_sqrt_p<P: Policy>(self) -> Self {
-        Self::ONE / self.sqrt()
+        self.sqrt().reciprocal_p::<P>()
     }
 
     #[inline(always)]
@@ -351,12 +367,12 @@ where
                 // Update Cosine Term: prev_term * (-r^2) / ((2k-1)*2k)
                 let div_c = (k2 - 1) * k2;
                 term_c *= r2 / Compensated::splat(FloatElement::from_i64(div_c));
-                cos += term_c;
+                cos.accumulate_unnormalized(term_c);
 
                 // Update Sine Term: prev_term * (-r^2) / (2k*(2k+1))
                 let div_s = k2 * (k2 + 1);
                 term_s *= r2 / Compensated::splat(FloatElement::from_i64(div_s));
-                sin += term_s;
+                sin.accumulate_unnormalized(term_s);
             }
 
             if (prev_s.cmp_eq(sin) & prev_c.cmp_eq(cos)).all() {
@@ -383,9 +399,9 @@ where
         let bit0 = (k_int & Vector::ONE).cmp_ne(Vector::ZERO); // true if k % 2 != 0 (quadrants 1, 3)
         let bit1 = (k_int & Vector::TWO).cmp_ne(Vector::ZERO); // true if k % 4 >= 2 (quadrants 2, 3)
 
-        // Swap sin/cos if k is odd (quadrants 1, 3)
-        let mut final_sin = bit0.select(cos, sin);
-        let mut final_cos = bit0.select(sin, cos); // Note: sign is handled next
+        // Swap sin/cos if k is odd (quadrants 1, 3), and normalize the results
+        let mut final_sin = bit0.select(cos, sin).normalize();
+        let mut final_cos = bit0.select(sin, cos).normalize(); // Note: sign is handled next
 
         // Sign logic:
         // Sin sign: positive in 0, 1. Negative in 2, 3. -> invert if bit1 is true.
@@ -500,7 +516,7 @@ where
 
         // if x > 1: x = 1/x
         // We will compute pi/2 - atan(1/x) later
-        let mut curr = gt_1.select(Self::ONE / abs_x, abs_x);
+        let mut curr = gt_1.select(abs_x.reciprocal_p::<P>(), abs_x);
 
         // Check if x > tan(pi/8)
         let gt_tan_pi8 = curr.value().cmp_gt(tan_pi_8.value());
@@ -534,7 +550,9 @@ where
                 let div = (2 * k) + 1; // 3, 5, 7...
 
                 term *= z2;
-                sum += term / Compensated::splat(FloatElement::from_i64(div as i64));
+
+                // NOTE: Doesn't need explicit normalization later, due to sum being used
+                sum.accumulate_unnormalized(term / Compensated::splat(FloatElement::from_i64(div as i64)));
             }
 
             if prev.cmp_eq(sum).all() {
@@ -777,10 +795,10 @@ where
                     let m_i = m as i64;
                     let den_i = (m_i + 1) * (2 * m_i + 1);
 
-                    c_k += num / Compensated::splat(FloatElement::from_i64(den_i));
+                    c_k.accumulate_unnormalized(num / Compensated::splat(FloatElement::from_i64(den_i)));
                 }
 
-                coeffs[k] = c_k;
+                coeffs[k] = c_k.normalize();
 
                 // Term = (c_k / (2k+1)) * w^(2k+1)
                 w_pow *= w2; // Next odd power of w
@@ -792,18 +810,21 @@ where
                     error: Vector::splat(c_k.error.extract::<0>()),
                 };
 
-                sum += (c_kv * w_pow) / Compensated::splat(FloatElement::from_i64(k_term_den));
+                sum.accumulate_unnormalized((c_kv * w_pow) / Compensated::splat(FloatElement::from_i64(k_term_den)));
 
+                // Check for convergence
                 if prev.cmp_eq(sum).all() {
-                    break;
+                    // Restore sign: erf_inv(-y) = -erf_inv(y)
+                    sum.value = sum.value.mul_sign(y_value);
+                    sum.error = sum.error.mul_sign(y_value);
+
+                    return sum.normalize();
                 }
             }
 
-            // Restore sign: erf_inv(-y) = -erf_inv(y)
-            sum.value = sum.value.mul_sign(y_value);
-            sum.error = sum.error.mul_sign(y_value);
-
-            return sum;
+            // The MAX_ERFINV_SERIES cutoff should guarantee convergence,
+            // but if we reach here, we fallback to Halley's method.
+            // This should be very rare, if not impossible.
         }
 
         // Detect singularities
@@ -828,7 +849,7 @@ where
         let t2 = l / a;
 
         // Stable Winitzki guess
-        let root_term = t1.mul_add(t1, -t2).sqrt();
+        let root_term = t1.mul_sub(t1, t2).sqrt();
         let inner = -t2 / (root_term + t1);
 
         // Clamp inner to 0 to avoid NaN if y ~ 0 results in tiny negative due to noise
@@ -855,7 +876,7 @@ where
                 break;
             }
 
-            x -= step;
+            x.reduce_unnormalized(step);
         }
 
         x = is_zero.select(Self::ZERO, is_one.select(Self::INFINITY, x));
@@ -864,7 +885,7 @@ where
         x.value = x.value.mul_sign(y_value);
         x.error = x.error.mul_sign(y_value);
 
-        x
+        x.normalize()
     }
 }
 
@@ -951,7 +972,7 @@ where
                     let den = FloatElement::from_i64(k_f * k2_p1);
 
                     term_s *= x2 * (Compensated::splat(num) / Compensated::splat(den));
-                    sum_s += term_s;
+                    sum_s.accumulate_unnormalized(term_s);
                 }
 
                 if prev_s.cmp_eq(sum_s).all() {
@@ -980,7 +1001,7 @@ where
                     c = b + a / c;
                     c = c.max(tiny); // if C<=0 -> tiny
 
-                    d = Self::ONE / d;
+                    d = d.reciprocal_p::<P>();
 
                     f *= c * d;
                 }
@@ -1011,7 +1032,11 @@ where
                     let s_ratio = x2 * (Compensated::splat(num) / Compensated::splat(den));
 
                     term_s *= s_ratio; // overflow doesn't matter if we don't use this
-                    sum_s = use_series.select(sum_s + term_s, sum_s); // but avoid overflowing the sum
+
+                    let mut new_sum_s = sum_s;
+                    new_sum_s.accumulate_unnormalized(term_s);
+
+                    sum_s = use_series.select(new_sum_s, sum_s); // but avoid overflowing the sum
 
                     // --- CF Update ---
                     // Lentz coefficients: a_k = (k-1)/2
@@ -1027,7 +1052,7 @@ where
                     c = b + a / c;
                     c = c.max(tiny); // if C<=0 -> tiny
 
-                    d = Self::ONE / d;
+                    d = d.reciprocal_p::<P>();
 
                     f = use_series.select(f, f * c * d);
                 }
@@ -1046,16 +1071,15 @@ where
 
         // --- Finalize ---
 
-        // 1. Result from Series
+        // 1. Result from Series, also normalizes the compensated sum
         let res_erf_s = sum_s * Self::FRAC_2_SQRT_PI;
 
         // 2. Result from CF (if used)
         // erfc = e^(-x^2)/sqrt(pi) * f
-        let res_erfc_c = if !use_only_series {
-            // avoid doing exp if not needed
-            f * (-x * x).exp_p::<P>() * Self::FRAC_1_SQRT_PI
+        let res_erfc_c = if use_only_series {
+            Self::ZERO // avoid doing exp if not needed
         } else {
-            Self::ZERO
+            f * (-x * x).exp_p::<P>() * Self::FRAC_1_SQRT_PI
         };
 
         // 3. Select based on Method
@@ -1115,7 +1139,7 @@ where
             // Base 10: 10^x = e^(x * ln10), k = round(x * log2(10)), r = x * ln(10) - k * ln(2)
             kf = (self.value * Vector::LOG2_10).round();
             // Standard Payne-Hanek style reduction step
-            r = self.mul_add(Self::LN_10, Self::new(kf) * -Self::LN_2);
+            r = self.mul_sub(Self::LN_10, Self::new(kf) * Self::LN_2);
         } else {
             // Base e: exp(x), expm1(x), exph(x), k = round(x * log2(e)), r = x - k * ln(2)
             kf = (self.value * Vector::LOG2_E).round();
@@ -1139,7 +1163,7 @@ where
 
             for i in i..next_i {
                 term *= r / Compensated::splat(FloatElement::from_i64(i as i64));
-                sum += term;
+                sum.accumulate_unnormalized(term);
             }
 
             if prev_sum.cmp_eq(sum).all() {
@@ -1157,6 +1181,7 @@ where
             k -= Vector::ONE;
         }
 
+        // sum + 1 also normalizes the compensated number
         let mut res = (sum + Self::ONE).ldexp_p::<P>(k); // 2^k * exp(r)
 
         if MODE == EXP_MODE_EXPM1 {
@@ -1268,7 +1293,7 @@ where
                 let div = (j * 2) + 1; // 3, 5, 7...
 
                 term *= z_sq;
-                sum += term / Compensated::splat(FloatElement::from_i64(div as i64));
+                sum.accumulate_unnormalized(term / Compensated::splat(FloatElement::from_i64(div as i64)));
             }
 
             if prev_sum.cmp_eq(sum).all() {
@@ -1280,7 +1305,7 @@ where
         }
 
         // Multiply by 2 to complete 2*atanh(z)
-        let ln_m = sum + sum;
+        let ln_m = sum + sum; // also normalizes
 
         // We cast k back to Compensated to perform the final addition
         let k = Self::new(k.cast());

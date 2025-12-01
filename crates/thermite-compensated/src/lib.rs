@@ -176,6 +176,11 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
+    pub fn normalize(self) -> Self {
+        Self::renormalized(self.value, self.error)
+    }
+
+    #[inline(always)]
     pub fn sqrt(self) -> Self {
         let s = self.value.sqrt();
 
@@ -295,6 +300,41 @@ impl<R: CompensatedRegister> Add for Compensated<R> {
     }
 }
 
+// for testing
+const ALLOW_UNNORMALIZED: bool = true;
+
+impl<R: CompensatedRegister> Compensated<R> {
+    /// Accumulate rhs into self without renormalization.
+    ///
+    /// This should only be used in specific scenarios where renormalization is not desired,
+    /// such as within iterative series expansions.
+    #[inline(always)]
+    pub fn accumulate_unnormalized(&mut self, rhs: Self) {
+        if ALLOW_UNNORMALIZED {
+            let (s, e) = two_sum(self.value, rhs.value);
+            self.value = s;
+            self.error += e + rhs.error;
+        } else {
+            *self += rhs;
+        }
+    }
+
+    /// Reduce rhs from self without renormalization.
+    ///
+    /// This should only be used in specific scenarios where renormalization is not desired,
+    /// such as within iterative series expansions.
+    #[inline(always)]
+    pub fn reduce_unnormalized(&mut self, rhs: Self) {
+        if ALLOW_UNNORMALIZED {
+            let (s, e) = two_diff(self.value, rhs.value);
+            self.value = s;
+            self.error = e + (self.error - rhs.error);
+        } else {
+            *self -= rhs;
+        }
+    }
+}
+
 impl<R: CompensatedRegister> Sub for Compensated<R> {
     type Output = Self;
 
@@ -377,7 +417,10 @@ impl<R: CompensatedRegister> Mul<Vector<R>> for Compensated<R> {
 
     #[inline(always)]
     fn mul(self, rhs: Vector<R>) -> Self {
-        self * Compensated::new(rhs)
+        // (a0 + a1) * b = a0*b + a1*b
+        let (p, e1) = two_prod(self.value, rhs);
+        // We just add a1*b to the error term
+        Self::renormalized(p, self.error.mul_adde(rhs, e1))
     }
 }
 
@@ -399,11 +442,9 @@ impl<R: CompensatedRegister> Rem<Vector<R>> for Compensated<R> {
     }
 }
 
-impl<R: CompensatedRegister> MulAdd for Compensated<R> {
-    type Output = Self;
-
+impl<R: CompensatedRegister> Compensated<R> {
     #[inline(always)]
-    fn mul_add(self, b: Self, c: Self) -> Self {
+    pub fn mul_add(self, b: Self, c: Self) -> Self {
         let (p, e_prod_base) = two_prod(self.value, b.value);
         let (s, e_sum) = two_sum(p, c.value);
 
@@ -418,6 +459,36 @@ impl<R: CompensatedRegister> MulAdd for Compensated<R> {
         };
 
         Self::renormalized(s, e_prod + e_sum + c.error)
+    }
+
+    #[inline(always)]
+    pub fn mul_sub(self, b: Self, c: Self) -> Self {
+        let (p, e_prod_base) = two_prod(self.value, b.value);
+        let (s, e_diff) = two_diff(p, c.value);
+
+        let e_prod = if R::HAS_TRUE_FMA {
+            // 2 fmas
+            self.error.mul_add(b.value, self.value.mul_add(b.error, e_prod_base))
+        } else {
+            // 2 muls, 2 adds
+            let cross1 = self.value * b.error;
+            let cross2 = b.value * self.error;
+
+            e_prod_base + cross1 + cross2
+        };
+
+        // Subtract c.error because the operation is (a*b) - c
+        // The total error is the product error + subtraction error - c's error component
+        Self::renormalized(s, e_prod + e_diff - c.error)
+    }
+}
+
+impl<R: CompensatedRegister> MulAdd for Compensated<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul_add(self, b: Self, c: Self) -> Self {
+        self.mul_add(b, c)
     }
 }
 
