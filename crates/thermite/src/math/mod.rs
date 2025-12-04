@@ -67,7 +67,6 @@ macro_rules! decl_math {
         impl<E, R> MathWithPolicy<R> for Vector<R>
         where
             R: MathInternal<E, Element = E>,
-            E: FloatConsts,
         {$(
             #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -294,7 +293,6 @@ decl_math! {
 impl<E, R> num_traits::Inv for Vector<R>
 where
     R: MathInternal<E, Element = E>,
-    E: FloatConsts,
 {
     type Output = Self;
 
@@ -309,7 +307,6 @@ where
 impl<E, R> num_traits::Pow<i32> for Vector<R>
 where
     R: MathInternal<E, Element = E>,
-    E: FloatConsts,
 {
     type Output = Self;
 
@@ -326,7 +323,6 @@ where
 impl<E, R> num_traits::Pow<Self> for Vector<R>
 where
     R: MathInternal<E, Element = E>,
-    E: FloatConsts,
 {
     type Output = Self;
 

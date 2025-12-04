@@ -5,7 +5,7 @@
 use crate::{
     divider::vector::VectorDivider,
     isa::InstructionSet,
-    register::{Element, SignedIntegerRegister},
+    register::{Element, ExtendRegister, SignedIntegerRegister, TruncateRegister},
 };
 
 use super::{
@@ -127,6 +127,11 @@ where
         let [lhs, rhs] = Self::split_array(value);
 
         Self(R::new(lhs), R::new(rhs))
+    }
+
+    #[inline(always)]
+    fn single(value: Self::Element) -> Storage<Self> {
+        Self(R::single(value), R::EMPTY)
     }
 
     #[inline(always)]
@@ -594,6 +599,26 @@ where
         let high: R::Storage = R::blendv(blend_hi, res_hi_from_lo, res_hi_from_hi);
 
         Self(low, high)
+    }
+}
+
+impl<R: Register> ExtendRegister<R> for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    #[inline(always)]
+    fn extend_from(value: Storage<R>) -> Storage<Self> {
+        Self(value, R::EMPTY)
+    }
+}
+
+impl<R: Register> TruncateRegister<DoublePumpRegister<R>> for R
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    #[inline(always)]
+    fn truncate_from(value: Storage<DoublePumpRegister<R>>) -> Storage<Self> {
+        value.0
     }
 }
 

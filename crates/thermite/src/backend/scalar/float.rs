@@ -27,26 +27,27 @@ impl Register for [<f $width>] {
     type ISize = [<i $width>];
     type USize = [<u $width>];
 
-    const EMPTY: Self::Storage = 0.0;
+    const EMPTY: Storage<Self> = 0.0;
 
-    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self::Storage { value[0] }
-    #[inline(always)] fn splat(value: Self::Element) -> Self::Storage { value }
-    #[inline(always)] fn broadcast<const I: usize>(value: Self::Storage) -> Self::Storage { value }
-    #[inline(always)] fn reverse(value: Self::Storage) -> Self::Storage { value }
+    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
+    #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
+    #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
 
-    #[inline(always)] fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() ^ rhs.to_bits())
     }
 
-    #[inline(always)] fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() & rhs.to_bits())
     }
 
-    #[inline(always)] fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() | rhs.to_bits())
     }
 
-    #[inline(always)] fn not(value: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(!value.to_bits())
     }
 
@@ -54,117 +55,117 @@ impl Register for [<f $width>] {
     const HAS_MSB_BLENDV: bool = cfg!(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"));
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
-    #[inline(always)] fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable((mask.to_bits() >> 31) != 0, rhs, lhs)
     }
 
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-    #[inline(always)] fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if mask != 0.0 { rhs } else { lhs }
     }
 
     #[inline(always)]
-    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         (a, b) // no-op for scalar
     }
 
     #[inline(always)]
-    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(value.to_bits().swap_bytes())
     }
 }
 
 impl ShuffleRegister for [<f $width>] {
     #[inline(always)]
-    fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
 impl PermuteRegister for [<f $width>] {
-    #[inline(always)] fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value }
+    #[inline(always)] fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value }
 }
 
 impl SwizzleRegister for [<f $width>] {
     const HAS_PERMUTEV: bool = false;
 
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 
     #[inline(always)]
-    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
 
 impl MaskRegister for [<f $width>] {
-    const TRUTHY: Self::Storage = Element::TRUTHY;
-    const FALSY: Self::Storage = Element::FALSY;
+    const TRUTHY: Storage<Self> = Element::TRUTHY;
+    const FALSY: Storage<Self> = Element::FALSY;
 
     #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
         if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
-    #[inline(always)] fn all(value: Self::Storage) -> bool { value.to_bool() }
-    #[inline(always)] fn any(value: Self::Storage) -> bool { value.to_bool() }
+    #[inline(always)] fn all(value: Storage<Self>) -> bool { value.to_bool() }
+    #[inline(always)] fn any(value: Storage<Self>) -> bool { value.to_bool() }
 
     #[inline(always)]
-    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(value.to_bool() as u64)
     }
 
     #[inline(always)]
-    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         view.set(0, value.to_bool());
     }
 }
 
 impl PartialOrdRegister for [<f $width>] {
-    #[inline(always)] fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs > rhs) }
-    #[inline(always)] fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs == rhs) }
-    #[inline(always)] fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs >= rhs) }
-    #[inline(always)] fn lt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs < rhs) }
-    #[inline(always)] fn le(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs <= rhs) }
-    #[inline(always)] fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs != rhs) }
+    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs > rhs) }
+    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs == rhs) }
+    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs >= rhs) }
+    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs < rhs) }
+    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs <= rhs) }
+    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs != rhs) }
 }
 
 impl NumericRegister for [<f $width>] {
-    const ZERO: Self::Storage = 0.0;
-    const ONE: Self::Storage = 1.0;
-    const TWO: Self::Storage = 2.0;
+    const ZERO: Storage<Self> = 0.0;
+    const ONE: Storage<Self> = 1.0;
+    const TWO: Storage<Self> = 2.0;
 
-    const MIN: Self::Storage = $f::MIN;
-    const MAX: Self::Storage = $f::MAX;
+    const MIN: Storage<Self> = $f::MIN;
+    const MAX: Storage<Self> = $f::MAX;
 
-    #[inline(always)] fn min_element(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn max_element(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn sum_elements(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn prod_elements(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn offset() -> Self::Storage { 1.0 }
-    #[inline(always)] fn indexed() -> Self::Storage { 0.0 }
-    #[inline(always)] fn add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs + rhs }
-    #[inline(always)] fn sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs - rhs }
-    #[inline(always)] fn mul(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs * rhs }
-    #[inline(always)] fn div(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs / rhs }
-    #[inline(always)] fn rem(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs % rhs }
-    #[inline(always)] fn min(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.min(rhs) }
-    #[inline(always)] fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.max(rhs) }
+    #[inline(always)] fn min_element(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn max_element(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn sum_elements(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn prod_elements(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn offset() -> Storage<Self> { 1.0 }
+    #[inline(always)] fn indexed() -> Storage<Self> { 0.0 }
+    #[inline(always)] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
+    #[inline(always)] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
+    #[inline(always)] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
+    #[inline(always)] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
+    #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
+    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.min(rhs) }
+    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.max(rhs) }
 }
 
 impl SignedRegister for [<f $width>] {
-    const NEG_ONE: Self::Storage = -1.0;
-    const MIN_POSITIVE: Self::Storage = <$f>::MIN_POSITIVE;
+    const NEG_ONE: Storage<Self> = -1.0;
+    const MIN_POSITIVE: Storage<Self> = <$f>::MIN_POSITIVE;
 
-    #[inline(always)] fn neg(value: Self::Storage) -> Self::Storage { -value }
-    #[inline(always)] fn abs(value: Self::Storage) -> Self::Storage { value.abs() }
-    #[inline(always)] fn signum(value: Self::Storage) -> Self::Storage { value.signum() }
-    #[inline(always)] fn copysign(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.copysign(rhs) }
+    #[inline(always)] fn neg(value: Storage<Self>) -> Storage<Self> { -value }
+    #[inline(always)] fn abs(value: Storage<Self>) -> Storage<Self> { value.abs() }
+    #[inline(always)] fn signum(value: Storage<Self>) -> Storage<Self> { value.signum() }
+    #[inline(always)] fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.copysign(rhs) }
 
     #[inline(always)]
-    fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage {
+    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
         if mask.to_bool() { -value } else { value }
     }
 }
@@ -177,31 +178,31 @@ impl FloatRegister for [<f $width>] {
     // best guess we can do
     const HAS_TRUE_FMA: bool = cfg!(any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"));
 
-    const HALF: Self::Storage = 0.5;
-    const NEG_ZERO: Self::Storage = -0.0;
-    const INFINITY: Self::Storage = $f::INFINITY;
-    const NEG_INFINITY: Self::Storage = $f::NEG_INFINITY;
-    const NAN: Self::Storage = $f::NAN;
-    const EPSILON: Self::Storage = $f::EPSILON;
+    const HALF: Storage<Self> = 0.5;
+    const NEG_ZERO: Storage<Self> = -0.0;
+    const INFINITY: Storage<Self> = $f::INFINITY;
+    const NEG_INFINITY: Storage<Self> = $f::NEG_INFINITY;
+    const NAN: Storage<Self> = $f::NAN;
+    const EPSILON: Storage<Self> = $f::EPSILON;
 
     const EXP_MASK: Storage<Self::Bits> = $f::INFINITY.to_bits(); // all exponent bits set
 
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
-    #[inline(always)] fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_mul_add(lhs, rhs, acc) }
-    #[inline(always)] fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_mul_sub(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_nmul_add(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage { FloatElement::scalar_nmul_sub(lhs, rhs, acc) }
+    #[inline(always)] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_mul_add(lhs, rhs, acc) }
+    #[inline(always)] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_mul_sub(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_nmul_add(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_nmul_sub(lhs, rhs, acc) }
 
-    #[inline(always)] fn sqrt(value: Self::Storage) -> Self::Storage { FloatElement::sqrt(value) }
-    #[inline(always)] fn floor(value: Self::Storage) -> Self::Storage { FloatElement::floor(value) }
-    #[inline(always)] fn ceil(value: Self::Storage) -> Self::Storage { FloatElement::ceil(value) }
-    #[inline(always)] fn round(value: Self::Storage) -> Self::Storage { FloatElement::round(value) }
-    #[inline(always)] fn trunc(value: Self::Storage) -> Self::Storage { FloatElement::trunc(value) }
-    #[inline(always)] fn fract(value: Self::Storage) -> Self::Storage { FloatElement::fract(value) }
-    #[inline(always)] fn next_up(value: Self::Storage) -> Self::Storage { FloatElement::next_up(value) }
-    #[inline(always)] fn next_down(value: Self::Storage) -> Self::Storage { FloatElement::next_down(value) }
+    #[inline(always)] fn sqrt(value: Storage<Self>) -> Storage<Self> { FloatElement::sqrt(value) }
+    #[inline(always)] fn floor(value: Storage<Self>) -> Storage<Self> { FloatElement::floor(value) }
+    #[inline(always)] fn ceil(value: Storage<Self>) -> Storage<Self> { FloatElement::ceil(value) }
+    #[inline(always)] fn round(value: Storage<Self>) -> Storage<Self> { FloatElement::round(value) }
+    #[inline(always)] fn trunc(value: Storage<Self>) -> Storage<Self> { FloatElement::trunc(value) }
+    #[inline(always)] fn fract(value: Storage<Self>) -> Storage<Self> { FloatElement::fract(value) }
+    #[inline(always)] fn next_up(value: Storage<Self>) -> Storage<Self> { FloatElement::next_up(value) }
+    #[inline(always)] fn next_down(value: Storage<Self>) -> Storage<Self> { FloatElement::next_down(value) }
 }
 
 }}} // end macro

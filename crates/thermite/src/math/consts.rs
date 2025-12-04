@@ -2,6 +2,9 @@ pub trait FloatConsts {
     /// Zero (0)
     const ZERO: Self;
 
+    /// Negative zero (-0) (only sign bit set)
+    const NEG_ZERO: Self;
+
     /// One (1)
     const ONE: Self;
 
@@ -112,6 +115,12 @@ pub trait FloatConsts {
 
     /// The golden ratio (φ)
     const PHI: Self;
+
+    /// 1/3
+    const FRAC_1_3: Self;
+
+    /// 1/6
+    const FRAC_1_6: Self;
 }
 
 macro_rules! impl_consts {
@@ -130,6 +139,7 @@ macro_rules! impl_consts {
 
 impl_consts!(
     ZERO,
+    NEG_ZERO,
     ONE,
     E,
     EGAMMA,
@@ -166,7 +176,9 @@ impl_consts!(
     TAU,
     SQRT_FRAC_PI_2,
     SQRT_2_PI,
-    PHI
+    PHI,
+    FRAC_1_3,
+    FRAC_1_6
 );
 
 use crate::register::FloatElement;
@@ -177,6 +189,7 @@ use core::f64::consts as f64c;
 impl_consts! {@
     f32 {
         ZERO = 0.0f32,
+        NEG_ZERO = -0.0f32,
         ONE = 1.0f32,
         E = f32c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
@@ -214,12 +227,15 @@ impl_consts! {@
         SQRT_FRAC_PI_2 = 1.2533141373155002512078826424055226265034933703049691583149617881,
         SQRT_2_PI = 2.506628274631000502415765284811045253006986740609938316629923576342293654607842,
         PHI = 1.618033988749894848204586834365638118,
+        FRAC_1_3 = 1.0 / 3.0,
+        FRAC_1_6 = 1.0 / 6.0,
     }
 }
 
 impl_consts! {@
     f64 {
         ZERO = 0.0f64,
+        NEG_ZERO = -0.0f64,
         ONE = 1.0f64,
         E = f64c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
@@ -257,5 +273,7 @@ impl_consts! {@
         SQRT_FRAC_PI_2 = 1.2533141373155002512078826424055226265034933703049691583149617881,
         SQRT_2_PI = 2.506628274631000502415765284811045253006986740609938316629923576342293654607842,
         PHI = 1.618033988749894848204586834365638118,
+        FRAC_1_3 = 1.0 / 3.0,
+        FRAC_1_6 = 1.0 / 6.0,
     }
 }

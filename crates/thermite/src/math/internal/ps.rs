@@ -1,7 +1,7 @@
 use crate::{
     divider::Divider,
     math::{
-        consts::FloatConsts,
+        consts::FloatConsts as _,
         policy::policies::{ExtraPrecision, MediumPrecision},
     },
 };

@@ -5,7 +5,7 @@ pub mod signed;
 pub mod unsigned;
 
 use crate::{
-    register::{Element, dp::DoublePumpRegister},
+    register::{Element, Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
 
@@ -61,21 +61,21 @@ macro_rules! impl_easy_casts {
     ($($from:ty as $to:ty),*) => {$(
         impl $crate::register::BitsRegister<$from> for $to {
             #[inline(always)]
-            fn from_bits(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+            fn from_bits(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                 unsafe { core::mem::transmute(value) }
             }
         }
 
         impl $crate::register::CastRegister<$from> for $to {
             #[inline(always)]
-            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                 unsafe { value as _ }
             }
         }
 
         impl $crate::register::CastMaskRegister<$from> for $to {
             #[inline(always)]
-            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                 unsafe { core::mem::transmute(value) }
             }
         }
@@ -86,14 +86,14 @@ macro_rules! impl_nontrivial_casts {
     ($($from:ty as $to:ty),* $(,)?) => {$(
         impl $crate::register::CastRegister<$from> for $to {
             #[inline(always)]
-            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                 unsafe { value as _ }
             }
         }
 
         impl $crate::register::CastMaskRegister<$from> for $to {
             #[inline(always)]
-            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                 Element::from_bool(value.to_bool())
             }
         }

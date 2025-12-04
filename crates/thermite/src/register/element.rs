@@ -3,9 +3,9 @@ pub trait Element:
     Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug + 'static + num_traits::NumOps
 {
     /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
-    type USize: Element;
+    type USize: IntegerElement;
     /// Signed integer type to be used with operations that require signed counts, such as shifts.
-    type ISize: Element;
+    type ISize: IntegerElement;
 
     /// When used as a mask, represents "true"
     const TRUTHY: Self;
@@ -75,16 +75,46 @@ impl_element! {
 impl_element!(F f32, u32, i32);
 impl_element!(F f64, u64, i64);
 
+/// A trait for integer element types that can be used in SIMD operations.
+///
+/// This trait is implemented for all primitive integer types that also implement `Element`, and
+/// wrapping addition and multiplication.
+pub trait IntegerElement:
+    Element
+    + num_traits::PrimInt
+    + num_traits::WrappingAdd
+    + num_traits::WrappingMul
+    + Shr<Self::USize, Output = Self>
+    + Shl<Self::USize, Output = Self>
+{
+}
+
+impl<T> IntegerElement for T where
+    T: Element
+        + num_traits::PrimInt
+        + num_traits::WrappingAdd
+        + num_traits::WrappingMul
+        + Shr<Self::USize, Output = Self>
+        + Shl<Self::USize, Output = Self>
+{
+}
+
+use core::ops::{Shl, Shr};
+
+#[cfg(feature = "std")]
+use num_traits::Float as FloatTrait;
+
+#[cfg(not(feature = "std"))]
+use num_traits::float::FloatCore as FloatTrait;
+
 /// A trait for float element types that can be used in SIMD operations.
 ///
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: Element + num_traits::float::FloatCore + From<i8> + core::fmt::Display
-// + crate::math::FloatConsts
-{
-    type Bits: Element;
-    type Signed: Element;
+pub trait FloatElement: Element + FloatTrait + From<i8> + core::fmt::Display + crate::math::FloatConsts {
+    type Bits: IntegerElement;
+    type Signed: IntegerElement;
 
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;

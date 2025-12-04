@@ -6,9 +6,17 @@ pub struct CompensatedConst<T>(pub T, pub T);
 
 use super::{Compensated, CompensatedRegister};
 
+pub const LOG_TABLE_SIZE: usize = 30;
+
+/// Helper trait to store precomputed compensated logarithm table for small integer bases.
+pub trait CompensatedLogTable<T>: FloatConsts {
+    /// The log table entries for bases 3..32 as (high, low) pairs.
+    const LOG_TABLE: [(T, T); LOG_TABLE_SIZE];
+}
+
 macro_rules! impl_consts {
     ($($const:ident),*) => {
-        pub trait SplitFloatConsts<T>: FloatConsts {
+        pub trait SplitFloatConsts<T>: CompensatedLogTable<T> {
             $(const $const: CompensatedConst<T>; )*
         }
 
@@ -29,17 +37,27 @@ macro_rules! impl_consts {
             $(const $const: CompensatedConst<$t> = <CompensatedConst<$t> as FloatConsts>::$const;)*
         }
     }};
+
+    (LOG $ty:ty [ $(($hi:literal, $low:literal),)* $(,)? ]) => {paste::paste! {
+        impl CompensatedLogTable<$ty> for $ty {
+            const LOG_TABLE: [( $ty, $ty ); LOG_TABLE_SIZE] = [
+                $( (hexf::[<hex $ty>]!($hi), hexf::[<hex $ty>]!($low)), )*
+            ];
+        }
+    }};
 }
 
 #[rustfmt::skip]
 impl_consts!(
-    ZERO,ONE,E,EGAMMA,FRAC_1_PI,FRAC_1_SQRT_2,FRAC_1_SQRT_3,FRAC_2_PI,FRAC_1_SQRT_PI,
+    ZERO,NEG_ZERO,ONE,E,EGAMMA,FRAC_1_PI,FRAC_1_SQRT_2,FRAC_1_SQRT_3,FRAC_2_PI,FRAC_1_SQRT_PI,
     FRAC_2_SQRT_PI,FRAC_SQRT_PI_2,FRAC_1_SQRT_TAU,FRAC_PI_2,FRAC_PI_3,FRAC_PI_4,FRAC_PI_6,FRAC_PI_8,
     FRAC_PI_180,FRAC_180_PI,LN_2,LN_10,LN_PI,FRAC_LN_PI_2,LOG2_10,LOG2_E,LOG10_2,LOG10_E,
-    PI,SQRT_2,SQRT_3,SQRT_E,TAU,SQRT_FRAC_PI_2,SQRT_2_PI,PHI,EPSILON,SQRT_EPSILON,FOURTH_ROOT_EPSILON);
+    PI,SQRT_2,SQRT_3,SQRT_E,TAU,SQRT_FRAC_PI_2,SQRT_2_PI,PHI,FRAC_1_3,FRAC_1_6,
+    EPSILON,SQRT_EPSILON,FOURTH_ROOT_EPSILON);
 
 impl_consts!(f32 {
     ZERO = ("0x0.0p+0", "0x0.0p+0"),
+    NEG_ZERO = ("-0x0.0p+0", "0x0.0p+0"),
     ONE = ("0x1.0000000000000p+0", "0x0.0p+0"),
     E = ("0x1.5bf0a80000000p+1", "0x1.628aee0000000p-24"),
     EGAMMA = ("0x1.2788d00000000p-1", "-0x1.c824f40000000p-28"),
@@ -74,13 +92,16 @@ impl_consts!(f32 {
     SQRT_FRAC_PI_2 = ("0x1.9884540000000p-1", "-0x1.8579360000000p-26"),
     SQRT_2_PI = ("0x1.40d9320000000p+1", "-0x1.3b1f4e0000000p-32"),
     PHI = ("0x1.9e377a0000000p+0", "-0x1.1a02d60000000p-26"),
-    EPSILON = ("0x1.0000000000000p-47", "0x1.6ece7c0000000p-103"),
-    SQRT_EPSILON = ("0x1.6a09e60000000p-24", "0x1.9fcef40000000p-50"),
-    FOURTH_ROOT_EPSILON = ("0x1.306fe00000000p-12", "0x1.4636e20000000p-37"),
+    FRAC_1_3 = ("0x1.5555560000000p-2", "-0x1.5555560000000p-27"),
+    FRAC_1_6 = ("0x1.5555560000000p-3", "-0x1.5555560000000p-28"),
+    EPSILON = ("0x1.0000000000000p-47", "0x1.02f4fe0000000p-74"),
+    SQRT_EPSILON = ("0x1.6a09e60000000p-24", "0x1.fb5d100000000p-50"),
+    FOURTH_ROOT_EPSILON = ("0x1.306fe00000000p-12", "0x1.5976240000000p-37"),
 });
 
 impl_consts!(f64 {
     ZERO = ("0x0.0p+0", "0x0.0p+0"),
+    NEG_ZERO = ("-0x0.0p+0", "0x0.0p+0"),
     ONE = ("0x1.0000000000000p+0", "0x0.0p+0"),
     E = ("0x1.5bf0a8b145769p+1", "0x1.4d57ee2b1013ap-53"),
     EGAMMA = ("0x1.2788cfc6fb619p-1", "-0x1.6cb90701fbfabp-58"),
@@ -115,7 +136,75 @@ impl_consts!(f64 {
     SQRT_FRAC_PI_2 = ("0x1.9884533d43651p-1", "-0x1.cbc0d30ebfd15p-55"),
     SQRT_2_PI = ("0x1.40d931ff62706p+1", "-0x1.a6a0d6f814637p-53"),
     PHI = ("0x1.9e3779b97f4a8p+0", "-0x1.f506319fcfd19p-55"),
-    EPSILON = ("0x1.0000000000000p-105", "0x1.2b837a498a57cp-228"),
-    SQRT_EPSILON = ("0x1.0000000000000p-105", "0x1.2b837a498a57cp-228"),
-    FOURTH_ROOT_EPSILON = ("0x1.0000000000000p-105", "0x1.2b837a498a57cp-228"),
+    FRAC_1_3 = ("0x1.5555555555555p-2", "0x1.5555555555555p-56"),
+    FRAC_1_6 = ("0x1.5555555555555p-3", "0x1.5555555555555p-57"),
+    EPSILON = ("0x1.0000000000000p-105", "0x1.946811deb71cap-160"),
+    SQRT_EPSILON = ("0x1.6a09e667f3bccp-53", "0x1.4b76de2ebce1ap-107"),
+    FOURTH_ROOT_EPSILON = ("0x1.ae89f995ad3adp-27", "0x1.133c04b31ca20p-83"),
 });
+
+impl_consts!(LOG f32 [
+    ("0x1.d20ae00000000p-1", "0x1.de60aa0000000p-28"),
+    ("0x1.7154760000000p-1", "0x1.4ae0c00000000p-27"),
+    ("0x1.3e1f9c0000000p-1", "0x1.9f2eee0000000p-26"),
+    ("0x1.1dc0ae0000000p-1", "-0x1.dda6380000000p-26"),
+    ("0x1.071dae0000000p-1", "0x1.f7c96a0000000p-26"),
+    ("0x1.ec709e0000000p-2", "-0x1.e2fe020000000p-29"),
+    ("0x1.d20ae00000000p-2", "0x1.de60aa0000000p-29"),
+    ("0x1.bcb7b20000000p-2", "-0x1.5b235e0000000p-27"),
+    ("0x1.ab0a8a0000000p-2", "0x1.4518740000000p-31"),
+    ("0x1.9c16820000000p-2", "-0x1.a3cddc0000000p-28"),
+    ("0x1.8f3a680000000p-2", "0x1.8014a80000000p-28"),
+    ("0x1.8404700000000p-2", "0x1.10dfaa0000000p-28"),
+    ("0x1.7a21c00000000p-2", "0x1.17d8500000000p-29"),
+    ("0x1.7154760000000p-2", "0x1.4ae0c00000000p-28"),
+    ("0x1.696d540000000p-2", "0x1.0760680000000p-27"),
+    ("0x1.62479a0000000p-2", "-0x1.e2a68a0000000p-28"),
+    ("0x1.5bc6340000000p-2", "-0x1.1fffc20000000p-31"),
+    ("0x1.55d1d20000000p-2", "-0x1.b703f60000000p-27"),
+    ("0x1.50577c0000000p-2", "0x1.a83cf40000000p-27"),
+    ("0x1.4b47a20000000p-2", "0x1.1831800000000p-27"),
+    ("0x1.4695520000000p-2", "0x1.22d24e0000000p-29"),
+    ("0x1.4235b40000000p-2", "-0x1.8912be0000000p-28"),
+    ("0x1.3e1f9c0000000p-2", "0x1.9f2eee0000000p-27"),
+    ("0x1.3a4b400000000p-2", "-0x1.37ecc00000000p-28"),
+    ("0x1.36b1ea0000000p-2", "0x1.a5101c0000000p-27"),
+    ("0x1.334dd80000000p-2", "-0x1.40ea420000000p-27"),
+    ("0x1.301a020000000p-2", "-0x1.03afa00000000p-27"),
+    ("0x1.2d12080000000p-2", "0x1.02e7c00000000p-27"),
+    ("0x1.2a32160000000p-2", "-0x1.8a11340000000p-27"),
+    ("0x1.2776c60000000p-2", "-0x1.e20c800000000p-27"),
+]);
+
+impl_consts!(LOG f64 [
+    ("0x1.d20ae03bcc153p-1", "-0x1.3a34bf2f1ab83p-55"),
+    ("0x1.71547652b82fep-1", "0x1.777d0ffda0d24p-57"),
+    ("0x1.3e1f9ccf97777p-1", "-0x1.db618df721f98p-55"),
+    ("0x1.1dc0ad112ce3ep-1", "0x1.769f645267d4ap-55"),
+    ("0x1.071daefbe4b4ap-1", "-0x1.9ea6c1f1794eep-55"),
+    ("0x1.ec709dc3a03fdp-2", "0x1.d27f05548af0cp-56"),
+    ("0x1.d20ae03bcc153p-2", "-0x1.3a34bf2f1ab83p-56"),
+    ("0x1.bcb7b1526e50ep-2", "0x1.95355baaafad3p-57"),
+    ("0x1.ab0a8a0a28c3ap-2", "0x1.b6455c79fed99p-56"),
+    ("0x1.9c1681970c88fp-2", "0x1.e3221f6298af5p-59"),
+    ("0x1.8f3a6860052a1p-2", "-0x1.afe7dc91a78f0p-56"),
+    ("0x1.8404704437eabp-2", "0x1.ac5dd927e6112p-56"),
+    ("0x1.7a21c022fb0a1p-2", "0x1.a9f5bd6a60428p-56"),
+    ("0x1.71547652b82fep-2", "0x1.777d0ffda0d24p-58"),
+    ("0x1.696d5483b0344p-2", "0x1.78ec9931dd399p-58"),
+    ("0x1.62479987565dap-2", "0x1.2708bb7e5784cp-56"),
+    ("0x1.5bc633f70001fp-2", "-0x1.1e2e054e1a1f4p-57"),
+    ("0x1.55d1d1247e049p-2", "-0x1.09a5cb7ff50e7p-56"),
+    ("0x1.50577cd41e7a0p-2", "-0x1.795d4f1c45fa7p-56"),
+    ("0x1.4b47a28c18bfbp-2", "-0x1.a4ad57d5c1ac2p-58"),
+    ("0x1.469552245a49dp-2", "-0x1.5b806338b1165p-59"),
+    ("0x1.4235b39dbb506p-2", "0x1.15529d613d714p-56"),
+    ("0x1.3e1f9ccf97777p-2", "-0x1.db618df721f98p-56"),
+    ("0x1.3a4b3fb204cfep-2", "-0x1.431b7d1b937b5p-60"),
+    ("0x1.36b1ead2880e2p-2", "-0x1.a2f0fee978f59p-57"),
+    ("0x1.334dd75f8adeep-2", "-0x1.c3950ba6ceb12p-56"),
+    ("0x1.301a017e282fcp-2", "0x1.dbdacfa0d9b0fp-57"),
+    ("0x1.2d12088173e01p-2", "0x1.bffac2f932436p-57"),
+    ("0x1.2a32153af765ep-2", "0x1.c22c8956209efp-56"),
+    ("0x1.2776c50ef9bfep-2", "0x1.e4b29ccc535d4p-56"),
+]);

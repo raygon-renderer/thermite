@@ -107,61 +107,6 @@ pub unsafe fn _mm_rorv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm_reverse_bits_epi32x_v1(mut value: __m128i) -> __m128i {
-    let mask_a = _mm_set1_epi32(0x55555555);
-    let mask_b = _mm_set1_epi32(0x33333333);
-    let mask_c = _mm_set1_epi32(0x0F0F0F0F);
-    let mask_d = _mm_set1_epi32(0x00FF00FF);
-
-    value = _mm_or_si128(
-        _mm_and_si128(mask_a, _mm_srli_epi32(value, 1)),
-        _mm_slli_epi32(_mm_and_si128(value, mask_a), 1),
-    );
-
-    value = _mm_or_si128(
-        _mm_and_si128(mask_b, _mm_srli_epi32(value, 2)),
-        _mm_slli_epi32(_mm_and_si128(value, mask_b), 2),
-    );
-
-    value = _mm_or_si128(
-        _mm_and_si128(mask_c, _mm_srli_epi32(value, 4)),
-        _mm_slli_epi32(_mm_and_si128(value, mask_c), 4),
-    );
-
-    value = _mm_or_si128(
-        _mm_and_si128(mask_d, _mm_srli_epi32(value, 8)),
-        _mm_slli_epi32(_mm_and_si128(value, mask_d), 8),
-    );
-
-    value = _mm_or_si128(_mm_srli_epi32(value, 16), _mm_slli_epi32(value, 16));
-
-    value
-}
-
-#[inline(always)]
-pub unsafe fn _mm_reverse_bits_epi64x_v1(mut value: __m128i) -> __m128i {
-    let mut s = 64;
-    let mut mask = !0i64;
-
-    loop {
-        s >>= 1;
-
-        if s == 0 {
-            return value;
-        }
-
-        mask ^= mask << s;
-
-        let s = _mm_set_epi32(0, 0, 0, s);
-
-        let left = _mm_and_si128(_mm_srl_epi64(value, s), _mm_set1_epi64x(mask));
-        let right = _mm_and_si128(_mm_sll_epi64(value, s), _mm_set1_epi64x(!mask));
-
-        value = _mm_or_si128(left, right);
-    }
-}
-
-#[inline(always)]
 pub unsafe fn _mm_np2_m1_epu32x_v1(mut value: __m128i) -> __m128i {
     let mut s = 1;
 

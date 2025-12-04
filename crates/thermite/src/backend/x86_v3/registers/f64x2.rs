@@ -8,7 +8,7 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, SwizzleRegister, empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, empty_reg, reg,
     },
 };
 
@@ -31,97 +31,102 @@ impl Register for F64x2V3 {
     type ISize = super::I64x2V3;
     type USize = super::U64x2V3;
 
-    const EMPTY: Self::Storage = empty_reg::<Self>();
+    const EMPTY: Storage<Self> = empty_reg::<Self>();
 
     #[inline(always)]
-    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self::Storage {
+    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
         unsafe { arch::_mm_loadu_pd(value.as_ptr() as *const _) }
     }
 
     #[inline(always)]
-    fn splat(value: Self::Element) -> Self::Storage {
+    fn single(value: Self::Element) -> crate::register::Storage<Self> {
+        unsafe { arch::_mm_set_sd(value) }
+    }
+
+    #[inline(always)]
+    fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_pd(value) }
     }
 
     #[inline(always)]
-    unsafe fn load(ptr: *const Self::Element) -> Self::Storage {
+    unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_load_pd(ptr) }
     }
 
     #[inline(always)]
-    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self::Storage {
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_loadu_pd(ptr) }
     }
 
     #[inline(always)]
-    unsafe fn store(ptr: *mut Self::Element, value: Self::Storage) {
+    unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_store_pd(ptr, value) }
     }
 
     #[inline(always)]
-    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Self::Storage) {
+    unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_storeu_pd(ptr, value) }
     }
 
     #[inline(always)]
-    unsafe fn load_stream(ptr: *const Self::Element) -> Self::Storage {
+    unsafe fn load_stream(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_castsi128_pd(arch::_mm_stream_load_si128(ptr as _)) }
     }
 
     #[inline(always)]
-    unsafe fn store_stream(ptr: *mut Self::Element, value: Self::Storage) {
+    unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_pd(ptr, value) }
     }
 
     #[inline(always)]
-    fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn bitandnot(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_andnot_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_or_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn not(value: Self::Storage) -> Self::Storage {
+    fn not(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_pd(value, arch::_mm_set1_pd(f64::from_bits(!0))) }
     }
 
     #[inline(always)]
-    fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_blendv_pd(lhs, rhs, mask) }
     }
 
     const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
-    fn reverse(value: Self::Storage) -> Self::Storage {
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_permute_pd(value, 0b01) }
     }
 
     #[inline(always)]
-    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
     }
 
     #[inline(always)]
-    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_pdx_v2(value) }
     }
 
     #[inline(always)]
-    fn reduce<F>(value: Self::Storage, f: F) -> Self::Element
+    fn reduce<F>(value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
@@ -133,14 +138,14 @@ impl Register for F64x2V3 {
 
 impl ShuffleRegister for F64x2V3 {
     #[inline(always)]
-    fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_pd(lhs, rhs, IMM8) }
     }
 }
 
 impl PermuteRegister for F64x2V3 {
     #[inline(always)]
-    fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_permute_pd(value, IMM8) }
     }
 }
@@ -150,36 +155,36 @@ impl SwizzleRegister for F64x2V3 {
 }
 
 impl MaskRegister for F64x2V3 {
-    const FALSY: Self::Storage = reg::<Self, 2>([f64::from_bits(0); 2]);
-    const TRUTHY: Self::Storage = reg::<Self, 2>([f64::from_bits(!0); 2]);
+    const FALSY: Storage<Self> = reg::<Self, 2>([f64::from_bits(0); 2]);
+    const TRUTHY: Storage<Self> = reg::<Self, 2>([f64::from_bits(!0); 2]);
 
     #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
         unsafe { arch::_mm_castsi128_pd(arch::_mm_cvtboolx2_to_epi64_mask_v2(value)) }
     }
 
     #[inline(always)]
-    fn all(value: Self::Storage) -> bool {
+    fn all(value: Storage<Self>) -> bool {
         unsafe { arch::_mm_movemask_pd(value) == 0b11 }
     }
 
     #[inline(always)]
-    fn any(value: Self::Storage) -> bool {
+    fn any(value: Storage<Self>) -> bool {
         unsafe { arch::_mm_movemask_pd(value) != 0 }
     }
 
     #[inline(always)]
-    fn none(value: Self::Storage) -> bool {
+    fn none(value: Storage<Self>) -> bool {
         unsafe { arch::_mm_movemask_pd(value) == 0 }
     }
 
     #[inline(always)]
-    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm_movemask_pd(value) as u64 })
     }
 
     #[inline(always)]
-    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let mask = unsafe { arch::_mm_movemask_pd(value) as u32 };
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
         view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
@@ -188,138 +193,138 @@ impl MaskRegister for F64x2V3 {
 
 impl PartialOrdRegister for F64x2V3 {
     #[inline(always)]
-    fn lt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_LT_OQ) }
     }
 
     #[inline(always)]
-    fn le(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_LE_OQ) }
     }
 
     #[inline(always)]
-    fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_GT_OQ) }
     }
 
     #[inline(always)]
-    fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_GE_OQ) }
     }
 
     #[inline(always)]
-    fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_EQ_OQ) }
     }
 
     #[inline(always)]
-    fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_NEQ_OQ) }
     }
 }
 
 impl NumericRegister for F64x2V3 {
-    const ZERO: Self::Storage = reg::<Self, 2>([0.0; 2]);
-    const ONE: Self::Storage = reg::<Self, 2>([1.0; 2]);
-    const TWO: Self::Storage = reg::<Self, 2>([2.0; 2]);
+    const ZERO: Storage<Self> = reg::<Self, 2>([0.0; 2]);
+    const ONE: Storage<Self> = reg::<Self, 2>([1.0; 2]);
+    const TWO: Storage<Self> = reg::<Self, 2>([2.0; 2]);
 
-    const MIN: Self::Storage = reg::<Self, 2>([f64::MIN; 2]);
-    const MAX: Self::Storage = reg::<Self, 2>([f64::MAX; 2]);
+    const MIN: Storage<Self> = reg::<Self, 2>([f64::MIN; 2]);
+    const MAX: Storage<Self> = reg::<Self, 2>([f64::MAX; 2]);
 
     #[inline(always)]
-    fn min_element(value: Self::Storage) -> Self::Element {
+    fn min_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v2!(value; _mm_min_pd _mm_min_sd)
     }
 
     #[inline(always)]
-    fn max_element(value: Self::Storage) -> Self::Element {
+    fn max_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v2!(value; _mm_max_pd _mm_max_sd)
     }
 
     #[inline(always)]
-    fn sum_elements(value: Self::Storage) -> Self::Element {
+    fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v2!(value; _mm_add_pd _mm_add_sd)
     }
 
     #[inline(always)]
-    fn prod_elements(value: Self::Storage) -> Self::Element {
+    fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v2!(value; _mm_mul_pd _mm_mul_sd)
     }
 
     #[inline(always)]
-    fn offset() -> Self::Storage {
+    fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as typenum::Unsigned>::USIZE as f64)
     }
 
     #[inline(always)]
-    fn indexed() -> Self::Storage {
+    fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as f64))
     }
 
     #[inline(always)]
-    fn add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_add_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn mul(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mul_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn div(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_div_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn rem(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // https://stackoverflow.com/a/26342944/2083075
         Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
     }
 
     #[inline(always)]
-    fn min(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_min_pd(lhs, rhs) }
     }
 
     #[inline(always)]
-    fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_max_pd(lhs, rhs) }
     }
 }
 
 impl SignedRegister for F64x2V3 {
-    const NEG_ONE: Self::Storage = reg::<Self, 2>([-1.0; 2]);
-    const MIN_POSITIVE: Self::Storage = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
+    const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1.0; 2]);
+    const MIN_POSITIVE: Storage<Self> = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
 
     #[inline(always)]
-    fn neg(value: Self::Storage) -> Self::Storage {
+    fn neg(value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::NEG_ZERO)
     }
 
     #[inline(always)]
-    fn abs(value: Self::Storage) -> Self::Storage {
+    fn abs(value: Storage<Self>) -> Storage<Self> {
         Self::bitandnot(Self::NEG_ZERO, value)
     }
 
     #[inline(always)]
-    fn copysign(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // take everything but the sign from lhs, and copy the sign from rhs
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
     #[inline(always)]
-    fn signum(value: Self::Storage) -> Self::Storage {
+    fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
     #[inline(always)]
-    fn conditional_negate(value: Self::Storage, mask: Self::Storage) -> Self::Storage {
+    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
@@ -331,37 +336,37 @@ impl FloatRegister for F64x2V3 {
     type Signed = super::I64x2V3;
     type ExtendedPrecision = Self; // f64 is the highest precision available
 
-    const HALF: Self::Storage = reg::<Self, 2>([0.5; 2]);
-    const NEG_ZERO: Self::Storage = reg::<Self, 2>([-0.0; 2]);
-    const EPSILON: Self::Storage = reg::<Self, 2>([f64::EPSILON; 2]);
-    const INFINITY: Self::Storage = reg::<Self, 2>([f64::INFINITY; 2]);
-    const NEG_INFINITY: Self::Storage = reg::<Self, 2>([f64::NEG_INFINITY; 2]);
-    const NAN: Self::Storage = reg::<Self, 2>([f64::NAN; 2]);
+    const HALF: Storage<Self> = reg::<Self, 2>([0.5; 2]);
+    const NEG_ZERO: Storage<Self> = reg::<Self, 2>([-0.0; 2]);
+    const EPSILON: Storage<Self> = reg::<Self, 2>([f64::EPSILON; 2]);
+    const INFINITY: Storage<Self> = reg::<Self, 2>([f64::INFINITY; 2]);
+    const NEG_INFINITY: Storage<Self> = reg::<Self, 2>([f64::NEG_INFINITY; 2]);
+    const NAN: Storage<Self> = reg::<Self, 2>([f64::NAN; 2]);
 
     const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 2>([0x7FF0_0000_0000_0000; 2]);
 
     #[inline(always)]
-    fn mul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pd(lhs, rhs, acc) }
     }
 
     #[inline(always)]
-    fn mul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmsub_pd(lhs, rhs, acc) }
     }
 
     #[inline(always)]
-    fn nmul_add(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fnmadd_pd(lhs, rhs, acc) }
     }
 
     #[inline(always)]
-    fn nmul_sub(lhs: Self::Storage, rhs: Self::Storage, acc: Self::Storage) -> Self::Storage {
+    fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fnmsub_pd(lhs, rhs, acc) }
     }
 
     #[inline(always)]
-    fn sqrt(value: Self::Storage) -> Self::Storage {
+    fn sqrt(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sqrt_pd(value) }
     }
 
@@ -369,32 +374,32 @@ impl FloatRegister for F64x2V3 {
     const HAS_APPROX_RCP: bool = false;
 
     #[inline(always)]
-    fn floor(value: Self::Storage) -> Self::Storage {
+    fn floor(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_floor_pd(value) }
     }
 
     #[inline(always)]
-    fn ceil(value: Self::Storage) -> Self::Storage {
+    fn ceil(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_ceil_pd(value) }
     }
 
     #[inline(always)]
-    fn round(value: Self::Storage) -> Self::Storage {
+    fn round(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_NEAREST_INT | arch::_MM_FROUND_NO_EXC) }
     }
 
     #[inline(always)]
-    fn trunc(value: Self::Storage) -> Self::Storage {
+    fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
 
     #[inline(always)]
-    fn next_up(value: Self::Storage) -> Self::Storage {
+    fn next_up(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_nextuppd_v2(value) }
     }
 
     #[inline(always)]
-    fn next_down(value: Self::Storage) -> Self::Storage {
+    fn next_down(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_nextdownpd_v2(value) }
     }
 }

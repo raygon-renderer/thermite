@@ -17,7 +17,7 @@ pub use i64x2::I64x2V2;
 pub use u64x2::U64x2V2;
 
 use crate::{
-    register::dp::DoublePumpRegister,
+    register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
 

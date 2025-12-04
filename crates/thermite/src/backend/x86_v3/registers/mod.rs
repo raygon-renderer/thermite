@@ -29,7 +29,7 @@ pub use u64x2::U64x2V3;
 pub use u64x4::U64x4V3;
 
 use crate::{
-    register::dp::DoublePumpRegister,
+    register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
 

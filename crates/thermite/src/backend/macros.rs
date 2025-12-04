@@ -3,7 +3,7 @@ macro_rules! impl_bit_casts {
         const _: () = {$(
             impl $crate::register::BitsRegister<$from> for $to {
                 #[inline(always)]
-                fn from_bits(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+                fn from_bits(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
             }
@@ -16,13 +16,13 @@ macro_rules! impl_type_casts {
         const _: () = {$(
             impl $crate::register::CastRegister<$from> for $to {
                 #[inline(always)]
-                fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+                fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
 
                 $(
                     #[inline(always)]
-                    fn fast_cast_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+                    fn fast_cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                         unsafe { arch::$fast_conv(value) }
                     }
                 )?
@@ -36,7 +36,7 @@ macro_rules! impl_mask_casts {
         const _: () = {$(
             impl $crate::register::CastMaskRegister<$from> for $to {
                 #[inline(always)]
-                fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Self::Storage {
+                fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
             }

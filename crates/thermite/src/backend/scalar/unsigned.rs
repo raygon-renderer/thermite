@@ -27,69 +27,70 @@ impl Register for [<u $width>] {
     type ISize = [<i $width>];
     type USize = [<u $width>];
 
-    const EMPTY: Self::Storage = 0;
+    const EMPTY: Storage<Self> = 0;
 
-    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self::Storage { value[0] }
-    #[inline(always)] fn splat(value: Self::Element) -> Self::Storage { value }
-    #[inline(always)] fn broadcast<const I: usize>(value: Self::Storage) -> Self::Storage { value }
-    #[inline(always)] fn bitxor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs ^ rhs }
-    #[inline(always)] fn bitand(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs & rhs }
-    #[inline(always)] fn bitor(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs | rhs }
-    #[inline(always)] fn not(value: Self::Storage) -> Self::Storage { !value }
-    #[inline(always)] fn reverse(value: Self::Storage) -> Self::Storage { value }
+    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
+    #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
+    #[inline(always)] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs ^ rhs }
+    #[inline(always)] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs & rhs }
+    #[inline(always)] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs | rhs }
+    #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> { !value }
+    #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
 
     // use msb + cmov/csel on x86/x86_64/ARM/AArch64
     const HAS_MSB_BLENDV: bool = cfg!(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"));
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
     #[inline(always)]
-    fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable((mask >> (<$i>::BITS - 1)) != 0, rhs, lhs)
     }
 
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
     #[inline(always)]
-    fn blendv(mask: Self::Storage, lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if mask != 0 { rhs } else { lhs }
     }
 
     #[inline(always)]
-    fn unpack(a: Self::Storage, b: Self::Storage) -> (Self::Storage, Self::Storage) {
+    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         (a, b) // no-op for scalar
     }
 
     #[inline(always)]
-    fn swap_bytes(value: Self::Storage) -> Self::Storage {
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value.swap_bytes()
     }
 }
 
 impl BitshiftRegister for [<u $width>] {
-    #[inline(always)] fn shl(value: Self::Storage, shift: u32) -> Self::Storage { value << shift }
-    #[inline(always)] fn shr(value: Self::Storage, shift: u32) -> Self::Storage { value >> shift }
-    #[inline(always)] fn shlv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { value << shifts }
-    #[inline(always)] fn shrv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { value >> shifts }
-    #[inline(always)] fn shli<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value << IMM8 }
-    #[inline(always)] fn shri<const IMM8: i32>(value: Self::Storage) -> Self::Storage { value >> IMM8 }
+    #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value << shift }
+    #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value >> shift }
+    #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { value << shifts }
+    #[inline(always)] fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { value >> shifts }
+    #[inline(always)] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value << IMM8 }
+    #[inline(always)] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value >> IMM8 }
 
-    #[inline(always)] fn rolv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::rol(value, shifts as _) }
-    #[inline(always)] fn rorv(value: Self::Storage, shifts: Storage<Self::USize>) -> Self::Storage { Self::ror(value, shifts as _) }
-    #[inline(always)] fn rol(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_left(shift) }
-    #[inline(always)] fn ror(value: Self::Storage, shift: u32) -> Self::Storage { value.rotate_right(shift) }
+    #[inline(always)] fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self::rol(value, shifts as _) }
+    #[inline(always)] fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self::ror(value, shifts as _) }
+    #[inline(always)] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> { value.rotate_left(shift) }
+    #[inline(always)] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> { value.rotate_right(shift) }
 
-    #[inline(always)] fn reverse_bits(value: Self::Storage) -> Self::Storage { value.reverse_bits() }
+    #[inline(always)] fn reverse_bits(value: Storage<Self>) -> Storage<Self> { value.reverse_bits() }
 }
 
 impl ShuffleRegister for [<u $width>] {
     #[inline(always)]
-    fn shuffle<const IMM8: i32>(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage {
+    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
 impl PermuteRegister for [<u $width>] {
     #[inline(always)]
-    fn permute<const IMM8: i32>(value: Self::Storage) -> Self::Storage {
+    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         value
     }
 }
@@ -98,93 +99,93 @@ impl SwizzleRegister for [<u $width>] {
     const HAS_PERMUTEV: bool = false;
 
     #[inline(always)]
-    fn permutev(value: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 
     #[inline(always)]
-    fn swizzle(a: Self::Storage, b: Self::Storage, idxs: GenericArray<u32, Self::Lanes>) -> Self::Storage {
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
 
 impl MaskRegister for [<u $width>] {
-    const TRUTHY: Self::Storage = Element::TRUTHY;
-    const FALSY: Self::Storage = Element::FALSY;
+    const TRUTHY: Storage<Self> = Element::TRUTHY;
+    const FALSY: Storage<Self> = Element::FALSY;
 
     #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Self::Storage {
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
         if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
-    #[inline(always)] fn all(value: Self::Storage) -> bool { value != 0 }
-    #[inline(always)] fn any(value: Self::Storage) -> bool { value != 0 }
-    #[inline(always)] fn none(value: Self::Storage) -> bool { value == 0 }
+    #[inline(always)] fn all(value: Storage<Self>) -> bool { value != 0 }
+    #[inline(always)] fn any(value: Storage<Self>) -> bool { value != 0 }
+    #[inline(always)] fn none(value: Storage<Self>) -> bool { value == 0 }
 
     #[inline(always)]
-    fn native_bitmask(value: Self::Storage) -> Option<u64> {
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some((value & 1) as u64)
     }
 
     #[inline(always)]
-    fn fill_bitmask(value: Self::Storage, view: &mut bitvec::slice::BitSlice<u32>) {
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         view.set(0, value.to_bool());
     }
 }
 
 impl PartialOrdRegister for [<u $width>] {
-    #[inline(always)] fn gt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs > rhs) }
-    #[inline(always)] fn eq(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs == rhs) }
-    #[inline(always)] fn ge(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs >= rhs) }
-    #[inline(always)] fn lt(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs < rhs) }
-    #[inline(always)] fn le(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs <= rhs) }
-    #[inline(always)] fn ne(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { Element::from_bool(lhs != rhs) }
+    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs > rhs) }
+    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs == rhs) }
+    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs >= rhs) }
+    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs < rhs) }
+    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs <= rhs) }
+    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs != rhs) }
 }
 
 impl NumericRegister for [<u $width>] {
-    const ZERO: Self::Storage = 0;
-    const ONE: Self::Storage = 1;
-    const TWO: Self::Storage = 2;
+    const ZERO: Storage<Self> = 0;
+    const ONE: Storage<Self> = 1;
+    const TWO: Storage<Self> = 2;
 
-    const MIN: Self::Storage = <$i>::MIN;
-    const MAX: Self::Storage = <$i>::MAX;
+    const MIN: Storage<Self> = <$i>::MIN;
+    const MAX: Storage<Self> = <$i>::MAX;
 
-    #[inline(always)] fn min_element(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn max_element(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn sum_elements(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn prod_elements(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn offset() -> Self::Storage { 1 }
-    #[inline(always)] fn indexed() -> Self::Storage { 0 }
-    #[inline(always)] fn add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs + rhs }
-    #[inline(always)] fn sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs - rhs }
-    #[inline(always)] fn mul(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs * rhs }
-    #[inline(always)] fn div(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs / rhs }
-    #[inline(always)] fn rem(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs % rhs }
-    #[inline(always)] fn min(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.min(rhs) }
-    #[inline(always)] fn max(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.max(rhs) }
+    #[inline(always)] fn min_element(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn max_element(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn sum_elements(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn prod_elements(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn offset() -> Storage<Self> { 1 }
+    #[inline(always)] fn indexed() -> Storage<Self> { 0 }
+    #[inline(always)] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
+    #[inline(always)] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
+    #[inline(always)] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
+    #[inline(always)] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
+    #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
+    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.min(rhs) }
+    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.max(rhs) }
 }
 
 impl IntegerRegister for [<u $width>] {
-    #[inline(always)] fn saturating_add(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_add(rhs) }
-    #[inline(always)] fn saturating_sub(lhs: Self::Storage, rhs: Self::Storage) -> Self::Storage { lhs.saturating_sub(rhs) }
-    #[inline(always)] fn wrapping_sum(value: Self::Storage) -> Self::Element { value }
-    #[inline(always)] fn wrapping_product(value: Self::Storage) -> Self::Element { value }
+    #[inline(always)] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.saturating_add(rhs) }
+    #[inline(always)] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.saturating_sub(rhs) }
+    #[inline(always)] fn wrapping_sum(value: Storage<Self>) -> Self::Element { value }
+    #[inline(always)] fn wrapping_product(value: Storage<Self>) -> Self::Element { value }
 
     #[inline(always)]
-    fn div_branched(value: Self::Storage, divider: crate::divider::Divider<Self::Element>) -> Self::Storage {
+    fn div_branched(value: Storage<Self>, divider: crate::divider::Divider<Self::Element>) -> Storage<Self> {
         divider.divide(value)
     }
 
     #[inline(always)]
     fn div_branchfree(
-        value: Self::Storage,
+        value: Storage<Self>,
         divider: crate::divider::BranchfreeDivider<Self::Element>,
-    ) -> Self::Storage {
+    ) -> Storage<Self> {
         divider.divide(value)
     }
 
     #[inline(always)]
-    fn divv_branchfree(value: Self::Storage, dividers: crate::divider::vector::VectorDivider<Self>) -> Self::Storage {
+    fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
         let m = dividers.multipliers;
         let s = dividers.shifts;
 
@@ -192,27 +193,27 @@ impl IntegerRegister for [<u $width>] {
         crate::divider::BranchfreeDivider::<$i>::new(m.0, s.0 as i8 as u8).divide(value)
     }
 
-    #[inline(always)] fn count_ones(value: Self::Storage) -> Self::Storage { value.count_ones() as _ }
-    #[inline(always)] fn count_zeros(value: Self::Storage) -> Self::Storage { value.count_ones() as _ }
-    #[inline(always)] fn leading_zeros(value: Self::Storage) -> Self::Storage { value.leading_zeros() as _ }
-    #[inline(always)] fn trailing_zeros(value: Self::Storage) -> Self::Storage { value.trailing_zeros() as _ }
-    #[inline(always)] fn leading_ones(value: Self::Storage) -> Self::Storage { value.leading_ones() as _ }
-    #[inline(always)] fn trailing_ones(value: Self::Storage) -> Self::Storage { value.trailing_ones() as _ }
+    #[inline(always)] fn count_ones(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
+    #[inline(always)] fn count_zeros(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
+    #[inline(always)] fn leading_zeros(value: Storage<Self>) -> Storage<Self> { value.leading_zeros() as _ }
+    #[inline(always)] fn trailing_zeros(value: Storage<Self>) -> Storage<Self> { value.trailing_zeros() as _ }
+    #[inline(always)] fn leading_ones(value: Storage<Self>) -> Storage<Self> { value.leading_ones() as _ }
+    #[inline(always)] fn trailing_ones(value: Storage<Self>) -> Storage<Self> { value.trailing_ones() as _ }
 }
 
 impl UnsignedIntegerRegister for [<u $width>] {
     #[inline(always)]
-    fn next_power_of_two_m1(value: Self::Storage) -> Self::Storage {
+    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
         if value == 0 { 0 } else { value.next_power_of_two() - 1 }
     }
 
     #[inline(always)]
-    fn is_power_of_two(value: Self::Storage) -> Self::Storage {
+    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
         Element::from_bool(value.is_power_of_two())
     }
 
     #[inline(always)]
-    fn parity(value: Self::Storage) -> Self::Storage {
+    fn parity(value: Storage<Self>) -> Storage<Self> {
         Element::from_bool(value.count_ones() % 2 == 1)
     }
 }

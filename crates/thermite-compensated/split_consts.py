@@ -6,7 +6,11 @@ decimal.getcontext().prec = 100
 
 def split_f64(val_str):
     """Splits a high-precision string into two f64s (hi, lo)."""
-    d = decimal.Decimal(val_str)
+    # Accept either string or Decimal directly
+    if isinstance(val_str, decimal.Decimal):
+        d = val_str
+    else:
+        d = decimal.Decimal(val_str)
 
     # 1. Cast to native float (f64)
     hi = float(d)
@@ -19,7 +23,11 @@ def split_f64(val_str):
 
 def split_f32(val_str):
     """Splits a high-precision string into two f32s (hi, lo)."""
-    d = decimal.Decimal(val_str)
+    # Accept either string or Decimal directly
+    if isinstance(val_str, decimal.Decimal):
+        d = val_str
+    else:
+        d = decimal.Decimal(val_str)
 
     # 1. Cast to f32 (via struct pack/unpack to force 32-bit rounding)
     #    Python floats are f64, so we must round-trip through bytes.
@@ -39,12 +47,10 @@ def split_f32(val_str):
 
 def print_f64_result(name, val_str):
     hi64, lo64 = split_f64(val_str)
-
     print(f"{name} = (\"{hi64.hex()}\", \"{lo64.hex()}\"),")
 
 def print_f32_result(name, val_str):
     hi32, lo32 = split_f32(val_str)
-
     print(f"{name} = (\"{float(hi32).hex()}\", \"{float(lo32).hex()}\"),")
 
 if __name__ == "__main__":
@@ -84,18 +90,20 @@ if __name__ == "__main__":
         "SQRT_FRAC_PI_2": "0.79788456080286535587989211986876373695171726232987",
         "SQRT_2_PI": "2.5066282746310005024157652848110452530069867406099",
         "PHI": "1.6180339887498948482045868343656381177203091798058",
+        "FRAC_1_3": "0.33333333333333333333333333333333333333333333333333333333333333",
+        "FRAC_1_6": "0.16666666666666666666666666666666666666666666666666666666666667",
     }
 
     f64_consts = {
-        "EPSILON": "0.00000000000000000000000000000002465190328815661891911651766508706968",
-        "SQRT_EPSILON": "0.00000000000000000000000000000002465190328815661891911651766508706968",
-        "FOURTH_ROOT_EPSILON": "0.00000000000000000000000000000002465190328815661891911651766508706968",
+        "EPSILON": "0.00000000000000000000000000000002465190328815662",
+        "SQRT_EPSILON": "0.0000000000000001570092458683775",
+        "FOURTH_ROOT_EPSILON": "0.000000012530333031024255",
     }
 
     f32_consts = {
-        "EPSILON": "0.000000000000007105427357601002",
-        "SQRT_EPSILON": "0.00000008429369702178806",
-        "FOURTH_ROOT_EPSILON": "0.00029033376831121120",
+        "EPSILON": "0.000000000000007105427411152052",
+        "SQRT_EPSILON": "0.0000000842936973394337",
+        "FOURTH_ROOT_EPSILON": "0.0002903337688582464",
     }
 
     print("---- f64 split ----")
@@ -104,8 +112,29 @@ if __name__ == "__main__":
     for name, val_str in f64_consts.items():
         print_f64_result(name, val_str)
 
-    print("---- f32 split ----")
+    print("\n---- f32 split ----")
     for name, val_str in consts.items():
         print_f32_result(name, val_str)
     for name, val_str in f32_consts.items():
         print_f32_result(name, val_str)
+
+    # Calculate 1/ln(n) for 3 <= n <= 32
+    inv_logs = []
+    for n in range(3, 33):
+        # decimal.Decimal(n).ln() is high precision ln(n)
+        val = decimal.Decimal(1) / decimal.Decimal(n).ln()
+        inv_logs.append(val)
+
+    print("\n---- 1/ln(n) f64 [3..32] ----")
+    print("[")
+    for val in inv_logs:
+        hi, lo = split_f64(val)
+        print(f"    (\"{hi.hex()}\", \"{lo.hex()}\"),")
+    print("]")
+
+    print("\n---- 1/ln(n) f32 [3..32] ----")
+    print("[")
+    for val in inv_logs:
+        hi, lo = split_f32(val)
+        print(f"    (\"{float(hi).hex()}\", \"{float(lo).hex()}\"),")
+    print("]")

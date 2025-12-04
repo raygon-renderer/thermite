@@ -14,7 +14,7 @@ pub(crate) type Vf<R> = Vector<R>;
 pub(crate) type Vu<R> = Vector<<R as FloatRegister>::Bits>;
 pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
 
-pub trait MathInternal<E: FloatConsts>: FloatRegister<Element = E> {
+pub trait MathInternal<E>: FloatRegister<Element = E> {
     #[inline(always)]
     fn ldexp<P: Policy>(x: Vf<Self>, exp: Vs<Self>) -> Vf<Self> {
         let bits: Vu<Self> = x.into_bits();

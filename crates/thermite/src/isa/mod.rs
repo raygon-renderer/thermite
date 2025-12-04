@@ -3,9 +3,14 @@
 /// Enum of supported instruction sets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum InstructionSet {
     /// Scalar (no SIMD)
     Scalar,
+
+    /// Unknown ISA, usually the result of register emulation,
+    /// such as with Glam vectors as registers.
+    Unknown,
 
     /// x86/x86_64 SIMD instruction set level 1 (SSE2)
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -56,7 +61,7 @@ impl InstructionSet {
     #[inline(always)]
     pub const fn num_registers(&self) -> usize {
         match self {
-            InstructionSet::Scalar => 1, // Scalar has 1 "register"
+            InstructionSet::Scalar | InstructionSet::Unknown => 1, // Scalar has 1 "register"
 
             // x86-v1 has 8 XMM registers
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -90,5 +95,33 @@ impl InstructionSet {
 
             _ => false,
         }
+    }
+
+    /// Returns whether the given instruction set is a SIMD instruction set.
+    #[inline(always)]
+    pub const fn is_simd(&self) -> bool {
+        #![allow(clippy::match_like_matches_macro)]
+
+        match self {
+            InstructionSet::Scalar | InstructionSet::Unknown => false,
+            _ => true,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn min(a: InstructionSet, b: InstructionSet) -> InstructionSet {
+        if (a as u8) < (b as u8) { a } else { b }
+    }
+
+    #[inline(always)]
+    pub const fn max(a: InstructionSet, b: InstructionSet) -> InstructionSet {
+        if (a as u8) > (b as u8) { a } else { b }
+    }
+
+    #[inline(always)]
+    pub const fn assert_eq(a: InstructionSet, b: InstructionSet) -> InstructionSet {
+        assert!((a as u8) == (b as u8), "InstructionSet equality assertion failed");
+
+        a
     }
 }

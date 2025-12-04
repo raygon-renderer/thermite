@@ -207,6 +207,12 @@ impl<R: Register> Vector<R> {
         Self(register::reg::<R, N>(values))
     }
 
+    /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
+    #[inline(always)]
+    pub fn single(value: R::Element) -> Self {
+        Self(R::single(value))
+    }
+
     /// Broadcast the value of a single lane across all lanes of the vector.
     #[inline(always)]
     pub fn broadcast<const I: usize>(self) -> Self {
@@ -1161,6 +1167,21 @@ impl<R: LinAlg3Register> Vector<R> {
     #[inline(always)]
     pub fn cross3(self, rhs: Self) -> Self {
         Self(R::cross3(self.0, rhs.0))
+    }
+
+    /// Quaternion multiplication.
+    ///
+    /// Method:
+    /// ```text
+    /// T1 = (lhs.w * rhs)
+    /// T2 = (lhs.x * rhs.wzyx) * {+,-,+,-}
+    /// T3 = (lhs.y * rhs.zwxy) * {+,+,-,-}
+    /// T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
+    /// T1 + T2 + T3 + T4
+    /// ```
+    #[inline(always)]
+    pub fn quat4_product(self, rhs: Self) -> Self {
+        Self(R::quat4_product(self.0, rhs.0))
     }
 
     /// Efficiently set the 4th (last) lane of the register to 0.0.

@@ -25,30 +25,6 @@ pub unsafe fn _mm_popcnt_epi64x_v2(v: __m128i) -> __m128i {
     _mm_sad_epu8(_mm_popcnt_epi8x_v2(v), _mm_setzero_si128())
 }
 
-#[inline(always)]
-pub unsafe fn _mm_rolv_epi32x_v2(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi32(_mm_set1_epi32(32), shifts);
-    _mm_or_si128(_mm_sllv_epi32x_v1(value, shifts), _mm_srlv_epi32x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rolv_epi64x_v2(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi64(_mm_set1_epi64x(64), shifts);
-    _mm_or_si128(_mm_sllv_epi64x_v1(value, shifts), _mm_srlv_epi64x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rorv_epi32x_v2(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi32(_mm_set1_epi32(32), shifts);
-    _mm_or_si128(_mm_srlv_epi32x_v1(value, shifts), _mm_sllv_epi32x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rorv_epi64x_v2(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi64(_mm_set1_epi64x(64), shifts);
-    _mm_or_si128(_mm_srlv_epi64x_v1(value, shifts), _mm_sllv_epi64x_v1(value, inv_shifts))
-}
-
 // This kind of sucked, but I'll leave it here for later.
 //
 // #[inline(always)]
@@ -84,15 +60,13 @@ pub unsafe fn _mm_rorv_epi64x_v2(value: __m128i, shifts: __m128i) -> __m128i {
 #[inline(always)]
 pub unsafe fn _mm_bswap_epi32x_v2(x: __m128i) -> __m128i {
     // Mask: 3 2 1 0  7 6 5 4  11 10 9 8  15 14 13 12
-    let mask = _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
-    _mm_shuffle_epi8(x, mask)
+    _mm_shuffle_epi8(x, _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12))
 }
 
 #[inline(always)]
 pub unsafe fn _mm_bswap_epi64x_v2(x: __m128i) -> __m128i {
     // Mask: 7 6 5 4 3 2 1 0  15 14 13 12 11 10 9 8
-    let mask = _mm_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
-    _mm_shuffle_epi8(x, mask)
+    _mm_shuffle_epi8(x, _mm_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8))
 }
 
 #[inline(always)]
