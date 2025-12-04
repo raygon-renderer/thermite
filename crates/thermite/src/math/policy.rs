@@ -414,6 +414,8 @@ pub mod policies {
 
 use policies::*;
 
-use crate::{math::FloatConsts, register::FloatElement};
+#[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+pub type DefaultPolicy = Size;
 
+#[cfg(not(all(feature = "wasm32", target_arch = "wasm32")))]
 pub type DefaultPolicy = Performance;
