@@ -193,6 +193,8 @@ impl IntegerRegister for [<u $width>] {
         crate::divider::BranchfreeDivider::<$i>::new(m.0, s.0 as i8 as u8).divide(value)
     }
 
+    const HAS_HARDWARE_POPCNT: bool = true;
+
     #[inline(always)] fn count_ones(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
     #[inline(always)] fn count_zeros(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
     #[inline(always)] fn leading_zeros(value: Storage<Self>) -> Storage<Self> { value.leading_zeros() as _ }

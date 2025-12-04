@@ -1201,6 +1201,8 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
     fn div_branchfree(value: Storage<Self>, divider: BranchfreeDivider<Self::Element>) -> Storage<Self>;
     fn divv_branchfree(value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self>;
 
+    const HAS_HARDWARE_POPCNT: bool;
+
     fn count_ones(value: Storage<Self>) -> Storage<Self>;
 
     #[inline(always)]
@@ -1234,7 +1236,23 @@ pub trait UnsignedIntegerRegister: IntegerRegister {
 
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self>;
 
-    fn parity(value: Storage<Self>) -> Storage<Self>;
+    #[inline(always)]
+    fn parity(mut value: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_HARDWARE_POPCNT {
+            // If we have a hardware popcnt, we can use that to compute parity faster.
+            value = Self::count_ones(value);
+        } else {
+            // Generic XOR reduction to compute parity, performs O(log2(N)) shifts and XORs.
+            let mut shift = size_of::<Self::Element>() as u32 * 4;
+
+            while shift > 0 {
+                value = Self::bitxor(value, Self::shr(value, shift));
+                shift >>= 1;
+            }
+        }
+
+        Self::bitand(Self::ONE, value)
+    }
 
     // TODO: Interleave bits?
 }

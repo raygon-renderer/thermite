@@ -363,6 +363,8 @@ impl IntegerRegister for U64x2V2 {
         unsafe { arch::_mm_divv_epu64x_bf_v1(value, dividers.multipliers.0, dividers.shifts.0) }
     }
 
+    const HAS_HARDWARE_POPCNT: bool = false;
+
     #[inline(always)]
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_popcnt_epi64x_v2(value) }
@@ -406,22 +408,6 @@ impl UnsignedIntegerRegister for U64x2V2 {
             arch::_mm_cmpeq_epi64(
                 value,
                 arch::_mm_and_si128(value, arch::_mm_sub_epi64(value, arch::_mm_set1_epi64x(1))),
-            )
-        }
-    }
-
-    #[inline(always)]
-    fn parity(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi64(value, 32));
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi64(value, 16));
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi64(value, 8));
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi64(value, 4));
-            value = arch::_mm_and_si128(value, arch::_mm_set1_epi64x(0x0F));
-
-            arch::_mm_and_si128(
-                arch::_mm_srlv_epi64x_v1(arch::_mm_set1_epi64x(0x6996), value),
-                arch::_mm_set1_epi64x(1),
             )
         }
     }

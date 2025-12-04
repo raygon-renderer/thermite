@@ -524,6 +524,8 @@ where
         Self(R::divv_branchfree(value.0, lo), R::divv_branchfree(value.1, hi))
     }
 
+    const HAS_HARDWARE_POPCNT: bool = R::HAS_HARDWARE_POPCNT;
+
     #[inline(always)] fn count_ones(value: Storage<Self>) -> Storage<Self> { Self(R::count_ones(value.0), R::count_ones(value.1)) }
     #[inline(always)] fn count_zeros(value: Storage<Self>) -> Storage<Self> { Self(R::count_zeros(value.0), R::count_zeros(value.1)) }
     #[inline(always)] fn leading_zeros(value: Storage<Self>) -> Storage<Self> { Self(R::leading_zeros(value.0), R::leading_zeros(value.1)) }

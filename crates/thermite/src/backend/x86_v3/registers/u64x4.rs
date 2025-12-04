@@ -356,6 +356,8 @@ impl IntegerRegister for U64x4V3 {
         unsafe { arch::_mm256_divv_epu64x_bf_v3(value, dividers.multipliers.0, dividers.shifts.0) }
     }
 
+    const HAS_HARDWARE_POPCNT: bool = false;
+
     #[inline(always)]
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_popcnt_epi64x_v3(value) }

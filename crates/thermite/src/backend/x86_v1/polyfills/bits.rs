@@ -83,30 +83,6 @@ pub unsafe fn _mm_srav_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm_rolv_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi32(_mm_set1_epi32(32), shifts);
-    _mm_or_si128(_mm_sllv_epi32x_v1(value, shifts), _mm_srlv_epi32x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rolv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi64(_mm_set1_epi64x(64), shifts);
-    _mm_or_si128(_mm_sllv_epi64x_v1(value, shifts), _mm_srlv_epi64x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rorv_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi32(_mm_set1_epi32(32), shifts);
-    _mm_or_si128(_mm_srlv_epi32x_v1(value, shifts), _mm_sllv_epi32x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
-pub unsafe fn _mm_rorv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
-    let inv_shifts = _mm_sub_epi64(_mm_set1_epi64x(64), shifts);
-    _mm_or_si128(_mm_srlv_epi64x_v1(value, shifts), _mm_sllv_epi64x_v1(value, inv_shifts))
-}
-
-#[inline(always)]
 pub unsafe fn _mm_np2_m1_epu32x_v1(mut value: __m128i) -> __m128i {
     let mut s = 1;
 
