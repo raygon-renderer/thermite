@@ -183,6 +183,8 @@ impl SwizzleRegister for U32x4V3 {
 }
 
 impl BitshiftRegister for U32x4V3 {
+    const HAS_TRUE_SHIFTV: bool = true;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -410,35 +412,4 @@ impl IntegerRegister for U32x4V3 {
     }
 }
 
-impl UnsignedIntegerRegister for U32x4V3 {
-    #[inline(always)]
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_np2_m1_epu32x_v1(value) }
-    }
-
-    #[inline(always)]
-    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            // f = (v & (v - 1)) == 0
-            arch::_mm_cmpeq_epi32(
-                value,
-                arch::_mm_and_si128(value, arch::_mm_sub_epi32(value, arch::_mm_set1_epi32(1))),
-            )
-        }
-    }
-
-    #[inline(always)]
-    fn parity(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi32(value, 16));
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi32(value, 8));
-            value = arch::_mm_xor_si128(value, arch::_mm_srli_epi32(value, 4));
-            value = arch::_mm_and_si128(value, arch::_mm_set1_epi32(0x0F));
-
-            arch::_mm_and_si128(
-                arch::_mm_srlv_epi32(arch::_mm_set1_epi32(0x6996), value),
-                arch::_mm_set1_epi32(1),
-            )
-        }
-    }
-}
+impl UnsignedIntegerRegister for U32x4V3 {}

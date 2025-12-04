@@ -275,6 +275,8 @@ impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
+    const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
+
     #[inline(always)] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shli::<IMM8>(value.0), R::shli::<IMM8>(value.1)) }
     #[inline(always)] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shri::<IMM8>(value.0), R::shri::<IMM8>(value.1)) }
     #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::shl(value.0, shift), R::shl(value.1, shift)) }

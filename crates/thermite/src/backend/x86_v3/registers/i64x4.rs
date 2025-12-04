@@ -163,6 +163,8 @@ impl Register for I64x4V3 {
 }
 
 impl BitshiftRegister for I64x4V3 {
+    const HAS_TRUE_SHIFTV: bool = true;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm256_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }

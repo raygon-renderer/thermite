@@ -138,6 +138,8 @@ impl Register for U64x2V2 {
 }
 
 impl BitshiftRegister for U64x2V2 {
+    const HAS_TRUE_SHIFTV: bool = false;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -396,22 +398,7 @@ impl IntegerRegister for U64x2V2 {
     }
 }
 
-impl UnsignedIntegerRegister for U64x2V2 {
-    #[inline(always)]
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_np2_m1_epu64x_v1(value) }
-    }
-
-    #[inline(always)]
-    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            arch::_mm_cmpeq_epi64(
-                value,
-                arch::_mm_and_si128(value, arch::_mm_sub_epi64(value, arch::_mm_set1_epi64x(1))),
-            )
-        }
-    }
-}
+impl UnsignedIntegerRegister for U64x2V2 {}
 
 impl CastRegister<DoublePumpRegister<U64x2V2>> for super::U32x4V2 {
     #[inline(always)]

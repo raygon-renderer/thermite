@@ -164,6 +164,8 @@ impl Register for I32x8V3 {
 }
 
 impl BitshiftRegister for I32x8V3 {
+    const HAS_TRUE_SHIFTV: bool = true;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm256_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -514,7 +516,7 @@ impl SignedIntegerRegister for I32x8V3 {
 
 impl CastRegister<I32x8V3> for DoublePumpRegister<super::I64x4V3> {
     #[inline(always)]
-    fn cast_from(value: <I32x8V3 as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<I32x8V3>) -> Storage<Self> {
         let (lo, hi) = I32x8V3::split(value);
 
         unsafe {

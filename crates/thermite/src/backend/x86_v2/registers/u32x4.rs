@@ -165,6 +165,8 @@ impl SwizzleRegister for U32x4V2 {
 }
 
 impl BitshiftRegister for U32x4V2 {
+    const HAS_TRUE_SHIFTV: bool = false;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -392,26 +394,10 @@ impl IntegerRegister for U32x4V2 {
     }
 }
 
-impl UnsignedIntegerRegister for U32x4V2 {
-    #[inline(always)]
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_np2_m1_epu32x_v1(value) }
-    }
-
-    #[inline(always)]
-    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            // f = (v & (v - 1)) == 0
-            arch::_mm_cmpeq_epi32(
-                value,
-                arch::_mm_and_si128(value, arch::_mm_sub_epi32(value, arch::_mm_set1_epi32(1))),
-            )
-        }
-    }
-}
+impl UnsignedIntegerRegister for U32x4V2 {}
 
 impl CastRegister<U32x4V2> for DoublePumpRegister<super::U64x2V2> {
-    fn cast_from(value: <U32x4V2 as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<U32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtepu32_epi64(value);
             let hi = arch::_mm_cvtepu32_epi64(arch::_mm_unpackhi_epi32(value, value));

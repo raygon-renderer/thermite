@@ -128,6 +128,8 @@ impl Register for I32x4V2 {
 }
 
 impl BitshiftRegister for I32x4V2 {
+    const HAS_TRUE_SHIFTV: bool = false;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -450,7 +452,7 @@ impl SignedIntegerRegister for I32x4V2 {
 }
 
 impl CastRegister<I32x4V2> for DoublePumpRegister<super::I64x2V2> {
-    fn cast_from(value: <I32x4V2 as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<I32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtepi32_epi64(value);
             let hi = arch::_mm_cvtepi32_epi64(arch::_mm_unpackhi_epi32(value, value));

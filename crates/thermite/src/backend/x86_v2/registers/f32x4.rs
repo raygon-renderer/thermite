@@ -478,7 +478,7 @@ impl LinAlg3Register for F32x4V2 {
 
 impl CastRegister<F32x4V2> for DoublePumpRegister<super::F64x2V2> {
     #[inline(always)]
-    fn cast_from(value: <F32x4V2 as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<F32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtps_pd(value);
             let hi = arch::_mm_cvtps_pd(arch::_mm_movehl_ps(value, value));

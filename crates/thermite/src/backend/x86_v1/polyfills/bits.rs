@@ -83,32 +83,6 @@ pub unsafe fn _mm_srav_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm_np2_m1_epu32x_v1(mut value: __m128i) -> __m128i {
-    let mut s = 1;
-
-    while s < 32 {
-        value = _mm_or_si128(value, _mm_srl_epi32(value, _mm_set_epi32(0, 0, 0, s)));
-
-        s <<= 1;
-    }
-
-    value
-}
-
-#[inline(always)]
-pub unsafe fn _mm_np2_m1_epu64x_v1(mut value: __m128i) -> __m128i {
-    let mut s = 1;
-
-    while s < 64 {
-        value = _mm_or_si128(value, _mm_srl_epi64(value, _mm_set_epi32(0, 0, 0, s)));
-
-        s <<= 1;
-    }
-
-    value
-}
-
-#[inline(always)]
 pub unsafe fn _mm_bswap_epi32x_v1(x: __m128i) -> __m128i {
     let t = _mm_or_si128(_mm_slli_epi16(x, 8), _mm_srli_epi16(x, 8));
     _mm_or_si128(_mm_slli_epi32(t, 16), _mm_srli_epi32(t, 16))

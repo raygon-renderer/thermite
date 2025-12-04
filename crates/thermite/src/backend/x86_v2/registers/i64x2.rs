@@ -138,6 +138,8 @@ impl Register for I64x2V2 {
 }
 
 impl BitshiftRegister for I64x2V2 {
+    const HAS_TRUE_SHIFTV: bool = false;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }

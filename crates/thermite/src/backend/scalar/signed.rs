@@ -66,6 +66,8 @@ impl Register for [<i $width>] {
 }
 
 impl BitshiftRegister for [<i $width>] {
+    const HAS_TRUE_SHIFTV: bool = true; // Technically true!
+
     // NOTE: We do _NOT_ want arithmetic shift here, so we cast to unsigned first
     #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { ((value as $u) << shift) as $i }
     #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { ((value as $u) >> shift) as $i }

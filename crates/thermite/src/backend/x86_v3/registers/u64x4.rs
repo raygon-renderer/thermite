@@ -163,6 +163,8 @@ impl Register for U64x4V3 {
 }
 
 impl BitshiftRegister for U64x4V3 {
+    const HAS_TRUE_SHIFTV: bool = true;
+
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm256_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
@@ -389,38 +391,7 @@ impl IntegerRegister for U64x4V3 {
     }
 }
 
-impl UnsignedIntegerRegister for U64x4V3 {
-    #[inline(always)]
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_np2_m1_epu64x_v3(value) }
-    }
-
-    #[inline(always)]
-    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            arch::_mm256_cmpeq_epi64(
-                value,
-                arch::_mm256_and_si256(value, arch::_mm256_sub_epi64(value, arch::_mm256_set1_epi64x(1))),
-            )
-        }
-    }
-
-    #[inline(always)]
-    fn parity(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe {
-            value = arch::_mm256_xor_si256(value, arch::_mm256_srli_epi64(value, 32));
-            value = arch::_mm256_xor_si256(value, arch::_mm256_srli_epi64(value, 16));
-            value = arch::_mm256_xor_si256(value, arch::_mm256_srli_epi64(value, 8));
-            value = arch::_mm256_xor_si256(value, arch::_mm256_srli_epi64(value, 4));
-            value = arch::_mm256_and_si256(value, arch::_mm256_set1_epi64x(0x0F));
-
-            arch::_mm256_and_si256(
-                arch::_mm256_srlv_epi64(arch::_mm256_set1_epi64x(0x6996), value),
-                arch::_mm256_set1_epi64x(1),
-            )
-        }
-    }
-}
+impl UnsignedIntegerRegister for U64x4V3 {}
 
 impl CastRegister<DoublePumpRegister<U64x4V3>> for super::U32x8V3 {
     #[inline(always)]

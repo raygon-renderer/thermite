@@ -483,7 +483,7 @@ impl FloatRegister for F32x8V3 {
 
 impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {
     #[inline(always)]
-    fn cast_from(value: <F32x8V3 as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<F32x8V3>) -> Storage<Self> {
         let (lo, hi) = F32x8V3::split(value);
 
         unsafe {

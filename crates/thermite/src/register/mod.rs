@@ -490,6 +490,10 @@ pub trait BitshiftRegister: MaskRegister<Element: IntegerElement> {
         Self::shr(value, IMM8 as u32)
     }
 
+    /// Indicates if true variable shifts are supported, or `false` if it
+    /// requires a scalar fallback.
+    const HAS_TRUE_SHIFTV: bool;
+
     #[inline(always)]
     fn shrv(mut value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
         // Scalar fallback
@@ -652,7 +656,7 @@ pub trait ExtendRegister<FROM: Register<Element = Self::Element>>: Register {
 /// including of varying element types.
 pub trait CastRegister<FROM: Register>: Register {
     /// Cast a register from another register type.
-    fn cast_from(value: FROM::Storage) -> Storage<Self>;
+    fn cast_from(value: Storage<FROM>) -> Storage<Self>;
 
     /// Cast a register to another register type, potentially faster
     /// when the values are within a certain range, otherwise
@@ -660,7 +664,7 @@ pub trait CastRegister<FROM: Register>: Register {
     /// Rust sense, but may not be safe in the sense that values
     /// may not be preserved across the cast.
     #[inline(always)]
-    fn fast_cast_from(value: FROM::Storage) -> Storage<Self> {
+    fn fast_cast_from(value: Storage<FROM>) -> Storage<Self> {
         Self::cast_from(value)
     }
 }
@@ -670,13 +674,13 @@ pub trait CastRegister<FROM: Register>: Register {
 /// of the same size in bytes. This is enforced simply by the fact that
 /// it will only be implemented for registers of the same size.
 pub trait BitsRegister<FROM: Register>: Register {
-    fn from_bits(value: FROM::Storage) -> Storage<Self>;
+    fn from_bits(value: Storage<FROM>) -> Storage<Self>;
 }
 
 /// A trait for registers that can be reinterpreted as other registers, as masks,
 /// such that the masks retain 0 or !0 values for the appropriate lanes.
 pub trait CastMaskRegister<FROM: MaskRegister>: MaskRegister {
-    fn mask_from(value: FROM::Storage) -> Storage<Self>;
+    fn mask_from(value: Storage<FROM>) -> Storage<Self>;
 }
 
 pub trait PartialOrdRegister: MaskRegister {
@@ -742,9 +746,20 @@ pub trait SignedRegister: NumericRegister {
     fn neg(value: Storage<Self>) -> Storage<Self>;
     fn abs(value: Storage<Self>) -> Storage<Self>;
 
-    fn signum(value: Storage<Self>) -> Storage<Self>;
+    #[inline(always)]
+    fn signum(value: Storage<Self>) -> Storage<Self> {
+        let is_neg = Self::is_negative(value);
+        let is_zero = Self::eq(value, Self::ZERO);
 
-    fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+        Self::bitandnot(is_zero, Self::blendv(is_neg, Self::NEG_ONE, Self::ONE))
+    }
+
+    #[inline(always)]
+    fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        let abs = Self::abs(lhs);
+
+        Self::blendv(Self::is_negative(rhs), abs, Self::neg(abs))
+    }
 
     const NEG_ONE: Storage<Self>;
     const MIN_POSITIVE: Storage<Self>;
@@ -759,7 +774,10 @@ pub trait SignedRegister: NumericRegister {
         Self::ge(value, Self::ZERO)
     }
 
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self>;
+    #[inline(always)]
+    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+        Self::blendv(mask, value, Self::neg(value))
+    }
 
     /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
     #[inline(always)]
@@ -1224,7 +1242,7 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
     }
 }
 
-pub trait UnsignedIntegerRegister: IntegerRegister {
+pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self> {
     /// Returns `floor(log2(x)) + 1`
     #[inline(always)]
     fn ilog2p1(value: Storage<Self>) -> Storage<Self> {
@@ -1232,19 +1250,47 @@ pub trait UnsignedIntegerRegister: IntegerRegister {
     }
 
     /// Next power of two minus 1
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self>;
+    #[inline(always)]
+    fn next_power_of_two_m1(mut value: Storage<Self>) -> Storage<Self> {
+        let width = (size_of::<Self::Element>() * 8) as u32;
+        let mut s = 1;
 
-    fn is_power_of_two(value: Storage<Self>) -> Storage<Self>;
+        while s < width {
+            value = Self::bitor(value, Self::shr(value, s));
+
+            s <<= 1;
+        }
+
+        value
+    }
+
+    #[inline(always)]
+    fn is_power_of_two(value: Storage<Self>) -> Storage<Self> {
+        // f = (v & (v - 1)) == 0
+        Self::eq(Self::ZERO, Self::bitand(value, Self::sub(value, Self::ONE)))
+    }
 
     #[inline(always)]
     fn parity(mut value: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_HARDWARE_POPCNT {
-            // If we have a hardware popcnt, we can use that to compute parity faster.
-            value = Self::count_ones(value);
-        } else {
-            // Generic XOR reduction to compute parity, performs O(log2(N)) shifts and XORs.
-            let mut shift = size_of::<Self::Element>() as u32 * 4;
+        let mut shift = size_of::<Self::Element>() as u32 * 4; // Start with half the bit width
 
+        if Self::HAS_HARDWARE_POPCNT {
+            // If we have a hardware popcnt, we can just use that.
+            value = Self::count_ones(value);
+        } else if Self::HAS_TRUE_SHIFTV {
+            // Slightly faster XOR reduction method that relies on variable shifts.
+            // This is still O(log2(N)), but solves the last 4 bits with a lookup table.
+            while shift >= 4 {
+                value = Self::bitxor(value, Self::shr(value, shift));
+                shift >>= 1;
+            }
+
+            value = Self::shrv(
+                Self::splat(Element::from_u16(0x6996)),
+                Self::bitand(value, Self::splat(Element::from_u16(0x0F))),
+            );
+        } else {
+            // Generic exhaustive XOR reduction to compute parity, performs O(log2(N)) shifts and XORs.
             while shift > 0 {
                 value = Self::bitxor(value, Self::shr(value, shift));
                 shift >>= 1;
@@ -1257,7 +1303,7 @@ pub trait UnsignedIntegerRegister: IntegerRegister {
     // TODO: Interleave bits?
 }
 
-pub trait SignedIntegerRegister: IntegerRegister + SignedRegister {
+pub trait SignedIntegerRegister: IntegerRegister<ISize = Self> + SignedRegister {
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self>;
 
     #[inline(always)]

@@ -30,32 +30,6 @@ pub unsafe fn _mm256_popcnt_epi32x_v3(v: __m256i) -> __m256i {
 }
 
 #[inline(always)]
-pub unsafe fn _mm256_np2_m1_epu32x_v3(mut value: __m256i) -> __m256i {
-    let mut s = 1;
-
-    while s < 32 {
-        value = _mm256_or_si256(value, _mm256_srl_epi32(value, _mm_cvtsi32_si128(s)));
-
-        s <<= 1;
-    }
-
-    value
-}
-
-#[inline(always)]
-pub unsafe fn _mm256_np2_m1_epu64x_v3(mut value: __m256i) -> __m256i {
-    let mut s = 1;
-
-    while s < 64 {
-        value = _mm256_or_si256(value, _mm256_srl_epi64(value, _mm_cvtsi32_si128(s)));
-
-        s <<= 1;
-    }
-
-    value
-}
-
-#[inline(always)]
 pub unsafe fn _mm256_bswap_epi32x_v3(x: __m256i) -> __m256i {
     // Note: vpshufb works within 128-bit lanes.
     // We repeat the 128-bit mask for both lanes.
