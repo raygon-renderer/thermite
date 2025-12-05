@@ -13,8 +13,6 @@ pub mod arch {
 pub mod polyfills;
 pub mod registers;
 
-use crate::{register::DoublePump, vector::Vector};
-
 pub use registers::X86V3;
 
 decl_aliases!(X86V3);

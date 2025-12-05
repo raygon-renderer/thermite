@@ -42,6 +42,9 @@ pub trait Denominator: Sized {
     /// Branchfree dividers may not support all divisors, see the documentation of
     /// [`BranchfreeDivider`] for details.
     fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor>;
+
+    /// Shift mask for this type.
+    const SHIFT_MASK: u8;
 }
 
 /// Divider recommended for constant divisors.
@@ -214,6 +217,8 @@ macro_rules! impl_unsigned_divider {
                 fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor> {
                     BranchfreeDivider::[<try_ $t>](self).ok_or(UnsupportedDivisor)
                 }
+
+                const SHIFT_MASK: u8 = Divider::<$t>::SHIFT_MASK;
             }
 
             impl Divider<$t> {
@@ -356,6 +361,8 @@ macro_rules! impl_signed_divider {
                 fn try_to_branchfree_divider(self) -> Result<BranchfreeDivider<Self>, UnsupportedDivisor> {
                     Ok(BranchfreeDivider::[<$t>](self))
                 }
+
+                const SHIFT_MASK: u8 = Divider::<$t>::SHIFT_MASK;
             }
 
             impl Divider<$t> {

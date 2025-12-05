@@ -426,6 +426,16 @@ impl SignedRegister for I32x8V3 {
 
 impl IntegerRegister for I32x8V3 {
     #[inline(always)]
+    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_mullhi_epi32x_v3(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_mullo_epi32(lhs, rhs) }
+    }
+
+    #[inline(always)]
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_adds_epi32x_v3(lhs, rhs) }
     }
@@ -446,21 +456,18 @@ impl IntegerRegister for I32x8V3 {
     }
 
     #[inline(always)]
-    fn div_branched(value: Storage<Self>, divider: crate::divider::Divider<Self::Element>) -> Storage<Self> {
-        unsafe { arch::_mm256_div_epi32x_v3(value, divider.multiplier(), divider.shift()) }
+    fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
+        arch::div_epi::<Self>(value, divider.multiplier(), divider.shift())
     }
 
     #[inline(always)]
-    fn div_branchfree(
-        value: Storage<Self>,
-        divider: crate::divider::BranchfreeDivider<Self::Element>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm256_div_epi32x_bf_v3(value, divider.multiplier(), divider.shift()) }
+    fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
+        arch::div_epi_bf::<Self>(value, divider.multiplier(), divider.shift())
     }
 
     #[inline(always)]
     fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_divv_epi32x_bf_v3(value, dividers.multipliers.0, dividers.shifts.0) }
+        arch::divv_epi_bf::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
     }
 
     const HAS_HARDWARE_POPCNT: bool = false;

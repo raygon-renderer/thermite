@@ -13,6 +13,7 @@ pub trait Element:
     const FALSY: Self;
 
     const ZERO: Self;
+    const ONE: Self;
 
     /// Convert the element, as a mask, to a boolean value.
     fn to_bool(self) -> bool;
@@ -24,6 +25,7 @@ pub trait Element:
     }
 
     fn from_i8(value: i8) -> Self;
+    fn from_u8(value: u8) -> Self;
     fn from_u16(value: u16) -> Self;
 }
 
@@ -36,9 +38,11 @@ macro_rules! impl_element {
             const TRUTHY: Self = !0;
             const FALSY: Self = 0;
             const ZERO: Self = 0;
+            const ONE: Self = 1;
 
             #[inline(always)] fn to_bool(self) -> bool { self != 0 }
             #[inline(always)] fn from_i8(value: i8) -> Self { value as $t }
+            #[inline(always)] fn from_u8(value: u8) -> Self { value as $t }
             #[inline(always)] fn from_u16(value: u16) -> Self { value as $t }
         }
     )+};
@@ -51,9 +55,11 @@ macro_rules! impl_element {
             const TRUTHY: Self = <$f>::from_bits(!0);
             const FALSY: Self = <$f>::from_bits(0);
             const ZERO: Self = 0.0;
+            const ONE: Self = 1.0;
 
             #[inline(always)] fn to_bool(self) -> bool { self.to_bits() != 0 }
             #[inline(always)] fn from_i8(value: i8) -> Self { value as $f }
+            #[inline(always)] fn from_u8(value: u8) -> Self { value as $f }
             #[inline(always)] fn from_u16(value: u16) -> Self { value as $f }
         }
     }
@@ -81,9 +87,13 @@ impl_element!(F f64, u64, i64);
 /// wrapping addition and multiplication.
 pub trait IntegerElement:
     Element
+    + crate::divider::Denominator
     + num_traits::PrimInt
     + num_traits::WrappingAdd
     + num_traits::WrappingMul
+    + num_traits::WrappingSub
+    + Shr<Output = Self>
+    + Shl<Output = Self>
     + Shr<Self::USize, Output = Self>
     + Shl<Self::USize, Output = Self>
 {
@@ -91,9 +101,13 @@ pub trait IntegerElement:
 
 impl<T> IntegerElement for T where
     T: Element
+        + crate::divider::Denominator
         + num_traits::PrimInt
         + num_traits::WrappingAdd
         + num_traits::WrappingMul
+        + num_traits::WrappingSub
+        + Shr<Output = Self>
+        + Shl<Output = Self>
         + Shr<Self::USize, Output = Self>
         + Shl<Self::USize, Output = Self>
 {

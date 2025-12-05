@@ -502,6 +502,9 @@ impl<R: IntegerRegister> IntegerRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
+    #[inline(always)] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(R::mulhi(lhs.0, rhs.0), R::mulhi(lhs.1, rhs.1)) }
+    #[inline(always)] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(R::mullo(lhs.0, rhs.0), R::mullo(lhs.1, rhs.1)) }
+
     #[inline(always)] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(R::saturating_add(lhs.0, rhs.0), R::saturating_add(lhs.1, rhs.1)) }
     #[inline(always)] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(R::saturating_sub(lhs.0, rhs.0), R::saturating_sub(lhs.1, rhs.1)) }
     #[inline(always)] fn wrapping_sum(value: Storage<Self>) -> Self::Element { R::wrapping_sum(R::add(value.0, value.1)) }

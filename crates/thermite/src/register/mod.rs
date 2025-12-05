@@ -145,10 +145,14 @@ pub trait Register: Sized + 'static {
 
     /// Unsigned integer register type with the same number of lanes, used for
     /// variable shifts and other operations.
-    type USize: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::USize>;
+    type USize: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::USize>
+        + CastRegister<Self::ISize>
+        + BitsRegister<Self::ISize>;
 
     /// Signed integer register type with the same number of lanes.
-    type ISize: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::ISize>;
+    type ISize: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::ISize>
+        + CastRegister<Self::USize>
+        + BitsRegister<Self::USize>;
 
     const EMPTY: Storage<Self>;
 
@@ -1202,6 +1206,9 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
 use num_traits::{WrappingAdd, WrappingMul};
 
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {
+    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 

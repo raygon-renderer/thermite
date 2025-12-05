@@ -448,7 +448,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
                 let mut t = y.nmul_adde(Vf::TWO, Vf::ONE).asin_p::<P>();
 
                 if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-                    t *= Vf::splat(E::ONE / E::from_f64(3.0));
+                    t *= Vf::splat(<E as FloatConsts>::ONE / E::from_f64(3.0));
                 } else {
                     // exact division for higher precisions
                     t /= Vf::splat(E::from_f64(3.0));

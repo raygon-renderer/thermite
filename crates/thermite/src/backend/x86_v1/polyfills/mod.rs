@@ -2,6 +2,8 @@
 
 use generic_array::GenericArray;
 
+pub use crate::backend::generic::polyfills::*;
+
 use super::arch::*;
 
 pub mod bits;

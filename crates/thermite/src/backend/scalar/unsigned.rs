@@ -12,7 +12,7 @@ use crate::register::{
 };
 
 #[rustfmt::skip]
-macro_rules! decl_unsigned_scalar { ($i:ty => $width:literal) => {paste::paste! {
+macro_rules! decl_unsigned_scalar { ($i:ty: $ei:ty => $width:literal) => {paste::paste! {
 
 impl Register for [<u $width>] {
     type Lanes = typenum::U1;
@@ -168,6 +168,16 @@ impl NumericRegister for [<u $width>] {
 }
 
 impl IntegerRegister for [<u $width>] {
+    #[inline(always)]
+    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        (((lhs as $ei) * (rhs as $ei)) >> <$i>::BITS) as $i
+    }
+
+    #[inline(always)]
+    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        ((lhs as $ei) * (rhs as $ei)) as $i
+    }
+
     #[inline(always)] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.saturating_add(rhs) }
     #[inline(always)] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.saturating_sub(rhs) }
     #[inline(always)] fn wrapping_sum(value: Storage<Self>) -> Self::Element { value }
@@ -224,5 +234,5 @@ impl UnsignedIntegerRegister for [<u $width>] {
 
 }}} // end macro
 
-decl_unsigned_scalar!(u32 => 32);
-decl_unsigned_scalar!(u64 => 64);
+decl_unsigned_scalar!(u32: u64 => 32);
+decl_unsigned_scalar!(u64: u128 => 64);
