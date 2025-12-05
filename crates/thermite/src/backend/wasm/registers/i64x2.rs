@@ -17,9 +17,9 @@ use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct I64x2Wasm32;
+pub struct I64x2Wasm;
 
-impl Register for I64x2Wasm32 {
+impl Register for I64x2Wasm {
     type Lanes = typenum::U2;
 
     type Element = i64;
@@ -27,10 +27,10 @@ impl Register for I64x2Wasm32 {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
-    const ISA: InstructionSet = InstructionSet::WASM32;
+    const ISA: InstructionSet = arch::ISA;
 
-    type ISize = super::I64x2Wasm32;
-    type USize = super::U64x2Wasm32;
+    type ISize = super::I64x2Wasm;
+    type USize = super::U64x2Wasm;
 
     const EMPTY: Storage<Self> = arch::i64x2(0, 0);
 
@@ -121,7 +121,7 @@ impl Register for I64x2Wasm32 {
     }
 }
 
-impl BitshiftRegister for I64x2Wasm32 {
+impl BitshiftRegister for I64x2Wasm {
     const HAS_TRUE_SHIFTV: bool = false;
 
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
@@ -133,7 +133,7 @@ impl BitshiftRegister for I64x2Wasm32 {
     }
 }
 
-impl MaskRegister for I64x2Wasm32 {
+impl MaskRegister for I64x2Wasm {
     const FALSY: Storage<Self> = arch::i64x2(0, 0);
     const TRUTHY: Storage<Self> = arch::i64x2(-1, -1);
 
@@ -165,21 +165,21 @@ impl MaskRegister for I64x2Wasm32 {
     }
 }
 
-impl ShuffleRegister for I64x2Wasm32 {
+impl ShuffleRegister for I64x2Wasm {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
-impl PermuteRegister for I64x2Wasm32 {
+impl PermuteRegister for I64x2Wasm {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
     }
 }
 
-impl SwizzleRegister for I64x2Wasm32 {
+impl SwizzleRegister for I64x2Wasm {
     const HAS_PERMUTEV: bool = true;
 
     #[inline(always)]
@@ -189,7 +189,7 @@ impl SwizzleRegister for I64x2Wasm32 {
 }
 
 #[rustfmt::skip]
-impl PartialOrdRegister for I64x2Wasm32 {
+impl PartialOrdRegister for I64x2Wasm {
     #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::i64x2_ge(lhs, rhs) }
     #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::i64x2_lt(lhs, rhs) }
     #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::i64x2_le(lhs, rhs) }
@@ -198,7 +198,7 @@ impl PartialOrdRegister for I64x2Wasm32 {
     #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::i64x2_eq(lhs, rhs) }
 }
 
-impl NumericRegister for I64x2Wasm32 {
+impl NumericRegister for I64x2Wasm {
     const ZERO: Storage<Self> = arch::i64x2(0, 0);
     const ONE: Storage<Self> = arch::i64x2(1, 1);
     const TWO: Storage<Self> = arch::i64x2(2, 2);
@@ -272,7 +272,7 @@ impl NumericRegister for I64x2Wasm32 {
     }
 }
 
-impl SignedRegister for I64x2Wasm32 {
+impl SignedRegister for I64x2Wasm {
     const NEG_ONE: Storage<Self> = arch::i64x2(-1, -1);
     const MIN_POSITIVE: Storage<Self> = arch::i64x2(1, 1);
 
@@ -303,7 +303,25 @@ impl SignedRegister for I64x2Wasm32 {
     }
 }
 
-impl IntegerRegister for I64x2Wasm32 {
+impl IntegerRegister for I64x2Wasm {
+    #[inline(always)]
+    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        let a0 = arch::i64x2_extract_lane::<0>(lhs);
+        let a1 = arch::i64x2_extract_lane::<1>(lhs);
+        let b0 = arch::i64x2_extract_lane::<0>(rhs);
+        let b1 = arch::i64x2_extract_lane::<1>(rhs);
+
+        arch::u64x2(
+            (((a0 as i128) * (b0 as i128)) >> 64) as u64,
+            (((a1 as i128) * (b1 as i128)) >> 64) as u64,
+        )
+    }
+
+    #[inline(always)]
+    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::i64x2_mul(lhs, rhs)
+    }
+
     #[inline(always)]
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::i64x2_saturating_add(lhs, rhs)
@@ -324,16 +342,19 @@ impl IntegerRegister for I64x2Wasm32 {
         reduce_64x2!(i value; i64x2_mul i64x2_mul)
     }
 
+    #[inline(always)]
     fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
-        todo!()
+        arch::div_epi::<Self>(value, divider.multiplier(), divider.shift())
     }
 
+    #[inline(always)]
     fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
-        todo!()
+        arch::div_epi_bf::<Self>(value, divider.multiplier(), divider.shift())
     }
 
+    #[inline(always)]
     fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
-        todo!()
+        arch::divv_epi_bf::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
     }
 
     const HAS_HARDWARE_POPCNT: bool = false;
@@ -341,7 +362,7 @@ impl IntegerRegister for I64x2Wasm32 {
     #[inline(always)]
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
         // use unsigned version's popcnt implementation
-        super::U64x2Wasm32::count_ones(value)
+        super::U64x2Wasm::count_ones(value)
     }
 
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
@@ -353,17 +374,17 @@ impl IntegerRegister for I64x2Wasm32 {
     }
 }
 
-impl SignedIntegerRegister for I64x2Wasm32 {
+impl SignedIntegerRegister for I64x2Wasm {
     #[inline(always)]
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         arch::i64x2_shr(value, shift) // Arithmetic shift right
     }
 }
 
-impl CastRegister<DoublePumpRegister<I64x2Wasm32>> for super::I32x4Wasm32 {
+impl CastRegister<DoublePumpRegister<I64x2Wasm>> for super::I32x4Wasm {
     #[rustfmt::skip]
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<I64x2Wasm32> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: <DoublePumpRegister<I64x2Wasm> as Register>::Storage) -> Storage<Self> {
         // Selects bytes 0-3 (lane 0 low) and 8-11 (lane 1 low) from 'lo'
         // Selects bytes 16-19 (lane 0 low) and 24-27 (lane 1 low) from 'hi'
         arch::i8x16_shuffle::<

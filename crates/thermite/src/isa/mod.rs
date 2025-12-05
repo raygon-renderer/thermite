@@ -32,18 +32,22 @@ pub enum InstructionSet {
     #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
     NEON,
 
-    /// WebAssembly SIMD instruction set
-    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    /// WebAssembly SIMD instruction set (32-bit)
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     WASM32,
+
+    /// WebAssembly SIMD instruction set (64-bit)
+    #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
+    WASM64,
 }
 
 // WASM32 may not have atomics to support the detector
-#[cfg(not(all(feature = "wasm32", target_arch = "wasm32")))]
+#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
 mod detector;
 
 impl InstructionSet {
     /// Detect the current instruction set at runtime. This result is cached for future calls.
-    #[cfg(not(all(feature = "wasm32", target_arch = "wasm32")))]
+    #[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
     pub fn get() -> InstructionSet {
         static DETECTOR: detector::DetectInstructionSet = detector::DetectInstructionSet::new();
 
@@ -51,7 +55,7 @@ impl InstructionSet {
     }
 
     /// Detect the current instruction set at runtime. This result is cached for future calls.
-    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     pub fn get() -> InstructionSet {
         InstructionSet::WASM32
     }
@@ -76,8 +80,11 @@ impl InstructionSet {
             #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
             InstructionSet::NEON => 32,
 
-            #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
             InstructionSet::WASM32 => 16, // TODO: Verify
+
+            #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
+            InstructionSet::WASM64 => 16, // TODO: Verify
         }
     }
 

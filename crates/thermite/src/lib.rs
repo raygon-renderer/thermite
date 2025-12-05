@@ -4,6 +4,8 @@
 // used for more intelligent const splat
 #![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]
 #![cfg_attr(feature = "nightly", allow(internal_features))]
+// Enable wasm64 simd on nightly
+#![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
 
 #[cfg(feature = "nightly")]
 #[rustversion::not(nightly)]

@@ -414,8 +414,8 @@ pub mod policies {
 
 use policies::*;
 
-#[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub type DefaultPolicy = Size;
 
-#[cfg(not(all(feature = "wasm32", target_arch = "wasm32")))]
+#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
 pub type DefaultPolicy = Performance;

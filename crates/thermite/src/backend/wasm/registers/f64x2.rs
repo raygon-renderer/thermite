@@ -17,9 +17,9 @@ use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct F64x2Wasm32;
+pub struct F64x2Wasm;
 
-impl Register for F64x2Wasm32 {
+impl Register for F64x2Wasm {
     type Lanes = typenum::U2;
 
     type Element = f64;
@@ -27,10 +27,10 @@ impl Register for F64x2Wasm32 {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
-    const ISA: InstructionSet = InstructionSet::WASM32;
+    const ISA: InstructionSet = arch::ISA;
 
-    type ISize = super::I64x2Wasm32;
-    type USize = super::U64x2Wasm32;
+    type ISize = super::I64x2Wasm;
+    type USize = super::U64x2Wasm;
 
     const EMPTY: Storage<Self> = arch::f64x2(0.0, 0.0);
 
@@ -119,7 +119,7 @@ impl Register for F64x2Wasm32 {
     }
 }
 
-impl MaskRegister for F64x2Wasm32 {
+impl MaskRegister for F64x2Wasm {
     const FALSY: Storage<Self> = arch::f64x2(f64::from_bits(0), f64::from_bits(0));
     const TRUTHY: Storage<Self> = arch::f64x2(f64::from_bits(!0), f64::from_bits(!0));
 
@@ -151,21 +151,21 @@ impl MaskRegister for F64x2Wasm32 {
     }
 }
 
-impl ShuffleRegister for F64x2Wasm32 {
+impl ShuffleRegister for F64x2Wasm {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
-impl PermuteRegister for F64x2Wasm32 {
+impl PermuteRegister for F64x2Wasm {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
     }
 }
 
-impl SwizzleRegister for F64x2Wasm32 {
+impl SwizzleRegister for F64x2Wasm {
     const HAS_PERMUTEV: bool = true;
 
     #[inline(always)]
@@ -175,7 +175,7 @@ impl SwizzleRegister for F64x2Wasm32 {
 }
 
 #[rustfmt::skip]
-impl PartialOrdRegister for F64x2Wasm32 {
+impl PartialOrdRegister for F64x2Wasm {
     #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_ge(lhs, rhs) }
     #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_lt(lhs, rhs) }
     #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_le(lhs, rhs) }
@@ -184,7 +184,7 @@ impl PartialOrdRegister for F64x2Wasm32 {
     #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_eq(lhs, rhs) }
 }
 
-impl NumericRegister for F64x2Wasm32 {
+impl NumericRegister for F64x2Wasm {
     const ZERO: Storage<Self> = arch::f64x2(0.0, 0.0);
     const ONE: Storage<Self> = arch::f64x2(1.0, 1.0);
     const TWO: Storage<Self> = arch::f64x2(2.0, 2.0);
@@ -259,7 +259,7 @@ impl NumericRegister for F64x2Wasm32 {
     }
 }
 
-impl SignedRegister for F64x2Wasm32 {
+impl SignedRegister for F64x2Wasm {
     const NEG_ONE: Storage<Self> = arch::f64x2(-1.0, -1.0);
     const MIN_POSITIVE: Storage<Self> = arch::f64x2(f64::MIN_POSITIVE, f64::MIN_POSITIVE);
 
@@ -289,12 +289,12 @@ impl SignedRegister for F64x2Wasm32 {
     }
 }
 
-impl FloatRegister for F64x2Wasm32 {
+impl FloatRegister for F64x2Wasm {
     // No way to know if FMA is supported at compile time
     const HAS_TRUE_FMA: bool = false;
 
-    type Bits = super::U64x2Wasm32;
-    type Signed = super::I64x2Wasm32;
+    type Bits = super::U64x2Wasm;
+    type Signed = super::I64x2Wasm;
     type ExtendedPrecision = Self;
 
     const HALF: Storage<Self> = arch::f64x2(0.5, 0.5);
@@ -380,9 +380,9 @@ impl FloatRegister for F64x2Wasm32 {
     }
 }
 
-impl CastRegister<DoublePumpRegister<F64x2Wasm32>> for super::F32x4Wasm32 {
+impl CastRegister<DoublePumpRegister<F64x2Wasm>> for super::F32x4Wasm {
     #[inline(always)]
-    fn cast_from(value: Storage<DoublePumpRegister<F64x2Wasm32>>) -> Storage<Self> {
+    fn cast_from(value: Storage<DoublePumpRegister<F64x2Wasm>>) -> Storage<Self> {
         let lo_demoted = arch::f32x4_demote_f64x2_zero(value.0);
         let hi_demoted = arch::f32x4_demote_f64x2_zero(value.1);
 
@@ -390,33 +390,33 @@ impl CastRegister<DoublePumpRegister<F64x2Wasm32>> for super::F32x4Wasm32 {
     }
 }
 
-impl CastRegister<super::U64x2Wasm32> for F64x2Wasm32 {
+impl CastRegister<super::U64x2Wasm> for F64x2Wasm {
     #[inline(always)]
-    fn cast_from(value: Storage<super::U64x2Wasm32>) -> Storage<Self> {
+    fn cast_from(value: Storage<super::U64x2Wasm>) -> Storage<Self> {
         arch::convert_u64x2_to_f64x2(value)
     }
 
     #[inline(always)]
-    fn fast_cast_from(value: Storage<super::U64x2Wasm32>) -> Storage<Self> {
+    fn fast_cast_from(value: Storage<super::U64x2Wasm>) -> Storage<Self> {
         arch::convert_epu64_pd_limited::<Self>(value)
     }
 }
 
-impl CastRegister<super::I64x2Wasm32> for F64x2Wasm32 {
+impl CastRegister<super::I64x2Wasm> for F64x2Wasm {
     #[inline(always)]
-    fn cast_from(value: Storage<super::I64x2Wasm32>) -> Storage<Self> {
+    fn cast_from(value: Storage<super::I64x2Wasm>) -> Storage<Self> {
         arch::convert_i64x2_to_f64x2(value)
     }
 
     #[inline(always)]
-    fn fast_cast_from(value: Storage<super::I64x2Wasm32>) -> Storage<Self> {
+    fn fast_cast_from(value: Storage<super::I64x2Wasm>) -> Storage<Self> {
         arch::convert_epi64_pd_limited::<Self>(value)
     }
 }
 
-impl CastRegister<F64x2Wasm32> for super::U64x2Wasm32 {
+impl CastRegister<F64x2Wasm> for super::U64x2Wasm {
     #[inline(always)]
-    fn cast_from(value: Storage<F64x2Wasm32>) -> Storage<Self> {
+    fn cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::u64x2(
             arch::f64x2_extract_lane::<0>(value) as u64,
             arch::f64x2_extract_lane::<1>(value) as u64,
@@ -424,14 +424,14 @@ impl CastRegister<F64x2Wasm32> for super::U64x2Wasm32 {
     }
 
     #[inline(always)]
-    fn fast_cast_from(value: Storage<F64x2Wasm32>) -> Storage<Self> {
-        arch::convert_pd_epu64_limited::<F64x2Wasm32>(value)
+    fn fast_cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
+        arch::convert_pd_epu64_limited::<F64x2Wasm>(value)
     }
 }
 
-impl CastRegister<F64x2Wasm32> for super::I64x2Wasm32 {
+impl CastRegister<F64x2Wasm> for super::I64x2Wasm {
     #[inline(always)]
-    fn cast_from(value: Storage<F64x2Wasm32>) -> Storage<Self> {
+    fn cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::i64x2(
             arch::f64x2_extract_lane::<0>(value) as i64,
             arch::f64x2_extract_lane::<1>(value) as i64,
@@ -439,7 +439,7 @@ impl CastRegister<F64x2Wasm32> for super::I64x2Wasm32 {
     }
 
     #[inline(always)]
-    fn fast_cast_from(value: Storage<F64x2Wasm32>) -> Storage<Self> {
-        arch::convert_pd_epi64_limited::<F64x2Wasm32>(value)
+    fn fast_cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
+        arch::convert_pd_epi64_limited::<F64x2Wasm>(value)
     }
 }

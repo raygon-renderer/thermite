@@ -17,9 +17,9 @@ use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct U64x2Wasm32;
+pub struct U64x2Wasm;
 
-impl Register for U64x2Wasm32 {
+impl Register for U64x2Wasm {
     type Lanes = typenum::U2;
 
     type Element = u64;
@@ -27,10 +27,10 @@ impl Register for U64x2Wasm32 {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
-    const ISA: InstructionSet = InstructionSet::WASM32;
+    const ISA: InstructionSet = arch::ISA;
 
-    type ISize = super::I64x2Wasm32;
-    type USize = super::U64x2Wasm32;
+    type ISize = super::I64x2Wasm;
+    type USize = super::U64x2Wasm;
 
     const EMPTY: Storage<Self> = arch::u64x2(0, 0);
 
@@ -119,7 +119,7 @@ impl Register for U64x2Wasm32 {
     }
 }
 
-impl BitshiftRegister for U64x2Wasm32 {
+impl BitshiftRegister for U64x2Wasm {
     const HAS_TRUE_SHIFTV: bool = false;
 
     #[inline(always)]
@@ -133,7 +133,7 @@ impl BitshiftRegister for U64x2Wasm32 {
     }
 }
 
-impl MaskRegister for U64x2Wasm32 {
+impl MaskRegister for U64x2Wasm {
     const FALSY: Storage<Self> = arch::u64x2(0, 0);
     const TRUTHY: Storage<Self> = arch::u64x2(!0, !0);
 
@@ -165,21 +165,21 @@ impl MaskRegister for U64x2Wasm32 {
     }
 }
 
-impl ShuffleRegister for U64x2Wasm32 {
+impl ShuffleRegister for U64x2Wasm {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
-impl PermuteRegister for U64x2Wasm32 {
+impl PermuteRegister for U64x2Wasm {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
     }
 }
 
-impl SwizzleRegister for U64x2Wasm32 {
+impl SwizzleRegister for U64x2Wasm {
     const HAS_PERMUTEV: bool = true;
 
     #[inline(always)]
@@ -188,7 +188,7 @@ impl SwizzleRegister for U64x2Wasm32 {
     }
 }
 
-impl PartialOrdRegister for U64x2Wasm32 {
+impl PartialOrdRegister for U64x2Wasm {
     #[inline(always)]
     fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u64x2_ne(lhs, rhs)
@@ -220,7 +220,7 @@ impl PartialOrdRegister for U64x2Wasm32 {
     }
 }
 
-impl NumericRegister for U64x2Wasm32 {
+impl NumericRegister for U64x2Wasm {
     const ZERO: Storage<Self> = arch::u64x2(0, 0);
     const ONE: Storage<Self> = arch::u64x2(1, 1);
     const TWO: Storage<Self> = arch::u64x2(2, 2);
@@ -294,7 +294,25 @@ impl NumericRegister for U64x2Wasm32 {
     }
 }
 
-impl IntegerRegister for U64x2Wasm32 {
+impl IntegerRegister for U64x2Wasm {
+    #[inline(always)]
+    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        let a0 = arch::u64x2_extract_lane::<0>(lhs);
+        let a1 = arch::u64x2_extract_lane::<1>(lhs);
+        let b0 = arch::u64x2_extract_lane::<0>(rhs);
+        let b1 = arch::u64x2_extract_lane::<1>(rhs);
+
+        arch::u64x2(
+            (((a0 as u128) * (b0 as u128)) >> 64) as u64,
+            (((a1 as u128) * (b1 as u128)) >> 64) as u64,
+        )
+    }
+
+    #[inline(always)]
+    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::u64x2_mul(lhs, rhs)
+    }
+
     #[inline(always)]
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u64x2_saturating_add(lhs, rhs)
@@ -315,16 +333,19 @@ impl IntegerRegister for U64x2Wasm32 {
         reduce_64x2!(u value; u64x2_mul u64x2_mul)
     }
 
+    #[inline(always)]
     fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
-        todo!()
+        arch::div_epu::<Self>(value, divider.multiplier(), divider.shift())
     }
 
+    #[inline(always)]
     fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
-        todo!()
+        arch::div_epu_bf::<Self>(value, divider.multiplier(), divider.shift())
     }
 
+    #[inline(always)]
     fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
-        todo!()
+        arch::divv_epu_bf::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
     }
 
     const HAS_HARDWARE_POPCNT: bool = false;
@@ -332,7 +353,7 @@ impl IntegerRegister for U64x2Wasm32 {
     #[inline(always)]
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
         // 1. Get 32-bit counts: [c0, c1, c2, c3]
-        let counts_32 = super::U32x4Wasm32::count_ones(value);
+        let counts_32 = super::U32x4Wasm::count_ones(value);
 
         // 2. We need [c0+c1, c2+c3].
         // Since max bit count for 64-bits is 64, this fits comfortably in i32
@@ -360,12 +381,12 @@ impl IntegerRegister for U64x2Wasm32 {
     }
 }
 
-impl UnsignedIntegerRegister for U64x2Wasm32 {}
+impl UnsignedIntegerRegister for U64x2Wasm {}
 
-impl CastRegister<DoublePumpRegister<U64x2Wasm32>> for super::U32x4Wasm32 {
+impl CastRegister<DoublePumpRegister<U64x2Wasm>> for super::U32x4Wasm {
     #[rustfmt::skip]
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<U64x2Wasm32> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: <DoublePumpRegister<U64x2Wasm> as Register>::Storage) -> Storage<Self> {
         // Selects bytes 0-3 (lane 0 low) and 8-11 (lane 1 low) from 'lo'
         // Selects bytes 16-19 (lane 0 low) and 24-27 (lane 1 low) from 'hi'
         arch::i8x16_shuffle::<

@@ -13,7 +13,9 @@ partial-ord = []                 # Implements PartialOrd for Vector, only if all
 float-trait = ["partial-ord"]    # Implements the Float/FloatCore traits as best as possible
 document_registers = []
 neon = []
-wasm32 = []
+
+# Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
+wasm = []
 
 [dependencies]
 fast_polynomial = { version = "0.4", default-features = false }

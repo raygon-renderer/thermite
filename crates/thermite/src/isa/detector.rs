@@ -75,14 +75,19 @@ impl DetectInstructionSet {
         InstructionSet::NEON // Assume Neon is always available on ARM with the feature enabled
     }
 
-    #[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     fn detect_internal() -> InstructionSet {
         InstructionSet::WASM32 // Assume Wasm SIMD is always available on wasm32 with the feature enabled
     }
 
+    #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
+    fn detect_internal() -> InstructionSet {
+        InstructionSet::WASM64 // Assume Wasm SIMD is always available on wasm64 with the feature enabled
+    }
+
     #[cfg(not(any(
         all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")),
-        all(feature = "wasm32", target_arch = "wasm32"),
+        all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")),
         any(target_arch = "x86", target_arch = "x86_64")
     )))]
     fn detect_internal() -> InstructionSet {

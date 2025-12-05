@@ -17,9 +17,9 @@ use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct F32x4Wasm32;
+pub struct F32x4Wasm;
 
-impl Register for F32x4Wasm32 {
+impl Register for F32x4Wasm {
     type Lanes = typenum::U4;
 
     type Element = f32;
@@ -27,10 +27,10 @@ impl Register for F32x4Wasm32 {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
-    const ISA: InstructionSet = InstructionSet::WASM32;
+    const ISA: InstructionSet = arch::ISA;
 
-    type ISize = super::I32x4Wasm32;
-    type USize = super::U32x4Wasm32;
+    type ISize = super::I32x4Wasm;
+    type USize = super::U32x4Wasm;
 
     const EMPTY: Storage<Self> = arch::f32x4(0.0, 0.0, 0.0, 0.0);
 
@@ -121,7 +121,7 @@ impl Register for F32x4Wasm32 {
     }
 }
 
-impl MaskRegister for F32x4Wasm32 {
+impl MaskRegister for F32x4Wasm {
     const FALSY: Storage<Self> = arch::f32x4(
         f32::from_bits(0),
         f32::from_bits(0),
@@ -164,21 +164,21 @@ impl MaskRegister for F32x4Wasm32 {
     }
 }
 
-impl ShuffleRegister for F32x4Wasm32 {
+impl ShuffleRegister for F32x4Wasm {
     #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x4_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
-impl PermuteRegister for F32x4Wasm32 {
+impl PermuteRegister for F32x4Wasm {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x4_to_indices::<IMM8>() })
     }
 }
 
-impl SwizzleRegister for F32x4Wasm32 {
+impl SwizzleRegister for F32x4Wasm {
     const HAS_PERMUTEV: bool = true;
 
     #[inline(always)]
@@ -191,7 +191,7 @@ impl SwizzleRegister for F32x4Wasm32 {
 }
 
 #[rustfmt::skip]
-impl PartialOrdRegister for F32x4Wasm32 {
+impl PartialOrdRegister for F32x4Wasm {
     #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_ge(lhs, rhs) }
     #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_lt(lhs, rhs) }
     #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_le(lhs, rhs) }
@@ -200,7 +200,7 @@ impl PartialOrdRegister for F32x4Wasm32 {
     #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_eq(lhs, rhs) }
 }
 
-impl NumericRegister for F32x4Wasm32 {
+impl NumericRegister for F32x4Wasm {
     const ZERO: Storage<Self> = arch::f32x4(0.0, 0.0, 0.0, 0.0);
     const ONE: Storage<Self> = arch::f32x4(1.0, 1.0, 1.0, 1.0);
     const TWO: Storage<Self> = arch::f32x4(2.0, 2.0, 2.0, 2.0);
@@ -275,7 +275,7 @@ impl NumericRegister for F32x4Wasm32 {
     }
 }
 
-impl SignedRegister for F32x4Wasm32 {
+impl SignedRegister for F32x4Wasm {
     const NEG_ONE: Storage<Self> = arch::f32x4(-1.0, -1.0, -1.0, -1.0);
     const MIN_POSITIVE: Storage<Self> = arch::f32x4(
         f32::MIN_POSITIVE,
@@ -310,13 +310,13 @@ impl SignedRegister for F32x4Wasm32 {
     }
 }
 
-impl FloatRegister for F32x4Wasm32 {
+impl FloatRegister for F32x4Wasm {
     // No way to know if FMA is supported at compile time
     const HAS_TRUE_FMA: bool = false;
 
-    type Bits = super::U32x4Wasm32;
-    type Signed = super::I32x4Wasm32;
-    type ExtendedPrecision = DoublePumpRegister<super::F64x2Wasm32>;
+    type Bits = super::U32x4Wasm;
+    type Signed = super::I32x4Wasm;
+    type ExtendedPrecision = DoublePumpRegister<super::F64x2Wasm>;
 
     const HALF: Storage<Self> = arch::f32x4(0.5, 0.5, 0.5, 0.5);
     const NEG_ZERO: Storage<Self> = arch::f32x4(-0.0, -0.0, -0.0, -0.0);
@@ -406,9 +406,9 @@ impl FloatRegister for F32x4Wasm32 {
     }
 }
 
-impl CastRegister<F32x4Wasm32> for DoublePumpRegister<super::F64x2Wasm32> {
+impl CastRegister<F32x4Wasm> for DoublePumpRegister<super::F64x2Wasm> {
     #[inline(always)]
-    fn cast_from(value: Storage<F32x4Wasm32>) -> Storage<Self> {
+    fn cast_from(value: Storage<F32x4Wasm>) -> Storage<Self> {
         // promote each pair of f32 to f64
         let lo = arch::f64x2_promote_low_f32x4(value);
         let hi = arch::f64x2_promote_low_f32x4(arch::i32x4_shuffle::<2, 3, 2, 3>(value, value));

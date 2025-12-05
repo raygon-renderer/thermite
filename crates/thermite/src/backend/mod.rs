@@ -20,6 +20,6 @@ pub mod x86_v2;
 #[macro_use]
 pub mod x86_v3;
 
-#[cfg(all(feature = "wasm32", target_arch = "wasm32"))]
+#[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
 pub mod wasm;
 
