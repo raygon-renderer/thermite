@@ -5,7 +5,7 @@
 use crate::{
     divider::vector::VectorDivider,
     isa::InstructionSet,
-    register::{Element, ExtendRegister, SignedIntegerRegister, TruncateRegister},
+    register::{Element, ExtendRegister, LinAlg4Register, SignedIntegerRegister, TruncateRegister, ValidLinAlg3Length},
 };
 
 use super::{
@@ -653,10 +653,17 @@ where
     }
 }
 
+impl<R: FloatRegister> LinAlg4Register for DoublePumpRegister<R>
+where
+    Self: FloatRegister<Lanes = typenum::U4> + SwizzleRegister,
+{
+    // default implementations are fine
+}
+
 // TODO: Improve the swizzling here when some generic variant is available
 impl<R: FloatRegister> LinAlg3Register for DoublePumpRegister<R>
 where
-    Self: FloatRegister<Lanes = typenum::U4> + SwizzleRegister,
+    Self: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + SwizzleRegister,
 {
     #[inline(always)]
     fn min_element3(value: Storage<Self>) -> Self::Element {

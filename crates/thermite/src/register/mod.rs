@@ -407,12 +407,18 @@ pub trait SwizzleRegister: MaskRegister {
         let value_array = Self::as_array(&value);
         let result_array = Self::as_array_mut(&mut result);
 
-        let mask = (<Self::Lanes as Unsigned>::U32) - 1;
+        let mask = Self::Lanes::U32 - 1;
 
         for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
-            let idx = idx & mask;
+            let idx = if const { is_power_of_2(Self::Lanes::U32) } {
+                idx & mask // we can AND with the mask if power-of-two lane count
+            } else {
+                idx.min(mask) // otherwise clamp to the max index
+            } as usize;
 
-            *dst = value_array[idx as usize];
+            unsafe { core::hint::assert_unchecked(idx < value_array.len()) };
+
+            *dst = value_array[idx];
         }
 
         result
@@ -434,12 +440,23 @@ pub trait SwizzleRegister: MaskRegister {
         let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
 
         for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
-            let idx = idx & mask;
-
-            *dst = if idx < Self::Lanes::U32 {
-                a_array[idx as usize]
+            // NOTE: If Self is power of two, so is 2 * Self
+            let mut idx = if const { is_power_of_2(Self::Lanes::U32) } {
+                idx & mask // we can AND with the mask if power-of-two lane count
             } else {
-                b_array[(idx - Self::Lanes::U32) as usize]
+                idx.min(mask) // otherwise clamp to the max index
+            } as usize;
+
+            *dst = if idx < Self::Lanes::USIZE {
+                unsafe { core::hint::assert_unchecked(idx < a_array.len()) };
+
+                a_array[idx]
+            } else {
+                idx -= Self::Lanes::USIZE;
+
+                unsafe { core::hint::assert_unchecked(idx < b_array.len()) };
+
+                b_array[idx]
             };
         }
 
@@ -1095,10 +1112,35 @@ pub trait FloatRegister:
     }
 }
 
+/// Useful swizzle indices for 3D linear algebra operations, such as cross products,
+/// for both 3-lane and 4-lane registers.
+pub trait ValidLinAlg3Length<R: FloatRegister<Lanes = Self>>: Lanes {
+    const ZXYW: GenericArray<u32, R::Lanes>;
+    const YZXW: GenericArray<u32, R::Lanes>;
+}
+
+impl<R> ValidLinAlg3Length<R> for typenum::U4
+where
+    R: FloatRegister<Lanes = Self>,
+{
+    const ZXYW: GenericArray<u32, R::Lanes> = GenericArray::from_array([2, 0, 1, 3]);
+    const YZXW: GenericArray<u32, R::Lanes> = GenericArray::from_array([1, 2, 0, 3]);
+}
+
+// Certain GPU vectors may actually have 3-lane registers, but this will probably
+// never be implemented for CPU SIMD.
+impl<R> ValidLinAlg3Length<R> for typenum::U3
+where
+    R: FloatRegister<Lanes = Self>,
+{
+    const ZXYW: GenericArray<u32, R::Lanes> = GenericArray::from_array([2, 0, 1]);
+    const YZXW: GenericArray<u32, R::Lanes> = GenericArray::from_array([1, 2, 0]);
+}
+
 /// Extensions to the `FloatRegister` trait for the most common 3D linear algebra operations.
 ///
-/// This is only available on 4-lane registers.
-pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + SwizzleRegister {
+/// This is only available on 3 or 4-lane registers.
+pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + SwizzleRegister {
     #[inline(always)]
     fn dot3(lhs: Storage<Self>, rhs: Storage<Self>) -> Self::Element {
         Self::sum_elements3(Self::mul(lhs, rhs))
@@ -1106,44 +1148,49 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
 
     #[inline(always)]
     fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        let lhszxy = Self::permutev(lhs, GenericArray::from_array([2, 0, 1, 3]));
-        let rhszxy = Self::permutev(rhs, GenericArray::from_array([2, 0, 1, 3]));
+        let lhszxy = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
+        let rhszxy = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
 
         let lhszxy_rhs = Self::mul(lhszxy, rhs);
         let rhszxy_lhs = Self::mul(rhszxy, lhs);
 
         let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
 
-        Self::permutev(sub, GenericArray::from_array([2, 0, 1, 3]))
+        Self::permutev(sub, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW)
+    }
+
+    /// More accurate cross product using the "accurate difference of sums" method, but
+    /// requires fused multiply-add/subtract operations for best accuracy.
+    #[inline(always)]
+    fn cross3_dop(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        let a = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
+        let b = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
+        let c = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
+        let d = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
+
+        let cd = Self::mul(c, d);
+
+        let err = Self::nmul_add(c, d, cd);
+        let dop = Self::mul_sub(a, b, cd);
+
+        Self::add(dop, err)
     }
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {
-        use Element as M;
-
-        if const { Self::ISA.is_simd() } {
-            // set w component to 0.0 by masking it out
-            Self::bitand(
-                value,
-                const { reg::<Self, 4>([M::TRUTHY, M::TRUTHY, M::TRUTHY, M::FALSY]) },
-            )
+        if Self::Lanes::USIZE == 4 {
+            Self::insert::<3>(value, Element::ZERO)
         } else {
-            Self::insert::<3>(value, M::ZERO)
+            value
         }
     }
 
     #[inline(always)]
     fn one4(value: Storage<Self>) -> Storage<Self> {
-        use crate::math::FloatConsts as C;
-
-        if const { Self::ISA.is_simd() } {
-            // set w component to 1.0
-            Self::bitor(
-                Self::zero4(value), // clear w component
-                const { reg::<Self, 4>([C::ZERO, C::ZERO, C::ZERO, C::ONE]) },
-            )
+        if Self::Lanes::USIZE == 4 {
+            Self::insert::<3>(value, Element::ONE)
         } else {
-            Self::insert::<3>(value, C::ONE)
+            value
         }
     }
 
@@ -1151,7 +1198,11 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
     fn max_element3(value: Storage<Self>) -> Self::Element;
     fn sum_elements3(value: Storage<Self>) -> Self::Element;
     fn prod_elements3(value: Storage<Self>) -> Self::Element;
+}
 
+/// Extensions to the `FloatRegister` trait for 4D linear algebra operations,
+/// including quaternion operations.
+pub trait LinAlg4Register: FloatRegister<Lanes = typenum::U4> + SwizzleRegister {
     /// Quaternion multiplication.
     ///
     /// Corresponds to `lhs * rhs`.
@@ -1171,6 +1222,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes = generic_array::typenum::U4> + S
         let y = Self::broadcast::<1>(lhs);
         let z = Self::broadcast::<2>(lhs);
 
+        // TODO: Alternative implementation when permutev is not available?
         let rhs_x = Self::permutev(rhs, GenericArray::from_array([3, 2, 1, 0]));
         let rhs_y = Self::permutev(rhs, GenericArray::from_array([2, 3, 0, 1]));
         let rhs_z = Self::permutev(rhs, GenericArray::from_array([1, 0, 3, 2]));

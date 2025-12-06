@@ -7,7 +7,7 @@ use crate::{
     mask::Mask,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        LinAlg4Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
         SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
@@ -1169,21 +1169,6 @@ impl<R: LinAlg3Register> Vector<R> {
         Self(R::cross3(self.0, rhs.0))
     }
 
-    /// Quaternion multiplication.
-    ///
-    /// Method:
-    /// ```text
-    /// T1 = (lhs.w * rhs)
-    /// T2 = (lhs.x * rhs.wzyx) * {+,-,+,-}
-    /// T3 = (lhs.y * rhs.zwxy) * {+,+,-,-}
-    /// T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
-    /// T1 + T2 + T3 + T4
-    /// ```
-    #[inline(always)]
-    pub fn quat4_product(self, rhs: Self) -> Self {
-        Self(R::quat4_product(self.0, rhs.0))
-    }
-
     /// Efficiently set the 4th (last) lane of the register to 0.0.
     ///
     /// Useful for sanitizing 3D Homogeneous vectors.
@@ -1226,6 +1211,23 @@ impl<R: LinAlg3Register> Vector<R> {
     #[inline(always)]
     pub fn prod_elements3(self) -> R::Element {
         R::prod_elements3(self.0)
+    }
+}
+
+impl<R: LinAlg4Register> Vector<R> {
+    /// Quaternion multiplication.
+    ///
+    /// Method:
+    /// ```text
+    /// T1 = (lhs.w * rhs)
+    /// T2 = (lhs.x * rhs.wzyx) * {+,-,+,-}
+    /// T3 = (lhs.y * rhs.zwxy) * {+,+,-,-}
+    /// T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
+    /// T1 + T2 + T3 + T4
+    /// ```
+    #[inline(always)]
+    pub fn quat4_product(self, rhs: Self) -> Self {
+        Self(R::quat4_product(self.0, rhs.0))
     }
 }
 
