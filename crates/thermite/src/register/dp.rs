@@ -141,13 +141,10 @@ where
 
     #[inline(always)]
     fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
-        let r = if const { I < R::Lanes::USIZE } {
-            R::broadcast::<I>(value.0)
-        } else {
-            R::broadcastv(value.1, const { I - Self::Lanes::USIZE })
-        };
-
-        Self(r, r)
+        // NOTE: using `broadcast::<I>(value)` doesn't work
+        // because the const index is propagated before the conditional
+        // check, leading to out-of-bounds errors.
+        Self::broadcastv(value, I)
     }
 
     #[inline(always)]

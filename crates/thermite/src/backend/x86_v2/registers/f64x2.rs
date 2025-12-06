@@ -397,16 +397,6 @@ impl FloatRegister for F64x2V2 {
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
-
-    #[inline(always)]
-    fn next_up(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_nextuppd_v2(value) }
-    }
-
-    #[inline(always)]
-    fn next_down(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_nextdownpd_v2(value) }
-    }
 }
 
 impl CastRegister<DoublePumpRegister<F64x2V2>> for super::F32x4V2 {
