@@ -710,32 +710,28 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
 
     #[inline(always)]
     fn sinc<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let n = x.sin_p::<P>();
-
-        let mut y = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            n * x.reciprocal_p::<P>()
-        } else {
-            n / x
-        };
-
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let x2 = x * x;
-            let x4 = x2 * x2;
-
-            let mut small_res = Vf::ONE;
-
-            // Taylor series expansion for small x
-            small_res -= x2 / Vf::splat(E::from_f64(6.0));
-            small_res += x4 / Vf::splat(E::from_f64(120.0));
-
-            let is_small = x.abs().cmp_le(Vf::FOURTH_ROOT_EPSILON);
-
-            // NOTE: Taylor series is naturally 1 at x = 0, so we can use it directly
-            y = is_small.select(small_res, y);
-        } else {
-            // Otherwise we check for zero exactly
-            y = x.cmp_eq(Vf::ZERO).select(Vf::ONE, y);
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            return x.sin_p::<P>() * x.reciprocal_p::<P>();
         }
+
+        let is_tiny = x.abs().cmp_le(Vf::FOURTH_ROOT_EPSILON);
+
+        let x2 = x * x;
+
+        // if branching, use Taylor series for tiny x without calling sine.
+        if !P::POLICY.avoid_branching && is_tiny.all() {
+            let res = x2 / Vf::splat(FloatElement::from_i64(120));
+            return x2.mul_add(res - Vf::FRAC_1_6, Vf::ONE);
+        }
+
+        // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
+        let num = is_tiny.select(x2, x.sin_p::<P>());
+        let den = is_tiny.select(Vf::splat(FloatElement::from_i64(120)), x);
+
+        // combined division, since division is expensive
+        let mut y = num / den;
+
+        y = is_tiny.select(x2.mul_add(y - Vf::FRAC_1_6, Vf::ONE), y);
 
         if P::POLICY.check_overflow {
             y = x.is_infinite().select(Vf::ZERO, y);

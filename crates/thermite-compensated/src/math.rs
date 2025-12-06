@@ -1,8 +1,8 @@
 #![allow(unused)]
 
-use num_traits::{MulAdd as _, Signed};
+use num_traits::{MulAdd, Signed};
 
-use crate::CompensatedElement;
+use crate::{CompensatedElement, consts::CompensatedLogTable};
 
 use super::{Compensated, CompensatedRegister};
 
@@ -57,7 +57,7 @@ where
             // basic Horner's method that's both compact and accurate, even without FMA
             let mut res = Self::splat(coeffs[N - 1]);
             for &c in coeffs.iter().rev().skip(1) {
-                res = res.mul_add(self, Self::splat(c));
+                res = res.mul_add(self, Vector::splat(c));
             }
             return res;
         }
@@ -71,7 +71,7 @@ where
             // basic Horner's method that's both compact and accurate, even without FMA
             let mut res = Self::splat(coeffs[0]);
             for &c in coeffs.iter().skip(1) {
-                res = res.mul_add(self, Self::splat(c));
+                res = res.mul_add(self, Vector::splat(c));
             }
             return res;
         }
@@ -157,7 +157,7 @@ where
                     * const { Smoothstep::<R::Element, N>::COEFFICIENTS }
                         .into_iter()
                         .fold(Self::ZERO, |res, c| {
-                            res.mul_add(t, Self::splat(FloatElement::from_i64(c)))
+                            res.mul_add(t, Vector::splat(FloatElement::from_i64(c)))
                         })
             }
         }
@@ -253,6 +253,8 @@ where
 
     #[inline(always)]
     fn inverse_sqrt_p<P: Policy>(self) -> Self {
+        // We don't use approximate rsqrt here,
+        // since the whole point is to get a precise result.
         self.sqrt().reciprocal_p::<P>()
     }
 
@@ -316,7 +318,25 @@ where
 
     #[inline(always)]
     fn hypot_p<P: Policy>(self, y: Self) -> Self {
-        self.mul_add(self, y * y).sqrt() // TODO: Check for overflow/underflow
+        if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            self.mul_add(self, y * y).sqrt()
+        } else {
+            let x = self.abs();
+            let y = y.abs();
+
+            let (min, max) = x.min_max(y);
+
+            let t = min / max;
+
+            let mut res = max * t.mul_add(t, Vector::ONE).sqrt();
+
+            if P::POLICY.check_overflow {
+                let inf = Vector::INFINITY;
+                res = (x.value().cmp_lt(inf) & y.value().cmp_lt(inf) & t.value().cmp_lt(inf)).select(res, x + y);
+            }
+
+            res
+        }
     }
 
     #[inline(always)]
@@ -366,12 +386,12 @@ where
 
                 // Update Cosine Term: prev_term * (-r^2) / ((2k-1)*2k)
                 let div_c = (k2 - 1) * k2;
-                term_c *= r2 / Compensated::splat(FloatElement::from_i64(div_c));
+                term_c *= r2 / Vector::splat(FloatElement::from_i64(div_c));
                 cos.accumulate_unnormalized(term_c);
 
                 // Update Sine Term: prev_term * (-r^2) / (2k*(2k+1))
                 let div_s = k2 * (k2 + 1);
-                term_s *= r2 / Compensated::splat(FloatElement::from_i64(div_s));
+                term_s *= r2 / Vector::splat(FloatElement::from_i64(div_s));
                 sin.accumulate_unnormalized(term_s);
             }
 
@@ -443,7 +463,32 @@ where
 
     #[inline(always)]
     fn sinc_p<P: Policy>(self) -> Self {
-        self.sin_p::<P>() / self
+        // Use non-compensated 4th root epsilon for tiny check, since
+        // the Taylor series is actually very good for very small x.
+        let is_tiny = self.value().abs().cmp_lt(Vector::FOURTH_ROOT_EPSILON);
+
+        let x2 = self * self;
+
+        // if branching, use Taylor series for tiny x without calling sine.
+        if !P::POLICY.avoid_branching && is_tiny.all() {
+            let res = x2 / Vector::splat(FloatElement::from_i64(120));
+            return x2.mul_add(res - Self::FRAC_1_6, Self::ONE);
+        }
+
+        // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
+        let num = is_tiny.select(x2, self.sin_p::<P>());
+        let den = is_tiny.select(Self::splat(FloatElement::from_i64(120)), self);
+
+        // combined division, since division is expensive
+        let mut y = num / den;
+
+        y = is_tiny.select(x2.mul_add(y - Self::FRAC_1_6, Self::ONE), y);
+
+        if P::POLICY.check_overflow {
+            y = self.value().is_infinite().select(Self::ZERO, y);
+        }
+
+        y
     }
 
     #[inline(always)]
@@ -552,7 +597,7 @@ where
                 term *= z2;
 
                 // NOTE: Doesn't need explicit normalization later, due to sum being used
-                sum.accumulate_unnormalized(term / Compensated::splat(FloatElement::from_i64(div as i64)));
+                sum.accumulate_unnormalized(term / Vector::splat(FloatElement::from_i64(div as i64)));
             }
 
             if prev.cmp_eq(sum).all() {
@@ -718,14 +763,18 @@ where
             2 => self.log2_p::<P>(),
             10 => self.log10_p::<P>(),
             n if n <= 32 => {
-                todo!("LOG_TABLE")
+                // Use precomputed 1/ln(n) table for small integer bases
+                let frac_1_ln_n: (R::Element, R::Element) =
+                    <R::Element as CompensatedLogTable<R::Element>>::LOG_TABLE[n - 3];
+
+                self.ln_p::<P>() * Self::from_parts(Vector::splat(frac_1_ln_n.0), Vector::splat(frac_1_ln_n.1))
             }
-            _ => self.ln_p::<P>() / Self::splat(FloatElement::from_i64(N as i64)).ln_p::<P>(),
+            _ => self.ln_p::<P>() / Vector::splat(FloatElement::from_i64(N as i64)).ln_p::<P>(),
         }
     }
 
     fn ln1m_expnx_p<P: Policy>(self) -> Self {
-        todo!()
+        self.ln1m_expnx_ext_p::<P>(self.ln_p::<P>())
     }
 
     fn ln1m_expnx_ext_p<P: Policy>(self, lnx: Self) -> Self {
@@ -795,7 +844,7 @@ where
                     let m_i = m as i64;
                     let den_i = (m_i + 1) * (2 * m_i + 1);
 
-                    c_k.accumulate_unnormalized(num / Compensated::splat(FloatElement::from_i64(den_i)));
+                    c_k.accumulate_unnormalized(num / Vector::splat(FloatElement::from_i64(den_i)));
                 }
 
                 coeffs[k] = c_k.normalize();
@@ -810,7 +859,7 @@ where
                     error: Vector::splat(c_k.error.extract::<0>()),
                 };
 
-                sum.accumulate_unnormalized((c_kv * w_pow) / Compensated::splat(FloatElement::from_i64(k_term_den)));
+                sum.accumulate_unnormalized((c_kv * w_pow) / Vector::splat(FloatElement::from_i64(k_term_den)));
 
                 // Check for convergence
                 if prev.cmp_eq(sum).all() {
@@ -869,7 +918,7 @@ where
 
             // Halley step: u / (1 + x*u)
             // Note: f''/f' = -2x, so the Halley term simplifies to this.
-            let step = u / x.mul_add(u, Self::ONE);
+            let step = u / x.mul_add(u, Vector::ONE);
 
             if (skip | step.value().abs().cmp_le(tolerance)).all() {
                 // println!("erf_inv converged in Halley in {} iterations", i);
@@ -971,7 +1020,7 @@ where
                     let num = FloatElement::from_i64(k2_m1);
                     let den = FloatElement::from_i64(k_f * k2_p1);
 
-                    term_s *= x2 * (Compensated::splat(num) / Compensated::splat(den));
+                    term_s *= x2 * (Compensated::splat(num) / Vector::splat(den));
                     sum_s.accumulate_unnormalized(term_s);
                 }
 
@@ -996,12 +1045,8 @@ where
                     // Lentz steps: D = b + a*D, C = b + a/C
                     d = a.mul_add(d, b); // D = b + a*D
 
-                    d = d.max(tiny); // if D<=0 -> tiny
-
-                    c = b + a / c;
-                    c = c.max(tiny); // if C<=0 -> tiny
-
-                    d = d.reciprocal_p::<P>();
+                    c = b + a / c.max(tiny); // if C<=0 -> tiny
+                    d = d.max(tiny).reciprocal_p::<P>(); // if D<=0 -> tiny
 
                     f *= c * d;
                 }
@@ -1029,7 +1074,7 @@ where
                     let den = FloatElement::from_i64(k_f * k2_p1);
 
                     // Compute ratio.
-                    let s_ratio = x2 * (Compensated::splat(num) / Compensated::splat(den));
+                    let s_ratio = x2 * (Compensated::splat(num) / Vector::splat(den));
 
                     term_s *= s_ratio; // overflow doesn't matter if we don't use this
 
@@ -1047,12 +1092,8 @@ where
                     // Lentz steps: D = b + a*D, C = b + a/C
                     d = a.mul_add(d, b); // D = b + a*D
 
-                    d = d.max(tiny); // if D<=0 -> tiny
-
-                    c = b + a / c;
-                    c = c.max(tiny); // if C<=0 -> tiny
-
-                    d = d.reciprocal_p::<P>();
+                    c = b + a / c.max(tiny); // if C<=0 -> tiny
+                    d = d.max(tiny).reciprocal_p::<P>(); // if D<=0 -> tiny
 
                     f = use_series.select(f, f * c * d);
                 }
@@ -1162,7 +1203,7 @@ where
             let prev_sum = sum;
 
             for i in i..next_i {
-                term *= r / Compensated::splat(FloatElement::from_i64(i as i64));
+                term *= r / Vector::splat(FloatElement::from_i64(i as i64));
                 sum.accumulate_unnormalized(term);
             }
 
@@ -1293,7 +1334,7 @@ where
                 let div = (j * 2) + 1; // 3, 5, 7...
 
                 term *= z_sq;
-                sum.accumulate_unnormalized(term / Compensated::splat(FloatElement::from_i64(div as i64)));
+                sum.accumulate_unnormalized(term / Vector::splat(FloatElement::from_i64(div as i64)));
             }
 
             if prev_sum.cmp_eq(sum).all() {

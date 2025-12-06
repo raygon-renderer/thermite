@@ -214,6 +214,23 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 
     #[inline(always)]
+    pub fn min_max(self, other: Self) -> (Self, Self) {
+        let mask = self.value().cmp_lt(other.value());
+
+        let min = Compensated {
+            value: mask.select(self.value, other.value),
+            error: mask.select(self.error, other.error),
+        };
+
+        let max = Compensated {
+            value: mask.select(other.value, self.value),
+            error: mask.select(other.error, self.error),
+        };
+
+        (min, max)
+    }
+
+    #[inline(always)]
     pub fn clamp(self, min: Self, max: Self) -> Self {
         let x = self.value();
         let min_value = min.value();
@@ -399,16 +416,19 @@ impl<R: CompensatedRegister> Add<Vector<R>> for Compensated<R> {
 
     #[inline(always)]
     fn add(self, rhs: Vector<R>) -> Self {
-        self + Compensated::new(rhs)
+        let (s, e) = two_sum(self.value, rhs);
+        Self::renormalized(s, e + self.error)
     }
 }
 
 impl<R: CompensatedRegister> Sub<Vector<R>> for Compensated<R> {
     type Output = Self;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn sub(self, rhs: Vector<R>) -> Self {
-        self - Compensated::new(rhs)
+        let (s, e) = two_diff(self.value, rhs);
+        Self::renormalized(s, e + self.error)
     }
 }
 
@@ -429,7 +449,15 @@ impl<R: CompensatedRegister> Div<Vector<R>> for Compensated<R> {
 
     #[inline(always)]
     fn div(self, rhs: Vector<R>) -> Self {
-        self / Compensated::new(rhs)
+        // same as regular division, but rhs has no error term
+        let q1 = self.value / rhs;
+
+        let (p_hi, p_lo) = two_prod(q1, rhs);
+
+        // calculate the remainder r
+        let r = (self.value - p_hi) - p_lo + self.error;
+
+        Self::renormalized(q1, r / rhs)
     }
 }
 
@@ -438,29 +466,13 @@ impl<R: CompensatedRegister> Rem<Vector<R>> for Compensated<R> {
 
     #[inline(always)]
     fn rem(self, rhs: Vector<R>) -> Self {
-        self % Compensated::new(rhs)
+        let q = self / rhs;
+        let n = Compensated::new(-q.value.trunc());
+        MulAdd::mul_add(n, rhs, self)
     }
 }
 
 impl<R: CompensatedRegister> Compensated<R> {
-    #[inline(always)]
-    pub fn mul_add(self, b: Self, c: Self) -> Self {
-        let (p, e_prod_base) = two_prod(self.value, b.value);
-        let (s, e_sum) = two_sum(p, c.value);
-
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(b.value, self.value.mul_add(b.error, e_prod_base))
-        } else {
-            // 2 muls, 2 adds
-            let cross1 = self.value * b.error;
-            let cross2 = b.value * self.error;
-            e_prod_base + cross1 + cross2
-        };
-
-        Self::renormalized(s, e_prod + e_sum + c.error)
-    }
-
     #[inline(always)]
     pub fn mul_sub(self, b: Self, c: Self) -> Self {
         let (p, e_prod_base) = two_prod(self.value, b.value);
@@ -488,7 +500,83 @@ impl<R: CompensatedRegister> MulAdd for Compensated<R> {
 
     #[inline(always)]
     fn mul_add(self, b: Self, c: Self) -> Self {
-        self.mul_add(b, c)
+        let (p, e_prod_base) = two_prod(self.value, b.value);
+        let (s, e_sum) = two_sum(p, c.value);
+
+        let e_prod = if R::HAS_TRUE_FMA {
+            // 2 fmas
+            self.error.mul_add(b.value, self.value.mul_add(b.error, e_prod_base))
+        } else {
+            // 2 muls, 2 adds
+            let cross1 = self.value * b.error;
+            let cross2 = b.value * self.error;
+            e_prod_base + cross1 + cross2
+        };
+
+        Self::renormalized(s, e_prod + e_sum + c.error)
+    }
+}
+
+impl<R: CompensatedRegister> MulAdd<Vector<R>> for Compensated<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul_add(self, b: Vector<R>, c: Self) -> Self {
+        let (p, e_prod_base) = two_prod(self.value, b);
+        let (s, e_sum) = two_sum(p, c.value);
+
+        let e_prod = if R::HAS_TRUE_FMA {
+            // 2 fmas
+            self.error.mul_add(b, e_prod_base)
+        } else {
+            // 1 mul, 1 add
+            e_prod_base + (self.error * b)
+        };
+
+        Self::renormalized(s, e_prod + e_sum + c.error)
+    }
+}
+
+impl<R: CompensatedRegister> MulAdd<Vector<R>, Vector<R>> for Compensated<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul_add(self, a: Vector<R>, b: Vector<R>) -> Self {
+        let (p, e_prod_base) = two_prod(self.value, a);
+        let (s, e_sum) = two_sum(p, b);
+
+        let e_prod = if R::HAS_TRUE_FMA {
+            // 1 fma
+            self.error.mul_add(a, e_prod_base)
+        } else {
+            // 1 mul, 1 add
+            e_prod_base + (self.error * a)
+        };
+
+        Self::renormalized(s, e_prod + e_sum)
+    }
+}
+
+impl<R: CompensatedRegister> MulAdd<Self, Vector<R>> for Compensated<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul_add(self, a: Self, b: Vector<R>) -> Self::Output {
+        let (p, e_prod_base) = two_prod(self.value, a.value);
+        let (s, e_sum) = two_sum(p, b);
+
+        let e_prod = if R::HAS_TRUE_FMA {
+            // 2 fmas
+            self.error.mul_add(a.value, self.value.mul_add(a.error, e_prod_base))
+        } else {
+            // 2 muls, 2 adds
+            let cross1 = self.value * a.error;
+            let cross2 = a.value * self.error;
+
+            e_prod_base + cross1 + cross2
+        };
+
+        Self::renormalized(s, e_prod + e_sum)
     }
 }
 
@@ -555,9 +643,12 @@ impl<R: CompensatedRegister> RemAssign<Vector<R>> for Compensated<R> {
     }
 }
 
-impl<R: CompensatedRegister> MulAddAssign for Compensated<R> {
+impl<R: CompensatedRegister, A, B> MulAddAssign<A, B> for Compensated<R>
+where
+    Self: MulAdd<A, B, Output = Self>,
+{
     #[inline(always)]
-    fn mul_add_assign(&mut self, a: Self, b: Self) {
+    fn mul_add_assign(&mut self, a: A, b: B) {
         *self = self.mul_add(a, b);
     }
 }
