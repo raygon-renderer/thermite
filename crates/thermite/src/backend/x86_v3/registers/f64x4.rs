@@ -7,7 +7,7 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
+        BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
         dp::DoublePumpRegister, empty_reg, reg,
     },
@@ -449,6 +449,8 @@ impl FloatRegister for F64x4V3 {
     }
 }
 
+impl LinAlg4Register for F64x4V3 {}
+
 impl LinAlg3Register for F64x4V3 {
     #[inline(always)]
     fn dot3(lhs: Storage<Self>, rhs: Storage<Self>) -> f64 {
@@ -462,23 +464,23 @@ impl LinAlg3Register for F64x4V3 {
         }
     }
 
-    #[inline(always)]
-    fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        // Borrowed from glam
-        unsafe {
-            // x  <-  a.y*b.z - a.z*b.y
-            // y  <-  a.z*b.x - a.x*b.z
-            // z  <-  a.x*b.y - a.y*b.x
-            // We can save a shuffle by grouping it in this wacky order:
-            // (self.zxy() * rhs - self * rhs.zxy()).zxy()
-            let lhszxy = arch::_mm256_permute4x64_pd(lhs, 0b11_01_00_10);
-            let rhszxy = arch::_mm256_permute4x64_pd(rhs, 0b11_01_00_10);
-            let lhszxy_rhs = arch::_mm256_mul_pd(lhszxy, rhs);
-            let rhszxy_lhs = arch::_mm256_mul_pd(rhszxy, lhs);
-            let sub = arch::_mm256_sub_pd(lhszxy_rhs, rhszxy_lhs);
-            arch::_mm256_permute4x64_pd(sub, 0b11_01_00_10)
-        }
-    }
+    // #[inline(always)]
+    // fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    //     // Borrowed from glam
+    //     unsafe {
+    //         // x  <-  a.y*b.z - a.z*b.y
+    //         // y  <-  a.z*b.x - a.x*b.z
+    //         // z  <-  a.x*b.y - a.y*b.x
+    //         // We can save a shuffle by grouping it in this wacky order:
+    //         // (self.zxy() * rhs - self * rhs.zxy()).zxy()
+    //         let lhszxy = arch::_mm256_permute4x64_pd(lhs, 0b11_01_00_10);
+    //         let rhszxy = arch::_mm256_permute4x64_pd(rhs, 0b11_01_00_10);
+    //         let lhszxy_rhs = arch::_mm256_mul_pd(lhszxy, rhs);
+    //         let rhszxy_lhs = arch::_mm256_mul_pd(rhszxy, lhs);
+    //         let sub = arch::_mm256_sub_pd(lhszxy_rhs, rhszxy_lhs);
+    //         arch::_mm256_permute4x64_pd(sub, 0b11_01_00_10)
+    //     }
+    // }
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {

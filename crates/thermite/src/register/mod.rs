@@ -1187,33 +1187,32 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
     }
 
     #[inline(always)]
-    fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        let lhszxy = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
-        let rhszxy = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
+    fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        if DOP {
+            // More accurate cross product using the "accurate difference of sums" method, but
+            // requires fused multiply-add/subtract operations for best accuracy.
+            let a = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
+            let b = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
+            let c = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
+            let d = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
 
-        let lhszxy_rhs = Self::mul(lhszxy, rhs);
-        let rhszxy_lhs = Self::mul(rhszxy, lhs);
+            let cd = Self::mul(c, d);
 
-        let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
+            let err = Self::nmul_add(c, d, cd);
+            let dop = Self::mul_sub(a, b, cd);
 
-        Self::permutev(sub, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW)
-    }
+            Self::add(dop, err)
+        } else {
+            let lhszxy = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
+            let rhszxy = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
 
-    /// More accurate cross product using the "accurate difference of sums" method, but
-    /// requires fused multiply-add/subtract operations for best accuracy.
-    #[inline(always)]
-    fn cross3_dop(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        let a = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
-        let b = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
-        let c = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
-        let d = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
+            let lhszxy_rhs = Self::mul(lhszxy, rhs);
+            let rhszxy_lhs = Self::mul(rhszxy, lhs);
 
-        let cd = Self::mul(c, d);
+            let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
 
-        let err = Self::nmul_add(c, d, cd);
-        let dop = Self::mul_sub(a, b, cd);
-
-        Self::add(dop, err)
+            Self::permutev(sub, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW)
+        }
     }
 
     #[inline(always)]
@@ -1242,7 +1241,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
 
 /// Extensions to the `FloatRegister` trait for 4D linear algebra operations,
 /// including quaternion operations.
-pub trait LinAlg4Register: FloatRegister<Lanes = typenum::U4> + SwizzleRegister {
+pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// Quaternion multiplication.
     ///
     /// Corresponds to `lhs * rhs`.
@@ -1292,6 +1291,50 @@ pub trait LinAlg4Register: FloatRegister<Lanes = typenum::U4> + SwizzleRegister 
         let sum34 = Self::mul_adde(z, rhs_z_signed, Self::mul(y, rhs_y_signed));
 
         Self::add(sum12, sum34)
+    }
+
+    #[inline(always)]
+    fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
+        if const { Self::HAS_PERMUTEV } {
+            // --- Fast SIMD Path (Giesen) ---
+            // Formula: v + 2w(q x v) + 2(q x (q x v))
+
+            let w = Self::broadcast::<3>(q);
+            let q_xyz = q;
+
+            // t = 2 * cross(q, v)
+            let t = Self::cross3::<DOP>(q_xyz, v);
+            let t = Self::add(t, t); // multiply by 2
+
+            // result = v + w*t + cross(q, t)
+            let w_t = Self::mul(w, t);
+            let cross_q_t = Self::cross3::<DOP>(q_xyz, t);
+
+            Self::add(v, Self::add(w_t, cross_q_t))
+        } else {
+            // --- Scalar/Fallback Path (Textbook) ---
+            // Formula: 2(q.v)q + (w^2 - q.q)v + 2w(q x v)
+            //
+            // When shuffles are expensive (emulated), Cross Products are expensive.
+            // This variant only uses 1 Cross Product, substituting the other with
+            // 2 Dot Products (which are cheap purely vertical/scalar math).
+
+            let u = q; // Vector part
+            let s = Self::broadcast::<3>(q);
+
+            // Term 1: 2 * dot(u, v) * u
+            let dot_uv = Self::splat(Self::dot3(u, v));
+            let t1 = Self::mul(u, Self::add(dot_uv, dot_uv));
+
+            // Term 2: v * (s*s - dot(u, u))
+            let t2 = Self::mul(v, Self::sub(Self::mul(s, s), Self::splat(Self::dot3(u, u))));
+
+            // Term 3: 2s * cross(u, v)
+            let t3 = Self::mul(Self::add(s, s), Self::cross3::<DOP>(u, v));
+
+            // Summation: (Term 1 + Term 2) + Term 3
+            Self::add(Self::add(t1, t2), t3)
+        }
     }
 }
 

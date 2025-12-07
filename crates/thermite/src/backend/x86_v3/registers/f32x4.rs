@@ -8,7 +8,7 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
+        BitsRegister, BitshiftRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
         dp::DoublePumpRegister, empty_reg, reg,
     },
@@ -440,6 +440,8 @@ impl FloatRegister for F32x4V3 {
     }
 }
 
+impl LinAlg4Register for F32x4V3 {}
+
 // Just use the SSE4.1 implementation
 impl LinAlg3Register for F32x4V3 {
     #[inline(always)]
@@ -447,10 +449,10 @@ impl LinAlg3Register for F32x4V3 {
         unsafe { arch::dot3_v1(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::cross3_v1(lhs, rhs) }
-    }
+    // #[inline(always)]
+    // fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    //     unsafe { arch::cross3_v1(lhs, rhs) }
+    // }
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {

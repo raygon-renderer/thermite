@@ -1193,9 +1193,17 @@ impl<R: LinAlg3Register> Vector<R> {
     ///
     /// This is more efficient than a raw cross product, as there is no need to
     /// zero out the last lane of the register.
+    ///
+    /// The `DOP` generic parameter indicates whether to use the
+    /// "Difference of Products" method for computing the cross product,
+    /// which can be more accurate in some cases, but _requires_
+    /// hardware fused multiply-add instructions to be efficient.
+    ///
+    /// If you want the best performance, set `DOP` to `false`.\
+    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
     #[inline(always)]
-    pub fn cross3(self, rhs: Self) -> Self {
-        Self(R::cross3(self.0, rhs.0))
+    pub fn cross3<const DOP: bool>(self, rhs: Self) -> Self {
+        Self(R::cross3::<DOP>(self.0, rhs.0))
     }
 
     /// Efficiently set the 4th (last) lane of the register to 0.0.
@@ -1257,6 +1265,27 @@ impl<R: LinAlg4Register> Vector<R> {
     #[inline(always)]
     pub fn quat4_product(self, rhs: Self) -> Self {
         Self(R::quat4_product(self.0, rhs.0))
+    }
+
+    /// Quaternion-vector multiplication.
+    ///
+    /// This is optimized to work best on various SIMD architectures. On
+    /// architectures with permute/shuffle instructions, it uses the
+    /// Double-Cross (Giesen) method. On architectures without such instructions,
+    /// it falls back to the standard method of two dot products
+    /// and a single cross product. This is because cross products require
+    /// several shuffles/permutations to compute efficiently with SIMD.
+    ///
+    /// The `DOP` generic parameter indicates whether to use the
+    /// "Difference of Products" method for computing the cross product(s),
+    /// which can be more accurate in some cases, but _requires_
+    /// hardware fused multiply-add instructions to be efficient.
+    ///
+    /// If you want the best performance, set `DOP` to `false`.\
+    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
+    #[inline(always)]
+    pub fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self {
+        Self(R::quat4_vec3_product::<DOP>(self.0, vec.0))
     }
 }
 

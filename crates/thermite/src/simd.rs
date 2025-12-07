@@ -10,8 +10,8 @@ use crate::{
     Vector,
     register::{
         BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Interoperable, Lanes,
-        MaskRegister, NarrowRegister, Register, SignedIntegerRegister, SignedRegister, UnsignedIntegerRegister,
-        WidenRegister,
+        LinAlg4Register, MaskRegister, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
+        UnsignedIntegerRegister, WidenRegister,
     },
 };
 
@@ -55,7 +55,7 @@ pub trait Simd: NativeSimd {
 
     // 128/32-bit SIMD types
     type f32x4: Interoperable<Self::i32x4, Self::u32x4, Lanes = U4, Element = f32, USize = Self::u32x4, ISize = Self::i32x4>
-        + FloatRegister<Bits = Self::u32x4, Signed = Self::i32x4>
+        + FloatRegister<Bits = Self::u32x4, Signed = Self::i32x4> + LinAlg4Register
         + CastRegister<Self::f64x4> + WidenRegister<Self::f32x2> + NarrowRegister<Self::f32x2>;
     type i32x4: Interoperable<Self::f32x4, Self::u32x4, Lanes = U4, Element = i32, USize = Self::u32x4, ISize = Self::i32x4>
         + SignedIntegerRegister
@@ -88,7 +88,7 @@ pub trait Simd: NativeSimd {
 
     // 256/64-bit SIMD types
     type f64x4: Interoperable<Self::i64x4, Self::u64x4, Lanes = U4, Element = f64, USize = Self::u64x4, ISize = Self::i64x4>
-        + FloatRegister<Bits = Self::u64x4, Signed = Self::i64x4>
+        + FloatRegister<Bits = Self::u64x4, Signed = Self::i64x4> + LinAlg4Register
         + CastRegister<Self::f32x4> + WidenRegister<Self::f64x2> + NarrowRegister<Self::f64x2>;
     type i64x4: Interoperable<Self::f64x4, Self::u64x4, Lanes = U4, Element = i64, USize = Self::u64x4, ISize = Self::i64x4>
         + SignedIntegerRegister
