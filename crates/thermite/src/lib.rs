@@ -69,6 +69,9 @@ macro_rules! MM_SHUFFLE_R {
 }
 
 #[macro_use]
+mod internal_macros;
+
+#[macro_use]
 pub mod simd;
 pub mod isa;
 pub mod vector;

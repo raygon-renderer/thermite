@@ -83,22 +83,6 @@ pub unsafe fn dot3_v1(lhs: __m128, rhs: __m128) -> f32 {
     _mm_cvtss_f32(_mm_add_ss(x2y2_0_0_0, z2_0_0_0))
 }
 
-/// Borrowed from glam
-#[inline(always)]
-pub unsafe fn cross3_v1(lhs: __m128, rhs: __m128) -> __m128 {
-    // x  <-  a.y*b.z - a.z*b.y
-    // y  <-  a.z*b.x - a.x*b.z
-    // z  <-  a.x*b.y - a.y*b.x
-    // We can save a shuffle by grouping it in this wacky order:
-    // (self.zxy() * rhs - self * rhs.zxy()).zxy()
-    let lhszxy = _mm_shuffle_ps(lhs, lhs, 0b11_01_00_10);
-    let rhszxy = _mm_shuffle_ps(rhs, rhs, 0b11_01_00_10);
-    let lhszxy_rhs = _mm_mul_ps(lhszxy, rhs);
-    let rhszxy_lhs = _mm_mul_ps(rhszxy, lhs);
-    let sub = _mm_sub_ps(lhszxy_rhs, rhszxy_lhs);
-    _mm_shuffle_ps(sub, sub, 0b11_01_00_10)
-}
-
 // // https://stackoverflow.com/a/76436268/2083075
 // #[inline(always)]
 // pub unsafe fn _mm_mullo_epi64x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {

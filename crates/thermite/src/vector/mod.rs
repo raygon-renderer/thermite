@@ -1303,6 +1303,11 @@ impl<R: LinAlg4Register> Vector<R> {
     ///
     /// If the matrix is **NOT** in column-major order, it will need to be
     /// transposed before the actual multiplication, which will incur a performance penalty.
+    ///
+    ///
+    /// NOTE: If you want to multiply 4 vectors by the same **column-major** matrix, consider using
+    /// [`Vector::mat4_product`] instead. It is conceptually the same as multiplying each
+    /// vector individually, but can take advantage of SIMD optimizations better.
     #[inline(always)]
     pub fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
         Self(R::mat4_vec4_product::<COLUMN_MAJOR>(
@@ -1319,6 +1324,19 @@ impl<R: LinAlg4Register> Vector<R> {
     /// and the order of the multiplication will become `rhs * lhs` to account for that.
     /// This is mathematically equivalent to transposing both matrices, performing
     /// the multiplication, and then transposing the result, but is obviously more efficient.
+    ///
+    /// NOTE: When operating in column-major mode (`COLUMN_MAJOR = true`), the multiplication
+    /// is effectively:
+    /// ```text
+    /// C0 = mat4_vec4_product(lhs, R0)
+    /// C1 = mat4_vec4_product(lhs, R1)
+    /// C2 = mat4_vec4_product(lhs, R2)
+    /// C3 = mat4_vec4_product(lhs, R3)
+    /// ```
+    ///
+    /// and is therefore, in **column-major order**, useful for transforming 4 vectors
+    /// by the same matrix, but capable of being optimized better than doing
+    /// 4 individual matrix-vector multiplications.
     #[inline(always)]
     pub fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
@@ -1330,27 +1348,32 @@ impl<R: LinAlg4Register> Vector<R> {
         .map(Vector)
     }
 
-    /// 4x4 Matrix-Matrix multiplication with wide registers, if available.
+    /// In-place 4x4 Matrix inversion.
     ///
-    /// This uses double-width registers to perform the multiplication more efficiently,
-    /// if the underlying architecture supports it. Otherwise it falls back to the regular
-    /// matrix multiplication method.
-    ///
-    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrices
-    /// are stored in column-major order (`true`) or row-major order (`false`),
-    /// same as [`Vector::mat4_product`].
+    /// Returns `true` if the matrix was successfully inverted,
+    /// or `false` if the matrix is singular and could not be inverted.
     #[inline(always)]
-    pub fn mat4_product_wide<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4]
-    where
-        R::DoubleRegister: FloatRegister<Element = R::Element, HalfRegister = R>,
-    {
+    pub fn mat4_inverse_inplace(m: &mut [Self; 4]) -> bool {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_product_wide::<COLUMN_MAJOR>(
-            unsafe { core::mem::transmute(lhs) }, //
-            unsafe { core::mem::transmute(rhs) },
-        )
-        .map(Vector)
+        R::mat4_inverse(unsafe { core::mem::transmute(m) })
+    }
+
+    /// 4x4 Matrix inversion.
+    ///
+    /// Returns `Some(inverted_matrix)` if the matrix was successfully inverted,
+    /// or `None` if the matrix is singular and could not be inverted.
+    ///
+    /// Consider using [`Vector::mat4_inverse_inplace`] if you want to avoid
+    /// an extra copy.
+    #[inline(always)]
+    pub fn mat4_inverse(m: &[Self; 4]) -> Option<[Self; 4]> {
+        let mut mat = *m;
+        if Self::mat4_inverse_inplace(&mut mat) {
+            Some(mat)
+        } else {
+            None
+        }
     }
 }
 

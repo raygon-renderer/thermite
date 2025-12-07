@@ -442,7 +442,31 @@ impl FloatRegister for F32x4V3 {
     }
 }
 
-impl LinAlg4Register for F32x4V3 {}
+macro_rules! s {
+    ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        unsafe { arch::_mm_permute_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v) }
+    };
+    ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        unsafe { arch::_mm_shuffle_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v1, $v2) }
+    };
+}
+
+impl LinAlg4Register for F32x4V3 {
+    #[inline(always)]
+    fn mat4_product<const COLUMN_MAJOR: bool>(
+        lhs: &[Storage<Self>; 4],
+        rhs: &[Storage<Self>; 4],
+    ) -> [Storage<Self>; 4] {
+        Self::mat4_product_wide::<COLUMN_MAJOR>(lhs, rhs)
+    }
+
+    #[inline(always)]
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+        // dedicated x86-v3 implementation that takes
+        // advantage of `_mm_permute_ps`/`_mm_shuffle_ps` directly.
+        impl_mat4_inverse!(m, s)
+    }
+}
 
 // Just use the SSE4.1 implementation
 impl LinAlg3Register for F32x4V3 {
@@ -450,11 +474,6 @@ impl LinAlg3Register for F32x4V3 {
     fn dot3(lhs: Storage<Self>, rhs: Storage<Self>) -> f32 {
         unsafe { arch::dot3_v1(lhs, rhs) }
     }
-
-    // #[inline(always)]
-    // fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-    //     unsafe { arch::cross3_v1(lhs, rhs) }
-    // }
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {

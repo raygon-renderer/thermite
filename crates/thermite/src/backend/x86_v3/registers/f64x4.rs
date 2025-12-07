@@ -165,7 +165,7 @@ impl ShuffleRegister for F64x4V3 {
 impl PermuteRegister for F64x4V3 {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_permute_pd(value, IMM8) }
+        unsafe { arch::_mm256_permute4x64_pd(value, IMM8) }
     }
 }
 
@@ -451,7 +451,24 @@ impl FloatRegister for F64x4V3 {
     }
 }
 
-impl LinAlg4Register for F64x4V3 {}
+macro_rules! s {
+    ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v) }
+    };
+    ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        Self::swizzle($v1, $v2, const { GenericArray::from_array([$a, $b, $c, $d]) })
+    };
+}
+
+impl LinAlg4Register for F64x4V3 {
+    #[inline(always)]
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+        // dedicated x86-v3 implementation that takes
+        // advantage of `_mm256_permute4x64_pd`, though
+        // generic swizzling is still used for some operations.
+        impl_mat4_inverse!(m, s)
+    }
+}
 
 impl LinAlg3Register for F64x4V3 {
     #[inline(always)]
@@ -465,24 +482,6 @@ impl LinAlg3Register for F64x4V3 {
             arch::_mm256_cvtsd_f64(arch::_mm256_add_pd(x2y2_0_0_0, z2_0_0_0))
         }
     }
-
-    // #[inline(always)]
-    // fn cross3(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-    //     // Borrowed from glam
-    //     unsafe {
-    //         // x  <-  a.y*b.z - a.z*b.y
-    //         // y  <-  a.z*b.x - a.x*b.z
-    //         // z  <-  a.x*b.y - a.y*b.x
-    //         // We can save a shuffle by grouping it in this wacky order:
-    //         // (self.zxy() * rhs - self * rhs.zxy()).zxy()
-    //         let lhszxy = arch::_mm256_permute4x64_pd(lhs, 0b11_01_00_10);
-    //         let rhszxy = arch::_mm256_permute4x64_pd(rhs, 0b11_01_00_10);
-    //         let lhszxy_rhs = arch::_mm256_mul_pd(lhszxy, rhs);
-    //         let rhszxy_lhs = arch::_mm256_mul_pd(rhszxy, lhs);
-    //         let sub = arch::_mm256_sub_pd(lhszxy_rhs, rhszxy_lhs);
-    //         arch::_mm256_permute4x64_pd(sub, 0b11_01_00_10)
-    //     }
-    // }
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {

@@ -7,9 +7,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        dp::DoublePumpRegister,
+        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, dp::DoublePumpRegister,
     },
 };
 
@@ -416,5 +416,41 @@ impl CastRegister<F32x4Wasm> for DoublePumpRegister<super::F64x2Wasm> {
         let hi = arch::f64x2_promote_low_f32x4(arch::i32x4_shuffle::<2, 3, 2, 3>(value, value));
 
         DoublePumpRegister(lo, hi)
+    }
+}
+
+impl LinAlg3Register for F32x4Wasm {
+    fn min_element3(value: Storage<Self>) -> Self::Element {
+        todo!()
+    }
+
+    fn max_element3(value: Storage<Self>) -> Self::Element {
+        todo!()
+    }
+
+    fn sum_elements3(value: Storage<Self>) -> Self::Element {
+        todo!()
+    }
+
+    fn prod_elements3(value: Storage<Self>) -> Self::Element {
+        todo!()
+    }
+}
+
+macro_rules! s {
+    ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        arch::i32x4_shuffle::<$a, $b, $c, $d>($v, $v)
+    };
+    ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        arch::i32x4_shuffle::<$a, $b, $c, $d>($v1, $v2)
+    };
+}
+
+impl LinAlg4Register for F32x4Wasm {
+    #[inline(always)]
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+        // dedicated WASM implementation that takes
+        // advantage of `i32x4_shuffle` directly.
+        impl_mat4_inverse!(m, s)
     }
 }

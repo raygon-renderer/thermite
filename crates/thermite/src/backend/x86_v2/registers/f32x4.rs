@@ -448,7 +448,23 @@ impl FloatRegister for F32x4V2 {
     }
 }
 
-impl LinAlg4Register for F32x4V2 {}
+macro_rules! s {
+    ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        unsafe { arch::_mm_shuffle_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v, $v) }
+    };
+    ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
+        unsafe { arch::_mm_shuffle_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v1, $v2) }
+    };
+}
+
+impl LinAlg4Register for F32x4V2 {
+    #[inline(always)]
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+        // dedicated x86-v2/v1 implementation that takes
+        // advantage of `_mm_shuffle_ps` directly.
+        impl_mat4_inverse!(m, s)
+    }
+}
 
 impl LinAlg3Register for F32x4V2 {
     #[inline(always)]
