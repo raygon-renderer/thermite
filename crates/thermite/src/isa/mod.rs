@@ -41,15 +41,14 @@ pub enum InstructionSet {
     WASM64,
 }
 
-// WASM32 may not have atomics to support the detector
-#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
-mod detector;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_detector;
 
 impl InstructionSet {
     /// Detect the current instruction set at runtime. This result is cached for future calls.
-    #[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     pub fn get() -> InstructionSet {
-        static DETECTOR: detector::DetectInstructionSet = detector::DetectInstructionSet::new();
+        static DETECTOR: x86_detector::DetectInstructionSet = x86_detector::DetectInstructionSet::new();
 
         DETECTOR.get_or_init()
     }
