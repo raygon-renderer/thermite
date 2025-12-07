@@ -1287,6 +1287,71 @@ impl<R: LinAlg4Register> Vector<R> {
     pub fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self {
         Self(R::quat4_vec3_product::<DOP>(self.0, vec.0))
     }
+
+    /// 4x4 Matrix Transpose
+    #[inline(always)]
+    pub fn mat4_transpose(m: &[Self; 4]) -> [Self; 4] {
+        // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+        // because Vector<R> is repr(transparent) around Storage<R>
+        R::mat4_transpose(unsafe { core::mem::transmute(m) }).map(Vector)
+    }
+
+    /// 4x4 Matrix-Vector multiplication, assuming `self` as the vector.
+    ///
+    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrix
+    /// is stored in column-major order (`true`) or row-major order (`false`).
+    ///
+    /// If the matrix is **NOT** in column-major order, it will need to be
+    /// transposed before the actual multiplication, which will incur a performance penalty.
+    #[inline(always)]
+    pub fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
+        Self(R::mat4_vec4_product::<COLUMN_MAJOR>(
+            // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+            // because Vector<R> is repr(transparent) around Storage<R>
+            unsafe { core::mem::transmute(m) },
+            self.0,
+        ))
+    }
+
+    /// 4x4 Matrix-Matrix multiplication.
+    ///
+    /// If `COLUMN_MAJOR` is `false`, the matrices are assumed to be in row-major order,
+    /// and the order of the multiplication will become `rhs * lhs` to account for that.
+    /// This is mathematically equivalent to transposing both matrices, performing
+    /// the multiplication, and then transposing the result, but is obviously more efficient.
+    #[inline(always)]
+    pub fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
+        // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+        // because Vector<R> is repr(transparent) around Storage<R>
+        R::mat4_product::<COLUMN_MAJOR>(
+            unsafe { core::mem::transmute(lhs) }, //
+            unsafe { core::mem::transmute(rhs) },
+        )
+        .map(Vector)
+    }
+
+    /// 4x4 Matrix-Matrix multiplication with wide registers, if available.
+    ///
+    /// This uses double-width registers to perform the multiplication more efficiently,
+    /// if the underlying architecture supports it. Otherwise it falls back to the regular
+    /// matrix multiplication method.
+    ///
+    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrices
+    /// are stored in column-major order (`true`) or row-major order (`false`),
+    /// same as [`Vector::mat4_product`].
+    #[inline(always)]
+    pub fn mat4_product_wide<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4]
+    where
+        R::DoubleRegister: FloatRegister<Element = R::Element, HalfRegister = R>,
+    {
+        // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+        // because Vector<R> is repr(transparent) around Storage<R>
+        R::mat4_product_wide::<COLUMN_MAJOR>(
+            unsafe { core::mem::transmute(lhs) }, //
+            unsafe { core::mem::transmute(rhs) },
+        )
+        .map(Vector)
+    }
 }
 
 impl<R: ShuffleRegister> Vector<R> {

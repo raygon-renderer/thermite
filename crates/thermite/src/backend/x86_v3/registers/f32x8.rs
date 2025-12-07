@@ -23,6 +23,8 @@ impl Register for F32x8V3 {
     type HalfRegister = super::f32x4::F32x4V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::X86V3;
 
     type USize = super::U32x8V3;

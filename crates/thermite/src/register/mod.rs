@@ -137,6 +137,9 @@ pub trait Register: Sized + 'static {
     type Element: Element;
     type Storage: Sized + Copy + core::fmt::Debug;
 
+    /// Indicates if the register is emulated in software.
+    const IS_EMULATED: bool;
+
     const ISA: InstructionSet;
 
     // Note: These don't require :Register because it would introduce recursive type bounds.
@@ -1310,7 +1313,9 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
             let w_t = Self::mul(w, t);
             let cross_q_t = Self::cross3::<DOP>(q_xyz, t);
 
-            Self::add(v, Self::add(w_t, cross_q_t))
+            // compute wt + v first to allow for better instruction level parallelism,
+            // while waiting on the cross product to complete
+            Self::add(cross_q_t, Self::add(w_t, v))
         } else {
             // --- Scalar/Fallback Path (Textbook) ---
             // Formula: 2(q.v)q + (w^2 - q.q)v + 2w(q x v)
@@ -1335,6 +1340,136 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
             // Summation: (Term 1 + Term 2) + Term 3
             Self::add(Self::add(t1, t2), t3)
         }
+    }
+
+    /// 4x4 Matrix Transpose
+    #[inline(always)]
+    fn mat4_transpose(m: &[Storage<Self>; 4]) -> [Storage<Self>; 4] {
+        // Stage 1: Interleave Low and High halves
+        // r0: [00, 01, 02, 03]
+        // r1: [10, 11, 12, 13]
+        // tmp0 (UnpackLo) -> [00, 10, 01, 11] (Rows 0+1 mixed lower)
+        // tmp1 (UnpackHi) -> [02, 12, 03, 13] (Rows 0+1 mixed upper)
+        let (tmp0, tmp1) = Self::unpack(m[0], m[1]);
+
+        // r2: [20, 21, 22, 23]
+        // r3: [30, 31, 32, 33]
+        // tmp2 (UnpackLo) -> [20, 30, 21, 31] (Rows 2+3 mixed lower)
+        // tmp3 (UnpackHi) -> [22, 32, 23, 33] (Rows 2+3 mixed upper)
+        let (tmp2, tmp3) = Self::unpack(m[2], m[3]);
+
+        // Stage 2: Swap 64-bit blocks (mixing the results of Stage 1)
+        // Final columns are created by unpacking the results of Stage 1.
+
+        // Col0 = UnpackLo(tmp0, tmp2) -> [00, 10, 20, 30]
+        // Col1 = UnpackHi(tmp0, tmp2) -> [01, 11, 21, 31]
+        let (c0, c1) = Self::unpack(tmp0, tmp2);
+
+        // Col2 = UnpackLo(tmp1, tmp3) -> [02, 12, 22, 32]
+        // Col3 = UnpackHi(tmp1, tmp3) -> [03, 13, 23, 33]
+        let (c2, c3) = Self::unpack(tmp1, tmp3);
+
+        [c0, c1, c2, c3]
+    }
+
+    /// 4x4 Matrix multiplied by 4D Vector
+    #[inline(always)]
+    fn mat4_vec4_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self> {
+        if const { !COLUMN_MAJOR } {
+            // transpose and treat as column-major
+            return Self::mat4_vec4_product::<true>(&Self::mat4_transpose(cols), vector);
+        }
+
+        let x = Self::broadcast::<0>(vector);
+        let y = Self::broadcast::<1>(vector);
+        let z = Self::broadcast::<2>(vector);
+        let w = Self::broadcast::<3>(vector);
+
+        // Run two fused multiply-add operations in parallel using instruction-level parallelism
+        let sum_ab = Self::mul_adde(cols[1], y, Self::mul(cols[0], x));
+        let sum_cd = Self::mul_adde(cols[3], w, Self::mul(cols[2], z));
+
+        // Final merge
+        Self::add(sum_ab, sum_cd)
+    }
+
+    /// Multiplies two 4x4 Matrices.
+    #[inline(always)]
+    fn mat4_product<const COLUMN_MAJOR: bool>(
+        lhs: &[Storage<Self>; 4],
+        rhs: &[Storage<Self>; 4],
+    ) -> [Storage<Self>; 4] {
+        // swap operands if not column-major
+        let (lhs, rhs) = if const { COLUMN_MAJOR } { (lhs, rhs) } else { (rhs, lhs) };
+
+        [
+            Self::mat4_vec4_product::<true>(lhs, rhs[0]),
+            Self::mat4_vec4_product::<true>(lhs, rhs[1]),
+            Self::mat4_vec4_product::<true>(lhs, rhs[2]),
+            Self::mat4_vec4_product::<true>(lhs, rhs[3]),
+        ]
+    }
+
+    #[inline(always)]
+    fn mat4_product_wide<const COLUMN_MAJOR: bool>(
+        lhs: &[Storage<Self>; 4],
+        rhs: &[Storage<Self>; 4],
+    ) -> [Storage<Self>; 4]
+    where
+        Self::DoubleRegister: FloatRegister<Element = Self::Element, HalfRegister = Self>,
+    {
+        // swap operands if not column-major
+        let (lhs, rhs) = if const { COLUMN_MAJOR } { (lhs, rhs) } else { (rhs, lhs) };
+
+        if const { <Self::DoubleRegister as Register>::IS_EMULATED } {
+            // Fallback to normal implementation if true wide registers are not available.
+            return Self::mat4_product::<true>(lhs, rhs);
+        }
+
+        // 1. Double-Pump the LHS (Basis Vectors)
+        // We concat each column with itself so it exists in both the low and high lanes.
+        // a0_wide = (Col0, Col0)
+        let a0 = Self::concat(lhs[0], lhs[0]);
+        let a1 = Self::concat(lhs[1], lhs[1]);
+        let a2 = Self::concat(lhs[2], lhs[2]);
+        let a3 = Self::concat(lhs[3], lhs[3]);
+
+        // Define the macro locally to handle the "Broadcast -> Concat -> FMA" pipeline.
+        // passing types ($Wide, $Narrow) explicitly avoids ambiguity.
+        #[rustfmt::skip]
+        macro_rules! compute_pair {
+            ($rhs_a:expr, $rhs_b:expr) => {{
+                // A. Prepare Coefficients
+                // Broadcast on narrow registers first (cheap), then concat into wide (cheap).
+
+                // x = (b_left.x ... | b_right.x ...)
+                let x = Self::concat(Self::broadcast::<0>($rhs_a), Self::broadcast::<0>($rhs_b));
+                let y = Self::concat(Self::broadcast::<1>($rhs_a), Self::broadcast::<1>($rhs_b));
+                let z = Self::concat(Self::broadcast::<2>($rhs_a), Self::broadcast::<2>($rhs_b));
+                let w = Self::concat(Self::broadcast::<3>($rhs_a), Self::broadcast::<3>($rhs_b));
+
+                // B. Wide FMA Chain (Pairwise Optimization)
+                // We perform the math for Col N and Col N+1 simultaneously, then add the results together.
+                Self::DoubleRegister::add(
+                    // (Col0 * x) + (Col1 * y)
+                    Self::DoubleRegister::mul_adde(a1, y, Self::DoubleRegister::mul(a0, x)),
+                    // (Col2 * z) + (Col3 * w)
+                    Self::DoubleRegister::mul_adde(a3, w, Self::DoubleRegister::mul(a2, z)),
+                )
+            }};
+        }
+
+        // 2. Compute First Half (Result Cols 0 and 1)
+        let wide_res_01 = compute_pair!(rhs[0], rhs[1]);
+
+        // 3. Compute Second Half (Result Cols 2 and 3)
+        let wide_res_23 = compute_pair!(rhs[2], rhs[3]);
+
+        // 4. Split and Return
+        let (c0, c1) = <Self::DoubleRegister as Register>::split(wide_res_01);
+        let (c2, c3) = <Self::DoubleRegister as Register>::split(wide_res_23);
+
+        [c0, c1, c2, c3]
     }
 }
 

@@ -22,6 +22,8 @@ impl Register for [<i $width>] {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::Scalar;
 
     type ISize = [<i $width>];

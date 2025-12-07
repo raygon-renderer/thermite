@@ -29,6 +29,8 @@ impl Register for F64x2V3 {
     type HalfRegister = f64; // Scalar register
     type DoubleRegister = super::F64x4V3;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::X86V3;
 
     type ISize = super::I64x2V3;

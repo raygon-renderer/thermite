@@ -27,6 +27,8 @@ impl Register for U32x8V3 {
     type HalfRegister = super::U32x4V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::X86V3;
 
     type ISize = super::I32x8V3;
@@ -80,12 +82,7 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
-    fn split(
-        value: Storage<Self>,
-    ) -> (
-        Storage<Self::HalfRegister>,
-        Storage<Self::HalfRegister>,
-    )
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
     where
         Self::HalfRegister: Register,
     {
@@ -96,10 +93,7 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
-    fn join(
-        lo: Storage<Self::HalfRegister>,
-        hi: Storage<Self::HalfRegister>,
-    ) -> Storage<Self>
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
     where
         Self::HalfRegister: Register,
     {

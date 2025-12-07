@@ -86,6 +86,8 @@ where
     type Element = R::Element;
     type Storage = DoublePumpRegister<R>;
 
+    const IS_EMULATED: bool = true; // sad, but true.
+
     const ISA: InstructionSet = R::ISA;
 
     type HalfRegister = R;

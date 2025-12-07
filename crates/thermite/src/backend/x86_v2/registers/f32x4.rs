@@ -29,6 +29,8 @@ impl Register for F32x4V2 {
     type HalfRegister = <Scalar as Simd>::f32x2;
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::X86V2;
 
     type USize = super::U32x4V2;

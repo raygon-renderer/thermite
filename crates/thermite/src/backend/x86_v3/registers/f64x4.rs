@@ -27,6 +27,8 @@ impl Register for F64x4V3 {
     type HalfRegister = super::F64x2V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = InstructionSet::X86V3;
 
     type ISize = super::I64x4V3;

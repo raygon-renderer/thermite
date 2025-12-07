@@ -27,6 +27,8 @@ impl Register for U64x2Wasm {
     type HalfRegister = ();
     type DoubleRegister = DoublePumpRegister<Self>;
 
+    const IS_EMULATED: bool = false;
+
     const ISA: InstructionSet = arch::ISA;
 
     type ISize = super::I64x2Wasm;
@@ -102,8 +104,8 @@ impl Register for U64x2Wasm {
 
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let low = Self::swizzle(a, b, GenericArray::from_array([0, 2]));
-        let high = Self::swizzle(a, b, GenericArray::from_array([1, 3]));
+        let low = arch::i64x2_shuffle::<0, 2>(a, b);
+        let high = arch::i64x2_shuffle::<1, 3>(a, b);
 
         (low, high)
     }
