@@ -148,48 +148,23 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
 
     #[inline(always)]
     fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
-        if const { Self::HAS_PERMUTEV } {
-            // --- Fast SIMD Path (Giesen) ---
-            // Formula: v + 2w(q x v) + 2(q x (q x v))
+        // --- Fast method by Giesen ---
+        // Formula: v + 2w(q x v) + 2(q x (q x v))
 
-            let w = Self::broadcast::<3>(q);
-            let q_xyz = q;
+        let w = Self::broadcast::<3>(q);
+        let q_xyz = q;
 
-            // t = 2 * cross(q, v)
-            let t = Self::cross3::<DOP>(q_xyz, v);
-            let t = Self::add(t, t); // multiply by 2
+        // t = 2 * cross(q, v)
+        let t = Self::cross3::<DOP>(q_xyz, v);
+        let t = Self::add(t, t); // multiply by 2
 
-            // result = v + w*t + cross(q, t)
-            let w_t = Self::mul(w, t);
-            let cross_q_t = Self::cross3::<DOP>(q_xyz, t);
+        // result = v + w*t + cross(q, t)
+        let w_t = Self::mul(w, t);
+        let cross_q_t = Self::cross3::<DOP>(q_xyz, t);
 
-            // compute wt + v first to allow for better instruction level parallelism,
-            // while waiting on the cross product to complete
-            Self::add(cross_q_t, Self::add(w_t, v))
-        } else {
-            // --- Scalar/Fallback Path (Textbook) ---
-            // Formula: 2(q.v)q + (w^2 - q.q)v + 2w(q x v)
-            //
-            // When shuffles are expensive (emulated), Cross Products are expensive.
-            // This variant only uses 1 Cross Product, substituting the other with
-            // 2 Dot Products (which are cheap purely vertical/scalar math).
-
-            let u = q; // Vector part
-            let s = Self::broadcast::<3>(q);
-
-            // Term 1: 2 * dot(u, v) * u
-            let dot_uv = Self::splat(Self::dot3(u, v));
-            let t1 = Self::mul(u, Self::add(dot_uv, dot_uv));
-
-            // Term 2: v * (s*s - dot(u, u))
-            let t2 = Self::mul(v, Self::sub(Self::mul(s, s), Self::splat(Self::dot3(u, u))));
-
-            // Term 3: 2s * cross(u, v)
-            let t3 = Self::mul(Self::add(s, s), Self::cross3::<DOP>(u, v));
-
-            // Summation: (Term 1 + Term 2) + Term 3
-            Self::add(Self::add(t1, t2), t3)
-        }
+        // compute wt + v first to allow for better instruction level parallelism,
+        // while waiting on the cross product to complete
+        Self::add(cross_q_t, Self::add(w_t, v))
     }
 
     /// 4x4 Matrix Transpose
