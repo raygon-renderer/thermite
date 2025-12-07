@@ -5,12 +5,14 @@ use generic_array::{
 };
 
 use crate::{
+    backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
         BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
         SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
+    simd::Simd,
 };
 
 use super::arch;
@@ -24,7 +26,7 @@ impl Register for I64x2V2 {
 
     type Element = i64;
     type Storage = arch::__m128i;
-    type HalfRegister = ();
+    type HalfRegister = i64; // Scalar register
     type DoubleRegister = DoublePumpRegister<Self>;
 
     const ISA: InstructionSet = InstructionSet::X86V2;
@@ -47,6 +49,26 @@ impl Register for I64x2V2 {
     #[inline(always)]
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi64x(value) }
+    }
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe {
+            let mut arr = [0; 2];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (arr[0], arr[1])
+        }
+    }
+
+    #[inline(always)]
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe { arch::_mm_setr_epi64x(lo, hi) }
     }
 
     #[inline(always)]
@@ -460,8 +482,27 @@ impl SignedIntegerRegister for I64x2V2 {
 
 impl CastRegister<DoublePumpRegister<I64x2V2>> for super::I32x4V2 {
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<I64x2V2> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<DoublePumpRegister<I64x2V2>>) -> Storage<Self> {
         let (lo, hi) = DoublePumpRegister::<I64x2V2>::split(value);
         unsafe { arch::_mm_cvtepi64_epi32x_v2(lo, hi) }
+    }
+}
+
+impl CastRegister<<Scalar as Simd>::i32x2> for I64x2V2 {
+    #[inline(always)]
+    fn cast_from(value: Storage<<Scalar as Simd>::i32x2>) -> Storage<Self> {
+        unsafe { arch::_mm_cvtepi32_epi64(arch::_mm_setr_epi32(value.0, value.1, 0, 0)) }
+    }
+}
+
+impl CastRegister<I64x2V2> for <Scalar as Simd>::i32x2 {
+    #[inline(always)]
+    fn cast_from(value: Storage<I64x2V2>) -> Storage<<Scalar as Simd>::i32x2> {
+        unsafe {
+            DoublePumpRegister(
+                arch::_mm_cvtsi128_si32(value),      // lowest 32 bits
+                arch::_mm_extract_epi32::<2>(value), // next 32 bits after 64 bits
+            )
+        }
     }
 }

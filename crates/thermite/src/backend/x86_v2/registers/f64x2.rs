@@ -5,12 +5,14 @@ use generic_array::{
 };
 
 use crate::{
+    backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
         BitshiftRegister, CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister,
         empty_reg, reg,
     },
+    simd::Simd,
 };
 
 use super::arch;
@@ -24,7 +26,7 @@ impl Register for F64x2V2 {
 
     type Element = f64;
     type Storage = arch::__m128d;
-    type HalfRegister = ();
+    type HalfRegister = f64; // Scalar register
     type DoubleRegister = DoublePumpRegister<Self>;
 
     const ISA: InstructionSet = InstructionSet::X86V2;
@@ -47,6 +49,26 @@ impl Register for F64x2V2 {
     #[inline(always)]
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_pd(value) }
+    }
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe {
+            let mut arr = [0f64; 2];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (arr[0], arr[1])
+        }
+    }
+
+    #[inline(always)]
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe { arch::_mm_setr_pd(lo, hi) }
     }
 
     #[inline(always)]
@@ -401,7 +423,7 @@ impl FloatRegister for F64x2V2 {
 
 impl CastRegister<DoublePumpRegister<F64x2V2>> for super::F32x4V2 {
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<F64x2V2> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<DoublePumpRegister<F64x2V2>>) -> Storage<Self> {
         let (lo, hi) = <DoublePumpRegister<F64x2V2> as Register>::split(value);
 
         unsafe {
@@ -409,6 +431,27 @@ impl CastRegister<DoublePumpRegister<F64x2V2>> for super::F32x4V2 {
             let hi = arch::_mm_cvtpd_ps(hi);
 
             arch::_mm_movelh_ps(lo, hi)
+        }
+    }
+}
+
+impl CastRegister<<Scalar as Simd>::f32x2> for F64x2V2 {
+    #[inline(always)]
+    fn cast_from(value: Storage<<Scalar as Simd>::f32x2>) -> Storage<Self> {
+        unsafe { arch::_mm_cvtps_pd(arch::_mm_setr_ps(value.0, value.1, 0.0, 0.0)) }
+    }
+}
+
+impl CastRegister<F64x2V2> for <Scalar as Simd>::f32x2 {
+    #[inline(always)]
+    fn cast_from(value: Storage<F64x2V2>) -> Storage<<Scalar as Simd>::f32x2> {
+        unsafe {
+            let ps = arch::_mm_cvtpd_ps(value);
+
+            DoublePumpRegister(
+                arch::_mm_cvtss_f32(ps),
+                f32::from_bits(arch::_mm_extract_ps::<1>(ps) as u32),
+            )
         }
     }
 }

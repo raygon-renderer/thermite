@@ -5,11 +5,14 @@ use generic_array::{
 };
 
 use crate::{
+    backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
-        Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, empty_reg, reg,
+        BitshiftRegister, CastRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister,
+        PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
+    simd::Simd,
 };
 
 use super::arch;
@@ -23,7 +26,7 @@ impl Register for U64x2V3 {
 
     type Element = u64;
     type Storage = arch::__m128i;
-    type HalfRegister = ();
+    type HalfRegister = u64; // Scalar register
     type DoubleRegister = super::U64x4V3;
 
     const ISA: InstructionSet = InstructionSet::X86V3;
@@ -45,6 +48,26 @@ impl Register for U64x2V3 {
     #[inline(always)]
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi64x(value as i64) }
+    }
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe {
+            let mut arr = [0; 2];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (arr[0], arr[1])
+        }
+    }
+
+    #[inline(always)]
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe { arch::_mm_setr_epu64x(lo, hi) }
     }
 
     #[inline(always)]
@@ -395,3 +418,23 @@ impl IntegerRegister for U64x2V3 {
 }
 
 impl UnsignedIntegerRegister for U64x2V3 {}
+
+impl CastRegister<<Scalar as Simd>::u32x2> for U64x2V3 {
+    #[inline(always)]
+    fn cast_from(value: Storage<<Scalar as Simd>::u32x2>) -> Storage<Self> {
+        // zero-extend lower two u32 lanes to u64 lanes
+        unsafe { arch::_mm_setr_epi32(0, value.0 as i32, 0, value.1 as i32) }
+    }
+}
+
+impl CastRegister<U64x2V3> for <Scalar as Simd>::u32x2 {
+    #[inline(always)]
+    fn cast_from(value: Storage<U64x2V3>) -> Storage<<Scalar as Simd>::u32x2> {
+        unsafe {
+            DoublePumpRegister(
+                arch::_mm_cvtsi128_si32(value) as u32,      // lowest 32 bits
+                arch::_mm_extract_epi32::<2>(value) as u32, // next 32 bits after 64 bits
+            )
+        }
+    }
+}

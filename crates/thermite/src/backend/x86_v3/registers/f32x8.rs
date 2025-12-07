@@ -31,10 +31,7 @@ impl Register for F32x8V3 {
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 
     #[inline(always)]
-    fn join(
-        lo: <Self::HalfRegister as Register>::Storage,
-        hi: <Self::HalfRegister as Register>::Storage,
-    ) -> Storage<Self>
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
     where
         Self::HalfRegister: Register,
     {
@@ -42,12 +39,7 @@ impl Register for F32x8V3 {
     }
 
     #[inline(always)]
-    fn split(
-        value: Storage<Self>,
-    ) -> (
-        <Self::HalfRegister as Register>::Storage,
-        <Self::HalfRegister as Register>::Storage,
-    )
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
     where
         Self::HalfRegister: Register,
     {

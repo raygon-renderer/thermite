@@ -5,7 +5,7 @@
 use crate::{
     divider::vector::VectorDivider,
     isa::InstructionSet,
-    register::{Element, ExtendRegister, LinAlg4Register, SignedIntegerRegister, TruncateRegister, ValidLinAlg3Length},
+    register::{Element, LinAlg4Register, SignedIntegerRegister, ValidLinAlg3Length},
 };
 
 use super::{
@@ -603,26 +603,6 @@ where
         let high: R::Storage = R::blendv(blend_hi, res_hi_from_lo, res_hi_from_hi);
 
         Self(low, high)
-    }
-}
-
-impl<R: Register> ExtendRegister<R> for DoublePumpRegister<R>
-where
-    typenum::Double<R::Lanes>: Lanes,
-{
-    #[inline(always)]
-    fn extend_from(value: Storage<R>) -> Storage<Self> {
-        Self(value, R::EMPTY)
-    }
-}
-
-impl<R: Register> TruncateRegister<DoublePumpRegister<R>> for R
-where
-    typenum::Double<R::Lanes>: Lanes,
-{
-    #[inline(always)]
-    fn truncate_from(value: Storage<DoublePumpRegister<R>>) -> Storage<Self> {
-        value.0
     }
 }
 

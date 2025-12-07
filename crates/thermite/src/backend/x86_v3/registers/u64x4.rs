@@ -80,12 +80,7 @@ impl Register for U64x4V3 {
     }
 
     #[inline(always)]
-    fn split(
-        value: Storage<Self>,
-    ) -> (
-        <Self::HalfRegister as Register>::Storage,
-        <Self::HalfRegister as Register>::Storage,
-    )
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
     where
         Self::HalfRegister: Register,
     {
@@ -96,10 +91,7 @@ impl Register for U64x4V3 {
     }
 
     #[inline(always)]
-    fn join(
-        lo: <Self::HalfRegister as Register>::Storage,
-        hi: <Self::HalfRegister as Register>::Storage,
-    ) -> Storage<Self>
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
     where
         Self::HalfRegister: Register,
     {
@@ -402,7 +394,7 @@ impl UnsignedIntegerRegister for U64x4V3 {}
 
 impl CastRegister<DoublePumpRegister<U64x4V3>> for super::U32x8V3 {
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<U64x4V3> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<DoublePumpRegister<U64x4V3>>) -> Storage<Self> {
         let (lo, hi) = DoublePumpRegister::<U64x4V3>::split(value);
 
         unsafe {

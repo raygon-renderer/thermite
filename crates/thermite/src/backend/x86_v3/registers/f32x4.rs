@@ -5,12 +5,14 @@ use generic_array::{
 };
 
 use crate::{
+    backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
         BitsRegister, BitshiftRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        empty_reg, reg,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
+    simd::Simd,
 };
 
 use super::arch;
@@ -24,7 +26,7 @@ impl Register for F32x4V3 {
 
     type Element = f32;
     type Storage = arch::__m128;
-    type HalfRegister = ();
+    type HalfRegister = <Scalar as Simd>::f32x2;
     type DoubleRegister = super::F32x8V3;
 
     const ISA: InstructionSet = InstructionSet::X86V3;
@@ -47,6 +49,26 @@ impl Register for F32x4V3 {
     #[inline(always)]
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_ps(value) }
+    }
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe {
+            let mut arr = [0f32; 4];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (DoublePumpRegister(arr[0], arr[1]), DoublePumpRegister(arr[2], arr[3]))
+        }
+    }
+
+    #[inline(always)]
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
+    where
+        Self::HalfRegister: Register,
+    {
+        unsafe { arch::_mm_setr_ps(lo.0, lo.1, hi.0, hi.1) }
     }
 
     #[inline(always)]

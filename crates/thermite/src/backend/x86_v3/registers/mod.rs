@@ -29,6 +29,7 @@ pub use u64x2::U64x2V3;
 pub use u64x4::U64x4V3;
 
 use crate::{
+    backend::scalar::Scalar,
     register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
@@ -49,6 +50,10 @@ impl NativeSimd for X86V3 {
 }
 
 impl Simd for X86V3 {
+    type f32x2 = <Scalar as Simd>::f32x2;
+    type i32x2 = <Scalar as Simd>::i32x2;
+    type u32x2 = <Scalar as Simd>::u32x2;
+
     type f32x4 = F32x4V3;
     type i32x4 = I32x4V3;
     type u32x4 = U32x4V3;

@@ -231,34 +231,30 @@ pub trait Register: Sized + 'static {
         unsafe { Self::store(ptr, value) }
     }
 
+    // join/split fallbacks really shouldn't be used, but are here
+    // for when HalfRegister is () (i.e., no smaller register type exists),
+    // and if they _are_ used are at least a not-terrible fallback.
+
     #[inline(always)]
-    fn join(
-        lo: <Self::HalfRegister as Register>::Storage,
-        hi: <Self::HalfRegister as Register>::Storage,
-    ) -> Storage<Self>
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
     where
         Self::HalfRegister: Register,
     {
-        let _ = (lo, hi);
-        unimplemented!("Register::join() not implemented for this register type.")
+        // NOTE: const_transmute will double-check sizes
+        unsafe { generic_array::const_transmute((lo, hi)) }
     }
 
     #[inline(always)]
-    fn split(
-        value: Storage<Self>,
-    ) -> (
-        <Self::HalfRegister as Register>::Storage,
-        <Self::HalfRegister as Register>::Storage,
-    )
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
     where
         Self::HalfRegister: Register,
     {
-        let _ = value;
-        unimplemented!("Register::split() not implemented for this register type.")
+        // NOTE: const_transmute will double-check sizes
+        unsafe { generic_array::const_transmute(value) }
     }
 
     #[inline(always)]
-    fn concat(lo: Storage<Self>, hi: Storage<Self>) -> <Self::DoubleRegister as Register>::Storage
+    fn concat(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self::DoubleRegister>
     where
         Self::DoubleRegister: Register<HalfRegister = Self>,
     {
@@ -395,6 +391,10 @@ pub trait PermuteRegister: Register {
 
 pub trait BlendRegister: Register {
     fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+}
+
+const fn is_power_of_2(n: u32) -> bool {
+    (n & (n - 1)) == 0
 }
 
 pub trait SwizzleRegister: MaskRegister {
@@ -663,14 +663,54 @@ pub trait MaskRegister: Register {
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>);
 }
 
-pub trait TruncateRegister<FROM: Register<Element = Self::Element>>: Register {
+pub trait WidenRegister<FROM>
+where
+    Self: Register<HalfRegister = FROM>,
+    FROM: Register<Element = Self::Element>,
+{
     /// Truncate the register from another register type into this register type.
-    fn truncate_from(value: FROM::Storage) -> Storage<Self>;
+    fn widen_from(value: FROM::Storage) -> Storage<Self>;
+
+    #[inline(always)]
+    fn join(lo: Storage<FROM>, hi: Storage<FROM>) -> Storage<Self> {
+        <Self as Register>::join(lo, hi)
+    }
 }
 
-pub trait ExtendRegister<FROM: Register<Element = Self::Element>>: Register {
+impl<FROM, INTO> WidenRegister<FROM> for INTO
+where
+    INTO: Register<HalfRegister = FROM>,
+    FROM: Register<Element = INTO::Element>,
+{
+    #[inline(always)]
+    fn widen_from(value: <FROM as Register>::Storage) -> Storage<Self> {
+        INTO::join(value, FROM::EMPTY)
+    }
+}
+
+pub trait NarrowRegister<INTO>
+where
+    INTO: Register,
+    Self: Register<Element = INTO::Element, HalfRegister = INTO>,
+{
     /// Extend the register from another register type into this register type.
-    fn extend_from(value: FROM::Storage) -> Storage<Self>;
+    fn narrow_from(value: Self::Storage) -> Storage<INTO>;
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<INTO>, Storage<INTO>) {
+        <Self as Register>::split(value)
+    }
+}
+
+impl<FROM, INTO> NarrowRegister<INTO> for FROM
+where
+    INTO: Register,
+    FROM: Register<Element = INTO::Element, HalfRegister = INTO>,
+{
+    #[inline(always)]
+    fn narrow_from(value: <FROM as Register>::Storage) -> Storage<INTO> {
+        FROM::split(value).0
+    }
 }
 
 /// A trait for registers that can be cast to/from other registers,
@@ -851,7 +891,7 @@ pub trait FloatRegister:
     const EXP_MASK: Storage<Self::Bits>;
 
     #[inline(always)]
-    fn total_order(value: Storage<Self>) -> <Self::Signed as Register>::Storage {
+    fn total_order(value: Storage<Self>) -> Storage<Self::Signed> {
         // value ^ (is_negative(value) >> 1), where is_negative produces all 1s for negative and all 0s for positive,
         // usually by shifting the sign bit to fill the register using an arithmetic shift right
 

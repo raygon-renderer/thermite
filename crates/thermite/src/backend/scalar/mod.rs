@@ -25,9 +25,13 @@ impl NativeSimd for Scalar {
 }
 
 impl Simd for Scalar {
-    type f32x4 = DoublePumpRegister<DoublePumpRegister<f32>>;
-    type i32x4 = DoublePumpRegister<DoublePumpRegister<i32>>;
-    type u32x4 = DoublePumpRegister<DoublePumpRegister<u32>>;
+    type f32x2 = DoublePumpRegister<f32>;
+    type i32x2 = DoublePumpRegister<i32>;
+    type u32x2 = DoublePumpRegister<u32>;
+
+    type f32x4 = DoublePumpRegister<Self::f32x2>;
+    type i32x4 = DoublePumpRegister<Self::i32x2>;
+    type u32x4 = DoublePumpRegister<Self::u32x2>;
 
     type f32x8 = DoublePumpRegister<Self::f32x4>;
     type i32x8 = DoublePumpRegister<Self::i32x4>;
@@ -61,21 +65,21 @@ macro_rules! impl_easy_casts {
     ($($from:ty as $to:ty),*) => {$(
         impl $crate::register::BitsRegister<$from> for $to {
             #[inline(always)]
-            fn from_bits(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
+            fn from_bits(value: Storage<$from>) -> Storage<Self> {
                 unsafe { core::mem::transmute(value) }
             }
         }
 
         impl $crate::register::CastRegister<$from> for $to {
             #[inline(always)]
-            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
+            fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { value as _ }
             }
         }
 
         impl $crate::register::CastMaskRegister<$from> for $to {
             #[inline(always)]
-            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
+            fn mask_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { core::mem::transmute(value) }
             }
         }
@@ -86,14 +90,14 @@ macro_rules! impl_nontrivial_casts {
     ($($from:ty as $to:ty),* $(,)?) => {$(
         impl $crate::register::CastRegister<$from> for $to {
             #[inline(always)]
-            fn cast_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
+            fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { value as _ }
             }
         }
 
         impl $crate::register::CastMaskRegister<$from> for $to {
             #[inline(always)]
-            fn mask_from(value: <$from as $crate::register::Register>::Storage) -> Storage<Self> {
+            fn mask_from(value: Storage<$from>) -> Storage<Self> {
                 Element::from_bool(value.to_bool())
             }
         }

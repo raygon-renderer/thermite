@@ -363,6 +363,35 @@ impl<R: Register> Vector<R> {
         Self::EMPTY
     }
 
+    /// Widen the vector to a register of double the width, filling the high half with zeros.
+    #[inline(always)]
+    pub fn widen<INTO>(self) -> Vector<INTO>
+    where
+        INTO: Register<HalfRegister = R, Element = R::Element>,
+    {
+        Vector(INTO::join(self.0, R::EMPTY))
+    }
+
+    /// Narrow the vector to a register of half the width by taking the low half,
+    /// and discarding the high half.
+    #[inline(always)]
+    pub fn narrow(self) -> Vector<R::HalfRegister>
+    where
+        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
+    {
+        Vector(R::split(self.0).0)
+    }
+
+    /// Narrow the vector to a register of half the width by taking the high half,
+    /// and discarding the low half.
+    #[inline(always)]
+    pub fn narrow_high(self) -> Vector<R::HalfRegister>
+    where
+        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
+    {
+        Vector(R::split(self.0).1)
+    }
+
     /// Join together low and high vectors to create a register of double the width.
     #[inline(always)]
     pub fn join(low: Vector<R::HalfRegister>, high: Vector<R::HalfRegister>) -> Self

@@ -83,8 +83,8 @@ impl Register for U32x8V3 {
     fn split(
         value: Storage<Self>,
     ) -> (
-        <Self::HalfRegister as Register>::Storage,
-        <Self::HalfRegister as Register>::Storage,
+        Storage<Self::HalfRegister>,
+        Storage<Self::HalfRegister>,
     )
     where
         Self::HalfRegister: Register,
@@ -97,8 +97,8 @@ impl Register for U32x8V3 {
 
     #[inline(always)]
     fn join(
-        lo: <Self::HalfRegister as Register>::Storage,
-        hi: <Self::HalfRegister as Register>::Storage,
+        lo: Storage<Self::HalfRegister>,
+        hi: Storage<Self::HalfRegister>,
     ) -> Storage<Self>
     where
         Self::HalfRegister: Register,

@@ -386,7 +386,7 @@ impl UnsignedIntegerRegister for U64x2Wasm {}
 impl CastRegister<DoublePumpRegister<U64x2Wasm>> for super::U32x4Wasm {
     #[rustfmt::skip]
     #[inline(always)]
-    fn cast_from(value: <DoublePumpRegister<U64x2Wasm> as Register>::Storage) -> Storage<Self> {
+    fn cast_from(value: Storage<DoublePumpRegister<U64x2Wasm>>) -> Storage<Self> {
         // Selects bytes 0-3 (lane 0 low) and 8-11 (lane 1 low) from 'lo'
         // Selects bytes 16-19 (lane 0 low) and 24-27 (lane 1 low) from 'hi'
         arch::i8x16_shuffle::<
