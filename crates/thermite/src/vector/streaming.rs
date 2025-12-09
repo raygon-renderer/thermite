@@ -43,7 +43,7 @@ impl<R: Register> StreamingVector<'_, R> {
     #[inline(always)]
     pub fn load(&self) -> Vector<R> {
         // SAFETY: Ensured valid alignment and size by reference type.
-        unsafe { Vector::load_stream(self.0 as *const _ as *const R::Element) }
+        unsafe { Vector::load_streaming(self.0 as *const _ as *const R::Element) }
     }
 
     /// Load a vector using a regular (cached) load.
@@ -65,7 +65,7 @@ impl<R: Register> StreamingVectorMut<'_, R> {
     #[inline(always)]
     pub fn store(&mut self, vec: Vector<R>) {
         // SAFETY: Ensured valid alignment and size by reference type.
-        unsafe { vec.store_stream(self.0 as *mut _ as *mut R::Element) }
+        unsafe { vec.store_streaming(self.0 as *mut _ as *mut R::Element) }
     }
 
     /// Store a vector using a regular (cached) store.

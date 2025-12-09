@@ -22,7 +22,7 @@ use num_traits::{
     WrappingMul, WrappingSub, Zero,
 };
 
-//pub mod generic;
+pub mod generic;
 pub mod streaming;
 
 #[cfg(feature = "float-trait")]
@@ -101,6 +101,13 @@ use generic_array::{GenericArray, typenum::Unsigned};
 
 impl<R: Register> const_default::ConstDefault for Vector<R> {
     const DEFAULT: Self = Self::EMPTY;
+}
+
+impl<R: Register> Default for Vector<R> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::EMPTY
+    }
 }
 
 impl<R: Register> Vector<R> {
@@ -257,7 +264,7 @@ impl<R: Register> Vector<R> {
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
     /// that is at least `R::Lanes` elements long.
     #[inline(always)]
-    pub unsafe fn load_stream(ptr: *const R::Element) -> Self {
+    pub unsafe fn load_streaming(ptr: *const R::Element) -> Self {
         unsafe { Self(R::load_stream(ptr)) }
     }
 
@@ -291,7 +298,7 @@ impl<R: Register> Vector<R> {
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
     /// that is at least `R::Lanes` elements long.
-    pub unsafe fn store_stream(self, ptr: *mut R::Element) {
+    pub unsafe fn store_streaming(self, ptr: *mut R::Element) {
         // SAFETY: The caller must ensure that the pointer is valid and aligned.
         unsafe { R::store_stream(ptr, self.0) }
     }
@@ -406,6 +413,17 @@ impl<R: Register> Vector<R> {
     pub fn split(self) -> (Vector<R::HalfRegister>, Vector<R::HalfRegister>)
     where
         R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
+    {
+        let (low, high) = R::split(self.0);
+        (Vector(low), Vector(high))
+    }
+
+    /// Split the register into two vectors of half the width. This does not
+    /// guarantee that the original register was double-width.
+    #[inline(always)]
+    pub fn split2(self) -> (Vector<R::HalfRegister>, Vector<R::HalfRegister>)
+    where
+        R::HalfRegister: Register<Element = R::Element>,
     {
         let (low, high) = R::split(self.0);
         (Vector(low), Vector(high))
@@ -710,6 +728,12 @@ impl<R: NumericRegister> Vector<R> {
     #[inline(always)]
     pub fn is_zero(self) -> Mask<R> {
         Mask(R::eq(self.0, R::ZERO))
+    }
+
+    /// Effectively returns `Self::splat(Self::LANES as R::Element)`.
+    #[inline(always)]
+    pub fn offset() -> Self {
+        Self(R::offset())
     }
 
     /// Returns a vector where each element is the index of the lane as that element type.
@@ -1625,6 +1649,24 @@ impl<R: IntegerRegister> WrappingMul for Vector<R> {
 }
 
 impl<R: IntegerRegister> Vector<R> {
+    /// Wrapping addition for each element of the vectors.
+    #[inline(always)]
+    pub fn wrapping_add(self, rhs: Self) -> Self {
+        Self(R::add(self.0, rhs.0))
+    }
+
+    /// Wrapping subtraction for each element of the vectors.
+    #[inline(always)]
+    pub fn wrapping_sub(self, rhs: Self) -> Self {
+        Self(R::sub(self.0, rhs.0))
+    }
+
+    /// Wrapping multiplication for each element of the vectors.
+    #[inline(always)]
+    pub fn wrapping_mul(self, rhs: Self) -> Self {
+        Self(R::mul(self.0, rhs.0))
+    }
+
     /// Use this vector as the denominators for a vectorized division operation.
     ///
     /// This creates a `VectorDivider` which can then be used to perform

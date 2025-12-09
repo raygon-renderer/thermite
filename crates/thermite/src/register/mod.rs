@@ -154,7 +154,7 @@ pub trait Register: Sized + 'static {
     const ISA: InstructionSet;
 
     // Note: These don't require :Register because it would introduce recursive type bounds.
-    type HalfRegister;
+    type HalfRegister: Register<Element = Self::Element>;
     type DoubleRegister;
 
     /// Unsigned integer register type with the same number of lanes, used for

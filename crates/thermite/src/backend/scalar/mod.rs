@@ -5,6 +5,7 @@ pub mod signed;
 pub mod unsigned;
 
 use crate::{
+    isa::InstructionSet,
     register::{Element, Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
@@ -12,6 +13,10 @@ use crate::{
 pub struct Scalar;
 
 impl NativeSimd for Scalar {
+    const ISA: InstructionSet = InstructionSet::Scalar;
+
+    type Registers = generic_array::typenum::U16;
+
     type Native32Width = generic_array::typenum::U1;
     type Native64Width = generic_array::typenum::U1;
 

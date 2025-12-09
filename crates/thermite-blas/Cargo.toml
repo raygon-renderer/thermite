@@ -1,0 +1,10 @@
+[package]
+name = "thermite-blas"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thermite = { path = "../thermite" }
+fast_polynomial = { version = "0.4", default-features = false }
+num-traits = { version = "0.2", default-features = false }
+const-default = { version = "1.0.0", default-features = false }

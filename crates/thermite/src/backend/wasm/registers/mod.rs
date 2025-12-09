@@ -17,6 +17,7 @@ pub use i64x2::I64x2Wasm;
 pub use u64x2::U64x2Wasm;
 
 use crate::{
+    isa::InstructionSet,
     register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
@@ -24,6 +25,8 @@ use crate::{
 pub struct Wasm;
 
 impl NativeSimd for Wasm {
+    const ISA: InstructionSet = arch::ISA;
+
     type Native32Width = generic_array::typenum::U4;
     type Native64Width = generic_array::typenum::U2;
 

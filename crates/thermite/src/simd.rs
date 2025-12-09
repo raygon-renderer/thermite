@@ -8,15 +8,21 @@ use num_traits::Signed;
 
 use crate::{
     Vector,
+    isa::InstructionSet,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Interoperable, Lanes,
-        LinAlg4Register, MaskRegister, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
-        UnsignedIntegerRegister, WidenRegister,
+        BitsRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, IntegerRegister, Interoperable,
+        Lanes, LinAlg4Register, MaskRegister, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
+        UnsignedIntegerRegister, WidenRegister, element::IntegerElement,
     },
 };
 
+/// Native-width SIMD types supported directly by the target architecture.
 #[rustfmt::skip]
 pub trait NativeSimd {
+    const ISA: InstructionSet;
+
+    type Registers: ArrayLength;
+
     /// Largest native 32-bit SIMD width
     type Native32Width: Lanes;
 
@@ -25,21 +31,22 @@ pub trait NativeSimd {
 
     // Largest Native 32-bit SIMD types
     type f32xN: Interoperable<Self::i32xN, Self::u32xN, Lanes = Self::Native32Width, Element = f32, USize = Self::u32xN, ISize = Self::i32xN>
-        + FloatRegister;
+        + FloatRegister<Bits = Self::u32xN, Signed = Self::i32xN>;
     type i32xN: Interoperable<Self::f32xN, Self::u32xN, Lanes = Self::Native32Width, Element = i32, USize = Self::u32xN, ISize = Self::i32xN>
-        + IntegerRegister + SignedRegister;
+        + SignedIntegerRegister;
     type u32xN: Interoperable<Self::f32xN, Self::i32xN, Lanes = Self::Native32Width, Element = u32, USize = Self::u32xN, ISize = Self::i32xN>
         + UnsignedIntegerRegister;
 
     // Largest Native 64-bit SIMD types
     type f64xN: Interoperable<Self::i64xN, Self::u64xN, Lanes = Self::Native64Width, Element = f64, USize = Self::u64xN, ISize = Self::i64xN>
-        + FloatRegister;
+        + FloatRegister<Bits = Self::u64xN, Signed = Self::i64xN>;
     type i64xN: Interoperable<Self::f64xN, Self::u64xN, Lanes = Self::Native64Width, Element = i64, USize = Self::u64xN, ISize = Self::i64xN>
-        + IntegerRegister + SignedRegister;
+        + SignedIntegerRegister;
     type u64xN: Interoperable<Self::f64xN, Self::i64xN, Lanes = Self::Native64Width, Element = u64, USize = Self::u64xN, ISize = Self::i64xN>
         + UnsignedIntegerRegister;
 }
 
+/// Fixed-size SIMD types of various lane counts and element sizes.
 #[rustfmt::skip]
 pub trait Simd: NativeSimd {
     // 64/32-bit SIMD types, almost always composite of scalar types
@@ -124,11 +131,185 @@ pub trait Simd: NativeSimd {
         + FloatRegister<Bits = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::f32x16> + WidenRegister<Self::f64x8> + NarrowRegister<Self::f64x8>;
     type i64x16: Interoperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64, USize = Self::u64x16, ISize = Self::i64x16>
-        + IntegerRegister + SignedRegister
+        + SignedIntegerRegister
         + CastRegister<Self::i32x16> + WidenRegister<Self::i64x8> + NarrowRegister<Self::i64x8>;
     type u64x16: Interoperable<Self::f64x16, Self::i64x16, Lanes = U16, Element = u64, USize = Self::u64x16, ISize = Self::i64x16>
         + UnsignedIntegerRegister
         + CastRegister<Self::u32x16> + WidenRegister<Self::u64x8> + NarrowRegister<Self::u64x8>;
+}
+
+// TODO: Move these "fully formed" traits to another module? Also work on their naming.
+
+/// A FloatElement type that can itself be used as a FloatRegister,
+/// with its associated Signed and Bits types also being fully formed.
+pub trait FullyFormedFloatElement:
+    FloatElement<
+        Signed: FullyFormedSignedIntegerElement<
+            Element = <Self as FloatElement>::Signed,
+            Storage = <Self as FloatElement>::Signed,
+        >,
+        Bits: FullyFormedUnsignedIntegerElement<
+            Element = <Self as FloatElement>::Bits,
+            Storage = <Self as FloatElement>::Bits,
+        >,
+    > + FloatRegister<Element = Self, Storage = Self>
+{
+}
+
+/// A Signed IntegerElement type that can itself be used as a SignedIntegerRegister.
+pub trait FullyFormedSignedIntegerElement:
+    IntegerElement
+    + IntegerRegister<Element = Self, Storage = Self>
+    + Signed
+    + SignedIntegerRegister<Element = Self, Storage = Self>
+{
+}
+
+/// An Unsigned IntegerElement type that can itself be used as an UnsignedIntegerRegister.
+pub trait FullyFormedUnsignedIntegerElement:
+    IntegerElement
+    + IntegerRegister<Element = Self, Storage = Self>
+    + UnsignedIntegerRegister<Element = Self, Storage = Self>
+{
+}
+
+impl<F> FullyFormedFloatElement for F where
+    F: FloatElement<
+            Signed: FullyFormedSignedIntegerElement<
+                Element = <F as FloatElement>::Signed,
+                Storage = <F as FloatElement>::Signed,
+            >,
+            Bits: FullyFormedUnsignedIntegerElement<
+                Element = <F as FloatElement>::Bits,
+                Storage = <F as FloatElement>::Bits,
+            >,
+        > + FloatRegister<Element = F, Storage = F>
+{
+}
+
+impl<I> FullyFormedSignedIntegerElement for I where
+    I: IntegerElement
+        + IntegerRegister<Element = I, Storage = I>
+        + Signed
+        + SignedIntegerRegister<Element = I, Storage = I>
+{
+}
+
+impl<U> FullyFormedUnsignedIntegerElement for U where
+    U: IntegerElement + IntegerRegister<Element = U, Storage = U> + UnsignedIntegerRegister<Element = U, Storage = U>
+{
+}
+
+/// SIMD types of the same element size but different lane counts, all based
+/// on the given fully formed element types.
+///
+/// For example, `SizedSimd<f32, i32, u32>` provides all the fixed-size SIMD types
+/// with 32-bit elements, and `SizedSimd<f64, i64, u64>` provides all the fixed-size SIMD types
+/// with 64-bit elements.
+///
+/// You can use this generically to write code that works with either 32-bit or 64-bit
+/// floating-point SIMD types and their associated integer types, like so:
+/// ```ignore
+/// fn my_func<S, T>(values: &[T]) -> T
+/// where
+///     T: FullyFormedFloatElement,
+///     S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
+/// {
+///     // do whatever you need with S::fxN, S::ixN, S::uxN, etc.
+///     let (scalar_prefix, vectors, scalar_suffix) = Vector::<S::fxN>::from_slice(values);
+/// }
+/// ```
+#[rustfmt::skip]
+pub trait SizedSimd<
+    F: FullyFormedFloatElement + FloatElement<Signed = I, Bits = U>,
+    I: FullyFormedSignedIntegerElement,
+    U: FullyFormedUnsignedIntegerElement,
+>: Simd {
+    type NativeWidth: Lanes;
+
+    type fxN: Interoperable<Self::ixN, Self::uxN, Lanes = Self::NativeWidth, Element = F, USize = Self::uxN, ISize = Self::ixN>
+        + FloatRegister<Bits = Self::uxN, Signed = Self::ixN>;
+    type ixN: Interoperable<Self::fxN, Self::uxN, Lanes = Self::NativeWidth, Element = I, USize = Self::uxN, ISize = Self::ixN>
+        + SignedIntegerRegister<Element = <F as FloatElement>::Signed>;
+    type uxN: Interoperable<Self::fxN, Self::ixN, Lanes = Self::NativeWidth, Element = U, USize = Self::uxN, ISize = Self::ixN>
+        + UnsignedIntegerRegister<Element = <F as FloatElement>::Bits>;
+
+    type fx2: Interoperable<Self::ix2, Self::ux2, Lanes = U2, Element = F, USize = Self::ux2, ISize = Self::ix2>
+        + FloatRegister<Bits = Self::ux2, Signed = Self::ix2> + WidenRegister<F> + NarrowRegister<F>;
+    type ix2: Interoperable<Self::fx2, Self::ux2, Lanes = U2, Element = I, USize = Self::ux2, ISize = Self::ix2>
+        + SignedIntegerRegister<Element = <F as FloatElement>::Signed> + WidenRegister<I> + NarrowRegister<I>;
+    type ux2: Interoperable<Self::fx2, Self::ix2, Lanes = U2, Element = U, USize = Self::ux2, ISize = Self::ix2>
+        + UnsignedIntegerRegister<Element = <F as FloatElement>::Bits> + WidenRegister<U> + NarrowRegister<U>;
+
+    type fx4: Interoperable<Self::ix4, Self::ux4, Lanes = U4, Element = F, USize = Self::ux4, ISize = Self::ix4>
+        + FloatRegister<Bits = Self::ux4, Signed = Self::ix4> + LinAlg4Register
+        + WidenRegister<Self::fx2> + NarrowRegister<Self::fx2>;
+    type ix4: Interoperable<Self::fx4, Self::ux4, Lanes = U4, Element = I, USize = Self::ux4, ISize = Self::ix4>
+        + SignedIntegerRegister<Element = <F as FloatElement>::Signed> + WidenRegister<Self::ix2> + NarrowRegister<Self::ix2>;
+    type ux4: Interoperable<Self::fx4, Self::ix4, Lanes = U4, Element = U, USize = Self::ux4, ISize = Self::ix4>
+        + UnsignedIntegerRegister<Element = <F as FloatElement>::Bits> + WidenRegister<Self::ux2> + NarrowRegister<Self::ux2>;
+
+    type fx8: Interoperable<Self::ix8, Self::ux8, Lanes = U8, Element = F, USize = Self::ux8, ISize = Self::ix8>
+        + FloatRegister<Bits = Self::ux8, Signed = Self::ix8> + WidenRegister<Self::fx4> + NarrowRegister<Self::fx4>;
+    type ix8: Interoperable<Self::fx8, Self::ux8, Lanes = U8, Element = I, USize = Self::ux8, ISize = Self::ix8>
+        + SignedIntegerRegister<Element = <F as FloatElement>::Signed> + WidenRegister<Self::ix4> + NarrowRegister<Self::ix4>;
+    type ux8: Interoperable<Self::fx8, Self::ix8, Lanes = U8, Element = U, USize = Self::ux8, ISize = Self::ix8>
+        + UnsignedIntegerRegister<Element = <F as FloatElement>::Bits> + WidenRegister<Self::ux4> + NarrowRegister<Self::ux4>;
+
+    type fx16: Interoperable<Self::ix16, Self::ux16, Lanes = U16, Element = F, USize = Self::ux16, ISize = Self::ix16>
+        + FloatRegister<Bits = Self::ux16, Signed = Self::ix16> + WidenRegister<Self::fx8> + NarrowRegister<Self::fx8>;
+    type ix16: Interoperable<Self::fx16, Self::ux16, Lanes = U16, Element = I, USize = Self::ux16, ISize = Self::ix16>
+        + SignedIntegerRegister<Element = <F as FloatElement>::Signed> + WidenRegister<Self::ix8> + NarrowRegister<Self::ix8>;
+    type ux16: Interoperable<Self::fx16, Self::ix16, Lanes = U16, Element = U, USize = Self::ux16, ISize = Self::ix16>
+        + UnsignedIntegerRegister<Element = <F as FloatElement>::Bits> + WidenRegister<Self::ux8> + NarrowRegister<Self::ux8>;
+}
+
+impl<S: Simd> SizedSimd<f32, i32, u32> for S {
+    type NativeWidth = S::Native32Width;
+
+    type fxN = S::f32xN;
+    type ixN = S::i32xN;
+    type uxN = S::u32xN;
+
+    type fx2 = S::f32x2;
+    type ix2 = S::i32x2;
+    type ux2 = S::u32x2;
+
+    type fx4 = S::f32x4;
+    type ix4 = S::i32x4;
+    type ux4 = S::u32x4;
+
+    type fx8 = S::f32x8;
+    type ix8 = S::i32x8;
+    type ux8 = S::u32x8;
+
+    type fx16 = S::f32x16;
+    type ix16 = S::i32x16;
+    type ux16 = S::u32x16;
+}
+
+impl<S: Simd> SizedSimd<f64, i64, u64> for S {
+    type NativeWidth = S::Native64Width;
+
+    type fxN = S::f64xN;
+    type ixN = S::i64xN;
+    type uxN = S::u64xN;
+
+    type fx2 = S::f64x2;
+    type ix2 = S::i64x2;
+    type ux2 = S::u64x2;
+
+    type fx4 = S::f64x4;
+    type ix4 = S::i64x4;
+    type ux4 = S::u64x4;
+
+    type fx8 = S::f64x8;
+    type ix8 = S::i64x8;
+    type ux8 = S::u64x8;
+
+    type fx16 = S::f64x16;
+    type ix16 = S::i64x16;
+    type ux16 = S::u64x16;
 }
 
 pub type f32xN<S> = Vector<<S as NativeSimd>::f32xN>;

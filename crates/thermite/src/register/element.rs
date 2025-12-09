@@ -5,7 +5,7 @@ pub trait Element:
     /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
     type USize: IntegerElement;
     /// Signed integer type to be used with operations that require signed counts, such as shifts.
-    type ISize: IntegerElement;
+    type ISize: IntegerElement + num_traits::Signed;
 
     /// When used as a mask, represents "true"
     const TRUTHY: Self;
@@ -126,9 +126,17 @@ use num_traits::float::FloatCore as FloatTrait;
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: Element + FloatTrait + From<i8> + core::fmt::Display + crate::math::FloatConsts {
+pub trait FloatElement:
+    Element
+    + FloatTrait
+    + From<i8>
+    + core::fmt::Display
+    + crate::math::FloatConsts
+    + num_traits::Signed
+    + num_traits::FloatConst
+{
     type Bits: IntegerElement;
-    type Signed: IntegerElement;
+    type Signed: IntegerElement + num_traits::Signed;
 
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;

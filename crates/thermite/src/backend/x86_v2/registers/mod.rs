@@ -18,6 +18,7 @@ pub use u64x2::U64x2V2;
 
 use crate::{
     backend::scalar::Scalar,
+    isa::InstructionSet,
     register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
@@ -25,6 +26,10 @@ use crate::{
 pub struct X86V2;
 
 impl NativeSimd for X86V2 {
+    const ISA: InstructionSet = InstructionSet::X86V2;
+
+    type Registers = generic_array::typenum::U16;
+
     type Native32Width = generic_array::typenum::U4;
     type Native64Width = generic_array::typenum::U2;
 

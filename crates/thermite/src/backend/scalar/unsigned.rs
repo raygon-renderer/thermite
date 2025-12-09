@@ -19,7 +19,7 @@ impl Register for [<u $width>] {
 
     type Element = $i;
     type Storage = $i;
-    type HalfRegister = ();
+    type HalfRegister = Self;
     type DoubleRegister = DoublePumpRegister<Self>;
 
     const IS_EMULATED: bool = false;
