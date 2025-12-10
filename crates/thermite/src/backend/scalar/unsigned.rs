@@ -56,6 +56,8 @@ impl Register for [<u $width>] {
         if mask != 0 { rhs } else { lhs }
     }
 
+    const HAS_SIMPLE_UNPACK: bool = true;
+
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         (a, b) // no-op for scalar

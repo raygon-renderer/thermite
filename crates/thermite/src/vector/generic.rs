@@ -47,8 +47,11 @@ pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
     fn extract<const I: usize>(self) -> Self::Element;
     fn insert<const I: usize>(self, value: Self::Element) -> Self;
     fn reverse(self) -> Self;
-    fn unpack(self, other: Self) -> (Self, Self);
     fn swap_bytes(self) -> Self;
+
+    const HAS_SIMPLE_UNPACK: bool;
+
+    fn unpack(self, other: Self) -> (Self, Self);
 
     fn map<F>(self, f: F) -> Self
     where
@@ -263,8 +266,11 @@ impl<R: Register> GenericVector for Vector<R> {
     #[inline(always)] fn extract<const I: usize>(self) -> Self::Element { Vector::<R>::extract::<I>(self) }
     #[inline(always)] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector::<R>::insert::<I>(self, value) }
     #[inline(always)] fn reverse(self) -> Self { Vector::<R>::reverse(self) }
-    #[inline(always)] fn unpack(self, other: Self) -> (Self, Self) { Vector::<R>::unpack(self, other) }
     #[inline(always)] fn swap_bytes(self) -> Self { Vector::<R>::swap_bytes(self) }
+
+    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
+
+    #[inline(always)] fn unpack(self, other: Self) -> (Self, Self) { Vector::<R>::unpack(self, other) }
 
     #[inline(always)] fn map<F>(self, f: F) -> Self
     where F: Fn(Self::Element) -> Self::Element,

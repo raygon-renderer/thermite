@@ -140,6 +140,8 @@ impl Register for F64x2V3 {
         unsafe { arch::_mm_permute_pd(value, 0b01) }
     }
 
+    const HAS_SIMPLE_UNPACK: bool = true;
+
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
@@ -258,22 +260,22 @@ impl NumericRegister for F64x2V3 {
 
     #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
-        _mm_reduce_pd_v2!(value; _mm_min_pd _mm_min_sd)
+        _mm_reduce_pd_v1!(value; _mm_min_pd _mm_min_sd)
     }
 
     #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
-        _mm_reduce_pd_v2!(value; _mm_max_pd _mm_max_sd)
+        _mm_reduce_pd_v1!(value; _mm_max_pd _mm_max_sd)
     }
 
     #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
-        _mm_reduce_pd_v2!(value; _mm_add_pd _mm_add_sd)
+        _mm_reduce_pd_v1!(value; _mm_add_pd _mm_add_sd)
     }
 
     #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
-        _mm_reduce_pd_v2!(value; _mm_mul_pd _mm_mul_sd)
+        _mm_reduce_pd_v1!(value; _mm_mul_pd _mm_mul_sd)
     }
 
     #[inline(always)]

@@ -22,7 +22,7 @@ macro_rules! _mm256_reduce_pd_v3 {
 
         let xmm0 = arch::$op(xmm0, xmm1);
 
-        _mm_reduce_pd_v2!(xmm0; $op $last)
+        _mm_reduce_pd_v1!(xmm0; $op $last)
     }};
 }
 

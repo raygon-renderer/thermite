@@ -492,6 +492,10 @@ impl<R: Register> Vector<R> {
         Self(R::reverse(self.0))
     }
 
+    /// Whether the register type has a simple unpack implementation,
+    /// or requires a more complex method.
+    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
+
     /// Unpack and interleave elements from two vectors.
     ///
     /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,

@@ -255,6 +255,10 @@ where
         Self(R::reverse(value.1), R::reverse(value.0))
     }
 
+    // double-pump logic for unpack does not add extra complexity,
+    // so this is determined solely by the underlying register.
+    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
+
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         let (r1_lo, r1_hi) = R::unpack(a.0, b.0);

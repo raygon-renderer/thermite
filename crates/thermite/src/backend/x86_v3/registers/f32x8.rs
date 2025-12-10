@@ -133,6 +133,8 @@ impl Register for F32x8V3 {
         Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
     }
 
+    const HAS_SIMPLE_UNPACK: bool = false;
+
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {

@@ -136,6 +136,8 @@ impl Register for F64x4V3 {
         unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
+    const HAS_SIMPLE_UNPACK: bool = false;
+
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
