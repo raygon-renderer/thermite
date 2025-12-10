@@ -141,13 +141,16 @@ impl Register for F64x4V3 {
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            let v0 = arch::_mm256_unpacklo_pd(a, b);
-            let v1 = arch::_mm256_unpackhi_pd(a, b);
+            // 1. Local Interleave
+            // Use shuffle_pd (0x0/0xF) instead of unpacklo/hi for that 0.5 CPI throughput on some CPUs
+            let t1 = arch::_mm256_shuffle_pd(a, b, 0x0); // "unpacklo" equivalent
+            let t2 = arch::_mm256_shuffle_pd(a, b, 0xF); // "unpackhi" equivalent
 
-            let real_lo = arch::_mm256_permute2f128_pd(v0, v1, 0x20);
-            let real_hi = arch::_mm256_permute2f128_pd(v0, v1, 0x31);
+            // 2. Lane Fix, may run in parallel
+            let res_a = arch::_mm256_permute4x64_pd(t1, 0xD8);
+            let res_b = arch::_mm256_permute4x64_pd(t2, 0xD8);
 
-            (real_lo, real_hi)
+            (res_a, res_b)
         }
     }
 

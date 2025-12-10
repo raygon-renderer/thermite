@@ -138,17 +138,26 @@ impl Register for F32x8V3 {
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            // 1. Unpack: Generate the ABAB pattern (but swizzled lanes)
-            // Latency: ~1 cycle
-            let v0 = arch::_mm256_unpacklo_ps(a, b);
-            let v1 = arch::_mm256_unpackhi_ps(a, b);
+            // 1. Group 128-bit lanes
+            // t1 = [a_lo, b_lo] (Contains a0..a3, a4..a7 equivalent indices relative to 128b)
+            let t1 = arch::_mm256_permute2f128_ps(a, b, 0x20);
 
-            // 2. Permute: Fix the lane ordering
-            // Latency: ~3 cycles
-            let real_lo = arch::_mm256_permute2f128_ps(v0, v1, 0x20);
-            let real_hi = arch::_mm256_permute2f128_ps(v0, v1, 0x31);
+            // t2 = [a_hi, b_hi]
+            let t2 = arch::_mm256_permute2f128_ps(a, b, 0x31);
 
-            (real_lo, real_hi)
+            // 2. Shuffle locally
+            // We now have t1: [a0 b0 a1 b1 | a4 b4 a5 b5]
+            //             t2: [a2 b2 a3 b3 | a6 b6 a7 b7]
+
+            // Select indices 0, 2 from t1 and 0, 2 from t2
+            // Lane 0: a0, a1 (from t1) + a2, a3 (from t2) -> a0 a1 a2 a3
+            // Lane 1: a4, a5 (from t1) + a6, a7 (from t2) -> a4 a5 a6 a7
+            let res_a = arch::_mm256_shuffle_ps(t1, t2, 0b10_00_10_00); // 0x88
+
+            // Select indices 1, 3 from t1 and 1, 3 from t2
+            let res_b = arch::_mm256_shuffle_ps(t1, t2, 0b11_01_11_01); // 0xDD
+
+            (res_a, res_b)
         }
     }
 

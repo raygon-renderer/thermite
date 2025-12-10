@@ -142,11 +142,17 @@ impl Register for I64x4V3 {
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
+            // 1. Unpack to de-interleave locally within 128-bit lanes
+            // v0 becomes [a0, a2, a1, a3]
             let v0 = arch::_mm256_unpacklo_epi64(a, b);
+            // v1 becomes [b0, b2, b1, b3]
             let v1 = arch::_mm256_unpackhi_epi64(a, b);
 
-            let real_lo = arch::_mm256_permute2f128_si256(v0, v1, 0x20);
-            let real_hi = arch::_mm256_permute2f128_si256(v0, v1, 0x31);
+            // 2. Permute to cross lanes and fix the order
+            // We want indices 0, 2, 1, 3 (swap middle two elements)
+            // _MM_SHUFFLE(3, 1, 2, 0) = 0b11_01_10_00 = 0xD8
+            let real_lo = arch::_mm256_permute4x64_epi64(v0, 0xD8);
+            let real_hi = arch::_mm256_permute4x64_epi64(v1, 0xD8);
 
             (real_lo, real_hi)
         }

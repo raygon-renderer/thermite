@@ -138,19 +138,11 @@ impl Register for U32x8V3 {
         Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    const HAS_SIMPLE_UNPACK: bool = super::I32x8V3::HAS_SIMPLE_UNPACK;
 
     #[inline(always)]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe {
-            let v0 = arch::_mm256_unpacklo_epi32(a, b);
-            let v1 = arch::_mm256_unpackhi_epi32(a, b);
-
-            let real_lo = arch::_mm256_permute2f128_si256(v0, v1, 0x20);
-            let real_hi = arch::_mm256_permute2f128_si256(v0, v1, 0x31);
-
-            (real_lo, real_hi)
-        }
+        super::I32x8V3::unpack(a, b) // reuse signed implementation
     }
 
     #[inline(always)]
