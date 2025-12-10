@@ -10,9 +10,6 @@ use crate::LoadKernel;
 
 /// Generic map-reduce kernel trait for BLAS operations.
 pub trait MapReduceKernel<T, const I: usize, const O: usize>: Sized {
-    // Avoid calls to `map` when possible, e.g., when `map_reduce` can be implemented more efficiently.
-    const AVOID_MAP: bool;
-
     /// Map input vectors to output vectors.
     fn map<V: FloatVector<Element = T>>(&self, v: [V; I]) -> [V; O];
     /// Reduce two sets of output vectors.
@@ -27,33 +24,46 @@ pub trait MapReduceKernel<T, const I: usize, const O: usize>: Sized {
     }
 
     #[inline(always)]
-    fn run<S, L>(&self, loader: &L, values: [&[T]; I]) -> [T; O]
+    fn run<S, L, const P: usize>(&self, loader: &L, values: [&[T]; P]) -> [T; O]
     where
-        L: LoadKernel<I>,
+        L: LoadKernel<P, I>,
         T: FullyFormedFloatElement,
         S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
     {
-        map_reduce::<S, T, L, Self, 0, I, O>(loader, self, values)
+        map_reduce::<S, T, L, Self, 0, P, I, O>(loader, self, values)
     }
 
     #[inline(always)]
-    fn run_n<S, L, const N: usize>(&self, loader: &L, values: [&[T; N]; I]) -> [T; O]
+    fn run_n<S, L, const N: usize, const P: usize>(&self, loader: &L, values: [&[T; N]; P]) -> [T; O]
     where
-        L: LoadKernel<I>,
+        L: LoadKernel<P, I>,
         T: FullyFormedFloatElement,
         S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
     {
-        map_reduce::<S, T, L, Self, N, I, O>(loader, self, values.map(|v| v.as_slice()))
+        map_reduce::<S, T, L, Self, N, P, I, O>(loader, self, values.map(|v| v.as_slice()))
     }
 }
 
 /// Generic map-reduce implementation using the provided kernel and loader.
+///
+/// The loader take P input pointers and loads I vectors from them,
+/// but the loader is also allowed to load more data than it returns,
+/// as indicated by the `READ_MULTIPLIER` associated constant.
+///
+/// The `MapReduceKernel` takes I input vectors and produces O output vectors.
+///
+/// The generic parameter N indicates a fixed size for the input slices,
+/// allowing for additional compile-time optimizations when known.
+///
+/// SizedSimd allows selecting SIMD types based on the element type and precision, be it
+/// f32 or f64, and their signed counterparts. `T` being a `FullyFormedFloatElement` ensures
+/// that `T` itself can be used as a Scalar register type within `Vector`.
 #[allow(unused_assignments, unused_mut)]
 #[inline(always)]
-fn map_reduce<S, T, L: LoadKernel<I>, K, const N: usize, const I: usize, const O: usize>(
+fn map_reduce<S, T, L: LoadKernel<P, I>, K, const N: usize, const P: usize, const I: usize, const O: usize>(
     loader: &L,
     kernel: &K,
-    values: [&[T]; I],
+    values: [&[T]; P],
 ) -> [T; O]
 where
     // most of this is to assure the compiler that the types are compatible
@@ -69,7 +79,7 @@ where
 
     if const { N != 0 } {
         unsafe {
-            for v in &values {
+            for v in values {
                 core::hint::assert_unchecked(v.len() == N);
             }
 
@@ -77,60 +87,41 @@ where
         }
     }
 
-    let mut sum = [Vector::ZERO; O];
-
+    // prepare input pointers
     let ptrs = values.map(|v| v.as_ptr());
+
+    // start with zeroed sum of the largest vector type
+    let mut sum = [Vector::ZERO; O];
 
     macro_rules! descend {
         ($($width:ty),*) => {{
             $(
+                // we don't want to use emulated (double-pumped) registers, only real SIMD registers
                 if !<$width as Register>::IS_EMULATED {
-                    let lane_width = <<$width as Register>::Lanes as Unsigned>::USIZE;
+                    let lane_width = <<$width as Register>::Lanes as Unsigned>::USIZE * L::READ_MULTIPLIER;
 
                     // accumulator registers, some of which may not be used depending on output size O,
                     // it's mostly just a compiler hint to accumulate in parallel
                     let mut registers: GenericArray<[Vector<$width>; O], S::Registers> = unsafe { core::mem::zeroed() };
 
                     // max number of registers we can use for accumulation, given the number of output vectors O
+                    let min = O;
                     let max = registers.len() / O;
-
-                    let mut register_is_used = false;
 
                     // for parallel accumulation, we need N-1 real registers, where ymm0 is reserved for temporary loads
                     // this ends up being optimal due to register renaming and avoiding stalls
-                    if registers.len() > 1 && max > (registers.len() - 1) {
+                    if max > (min + 1) {
                         // elements processed per parallel iteration
-                        let parallel_width = lane_width * (registers.len() - 1);
-
-                        // first iteration using regular map to fill registers
-                        if const { N > 0 && !K::AVOID_MAP } && (len - idx) >= parallel_width {
-                            for (i, r) in registers[1..max].iter_mut().enumerate().skip(1) {
-                                *r = kernel.map(unsafe {
-                                    loader.load::<Vector<$width>>(ptrs.map(|p| p.add(idx + i * lane_width)))
-                                });
-                            }
-
-                            idx += parallel_width;
-                            register_is_used = true;
-                        }
+                        let parallel_width = lane_width * (max - min);
 
                         while (len - idx) >= parallel_width {
-                            for (i, r) in registers[1..max].iter_mut().enumerate() {
-                                *r = kernel.map_reduce(*r, unsafe {
-                                    loader.load::<Vector<$width>>(ptrs.map(|p| p.add(idx + i * lane_width)))
-                                });
+                            for (i, r) in registers[min..max].iter_mut().enumerate() {
+                                let idx = idx + i * lane_width;
+                                *r = kernel.map_reduce(*r, unsafe { loader.load::<Vector<$width>>(ptrs.map(|p| p.add(idx))) });
                             }
 
                             idx += parallel_width;
-                            register_is_used = true;
                         }
-                    }
-
-                    if { N > 0 && !K::AVOID_MAP } && !register_is_used && (len - idx) >= lane_width {
-                        registers[0] = kernel.map(unsafe {
-                            loader.load::<Vector<$width>>(ptrs.map(|p| p.add(idx)))
-                        });
-                        idx += lane_width;
                     }
 
                     // accumulate remaining full lanes in ymm0
@@ -156,6 +147,7 @@ where
                 }
 
                 // prep sum for next iteration by narrowing it down
+                // e.g., f64x16 -> f64x8 -> f64x4
                 let mut sum = {
                     let mut lo = [Vector::ZERO; O];
                     let mut hi = [Vector::ZERO; O];
@@ -175,7 +167,7 @@ where
 
             while idx < len {
                 sum = kernel.map_reduce(sum, unsafe { loader.load::<Vector<T>>(ptrs.map(|p| p.add(idx))) });
-                idx += 1;
+                idx += L::READ_MULTIPLIER;
             }
 
             kernel.reduce_scalar(sum)
