@@ -1,29 +1,21 @@
 use thermite::{
-    Vector,
-    generic_array::{GenericArray, typenum::Unsigned},
-    register::{FloatElement, FloatRegister, Register, SignedIntegerRegister, UnsignedIntegerRegister},
-    simd::{Simd, SizedSimd},
+    register::well_formed::WellFormedFloatElement,
+    simd::{FloatSimd, Simd},
     vector::generic::FloatVector,
 };
 
+pub mod argmx;
 pub mod kernels;
 pub mod map_reduce;
 
 use map_reduce::MapReduceKernel;
 
-impl<S: Simd> BLAS1<S> for S {}
+impl<S: Simd> BLAS<S> for S {}
 
-trait AsTuple {
-    type Output;
-    fn into_tuple(self) -> Self::Output;
-}
-
-impl<T: Copy> AsTuple for [T; 2] {
-    type Output = (T, T);
-    #[inline(always)]
-    fn into_tuple(self) -> Self::Output {
-        (self[0], self[1])
-    }
+#[derive(Copy, Clone, Debug)]
+pub struct Complex<V: FloatVector> {
+    pub re: V,
+    pub im: V,
 }
 
 macro_rules! decl_complex_dp {
@@ -39,9 +31,8 @@ macro_rules! decl_complex_dp {
             decl_complex_dp!(TY_TY $ty),
             decl_complex_dp!(TY_TY $ty),
         ) {
-            kernels::dot_product::SoAComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >
-                .run::<S, _, _>(&SimpleLoad, [ar, ai, br, bi])
-                .into_tuple()
+            let [re, im] = kernels::dot_product::ComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >.run::<S, _, _>(&SimpleLoad, [ar, ai, br, bi]);
+            (re, im)
         }
 
         #[doc = concat!(decl_complex_dp!(TY_DOC $ty), " complex dot product ", decl_complex_dp!(CONJ_DOC $conj), " - interleaved layout.")]
@@ -61,9 +52,29 @@ macro_rules! decl_complex_dp {
             assert!(a.len() % 2 == 0, "Input array 'a' length must be even for interleaved complex numbers.");
             assert!(b.len() % 2 == 0, "Input array 'b' length must be even for interleaved complex numbers.");
 
-            kernels::dot_product::SoAComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >
-                .run::<S, _, _>(&DeInterleavedLoad(SimpleLoad), [a, b])
-                .into_tuple()
+            let [re, im] = kernels::dot_product::ComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >.run::<S, _, _>(&DeInterleavedLoad(SimpleLoad), [a, b]);
+            (re, im)
+        }
+
+        #[doc = concat!(decl_complex_dp!(TY_DOC $ty), " complex dot product ", decl_complex_dp!(CONJ_DOC $conj), " - interleaved layout.")]
+        ///
+        /// # Panics
+        ///
+        /// Panics if the input arrays' lengths are not even, as interleaved complex numbers
+        /// require pairs of real and imaginary parts.
+        #[inline(always)]
+        fn [<$ty dot $conj _interleaved_kahan>](
+            a: &[ decl_complex_dp!(TY_TY $ty) ],
+            b: &[ decl_complex_dp!(TY_TY $ty) ],
+        ) -> (
+            decl_complex_dp!(TY_TY $ty),
+            decl_complex_dp!(TY_TY $ty),
+        ) {
+            assert!(a.len() % 2 == 0, "Input array 'a' length must be even for interleaved complex numbers.");
+            assert!(b.len() % 2 == 0, "Input array 'b' length must be even for interleaved complex numbers.");
+
+            let [re, im, ..] = kernels::dot_product::ComplexDotProductKahanKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >.run::<S, _, _>(&DeInterleavedLoad(SimpleLoad), [a, b]);
+            (re, im)
         }
 
         #[doc = concat!(decl_complex_dp!(TY_DOC $ty), " complex dot product ", decl_complex_dp!(CONJ_DOC $conj), " - planar layout, fixed-size arrays.\n\n")]
@@ -78,9 +89,8 @@ macro_rules! decl_complex_dp {
             decl_complex_dp!(TY_TY $ty),
             decl_complex_dp!(TY_TY $ty),
         ) {
-            kernels::dot_product::SoAComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >
-                .run_n::<S, _, N, _>(&SimpleLoad, [ar, ai, br, bi])
-                .into_tuple()
+            let [re, im] = kernels::dot_product::ComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >.run_n::<S, _, N, _>(&SimpleLoad, [ar, ai, br, bi]);
+            (re, im)
         }
 
         #[doc = concat!(decl_complex_dp!(TY_DOC $ty), " complex dot product ", decl_complex_dp!(CONJ_DOC $conj), " - interleaved layout, fixed-size arrays.\n\n")]
@@ -99,9 +109,8 @@ macro_rules! decl_complex_dp {
             decl_complex_dp!(TY_TY $ty),
         ) {
             assert!(N % 2 == 0, "Input array length must be even for interleaved complex numbers.");
-            kernels::dot_product::SoAComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >
-                .run_n::<S, _, N, _>(&DeInterleavedLoad(SimpleLoad), [a, b])
-                .into_tuple()
+            let [re, im] = kernels::dot_product::ComplexDotProductKernel::< { decl_complex_dp!(CONJ_VAL $conj) } >.run_n::<S, _, N, _>(&DeInterleavedLoad(SimpleLoad), [a, b]);
+            (re, im)
         }
     }};
 
@@ -118,8 +127,20 @@ macro_rules! decl_complex_dp {
     (CONJ_VAL u) => { false };
 }
 
-/// WIP BLAS Level 1 routines implemented using Thermite SIMD abstractions.
-pub trait BLAS1<S: Simd> {
+/// WIP BLAS routines implemented using Thermite SIMD abstractions.
+pub trait BLAS<S: Simd> {
+    /// Find the indices of the minimum and maximum elements in a slice.
+    ///
+    /// Returns `None` if the input slice is empty.
+    #[inline(always)]
+    fn arg_minmax<T>(data: &[T]) -> Option<(usize, usize)>
+    where
+        T: WellFormedFloatElement,
+        S: FloatSimd<T>,
+    {
+        argmx::arg_minmax::<S, T, _, 1>(&SimpleLoad, [data])
+    }
+
     /// Single-precision dot product.
     #[inline(always)]
     fn sdot(a: &[f32], b: &[f32]) -> f32 {
@@ -149,6 +170,19 @@ pub trait BLAS1<S: Simd> {
     decl_complex_dp!(c, c); // single-precision complex dot product with conjugation
     decl_complex_dp!(z, u); // double-precision complex dot product without conjugation
     decl_complex_dp!(z, c); // double-precision complex dot product with conjugation
+
+    /// Complex Dot Product using slices of `Complex<V>` structs.
+    #[inline(always)]
+    fn complex_dot_product<V: FloatVector, const CONJ: bool>(
+        a: &[Complex<V>],
+        b: &[Complex<V>],
+    ) -> (V::Element, V::Element) {
+        let loader = |[a, b]: [Complex<V>; 2]| -> [V; 4] { [a.re, a.im, b.re, b.im] };
+
+        let res = kernels::dot_product::ComplexDotProductKernel::<CONJ>.run_simple(loader, [a, b]);
+
+        (res[0], res[1])
+    }
 }
 
 /// Trait for loading vectors from memory.
