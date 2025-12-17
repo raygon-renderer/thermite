@@ -10,10 +10,7 @@ use crate::{
 };
 
 #[rustfmt::skip]
-impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R>
-where
-    Self: FloatConsts,
-{
+impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R> {
     #[inline(always)] fn infinity() -> Self { Self::INFINITY }
     #[inline(always)] fn neg_infinity() -> Self { Self::NEG_INFINITY }
     #[inline(always)] fn nan() -> Self { Self::NAN }

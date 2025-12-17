@@ -5,6 +5,7 @@
 use crate::{
     divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
     mask::Mask,
+    math::FloatConsts,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
         LinAlg4Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
@@ -1167,44 +1168,33 @@ impl<R: NumericRegister> ConstOne for Vector<R> {
 }
 
 #[rustfmt::skip]
-impl<R: FloatRegister> num_traits::FloatConst for Vector<R>
-where
-    R::Element: num_traits::FloatConst
-        + Add<R::Element, Output = R::Element>
-        + Div<R::Element, Output = R::Element>,
-{
-    #[inline(always)] fn E() -> Self { Self::splat(num_traits::FloatConst::E()) }
-    #[inline(always)] fn FRAC_1_PI() -> Self { Self::splat(num_traits::FloatConst::FRAC_1_PI()) }
-    #[inline(always)] fn FRAC_1_SQRT_2() -> Self { Self::splat(num_traits::FloatConst::FRAC_1_SQRT_2()) }
-    #[inline(always)] fn FRAC_2_PI() -> Self { Self::splat(num_traits::FloatConst::FRAC_2_PI()) }
-    #[inline(always)] fn FRAC_2_SQRT_PI() -> Self { Self::splat(num_traits::FloatConst::FRAC_2_SQRT_PI()) }
-    #[inline(always)] fn FRAC_PI_2() -> Self { Self::splat(num_traits::FloatConst::FRAC_PI_2()) }
-    #[inline(always)] fn FRAC_PI_3() -> Self { Self::splat(num_traits::FloatConst::FRAC_PI_3()) }
-    #[inline(always)] fn FRAC_PI_4() -> Self { Self::splat(num_traits::FloatConst::FRAC_PI_4()) }
-    #[inline(always)] fn FRAC_PI_6() -> Self { Self::splat(num_traits::FloatConst::FRAC_PI_6()) }
-    #[inline(always)] fn FRAC_PI_8() -> Self { Self::splat(num_traits::FloatConst::FRAC_PI_8()) }
-    #[inline(always)] fn LN_10() -> Self { Self::splat(num_traits::FloatConst::LN_10()) }
-    #[inline(always)] fn LN_2() -> Self { Self::splat(num_traits::FloatConst::LN_2()) }
-    #[inline(always)] fn LOG10_E() -> Self { Self::splat(num_traits::FloatConst::LOG10_E()) }
-    #[inline(always)] fn LOG2_E() -> Self { Self::splat(num_traits::FloatConst::LOG2_E()) }
-    #[inline(always)] fn PI() -> Self { Self::splat(num_traits::FloatConst::PI()) }
-    #[inline(always)] fn SQRT_2() -> Self { Self::splat(num_traits::FloatConst::SQRT_2()) }
+impl<R: FloatRegister> num_traits::FloatConst for Vector<R> {
+    #[inline(always)] fn E() -> Self                { const { Self::splat_const(FloatConsts::E) } }
+    #[inline(always)] fn FRAC_1_PI() -> Self        { const { Self::splat_const(FloatConsts::FRAC_1_PI) } }
+    #[inline(always)] fn FRAC_1_SQRT_2() -> Self    { const { Self::splat_const(FloatConsts::FRAC_1_SQRT_2) } }
+    #[inline(always)] fn FRAC_2_PI() -> Self        { const { Self::splat_const(FloatConsts::FRAC_2_PI) } }
+    #[inline(always)] fn FRAC_2_SQRT_PI() -> Self   { const { Self::splat_const(FloatConsts::FRAC_2_SQRT_PI) } }
+    #[inline(always)] fn FRAC_PI_2() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_2) } }
+    #[inline(always)] fn FRAC_PI_3() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_3) } }
+    #[inline(always)] fn FRAC_PI_4() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_4) } }
+    #[inline(always)] fn FRAC_PI_6() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_6) } }
+    #[inline(always)] fn FRAC_PI_8() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_8) } }
+    #[inline(always)] fn LN_10() -> Self            { const { Self::splat_const(FloatConsts::LN_10) } }
+    #[inline(always)] fn LN_2() -> Self             { const { Self::splat_const(FloatConsts::LN_2) } }
+    #[inline(always)] fn LOG10_E() -> Self          { const { Self::splat_const(FloatConsts::LOG10_E) } }
+    #[inline(always)] fn LOG2_E() -> Self           { const { Self::splat_const(FloatConsts::LOG2_E) } }
+    #[inline(always)] fn PI() -> Self               { const { Self::splat_const(FloatConsts::PI) } }
+    #[inline(always)] fn SQRT_2() -> Self           { const { Self::splat_const(FloatConsts::SQRT_2) } }
 
     // the bounds on these three are dumb
     #[inline(always)]
-    fn TAU() -> Self where Self: Sized + Add<Self, Output = Self> {
-        Self::splat(num_traits::FloatConst::TAU())
-    }
+    fn TAU() -> Self where Self: Sized + Add<Self, Output = Self> { const { Self::splat_const(FloatConsts::TAU) } }
 
     #[inline(always)]
-    fn LOG10_2() -> Self where Self: Sized + Div<Self, Output = Self> {
-        Self::splat(num_traits::FloatConst::LOG10_2())
-    }
+    fn LOG10_2() -> Self where Self: Sized + Div<Self, Output = Self> { const { Self::splat_const(FloatConsts::LOG10_2) } }
 
     #[inline(always)]
-    fn LOG2_10() -> Self where Self: Sized + Div<Self, Output = Self> {
-        Self::splat(num_traits::FloatConst::LOG2_10())
-    }
+    fn LOG2_10() -> Self where Self: Sized + Div<Self, Output = Self> { const { Self::splat_const(FloatConsts::LOG2_10) } }
 }
 
 impl<R: LinAlg3Register> Vector<R> {

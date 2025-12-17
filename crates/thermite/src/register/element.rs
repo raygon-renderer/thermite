@@ -127,10 +127,6 @@ use num_traits::Float as FloatTrait;
 #[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore as FloatTrait;
 
-pub trait Is<T> {}
-
-impl<T> Is<T> for T {}
-
 /// A trait for float element types that can be used in SIMD operations.
 ///
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,

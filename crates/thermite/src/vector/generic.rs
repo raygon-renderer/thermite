@@ -1,7 +1,9 @@
 #![allow(missing_docs, clippy::missing_safety_doc)]
 #![deny(unconditional_recursion)] // just in case we miss one
 
-use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
+use core::ops::{
+    Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub,
+};
 
 use generic_array::GenericArray;
 use num_traits::Signed;
@@ -13,16 +15,23 @@ use crate::{
     register::{
         BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
         IntegerRegister, Lanes, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
-        SignedRegister, UnsignedIntegerRegister,
+        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
-pub trait VectorOperation<Args> {
-    type Output;
-    fn call(args: Args) -> Self::Output;
-}
-
-pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
+pub trait GenericVector:
+    Sized
+    + Copy
+    + core::fmt::Debug
+    + 'static
+    + BitAnd<Self, Output = Self>
+    + BitAndAssign<Self>
+    + BitOr<Self, Output = Self>
+    + BitOrAssign<Self>
+    + BitXor<Self, Output = Self>
+    + BitXorAssign<Self>
+    + Not<Output = Self>
+{
     type Element: Element;
     type Register: Register<Element = Self::Element, Lanes = Self::Lanes>;
 
@@ -60,6 +69,9 @@ pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
     fn insert<const I: usize>(self, value: Self::Element) -> Self;
     fn reverse(self) -> Self;
     fn swap_bytes(self) -> Self;
+
+    /// !self & other
+    fn bitandnot(self, other: Self) -> Self;
 
     const HAS_SIMPLE_UNPACK: bool;
 
@@ -102,12 +114,12 @@ pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
     }
 }
 
-pub trait SwizzleVector: GenericVector {
+pub trait SwizzleVector: GenericVector<Register: SwizzleRegister> {
     fn swizzle(self, other: Self, indices: GenericArray<u32, Self::Lanes>) -> Self;
     fn permute(self, indices: GenericArray<u32, Self::Lanes>) -> Self;
 }
 
-pub trait CastVector<FROM>: Sized {
+pub trait CastVector<FROM: GenericVector>: GenericVector<Register: CastRegister<FROM::Register>> {
     fn cast_from(from: FROM) -> Self;
 
     #[inline(always)]
@@ -132,7 +144,7 @@ where
     }
 }
 
-pub trait BitsVector<FROM>: Sized {
+pub trait BitsVector<FROM: GenericVector>: GenericVector<Register: BitsRegister<FROM::Register>> {
     fn from_bits(bits: FROM) -> Self;
 }
 
@@ -147,7 +159,19 @@ where
     }
 }
 
-pub trait GenericMask<V: GenericVector>: Sized + Copy + core::fmt::Debug + 'static {
+pub trait GenericMask<V: GenericVector>:
+    Sized
+    + Copy
+    + core::fmt::Debug
+    + 'static
+    + BitAnd<Self, Output = Self>
+    + BitAndAssign<Self>
+    + BitOr<Self, Output = Self>
+    + BitOrAssign<Self>
+    + BitXor<Self, Output = Self>
+    + BitXorAssign<Self>
+    + Not<Output = Self>
+{
     fn all(self) -> bool;
     fn any(self) -> bool;
     fn none(self) -> bool;
@@ -205,18 +229,24 @@ impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
     }
 }
 
-pub trait BitshiftVector: GenericVector {
+pub trait BitshiftVector:
+    GenericVector<Register: BitshiftRegister>
+    + Shr<Self::USize, Output = Self>
+    + Shl<Self::USize, Output = Self>
+    + Shr<u32, Output = Self>
+    + Shl<u32, Output = Self>
+{
     fn shli<const I: i32>(self) -> Self;
     fn shri<const I: i32>(self) -> Self;
     fn shlv(self, counts: Self::USize) -> Self;
     fn shrv(self, counts: Self::USize) -> Self;
 }
 
-pub trait MaskedVector: GenericVector {
+pub trait MaskedVector: GenericVector<Register: MaskRegister> {
     type Mask: GenericMask<Self>;
 }
 
-pub trait PartialOrdVector: MaskedVector + PartialEq {
+pub trait PartialOrdVector: MaskedVector<Register: PartialOrdRegister> + PartialEq {
     fn cmp_lt(self, other: Self) -> Self::Mask;
     fn cmp_le(self, other: Self) -> Self::Mask;
     fn cmp_gt(self, other: Self) -> Self::Mask;
@@ -226,7 +256,7 @@ pub trait PartialOrdVector: MaskedVector + PartialEq {
 }
 
 pub trait NumericVector:
-    PartialOrdVector<Element: num_traits::Num>
+    PartialOrdVector<Element: num_traits::Num, Register: NumericRegister>
     + num_traits::Num
     + num_traits::Bounded
     + num_traits::ConstOne
@@ -256,7 +286,7 @@ pub trait NumericVector:
     fn indexed() -> Self;
 }
 
-pub trait SignedVector: NumericVector<Element: Signed> + Signed {
+pub trait SignedVector: NumericVector<Element: Signed, Register: SignedRegister> + Signed {
     const NEG_ONE: Self;
     const MIN_POSITIVE: Self;
 
@@ -270,7 +300,10 @@ pub trait SignedVector: NumericVector<Element: Signed> + Signed {
 }
 
 pub trait IntegerVector:
-    NumericVector<Element: Denominator> + Div<Self::Divider, Output = Self> + Div<Self::BranchfreeDivider, Output = Self>
+    NumericVector<Element: Denominator, Register: IntegerRegister>
+    + BitshiftVector
+    + Div<Self::Divider, Output = Self>
+    + Div<Self::BranchfreeDivider, Output = Self>
 {
     type Divider: Copy;
     type BranchfreeDivider: Copy;
@@ -296,13 +329,13 @@ pub trait IntegerVector:
     fn leading_zeros(self) -> Self;
 }
 
-pub trait SignedIntegerVector: SignedVector + IntegerVector {
+pub trait SignedIntegerVector: SignedVector<Register: SignedIntegerRegister> + IntegerVector {
     fn srai<const I: i32>(self) -> Self;
     fn sra(self, count: u32) -> Self;
     fn srav(self, counts: Self::USize) -> Self;
 }
 
-pub trait UnsignedIntegerVector: IntegerVector {
+pub trait UnsignedIntegerVector: IntegerVector<Register: UnsignedIntegerRegister> {
     fn is_power_of_two(self) -> Self::Mask;
 
     fn next_power_of_two_m1(self) -> Self;
@@ -311,19 +344,19 @@ pub trait UnsignedIntegerVector: IntegerVector {
 }
 
 #[cfg(not(feature = "float-trait"))]
-pub trait FloatTrait {}
+pub trait CoreFloatTrait {}
 
-#[cfg(all(feature = "float-trait", not(feature = "std")))]
-use num_traits::float::FloatCore as FloatTrait;
+#[cfg(not(feature = "float-trait"))]
+impl<T> CoreFloatTrait for T {}
 
-#[cfg(all(feature = "float-trait", feature = "std"))]
-use num_traits::Float as FloatTrait;
+#[cfg(feature = "float-trait")]
+use num_traits::float::FloatCore as CoreFloatTrait;
 
 pub trait FloatVector:
     SignedVector<Element: FloatElement, Register: FloatRegister>
     + num_traits::FloatConst
     + FloatConsts
-    + FloatTrait
+    + CoreFloatTrait
     + CastVector<Self::Signed>
     + CastVector<Self::Bits>
     + BitsVector<Self::Signed>
@@ -407,6 +440,7 @@ impl<R: Register> GenericVector for Vector<R> {
     #[inline(always)] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector::<R>::insert::<I>(self, value) }
     #[inline(always)] fn reverse(self) -> Self { Vector::<R>::reverse(self) }
     #[inline(always)] fn swap_bytes(self) -> Self { Vector::<R>::swap_bytes(self) }
+    #[inline(always)] fn bitandnot(self, other: Self) -> Self { Vector::<R>::bitandnot(self, other) }
 
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
@@ -529,56 +563,29 @@ where
     #[inline(always)] fn leading_zeros(self) -> Self { Vector::<R>::leading_zeros(self) }
 }
 
+#[rustfmt::skip]
 impl<R: SignedIntegerRegister> SignedIntegerVector for Vector<R>
 where
     R::Element: Denominator + Signed,
 {
-    #[inline(always)]
-    fn srai<const I: i32>(self) -> Self {
-        Vector::<R>::srai::<I>(self)
-    }
-
-    #[inline(always)]
-    fn sra(self, count: u32) -> Self {
-        Vector::<R>::sra(self, count)
-    }
-
-    #[inline(always)]
-    fn srav(self, counts: Self::USize) -> Self {
-        Vector::<R>::srav(self, counts)
-    }
+    #[inline(always)] fn srai<const I: i32>(self) -> Self { Vector::<R>::srai::<I>(self) }
+    #[inline(always)] fn sra(self, count: u32) -> Self { Vector::<R>::sra(self, count) }
+    #[inline(always)] fn srav(self, counts: Self::USize) -> Self { Vector::<R>::srav(self, counts) }
 }
 
+#[rustfmt::skip]
 impl<R: UnsignedIntegerRegister> UnsignedIntegerVector for Vector<R>
 where
     R::Element: Denominator,
 {
-    #[inline(always)]
-    fn is_power_of_two(self) -> Self::Mask {
-        Vector::<R>::is_power_of_two(self)
-    }
-
-    #[inline(always)]
-    fn next_power_of_two_m1(self) -> Self {
-        Vector::<R>::next_power_of_two_m1(self)
-    }
-
-    #[inline(always)]
-    fn ilog2p1(self) -> Self {
-        Vector::<R>::ilog2p1(self)
-    }
-
-    #[inline(always)]
-    fn parity(self) -> Self {
-        Vector::<R>::parity(self)
-    }
+    #[inline(always)] fn is_power_of_two(self) -> Self::Mask { Vector::<R>::is_power_of_two(self) }
+    #[inline(always)] fn next_power_of_two_m1(self) -> Self { Vector::<R>::next_power_of_two_m1(self) }
+    #[inline(always)] fn ilog2p1(self) -> Self { Vector::<R>::ilog2p1(self) }
+    #[inline(always)] fn parity(self) -> Self { Vector::<R>::parity(self) }
 }
 
 #[rustfmt::skip]
-impl<R: FloatRegister> FloatVector for Vector<R>
-where
-    R::Element: num_traits::FloatConst,
-{
+impl<R: FloatRegister> FloatVector for Vector<R> {
     const HALF: Self = Vector::<R>::HALF;
     const NEG_ZERO: Self = Vector::<R>::NEG_ZERO;
     const INFINITY: Self = Vector::<R>::INFINITY;
