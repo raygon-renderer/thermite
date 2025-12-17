@@ -2260,3 +2260,46 @@ macro_rules! impl_unsigned_pow {
 }
 
 impl_unsigned_pow!(u8, u16, u32, u64, usize);
+
+#[cfg(feature = "rand")]
+const _: () = {
+    use generic_array::sequence::GenericSequence;
+    use rand::{Fill, Rng, distr::Distribution};
+
+    impl<R: Register> Distribution<Vector<R>> for rand::distr::Uniform<R::Element>
+    where
+        rand::distr::Uniform<R::Element>: Distribution<R::Element>,
+        R::Element: rand::distr::uniform::SampleUniform,
+    {
+        #[inline(always)]
+        fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
+            Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
+        }
+    }
+
+    macro_rules! impl_distr {
+        ($($distr:ident),* $(,)?) => {$(
+            impl<R: Register> Distribution<Vector<R>> for rand::distr::$distr
+            where
+                rand::distr::$distr: Distribution<R::Element>,
+            {
+                #[inline(always)]
+                fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
+                    Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
+                }
+            }
+        )*};
+    }
+
+    impl_distr!(Open01, OpenClosed01, StandardUniform);
+
+    impl<R: Register> Fill for Vector<R>
+    where
+        [R::Element]: Fill,
+    {
+        #[inline(always)]
+        fn fill<Rng: rand::Rng + ?Sized>(&mut self, rng: &mut Rng) {
+            Fill::fill(self.as_mut_slice(), rng);
+        }
+    }
+};

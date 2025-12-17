@@ -26,6 +26,7 @@ libm = "0.2.13"
 paste = "1.0.15"
 num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
+rand = { version = "0.9", optional = true, default-features = false }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 core_detect = "1"
