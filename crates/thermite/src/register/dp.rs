@@ -411,6 +411,14 @@ where
     #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(R::max(lhs.0, rhs.0), R::max(lhs.1, rhs.1)) }
 
     #[inline(always)]
+    fn sort(value: Storage<Self>) -> Storage<Self> {
+        let lo = R::min(value.0, value.1);
+        let hi = R::max(value.0, value.1);
+
+        Self(R::sort(lo), R::sort(hi))
+    }
+
+    #[inline(always)]
     fn offset() -> Storage<Self> {
         // Because we're doubling up each time, we can just x2 the offset
         let mut offset = R::offset();

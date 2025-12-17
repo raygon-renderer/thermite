@@ -819,6 +819,46 @@ pub trait NumericRegister: PartialOrdRegister {
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
+    #[inline(always)]
+    fn sort(mut value: Storage<Self>) -> Storage<Self> {
+        let s = Self::as_array_mut(&mut value);
+
+        /// Compare-and-Swap: The atomic primitive of sorting networks.
+        /// LLVM optimizes this to `cmp` + `cmov` (Conditional Move), which is branchless.
+        #[inline(always)]
+        fn cas<T: PartialOrd>(s: &mut [T], i: usize, j: usize) {
+            // Note: slice indexing checks bounds.
+            // For maximal performance, you could use `get_unchecked` if unsafe is permitted,
+            // but the optimizer often elides checks in fixed-size networks anyway.
+            if s[i] > s[j] {
+                s.swap(i, j);
+            }
+        }
+
+        #[rustfmt::skip]
+        let () = match s.len() {
+            2 => cas(s, 0, 1),
+            4 => {
+                cas(s, 0, 1); cas(s, 2, 3); // Layer 1
+                cas(s, 0, 2); cas(s, 1, 3); // Layer 2
+                cas(s, 1, 2);               // Layer 3
+            },
+            // For N=8 or others, Insertion Sort is compact and very fast for N < 20
+            _ => {
+                for i in 1..s.len() {
+                    let mut j = i;
+                    // The compiler unrolls this loop well for small fixed bounds
+                    while j > 0 && s[j - 1] > s[j] {
+                        s.swap(j - 1, j);
+                        j -= 1;
+                    }
+                }
+            }
+        };
+
+        value
+    }
+
     fn min_element(value: Storage<Self>) -> Self::Element;
     fn max_element(value: Storage<Self>) -> Self::Element;
 

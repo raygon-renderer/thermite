@@ -157,6 +157,7 @@ impl NumericRegister for [<f $width>] {
     #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
     #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.min(rhs) }
     #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.max(rhs) }
+    #[inline(always)] fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
 }
 
 impl SignedRegister for [<f $width>] {

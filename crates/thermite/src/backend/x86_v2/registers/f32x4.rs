@@ -8,9 +8,9 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitsRegister, BitshiftRegister, BlendRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register,
+        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister,
+        Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -164,6 +164,13 @@ impl PermuteRegister for F32x4V2 {
     #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_ps(value, value, IMM8) }
+    }
+}
+
+impl BlendRegister for F32x4V2 {
+    #[inline(always)]
+    fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_blend_ps::<IMM8>(lhs, rhs) }
     }
 }
 
@@ -337,6 +344,11 @@ impl NumericRegister for F32x4V2 {
     #[inline(always)]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_max_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn sort(value: Storage<Self>) -> Storage<Self> {
+        arch::sort_4::<Self>(value)
     }
 }
 
