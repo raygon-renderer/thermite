@@ -13,6 +13,7 @@ macro_rules! s {
 pub mod dp;
 pub mod element;
 pub mod linalg;
+pub mod well_formed;
 
 pub use element::{Element, FloatElement};
 pub use linalg::{LinAlg3Register, LinAlg4Register, ValidLinAlg3Length};

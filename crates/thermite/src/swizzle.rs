@@ -1,4 +1,7 @@
-use generic_array::GenericArray;
+use generic_array::{
+    ArrayLength, GenericArray,
+    typenum::{self, Unsigned},
+};
 
 use crate::{
     Vector,
@@ -48,15 +51,15 @@ pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32
 */
 
 /// Trait for swizzling and permuting vector types. Use the [`swizzle!`](crate::swizzle!) macro for convenient usage.
-pub trait Swizzle<R: Register> {
+pub trait Swizzle<N: ArrayLength> {
     /// Swizzle lanes from two vectors according to the given indices.
-    fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self;
+    fn swizzle(self, other: Self, indices: GenericArray<u32, N>) -> Self;
 
     /// Permute lanes from a single vector according to the given indices.
-    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self;
+    fn permute(self, indices: GenericArray<u32, N>) -> Self;
 }
 
-impl<R: Register> Swizzle<R> for Vector<R>
+impl<R: Register> Swizzle<R::Lanes> for Vector<R>
 where
     R: SwizzleRegister,
 {
@@ -71,7 +74,7 @@ where
     }
 }
 
-impl<R: MaskRegister> Swizzle<R> for Mask<R>
+impl<R: MaskRegister> Swizzle<R::Lanes> for Mask<R>
 where
     R: SwizzleRegister,
 {

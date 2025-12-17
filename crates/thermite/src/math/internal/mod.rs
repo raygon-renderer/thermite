@@ -37,8 +37,8 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
         let mut result = (exp << E::MANTISSA) | sign_mantissa;
 
         if const { P::POLICY.check_overflow } {
-            let is_underflow = exp.cmp_le(Vs::<Self>::ZERO);
-            let input_was_subnormal = biased_exp.cmp_eq(Vs::<Self>::ZERO);
+            let is_underflow = exp.cmp_le(Vector::ZERO);
+            let input_was_subnormal = biased_exp.cmp_eq(Vector::ZERO);
 
             // result = !(is_underflow | input_was_subnormal) & result
             result = (is_underflow | input_was_subnormal).value().bitandnot(result);

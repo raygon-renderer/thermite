@@ -1,15 +1,19 @@
-#![allow(missing_docs)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
+#![deny(unconditional_recursion)] // just in case we miss one
 
 use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
+use generic_array::GenericArray;
 use num_traits::Signed;
 
 use crate::{
-    Mask, Vector,
+    Mask, Swizzle, Vector,
     divider::Denominator,
+    math::FloatConsts,
     register::{
-        BitshiftRegister, Element, FloatRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister,
-        Register, SignedIntegerRegister, SignedRegister, UnsignedIntegerRegister,
+        BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
+        IntegerRegister, Lanes, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
+        SignedRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -20,12 +24,20 @@ pub trait VectorOperation<Args> {
 
 pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
     type Element: Element;
+    type Register: Register<Element = Self::Element, Lanes = Self::Lanes>;
 
     const EMPTY: Self;
     const LANES: usize;
 
-    type USize: UnsignedIntegerVector<Element = <Self::Element as Element>::USize>;
-    type ISize: SignedIntegerVector<Element = <Self::Element as Element>::ISize>;
+    type Lanes: Lanes;
+
+    type USize: UnsignedIntegerVector<Lanes = Self::Lanes, Element = <Self::Element as Element>::USize>
+        + CastVector<Self::ISize>
+        + BitsVector<Self::ISize>;
+
+    type ISize: SignedIntegerVector<Lanes = Self::Lanes, Element = <Self::Element as Element>::ISize>
+        + CastVector<Self::USize>
+        + BitsVector<Self::USize>;
 
     fn splat(value: Self::Element) -> Self;
     fn single(value: Self::Element) -> Self;
@@ -64,6 +76,75 @@ pub trait GenericVector: Sized + Copy + core::fmt::Debug + 'static {
     fn reduce<F>(self, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element;
+
+    #[inline(always)]
+    fn cast<INTO>(self) -> INTO
+    where
+        INTO: CastVector<Self>,
+    {
+        INTO::cast_from(self)
+    }
+
+    #[inline(always)]
+    fn fast_cast<INTO>(self) -> INTO
+    where
+        INTO: CastVector<Self>,
+    {
+        INTO::fast_cast_from(self)
+    }
+
+    #[inline(always)]
+    fn into_bits<INTO>(self) -> INTO
+    where
+        INTO: BitsVector<Self>,
+    {
+        INTO::from_bits(self)
+    }
+}
+
+pub trait SwizzleVector: GenericVector {
+    fn swizzle(self, other: Self, indices: GenericArray<u32, Self::Lanes>) -> Self;
+    fn permute(self, indices: GenericArray<u32, Self::Lanes>) -> Self;
+}
+
+pub trait CastVector<FROM>: Sized {
+    fn cast_from(from: FROM) -> Self;
+
+    #[inline(always)]
+    fn fast_cast_from(from: FROM) -> Self {
+        Self::cast_from(from)
+    }
+}
+
+impl<FROM, INTO> CastVector<Vector<FROM>> for Vector<INTO>
+where
+    FROM: Register,
+    INTO: CastRegister<FROM>,
+{
+    #[inline(always)]
+    fn cast_from(from: Vector<FROM>) -> Self {
+        Vector::<INTO>::from(from)
+    }
+
+    #[inline(always)]
+    fn fast_cast_from(from: Vector<FROM>) -> Self {
+        Vector::<INTO>::fast_from(from)
+    }
+}
+
+pub trait BitsVector<FROM>: Sized {
+    fn from_bits(bits: FROM) -> Self;
+}
+
+impl<FROM, INTO> BitsVector<Vector<FROM>> for Vector<INTO>
+where
+    FROM: Register,
+    INTO: BitsRegister<FROM>,
+{
+    #[inline(always)]
+    fn from_bits(bits: Vector<FROM>) -> Self {
+        Vector::<INTO>::from_bits(bits)
+    }
 }
 
 pub trait GenericMask<V: GenericVector>: Sized + Copy + core::fmt::Debug + 'static {
@@ -72,6 +153,35 @@ pub trait GenericMask<V: GenericVector>: Sized + Copy + core::fmt::Debug + 'stat
     fn none(self) -> bool;
     fn select(self, t: V, f: V) -> V;
 }
+
+pub trait GenericCastMask<FROM>: Sized {
+    fn mask_from(from: FROM) -> Self;
+}
+
+impl<FROM, INTO> GenericCastMask<Mask<FROM>> for Mask<INTO>
+where
+    FROM: MaskRegister,
+    INTO: CastMaskRegister<FROM>,
+{
+    #[inline(always)]
+    fn mask_from(from: Mask<FROM>) -> Self {
+        Mask::<INTO>::from_mask(from)
+    }
+}
+
+pub trait GenericSelectable {
+    fn select<M>(mask: M, t: Self, f: Self) -> Self;
+}
+
+// impl<R: Register, M: MaskRegister> GenericSelectable<Mask<M>> for Vector<R>
+// where
+//     R: CastMaskRegister<M, Lanes = M::Lanes>,
+// {
+//     #[inline(always)]
+//     fn select(mask: Mask<M>, t: Self, f: Self) -> Self {
+//         Vector(R::blendv(R::mask_from(mask.0), f.0, t.0))
+//     }
+// }
 
 impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
     #[inline(always)]
@@ -116,7 +226,7 @@ pub trait PartialOrdVector: MaskedVector + PartialEq {
 }
 
 pub trait NumericVector:
-    PartialOrdVector
+    PartialOrdVector<Element: num_traits::Num>
     + num_traits::Num
     + num_traits::Bounded
     + num_traits::ConstOne
@@ -200,7 +310,26 @@ pub trait UnsignedIntegerVector: IntegerVector {
     fn parity(self) -> Self;
 }
 
-pub trait FloatVector: SignedVector + num_traits::FloatConst {
+#[cfg(not(feature = "float-trait"))]
+pub trait FloatTrait {}
+
+#[cfg(all(feature = "float-trait", not(feature = "std")))]
+use num_traits::float::FloatCore as FloatTrait;
+
+#[cfg(all(feature = "float-trait", feature = "std"))]
+use num_traits::Float as FloatTrait;
+
+pub trait FloatVector:
+    SignedVector<Element: FloatElement, Register: FloatRegister>
+    + num_traits::FloatConst
+    + FloatConsts
+    + FloatTrait
+    + CastVector<Self::Signed>
+    + CastVector<Self::Bits>
+    + BitsVector<Self::Signed>
+    + BitsVector<Self::Bits>
+    + CastVector<Self::ExtendedPrecision>
+{
     const HALF: Self;
     const NEG_ZERO: Self;
     const INFINITY: Self;
@@ -208,9 +337,17 @@ pub trait FloatVector: SignedVector + num_traits::FloatConst {
     const NAN: Self;
     const EPSILON: Self;
 
-    type Signed: SignedIntegerVector;
-    type Bits: UnsignedIntegerVector;
-    type ExtendedPrecision: FloatVector;
+    type Signed: SignedIntegerVector<Element = <Self::Element as FloatElement>::Signed>
+        + CastVector<Self::Bits>
+        + BitsVector<Self::Bits>
+        + BitsVector<Self>;
+
+    type Bits: UnsignedIntegerVector<Element = <Self::Element as FloatElement>::Bits>
+        + CastVector<Self::Signed>
+        + BitsVector<Self::Signed>
+        + BitsVector<Self>;
+
+    type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
 
     fn is_infinite(self) -> Self::Mask;
     fn is_finite(self) -> Self::Mask;
@@ -255,6 +392,9 @@ impl<R: Register> GenericVector for Vector<R> {
     const EMPTY: Self = Vector::<R>::EMPTY;
     const LANES: usize = Vector::<R>::LANES;
 
+    type Lanes = R::Lanes;
+    type Register = R;
+
     type USize = Vector<R::USize>;
     type ISize = Vector<R::ISize>;
 
@@ -284,9 +424,8 @@ impl<R: Register> GenericVector for Vector<R> {
     where F: Fn(Self::Element, Self::Element) -> Self::Element,
     { Vector::<R>::reduce(self, f) }
 
-    fn single(value: Self::Element) -> Self {
-        Vector::<R>::single(value)
-    }
+    #[inline(always)] fn single(value: Self::Element) -> Self { Vector::<R>::single(value) }
+
     #[inline(always)] unsafe fn load(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load(ptr) } }
     #[inline(always)] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load_unaligned(ptr) } }
     #[inline(always)] unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load_streaming(ptr) } }

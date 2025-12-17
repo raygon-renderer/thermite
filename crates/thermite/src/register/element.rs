@@ -3,9 +3,9 @@ pub trait Element:
     Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug + 'static + num_traits::NumOps
 {
     /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
-    type USize: IntegerElement;
+    type USize: UnsignedIntegerElement<ISize = Self::ISize>;
     /// Signed integer type to be used with operations that require signed counts, such as shifts.
-    type ISize: IntegerElement + num_traits::Signed;
+    type ISize: SignedIntegerElement<USize = Self::USize>;
 
     /// When used as a mask, represents "true"
     const TRUTHY: Self;
@@ -113,6 +113,12 @@ impl<T> IntegerElement for T where
 {
 }
 
+pub trait SignedIntegerElement: IntegerElement<ISize = Self> + num_traits::Signed + TryInto<isize> {}
+pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + TryInto<usize> {}
+
+impl<S> SignedIntegerElement for S where S: IntegerElement<ISize = S> + num_traits::Signed + TryInto<isize> {}
+impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + TryInto<usize> {}
+
 use core::ops::{Shl, Shr};
 
 #[cfg(feature = "std")]
@@ -120,6 +126,10 @@ use num_traits::Float as FloatTrait;
 
 #[cfg(not(feature = "std"))]
 use num_traits::float::FloatCore as FloatTrait;
+
+pub trait Is<T> {}
+
+impl<T> Is<T> for T {}
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
@@ -135,8 +145,8 @@ pub trait FloatElement:
     + num_traits::Signed
     + num_traits::FloatConst
 {
-    type Bits: IntegerElement;
-    type Signed: IntegerElement + num_traits::Signed;
+    type Bits: UnsignedIntegerElement<USize = Self::Bits>;
+    type Signed: SignedIntegerElement<ISize = Self::Signed>;
 
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;
