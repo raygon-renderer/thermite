@@ -135,7 +135,7 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
         let mut yk = y1;
         let mut k = E::from_i64(2);
 
-        let k_max = E::from_i64(n as i64) * (E::ONE + E::EPSILON);
+        let k_max = E::from_i64(n as i64) * (<E as FloatConsts>::ONE + E::EPSILON);
 
         while k < k_max {
             let kf = Vf::splat(k);
@@ -156,7 +156,7 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
             y0 = y1;
             y1 = yk;
 
-            k = k + E::ONE;
+            k = k + <E as FloatConsts>::ONE;
         }
 
         scale * yk

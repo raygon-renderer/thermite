@@ -16,76 +16,38 @@ where
     R: FloatRegister<Element = f32>,
 {
     #[inline(always)]
-    fn sin_cos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
-        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            // Max error about 0.00092, avg error about 0.00053
-            // https://stackoverflow.com/a/28050328/2083075
-            #[inline(always)]
-            fn inner<R: MathInternal<f32>>(mut x: Vf<R>) -> Vf<R> {
-                // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
-                //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
-                x *= x
-                    .abs()
-                    .mul_sube(const { Vf::splat_const(16.0) }, const { Vf::splat_const(8.0) });
+    fn sin_cos<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        sin_cos_f_internal::<P, R, false>(x)
+    }
 
-                // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
-                // increases average error but decreases max error
-                let p = const { Vf::splat_const(0.22400815333595678) }; // original P = 0.225
+    #[inline(always)]
+    fn sincos_pi<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        sin_cos_f_internal::<P, R, true>(x)
+    }
 
-                x.mul_adde(x.abs().mul_sube(p, p), x)
-            }
+    #[inline(always)]
+    fn sinh_cosh<P: Policy>(x0: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        let x = x0.abs();
+        let y = Self::exph::<P>(x);
+        let qy = Vf::splat(0.25) / y;
 
-            let x = xx * const { Vf::splat_const(FRAC_1_PI / 2.0) };
+        let mut sinh = y - qy;
+        let cosh = y + qy;
 
-            let quarter = const { Vf::splat_const(0.25) };
+        let x_small = x.cmp_lt(Vf::ONE);
 
-            let sine = inner::<R>((x - Vf::HALF) - x.floor());
-            let cosine = inner::<R>((x - quarter) - (x + quarter).floor());
+        // if any are small, use a polynomial approximation
+        if P::POLICY.avoid_branching || x_small.any() {
+            let x2 = x * x;
 
-            return (sine, cosine);
+            let y1 = x2
+                .poly_p::<P, _>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
+                .mul_adde(x2 * x, x);
+
+            sinh = x_small.select(y1, sinh);
         }
 
-        let xa = xx.abs();
-
-        let y = (xa * Vf::FRAC_2_PI).round();
-        let q: Vu<Self> = Vs::<Self>::fast_from(y).into_bits();
-
-        let dp1f = const { Vector::splat_const(0.78515625 * 2.0) };
-        let dp2f = const { Vector::splat_const(2.4187564849853515625E-4 * 2.0) };
-        let dp3f = const { Vector::splat_const(3.77489497744594108E-8 * 2.0) };
-
-        // Reduce by extended precision modular arithmetic
-        // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
-        let x = y.nmul_adde(dp3f, y.nmul_adde(dp2f, y.nmul_adde(dp1f, xa)));
-
-        // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
-        let x2 = x * x;
-
-        #[rustfmt::skip]
-        let mut s = x2.poly_p::<P, _>(&[
-            -1.6666654611E-1,
-            8.3321608736E-3,
-            -1.9515295891E-4,
-        ])
-        .mul_adde(x2 * x, x);
-
-        #[rustfmt::skip]
-        let mut c = x2.poly_p::<P, _>(&[
-            4.166664568298827E-2,
-            -1.388731625493765E-3,
-            2.443315711809948E-5,
-        ])
-        .mul_adde(x2 * x2, x2.nmul_adde(Vf::HALF, Vf::ONE));
-
-        let swap = (q & Vu::<Self>::ONE).cmp_ne(Vu::<Self>::ZERO);
-
-        let sin1 = swap.select(c, s);
-        let cos1 = swap.select(s, c);
-
-        let signsin = Vf::from_bits(q.shli::<30>()) ^ xx;
-        let signcos = Vf::from_bits((q + Vu::<Self>::ONE).shri::<1>().shli::<31>());
-
-        (sin1.mul_sign(signsin), cos1 ^ signcos)
+        (sinh.mul_sign(x0), cosh)
     }
 
     #[inline(always)]
@@ -106,7 +68,7 @@ where
             }
         }
 
-        // if all are small, use a polynomial approximation
+        // if any are small, use a polynomial approximation
         if P::POLICY.avoid_branching || x_small.any() {
             let x2 = x * x;
 
@@ -951,6 +913,122 @@ where
 
         p0 * x
     }
+}
+
+fn sin_cos_f_internal<P: Policy, R: MathInternal<f32>, const PI: bool>(xx: Vf<R>) -> (Vf<R>, Vf<R>) {
+    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        // Max error about 0.00092, avg error about 0.00053
+        // https://stackoverflow.com/a/28050328/2083075
+        // the actual instruction count isn't that much better,
+        // but it avoids integer conversions and branches
+        #[inline(always)]
+        fn inner<R: MathInternal<f32>>(mut x: Vf<R>) -> Vf<R> {
+            // rearrange for FMA, no chance of overflow since x is (-0.5, 0.5) here
+            //x *= Vf::splat(16.0) * (x.abs() - Vf::splat(0.5));
+            x *= x
+                .abs()
+                .mul_sube(const { Vf::splat_const(16.0) }, const { Vf::splat_const(8.0) });
+
+            // https://stackoverflow.com/questions/18662261/#comment138971102_28050328
+            // increases average error but decreases max error
+            let p = const { Vf::splat_const(0.22400815333595678) }; // original P = 0.225
+
+            x.mul_adde(x.abs().mul_sube(p, p), x)
+        }
+
+        let quarter = const { Vf::splat_const(0.25) };
+
+        #[rustfmt::skip] // scaling factor
+        let m = const { if PI {
+            Vf::HALF // (1/pi) / 2 * pi = 0.5
+        } else {
+            Vf::splat_const(FRAC_1_PI / 2.0)
+        } };
+
+        return if const { R::HAS_TRUE_FMA } {
+            // if FMA is available, we can improve ILP by doing product with m in parallel
+            (
+                inner::<R>(xx.mul_sub(m, Vf::HALF) - (xx * m).floor()), // sine
+                inner::<R>(xx.mul_sub(m, quarter) - xx.mul_add(m, quarter).floor()), // cosine
+            )
+        } else {
+            let x = m * xx;
+
+            (
+                inner::<R>((x - Vf::HALF) - x.floor()),            // sine
+                inner::<R>((x - quarter) - (x + quarter).floor()), // cosine
+            )
+        };
+    }
+
+    let mut xa = xx.abs();
+
+    let y = if PI {
+        xa + xa // 2x for sinpi/cospi
+    } else {
+        if const { P::POLICY.check_overflow } {
+            #[rustfmt::skip]
+            let limit = const { match R::HAS_TRUE_FMA {
+                true => Vf::<R>::splat_const(1e7),
+                false => Vf::<R>::splat_const(1e5),
+            } };
+
+            xa &= xa.cmp_le(limit).value(); // set to zero if too large
+        }
+
+        xa * Vf::FRAC_2_PI
+    };
+
+    let y = y.round();
+
+    let q: Vu<R> = Vs::<R>::fast_from(y).into_bits();
+
+    // pi/2 split into three parts for extended precision modular arithmetic
+    let dp1f = const { Vector::splat_const(0.78515625 * 2.0) };
+    let dp2f = const { Vector::splat_const(2.4187564849853515625E-4 * 2.0) };
+    let dp3f = const { Vector::splat_const(3.77489497744594108E-8 * 2.0) };
+
+    // Reduce by extended precision modular arithmetic
+    // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
+    // or if calculating sinpi/cospi:
+    // x = pi * (xa - y * 0.5)
+    let x = if PI {
+        y.nmul_adde(Vf::HALF, xa) * Vf::PI
+    } else if const { R::HAS_TRUE_FMA } {
+        // if true FMA is available, we only have to do two FMAs
+        y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa))
+    } else {
+        ((xa - y * dp1f) - y * dp2f) - y * dp3f
+    };
+
+    // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
+    let x2 = x * x;
+
+    #[rustfmt::skip]
+    let mut s = x2.poly_p::<P, _>(&[
+        -1.6666654611E-1,
+        8.3321608736E-3,
+        -1.9515295891E-4,
+    ])
+    .mul_adde(x2 * x, x);
+
+    #[rustfmt::skip]
+    let mut c = x2.poly_p::<P, _>(&[
+        4.166664568298827E-2,
+        -1.388731625493765E-3,
+        2.443315711809948E-5,
+    ])
+    .mul_adde(x2 * x2, x2.nmul_adde(Vf::HALF, Vf::ONE));
+
+    let swap = (q & Vu::<R>::ONE).cmp_ne(Vu::<R>::ZERO);
+
+    let sin1 = swap.select(c, s);
+    let cos1 = swap.select(s, c);
+
+    let signsin = Vf::from_bits(q.shli::<30>()) ^ xx;
+    let signcos = Vf::from_bits((q + Vu::<R>::ONE).shri::<1>().shli::<31>());
+
+    (sin1.mul_sign(signsin), cos1 ^ signcos)
 }
 
 #[inline(always)]

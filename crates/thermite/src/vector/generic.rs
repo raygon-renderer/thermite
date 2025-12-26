@@ -176,6 +176,7 @@ pub trait GenericMask<V: GenericVector>:
     fn any(self) -> bool;
     fn none(self) -> bool;
     fn select(self, t: V, f: V) -> V;
+    fn value(self) -> V;
 }
 
 pub trait GenericCastMask<FROM>: Sized {
@@ -226,6 +227,11 @@ impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
     #[inline(always)]
     fn select(self, t: Vector<R>, f: Vector<R>) -> Vector<R> {
         Vector(R::blendv(self.0, f.0, t.0))
+    }
+
+    #[inline(always)]
+    fn value(self) -> Vector<R> {
+        self.value()
     }
 }
 

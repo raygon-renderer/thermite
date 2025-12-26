@@ -709,6 +709,27 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
     }
 
     #[inline(always)]
+    fn sincos_pi<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        Self::sin_cos::<P>(x * Vf::PI)
+    }
+
+    #[inline(always)]
+    fn sin_pi<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        Self::sincos_pi::<P>(x).0
+    }
+
+    #[inline(always)]
+    fn cos_pi<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        Self::sincos_pi::<P>(x).1
+    }
+
+    #[inline(always)]
+    fn tan_pi<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+        let (s, c) = Self::sincos_pi::<P>(x);
+        s / c
+    }
+
+    #[inline(always)]
     fn sinc<P: Policy>(x: Vf<Self>) -> Vf<Self> {
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             return x.sin_p::<P>() * x.reciprocal_p::<P>();
@@ -719,7 +740,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
         let x2 = x * x;
 
         // if branching, use Taylor series for tiny x without calling sine.
-        if !P::POLICY.avoid_branching && is_tiny.all() {
+        if !P::POLICY.avoid_branching && crate::unlikely(is_tiny.all()) {
             let res = x2 / Vf::splat(FloatElement::from_i64(120));
             return x2.mul_add(res - Vf::FRAC_1_6, Vf::ONE);
         }
@@ -740,28 +761,7 @@ pub trait MathInternal<E>: FloatRegister<Element = E> {
         y
     }
 
-    #[inline(always)]
-    fn sin_pix<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let (x, xs) = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let x = x.abs();
-            let mut fl = x.floor();
-
-            let is_odd = (fl % Vf::TWO).cmp_ne(Vf::ZERO);
-
-            fl += Vf::ONE & is_odd.value(); // only add one if odd
-
-            let sign = Vf::NEG_ZERO & is_odd.value();
-            let mut dist = (x - fl) ^ sign; // flip the sign if odd
-
-            dist -= Vf::ONE & dist.cmp_gt(Vf::HALF).value(); // if dist > 0.5, flip the sign
-
-            (x ^ sign, dist)
-        } else {
-            (x, x)
-        };
-
-        x * (xs * Vf::PI).sin_p::<P>()
-    }
+    fn sinh_cosh<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>);
 
     fn sinh<P: Policy>(x: Vf<Self>) -> Vf<Self>;
     fn cosh<P: Policy>(x: Vf<Self>) -> Vf<Self>;

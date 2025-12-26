@@ -40,7 +40,7 @@ where
             let mut refl_res = Vf::EMPTY;
 
             if P::POLICY.avoid_precision_branches() || thermite::unlikely(reflected.any()) {
-                refl_res = z.sin_pix_p::<P>();
+                refl_res = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
 
                 // If not branching, all negative values are reflected
                 if const { P::POLICY.avoid_precision_branches() } {
@@ -205,7 +205,7 @@ where
         let mut t = Vf::ONE;
 
         if P::POLICY.avoid_branching || reflect.any() {
-            let pix = z.sin_pix_p::<P>();
+            let pix = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
 
             signum |= reflect.select(pix.signed_zero(), signum);
 

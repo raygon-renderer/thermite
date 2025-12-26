@@ -65,8 +65,7 @@ macro_rules! decl_math {
         impl<M, R: FloatRegister> Math<R> for M where M: MathWithPolicy<R> {}
 
         impl<E, R> MathWithPolicy<R> for Vector<R>
-        where
-            R: MathInternal<E, Element = E>,
+            where R: MathInternal<E, Element = E>,
         {$(
             #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -200,7 +199,7 @@ decl_math! {
     /// If using the worst precision policy, it becomes equivalent to the naive implementation.
     fn hypot[][](self: Self, other: Self) -> Self;
 
-    /// Trigonometric sine and cosine, together. This may be more efficient than calling `sin` and `cos` separately.
+    /// Trigonometric sine and cosine, together. This will be more efficient than calling `sin` and `cos` separately.
     fn sin_cos[][](self: Self) -> (Self, Self);
     /// Trigonometric sine
     fn sin[][](self: Self) -> Self;
@@ -208,12 +207,23 @@ decl_math! {
     fn cos[][](self: Self) -> Self;
     /// Trigonometric tangent
     fn tan[][](self: Self) -> Self;
+
+    /// Sine and cosine of `pi * x`, together. This will be more efficient than calling `sin_pi` and `cos_pi` separately,
+    /// and more precise than computing them manually with `sin(pi * x)` and `cos(pi * x)`.
+    fn sincos_pi[][](self: Self) -> (Self, Self);
+
+    /// Trigonometric sine of `pi * x`, with improved precision when the policy allows.
+    fn sin_pi[][](self: Self) -> Self;
+    /// Trigonometric cosine of `pi * x`, with improved precision when the policy allows.
+    fn cos_pi[][](self: Self) -> Self;
+    /// Trigonometric tangent of `pi * x`, with improved precision when the policy allows.
+    fn tan_pi[][](self: Self) -> Self;
+
     /// Computes `sin(pi * x) / (pi * x)` with improved precision when the policy allows.
     fn sinc[][](self: Self) -> Self;
 
-    /// Computes `x * sin(pi * x)` with improved precision when the policy allows.
-    fn sin_pix[][](self: Self) -> Self;
-
+    /// Hyperbolic sine and cosine, together. This will be more efficient than calling `sinh` and `cosh` separately.
+    fn sinh_cosh[][](self: Self) -> (Self, Self);
     /// Hyperbolic sine
     fn sinh[][](self: Self) -> Self;
     /// Hyperbolic cosine

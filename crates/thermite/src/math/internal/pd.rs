@@ -11,63 +11,50 @@ where
     R: FloatRegister<Element = f64>,
 {
     #[inline(always)]
-    fn sin_cos<P: Policy>(xx: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
-        let dp1 = Vf::splat(7.853981554508209228515625E-1 * 2.0);
-        let dp2 = Vf::splat(7.94662735614792836714E-9 * 2.0);
-        let dp3 = Vf::splat(3.06161699786838294307E-17 * 2.0);
-        let xa = xx.abs();
+    fn sin_cos<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        sincos_d_internal::<P, R, false>(x)
+    }
 
-        let y = (xa * Vf::FRAC_2_PI).round();
-        let q = Vu::<R>::fast_from(y);
-        //let q = unsafe { y.to_uint_fast() };
+    #[inline(always)]
+    fn sincos_pi<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        sincos_d_internal::<P, R, true>(x)
+    }
 
-        // Reduce by extended precision modular arithmetic
-        // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
-        let x = y.nmul_adde(dp3, y.nmul_adde(dp2, y.nmul_adde(dp1, xa)));
+    #[inline(always)]
+    fn sinh_cosh<P: Policy>(x0: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+        let x = x0.abs();
+        let y = Self::exph::<P>(x);
+        let qy = Vf::splat(0.25) / y;
 
-        // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
-        let x2 = x * x;
-        let x4 = x2 * x2;
+        let mut sinh = y - qy;
+        let cosh = y + qy;
 
-        let mut s = x2.poly_p::<P, _>(&[
-            -1.66666666666666307295E-1,
-            8.33333333332211858878E-3,
-            -1.98412698295895385996E-4,
-            2.75573136213857245213E-6,
-            -2.50507477628578072866E-8,
-            1.58962301576546568060E-10,
-        ]);
+        let x_small = x.cmp_le(Vf::ONE);
 
-        let mut c = x2.poly_p::<P, _>(&[
-            4.16666666666665929218E-2,
-            -1.38888888888730564116E-3,
-            2.48015872888517045348E-5,
-            -2.75573141792967388112E-7,
-            2.08757008419747316778E-9,
-            -1.13585365213876817300E-11,
-        ]);
+        // if any are small, use a polynomial approximation
+        if P::POLICY.avoid_branching || x_small.any() {
+            let x2 = x * x;
 
-        s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
-        c = c.mul_adde(x4, x2.nmul_adde(Vf::HALF, Vf::ONE)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+            #[rustfmt::skip]
+            let y1 = x2.poly_rational_p::<P, _, _>(
+                &[
+                    -3.51754964808151394800E5,
+                    -1.15614435765005216044E4,
+                    -1.63725857525983828727E2,
+                    -7.89474443963537015605E-1,
+                ],
+                &[
+                    -2.11052978884890840399E6,
+                    3.61578279834431989373E4,
+                    -2.77711081420602794433E2,
+                    1.0,
+                ],
+            ).mul_adde(x * x2, x);
 
-        // swap sin and cos if odd quadrant
-        let swap = (q & Vu::<R>::ONE).cmp_ne(Vu::<R>::ZERO);
-
-        if P::POLICY.check_overflow {
-            let overflow = y.cmp_gt(Vf::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
-
-            let s = overflow.select(Vf::ZERO, s);
-            let c = overflow.select(Vf::ONE, c);
+            sinh = x_small.select(y1, sinh);
         }
 
-        let sin1 = swap.select(c, s);
-        let cos1 = swap.select(s, c);
-
-        let signsin = Vf::from_bits(q << 62) ^ xx;
-        let signcos = Vf::from_bits(((q + Vu::<R>::ONE) & Vu::<R>::splat(2)) << 62);
-
-        // combine signs
-        (sin1.mul_sign(signsin), cos1 ^ signcos)
+        (sinh.mul_sign(x0), cosh)
     }
 
     #[inline(always)]
@@ -1055,4 +1042,91 @@ fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) ->
     }
 
     z
+}
+
+#[inline(always)]
+fn sincos_d_internal<P: Policy, R: MathInternal<f64>, const PI: bool>(xx: Vf<R>) -> (Vf<R>, Vf<R>) {
+    let mut xa = xx.abs();
+
+    let y = if PI {
+        xa + xa // 2x for sinpi/cospi
+    } else {
+        if const { P::POLICY.check_overflow } {
+            #[rustfmt::skip]
+            let limit = const { match R::HAS_TRUE_FMA {
+                true => Vf::<R>::splat_const(1e15),
+                false => Vf::<R>::splat_const(1e13),
+            } };
+
+            xa &= xa.cmp_le(limit).value(); // set to zero if too large
+        }
+
+        xa * Vf::FRAC_2_PI
+    };
+
+    let y = y.round();
+
+    let q = Vu::<R>::fast_from(y);
+
+    // pi/2 split into three parts for extended precision modular arithmetic
+    let dp1 = const { Vf::splat_const(7.853981554508209228515625E-1 * 2.0) };
+    let dp2 = const { Vf::splat_const(7.94662735614792836714E-9 * 2.0) };
+    let dp3 = const { Vf::splat_const(3.06161699786838294307E-17 * 2.0) };
+
+    // Reduce by extended precision modular arithmetic
+    // x = ((xa - y * DP1) - y * DP2) - y * DP3;
+    // or if calculating sinpi/cospi:
+    // x = pi * (xa - y * 0.5)
+    let x = if PI {
+        y.nmul_adde(Vf::HALF, xa) * Vf::PI
+    } else if const { R::HAS_TRUE_FMA } {
+        // if true FMA is available, we only have to do two FMAs
+        y.nmul_add(dp3, y.nmul_add(dp2 + dp1, xa))
+    } else {
+        ((xa - y * dp1) - y * dp2) - y * dp3
+    };
+
+    // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
+    let x2 = x * x;
+    let x4 = x2 * x2;
+
+    let mut s = x2.poly_p::<P, _>(&[
+        -1.66666666666666307295E-1,
+        8.33333333332211858878E-3,
+        -1.98412698295895385996E-4,
+        2.75573136213857245213E-6,
+        -2.50507477628578072866E-8,
+        1.58962301576546568060E-10,
+    ]);
+
+    let mut c = x2.poly_p::<P, _>(&[
+        4.16666666666665929218E-2,
+        -1.38888888888730564116E-3,
+        2.48015872888517045348E-5,
+        -2.75573141792967388112E-7,
+        2.08757008419747316778E-9,
+        -1.13585365213876817300E-11,
+    ]);
+
+    s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
+    c = c.mul_adde(x4, x2.nmul_adde(Vf::HALF, Vf::ONE)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+
+    // swap sin and cos if odd quadrant
+    let swap = (q & Vu::<R>::ONE).cmp_ne(Vu::<R>::ZERO);
+
+    if P::POLICY.check_overflow {
+        let overflow = y.cmp_gt(Vf::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
+
+        let s = overflow.select(Vf::ZERO, s);
+        let c = overflow.select(Vf::ONE, c);
+    }
+
+    let sin1 = swap.select(c, s);
+    let cos1 = swap.select(s, c);
+
+    let signsin = Vf::from_bits(q << 62) ^ xx;
+    let signcos = Vf::from_bits(((q + Vu::<R>::ONE) & Vu::<R>::splat(2)) << 62);
+
+    // combine signs
+    (sin1.mul_sign(signsin), cos1 ^ signcos)
 }
