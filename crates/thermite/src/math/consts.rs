@@ -1,18 +1,21 @@
 pub trait FloatConsts {
-    /// Zero (0)
-    const ZERO: Self;
-
     /// Negative zero (-0) (only sign bit set)
     const NEG_ZERO: Self;
-
-    /// One (1)
-    const ONE: Self;
 
     /// Euler’s number (e)
     const E: Self;
 
     /// Euler-Mascheroni constant (γ)
     const EGAMMA: Self;
+
+    /// π^2
+    const PI_SQUARED: Self;
+
+    /// π^3
+    const PI_CUBED: Self;
+
+    /// π^4
+    const PI_TESSERACTED: Self;
 
     /// 1/π
     const FRAC_1_PI: Self;
@@ -138,11 +141,12 @@ macro_rules! impl_consts {
 }
 
 impl_consts!(
-    ZERO,
     NEG_ZERO,
-    ONE,
     E,
     EGAMMA,
+    PI_SQUARED,
+    PI_CUBED,
+    PI_TESSERACTED,
     FRAC_1_PI,
     FRAC_1_SQRT_2,
     FRAC_1_SQRT_3,
@@ -188,11 +192,12 @@ use core::f64::consts as f64c;
 
 impl_consts! {@
     f32 {
-        ZERO = 0.0f32,
         NEG_ZERO = -0.0f32,
-        ONE = 1.0f32,
         E = f32c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
+        PI_SQUARED = 9.8696044010893586188344909998761511353136994072408,
+        PI_CUBED = 31.006276680299820175476315067101395202225288565885,
+        PI_TESSERACTED = 97.409091034002437236440332688705111249727585672685,
         FRAC_1_PI = f32c::FRAC_1_PI,
         FRAC_1_SQRT_2 = f32c::FRAC_1_SQRT_2,
         FRAC_1_SQRT_3 = 0.577350269189625764509148780501957456,
@@ -234,11 +239,12 @@ impl_consts! {@
 
 impl_consts! {@
     f64 {
-        ZERO = 0.0f64,
         NEG_ZERO = -0.0f64,
-        ONE = 1.0f64,
         E = f64c::E,
         EGAMMA = 5.772156649015328606065120900824024310e-01,
+        PI_SQUARED = 9.8696044010893586188344909998761511353136994072408,
+        PI_CUBED = 31.006276680299820175476315067101395202225288565885,
+        PI_TESSERACTED = 97.409091034002437236440332688705111249727585672685,
         FRAC_1_PI = f64c::FRAC_1_PI,
         FRAC_1_SQRT_2 = f64c::FRAC_1_SQRT_2,
         FRAC_1_SQRT_3 = 0.577350269189625764509148780501957456,

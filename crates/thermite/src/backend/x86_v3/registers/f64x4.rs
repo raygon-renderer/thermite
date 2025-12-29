@@ -7,9 +7,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        dp::DoublePumpRegister, empty_reg, reg,
+        BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, NumericRegister,
+        PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -186,7 +186,7 @@ impl SwizzleRegister for F64x4V3 {
     }
 }
 
-impl MaskRegister for F64x4V3 {
+impl PartialMaskRegister for F64x4V3 {
     const FALSY: Storage<Self> = reg::<Self, 4>([f64::from_bits(0); 4]);
     const TRUTHY: Storage<Self> = reg::<Self, 4>([f64::from_bits(!0); 4]);
 
@@ -454,6 +454,9 @@ impl FloatRegister for F64x4V3 {
     fn next_down(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_nextdownpd_v3(value) }
     }
+
+    const HAS_NATIVE_LDEXP: bool = false;
+    const HAS_NATIVE_FREXP: bool = false;
 }
 
 macro_rules! s {

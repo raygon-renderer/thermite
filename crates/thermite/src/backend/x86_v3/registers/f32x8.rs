@@ -3,7 +3,7 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister,
+        BitshiftRegister, CastRegister, FloatRegister, NumericRegister, PartialMaskRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister,
         empty_reg, reg,
     },
@@ -206,7 +206,7 @@ impl SwizzleRegister for F32x8V3 {
     }
 }
 
-impl MaskRegister for F32x8V3 {
+impl PartialMaskRegister for F32x8V3 {
     const FALSY: Storage<Self> = reg::<Self, 8>([f32::from_bits(0); 8]);
     const TRUTHY: Storage<Self> = reg::<Self, 8>([f32::from_bits(!0); 8]);
 
@@ -484,6 +484,9 @@ impl FloatRegister for F32x8V3 {
     fn next_down(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_nextdownps_v3(value) }
     }
+
+    const HAS_NATIVE_LDEXP: bool = false;
+    const HAS_NATIVE_FREXP: bool = false;
 }
 
 impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {

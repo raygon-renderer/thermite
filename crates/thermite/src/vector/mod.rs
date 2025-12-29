@@ -8,8 +8,8 @@ use crate::{
     math::FloatConsts,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
-        LinAlg4Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        LinAlg4Register, NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -26,8 +26,7 @@ use num_traits::{
 pub mod generic;
 pub mod streaming;
 
-#[cfg(feature = "float-trait")]
-mod float_trait;
+// pub mod num;
 
 /// SIMD Vector type.
 ///
@@ -38,7 +37,7 @@ pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
 #[doc(hidden)]
 pub trait IMaskOf {
-    type MaskRegister: MaskRegister;
+    type MaskRegister: PartialMaskRegister;
 }
 
 #[doc(hidden)]
@@ -46,7 +45,7 @@ pub trait IRegisterOf {
     type Register: Register;
 }
 
-impl<R: MaskRegister> IMaskOf for Vector<R> {
+impl<R: PartialMaskRegister> IMaskOf for Vector<R> {
     type MaskRegister = R;
 }
 
@@ -54,7 +53,7 @@ impl<R: Register> IRegisterOf for Vector<R> {
     type Register = R;
 }
 
-impl<R: MaskRegister> IRegisterOf for Mask<R> {
+impl<R: PartialMaskRegister> IRegisterOf for Mask<R> {
     type Register = R;
 }
 
@@ -322,6 +321,16 @@ impl<R: Register> Vector<R> {
         // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
         // which is really all that's needed to consider it a slice of registers.
         unsafe { values.align_to::<Self>() }
+    }
+
+    /// Transforms a mutable slice of element values into a mutable slice of vectors, with
+    /// alignment and length checks. A prefix and/or suffix slice may be returned if the slice is
+    /// not aligned or if the length is not a multiple of the number of lanes in the vector.
+    #[inline(always)]
+    pub fn from_slice_mut(values: &mut [R::Element]) -> (&mut [R::Element], &mut [Self], &mut [R::Element]) {
+        // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
+        // which is really all that's needed to consider it a slice of registers.
+        unsafe { values.align_to_mut::<Self>() }
     }
 
     /// Iterate over a slice of element values as Vectors using non-temporal (streaming) loads.

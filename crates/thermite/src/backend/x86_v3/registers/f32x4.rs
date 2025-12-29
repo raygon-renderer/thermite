@@ -8,9 +8,9 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, BlendRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitsRegister, BitshiftRegister, BlendRegister, FloatRegister, LinAlg3Register, LinAlg4Register,
+        NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -203,7 +203,7 @@ impl SwizzleRegister for F32x4V3 {
     }
 }
 
-impl MaskRegister for F32x4V3 {
+impl PartialMaskRegister for F32x4V3 {
     const FALSY: Storage<Self> = reg::<Self, 4>([0.0; 4]);
     const TRUTHY: Storage<Self> = reg::<Self, 4>([f32::from_bits(!0); 4]);
 
@@ -454,6 +454,9 @@ impl FloatRegister for F32x4V3 {
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_ps(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
+
+    const HAS_NATIVE_LDEXP: bool = false;
+    const HAS_NATIVE_FREXP: bool = false;
 }
 
 macro_rules! s {

@@ -8,7 +8,7 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister,
+        BitshiftRegister, CastRegister, IntegerRegister, PartialMaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
         dp::DoublePumpRegister, empty_reg, reg,
     },
@@ -224,7 +224,7 @@ impl BitshiftRegister for U32x4V2 {
     }
 }
 
-impl MaskRegister for U32x4V2 {
+impl PartialMaskRegister for U32x4V2 {
     const FALSY: Storage<Self> = reg::<Self, 4>([0; 4]);
     const TRUTHY: Storage<Self> = reg::<Self, 4>([!0; 4]);
 

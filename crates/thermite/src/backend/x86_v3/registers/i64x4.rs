@@ -7,7 +7,7 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, IntegerRegister, MaskRegister, NumericRegister, PartialOrdRegister,
+        BitshiftRegister, CastRegister, IntegerRegister, PartialMaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
         dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
@@ -198,7 +198,7 @@ impl BitshiftRegister for I64x4V3 {
     }
 }
 
-impl MaskRegister for I64x4V3 {
+impl PartialMaskRegister for I64x4V3 {
     const FALSY: Storage<Self> = reg::<Self, 4>([0; 4]);
     const TRUTHY: Storage<Self> = reg::<Self, 4>([-1; 4]);
 

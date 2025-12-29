@@ -380,6 +380,9 @@ impl FloatRegister for F64x2Wasm {
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_trunc(value)
     }
+
+    const HAS_NATIVE_LDEXP: bool = false;
+    const HAS_NATIVE_FREXP: bool = false;
 }
 
 impl CastRegister<DoublePumpRegister<F64x2Wasm>> for super::F32x4Wasm {

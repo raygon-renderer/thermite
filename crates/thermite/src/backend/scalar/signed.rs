@@ -7,8 +7,8 @@ use generic_array::{
 use crate::isa::InstructionSet;
 use crate::register::{
     BitsRegister, BitshiftRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register, MaskRegister,
-    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
-    SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+    SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -116,13 +116,13 @@ impl SwizzleRegister for [<i $width>] {
     }
 }
 
-impl MaskRegister for [<i $width>] {
+impl PartialMaskRegister for [<i $width>] {
     const TRUTHY: Storage<Self> = Element::TRUTHY;
     const FALSY: Storage<Self> = Element::FALSY;
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
+        if value[0] { <Self as PartialMaskRegister>::TRUTHY } else { <Self as PartialMaskRegister>::FALSY }
     }
 
     #[inline(always)] fn all(value: Storage<Self>) -> bool { value.to_bool() }

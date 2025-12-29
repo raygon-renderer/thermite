@@ -8,7 +8,7 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, FloatRegister, MaskRegister, NumericRegister, PartialOrdRegister,
+        BitshiftRegister, CastRegister, FloatRegister, PartialMaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister,
         empty_reg, reg,
     },
@@ -181,7 +181,7 @@ impl SwizzleRegister for F64x2V3 {
     const HAS_PERMUTEV: bool = false;
 }
 
-impl MaskRegister for F64x2V3 {
+impl PartialMaskRegister for F64x2V3 {
     const FALSY: Storage<Self> = reg::<Self, 2>([f64::from_bits(0); 2]);
     const TRUTHY: Storage<Self> = reg::<Self, 2>([f64::from_bits(!0); 2]);
 
@@ -419,6 +419,9 @@ impl FloatRegister for F64x2V3 {
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
+
+    const HAS_NATIVE_LDEXP: bool = false;
+    const HAS_NATIVE_FREXP: bool = false;
 }
 
 impl CastRegister<<Scalar as Simd>::f32x2> for F64x2V3 {

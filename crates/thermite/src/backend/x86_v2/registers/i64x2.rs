@@ -8,7 +8,7 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, MaskRegister, NumericRegister,
+        BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, PartialMaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
         SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
@@ -214,7 +214,7 @@ impl SwizzleRegister for I64x2V2 {
     const HAS_PERMUTEV: bool = false;
 }
 
-impl MaskRegister for I64x2V2 {
+impl PartialMaskRegister for I64x2V2 {
     const FALSY: Storage<Self> = reg::<Self, 2>([0; 2]);
     const TRUTHY: Storage<Self> = reg::<Self, 2>([-1; 2]);
 

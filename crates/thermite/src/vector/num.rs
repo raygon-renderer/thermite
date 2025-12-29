@@ -1,24 +1,120 @@
-//! Implements the `num_traits::float::FloatCore` and `num_traits::float::Float` traits for `Vector<R>`
-//!
-//! These aren't ideal since they assume a scalar-like behavior for vectors, but they provide
-//! compatibility with libraries that rely on `num_traits` for floating-point operations.
+#![allow(missing_docs)]
+
+use core::ops::Deref;
 
 use crate::{
     math::{FloatConsts, Math},
     register::{FloatElement, FloatRegister},
-    vector::Vector,
+    vector::{
+        Vector,
+        generic::{
+            BitshiftVector, FloatVector, GenericCastMask, GenericSelectable, GenericVector, NumericVector, SignedVector,
+        },
+    },
 };
 
+#[repr(transparent)]
+pub struct NumVector<V: GenericVector>(pub V);
+
+impl<V: GenericVector> Copy for NumVector<V> {}
+impl<V: GenericVector> Clone for NumVector<V> {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<V: GenericVector> Deref for NumVector<V> {
+    type Target = V;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<V: GenericVector> GenericSelectable for NumVector<V>
+where
+    V: GenericSelectable,
+{
+    type SelectableMask = V::SelectableMask;
+
+    #[inline(always)]
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Self::SelectableMask: GenericCastMask<M>,
+    {
+        Self(<V as GenericSelectable>::select(mask, t.0, f.0))
+    }
+}
+
+macro_rules! fwd_ops {
+    (BINARY: $bound:ident => $($trait:ident::$op:ident),* $(,)?) => {paste::paste! {$(
+        impl<V: $bound> core::ops::$trait for NumVector<V> {
+            type Output = Self; #[inline(always)] fn $op(self, rhs: Self) -> Self::Output {
+                Self(core::ops::$trait::$op(self.0, rhs.0))
+            }
+        }
+        impl<V: $bound> core::ops::[<$trait Assign>] for NumVector<V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: Self) {
+                core::ops::[<$trait Assign>]::[<$op _assign>](&mut self.0, rhs.0);
+            }
+        }
+    )*}};
+    (UNARY: $bound:ident => $($trait:ident::$op:ident),* $(,)?) => {paste::paste! {$(
+        impl<V: $bound> core::ops::$trait for NumVector<V> {
+            type Output = Self; #[inline(always)] fn $op(self) -> Self::Output {
+                Self(core::ops::$trait::$op(self.0))
+            }
+        }
+    )*}};
+    (SHIFTS: $bound:ident => $($trait:ident::$op:ident),* $(,)?) => {paste::paste! {$(
+        impl<V: $bound> core::ops::$trait<u32> for NumVector<V> {
+            type Output = Self; #[inline(always)] fn $op(self, rhs: u32) -> Self::Output {
+                Self(core::ops::$trait::$op(self.0, rhs))
+            }
+        }
+        impl<V: $bound> core::ops::[<$trait Assign>]<u32> for NumVector<V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: u32) {
+                core::ops::[<$trait Assign>]::[<$op _assign>](&mut self.0, rhs);
+            }
+        }
+        impl<V: $bound> core::ops::$trait<NumVector<V::USize>> for NumVector<V> {
+            type Output = Self; #[inline(always)] fn $op(self, rhs: NumVector<V::USize>) -> Self::Output {
+                Self(core::ops::$trait::$op(self.0, rhs.0))
+            }
+        }
+        impl<V: $bound> core::ops::[<$trait Assign>]<NumVector<V::USize>> for NumVector<V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: NumVector<V::USize>) {
+                core::ops::[<$trait Assign>]::[<$op _assign>](&mut self.0, rhs.0);
+            }
+        }
+    )*}};
+}
+
+fwd_ops!(BINARY: GenericVector => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+fwd_ops!(BINARY: NumericVector => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
+fwd_ops!(SHIFTS: BitshiftVector => Shl::shl, Shr::shr);
+fwd_ops!(UNARY: SignedVector => Neg::neg);
+
+impl<V: NumericVector> num_traits::Num for NumVector<V> {
+    type FromStrRadixErr = <V::Element as num_traits::Num>::FromStrRadixErr;
+
+    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        todo!()
+    }
+}
+
 #[rustfmt::skip]
-impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R> {
-    #[inline(always)] fn infinity() -> Self { Self::INFINITY }
-    #[inline(always)] fn neg_infinity() -> Self { Self::NEG_INFINITY }
-    #[inline(always)] fn nan() -> Self { Self::NAN }
-    #[inline(always)] fn neg_zero() -> Self { Self::NEG_ZERO }
-    #[inline(always)] fn min_value() -> Self { Self::MIN }
-    #[inline(always)] fn min_positive_value() -> Self { Self::MIN_POSITIVE }
-    #[inline(always)] fn epsilon() -> Self { Self::EPSILON }
-    #[inline(always)] fn max_value() -> Self { Self::MAX }
+impl<V: FloatVector> num_traits::float::FloatCore for NumVector<V> {
+    #[inline(always)] fn infinity()             -> Self { Self(V::INFINITY) }
+    #[inline(always)] fn neg_infinity()         -> Self { Self(V::NEG_INFINITY) }
+    #[inline(always)] fn nan()                  -> Self { Self(V::NAN) }
+    #[inline(always)] fn neg_zero()             -> Self { Self(V::NEG_ZERO) }
+    #[inline(always)] fn min_value()            -> Self { Self(V::MIN) }
+    #[inline(always)] fn min_positive_value()   -> Self { Self(V::MIN_POSITIVE) }
+    #[inline(always)] fn epsilon()              -> Self { Self(V::EPSILON) }
+    #[inline(always)] fn max_value()            -> Self { Self(V::MAX) }
 
     /// Follows the logic of most important classification in the order:
     /// NaN (any) > Infinite (any) > Zero (all) > Subnormal (any) > Normal
@@ -72,9 +168,9 @@ impl<R: FloatRegister> num_traits::float::FloatCore for Vector<R> {
 
 #[cfg(feature = "std")]
 #[rustfmt::skip]
-impl<R: FloatRegister> num_traits::float::Float for Vector<R>
+impl<V: FloatVector> num_traits::float::Float for NumVector<V>
 where
-    Self: Math<R>,
+    Self: VectorMath,
 {
     #[inline(always)] fn epsilon() -> Self { Self::EPSILON }
     #[inline(always)] fn is_subnormal(self) -> bool { self.is_subnormal().any() }

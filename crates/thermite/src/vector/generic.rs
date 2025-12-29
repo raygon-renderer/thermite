@@ -2,11 +2,11 @@
 #![deny(unconditional_recursion)] // just in case we miss one
 
 use core::ops::{
-    Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, Mul, Neg, Not, Rem, Shl, Shr, Sub,
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, Mul, Neg, Not, Rem, Shl,
+    ShlAssign, Shr, ShrAssign, Sub,
 };
 
 use generic_array::GenericArray;
-use num_traits::Signed;
 
 use crate::{
     Mask, Swizzle, Vector,
@@ -14,10 +14,67 @@ use crate::{
     math::FloatConsts,
     register::{
         BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
-        IntegerRegister, Lanes, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
-        SignedRegister, SwizzleRegister, UnsignedIntegerRegister,
+        IntegerRegister, Lanes, MaskRegister, NumericRegister, PartialMaskRegister, PartialOrdRegister, Register,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
+
+/// Macro to splat a compile-time constant value into all lanes of a generic vector.
+#[macro_export]
+macro_rules! generic_splat {
+    ($ty:ty: $value:expr) => {{
+        struct __ConstSplatValue;
+        impl $crate::vector::generic::SplatConst<$ty> for __ConstSplatValue {
+            const VALUE: $ty = const { $value };
+        }
+        $crate::vector::generic::GenericVector::splat_const::<__ConstSplatValue>()
+    }};
+}
+
+/// Simple associated constant splat trait.
+///
+/// Used with `GenericVector::splat_const` to splat compile-time constant values into vectors.
+///
+/// This is effectively a workaround for the lack of `const generics` for generic types.
+pub trait SplatConst<E> {
+    const VALUE: E;
+}
+
+pub trait GenericInteroperable<A, B>:
+    MaskedVector<Mask: GenericCastMask<A::Mask> + GenericCastMask<B::Mask>>
+    // bits
+    + BitsVector<Self>
+    + BitsVector<A>
+    + BitsVector<B>
+    // casts
+    + CastVector<Self>
+    + CastVector<A>
+    + CastVector<B>
+where
+    A: BitsVector<Self> + CastVector<Self> + MaskedVector<Lanes = Self::Lanes, Mask: GenericCastMask<Self::Mask> + GenericCastMask<B::Mask>>,
+    B: BitsVector<Self> + CastVector<Self> + MaskedVector<Lanes = Self::Lanes, Mask: GenericCastMask<Self::Mask> + GenericCastMask<A::Mask>>,
+{
+}
+
+impl<V, A, B> GenericInteroperable<A, B> for V
+where
+    V: MaskedVector<Mask: GenericCastMask<A::Mask> + GenericCastMask<B::Mask>>
+        // bits
+        + BitsVector<V>
+        + BitsVector<A>
+        + BitsVector<B>
+        // casts
+        + CastVector<V>
+        + CastVector<A>
+        + CastVector<B>,
+    A: BitsVector<V>
+        + CastVector<V>
+        + MaskedVector<Lanes = V::Lanes, Mask: GenericCastMask<V::Mask> + GenericCastMask<B::Mask>>,
+    B: BitsVector<V>
+        + CastVector<V>
+        + MaskedVector<Lanes = V::Lanes, Mask: GenericCastMask<V::Mask> + GenericCastMask<A::Mask>>,
+{
+}
 
 pub trait GenericVector:
     Sized
@@ -35,6 +92,11 @@ pub trait GenericVector:
     type Element: Element;
     type Register: Register<Element = Self::Element, Lanes = Self::Lanes>;
 
+    /// Get the underlying register storage.
+    fn register(self) -> Storage<Self::Register>;
+    /// Create a vector from the underlying register storage.
+    fn from_register(storage: Storage<Self::Register>) -> Self;
+
     const EMPTY: Self;
     const LANES: usize;
 
@@ -49,6 +111,18 @@ pub trait GenericVector:
         + BitsVector<Self::USize>;
 
     fn splat(value: Self::Element) -> Self;
+
+    /// Splat a compile-time constant value into all lanes of the vector.
+    ///
+    /// Use the `generic_splat!` macro to call this function with easier syntax.
+    #[inline(always)]
+    fn splat_const<C>() -> Self
+    where
+        C: SplatConst<Self::Element>,
+    {
+        Self::splat(C::VALUE)
+    }
+
     fn single(value: Self::Element) -> Self;
 
     unsafe fn load(ptr: *const Self::Element) -> Self;
@@ -114,6 +188,23 @@ pub trait GenericVector:
     }
 }
 
+pub trait BitshiftVector:
+    GenericVector<Register: BitshiftRegister>
+    + Shr<Self::USize, Output = Self>
+    + ShrAssign<Self::USize>
+    + Shl<Self::USize, Output = Self>
+    + ShlAssign<Self::USize>
+    + Shr<u32, Output = Self>
+    + ShrAssign<u32>
+    + Shl<u32, Output = Self>
+    + ShlAssign<u32>
+{
+    fn shli<const I: i32>(self) -> Self;
+    fn shri<const I: i32>(self) -> Self;
+    fn shlv(self, counts: Self::USize) -> Self;
+    fn shrv(self, counts: Self::USize) -> Self;
+}
+
 pub trait SwizzleVector: GenericVector<Register: SwizzleRegister> {
     fn swizzle(self, other: Self, indices: GenericArray<u32, Self::Lanes>) -> Self;
     fn permute(self, indices: GenericArray<u32, Self::Lanes>) -> Self;
@@ -160,7 +251,9 @@ where
 }
 
 pub trait GenericMask<V: GenericVector>:
-    Sized
+    GenericSelectable<SelectableMask = Self>
+    + GenericCastMask<Self>
+    + Sized
     + Copy
     + core::fmt::Debug
     + 'static
@@ -172,11 +265,20 @@ pub trait GenericMask<V: GenericVector>:
     + BitXorAssign<Self>
     + Not<Output = Self>
 {
+    fn from_unchecked(vector: V) -> Self;
+
     fn all(self) -> bool;
     fn any(self) -> bool;
     fn none(self) -> bool;
-    fn select(self, t: V, f: V) -> V;
     fn value(self) -> V;
+
+    #[inline(always)]
+    fn select<S>(self, t: S, f: S) -> S
+    where
+        S: GenericSelectable<SelectableMask: GenericCastMask<Self>>,
+    {
+        S::select(self, t, f)
+    }
 }
 
 pub trait GenericCastMask<FROM>: Sized {
@@ -185,7 +287,7 @@ pub trait GenericCastMask<FROM>: Sized {
 
 impl<FROM, INTO> GenericCastMask<Mask<FROM>> for Mask<INTO>
 where
-    FROM: MaskRegister,
+    FROM: PartialMaskRegister,
     INTO: CastMaskRegister<FROM>,
 {
     #[inline(always)]
@@ -194,21 +296,12 @@ where
     }
 }
 
-pub trait GenericSelectable {
-    fn select<M>(mask: M, t: Self, f: Self) -> Self;
-}
-
-// impl<R: Register, M: MaskRegister> GenericSelectable<Mask<M>> for Vector<R>
-// where
-//     R: CastMaskRegister<M, Lanes = M::Lanes>,
-// {
-//     #[inline(always)]
-//     fn select(mask: Mask<M>, t: Self, f: Self) -> Self {
-//         Vector(R::blendv(R::mask_from(mask.0), f.0, t.0))
-//     }
-// }
-
 impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
+    #[inline(always)]
+    fn from_unchecked(vector: Vector<R>) -> Self {
+        Mask::<R>::from_unchecked(vector)
+    }
+
     #[inline(always)]
     fn all(self) -> bool {
         Mask::<R>::all(self)
@@ -225,31 +318,51 @@ impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
     }
 
     #[inline(always)]
-    fn select(self, t: Vector<R>, f: Vector<R>) -> Vector<R> {
-        Vector(R::blendv(self.0, f.0, t.0))
-    }
-
-    #[inline(always)]
     fn value(self) -> Vector<R> {
         self.value()
     }
 }
 
-pub trait BitshiftVector:
-    GenericVector<Register: BitshiftRegister>
-    + Shr<Self::USize, Output = Self>
-    + Shl<Self::USize, Output = Self>
-    + Shr<u32, Output = Self>
-    + Shl<u32, Output = Self>
-{
-    fn shli<const I: i32>(self) -> Self;
-    fn shri<const I: i32>(self) -> Self;
-    fn shlv(self, counts: Self::USize) -> Self;
-    fn shrv(self, counts: Self::USize) -> Self;
+pub trait GenericSelectable {
+    type SelectableMask;
+
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Self::SelectableMask: GenericCastMask<M>;
 }
 
-pub trait MaskedVector: GenericVector<Register: MaskRegister> {
-    type Mask: GenericMask<Self>;
+impl<R> GenericSelectable for Vector<R>
+where
+    R: MaskRegister,
+{
+    type SelectableMask = Mask<R>;
+
+    #[inline(always)]
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Mask<R>: GenericCastMask<M>,
+    {
+        Mask::mask_from(mask).select(t, f)
+    }
+}
+
+impl<R> GenericSelectable for Mask<R>
+where
+    R: MaskRegister,
+{
+    type SelectableMask = Mask<R>;
+
+    #[inline(always)]
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Mask<R>: GenericCastMask<M>,
+    {
+        Mask::mask_from(mask).select(t, f)
+    }
+}
+
+pub trait MaskedVector: GenericVector<Register: MaskRegister> + GenericSelectable<SelectableMask = Self::Mask> {
+    type Mask: GenericMask<Self> + GenericSelectable<SelectableMask = Self::Mask>;
 }
 
 pub trait PartialOrdVector: MaskedVector<Register: PartialOrdRegister> + PartialEq {
@@ -263,10 +376,8 @@ pub trait PartialOrdVector: MaskedVector<Register: PartialOrdRegister> + Partial
 
 pub trait NumericVector:
     PartialOrdVector<Element: num_traits::Num, Register: NumericRegister>
-    + num_traits::Num
-    + num_traits::Bounded
-    + num_traits::ConstOne
-    + num_traits::ConstZero
+    + num_traits::NumOps
+    + num_traits::NumAssignOps
     + core::iter::Sum
     + core::iter::Product
     + num_traits::Bounded
@@ -292,7 +403,14 @@ pub trait NumericVector:
     fn indexed() -> Self;
 }
 
-pub trait SignedVector: NumericVector<Element: Signed, Register: SignedRegister> + Signed {
+pub trait NumVector:
+    NumericVector + num_traits::Num + num_traits::NumAssign + num_traits::ConstOne + num_traits::ConstZero
+{
+}
+
+pub trait SignedVector:
+    NumericVector<Element: num_traits::Signed, Register: SignedRegister> + Neg<Output = Self>
+{
     const NEG_ONE: Self;
     const MIN_POSITIVE: Self;
 
@@ -304,6 +422,8 @@ pub trait SignedVector: NumericVector<Element: Signed, Register: SignedRegister>
     fn is_positive(self) -> Self::Mask;
     fn is_negative(self) -> Self::Mask;
 }
+
+pub trait NumSignedVector: SignedVector + NumVector + num_traits::Signed {}
 
 pub trait IntegerVector:
     NumericVector<Element: Denominator, Register: IntegerRegister>
@@ -358,15 +478,20 @@ impl<T> CoreFloatTrait for T {}
 #[cfg(feature = "float-trait")]
 use num_traits::float::FloatCore as CoreFloatTrait;
 
+pub trait NumFloatVector:
+    FloatVector
+    + NumSignedVector
+    + num_traits::FloatConst
+    + CoreFloatTrait
+    + num_traits::MulAdd<Self, Self, Output = Self>
+    + num_traits::MulAddAssign<Self, Self>
+{
+}
+
 pub trait FloatVector:
     SignedVector<Element: FloatElement, Register: FloatRegister>
-    + num_traits::FloatConst
     + FloatConsts
-    + CoreFloatTrait
-    + CastVector<Self::Signed>
-    + CastVector<Self::Bits>
-    + BitsVector<Self::Signed>
-    + BitsVector<Self::Bits>
+    + GenericInteroperable<Self::Signed, Self::Bits>
     + CastVector<Self::ExtendedPrecision>
 {
     const HALF: Self;
@@ -376,15 +501,17 @@ pub trait FloatVector:
     const NAN: Self;
     const EPSILON: Self;
 
-    type Signed: SignedIntegerVector<Element = <Self::Element as FloatElement>::Signed>
-        + CastVector<Self::Bits>
-        + BitsVector<Self::Bits>
-        + BitsVector<Self>;
+    type Signed: SignedIntegerVector<
+            Lanes = Self::Lanes,
+            Element = <Self::Element as FloatElement>::Signed,
+            Register = <Self::Register as FloatRegister>::Signed,
+        > + GenericInteroperable<Self, Self::Bits>;
 
-    type Bits: UnsignedIntegerVector<Element = <Self::Element as FloatElement>::Bits>
-        + CastVector<Self::Signed>
-        + BitsVector<Self::Signed>
-        + BitsVector<Self>;
+    type Bits: UnsignedIntegerVector<
+            Lanes = Self::Lanes,
+            Element = <Self::Element as FloatElement>::Bits,
+            Register = <Self::Register as FloatRegister>::Bits,
+        > + GenericInteroperable<Self, Self::Signed>;
 
     type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
 
@@ -436,6 +563,21 @@ impl<R: Register> GenericVector for Vector<R> {
 
     type USize = Vector<R::USize>;
     type ISize = Vector<R::ISize>;
+
+    #[inline(always)]
+    fn register(self) -> Storage<Self::Register> {
+        self.0
+    }
+
+    #[inline(always)]
+    fn from_register(storage: Storage<Self::Register>) -> Self {
+        Vector(storage)
+    }
+
+    #[inline(always)]
+    fn splat_const<C>() -> Self where C: SplatConst<Self::Element> {
+        const { Self::splat_const(C::VALUE) }
+    }
 
     #[inline(always)] fn splat(value: Self::Element) -> Self { Vector::<R>::splat(value) }
     #[inline(always)] fn broadcast<const I: usize>(self) -> Self { Vector::<R>::broadcast::<I>(self) }
@@ -523,10 +665,12 @@ where
     #[inline(always)] fn indexed() -> Self { Vector::<R>::indexed() }
 }
 
+impl<R: NumericRegister> NumVector for Vector<R> where R::Element: num_traits::Num {}
+
 #[rustfmt::skip]
 impl<R: SignedRegister> SignedVector for Vector<R>
 where
-    R::Element: Signed,
+    R::Element: num_traits::Signed,
 {
     const NEG_ONE: Self = Vector::<R>::NEG_ONE;
     const MIN_POSITIVE: Self = Vector::<R>::MIN_POSITIVE;
@@ -539,6 +683,8 @@ where
     #[inline(always)] fn is_positive(self) -> Self::Mask { Vector::<R>::is_positive(self) }
     #[inline(always)] fn is_negative(self) -> Self::Mask { Vector::<R>::is_negative(self) }
 }
+
+impl<R: SignedRegister> NumSignedVector for Vector<R> where R::Element: num_traits::Signed {}
 
 #[rustfmt::skip]
 impl<R: IntegerRegister> IntegerVector for Vector<R>
@@ -572,7 +718,7 @@ where
 #[rustfmt::skip]
 impl<R: SignedIntegerRegister> SignedIntegerVector for Vector<R>
 where
-    R::Element: Denominator + Signed,
+    R::Element: Denominator + num_traits::Signed,
 {
     #[inline(always)] fn srai<const I: i32>(self) -> Self { Vector::<R>::srai::<I>(self) }
     #[inline(always)] fn sra(self, count: u32) -> Self { Vector::<R>::sra(self, count) }

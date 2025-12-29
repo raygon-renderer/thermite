@@ -10,8 +10,8 @@ use crate::{
     Vector,
     register::{
         BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatRegister, IntegerRegister, Lanes,
-        LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        LinAlg3Register, NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -25,21 +25,21 @@ use crate::{
 /// Masks are created by certain operations on vectors, such as comparisons, and can be used
 /// to select elements from vectors based on the mask values.
 #[repr(transparent)]
-pub struct Mask<R: MaskRegister>(#[doc(hidden)] pub Storage<R>);
+pub struct Mask<R: PartialMaskRegister>(#[doc(hidden)] pub Storage<R>);
 
-impl<R: MaskRegister> Clone for Mask<R> {
+impl<R: PartialMaskRegister> Clone for Mask<R> {
     #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<R: MaskRegister> Copy for Mask<R> {}
+impl<R: PartialMaskRegister> Copy for Mask<R> {}
 
 const _: () = {
     use core::fmt;
 
-    impl<R: MaskRegister> fmt::Debug for Mask<R> {
+    impl<R: PartialMaskRegister> fmt::Debug for Mask<R> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let mut t = f.debug_tuple("Mask");
 
@@ -54,11 +54,11 @@ const _: () = {
 
 use generic_array::{GenericArray, typenum::Unsigned};
 
-impl<R: MaskRegister> const_default::ConstDefault for Mask<R> {
+impl<R: PartialMaskRegister> const_default::ConstDefault for Mask<R> {
     const DEFAULT: Self = Self::FALSY;
 }
 
-impl<R: MaskRegister> Mask<R> {
+impl<R: PartialMaskRegister> Mask<R> {
     /// The number of lanes in the mask register.
     pub const LANES: usize = <R::Lanes as Unsigned>::USIZE;
 
@@ -166,7 +166,7 @@ impl<R: MaskRegister> Mask<R> {
 
     /// Create a mask by casting from another mask type.
     #[inline(always)]
-    pub fn from_mask<FROM: MaskRegister>(mask: Mask<FROM>) -> Mask<R>
+    pub fn from_mask<FROM: PartialMaskRegister>(mask: Mask<FROM>) -> Mask<R>
     where
         R: CastMaskRegister<FROM>,
     {
@@ -242,7 +242,7 @@ impl<R: MaskRegister> Mask<R> {
     #[inline(always)]
     pub fn join(low: Mask<R::HalfRegister>, high: Mask<R::HalfRegister>) -> Self
     where
-        R::HalfRegister: MaskRegister<Element = R::Element, DoubleRegister = R>,
+        R::HalfRegister: PartialMaskRegister<Element = R::Element, DoubleRegister = R>,
     {
         Self(R::join(low.0, high.0))
     }
@@ -251,7 +251,7 @@ impl<R: MaskRegister> Mask<R> {
     #[inline(always)]
     pub fn split(self) -> (Mask<R::HalfRegister>, Mask<R::HalfRegister>)
     where
-        R::HalfRegister: MaskRegister<Element = R::Element, DoubleRegister = R>,
+        R::HalfRegister: PartialMaskRegister<Element = R::Element, DoubleRegister = R>,
     {
         let (low, high) = R::split(self.0);
         (Mask(low), Mask(high))
@@ -263,7 +263,7 @@ impl<R: MaskRegister> Mask<R> {
     #[inline(always)]
     pub fn concat(self, other: Self) -> Mask<R::DoubleRegister>
     where
-        R::DoubleRegister: MaskRegister<HalfRegister = R, Element = R::Element>,
+        R::DoubleRegister: PartialMaskRegister<HalfRegister = R, Element = R::Element>,
     {
         Mask(R::concat(self.0, other.0))
     }
@@ -326,14 +326,14 @@ impl<R: MaskRegister> Mask<R> {
 pub trait Selectable<R: Register> {
     /// For each lane in `mask`, if the lane is `true`, the corresponding lane in `truthy` is selected,
     /// otherwise the corresponding lane in `falsy` is selected.
-    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    fn select<M: PartialMaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
     where
         R: CastMaskRegister<M, Lanes = M::Lanes>;
 }
 
-impl<R: MaskRegister> Selectable<R> for Vector<R> {
+impl<R: PartialMaskRegister> Selectable<R> for Vector<R> {
     #[inline(always)]
-    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    fn select<M: PartialMaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
     where
         R: CastMaskRegister<M, Lanes = M::Lanes>,
     {
@@ -341,9 +341,9 @@ impl<R: MaskRegister> Selectable<R> for Vector<R> {
     }
 }
 
-impl<R: MaskRegister> Selectable<R> for Mask<R> {
+impl<R: PartialMaskRegister> Selectable<R> for Mask<R> {
     #[inline(always)]
-    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
+    fn select<M: PartialMaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
     where
         R: CastMaskRegister<M, Lanes = M::Lanes>,
     {
@@ -351,7 +351,7 @@ impl<R: MaskRegister> Selectable<R> for Mask<R> {
     }
 }
 
-impl<R: MaskRegister> From<bool> for Mask<R> {
+impl<R: PartialMaskRegister> From<bool> for Mask<R> {
     /// Sets all bits in the mask to `true` if `value` is `true`, and all bits to `false` if `value` is `false`.
     #[inline(always)]
     fn from(value: bool) -> Self {
@@ -359,7 +359,7 @@ impl<R: MaskRegister> From<bool> for Mask<R> {
     }
 }
 
-impl<R: MaskRegister> From<Vector<R>> for Mask<R>
+impl<R: PartialMaskRegister> From<Vector<R>> for Mask<R>
 where
     R: NumericRegister,
 {
@@ -373,7 +373,7 @@ where
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
-impl<R: MaskRegister> BitAnd for Mask<R> {
+impl<R: PartialMaskRegister> BitAnd for Mask<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -382,14 +382,14 @@ impl<R: MaskRegister> BitAnd for Mask<R> {
     }
 }
 
-impl<R: MaskRegister> BitAndAssign for Mask<R> {
+impl<R: PartialMaskRegister> BitAndAssign for Mask<R> {
     #[inline(always)]
     fn bitand_assign(&mut self, rhs: Self) {
         self.0 = R::bitand(self.0, rhs.0);
     }
 }
 
-impl<R: MaskRegister> BitOr for Mask<R> {
+impl<R: PartialMaskRegister> BitOr for Mask<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -398,14 +398,14 @@ impl<R: MaskRegister> BitOr for Mask<R> {
     }
 }
 
-impl<R: MaskRegister> BitOrAssign for Mask<R> {
+impl<R: PartialMaskRegister> BitOrAssign for Mask<R> {
     #[inline(always)]
     fn bitor_assign(&mut self, rhs: Self) {
         self.0 = R::bitor(self.0, rhs.0);
     }
 }
 
-impl<R: MaskRegister> BitXor for Mask<R> {
+impl<R: PartialMaskRegister> BitXor for Mask<R> {
     type Output = Self;
 
     #[inline(always)]
@@ -414,14 +414,14 @@ impl<R: MaskRegister> BitXor for Mask<R> {
     }
 }
 
-impl<R: MaskRegister> BitXorAssign for Mask<R> {
+impl<R: PartialMaskRegister> BitXorAssign for Mask<R> {
     #[inline(always)]
     fn bitxor_assign(&mut self, rhs: Self) {
         self.0 = R::bitxor(self.0, rhs.0);
     }
 }
 
-impl<R: MaskRegister> Not for Mask<R> {
+impl<R: PartialMaskRegister> Not for Mask<R> {
     type Output = Self;
 
     #[inline(always)]

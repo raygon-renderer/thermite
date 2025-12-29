@@ -1,5 +1,7 @@
 #![allow(non_camel_case_types)]
 
+use core::hash::Hash;
+
 use generic_array::{
     ArrayLength,
     typenum::{U1, U2, U4, U8, U16},
@@ -11,16 +13,31 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitsRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, IntegerRegister, Interoperable,
-        Lanes, LinAlg4Register, MaskRegister, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
+        Lanes, LinAlg4Register, NarrowRegister, PartialMaskRegister, Register, SignedIntegerRegister, SignedRegister,
         UnsignedIntegerRegister, WidenRegister,
         element::IntegerElement,
         well_formed::{WellFormedFloatElement, WellFormedSignedIntegerElement, WellFormedUnsignedIntegerElement},
     },
 };
 
+#[doc(hidden)]
+#[repr(align(16))]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Align16;
+
+#[doc(hidden)]
+#[repr(align(32))]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Align32;
+
+#[doc(hidden)]
+#[repr(align(64))]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Align64;
+
 /// Native-width SIMD types supported directly by the target architecture.
 #[rustfmt::skip]
-pub trait NativeSimd {
+pub trait NativeSimd: Clone + Copy + PartialEq + Eq + Hash {
     const ISA: InstructionSet;
 
     type Registers: ArrayLength;
@@ -30,6 +47,12 @@ pub trait NativeSimd {
 
     /// Largest native 64-bit SIMD width
     type Native64Width: Lanes;
+
+    /// Opaque type with the minimum required alignment for native SIMD types.
+    ///
+    /// Include this as a field in structs that contain native SIMD types to ensure
+    /// proper alignment of the containing struct.
+    type NativeAlignment: Sized + Default + Copy + Ord + Hash + Send + Sync + Unpin + core::panic::UnwindSafe + core::panic::RefUnwindSafe + core::fmt::Debug + 'static;
 
     // Largest Native 32-bit SIMD types
     type f32xN: Interoperable<Self::i32xN, Self::u32xN, Lanes = Self::Native32Width, Element = f32, USize = Self::u32xN, ISize = Self::i32xN>

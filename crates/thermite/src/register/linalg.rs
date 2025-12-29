@@ -107,7 +107,7 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// 5. Sum T1 + T2 + T3 + T4
     #[inline(always)]
     fn quat4_product(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        use crate::math::FloatConsts as C;
+        use crate::{math::FloatConsts as C, register::Element as E};
 
         let w = Self::broadcast::<3>(lhs);
         let x = Self::broadcast::<0>(lhs);
@@ -122,19 +122,19 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         // T2 Signs: (+, -, +, -) -> Negate indices 1 and 3
         let rhs_x_signed = Self::bitxor(
             rhs_x,
-            const { reg::<Self, 4>([C::ZERO, C::NEG_ZERO, C::ZERO, C::NEG_ZERO]) },
+            const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) },
         );
 
         // T3 Signs: (+, +, -, -) -> Negate indices 2 and 3
         let rhs_y_signed = Self::bitxor(
             rhs_y,
-            const { reg::<Self, 4>([C::ZERO, C::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
+            const { reg::<Self, 4>([E::ZERO, E::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
         );
 
         // T4 Signs: (-, +, +, -) -> Negate indices 0 and 3
         let rhs_z_signed = Self::bitxor(
             rhs_z,
-            const { reg::<Self, 4>([C::NEG_ZERO, C::ZERO, C::ZERO, C::NEG_ZERO]) },
+            const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
         );
 
         // Pair 1: (w * rhs) + (x * rhs_x_signed)

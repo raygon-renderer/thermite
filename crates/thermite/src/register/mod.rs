@@ -502,7 +502,7 @@ pub trait SwizzleRegister: MaskRegister {
         let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
         let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
 
-        let mut blend_mask = <Self as MaskRegister>::FALSY;
+        let mut blend_mask = <Self as PartialMaskRegister>::FALSY;
 
         let blend = Self::as_array_mut(&mut blend_mask);
 
@@ -650,7 +650,11 @@ pub trait BitshiftRegister: MaskRegister<Element: IntegerElement> {
     }
 }
 
-pub trait MaskRegister: Register {
+pub trait MaskRegister: CastMaskRegister<Self> {}
+
+impl<R> MaskRegister for R where R: CastMaskRegister<R> {}
+
+pub trait PartialMaskRegister: Register {
     const TRUTHY: Storage<Self>;
     const FALSY: Storage<Self>;
 
@@ -768,7 +772,7 @@ pub trait BitsRegister<FROM: Register>: Register {
 
 /// A trait for registers that can be reinterpreted as other registers, as masks,
 /// such that the masks retain 0 or !0 values for the appropriate lanes.
-pub trait CastMaskRegister<FROM: MaskRegister>: MaskRegister {
+pub trait CastMaskRegister<FROM: PartialMaskRegister>: PartialMaskRegister {
     fn mask_from(value: Storage<FROM>) -> Storage<Self>;
 }
 
@@ -957,6 +961,19 @@ pub trait FloatRegister:
     const EPSILON: Storage<Self>;
 
     const EXP_MASK: Storage<Self::Bits>;
+
+    const HAS_NATIVE_LDEXP: bool;
+    const HAS_NATIVE_FREXP: bool;
+
+    #[inline(never)]
+    fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
+        unreachable!("native_ldexp is not implemented for this FloatRegister");
+    }
+
+    #[inline(never)]
+    fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
+        unreachable!("native_frexp is not implemented for this FloatRegister");
+    }
 
     #[inline(always)]
     fn total_order(value: Storage<Self>) -> Storage<Self::Signed> {

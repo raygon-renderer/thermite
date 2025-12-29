@@ -23,6 +23,7 @@ use crate::{
     simd::{NativeSimd, Simd},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct X86V2;
 
 impl NativeSimd for X86V2 {
@@ -32,6 +33,8 @@ impl NativeSimd for X86V2 {
 
     type Native32Width = generic_array::typenum::U4;
     type Native64Width = generic_array::typenum::U2;
+
+    type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
 
     type f32xN = F32x4V2;
     type i32xN = I32x4V2;

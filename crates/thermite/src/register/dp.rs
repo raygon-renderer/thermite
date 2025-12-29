@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes,
-    LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedRegister, Storage,
+    LinAlg3Register, NumericRegister, PartialMaskRegister, PartialOrdRegister, Register, SignedRegister, Storage,
     SwizzleRegister, UnsignedIntegerRegister,
 };
 
@@ -295,7 +295,7 @@ where
     #[inline(always)] fn reverse_bits(value: Storage<Self>) -> Storage<Self> { Self(R::reverse_bits(value.0), R::reverse_bits(value.1)) }
 }
 
-impl<R: MaskRegister> MaskRegister for DoublePumpRegister<R>
+impl<R: PartialMaskRegister> PartialMaskRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
@@ -361,7 +361,7 @@ where
     }
 }
 
-impl<FROM: MaskRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>
+impl<FROM: PartialMaskRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>
     for DoublePumpRegister<INTO>
 where
     typenum::Double<INTO::Lanes>: Lanes,
@@ -506,6 +506,22 @@ where
     #[inline(always)] fn fract(value: Storage<Self>) -> Storage<Self> { Self(R::fract(value.0), R::fract(value.1)) }
     #[inline(always)] fn next_up(value: Storage<Self>) -> Storage<Self> { Self(R::next_up(value.0), R::next_up(value.1)) }
     #[inline(always)] fn next_down(value: Storage<Self>) -> Storage<Self> { Self(R::next_down(value.0), R::next_down(value.1)) }
+
+    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
+    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
+
+    #[inline(always)]
+    fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
+        Self(R::native_ldexp(value.0, exp.0), R::native_ldexp(value.1, exp.1))
+    }
+
+    #[inline(always)]
+    fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
+        let (lo_val, lo_exp) = R::native_frexp(value.0);
+        let (hi_val, hi_exp) = R::native_frexp(value.1);
+
+        (Self(lo_val, hi_val), DoublePumpRegister(lo_exp, hi_exp))
+    }
 }
 
 #[rustfmt::skip]

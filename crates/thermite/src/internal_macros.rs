@@ -77,10 +77,10 @@ macro_rules! impl_mat4_inverse {
             Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
         };
 
-        use crate::math::FloatConsts as C;
+        use crate::{math::FloatConsts as C, register::Element as E};
 
-        let sign_a = Self::new(GenericArray::from_array([C::NEG_ZERO, C::ZERO, C::NEG_ZERO, C::ZERO]));
-        let sign_b = Self::new(GenericArray::from_array([C::ZERO, C::NEG_ZERO, C::ZERO, C::NEG_ZERO]));
+        let sign_a = Self::new(GenericArray::from_array([C::NEG_ZERO, E::ZERO, C::NEG_ZERO, E::ZERO]));
+        let sign_b = Self::new(GenericArray::from_array([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]));
 
         let temp0 = $swizzle!(Self: y_axis, x_axis, [0, 0, 4, 4]);
         let vec0 = $swizzle!(Self: temp0, [0, 2, 2, 2]);

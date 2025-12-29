@@ -6,7 +6,7 @@ use generic_array::{
 use crate::{
     Vector,
     mask::Mask,
-    register::{MaskRegister, Register, SwizzleRegister},
+    register::{PartialMaskRegister, Register, SwizzleRegister},
 };
 
 /*
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<R: MaskRegister> Swizzle<R::Lanes> for Mask<R>
+impl<R: PartialMaskRegister> Swizzle<R::Lanes> for Mask<R>
 where
     R: SwizzleRegister,
 {

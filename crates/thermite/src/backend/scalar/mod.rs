@@ -10,6 +10,7 @@ use crate::{
     simd::{NativeSimd, Simd},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Scalar;
 
 impl NativeSimd for Scalar {
@@ -19,6 +20,8 @@ impl NativeSimd for Scalar {
 
     type Native32Width = generic_array::typenum::U1;
     type Native64Width = generic_array::typenum::U1;
+
+    type NativeAlignment = ();
 
     type f32xN = f32;
     type i32xN = i32;
