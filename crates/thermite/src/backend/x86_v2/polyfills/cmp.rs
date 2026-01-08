@@ -2,13 +2,13 @@ use super::*;
 
 #[inline(always)]
 pub unsafe fn _mm_cmpgt_epu32x_v2(a: __m128i, b: __m128i) -> __m128i {
-    let mask = _mm_set1_epu32x(0x80000000);
+    let mask = _mm_set1_epu32x(1u32 << 31);
     _mm_cmpgt_epi32(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))
 }
 
 #[inline(always)]
 pub unsafe fn _mm_cmpgt_epu64x_v2(a: __m128i, b: __m128i) -> __m128i {
-    let mask = _mm_set1_epu64x(0x8000000080000000);
+    let mask = _mm_set1_epu64x(1u64 << 63);
     _mm_cmpgt_epi64(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))
 }
 
