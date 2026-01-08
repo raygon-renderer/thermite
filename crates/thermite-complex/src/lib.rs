@@ -1,32 +1,31 @@
 #![no_std]
 
 use thermite::{
-    Vector,
     math::{
-        MathWithPolicy,
+        TranscendentalMathWithPolicy as MathVector,
         policy::{DefaultPolicy, Policy},
     },
-    register::{FloatElement, FloatRegister, NumericRegister, Register, SignedRegister},
+    register::FloatElement,
 };
 
-pub struct Complex<R: Register, P: Policy = DefaultPolicy> {
-    pub re: Vector<R>,
-    pub im: Vector<R>,
+pub struct Complex<V: MathVector, P: Policy = DefaultPolicy> {
+    pub re: V,
+    pub im: V,
     _policy: core::marker::PhantomData<P>,
 }
 
-impl<R: Register, P: Policy> Clone for Complex<R, P> {
+impl<V: MathVector, P: Policy> Clone for Complex<V, P> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<R: Register, P: Policy> Copy for Complex<R, P> {}
+impl<V: MathVector, P: Policy> Copy for Complex<V, P> {}
 
-impl<R: Register, P: Policy> Complex<R, P> {
+impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Creates a complex number with the given real and imaginary parts.
     #[inline(always)]
-    pub const fn new(re: Vector<R>, im: Vector<R>) -> Self {
+    pub const fn new(re: V, im: V) -> Self {
         Self {
             re,
             im,
@@ -36,64 +35,61 @@ impl<R: Register, P: Policy> Complex<R, P> {
 
     /// Creates a complex number with the given real and imaginary parts splatted across all lanes.
     #[inline(always)]
-    pub fn splat(re: R::Element, im: R::Element) -> Self {
-        Self::new(Vector::splat(re), Vector::splat(im))
+    pub fn splat(re: V::Element, im: V::Element) -> Self {
+        Self::new(V::splat(re), V::splat(im))
     }
 
     /// Changes the policy of the complex number operations.
     #[inline(always)]
-    pub const fn with_policy<Q: Policy>(self) -> Complex<R, Q> {
-        Complex::<R, Q>::new(self.re, self.im)
+    pub const fn with_policy<Q: Policy>(self) -> Complex<V, Q> {
+        Complex::<V, Q>::new(self.re, self.im)
     }
 }
 
-impl<R: NumericRegister, P: Policy> Complex<R, P> {
+impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Creates a complex number with the given real part and zero imaginary part.
     #[inline(always)]
-    pub const fn real(re: Vector<R>) -> Self {
-        Self::new(re, Vector::ZERO)
+    pub const fn real(re: V) -> Self {
+        Self::new(re, V::ZERO)
     }
 
     /// Creates a complex number with zero real part and the given imaginary part.
     #[inline(always)]
-    pub const fn imag(im: Vector<R>) -> Self {
-        Self::new(Vector::ZERO, im)
+    pub const fn imag(im: V) -> Self {
+        Self::new(V::ZERO, im)
     }
 
-    pub const I: Self = Self::new(Vector::ZERO, Vector::ONE);
-    pub const ZERO: Self = Self::new(Vector::ZERO, Vector::ZERO);
-    pub const ONE: Self = Self::new(Vector::ONE, Vector::ZERO);
+    pub const I: Self = Self::new(V::ZERO, V::ONE);
+    pub const ZERO: Self = Self::new(V::ZERO, V::ZERO);
+    pub const ONE: Self = Self::new(V::ONE, V::ZERO);
 }
 
-impl<R: SignedRegister, P: Policy> Complex<R, P> {
-    pub const NEG_I: Self = Self::new(Vector::ZERO, Vector::NEG_ONE);
+impl<V: MathVector, P: Policy> Complex<V, P> {
+    pub const NEG_I: Self = Self::new(V::ZERO, V::NEG_ONE);
 }
 
-impl<R: FloatRegister, P: Policy> Complex<R, P>
-where
-    Vector<R>: MathWithPolicy<R>,
-{
+impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Computes the squared norm (magnitude) of the complex number.
     #[inline(always)]
-    pub fn norm_sqr(self) -> Vector<R> {
+    pub fn norm_sqr(self) -> V {
         self.re.mul_adde(self.re, self.im * self.im)
     }
 
     /// Computes the norm (magnitude) of the complex number.
     #[inline(always)]
-    pub fn norm(self) -> Vector<R> {
+    pub fn norm(self) -> V {
         self.re.hypot_p::<P>(self.im)
     }
 
     /// Scales/multiplies the complex number by the given vector.
     #[inline(always)]
-    pub fn scale(self, t: Vector<R>) -> Self {
+    pub fn scale(self, t: V) -> Self {
         self * t
     }
 
     /// Unscales/divides the complex number by the given vector.
     #[inline(always)]
-    pub fn unscale(self, t: Vector<R>) -> Self {
+    pub fn unscale(self, t: V) -> Self {
         self / t
     }
 
@@ -122,26 +118,26 @@ where
     ///
     /// [Manhattan distance]: https://en.wikipedia.org/wiki/Taxicab_geometry
     #[inline(always)]
-    pub fn l1_norm(self) -> Vector<R> {
+    pub fn l1_norm(self) -> V {
         self.re.abs() + self.im.abs()
     }
 
     /// Calculate the principal Arg of self.
     #[inline(always)]
-    pub fn arg(self) -> Vector<R> {
+    pub fn arg(self) -> V {
         self.im.atan2_p::<P>(self.re)
     }
 
     /// Convert to polar form (r, theta), such that
     /// `self = r * exp(i * theta)`
     #[inline(always)]
-    pub fn to_polar(self) -> (Vector<R>, Vector<R>) {
+    pub fn to_polar(self) -> (V, V) {
         (self.norm(), self.arg())
     }
 
     /// Convert a polar representation into a complex number.
     #[inline(always)]
-    pub fn from_polar(r: Vector<R>, theta: Vector<R>) -> Self {
+    pub fn from_polar(r: V, theta: V) -> Self {
         let (s, c) = theta.sin_cos_p::<P>();
         Self::new(r * c, r * s)
     }
@@ -176,7 +172,7 @@ where
         // Self::from_polar(r.sqrt(), theta * V::splat_as(0.5))
 
         // New formula from: http://stanleyrabinowitz.com/bibliography/complexSquareRoot.pdf
-        let half = Vector::HALF;
+        let half = V::HALF;
         let m = self.norm() * half;
 
         let r = self.re.mul_adde(half, m).sqrt(); // sqrt(0.5 * (m + re))
@@ -195,12 +191,12 @@ where
         // formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
         let (r, theta) = self.to_polar();
         // 1/3 isn't well-represented in float, so an exact inverse can't work with all precisions
-        Self::from_polar(r.cbrt_p::<P>(), theta / Vector::splat(FloatElement::from_i64(3)))
+        Self::from_polar(r.cbrt_p::<P>(), theta / V::splat(FloatElement::from_i64(3)))
     }
 
     /// Raises `self` to a floating point power.
     #[inline]
-    pub fn powf(self, exp: Vector<R>) -> Self {
+    pub fn powf(self, exp: V) -> Self {
         // formula: x^y = (ρ e^(i θ))^y = ρ^y e^(i θ y)
         // = from_polar(ρ^y, θ y)
         let (r, theta) = self.to_polar();
@@ -209,12 +205,12 @@ where
 
     /// Returns the logarithm of `self` with respect to an arbitrary base.
     #[inline]
-    pub fn log(self, base: Vector<R>) -> Self {
+    pub fn log(self, base: V) -> Self {
         // formula: log_y(x) = log_y(ρ e^(i θ))
         // = log_y(ρ) + log_y(e^(i θ)) = log_y(ρ) + ln(e^(i θ)) / ln(y)
         // = log_y(ρ) + i θ / ln(y)
         let (r, theta) = self.to_polar();
-        let d = Vector::ONE / base.ln_p::<P>();
+        let d = V::ONE / base.ln_p::<P>();
         Self::new(r.ln_p::<P>() * d, theta * d)
     }
 
@@ -241,7 +237,7 @@ where
 
     /// Raises a floating point number to the complex power `self`.
     #[inline]
-    pub fn expf(self, base: Vector<R>) -> Self {
+    pub fn expf(self, base: V) -> Self {
         // formula: x^(a+bi) = x^a x^bi = x^a e^(b ln(x) i)
         // = from_polar(x^a, b ln(x))
         Self::from_polar(base.powf_p::<P>(self.re), self.im * base.ln_p::<P>())
@@ -324,7 +320,7 @@ where
         let b = self.mul_add(Self::NEG_I, Self::ONE);
 
         // z/(2i) == -0.5i * z
-        (a.ln() - b.ln()) * Self::imag(Vector::splat(FloatElement::from_f64(-0.5)))
+        (a.ln() - b.ln()) * Self::imag(V::splat(FloatElement::from_f64(-0.5)))
     }
 
     /// Computes the hyperbolic sine of `self`.
@@ -377,7 +373,7 @@ where
     #[inline]
     pub fn acosh(self) -> Self {
         // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
-        let one_half = Self::real(Vector::HALF);
+        let one_half = Self::real(V::HALF);
 
         let a = self.mul_add(one_half, one_half).sqrt();
         let b = self.mul_add(one_half, -one_half).sqrt();
@@ -403,7 +399,7 @@ where
         //} else if self == -one {
         //    return Self::new(-T::infinity(), T::zero());
         //}
-        Self::real(Vector::HALF) * ((Self::ONE + self).ln() - (Self::ONE - self).ln())
+        Self::real(V::HALF) * ((Self::ONE + self).ln() - (Self::ONE - self).ln())
     }
 
     /// Returns `1/self` using floating-point operations.
@@ -427,7 +423,7 @@ where
     }
 }
 
-impl<R: NumericRegister, P: Policy> core::ops::Add for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Add for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -436,7 +432,7 @@ impl<R: NumericRegister, P: Policy> core::ops::Add for Complex<R, P> {
     }
 }
 
-impl<R: NumericRegister, P: Policy> core::ops::Sub for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Sub for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -445,7 +441,7 @@ impl<R: NumericRegister, P: Policy> core::ops::Sub for Complex<R, P> {
     }
 }
 
-impl<R: FloatRegister, P: Policy> core::ops::Mul for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Mul for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -457,7 +453,7 @@ impl<R: FloatRegister, P: Policy> core::ops::Mul for Complex<R, P> {
     }
 }
 
-impl<R: FloatRegister, P: Policy> core::ops::Div for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Div for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
@@ -470,25 +466,25 @@ impl<R: FloatRegister, P: Policy> core::ops::Div for Complex<R, P> {
     }
 }
 
-impl<R: FloatRegister, P: Policy> core::ops::Mul<Vector<R>> for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Mul<V> for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
-    fn mul(self, rhs: Vector<R>) -> Self::Output {
+    fn mul(self, rhs: V) -> Self::Output {
         Self::new(self.re * rhs, self.im * rhs)
     }
 }
 
-impl<R: FloatRegister, P: Policy> core::ops::Div<Vector<R>> for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Div<V> for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]
-    fn div(self, rhs: Vector<R>) -> Self::Output {
+    fn div(self, rhs: V) -> Self::Output {
         Self::new(self.re / rhs, self.im / rhs)
     }
 }
 
-impl<R: FloatRegister, P: Policy> core::ops::Neg for Complex<R, P> {
+impl<V: MathVector, P: Policy> core::ops::Neg for Complex<V, P> {
     type Output = Self;
 
     #[inline(always)]

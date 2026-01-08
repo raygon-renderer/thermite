@@ -1,17 +1,15 @@
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
-    Vector,
     math::{
-        FloatConsts, MathWithPolicy,
+        FloatConsts, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
-    register::FloatRegister,
+    vector::generic::FloatVector,
 };
 
-use crate::internal::SpecialMathInternal;
-
-mod internal;
+mod specialized;
+use specialized::SpecializedSpecialMath;
 
 macro_rules! decl_math {
     ($(
@@ -29,7 +27,7 @@ macro_rules! decl_math {
         /// which uses the [`DefaultPolicy`]. All floating-point vector types that implement
         /// the necessary internal math operations will automatically implement this trait, and
         /// the [`SpecialMath`] trait as well for all types that implement this one.
-        pub trait SpecialMathWithPolicy<R: FloatRegister>: MathWithPolicy<R> {$(
+        pub trait SpecialMathWithPolicy: TranscendentalMathWithPolicy {$(
             $(#[$meta])*
             fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -45,32 +43,38 @@ macro_rules! decl_math {
         ///
         /// All methods here have an associated method in [`SpecialMathWithPolicy`] with a `_p` suffix
         /// that accepts a policy parameter as the first generic argument.
-        pub trait SpecialMath<R: FloatRegister>: SpecialMathWithPolicy<R> {$(
+        pub trait SpecialMath: SpecialMathWithPolicy {$(
             $(#[$meta])*
             #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             {
-                SpecialMathWithPolicy::<R>::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*)
+                SpecialMathWithPolicy::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*)
             }
         )*}
 
-        impl<M, R: FloatRegister> SpecialMath<R> for M where M: SpecialMathWithPolicy<R> {}
+        impl<M> SpecialMath for M where M: SpecialMathWithPolicy {}
 
-        impl<E, R> SpecialMathWithPolicy<R> for Vector<R>
+        impl<E, V: FloatVector<Element = E>> SpecialMathWithPolicy for V
         where
-            R: SpecialMathInternal<E, Element = E>,
-            E: FloatConsts,
+            V: SpecializedSpecialMath<E>,
         {$(
             #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             {
-                R::$name::<P, $($generic_names),*>($($arg_name),*)
+                V::$name::<P, $($generic_names),*>($($arg_name),*)
             }
         )*}
     }};
 }
 
 decl_math! {
+    /// Computes the error function.
+    fn erf[][](self: Self) -> Self;
+    /// Computes the complementary error function.
+    fn erfc[][](self: Self) -> Self;
+    /// Computes the inverse error function.
+    fn erfinv[][](self: Self) -> Self;
+
     /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
     ///
     /// This implementation uses a few different behaviors to ensure the greatest precision where possible.
@@ -114,7 +118,7 @@ decl_math! {
     /// The polynomial is calculated independently per-lane with the given degree in `n`.
     ///
     /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermitev[][](self: Self, n: internal::Vu<R>) -> Self;
+    fn hermitev[][](self: Self, n: Self::Bits) -> Self;
 
     /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
     ///

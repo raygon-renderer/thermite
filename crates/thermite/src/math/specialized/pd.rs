@@ -1,35 +1,40 @@
-use crate::{
-    divider::Divider,
-    math::{consts::FloatConsts as _, policy::policies::ExtraPrecision},
-};
+use crate::divider::Divider;
 use core::f64::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
-impl<R> MathInternal<f64> for R
-where
-    R: FloatRegister<Element = f64>,
-{
+impl<V: FloatVector<Element = f64>> SpecializedCoreMath<f64> for V {}
+impl<V: FloatVector<Element = f64>> SpecializedRealMath<f64> for V {}
+
+#[rustfmt::skip]
+impl<V: FloatVector<Element = f64>> SpecializedSpatialMath<f64> for V {
+    #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self * self }
+    #[inline(always)] fn l2_norm<P: Policy>(self) -> Self { self.abs() }
+    #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }
+}
+
+impl<V: FloatVector<Element = f64>> SpecializedTranscendentalMath<f64> for V {
     #[inline(always)]
-    fn sin_cos<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
-        sincos_d_internal::<P, R, false>(x)
+    fn sin_cos<P: Policy>(self) -> (Self, Self) {
+        sincos_d_internal::<P, V, false>(self)
     }
 
     #[inline(always)]
-    fn sincos_pi<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
-        sincos_d_internal::<P, R, true>(x)
+    fn sincos_pi<P: Policy>(self) -> (Self, Self) {
+        sincos_d_internal::<P, V, true>(self)
     }
 
     #[inline(always)]
-    fn sinh_cosh<P: Policy>(x0: Vf<Self>) -> (Vf<Self>, Vf<Self>) {
+    fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
+        let x0 = self;
         let x = x0.abs();
-        let y = Self::exph::<P>(x);
-        let qy = Vf::splat(0.25) / y;
+        let y = x.exph_p::<P>();
+        let qy = V::splat(0.25) / y;
 
         let mut sinh = y - qy;
         let cosh = y + qy;
 
-        let x_small = x.cmp_le(Vf::ONE);
+        let x_small = x.cmp_le(V::ONE);
 
         // if any are small, use a polynomial approximation
         if P::POLICY.avoid_branching || x_small.any() {
@@ -58,16 +63,17 @@ where
     }
 
     #[inline(always)]
-    fn sinh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+    fn sinh<P: Policy>(self) -> Self {
+        let x0 = self;
         let x = x0.abs();
 
-        let x_small = x.cmp_le(Vf::ONE);
+        let x_small = x.cmp_le(V::ONE);
 
-        let mut y2 = Vf::EMPTY;
+        let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
             y2 = x.exph_p::<P>();
-            y2 -= Vf::splat(0.25) / y2;
+            y2 -= V::splat(0.25) / y2;
 
             // if we don't care about small x, we can skip the next branch
             if const { P::POLICY.avoid_precision_branches() } {
@@ -101,25 +107,26 @@ where
     }
 
     #[inline(always)]
-    fn cosh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
-        let y = Self::exph::<P>(x0.abs());
-        y + Vf::splat(0.25) / y
+    fn cosh<P: Policy>(self) -> Self {
+        let y = self.abs().exph_p::<P>();
+        y + V::splat(0.25) / y
     }
 
     #[inline(always)]
-    fn tanh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+    fn tanh<P: Policy>(self) -> Self {
+        let x0 = self;
         let x = x0.abs();
 
-        let x_small = x.cmp_le(Vf::splat(0.625));
+        let x_small = x.cmp_le(V::splat(0.625));
 
-        let mut y2 = Vf::EMPTY;
+        let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
             y2 = (x + x).exp_p::<P>();
-            y2 = (y2 - Vf::ONE) / (y2 + Vf::ONE); // originally (1 - 2/(y2 + 1))
+            y2 = (y2 - V::ONE) / (y2 + V::ONE); // originally (1 - 2/(y2 + 1))
 
             if P::POLICY.check_overflow {
-                y2 = x.cmp_gt(Vf::splat(350.0)).select(Vf::ONE, y2);
+                y2 = x.cmp_gt(V::splat(350.0)).select(V::ONE, y2);
             }
 
             if const { P::POLICY.avoid_precision_branches() } {
@@ -152,42 +159,43 @@ where
     }
 
     #[inline(always)]
-    fn asin<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        asin_internal::<Self, P, false>(x)
+    fn asin<P: Policy>(self) -> Self {
+        asin_internal::<Self, P, false>(self)
     }
 
     #[inline(always)]
-    fn acos<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        asin_internal::<Self, P, true>(x)
+    fn acos<P: Policy>(self) -> Self {
+        asin_internal::<Self, P, true>(self)
     }
 
     #[inline(always)]
-    fn atan<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        atan_internal::<Self, P, false>(x, Vf::ZERO)
+    fn atan<P: Policy>(self) -> Self {
+        atan_internal::<Self, P, false>(self, V::ZERO)
     }
 
     #[inline(always)]
-    fn atan2<P: Policy>(y: Vf<Self>, x: Vf<Self>) -> Vf<Self> {
-        atan_internal::<Self, P, true>(y, x)
+    fn atan2<P: Policy>(self, x: Self) -> Self {
+        atan_internal::<Self, P, true>(self, x)
     }
 
     #[inline(always)]
-    fn asinh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+    fn asinh<P: Policy>(self) -> Self {
+        let x0 = self;
         let x = x0.abs();
         let x2 = x * x;
 
-        let x_small = x.cmp_le(Vf::splat(0.533));
+        let x_small = x.cmp_le(V::splat(0.533));
 
-        let mut y2 = Vf::EMPTY;
+        let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
-            y2 = ((x2 + Vf::ONE).sqrt() + x).ln_p::<P>();
+            y2 = ((x2 + V::ONE).sqrt() + x).ln_p::<P>();
 
             if const { P::POLICY.check_overflow || !P::POLICY.avoid_precision_branches() } {
-                let x_huge = x.cmp_gt(Vf::splat(1e20));
+                let x_huge = x.cmp_gt(V::splat(1e20));
 
                 if crate::unlikely(x_huge.any()) {
-                    y2 = x_huge.select(x.ln_p::<P>() + Vf::LN_2, y2);
+                    y2 = x_huge.select(x.ln_p::<P>() + V::LN_2, y2);
                 }
             }
         }
@@ -219,28 +227,29 @@ where
     }
 
     #[inline(always)]
-    fn acosh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
-        let x1 = x0 - Vf::ONE;
+    fn acosh<P: Policy>(self) -> Self {
+        let x0 = self;
+        let x1 = x0 - V::ONE;
 
-        let x_small = x1.cmp_le(Vf::splat(0.49));
+        let x_small = x1.cmp_le(V::splat(0.49));
 
-        let mut y2 = Vf::EMPTY;
+        let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
-            y2 = (x0.mul_sube(x0, Vf::ONE).sqrt() + x0).ln_p::<P>();
+            y2 = (x0.mul_sube(x0, V::ONE).sqrt() + x0).ln_p::<P>();
 
             if const { P::POLICY.check_overflow && !P::POLICY.avoid_precision_branches() } {
-                let x_huge = x1.cmp_gt(Vf::splat(1e20));
+                let x_huge = x1.cmp_gt(V::splat(1e20));
 
                 if crate::unlikely(x_huge.any()) {
-                    y2 = x_huge.select(x0.ln_p::<P>() + Vf::LN_2, y2);
+                    y2 = x_huge.select(x0.ln_p::<P>() + V::LN_2, y2);
                 }
             }
 
             if const { P::POLICY.avoid_precision_branches() } {
                 // certain overflow checks can still be important even if precision is not
                 if P::POLICY.check_overflow {
-                    y2 = x0.cmp_lt(Vf::ONE).select(Vf::NAN, y2);
+                    y2 = x0.cmp_lt(V::ONE).select(V::NAN, y2);
                 }
 
                 return y2;
@@ -268,7 +277,7 @@ where
                 );
 
             if P::POLICY.check_overflow {
-                y1 = x0.cmp_lt(Vf::ONE).select(Vf::NAN, y1);
+                y1 = x0.cmp_lt(V::ONE).select(V::NAN, y1);
             }
 
             y2 = x_small.select(y1, y2);
@@ -278,19 +287,20 @@ where
     }
 
     #[inline(always)]
-    fn atanh<P: Policy>(x0: Vf<Self>) -> Vf<Self> {
+    fn atanh<P: Policy>(self) -> Self {
+        let x0 = self;
         let x = x0.abs();
 
-        let x_small = x.cmp_le(Vf::HALF);
+        let x_small = x.cmp_le(V::HALF);
 
-        let mut y2 = Vf::EMPTY;
+        let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
-            y2 = ((Vf::ONE + x) / (Vf::ONE - x)).ln_p::<P>() * Vf::HALF;
+            y2 = ((V::ONE + x) / (V::ONE - x)).ln_p::<P>() * V::HALF;
 
             if P::POLICY.check_overflow {
-                let y3 = x.cmp_eq(Vf::ONE).select(Vf::INFINITY, Vf::NAN);
-                y2 = x.cmp_ge(Vf::ONE).select(y3, y2);
+                let y3 = x.cmp_eq(V::ONE).select(V::INFINITY, V::NAN);
+                y2 = x.cmp_ge(V::ONE).select(y3, y2);
             }
 
             if const { P::POLICY.avoid_precision_branches() } {
@@ -328,44 +338,46 @@ where
     }
 
     #[inline(always)]
-    fn exp<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        exp_d_internal::<Self, P, EXP_MODE_EXP>(x)
+    fn exp<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_EXP>(self)
     }
 
     #[inline(always)]
-    fn exph<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        exp_d_internal::<Self, P, EXP_MODE_EXPH>(x)
+    fn exph<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_EXPH>(self)
     }
 
     #[inline(always)]
-    fn exp2<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        exp_d_internal::<Self, P, EXP_MODE_POW2>(x)
+    fn exp2<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_POW2>(self)
     }
 
     #[inline(always)]
-    fn exp10<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        exp_d_internal::<Self, P, EXP_MODE_POW10>(x)
+    fn exp10<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_POW10>(self)
     }
 
     #[inline(always)]
-    fn exp_m1<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        exp_d_internal::<Self, P, EXP_MODE_EXPM1>(x)
+    fn exp_m1<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_EXPM1>(self)
     }
 
     #[inline(always)]
-    fn powf<P: Policy>(x0: Vf<Self>, y: Vf<Self>) -> Vf<Self> {
+    fn powf<P: Policy>(self, y: Self) -> Self {
+        let x0 = self;
+
         // define constants
-        let ln2d_hi = Vf::splat(0.693145751953125); // log(2) in extra precision, high bits
-        let ln2d_lo = Vf::splat(1.42860682030941723212E-6); // low bits of log(2)
+        let ln2d_hi = crate::generic_splat!(f64: 0.693145751953125); // log(2) in extra precision, high bits
+        let ln2d_lo = crate::generic_splat!(f64: 1.42860682030941723212E-6); // low bits of log(2)
 
         let x1 = x0.abs();
 
         let mut x = fraction2(x1);
 
-        let blend = x.cmp_gt(Vf::splat(SQRT_2 / 2.0));
+        let blend = x.cmp_gt(V::splat(SQRT_2 / 2.0));
 
-        x += blend.andnot(x);
-        x -= Vf::ONE;
+        x += blend.value().bitandnot(x); // !blend.value() & x
+        x -= V::ONE;
 
         let x2 = x * x;
 
@@ -391,40 +403,40 @@ where
             ],
         );
 
-        let ef = exponent_f(x1) + (blend.value() & Vf::ONE);
+        let ef = exponent_f(x1) + (blend.value() & V::ONE);
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
         let yr = ef.mul_sube(y, e1); // calculate remainder yr. precision very important here
 
         // add initial terms to expansion
-        let lg = Vf::HALF.nmul_adde(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
+        let lg = V::HALF.nmul_adde(x2, x) + lg1; // lg = (x - 0.5f * x2) + lg1;
 
         // calculate rounding errors in lg
         // rounding error in multiplication 0.5*x*x
-        let x2err = (Vf::HALF * x).mul_sube(x, Vf::HALF * x2);
+        let x2err = (V::HALF * x).mul_sube(x, V::HALF * x2);
 
         // rounding error in additions and subtractions
-        let lgerr = Vf::HALF.mul_adde(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
+        let lgerr = V::HALF.mul_adde(x2, lg - x) - lg1; // lgerr = ((lg - x) + 0.5f * x2) - lg1;
 
         // extract something for the exponent
-        let e2 = (lg * y * Vf::LOG2_E).round();
+        let e2 = (lg * y * V::LOG2_E).round();
 
         // subtract this from lg, with extra precision
         let mut v = e2.nmul_adde(ln2d_lo, lg.mul_sube(y, e2 * ln2d_hi));
 
         // add remainder from ef * y
-        v = yr.mul_adde(Vf::LN_2, v); // v += yr * VM_LN2;
+        v = yr.mul_adde(V::LN_2, v); // v += yr * VM_LN2;
 
         // correct for previous rounding errors
         v = (lgerr + x2err).nmul_adde(y, v); // v -= (lgerr + x2err) * y;
 
         // extract something for the exponent if possible
         let mut x = v;
-        let e3 = (x * Vf::LOG2_E).round();
+        let e3 = (x * V::LOG2_E).round();
 
         // high precision multiplication not needed here because abs(e3) <= 1
-        x = e3.nmul_adde(Vf::LN_2, x); // x -= e3 * VM_LN2;
+        x = e3.nmul_adde(V::LN_2, x); // x -= e3 * VM_LN2;
 
         // Taylor coefficients for exp function, 1/n!
         let mut z = x.poly_p::<P, _>(&[
@@ -446,21 +458,21 @@ where
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
-        let ei: Vs<R> = ee.fast_cast();
+        let ei: Self::Signed = ee.fast_cast();
 
         // biased exponent of result:
-        let ej = ei + (Vs::<R>::from_bits(x.abs()) >> 52);
+        let ej = ei + (V::Signed::from_bits(x.abs()) >> 52);
 
         // add exponent by signed integer addition
-        let mut z = Vf::<R>::from_bits(Vs::<R>::from_bits(z) + (ei << 52));
+        let mut z = V::from_bits(V::Signed::from_bits(z) + (ei << 52));
 
         if !P::POLICY.check_overflow {
             return z;
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(Vs::<R>::splat(0x07FF)).cast() | ee.cmp_gt(Vf::splat(3000.0));
-        let underflow = ej.cmp_le(Vs::<R>::splat(0x0000)).cast() | ee.cmp_lt(Vf::splat(-3000.0));
+        let overflow = ej.cmp_ge(V::Signed::splat(0x07FF)).cast_mask::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
+        let underflow = ej.cmp_le(V::Signed::splat(0x0000)).cast_mask::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -471,25 +483,25 @@ where
         let xsign = x0.is_negative();
 
         if crate::unlikely((overflow | underflow).any()) {
-            z = underflow.select(Vf::ZERO, z);
-            z = overflow.select(Vf::INFINITY, z);
+            z = underflow.select(V::ZERO, z);
+            z = overflow.select(V::INFINITY, z);
         }
 
-        let yzero = y.cmp_eq(Vf::ZERO);
-        let yneg = y.cmp_lt(Vf::ZERO);
+        let yzero = y.cmp_eq(V::ZERO);
+        let yneg = y.cmp_lt(V::ZERO);
 
         // pow_case_x0
-        z = xzero.select(yneg.select(Vf::INFINITY, yzero.select(Vf::ONE, Vf::ZERO)), z);
+        z = xzero.select(yneg.select(V::INFINITY, yzero.select(V::ONE, V::ZERO)), z);
 
-        let mut yodd = Vf::ZERO;
+        let mut yodd = V::ZERO;
 
         if xsign.any() {
             let yint = y.cmp_eq(y.round());
-            yodd = Vf::from_bits(y.into_bits::<Self::Bits>() << 63);
+            yodd = V::from_bits(y.into_bits::<Self::Bits>() << 63);
 
-            let z1 = yint.select(z | yodd, x0.cmp_eq(Vf::ZERO).select(z, Vf::NAN));
+            let z1 = yint.select(z | yodd, x0.cmp_eq(V::ZERO).select(z, V::NAN));
 
-            yodd = yint.select(yodd, Vf::ZERO);
+            yodd = yint.select(yodd, V::ZERO);
 
             z = xsign.select(z1, z);
         }
@@ -503,9 +515,9 @@ where
         // handle special error cases: y infinite
         let z1 = (yfinite & efinite).select(
             z,
-            x1.cmp_eq(Vf::ONE).select(
-                Vf::ONE,
-                (x1.cmp_gt(Vf::ONE) ^ y.is_negative()).select(Vf::INFINITY, Vf::ZERO),
+            x1.cmp_eq(V::ONE).select(
+                V::ONE,
+                (x1.cmp_gt(V::ONE) ^ y.is_negative()).select(V::INFINITY, V::ZERO),
             ),
         );
 
@@ -513,7 +525,7 @@ where
         let z1 = xfinite.select(
             z1,
             yzero.select(
-                Vf::ONE,
+                V::ONE,
                 yneg.select(
                     yodd & z,               // 0.0 with the sign of z from above
                     x0.abs() | (x0 & yodd), // get sign of x0 only if y is odd integer
@@ -527,31 +539,33 @@ where
     }
 
     #[inline(always)]
-    fn cbrt<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let b1 = Vu::<Self>::splat(715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
-        let b2 = Vu::<Self>::splat(696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
-        let m = Vu::<Self>::splat(0x7fffffff); // u32::MAX >> 1
+    fn cbrt<P: Policy>(self) -> Self {
+        let x = self;
 
-        let x1p54 = x * Vf::<Self>::splat(f64::from_bits(0x4350000000000000)); // 0x1p54 === 2 ^ 54
+        let b1 = crate::generic_splat!(u64: 715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
+        let b2 = crate::generic_splat!(u64: 696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
+        let m = crate::generic_splat!(u64: 0x7fffffff); // u32::MAX >> 1
 
-        let hx0 = (x.into_bits() >> 32) & m;
+        let x1p54 = x * Self::splat(f64::from_bits(0x4350000000000000)); // 0x1p54 === 2 ^ 54
 
-        let x_small = hx0.cmp_lt(Vu::<Self>::splat(0x00100000));
+        let hx0 = (x.into_bits::<Self::Bits>() >> 32) & m;
+
+        let x_small = hx0.cmp_lt(Self::Bits::splat(0x00100000));
 
         let xs = x_small.select(x1p54, x); // note that this upcasts
         let b = x_small.select(b2, b1);
 
-        let mut ui = xs.into_bits();
-        let mut hx = (ui >> 32) & m;
+        let mut ui: Self::Bits = xs.into_bits();
+        let mut hx: Self::Bits = (ui >> 32) & m;
 
         // NOTE: Using the branched divider with a constant
         // leads to better codegen when the branch is inlined.
         hx = hx / Divider::u64(3) + b;
 
-        ui &= Vu::<Self>::splat(1 << 63);
+        ui &= Self::Bits::splat(1 << 63);
         ui |= hx << 32;
 
-        let mut t = Vf::<Self>::from_bits(ui);
+        let mut t = Self::from_bits(ui);
 
         let r = (t * t) * (t / x); // encourage ILP
         let r2 = r * r;
@@ -565,186 +579,98 @@ where
         ]);
 
         ui = t.into_bits();
-        ui = (ui + Vu::<Self>::splat(0x80000000)) & Vu::<Self>::splat(0xffffffffc0000000);
-        t = Vf::<Self>::from_bits(ui);
+        ui = (ui + Self::Bits::splat(0x80000000)) & Self::Bits::splat(0xffffffffc0000000);
+        t = Self::from_bits(ui);
 
-        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
+        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::Register::HAS_TRUE_FMA } {
             // original form, 5 simple ops, 2 divisions
             let xtt = x / (t * t);
             (xtt - t) / ((t + t) + xtt)
         } else {
             // fast form, 3 simple ops, 1 division, 1 fma
             let t3 = t * t * t;
-            (x - t3) / t3.mul_add(Vf::<Self>::TWO, x)
+            (x - t3) / t3.mul_add(Self::TWO, x)
         };
 
         t = r.mul_adde(t, t);
 
         if !P::POLICY.check_overflow {
-            return x.cmp_eq(Vf::<Self>::ZERO).select(x, t);
+            return x.cmp_eq(Self::ZERO).select(x, t);
         }
 
-        (hx0.cmp_gt(Vu::<Self>::splat(0x7f800000)) | hx0.cmp_eq(Vu::<Self>::ZERO)).select(x, t)
+        (hx0.cmp_gt(Self::Bits::splat(0x7f800000)) | hx0.cmp_eq(Self::Bits::ZERO)).select(x, t)
     }
 
     #[inline(always)]
-    fn ln<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_d_internal::<Self, P, false>(x)
+    fn ln<P: Policy>(self) -> Self {
+        ln_d_internal::<Self, P, false>(self)
     }
 
     #[inline(always)]
-    fn ln_1p<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_d_internal::<Self, P, true>(x)
+    fn ln_1p<P: Policy>(self) -> Self {
+        ln_d_internal::<Self, P, true>(self)
     }
 
     #[inline(always)]
-    fn log2<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_d_internal::<Self, P, false>(x) * Vf::LOG2_E
+    fn log2<P: Policy>(self) -> Self {
+        ln_d_internal::<Self, P, false>(self) * V::LOG2_E
     }
 
     #[inline(always)]
-    fn log10<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        ln_d_internal::<Self, P, false>(x) * Vf::LOG10_2
+    fn log10<P: Policy>(self) -> Self {
+        ln_d_internal::<Self, P, false>(self) * V::LOG10_2
     }
 
     #[inline(always)]
-    fn ln1m_expnx<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+    fn ln1m_expnx<P: Policy>(self) -> Self {
+        (V::ONE - (-self).exp_p::<P>()).ln_p::<P>()
     }
 
     #[inline(always)]
-    fn ln1m_expnx_ext<P: Policy>(x: Vf<Self>, _lnx: Vf<Self>) -> Vf<Self> {
-        (Vf::ONE - (-x).exp_p::<P>()).ln_p::<P>()
-    }
-
-    #[inline(always)]
-    fn erf<P: Policy>(x: Vf<Self>) -> Vf<Self> {
-        let x2 = x * x;
-        let res = x * x2.poly_rational_p::<P, _, _>(
-            &[
-                5.55923013010394962768e4,
-                7.00332514112805075473e3,
-                2.23200534594684319226e3,
-                9.00260197203842689217e1,
-                9.60497373987051638749e0,
-                0.0,
-            ],
-            &[
-                4.92673942608635921086e4,
-                2.26290000613890934246e4,
-                4.59432382970980127987e3,
-                5.21357949780152679795e2,
-                3.35617141647503099647e1,
-                1.00000000000000000000e0,
-            ],
-        );
-
-        if P::POLICY.check_overflow {
-            // x^2 highest point in the polynomial, use x2 to avoid needing absolute value
-            // TODO: Find more exact value?
-            x2.cmp_gt(Vf::splat(8.135455562428929)).select(x.signum(), res)
-        } else {
-            res
-        }
-    }
-
-    #[inline(always)]
-    fn erfinv<P: Policy>(y: Vf<Self>) -> Vf<Self> {
-        let a = y.abs();
-
-        let w = -a.nmul_adde(a, Vf::ONE).ln_p::<P>();
-
-        // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - Vf::splat(2.5)).poly_p::<P, _>(&[
-            1.501409350414994,
-            0.2466402709383954,
-            -0.0041773392840529855,
-            -0.001252754693878528,
-            0.00021818504236422313,
-            -0.000005055953518603739,
-            -0.000003451228003698613,
-            4.691555466910589e-7,
-            1.565009183876413e-8,
-            -7.498144332533493e-9,
-            2.378447620687541e-9,
-            4.340759057762667e-10,
-            -1.1526825105953649e-11,
-            -3.605158594283844e-12,
-        ]);
-
-        let w_big = w.cmp_ge(Vf::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
-
-        if P::POLICY.avoid_branching || crate::unlikely(w_big.any()) {
-            let mut p1 = (w.sqrt() - Vf::splat(3.0)).poly_p::<P, _>(&[
-                2.914513093490991,
-                1.5466942804733321,
-                1.5950004257395263,
-                2.559965578101086,
-                2.3489887347568135,
-                0.7600225853251197,
-                -0.9258061028319879,
-                -1.574375166164548,
-                -1.2294848322739875,
-                -0.6192716293714041,
-                -0.21681459128064842,
-                -0.05369968979686224,
-                -0.009288117987439485,
-                -0.0010722580888930223,
-                -0.00007449590390143766,
-                -0.0000023620166848468398,
-            ]);
-
-            if P::POLICY.check_overflow {
-                p1 = a.cmp_eq(Vf::ONE).select(Vf::INFINITY, p1); // erfinv(x == 1) = inf
-                p1 = a.cmp_gt(Vf::ONE).select(Vf::NAN, p1); // erfinv(x > 1) = NaN
-            }
-
-            p0 = w_big.select(p1, p0);
-        }
-
-        p0 * y
+    fn ln1m_expnx_ext<P: Policy>(self, _lnx: Self) -> Self {
+        (V::ONE - (-self).exp_p::<P>()).ln_p::<P>()
     }
 }
 
 #[inline(always)]
-fn fraction2<R: MathInternal<f64>>(x: Vf<R>) -> Vf<R> {
+fn fraction2<V: FloatVector<Element = f64>>(x: V) -> V {
     // set exponent to 0 + bias
-    (x & Vf::splat(f64::from_bits(0x000FFFFFFFFFFFFF))) | Vf::splat(f64::from_bits(0x3FE0000000000000))
+    (x & V::splat(f64::from_bits(0x000FFFFFFFFFFFFF))) | V::splat(f64::from_bits(0x3FE0000000000000))
 }
 
 #[inline(always)]
-fn exponent<R: MathInternal<f64>>(x: Vf<R>) -> Vs<R> {
+fn exponent<V: FloatVector<Element = f64>>(x: V) -> V::Signed {
     // shift out sign, extract exp, subtract bias
-    Vs::<R>::from_bits((Vu::<R>::from_bits(x) << 1) >> 53) - Vs::<R>::splat(0x3FF)
+    V::Signed::from_bits((V::Bits::from_bits(x) << 1) >> 53) - V::Signed::splat(0x3FF)
 }
 
 #[inline(always)]
-fn exponent_f<R: MathInternal<f64>>(x: Vf<R>) -> Vf<R> {
-    let pow2_52 = Vf::<R>::splat(4503599627370496.0);
-    let bias = Vf::<R>::splat(1023.0);
+fn exponent_f<V: FloatVector<Element = f64>>(x: V) -> V {
+    let pow2_52: V = crate::generic_splat!(f64: 4503599627370496.0);
+    let bias: V = crate::generic_splat!(f64: 1023.0);
 
-    Vf::from_bits((Vu::<R>::from_bits(x) >> 52) | pow2_52.into_bits()) - (pow2_52 + bias)
+    V::from_bits((V::Bits::from_bits(x) >> 52) | pow2_52.into_bits()) - (pow2_52 + bias)
 }
 
 #[inline(always)]
-fn ln_d_internal<R: MathInternal<f64>, P: Policy, const P1: bool>(x0: Vf<R>) -> Vf<R> {
-    let ln2_hi = Vf::splat(0.693359375);
-    let ln2_lo = Vf::splat(-2.121944400546905827679E-4);
-    let x1 = if P1 { x0 + Vf::ONE } else { x0 };
+fn ln_d_internal<V: SpecializedCoreMath<f64>, P: Policy, const P1: bool>(x0: V) -> V {
+    let ln2_hi = crate::generic_splat!(f64: 0.693359375);
+    let ln2_lo = crate::generic_splat!(f64: -2.121944400546905827679E-4);
+    let x1 = if P1 { x0 + V::ONE } else { x0 };
 
-    let mut x = fraction2::<R>(x1);
-    let mut fe = Vf::from(exponent::<R>(x1));
+    let mut x = fraction2::<V>(x1);
+    let mut fe = V::cast_from(exponent::<V>(x1));
 
-    let blend = x.cmp_gt(Vf::splat(SQRT_2 * 0.5));
+    let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
 
     x = blend.select(x, x + x); // x = x.conditional_add(x, !blend);
-    fe = blend.select(fe + Vf::ONE, fe); // fe = fe.conditional_add(Vf::ONE, blend);
+    fe = blend.select(fe + V::ONE, fe); // fe = fe.conditional_add(V::ONE, blend);
 
-    let xp1 = x - Vf::ONE;
+    let xp1 = x - V::ONE;
 
     x = if P1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
-        fe.cmp_eq(Vf::ZERO).select(x0, xp1)
+        fe.cmp_eq(V::ZERO).select(x0, xp1)
     } else {
         // log(x). Expand around 1.0
         xp1
@@ -771,7 +697,7 @@ fn ln_d_internal<R: MathInternal<f64>, P: Policy, const P1: bool>(x0: Vf<R>) -> 
         ]);
 
     res = fe.mul_adde(ln2_lo, res); // res += fe * ln2_lo;
-    res += x2.nmul_adde(Vf::HALF, x); // res += x - 0.5 * x2;
+    res += x2.nmul_adde(V::HALF, x); // res += x - 0.5 * x2;
     res = fe.mul_adde(ln2_hi, res); // res += fe * ln2_hi;
 
     if !P::POLICY.check_overflow {
@@ -779,27 +705,27 @@ fn ln_d_internal<R: MathInternal<f64>, P: Policy, const P1: bool>(x0: Vf<R>) -> 
     }
 
     let overflow = !x1.is_finite();
-    let underflow = x1.cmp_lt(Vf::splat(2.2250738585072014E-308));
+    let underflow = x1.cmp_lt(V::splat(2.2250738585072014E-308));
 
     if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
         return res;
     }
 
-    res = underflow.select(Vf::NAN, res); // x1 < 0 gives NAN
-    res = x1.is_zero_or_subnormal().select(Vf::NEG_INFINITY, res); // x1 == 0 gives -INF
+    res = underflow.select(V::NAN, res); // x1 < 0 gives NAN
+    res = x1.is_zero_or_subnormal().select(V::NEG_INFINITY, res); // x1 == 0 gives -INF
     res = overflow.select(x1, res); // INF or NAN goes through
-    res = (x1.is_infinite() & x1.is_negative()).select(Vf::NAN, res); // -INF gives NAN
+    res = (x1.is_infinite() & x1.is_negative()).select(V::NAN, res); // -INF gives NAN
 
     res
 }
 
 #[inline(always)]
-fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x: Vf<R>) -> Vf<R> {
-    let morebits = Vf::splat(6.123233995736765886130E-17);
-    let morebitso2 = Vf::splat(6.123233995736765886130E-17 * 0.5);
-    let t3po8 = Vf::splat(SQRT_2 + 1.0);
+fn atan_internal<V: SpecializedCoreMath<f64>, P: Policy, const ATAN2: bool>(y: V, x: V) -> V {
+    let morebits = V::splat(6.123233995736765886130E-17);
+    let morebitso2 = V::splat(6.123233995736765886130E-17 * 0.5);
+    let t3po8 = V::splat(SQRT_2 + 1.0);
 
-    let mut swapxy = Mask::FALSY;
+    let mut swapxy = GenericMask::FALSY;
 
     let t = if ATAN2 {
         let x1 = x.abs();
@@ -815,8 +741,8 @@ fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x
 
             // TODO: Benchmark this branch
             if crate::unlikely(both_inf.any()) {
-                x2 = both_inf.select(x2 & Vf::NEG_ONE, x2);
-                y2 = both_inf.select(y2 & Vf::NEG_ONE, y2);
+                x2 = both_inf.select(x2 & V::NEG_ONE, x2);
+                y2 = both_inf.select(y2 & V::NEG_ONE, y2);
             }
         }
 
@@ -826,14 +752,14 @@ fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x
     };
 
     let not_big = t.cmp_le(t3po8);
-    let not_small = t.cmp_ge(Vf::splat(0.66));
+    let not_small = t.cmp_ge(V::splat(0.66));
 
-    let s = not_big.select(Vf::FRAC_PI_4, Vf::FRAC_PI_2) & not_small.value();
+    let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2) & not_small.value();
 
     let fac = not_big.select(morebitso2, morebits) & not_small.value();
 
-    let a = (not_big.value() & t) + (not_small.value() & Vf::NEG_ONE);
-    let b = (not_big.value() & Vf::ONE) + (not_small.value() & t);
+    let a = (not_big.value() & t) + (not_small.value() & V::NEG_ONE);
+    let b = (not_big.value() & V::ONE) + (not_small.value() & t);
 
     let z = a / b;
 
@@ -858,28 +784,28 @@ fn atan_internal<R: MathInternal<f64>, P: Policy, const ATAN2: bool>(y: Vf<R>, x
     let mut re = re0.mul_adde(z * zz, z + s + fac);
 
     if ATAN2 {
-        re = swapxy.select(Vf::FRAC_PI_2 - re, re);
-        re = (x | y).cmp_eq(Vf::ZERO).select(Vf::ZERO, re); // atan2(0,0) = 0 by convention
+        re = swapxy.select(V::FRAC_PI_2 - re, re);
+        re = (x | y).cmp_eq(V::ZERO).select(V::ZERO, re); // atan2(0,0) = 0 by convention
         // also for x = -0.
-        re = x.select_negative(Vf::PI - re, re);
+        re = x.select_negative(V::PI - re, re);
     }
 
     re.mul_sign(y)
 }
 
 #[inline(always)]
-fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) -> Vf<R> {
+fn asin_internal<V: SpecializedCoreMath<f64>, P: Policy, const ACOS: bool>(x: V) -> V {
     let xa = x.abs();
 
-    let is_big = xa.cmp_ge(Vf::splat(0.625));
+    let is_big = xa.cmp_ge(V::splat(0.625));
 
-    let x1 = is_big.select(Vf::ONE - xa, xa * xa);
+    let x1 = is_big.select(V::ONE - xa, xa * xa);
 
     let x2 = x1 * x1;
     let x4 = x2 * x2;
     let x8 = x4 * x4;
 
-    let undef = Vf::EMPTY;
+    let undef = V::EMPTY;
 
     let mut px = undef;
     let mut qx = undef;
@@ -939,25 +865,25 @@ fn asin_internal<R: MathInternal<f64>, P: Policy, const ACOS: bool>(x: Vf<R>) ->
     let z2 = xa.mul_adde(y1, xa);
 
     if ACOS {
-        let z1 = x.select_negative(Vf::PI - z1, z1);
-        let z2 = Vf::FRAC_PI_2 - z2.mul_sign(x);
+        let z1 = x.select_negative(V::PI - z1, z1);
+        let z2 = V::FRAC_PI_2 - z2.mul_sign(x);
         is_big.select(z1, z2)
     } else {
-        let z1 = Vf::FRAC_PI_2 - z1;
+        let z1 = V::FRAC_PI_2 - z1;
         is_big.select(z1, z2).mul_sign(x)
     }
 }
 
 #[inline(always)]
-fn pow2n_d<R: MathInternal<f64>>(n: Vf<R>) -> Vf<R> {
-    let pow2_52 = Vf::splat(4503599627370496.0);
-    let bias = Vf::splat(1023.0);
+fn pow2n_d<V: FloatVector<Element = f64>>(n: V) -> V {
+    let pow2_52: V = crate::generic_splat!(f64: 4503599627370496.0);
+    let bias: V = crate::generic_splat!(f64: 1023.0);
 
-    Vf::<R>::from_bits(Vu::<R>::from_bits(n + (bias + pow2_52)) << 52)
+    V::from_bits(V::Bits::from_bits(n + (bias + pow2_52)) << 52)
 }
 
 #[inline(always)]
-fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) -> Vf<R> {
+fn exp_d_internal<V: SpecializedCoreMath<f64>, P: Policy, const MODE: u8>(x0: V) -> V {
     let mut x = x0;
     let mut r;
 
@@ -970,33 +896,33 @@ fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) ->
             r = x0.round();
 
             x -= r;
-            x *= Vf::LN_2;
+            x *= V::LN_2;
         }
         EXP_MODE_POW10 => {
             max_x = 307.65;
 
-            let log10_2_hi = Vf::splat(0.30102999554947019); // log10(2) in two parts
-            let log10_2_lo = Vf::splat(1.1451100899212592E-10);
+            let log10_2_hi = V::splat(0.30102999554947019); // log10(2) in two parts
+            let log10_2_lo = V::splat(1.1451100899212592E-10);
 
-            r = (x0 * Vf::splat(LN_10 * LOG2_E)).round();
+            r = (x0 * V::splat(LN_10 * LOG2_E)).round();
 
             x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
             x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
-            x *= Vf::LN_10;
+            x *= V::LN_10;
         }
         _ => {
             max_x = const { if MODE == EXP_MODE_EXP { 708.39 } else { 709.7 } };
 
-            let ln2d_hi = Vf::splat(0.693145751953125);
-            let ln2d_lo = Vf::splat(1.42860682030941723212E-6);
+            let ln2d_hi = V::splat(0.693145751953125);
+            let ln2d_lo = V::splat(1.42860682030941723212E-6);
 
-            r = (x0 * Vf::splat(LOG2_E)).round();
+            r = (x0 * V::splat(LOG2_E)).round();
 
             x = r.nmul_adde(ln2d_hi, x); // x -= r * ln2_hi;
             x = r.nmul_adde(ln2d_lo, x); // x -= r * ln2_lo;
 
             if MODE == EXP_MODE_EXPH {
-                r -= Vf::ONE;
+                r -= V::ONE;
             }
         }
     }
@@ -1020,23 +946,23 @@ fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) ->
         1.0 / 6227020800.0,
     ]);
 
-    let n2 = pow2n_d::<R>(r);
+    let n2 = pow2n_d::<V>(r);
 
     z = match MODE {
-        EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - Vf::ONE),
+        EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - V::ONE),
         _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
     if P::POLICY.check_overflow {
-        let in_range = x0.abs().cmp_lt(Vf::splat(max_x)) & x0.is_finite();
+        let in_range = x0.abs().cmp_lt(V::splat(max_x)) & x0.is_finite();
 
         if crate::likely(in_range.all()) {
             return z;
         }
 
-        let underflow_value = const { if MODE == EXP_MODE_EXPM1 { Vf::NEG_ONE } else { Vf::ZERO } };
+        let underflow_value = const { if MODE == EXP_MODE_EXPM1 { V::NEG_ONE } else { V::ZERO } };
 
-        r = x0.select_negative(underflow_value, Vf::INFINITY);
+        r = x0.select_negative(underflow_value, V::INFINITY);
         z = in_range.select(z, r);
         z = x0.is_nan().select(x0, z);
     }
@@ -1045,41 +971,42 @@ fn exp_d_internal<R: MathInternal<f64>, P: Policy, const MODE: u8>(x0: Vf<R>) ->
 }
 
 #[inline(always)]
-fn sincos_d_internal<P: Policy, R: MathInternal<f64>, const PI: bool>(xx: Vf<R>) -> (Vf<R>, Vf<R>) {
+fn sincos_d_internal<P: Policy, V: SpecializedCoreMath<f64>, const PI: bool>(xx: V) -> (V, V) {
     let mut xa = xx.abs();
 
     let y = if PI {
         xa + xa // 2x for sinpi/cospi
     } else {
         if const { P::POLICY.check_overflow } {
-            #[rustfmt::skip]
-            let limit = const { match R::HAS_TRUE_FMA {
-                true => Vf::<R>::splat_const(1e15),
-                false => Vf::<R>::splat_const(1e13),
-            } };
+            let limit: V = crate::generic_splat!(<V> = <V: FloatVector> f64: {
+                match V::Register::HAS_TRUE_FMA {
+                    true => 1e15,
+                    false => 1e13,
+                }
+            });
 
             xa &= xa.cmp_le(limit).value(); // set to zero if too large
         }
 
-        xa * Vf::FRAC_2_PI
+        xa * V::FRAC_2_PI
     };
 
     let y = y.round();
 
-    let q = Vu::<R>::fast_from(y);
+    let q = V::Bits::fast_cast_from(y);
 
     // pi/2 split into three parts for extended precision modular arithmetic
-    let dp1 = const { Vf::splat_const(7.853981554508209228515625E-1 * 2.0) };
-    let dp2 = const { Vf::splat_const(7.94662735614792836714E-9 * 2.0) };
-    let dp3 = const { Vf::splat_const(3.06161699786838294307E-17 * 2.0) };
+    let dp1 = crate::generic_splat!(f64: 7.853981554508209228515625E-1 * 2.0);
+    let dp2 = crate::generic_splat!(f64: 7.94662735614792836714E-9 * 2.0);
+    let dp3 = crate::generic_splat!(f64: 3.06161699786838294307E-17 * 2.0);
 
     // Reduce by extended precision modular arithmetic
     // x = ((xa - y * DP1) - y * DP2) - y * DP3;
     // or if calculating sinpi/cospi:
     // x = pi * (xa - y * 0.5)
     let x = if PI {
-        y.nmul_adde(Vf::HALF, xa) * Vf::PI
-    } else if const { R::HAS_TRUE_FMA } {
+        y.nmul_adde(V::HALF, xa) * V::PI
+    } else if const { V::Register::HAS_TRUE_FMA } {
         // if true FMA is available, we only have to do two FMAs
         y.nmul_add(dp3, y.nmul_add(dp2 + dp1, xa))
     } else {
@@ -1109,23 +1036,23 @@ fn sincos_d_internal<P: Policy, R: MathInternal<f64>, const PI: bool>(xx: Vf<R>)
     ]);
 
     s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
-    c = c.mul_adde(x4, x2.nmul_adde(Vf::HALF, Vf::ONE)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+    c = c.mul_adde(x4, x2.nmul_adde(V::HALF, V::ONE)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
 
     // swap sin and cos if odd quadrant
-    let swap = (q & Vu::<R>::ONE).cmp_ne(Vu::<R>::ZERO);
+    let swap = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
 
     if P::POLICY.check_overflow {
-        let overflow = y.cmp_gt(Vf::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
+        let overflow = y.cmp_gt(V::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
-        let s = overflow.select(Vf::ZERO, s);
-        let c = overflow.select(Vf::ONE, c);
+        let s = overflow.select(V::ZERO, s);
+        let c = overflow.select(V::ONE, c);
     }
 
     let sin1 = swap.select(c, s);
     let cos1 = swap.select(s, c);
 
-    let signsin = Vf::from_bits(q << 62) ^ xx;
-    let signcos = Vf::from_bits(((q + Vu::<R>::ONE) & Vu::<R>::splat(2)) << 62);
+    let signsin = V::from_bits(q << 62) ^ xx;
+    let signcos = V::from_bits(((q + V::Bits::ONE) & V::Bits::splat(2)) << 62);
 
     // combine signs
     (sin1.mul_sign(signsin), cos1 ^ signcos)

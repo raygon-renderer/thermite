@@ -24,9 +24,8 @@ use num_traits::{
 };
 
 pub mod generic;
+pub mod num;
 pub mod streaming;
-
-// pub mod num;
 
 /// SIMD Vector type.
 ///

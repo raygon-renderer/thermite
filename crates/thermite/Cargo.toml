@@ -5,12 +5,11 @@ edition = "2024"
 categories = ["no_std"]
 
 [features]
-default = ["document_registers"]
-disable_fma_emulation = []       # Disable fast FMA emulation to ensure correctness
+
+disable_fma_emulation = [] # Disable fast FMA emulation to ensure correctness
 nightly = []
-std = ["num-traits/std"]         # required for decent scalar support
-partial-ord = []                 # Implements PartialOrd for Vector, only if all lanes are that order
-float-trait = ["partial-ord"]    # Implements the Float/FloatCore traits as best as possible
+std = ["num-traits/std"]   # required for decent scalar support
+partial-ord = []           # Implements PartialOrd for Vector, only if all lanes are that order
 document_registers = []
 neon = []
 

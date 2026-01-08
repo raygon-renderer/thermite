@@ -160,13 +160,21 @@ pub trait Register: Sized + 'static {
 
     /// Unsigned integer register type with the same number of lanes, used for
     /// variable shifts and other operations.
-    type USize: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::USize>
-        + CastRegister<Self::ISize>
+    type USize: UnsignedIntegerRegister<
+            ISize = Self::ISize,
+            USize = Self::USize,
+            Lanes = Self::Lanes,
+            Element = <Self::Element as Element>::USize,
+        > + CastRegister<Self::ISize>
         + BitsRegister<Self::ISize>;
 
     /// Signed integer register type with the same number of lanes.
-    type ISize: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as Element>::ISize>
-        + CastRegister<Self::USize>
+    type ISize: SignedIntegerRegister<
+            USize = Self::USize,
+            ISize = Self::ISize,
+            Lanes = Self::Lanes,
+            Element = <Self::Element as Element>::ISize,
+        > + CastRegister<Self::USize>
         + BitsRegister<Self::USize>;
 
     const EMPTY: Storage<Self>;

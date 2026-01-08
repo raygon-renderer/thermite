@@ -2,34 +2,39 @@
 
 use thermite::{
     math::{
-        FloatConsts, MathWithPolicy as _,
+        CoreMathWithPolicy, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{Policy, PrecisionPolicy, policies::ExtraPrecision},
     },
-    register::FloatRegister,
-    vector::Vector,
+    register::{Element, FloatElement},
+    vector::generic::{GenericMask, NumericVector, PartialOrdVector},
 };
 
 use super::SpecialMathWithPolicy as _;
 
-pub(crate) type Vf<R> = Vector<R>;
-pub(crate) type Vu<R> = Vector<<R as FloatRegister>::Bits>;
-pub(crate) type Vs<R> = Vector<<R as FloatRegister>::Signed>;
-
 mod pd;
 mod ps;
 
-pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInternal<E> {
-    fn tgamma<P: Policy>(x: Vf<Self>) -> Vf<Self>;
-    fn lgamma_r<P: Policy>(x: Vf<Self>) -> (Vf<Self>, Vf<Self>);
+pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTranscendentalMath<E> {
+    fn erf<P: Policy>(self) -> Self;
 
     #[inline(always)]
-    fn lgamma<P: Policy>(x: Vf<Self>) -> Vf<Self> {
+    fn erfc<P: Policy>(self) -> Self {
+        Self::ONE - self.erf_p::<P>()
+    }
+
+    fn erfinv<P: Policy>(self) -> Self;
+
+    fn tgamma<P: Policy>(x: Self) -> Self;
+    fn lgamma_r<P: Policy>(x: Self) -> (Self, Self);
+
+    #[inline(always)]
+    fn lgamma<P: Policy>(x: Self) -> Self {
         Self::lgamma_r::<P>(x).0
     }
 
     #[inline(always)]
-    fn hermite<P: Policy, const N: usize>(x: Vf<Self>) -> Vf<Self> {
-        let one = Vf::ONE;
+    fn hermite<P: Policy, const N: usize>(x: Self) -> Self {
+        let one = Self::ONE;
         let mut p0 = one;
 
         if N == 0 {
@@ -56,10 +61,10 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
     }
 
     #[inline(always)]
-    fn hermitev<P: Policy>(x: Vf<Self>, n: Vu<Self>) -> Vf<Self> {
-        let one = Vf::<Self>::ONE;
-        let i1 = Vu::<Self>::ONE;
-        let n_is_zero = n.cmp_eq(Vu::<Self>::ZERO);
+    fn hermitev<P: Policy>(x: Self, n: Self::Bits) -> Self {
+        let one = Self::ONE;
+        let i1 = Self::Bits::ONE;
+        let n_is_zero = n.cmp_eq(Self::Bits::ZERO);
 
         let mut c = i1;
 
@@ -91,25 +96,25 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
     }
 
     #[inline(always)]
-    fn jacobi<P: Policy>(x: Vf<Self>, mut alpha: Vf<Self>, mut beta: Vf<Self>, mut n: u32, m: u32) -> Vf<Self> {
+    fn jacobi<P: Policy>(x: Self, mut alpha: Self, mut beta: Self, mut n: u32, m: u32) -> Self {
         if thermite::unlikely(m > n) {
-            return Vf::ZERO;
+            return Self::ZERO;
         }
 
-        let mut scale = Vf::ONE;
+        let mut scale = Self::ONE;
 
         if m > 0 {
-            let mut jf = Vf::ONE;
-            let nf = Vf::splat(E::from_i64(n as i64));
+            let mut jf = Self::ONE;
+            let nf = Self::splat(E::from_i64(n as i64));
 
-            let t0 = Vf::HALF * (nf + alpha + beta);
+            let t0 = Self::HALF * (nf + alpha + beta);
 
             for _ in 0..m {
-                scale *= Vf::HALF.mul_adde(jf, t0);
-                jf += Vf::ONE;
+                scale *= Self::HALF.mul_adde(jf, t0);
+                jf += Self::ONE;
             }
 
-            let mf = Vf::<Self>::splat(E::from_i64(m as i64));
+            let mf = Self::splat(E::from_i64(m as i64));
 
             alpha += mf;
             beta += mf;
@@ -120,66 +125,66 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
             return scale; // scale * one
         }
 
-        let mut y0 = Vf::ONE;
+        let mut y0 = Self::ONE;
 
         let alpha_p_beta = alpha + beta;
         let alpha_sqr = alpha * alpha;
         let beta_sqr = beta * beta;
-        let alpha1 = alpha - Vf::ONE;
-        let beta1 = beta - Vf::ONE;
+        let alpha1 = alpha - Self::ONE;
+        let beta1 = beta - Self::ONE;
         let alpha2beta2 = alpha_sqr - beta_sqr;
 
         //let mut y1 = alpha + 1 + 0.5 * (alpha_p_beta + 2) * (x - 1);
-        let mut y1 = Vf::HALF * (x.mul_adde(alpha, alpha) + x.mul_sube(beta, beta) + x + x);
+        let mut y1 = Self::HALF * (x.mul_adde(alpha, alpha) + x.mul_sube(beta, beta) + x + x);
 
         let mut yk = y1;
         let mut k = E::from_i64(2);
 
-        let k_max = E::from_i64(n as i64) * (<E as FloatConsts>::ONE + E::EPSILON);
+        let k_max = E::from_i64(n as i64) * (<E as Element>::ONE + E::EPSILON);
 
         while k < k_max {
-            let kf = Vf::splat(k);
-            let kf2 = Vf::TWO * kf;
+            let kf = Self::splat(k);
+            let kf2 = Self::TWO * kf;
 
             let k_alpha_p_beta = kf + alpha_p_beta;
             let k2_alpha_p_beta = kf2 + alpha_p_beta;
 
-            let k2_alpha_p_beta_m2 = k2_alpha_p_beta - Vf::TWO;
+            let k2_alpha_p_beta_m2 = k2_alpha_p_beta - Self::TWO;
 
             let denom = kf2 * k_alpha_p_beta * k2_alpha_p_beta_m2;
             let t0 = x.mul_adde(k2_alpha_p_beta * k2_alpha_p_beta_m2, alpha2beta2);
             let gamma1 = k2_alpha_p_beta.mul_sube(t0, t0);
-            let gamma0 = Vf::TWO * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
+            let gamma0 = Self::TWO * (kf + alpha1) * (kf + beta1) * k2_alpha_p_beta;
 
             yk = gamma1.mul_sube(y1, gamma0 * y0) / denom;
 
             y0 = y1;
             y1 = yk;
 
-            k = k + <E as FloatConsts>::ONE;
+            k = k + <E as Element>::ONE;
         }
 
         scale * yk
     }
 
     #[inline(always)]
-    fn gaussian<P: Policy>(x: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
+    fn gaussian<P: Policy>(x: Self, a: Self, c: Self) -> Self {
         let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
             x * c.reciprocal_p::<P>()
         } else {
             x / c
         };
 
-        a * (Vf::splat(E::from_f64(-0.5)) * xc * xc).exp_p::<P>()
+        a * (Self::splat(E::from_f64(-0.5)) * xc * xc).exp_p::<P>()
     }
 
-    fn beta<P: Policy>(a: Vf<Self>, b: Vf<Self>) -> Vf<Self>;
+    fn beta<P: Policy>(a: Self, b: Self) -> Self;
 
     #[inline(always)]
-    fn gaussian_integral<P: Policy>(x0: Vf<Self>, x1: Vf<Self>, a: Vf<Self>, c: Vf<Self>) -> Vf<Self> {
+    fn gaussian_integral<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self {
         // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
-        let common = Vf::SQRT_FRAC_PI_2 * a * c;
-        let denom = Vf::SQRT_2 * c;
+        let common = Self::SQRT_FRAC_PI_2 * a * c;
+        let denom = Self::SQRT_2 * c;
 
         let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             let d = denom.reciprocal_p::<P>();
@@ -193,10 +198,10 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
 
     #[rustfmt::skip]
     #[inline(always)]
-    fn legendre0<P: Policy, const N: u32>(x: Vf<Self>, n: u32) -> Vf<Self> {
+    fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
         // macro_rules! l { ($($n:literal $(/ $d:literal)?),*) => { x.poly_p::<P, _>(&[$(  E::from_i64($n) $( / E::from_i64($d))?   ),*]) }; }
         // match n {
-        //     0 => Vf::ONE,
+        //     0 => Self::ONE,
         //     1 => x,
         //     2 => l![-1 / 2, 0, 3 / 2],
         //     3 => l![0, -3 / 2, 0, 5 / 2],
@@ -213,7 +218,7 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
         //     _ => unsafe { core::hint::unreachable_unchecked() },
         // }
 
-        macro_rules! c { ($n:literal / $d:literal) => { Vf::splat(E::from_i64($n) / E::from_i64($d)) }; }
+        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(E::from_i64($n) / E::from_i64($d)) }; }
 
         let x2 = x * x;
         let x4 = x2 * x2;
@@ -279,9 +284,9 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
     }
 
     #[inline(always)]
-    fn legendre<P: Policy>(x: Vf<Self>, n: u32, m: u32) -> Vf<Self> {
+    fn legendre<P: Policy>(x: Self, n: u32, m: u32) -> Self {
         match (n, m) {
-            (0, 0) => return Vf::ONE,
+            (0, 0) => return Self::ONE,
             (n, 0) if n < 14 => return Self::legendre0::<P, 0>(x, n),
             (n, 0) => {
                 let mut k = 14; // set to max degree hard-coded + 1
@@ -291,7 +296,7 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
                 let mut p1 = Self::legendre0::<P, 13>(x, 13); // n = k - 1
 
                 while k <= n {
-                    let nf = Vf::splat(E::from_i64(k as i64));
+                    let nf = Self::splat(E::from_i64(k as i64));
 
                     let tmp = p1;
                     p1 = x.mul_sube((nf + nf).mul_sube(p1, p1), nf.mul_sube(p0, p0)) / nf;
@@ -305,9 +310,9 @@ pub trait SpecialMathInternal<E: FloatConsts>: thermite::math::internal::MathInt
             _ => {}
         }
 
-        let jacobi = Self::jacobi::<P>(x, Vf::ZERO, Vf::ZERO, n, m);
+        let jacobi = Self::jacobi::<P>(x, Self::ZERO, Self::ZERO, n, m);
 
-        let x12 = x.nmul_adde(x, Vf::ONE); // (1 - x^2)
+        let x12 = x.nmul_adde(x, Self::ONE); // (1 - x^2)
 
         if m & 1 == 0 {
             jacobi * Self::powi::<P>(x12, (m >> 1) as i32)
