@@ -2,8 +2,12 @@ use crate::{math::policy::PrecisionPolicy, vector::generic::GenericMask as _};
 
 use super::*;
 
+/// Newton's method for finding roots of a function.
+///
+/// Returns `Ok(root)` if convergence was achieved within the maximum number of iterations,
+/// otherwise returns `Err(approximation)` with the best approximation found.
 #[inline(always)]
-pub fn newtons_method<V: CoreMath, P: Policy, F>(
+pub fn newtons_method<V: FloatVector, P: Policy, F>(
     mut x: V,
     tolerance: V,
     bounds: Option<(V, V)>,
@@ -36,16 +40,18 @@ where
     Err(x)
 }
 
+/// Computes the sum of a function `f` evaluated over the range `[start, end)`.
+///
+/// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
+/// otherwise returns `Err(partial_sum)` with the best partial sum computed.
 #[inline(always)]
-fn sum_f<V: CoreMath, P: Policy, F>(start: i64, end: i64, mut f: F) -> Result<V, V>
+pub fn sum_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
 where
     F: FnMut(i64) -> V,
 {
     let mut sum = V::ZERO;
     let mut c = V::ZERO; // Kahan summation compensation
     let mut n = start;
-
-    let tolerance = V::tolerance_p::<P>();
 
     let mut converged = false;
 
@@ -89,15 +95,17 @@ where
     }
 }
 
+/// Computes the sum of a function `f` evaluated over the range `[start, end)`.
+///
+/// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
+/// otherwise returns `Err(partial_sum)` with the best partial sum computed.
 #[inline(always)]
-fn prod_f<V: CoreMath, P: Policy, F>(start: i64, end: i64, mut f: F) -> Result<V, V>
+pub fn prod_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
 where
     F: FnMut(i64) -> V,
 {
     let mut prod = V::ONE;
     let mut n = start;
-
-    let tolerance = V::tolerance_p::<P>();
 
     for _ in 0..P::POLICY.max_iterations {
         if n >= end {

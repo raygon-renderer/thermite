@@ -870,8 +870,8 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 //     fn erfinv<P: Policy>(self) -> Self;
 // }
 
-pub mod pd;
-pub mod ps;
+mod pd;
+mod ps;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
