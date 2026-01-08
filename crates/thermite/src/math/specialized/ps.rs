@@ -626,7 +626,7 @@ impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
 
         let mut t = V::from_bits(ui);
 
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::Register::HAS_TRUE_FMA } {
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
             let mut td: Self::ExtendedPrecision = t.cast();
             let xd: Self::ExtendedPrecision = x.cast();
 
@@ -784,7 +784,7 @@ fn sin_cos_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const PI: bool>(xx
             crate::generic_splat!(f32: FRAC_1_PI / 2.0)
         };
 
-        return if const { V::Register::HAS_TRUE_FMA } {
+        return if const { V::HAS_TRUE_FMA } {
             // if FMA is available, we can improve ILP by doing product with m in parallel
             (
                 inner::<V>(xx.mul_sub(m, V::HALF) - (xx * m).floor()), // sine
@@ -807,7 +807,7 @@ fn sin_cos_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const PI: bool>(xx
     } else {
         if const { P::POLICY.check_overflow } {
             let limit: V = crate::generic_splat!(<V> = <V: FloatVector> f32: {
-                match V::Register::HAS_TRUE_FMA {
+                match V::HAS_TRUE_FMA {
                     true => 1e7,
                     false => 1e5,
                 }
@@ -834,7 +834,7 @@ fn sin_cos_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const PI: bool>(xx
     // x = pi * (xa - y * 0.5)
     let x = if PI {
         y.nmul_adde(V::HALF, xa) * V::PI
-    } else if const { V::Register::HAS_TRUE_FMA } {
+    } else if const { V::HAS_TRUE_FMA } {
         // if true FMA is available, we only have to do two FMAs
         y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa))
     } else {
@@ -893,7 +893,7 @@ fn asin_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const ACOS: bool>(x: 
         let a1 = m.poly_p::<P, _>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
 
         if ACOS {
-            if V::Register::HAS_TRUE_FMA {
+            if V::HAS_TRUE_FMA {
                 // if FMA is available we can at least exploit instruction-level parallelism
                 return x.select_negative(a0.nmul_add(a1, V::PI), a0 * a1);
             }

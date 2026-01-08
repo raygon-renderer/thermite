@@ -511,14 +511,14 @@ where
     const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
 
     #[inline(always)]
-    fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
-        Self(R::native_ldexp(value.0, exp.0), R::native_ldexp(value.1, exp.1))
+    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
+        unsafe { Self(R::native_ldexp(value.0, exp.0), R::native_ldexp(value.1, exp.1)) }
     }
 
     #[inline(always)]
-    fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
-        let (lo_val, lo_exp) = R::native_frexp(value.0);
-        let (hi_val, hi_exp) = R::native_frexp(value.1);
+    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
+        let (lo_val, lo_exp) = unsafe { R::native_frexp(value.0) };
+        let (hi_val, hi_exp) = unsafe { R::native_frexp(value.1) };
 
         (Self(lo_val, hi_val), DoublePumpRegister(lo_exp, hi_exp))
     }

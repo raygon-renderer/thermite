@@ -12,6 +12,16 @@ pub mod specialized;
 
 use policy::{DefaultPolicy, Policy};
 
+pub mod prelude {
+    pub use crate::vector::generic::FloatVector;
+
+    pub use super::FloatConsts;
+    pub use super::{
+        CoreMath, CoreMathWithPolicy, RealMath, RealMathWithPolicy, SpatialMath, SpatialMathWithPolicy,
+        TranscendentalMath, TranscendentalMathWithPolicy,
+    };
+}
+
 // Helper macro to declare math traits and implementations
 // for both policy and default policy versions. This reduces
 // boilerplate and ensures consistency between the two traits,

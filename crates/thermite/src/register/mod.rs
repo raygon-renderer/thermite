@@ -974,12 +974,12 @@ pub trait FloatRegister:
     const HAS_NATIVE_FREXP: bool;
 
     #[inline(never)]
-    fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
+    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
         unreachable!("native_ldexp is not implemented for this FloatRegister");
     }
 
     #[inline(never)]
-    fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
+    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
         unreachable!("native_frexp is not implemented for this FloatRegister");
     }
 

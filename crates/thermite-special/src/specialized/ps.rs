@@ -7,7 +7,6 @@ use thermite::{
             policies::{AveragePrecision, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision},
         },
     },
-    register::FloatRegister,
     vector::generic::GenericMask,
 };
 
@@ -40,7 +39,7 @@ where
                 let t4 = t2 * t2;
 
                 // 1 - 1/t4
-                if V::Register::HAS_APPROX_RCP {
+                if V::HAS_APPROX_RCP {
                     // use raw approximate reciprocal when available
                     let y = t4.rcp();
 
@@ -150,7 +149,7 @@ where
         let e = (-x2).exp_p::<P>();
 
         // if x<0 then 2 - y, else y
-        if V::Register::HAS_TRUE_FMA {
+        if V::HAS_TRUE_FMA {
             // exploit instruction-level parallelism if FMA is available
             x0.select_negative(m.nmul_add(e, V::TWO), m * e)
         } else {

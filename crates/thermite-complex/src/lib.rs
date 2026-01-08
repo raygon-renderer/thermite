@@ -2,11 +2,16 @@
 
 use thermite::{
     math::{
-        TranscendentalMathWithPolicy as MathVector,
+        SpatialMathWithPolicy, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
     register::FloatElement,
 };
+
+/// A trait for vectors that support the necessary mathematical operations
+/// to be used as the real and imaginary parts of a complex number.
+pub trait MathVector: TranscendentalMathWithPolicy + SpatialMathWithPolicy {}
+impl<V> MathVector for V where V: TranscendentalMathWithPolicy + SpatialMathWithPolicy {}
 
 pub struct Complex<V: MathVector, P: Policy = DefaultPolicy> {
     pub re: V,

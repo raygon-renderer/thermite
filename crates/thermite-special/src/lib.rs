@@ -8,7 +8,7 @@ use thermite::{
     vector::generic::FloatVector,
 };
 
-mod specialized;
+pub mod specialized;
 use specialized::SpecializedSpecialMath;
 
 macro_rules! decl_math {

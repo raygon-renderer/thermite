@@ -582,7 +582,7 @@ impl<V: FloatVector<Element = f64>> SpecializedTranscendentalMath<f64> for V {
         ui = (ui + Self::Bits::splat(0x80000000)) & Self::Bits::splat(0xffffffffc0000000);
         t = Self::from_bits(ui);
 
-        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::Register::HAS_TRUE_FMA } {
+        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
             // original form, 5 simple ops, 2 divisions
             let xtt = x / (t * t);
             (xtt - t) / ((t + t) + xtt)
@@ -979,7 +979,7 @@ fn sincos_d_internal<P: Policy, V: SpecializedCoreMath<f64>, const PI: bool>(xx:
     } else {
         if const { P::POLICY.check_overflow } {
             let limit: V = crate::generic_splat!(<V> = <V: FloatVector> f64: {
-                match V::Register::HAS_TRUE_FMA {
+                match V::HAS_TRUE_FMA {
                     true => 1e15,
                     false => 1e13,
                 }
@@ -1006,7 +1006,7 @@ fn sincos_d_internal<P: Policy, V: SpecializedCoreMath<f64>, const PI: bool>(xx:
     // x = pi * (xa - y * 0.5)
     let x = if PI {
         y.nmul_adde(V::HALF, xa) * V::PI
-    } else if const { V::Register::HAS_TRUE_FMA } {
+    } else if const { V::HAS_TRUE_FMA } {
         // if true FMA is available, we only have to do two FMAs
         y.nmul_add(dp3, y.nmul_add(dp2 + dp1, xa))
     } else {

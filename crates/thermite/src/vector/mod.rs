@@ -631,6 +631,20 @@ impl<R: Register> Vector<R> {
 }
 
 impl<R: BitshiftRegister> Vector<R> {
+    /// Treats the entire vector as a single large integer and shifts left by the immediate value
+    /// number of BYTES. Not bits, bytes.
+    #[inline(always)]
+    pub fn bshli<const IMM8: i32>(self) -> Self {
+        Self(R::bshli::<IMM8>(self.0))
+    }
+
+    /// Treats the entire vector as a single large integer and shifts right by the immediate value
+    /// number of BYTES. Not bits, bytes.
+    #[inline(always)]
+    pub fn bshri<const IMM8: i32>(self) -> Self {
+        Self(R::bshri::<IMM8>(self.0))
+    }
+
     /// For each lane in the vector, shift left by the immediate value.
     #[inline(always)]
     pub fn shli<const IMM8: i32>(self) -> Self {

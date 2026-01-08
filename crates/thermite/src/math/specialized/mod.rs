@@ -8,7 +8,7 @@ use crate::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
         algorithms, policy::policies::ExtraPrecision,
     },
-    register::{FloatElement, FloatRegister, Register, SignedIntegerRegister},
+    register::FloatElement,
     vector::{generic::*, num::NumVector},
 };
 
@@ -18,10 +18,8 @@ use super::policy::{Policy, PolicyParameters, PrecisionPolicy};
 pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     #[inline(always)]
     fn ldexp<P: Policy>(self, exp: Self::Signed) -> Self {
-        if const { <Self::Register as FloatRegister>::HAS_NATIVE_LDEXP } {
-            let (value, exp) = (self.register(), exp.register());
-
-            return Self::from_register(Self::Register::native_ldexp(value, exp));
+        if const { Self::HAS_NATIVE_LDEXP } {
+            return unsafe { Self::native_ldexp(self, exp) };
         }
 
         let bits: Self::Bits = self.into_bits();
@@ -64,10 +62,8 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn frexp<P: Policy>(self) -> (Self, Self::Signed) {
-        if const { <Self::Register as FloatRegister>::HAS_NATIVE_FREXP } {
-            let (mantissa, exp) = Self::Register::native_frexp(self.register());
-
-            return (Self::from_register(mantissa), Self::Signed::from_register(exp));
+        if const { Self::HAS_NATIVE_FREXP } {
+            return unsafe { Self::native_frexp(self) };
         }
 
         let bits: Self::Bits = self.into_bits();
@@ -234,7 +230,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn reciprocal<P: Policy>(self) -> Self {
-        if const { !Self::Register::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             Self::ONE / self
         } else {
             let mut y = self.rcp();
@@ -250,7 +246,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(self, a: Self) -> Self {
-        if const { !Self::Register::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             a + Self::ONE / self
         } else {
             let mut y = self.rcp();
@@ -268,7 +264,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn inverse_sqrt<P: Policy>(self) -> Self {
-        if const { !Self::Register::HAS_APPROX_RSQRT || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        if const { !Self::HAS_APPROX_RSQRT || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             Self::ONE / self.sqrt()
         } else {
             let mut y = self.rsqrt();
@@ -322,7 +318,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
             // NOTE: e1 is bitcast to Self when `select` is used, so we use it for the MSB_BLENDV hack
             // requirements
-            res = if <Self::Register as Register>::HAS_MSB_BLENDV {
+            res = if Self::HAS_MSB_BLENDV {
                 // Move the lowest bit to the highest bit position
                 e1 <<= const { core::mem::size_of::<<Self::Signed as GenericVector>::Element>() as u32 * 8 - 1 };
 
@@ -347,7 +343,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     fn lerp<P: Policy>(self, a: Self, b: Self) -> Self {
         let t = self;
 
-        if const { Self::Register::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
+        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
             t.mul_add(b - a, a) // Fast and accurate, if available
         } else {
             (Self::ONE - t) * a + t * b // Accurate but slower than FMA
