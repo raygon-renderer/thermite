@@ -78,7 +78,53 @@ where
     unsafe { core::mem::zeroed() }
 }
 
-pub trait Interoperable<A: MaskRegister<Lanes = Self::Lanes>, B: MaskRegister<Lanes = Self::Lanes>>: MaskRegister
+pub trait MaskInteroperable<A, B>: CoreRegister
+    // masks
+    + CastMaskRegister<Self>
+    + CastMaskRegister<A>
+    + CastMaskRegister<B>
+where
+    A: CastMaskRegister<Self>,
+    B: CastMaskRegister<Self>
+{}
+
+impl<R, A, B> MaskInteroperable<A, B> for R
+where
+    R: CoreRegister + CastMaskRegister<Self> + CastMaskRegister<A> + CastMaskRegister<B>,
+    A: CastMaskRegister<R>,
+    B: CastMaskRegister<R>,
+{
+}
+
+pub trait PartiallyInteroperable<A: Register<Lanes = Self::Lanes>, B: Register<Lanes = Self::Lanes>>: Register
+    // casts
+    + CastRegister<Self>
+    + CastRegister<A>
+    + CastRegister<B>
+    // masks
+    + CastMaskRegister<Self>
+    + CastMaskRegister<A>
+    + CastMaskRegister<B>
+where
+    A: CastRegister<Self> + CastMaskRegister<Self>,
+    B: CastRegister<Self> + CastMaskRegister<Self>
+{}
+
+impl<R, A: Register<Lanes = Self::Lanes>, B: Register<Lanes = Self::Lanes>> PartiallyInteroperable<A, B> for R
+where
+    R: Register
+        + CastRegister<Self>
+        + CastRegister<A>
+        + CastRegister<B>
+        + CastMaskRegister<Self>
+        + CastMaskRegister<A>
+        + CastMaskRegister<B>,
+    A: CastRegister<R> + CastMaskRegister<R>,
+    B: CastRegister<R> + CastMaskRegister<R>,
+{
+}
+
+pub trait FullyInteroperable<A: Register<Lanes = Self::Lanes>, B: Register<Lanes = Self::Lanes>>: Register
     // bits
     + BitsRegister<Self>
     + BitsRegister<A>
@@ -96,9 +142,9 @@ where
     B: BitsRegister<Self> + CastRegister<Self> + CastMaskRegister<Self>
 {}
 
-impl<R, A, B> Interoperable<A, B> for R
+impl<R, A, B> FullyInteroperable<A, B> for R
 where
-    R: MaskRegister
+    R: Register
         + BitsRegister<Self>
         + BitsRegister<A>
         + BitsRegister<B>
@@ -108,8 +154,8 @@ where
         + CastMaskRegister<Self>
         + CastMaskRegister<A>
         + CastMaskRegister<B>,
-    A: MaskRegister<Lanes = R::Lanes>,
-    B: MaskRegister<Lanes = R::Lanes>,
+    A: Register<Lanes = R::Lanes>,
+    B: Register<Lanes = R::Lanes>,
     A: BitsRegister<R> + CastRegister<R> + CastMaskRegister<R>,
     B: BitsRegister<R> + CastRegister<R> + CastMaskRegister<R>,
 {
@@ -142,13 +188,17 @@ where
     type BitmaskLength = MaskWordCount<T>;
 }
 
-pub(crate) type Storage<R> = <R as Register>::Storage;
+pub(crate) type Storage<R> = <R as CoreRegister>::Storage;
 
-pub trait Register: Sized + 'static {
+/// Core data types for a given register. These are simple types
+/// without any intertwining trait bounds.
+pub trait CoreRegister: 'static + Sized {
     type Lanes: Lanes;
     type Element: Element;
     type Storage: Sized + Copy + core::fmt::Debug;
+}
 
+pub trait Register: CoreRegister + MaskInteroperable<Self::USize, Self::ISize> {
     /// Indicates if the register is emulated in software.
     const IS_EMULATED: bool;
 
@@ -166,7 +216,8 @@ pub trait Register: Sized + 'static {
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::USize,
         > + CastRegister<Self::ISize>
-        + BitsRegister<Self::ISize>;
+        + BitsRegister<Self::ISize>
+        + CastMaskRegister<Self>;
 
     /// Signed integer register type with the same number of lanes.
     type ISize: SignedIntegerRegister<
@@ -175,7 +226,8 @@ pub trait Register: Sized + 'static {
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::ISize,
         > + CastRegister<Self::USize>
-        + BitsRegister<Self::USize>;
+        + BitsRegister<Self::USize>
+        + CastMaskRegister<Self>;
 
     const EMPTY: Storage<Self>;
 
@@ -372,6 +424,65 @@ pub trait Register: Sized + 'static {
             .fold(Self::extract::<0>(value), |acc, &v| f(acc, v))
     }
 
+    const TRUTHY: Storage<Self>;
+    const FALSY: Storage<Self>;
+
+    #[inline(always)]
+    fn boolean(value: bool) -> Storage<Self> {
+        if value { Self::TRUTHY } else { Self::FALSY }
+    }
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        // NOTE: This is a fallback implementation.
+        let mut result = Self::EMPTY;
+
+        {
+            let result = Self::as_array_mut(&mut result);
+            for (i, v) in value.into_iter().enumerate() {
+                result[i] = Self::Element::from_bool(v);
+            }
+        }
+        result
+    }
+
+    #[inline(always)]
+    fn debug_iter_bool(value: &Storage<Self>) -> impl Iterator<Item = bool> {
+        Self::as_array(value).iter().map(|v| v.to_bool())
+    }
+
+    fn all(value: Storage<Self>) -> bool;
+    fn any(value: Storage<Self>) -> bool;
+
+    #[inline(always)]
+    fn none(value: Storage<Self>) -> bool {
+        !Self::any(value)
+    }
+
+    fn native_bitmask(value: Storage<Self>) -> Option<u64>;
+
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>);
+
+    // /// SIMD version of reduce, where the reduction is done in a tree-like fashion.
+    // /// The result is still a full register, but the lowest lane contains the reduced value.
+    // fn reduce_simd<F, L>(mut value: Storage<Self>, f: F, last: L) -> Self::Element
+    // where
+    //     F: Fn(Storage<Self>, Storage<Self>) -> Storage<Self>,
+    //     L: FnOnce(Storage<Self>) -> Self::Element,
+    // {
+    //     let mut lanes = <Self::Lanes as Unsigned>::USIZE;
+
+    //     while lanes > 1 {
+    //         let half = lanes >> 1;
+
+    //         // TODO
+
+    //         lanes = half;
+    //     }
+
+    //     last(value)
+    // }
+
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
@@ -433,7 +544,7 @@ const fn is_power_of_2(n: u32) -> bool {
     (n & (n - 1)) == 0
 }
 
-pub trait SwizzleRegister: MaskRegister {
+pub trait SwizzleRegister: Register {
     const HAS_PERMUTEV: bool;
 
     #[inline(always)]
@@ -510,7 +621,7 @@ pub trait SwizzleRegister: MaskRegister {
         let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
         let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
 
-        let mut blend_mask = <Self as PartialMaskRegister>::FALSY;
+        let mut blend_mask = <Self as Register>::FALSY;
 
         let blend = Self::as_array_mut(&mut blend_mask);
 
@@ -533,7 +644,7 @@ pub trait SwizzleRegister: MaskRegister {
     }
 }
 
-pub trait BitshiftRegister: MaskRegister<Element: IntegerElement> {
+pub trait BitshiftRegister: Register<Element: IntegerElement> {
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self>;
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self>;
 
@@ -545,6 +656,103 @@ pub trait BitshiftRegister: MaskRegister<Element: IntegerElement> {
     #[inline(always)]
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         Self::shr(value, IMM8 as u32)
+    }
+
+    /// Indicates if bshli/bshri are supported natively.
+    const HAS_WIDE_BYTE_SHIFTS: bool;
+
+    /// Shifts the ENTIRE register left by a constant amount of BYTES,
+    /// filling with zeros. This is different from lane-wise shifts, and effectively
+    /// treats the register as one large integer.
+    #[inline(always)]
+    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+        let arr = Self::as_array_mut(&mut value);
+        let lane_width = core::mem::size_of::<Self::Element>() * 8;
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+
+        let skip = (8 * IMM8 as usize) / lane_width;
+        let shift = (8 * IMM8 as u16) % lane_width as u16;
+
+        if skip >= lanes {
+            return Self::EMPTY;
+        }
+
+        if shift == 0 {
+            for i in (skip..lanes).rev() {
+                arr[i] = arr[i - skip];
+            }
+            for i in 0..skip {
+                arr[i] = Self::Element::ZERO;
+            }
+
+            return value;
+        }
+
+        let inv_shift = lane_width as u16 - shift;
+
+        let shift: Self::Element = Element::from_u16(shift);
+        let inv_shift: Self::Element = Element::from_u16(inv_shift);
+
+        for i in (skip + 1..lanes).rev() {
+            arr[i] = (arr[i - skip] << shift) | (arr[i - skip - 1] >> inv_shift);
+        }
+
+        arr[skip] = arr[0] << shift;
+
+        if skip > 0 {
+            for i in 0..skip {
+                arr[i] = Self::Element::ZERO;
+            }
+        }
+
+        value
+    }
+
+    /// Shifts the ENTIRE register right by a constant amount of BYTES,
+    /// filling with zeros. This is different from lane-wise shifts, and effectively
+    /// treats the register as one large integer.
+    #[inline(always)]
+    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+        let arr = Self::as_array_mut(&mut value);
+        let lane_width = core::mem::size_of::<Self::Element>() * 8;
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+
+        let skip = (8 * IMM8 as usize) / lane_width;
+        let shift = (8 * IMM8 as u16) % lane_width as u16;
+
+        if skip >= lanes {
+            return Self::EMPTY;
+        }
+
+        if shift == 0 {
+            for i in 0..(lanes - skip) {
+                arr[i] = arr[i + skip];
+            }
+            for i in (lanes - skip)..lanes {
+                arr[i] = Self::Element::ZERO;
+            }
+
+            return value;
+        }
+
+        let inv_shift = lane_width as u16 - shift;
+
+        let shift: Self::Element = Element::from_u16(shift);
+        let inv_shift: Self::Element = Element::from_u16(inv_shift);
+
+        for i in 0..(lanes - skip - 1) {
+            arr[i] = (arr[i + skip] >> shift) | (arr[i + skip + 1] << inv_shift);
+        }
+
+        arr[lanes - skip - 1] = arr[lanes - 1] >> shift;
+
+        if skip > 0 {
+            for i in (lanes - skip)..lanes {
+                arr[i] = Self::Element::ZERO;
+            }
+        }
+
+        value
     }
 
     /// Indicates if true variable shifts are supported, or `false` if it
@@ -658,51 +866,6 @@ pub trait BitshiftRegister: MaskRegister<Element: IntegerElement> {
     }
 }
 
-pub trait MaskRegister: CastMaskRegister<Self> {}
-
-impl<R> MaskRegister for R where R: CastMaskRegister<R> {}
-
-pub trait PartialMaskRegister: Register {
-    const TRUTHY: Storage<Self>;
-    const FALSY: Storage<Self>;
-
-    #[inline(always)]
-    fn boolean(value: bool) -> Storage<Self> {
-        if value { Self::TRUTHY } else { Self::FALSY }
-    }
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        // NOTE: This is a fallback implementation.
-        let mut result = Self::EMPTY;
-
-        {
-            let result = Self::as_array_mut(&mut result);
-            for (i, v) in value.into_iter().enumerate() {
-                result[i] = Self::Element::from_bool(v);
-            }
-        }
-        result
-    }
-
-    #[inline(always)]
-    fn debug_iter_bool(value: &Storage<Self>) -> impl Iterator<Item = bool> {
-        Self::as_array(value).iter().map(|v| v.to_bool())
-    }
-
-    fn all(value: Storage<Self>) -> bool;
-    fn any(value: Storage<Self>) -> bool;
-
-    #[inline(always)]
-    fn none(value: Storage<Self>) -> bool {
-        !Self::any(value)
-    }
-
-    fn native_bitmask(value: Storage<Self>) -> Option<u64>;
-
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>);
-}
-
 pub trait WidenRegister<FROM>
 where
     Self: Register<HalfRegister = FROM>,
@@ -723,7 +886,7 @@ where
     FROM: Register<Element = INTO::Element>,
 {
     #[inline(always)]
-    fn widen_from(value: <FROM as Register>::Storage) -> Storage<Self> {
+    fn widen_from(value: Storage<FROM>) -> Storage<Self> {
         INTO::join(value, FROM::EMPTY)
     }
 }
@@ -748,14 +911,14 @@ where
     FROM: Register<Element = INTO::Element, HalfRegister = INTO>,
 {
     #[inline(always)]
-    fn narrow_from(value: <FROM as Register>::Storage) -> Storage<INTO> {
+    fn narrow_from(value: Storage<FROM>) -> Storage<INTO> {
         FROM::split(value).0
     }
 }
 
 /// A trait for registers that can be cast to/from other registers,
 /// including of varying element types.
-pub trait CastRegister<FROM: Register>: Register {
+pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     /// Cast a register from another register type.
     fn cast_from(value: Storage<FROM>) -> Storage<Self>;
 
@@ -774,17 +937,17 @@ pub trait CastRegister<FROM: Register>: Register {
 /// though this is not a safe operation. This is only available for registers
 /// of the same size in bytes. This is enforced simply by the fact that
 /// it will only be implemented for registers of the same size.
-pub trait BitsRegister<FROM: Register>: Register {
+pub trait BitsRegister<FROM: CoreRegister>: CoreRegister {
     fn from_bits(value: Storage<FROM>) -> Storage<Self>;
 }
 
 /// A trait for registers that can be reinterpreted as other registers, as masks,
 /// such that the masks retain 0 or !0 values for the appropriate lanes.
-pub trait CastMaskRegister<FROM: PartialMaskRegister>: PartialMaskRegister {
+pub trait CastMaskRegister<FROM: CoreRegister>: CoreRegister {
     fn mask_from(value: Storage<FROM>) -> Storage<Self>;
 }
 
-pub trait PartialOrdRegister: MaskRegister {
+pub trait PartialOrdRegister: Register {
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
@@ -812,9 +975,11 @@ pub trait PartialOrdRegister: MaskRegister {
     }
 }
 
-// TODO: Replace `: Register` with `: PartialOrdRegister` when
-// it's implemented for all registers.
-pub trait NumericRegister: PartialOrdRegister {
+pub trait NumericRegister:
+    PartialOrdRegister<ISize: CastRegister<Self>, USize: CastRegister<Self>>
+    + CastRegister<Self::ISize>
+    + CastRegister<Self::USize>
+{
     const ZERO: Storage<Self>;
     const ONE: Storage<Self>;
     const TWO: Storage<Self>;
@@ -932,7 +1097,7 @@ pub trait SignedRegister: NumericRegister {
 }
 
 #[inline(always)]
-fn zip_ternary<R: FloatRegister, F>(mut lhs: R::Storage, rhs: R::Storage, acc: R::Storage, f: F) -> R::Storage
+fn zip_ternary<R: FloatRegister, F>(mut lhs: Storage<R>, rhs: Storage<R>, acc: Storage<R>, f: F) -> Storage<R>
 where
     F: Fn(&mut R::Element, R::Element, R::Element),
 {
@@ -947,12 +1112,14 @@ where
 }
 
 pub trait FloatRegister:
-    SignedRegister<Element: FloatElement> + Interoperable<Self::Bits, Self::Signed> + CastRegister<Self::ExtendedPrecision>
+    SignedRegister<Element: FloatElement>
+    + FullyInteroperable<Self::Bits, Self::Signed>
+    + CastRegister<Self::ExtendedPrecision>
 {
     type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
-        + Interoperable<Self, Self::Signed>;
+        + FullyInteroperable<Self, Self::Signed>;
     type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Signed>
-        + Interoperable<Self, Self::Bits>;
+        + FullyInteroperable<Self, Self::Bits>;
 
     /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
     /// and this associated type provides that capability. If no higher-precision type is available,

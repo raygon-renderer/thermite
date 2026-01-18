@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
-    BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, FloatRegister, IntegerRegister, Lanes,
-    LinAlg3Register, NumericRegister, PartialMaskRegister, PartialOrdRegister, Register, SignedRegister, Storage,
-    SwizzleRegister, UnsignedIntegerRegister,
+    BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, CoreRegister, FloatRegister, IntegerRegister,
+    Lanes, LinAlg3Register, NumericRegister, PartialOrdRegister, Register, SignedRegister, Storage, SwizzleRegister,
+    UnsignedIntegerRegister,
 };
 
 use generic_array::{
@@ -30,15 +30,12 @@ use generic_array::{
 /// type f32x32 = DoublePump<f32x16>;
 /// ```
 #[repr(C)]
-pub struct DoublePumpRegister<R: Register>(pub(crate) R::Storage, pub(crate) R::Storage);
+pub struct DoublePumpRegister<R: CoreRegister>(pub(crate) Storage<R>, pub(crate) Storage<R>);
 
 const _: () = {
     use core::fmt;
 
-    impl<R: Register> fmt::Debug for DoublePumpRegister<R>
-    where
-        R::Storage: fmt::Debug,
-    {
+    impl<R: CoreRegister> fmt::Debug for DoublePumpRegister<R> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_tuple("DoublePumpRegister")
                 .field(&self.0)
@@ -60,32 +57,38 @@ where
     type DoublePumped = crate::vector::Vector<R::DoubleRegister>;
 }
 
-impl<R: Register> Clone for DoublePumpRegister<R> {
+impl<R: CoreRegister> Clone for DoublePumpRegister<R> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<R: Register> Copy for DoublePumpRegister<R> {}
+impl<R: CoreRegister> Copy for DoublePumpRegister<R> {}
 
-impl<R: Register> DoublePumpRegister<R>
+impl<R: CoreRegister> DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
     #[inline(always)]
-    fn split_array<T>(input: GenericArray<T, <Self as Register>::Lanes>) -> [GenericArray<T, R::Lanes>; 2] {
+    fn split_array<T>(input: GenericArray<T, <Self as CoreRegister>::Lanes>) -> [GenericArray<T, R::Lanes>; 2] {
         unsafe { generic_array::const_transmute(input) }
     }
+}
+
+impl<R: CoreRegister> CoreRegister for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    type Lanes = typenum::Double<R::Lanes>;
+    type Element = R::Element;
+
+    type Storage = DoublePumpRegister<R>;
 }
 
 impl<R: Register> Register for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    type Lanes = typenum::Double<R::Lanes>;
-    type Element = R::Element;
-    type Storage = DoublePumpRegister<R>;
-
     const IS_EMULATED: bool = true; // sad, but true.
 
     const ISA: InstructionSet = R::ISA;
@@ -99,12 +102,7 @@ where
     const EMPTY: Storage<Self> = Self(R::EMPTY, R::EMPTY);
 
     #[inline(always)]
-    fn split(
-        value: Storage<Self>,
-    ) -> (
-        <Self::HalfRegister as Register>::Storage,
-        <Self::HalfRegister as Register>::Storage,
-    )
+    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
     where
         Self::HalfRegister: Register,
     {
@@ -112,10 +110,7 @@ where
     }
 
     #[inline(always)]
-    fn join(
-        lo: <Self::HalfRegister as Register>::Storage,
-        hi: <Self::HalfRegister as Register>::Storage,
-    ) -> Storage<Self>
+    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
     where
         Self::HalfRegister: Register,
     {
@@ -218,87 +213,6 @@ where
         f(lo, hi)
     }
 
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::bitxor(lhs.0, rhs.0), R::bitxor(lhs.1, rhs.1))
-    }
-
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::bitand(lhs.0, rhs.0), R::bitand(lhs.1, rhs.1))
-    }
-
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::bitandnot(lhs.0, rhs.0), R::bitandnot(lhs.1, rhs.1))
-    }
-
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::bitor(lhs.0, rhs.0), R::bitor(lhs.1, rhs.1))
-    }
-
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
-        Self(R::not(value.0), R::not(value.1))
-    }
-
-    #[inline(always)]
-    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::blendv(mask.0, lhs.0, rhs.0), R::blendv(mask.1, lhs.1, rhs.1))
-    }
-
-    const HAS_MSB_BLENDV: bool = R::HAS_MSB_BLENDV;
-
-    #[inline(always)]
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
-        Self(R::reverse(value.1), R::reverse(value.0))
-    }
-
-    // double-pump logic for unpack does not add extra complexity,
-    // so this is determined solely by the underlying register.
-    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
-
-    #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let (r1_lo, r1_hi) = R::unpack(a.0, b.0);
-        let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
-
-        (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
-    }
-
-    #[inline(always)]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        Self(R::swap_bytes(value.0), R::swap_bytes(value.1))
-    }
-}
-
-#[rustfmt::skip]
-impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>
-where
-    typenum::Double<R::Lanes>: Lanes,
-{
-    const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
-
-    #[inline(always)] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shli::<IMM8>(value.0), R::shli::<IMM8>(value.1)) }
-    #[inline(always)] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shri::<IMM8>(value.0), R::shri::<IMM8>(value.1)) }
-    #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::shl(value.0, shift), R::shl(value.1, shift)) }
-    #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::shr(value.0, shift), R::shr(value.1, shift)) }
-    #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::shlv(value.0, shifts.0), R::shlv(value.1, shifts.1)) }
-    #[inline(always)] fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::shrv(value.0, shifts.0), R::shrv(value.1, shifts.1)) }
-    #[inline(always)] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::rol(value.0, shift), R::rol(value.1, shift)) }
-    #[inline(always)] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::ror(value.0, shift), R::ror(value.1, shift)) }
-    #[inline(always)] fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::roli::<IMM8>(value.0), R::roli::<IMM8>(value.1)) }
-    #[inline(always)] fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::rori::<IMM8>(value.0), R::rori::<IMM8>(value.1)) }
-    #[inline(always)] fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::rolv(value.0, shifts.0), R::rolv(value.1, shifts.1)) }
-    #[inline(always)] fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::rorv(value.0, shifts.0), R::rorv(value.1, shifts.1)) }
-    #[inline(always)] fn reverse_bits(value: Storage<Self>) -> Storage<Self> { Self(R::reverse_bits(value.0), R::reverse_bits(value.1)) }
-}
-
-impl<R: PartialMaskRegister> PartialMaskRegister for DoublePumpRegister<R>
-where
-    typenum::Double<R::Lanes>: Lanes,
-{
     const TRUTHY: Storage<Self> = Self(R::TRUTHY, R::TRUTHY);
     const FALSY: Storage<Self> = Self(R::FALSY, R::FALSY);
 
@@ -359,16 +273,93 @@ where
             R::fill_bitmask(value.1, &mut view[lane_count..]);
         }
     }
+
+    #[inline(always)]
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::bitxor(lhs.0, rhs.0), R::bitxor(lhs.1, rhs.1))
+    }
+
+    #[inline(always)]
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::bitand(lhs.0, rhs.0), R::bitand(lhs.1, rhs.1))
+    }
+
+    #[inline(always)]
+    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::bitandnot(lhs.0, rhs.0), R::bitandnot(lhs.1, rhs.1))
+    }
+
+    #[inline(always)]
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::bitor(lhs.0, rhs.0), R::bitor(lhs.1, rhs.1))
+    }
+
+    #[inline(always)]
+    fn not(value: Storage<Self>) -> Storage<Self> {
+        Self(R::not(value.0), R::not(value.1))
+    }
+
+    #[inline(always)]
+    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::blendv(mask.0, lhs.0, rhs.0), R::blendv(mask.1, lhs.1, rhs.1))
+    }
+
+    const HAS_MSB_BLENDV: bool = R::HAS_MSB_BLENDV;
+
+    #[inline(always)]
+    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
+        Self(R::reverse(value.1), R::reverse(value.0))
+    }
+
+    // double-pump logic for unpack does not add extra complexity,
+    // so this is determined solely by the underlying register.
+    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
+
+    #[inline(always)]
+    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (r1_lo, r1_hi) = R::unpack(a.0, b.0);
+        let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
+
+        (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
+    }
+
+    #[inline(always)]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        Self(R::swap_bytes(value.0), R::swap_bytes(value.1))
+    }
 }
 
-impl<FROM: PartialMaskRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>
+#[rustfmt::skip]
+impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    const HAS_WIDE_BYTE_SHIFTS: bool = false;
+    const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
+
+    #[inline(always)] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shli::<IMM8>(value.0), R::shli::<IMM8>(value.1)) }
+    #[inline(always)] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::shri::<IMM8>(value.0), R::shri::<IMM8>(value.1)) }
+    #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::shl(value.0, shift), R::shl(value.1, shift)) }
+    #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::shr(value.0, shift), R::shr(value.1, shift)) }
+    #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::shlv(value.0, shifts.0), R::shlv(value.1, shifts.1)) }
+    #[inline(always)] fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::shrv(value.0, shifts.0), R::shrv(value.1, shifts.1)) }
+    #[inline(always)] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::rol(value.0, shift), R::rol(value.1, shift)) }
+    #[inline(always)] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> { Self(R::ror(value.0, shift), R::ror(value.1, shift)) }
+    #[inline(always)] fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::roli::<IMM8>(value.0), R::roli::<IMM8>(value.1)) }
+    #[inline(always)] fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self(R::rori::<IMM8>(value.0), R::rori::<IMM8>(value.1)) }
+    #[inline(always)] fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::rolv(value.0, shifts.0), R::rolv(value.1, shifts.1)) }
+    #[inline(always)] fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self(R::rorv(value.0, shifts.0), R::rorv(value.1, shifts.1)) }
+    #[inline(always)] fn reverse_bits(value: Storage<Self>) -> Storage<Self> { Self(R::reverse_bits(value.0), R::reverse_bits(value.1)) }
+}
+
+impl<FROM: CoreRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>
     for DoublePumpRegister<INTO>
 where
     typenum::Double<INTO::Lanes>: Lanes,
     typenum::Double<FROM::Lanes>: Lanes,
 {
     #[inline(always)]
-    fn mask_from(value: <DoublePumpRegister<FROM> as Register>::Storage) -> Storage<Self> {
+    fn mask_from(value: Storage<DoublePumpRegister<FROM>>) -> Storage<Self> {
         Self(INTO::mask_from(value.0), INTO::mask_from(value.1))
     }
 }
@@ -636,7 +627,7 @@ where
     }
 }
 
-impl<FROM: Register, INTO: CastRegister<FROM>> CastRegister<DoublePumpRegister<FROM>> for DoublePumpRegister<INTO>
+impl<FROM: CoreRegister, INTO: CastRegister<FROM>> CastRegister<DoublePumpRegister<FROM>> for DoublePumpRegister<INTO>
 where
     typenum::Double<FROM::Lanes>: Lanes,
     typenum::Double<INTO::Lanes>: Lanes,
@@ -652,7 +643,7 @@ where
     }
 }
 
-impl<FROM: Register, INTO: BitsRegister<FROM>> BitsRegister<DoublePumpRegister<FROM>> for DoublePumpRegister<INTO>
+impl<FROM: CoreRegister, INTO: BitsRegister<FROM>> BitsRegister<DoublePumpRegister<FROM>> for DoublePumpRegister<INTO>
 where
     typenum::Double<FROM::Lanes>: Lanes,
     typenum::Double<INTO::Lanes>: Lanes,

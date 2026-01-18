@@ -3,17 +3,18 @@ use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
-impl<V: FloatVector<Element = f32>> SpecializedCoreMath<f32> for V {}
-impl<V: FloatVector<Element = f32>> SpecializedRealMath<f32> for V {}
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedCoreMath<f32> for V {}
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {}
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedFloatMath<f32> for V {}
 
 #[rustfmt::skip]
-impl<V: FloatVector<Element = f32>> SpecializedSpatialMath<f32> for V {
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedSpatialMath<f32> for V {
     #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self * self }
     #[inline(always)] fn l2_norm<P: Policy>(self) -> Self { self.abs() }
     #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }
 }
 
-impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> for V {
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
         sin_cos_f_internal::<P, V, false>(self)
@@ -557,7 +558,7 @@ impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
 
         if xsign.any() {
             let yint = y.cmp_eq(y.round());
-            yodd = V::from_bits(y.into_bits::<Self::Bits>() << 31);
+            yodd = V::from_bits(y.into_bits::<V::Bits>() << 31);
 
             let z0 = x0.cmp_eq(zero).select(z, V::NAN);
             let z1 = yint.select(z | yodd, z0);
@@ -601,27 +602,27 @@ impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
     fn cbrt<P: Policy>(self) -> Self {
         let x = self;
 
-        let b1: Self::Bits = crate::generic_splat!(u32: 709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
-        let b2: Self::Bits = crate::generic_splat!(u32: 642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
-        let m: Self::Bits = crate::generic_splat!(u32: 0x7fffffff); // u32::MAX >> 1
+        let b1: V::Bits = crate::generic_splat!(u32: 709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
+        let b2: V::Bits = crate::generic_splat!(u32: 642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
+        let m: V::Bits = crate::generic_splat!(u32: 0x7fffffff); // u32::MAX >> 1
 
         let x1p24 = x * crate::generic_splat!(f32: f32::from_bits(0x4b800000)); // 0x1p24f === 2 ^ 24
 
-        let hx0: Self::Bits = x.into_bits::<Self::Bits>() & m;
+        let hx0: V::Bits = x.into_bits::<V::Bits>() & m;
 
         let x_small = hx0.cmp_lt(crate::generic_splat!(u32: 0x00800000));
 
         let xs = x_small.select(x1p24, x);
         let b = x_small.select(b2, b1);
 
-        let mut ui: Self::Bits = xs.into_bits();
+        let mut ui: V::Bits = xs.into_bits();
         let mut hx = ui & m;
 
         // NOTE: Using the branched divider with a constant
         // leads to better codegen when the branch is inlined.
         hx = hx / Divider::u32(3) + b;
 
-        ui &= Self::Bits::splat(0x80000000);
+        ui &= V::Bits::splat(0x80000000);
         ui |= hx;
 
         let mut t = V::from_bits(ui);
@@ -655,7 +656,7 @@ impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
         }
 
         // cbrt(NaN,INF,+-0) is itself
-        (hx0.cmp_gt(Self::Bits::splat(0x7f800000)) | hx0.cmp_eq(Self::Bits::ZERO)).select(x, t)
+        (hx0.cmp_gt(V::Bits::splat(0x7f800000)) | hx0.cmp_eq(V::Bits::ZERO)).select(x, t)
     }
 
     #[inline(always)]
@@ -753,7 +754,7 @@ impl<V: FloatVector<Element = f32>> SpecializedTranscendentalMath<f32> for V {
 
 // }
 
-fn sin_cos_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const PI: bool>(xx: V) -> (V, V) {
+fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Max error about 0.00092, avg error about 0.00053
         // https://stackoverflow.com/a/28050328/2083075
@@ -872,7 +873,7 @@ fn sin_cos_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const PI: bool>(xx
 }
 
 #[inline(always)]
-fn asin_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const ACOS: bool>(x: V) -> V {
+fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS: bool>(x: V) -> V {
     let xa = x.abs();
 
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
@@ -938,7 +939,7 @@ fn asin_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const ACOS: bool>(x: 
 }
 
 #[inline(always)]
-fn pow2n_f<V: FloatVector<Element = f32>>(n: V) -> V {
+fn pow2n_f<V: FloatVectorWithBits<Element = f32>>(n: V) -> V {
     let pow2_23: V = crate::generic_splat!(f32: 8388608.0);
     let bias: V = crate::generic_splat!(f32: 127.0);
 
@@ -946,7 +947,7 @@ fn pow2n_f<V: FloatVector<Element = f32>>(n: V) -> V {
 }
 
 #[inline(always)]
-fn exp_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const MODE: u8>(x0: V) -> V {
+fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: u8>(x0: V) -> V {
     let mut x = x0;
     let mut r;
 
@@ -1059,19 +1060,19 @@ fn exp_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const MODE: u8>(x0: V)
 }
 
 #[inline(always)]
-fn fraction2<V: FloatVector<Element = f32>>(x: V) -> V {
+fn fraction2<V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     // set exponent to 0 + bias
     (x & V::splat(f32::from_bits(0x007FFFFF))) | V::splat(f32::from_bits(0x3F000000))
 }
 
 #[inline(always)]
-fn exponent<V: FloatVector<Element = f32>>(x: V) -> V::Signed {
+fn exponent<V: FloatVectorWithBits<Element = f32>>(x: V) -> V::Signed {
     // shift out sign, extract exp, subtract bias
     V::Signed::from_bits((V::Bits::from_bits(x).shli::<1>()).shri::<24>()) - V::Signed::splat(0x7F)
 }
 
 #[inline(always)]
-fn ln_2_internal<P: Policy, V: SpecializedTranscendentalMath<f32>>(x: V) -> V {
+fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // // https://github.com/nadavrot/fast_log/blob/83bd112c330976c291300eaa214e668f809367ab/src/log_approx.cc#L47
         // return fraction2::<V>(x).poly_p::<P, _>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
@@ -1086,7 +1087,7 @@ fn ln_2_internal<P: Policy, V: SpecializedTranscendentalMath<f32>>(x: V) -> V {
 }
 
 #[inline(always)]
-fn ln_10_internal<P: Policy, V: SpecializedTranscendentalMath<f32>>(x: V) -> V {
+fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // ln(x) * LOG10_E
         // between 1e-4 and 1000, avg error: 0.00212, max error 0.0173 at 31.999878
@@ -1097,7 +1098,7 @@ fn ln_10_internal<P: Policy, V: SpecializedTranscendentalMath<f32>>(x: V) -> V {
 }
 
 #[inline(always)]
-fn ln_f_internal<P: Policy, V: SpecializedCoreMath<f32>, const P1: bool>(x0: V) -> V {
+fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: bool>(x0: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         let x1 = if P1 { x0 + V::ONE } else { x0 };
 

@@ -8,7 +8,7 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, IntegerRegister, PartialMaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
+        BitshiftRegister, CoreRegister, IntegerRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
         Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister,
         empty_reg, reg,
     },
@@ -21,11 +21,13 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct U32x4V3;
 
-impl Register for U32x4V3 {
+impl CoreRegister for U32x4V3 {
     type Lanes = typenum::U4;
-
     type Element = u32;
     type Storage = arch::__m128i;
+}
+
+impl Register for U32x4V3 {
     type HalfRegister = <Scalar as Simd>::u32x2;
     type DoubleRegister = super::U32x8V3;
 
@@ -101,6 +103,41 @@ impl Register for U32x4V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
+    }
+
+    const FALSY: Storage<Self> = reg::<Self, 4>([0; 4]);
+    const TRUTHY: Storage<Self> = reg::<Self, 4>([!0; 4]);
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm_cvtboolx4_to_epi32_mask_v2(value) }
+    }
+
+    #[inline(always)]
+    fn all(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm_movemask_epi8(value) as u32 == 0xFFFF }
+    }
+
+    #[inline(always)]
+    fn any(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm_movemask_epi8(value) != 0 }
+    }
+
+    #[inline(always)]
+    fn none(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm_movemask_epi8(value) == 0 }
+    }
+
+    #[inline(always)]
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+        Some(unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u64 })
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+        let mask = unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u32 };
+        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
+        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
 
     #[inline(always)]
@@ -211,6 +248,17 @@ impl SwizzleRegister for U32x4V3 {
 
 impl BitshiftRegister for U32x4V3 {
     const HAS_TRUE_SHIFTV: bool = true;
+    const HAS_WIDE_BYTE_SHIFTS: bool = true;
+
+    #[inline(always)]
+    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bslli_si128(value, IMM8) }
+    }
+
+    #[inline(always)]
+    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bsrli_si128(value, IMM8) }
+    }
 
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
@@ -240,43 +288,6 @@ impl BitshiftRegister for U32x4V3 {
     #[inline(always)]
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi32(value, IMM8) }
-    }
-}
-
-impl PartialMaskRegister for U32x4V3 {
-    const FALSY: Storage<Self> = reg::<Self, 4>([0; 4]);
-    const TRUTHY: Storage<Self> = reg::<Self, 4>([!0; 4]);
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm_cvtboolx4_to_epi32_mask_v2(value) }
-    }
-
-    #[inline(always)]
-    fn all(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm_movemask_epi8(value) as u32 == 0xFFFF }
-    }
-
-    #[inline(always)]
-    fn any(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm_movemask_epi8(value) != 0 }
-    }
-
-    #[inline(always)]
-    fn none(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm_movemask_epi8(value) == 0 }
-    }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some(unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u64 })
-    }
-
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        let mask = unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u32 };
-        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
-        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
 }
 

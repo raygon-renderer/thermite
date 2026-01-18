@@ -1,11 +1,12 @@
+#![no_std]
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
+    generic::FloatVector,
     math::{
         FloatConsts, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
-    vector::generic::FloatVector,
 };
 
 pub mod specialized;
@@ -118,7 +119,7 @@ decl_math! {
     /// The polynomial is calculated independently per-lane with the given degree in `n`.
     ///
     /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermitev[][](self: Self, n: Self::Bits) -> Self;
+    fn hermitev[][](self: Self, n: Self::USize) -> Self;
 
     /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
     ///

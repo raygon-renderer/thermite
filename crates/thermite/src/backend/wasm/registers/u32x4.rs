@@ -125,6 +125,7 @@ impl Register for U32x4Wasm {
 
 impl BitshiftRegister for U32x4Wasm {
     const HAS_TRUE_SHIFTV: bool = false;
+    const HAS_WIDE_BYTE_SHIFTS: bool = false;
 
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
         arch::u32x4_shr(value, shift) // Non-arithmetic

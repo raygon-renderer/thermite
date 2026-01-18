@@ -1,12 +1,12 @@
 #![allow(clippy::excessive_precision)]
 
 use thermite::{
+    generic::{GenericMask, NumericVector, PartialOrdVector},
     math::{
         CoreMathWithPolicy, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{Policy, PrecisionPolicy, policies::ExtraPrecision},
     },
     register::{Element, FloatElement},
-    vector::generic::{GenericMask, NumericVector, PartialOrdVector},
 };
 
 use super::SpecialMathWithPolicy as _;
@@ -61,10 +61,10 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn hermitev<P: Policy>(x: Self, n: Self::Bits) -> Self {
+    fn hermitev<P: Policy>(x: Self, n: Self::USize) -> Self {
         let one = Self::ONE;
-        let i1 = Self::Bits::ONE;
-        let n_is_zero = n.cmp_eq(Self::Bits::ZERO);
+        let i1 = Self::USize::ONE;
+        let n_is_zero = n.cmp_eq(Self::USize::ZERO);
 
         let mut c = i1;
 

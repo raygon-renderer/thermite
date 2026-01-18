@@ -3,19 +3,20 @@
 use core::marker::PhantomData;
 
 use crate::{
+    generic::*,
     mask::Mask,
     math::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
         algorithms, policy::policies::ExtraPrecision,
     },
     register::FloatElement,
-    vector::{generic::*, num::NumVector},
+    vector::num::NumVector,
 };
 
 // use super::MathWithPolicy;
 use super::policy::{Policy, PolicyParameters, PrecisionPolicy};
 
-pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
+pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     #[inline(always)]
     fn ldexp<P: Policy>(self, exp: Self::Signed) -> Self {
         if const { Self::HAS_NATIVE_LDEXP } {
@@ -25,12 +26,12 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         let bits: Self::Bits = self.into_bits();
 
         let exp_lsb_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::EXP_LSB_MASK
         );
 
         let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::SIGN_MANTISSA_MASK
         );
 
@@ -41,7 +42,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         if const { P::POLICY.check_overflow } {
             // clamp exponent between 0 and max biased exponent
             exp = exp.max(Self::Signed::ZERO).min(crate::generic_splat!(
-                <Self> = <S: FloatVector>
+                <Self> = <S: FloatVectorWithBits>
                 <S::Signed as GenericVector>::Element: <S::Element as FloatElement>::MAX_BIASED_EXP
             ));
         }
@@ -69,22 +70,22 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         let bits: Self::Bits = self.into_bits();
 
         let exp_lsb_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::EXP_LSB_MASK
         );
 
         let frexp_bias_offset: Self::Signed = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Signed as GenericVector>::Element: <S::Element as FloatElement>::FREXP_BIAS_OFFSET
         );
 
         let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::SIGN_MANTISSA_MASK
         );
 
         let half_exp_bits: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVector>
+            <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::HALF_EXP_BITS
         );
 
@@ -107,12 +108,9 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
         (Self::from_bits(fraction), exp)
     }
+}
 
-    #[inline(always)]
-    fn tolerance<P: Policy>() -> Self {
-        Self::splat(Self::Element::from_i64(P::POLICY.precision.tolerance()) * Self::Element::EPSILON)
-    }
-
+pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     #[inline(always)]
     fn poly<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
@@ -304,7 +302,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     }
 
     #[inline(always)]
-    fn powiv<P: Policy>(self, mut e: Self::Signed) -> Self {
+    fn powiv<P: Policy>(self, mut e: Self::ISize) -> Self {
         let mut x = self;
         let mut res = Self::ONE;
 
@@ -312,7 +310,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         e = e.abs();
 
         loop {
-            let mut e1 = e & Self::Signed::ONE;
+            let mut e1 = e & Self::ISize::ONE;
 
             let nx = res * x;
 
@@ -320,18 +318,18 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
             // requirements
             res = if Self::HAS_MSB_BLENDV {
                 // Move the lowest bit to the highest bit position
-                e1 <<= const { core::mem::size_of::<<Self::Signed as GenericVector>::Element>() as u32 * 8 - 1 };
+                e1 <<= const { core::mem::size_of::<<Self::ISize as GenericVector>::Element>() as u32 * 8 - 1 };
 
                 // Blend the result based on the highest bit of e1
-                <Self::Signed as MaskedVector>::Mask::from_unchecked(e1).select(nx, res)
+                <Self::ISize as GenericVector>::Mask::from_unchecked(e1).select(nx, res)
             } else {
-                e1.cmp_ne(Self::Signed::ZERO).select(nx, res)
+                e1.cmp_ne(Self::ISize::ZERO).select(nx, res)
             };
 
             x *= x;
             e >>= 1;
 
-            if e.cmp_ne(Self::Signed::ZERO).none() {
+            if e.cmp_ne(Self::ISize::ZERO).none() {
                 return res;
             }
         }
@@ -579,14 +577,41 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn ln1m_expnx_ext<P: Policy>(self, lnx: Self) -> Self;
 }
 
-pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
-    #[inline(always)]
-    fn hypot<P: Policy>(self, y: Self) -> Self {
-        let x = self;
+#[inline(always)]
+fn hypot_n_impl<E, V, P, const N: usize, const INV: bool>(mut values: [V; N]) -> V
+where
+    E: FloatElement,
+    V: SpecializedSpatialMath<E>,
+    P: Policy,
+{
+    if N == 0 {
+        if INV {
+            return V::INFINITY; // 1/0 == infinity
+        }
 
-        if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+        return V::ZERO;
+    }
+
+    if N == 1 {
+        let mut res = values[0].abs(); // sqrt(x^2) == abs(x)
+
+        if INV {
+            res = res.reciprocal_p::<P>();
+        }
+
+        return res;
+    }
+
+    // special case N=2 which saves a couple instructions
+    if N == 2 {
+        let x = values[0];
+        let y = values[1];
+
+        return if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
             // Use the worst precision method, which is usually faster
-            x.mul_adde(x, y * y).sqrt()
+            let res = x.mul_adde(x, y * y);
+
+            return if INV { res.inverse_sqrt_p::<P>() } else { res.sqrt() };
         } else {
             // Use a more precise method
             let x = x.abs();
@@ -596,16 +621,94 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
             let min = x.min(y);
             let t = min / max;
 
-            let mut res = max * t.mul_adde(t, Self::ONE).sqrt();
+            let mut res = max * t.mul_adde(t, V::ONE);
 
-            if P::POLICY.check_overflow {
-                // because these have already been abs, we can just use less-than
-                let inf = Self::INFINITY;
-                res = (x.cmp_lt(inf) & y.cmp_lt(inf) & t.cmp_lt(inf)).select(res, x + y);
+            if INV {
+                res = res.inverse_sqrt_p::<P>();
+
+                if P::POLICY.check_overflow {
+                    res = max.is_infinite().select(V::ZERO, res);
+                }
+            } else {
+                res = res.sqrt();
+
+                if P::POLICY.check_overflow {
+                    res = max.is_infinite().select(max, res);
+                }
             }
 
             res
+        };
+    }
+
+    if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+        // square each value in place, zero dependencies
+        for value in values.iter_mut() {
+            *value *= *value;
         }
+
+        crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+        return if INV {
+            values[0].inverse_sqrt_p::<P>()
+        } else {
+            values[0].sqrt()
+        };
+    }
+
+    // high-precision path
+
+    // take absolute value of each element in place, zero dependencies,
+    // since we're squaring anyway this doesn't lose any information
+    for x in &mut values {
+        *x = x.abs();
+    }
+
+    let max_abs = crate::math::algorithms::reduce_array(values, |a, b| a.max(b));
+    let is_zero = max_abs.cmp_eq(V::ZERO);
+
+    let scale = is_zero.select(V::ONE, max_abs.reciprocal_p::<P>());
+
+    for x in &mut values {
+        *x *= scale; // scale to prevent overflow
+        *x *= *x; // square in place
+    }
+
+    // sum squares in place
+    crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+    let mut res;
+
+    if INV {
+        res = scale * values[0].inverse_sqrt_p::<P>();
+
+        if const { P::POLICY.check_overflow } {
+            res = max_abs.is_infinite().select(V::ZERO, res);
+        }
+    } else {
+        res = max_abs * values[0].sqrt();
+
+        if const { P::POLICY.check_overflow } {
+            res = max_abs.is_infinite().select(max_abs, res);
+        }
+    }
+
+    res
+}
+
+pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
+    #[inline(always)]
+    fn hypot<P: Policy>(self, y: Self) -> Self {
+        Self::hypot_n::<P, 2>([self, y])
+    }
+
+    #[inline(always)]
+    fn hypot_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
+        hypot_n_impl::<E, Self, P, N, false>(values)
+    }
+
+    fn inv_hypot_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
+        hypot_n_impl::<E, Self, P, N, true>(values)
     }
 
     fn l1_norm<P: Policy>(self) -> Self;
@@ -618,7 +721,14 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
     fn l2_norm_squared<P: Policy>(self) -> Self;
 }
 
-pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> {
+pub trait SpecializedRealMath<E>:
+    SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> + SpecializedFloatMath<E>
+{
+    #[inline(always)]
+    fn tolerance<P: Policy>() -> Self {
+        Self::splat(Self::Element::from_i64(P::POLICY.precision.tolerance()) * Self::Element::EPSILON)
+    }
+
     #[inline(always)]
     fn to_degrees<P: Policy>(self) -> Self {
         self * Self::FRAC_180_PI

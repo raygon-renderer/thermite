@@ -1,4 +1,4 @@
-use crate::{math::policy::PrecisionPolicy, vector::generic::GenericMask as _};
+use crate::{generic::GenericMask as _, math::policy::PrecisionPolicy};
 
 use super::*;
 
@@ -6,6 +6,9 @@ use super::*;
 ///
 /// Returns `Ok(root)` if convergence was achieved within the maximum number of iterations,
 /// otherwise returns `Err(approximation)` with the best approximation found.
+///
+/// The given function `f` should return a tuple `(f(x), f'(x))`, where `f(x)` is the function value
+/// and `f'(x)` is its derivative at point `x`.
 #[inline(always)]
 pub fn newtons_method<V: FloatVector, P: Policy, F>(
     mut x: V,
@@ -44,6 +47,10 @@ where
 ///
 /// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
 /// otherwise returns `Err(partial_sum)` with the best partial sum computed.
+///
+/// The function `f` is expected to return a value at each provided iteration index.
+///
+/// If using a precision policy of `Best` or higher, modified Kahan summation is employed to reduce numerical error.
 #[inline(always)]
 pub fn sum_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
 where
@@ -99,6 +106,8 @@ where
 ///
 /// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
 /// otherwise returns `Err(partial_sum)` with the best partial sum computed.
+///
+/// The function `f` is expected to return a value at each provided iteration index.
 #[inline(always)]
 pub fn prod_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
 where
@@ -125,4 +134,42 @@ where
     }
 
     Err(prod)
+}
+
+/// Reduces the elements of `values` in place using the binary operation `op` in O(n) steps, but
+/// with a dependency depth of O(log n), allowing for better instruction-level parallelism.
+///
+/// The end result is stored in `values[0]`.
+#[inline(always)]
+pub fn reduce_in_place<V: Copy, F>(values: &mut [V], mut op: F)
+where
+    F: FnMut(V, V) -> V,
+{
+    let mut stride = 1;
+
+    while stride < values.len() {
+        let mut i = 0;
+        let next_stride = stride * 2;
+
+        while i + stride < values.len() {
+            values[i] = op(values[i], values[i + stride]);
+            i += next_stride;
+        }
+
+        stride = next_stride;
+    }
+}
+
+/// Reduces the elements of `values` using the binary operation `op` in O(n) steps, but
+/// with a dependency depth of O(log n), allowing for better instruction-level parallelism.
+///
+/// The end result is returned.
+#[inline(always)]
+pub fn reduce_array<V: Copy, const N: usize, F>(mut values: [V; N], mut op: F) -> V
+where
+    F: FnMut(V, V) -> V,
+{
+    reduce_in_place(&mut values, op);
+
+    values[0]
 }

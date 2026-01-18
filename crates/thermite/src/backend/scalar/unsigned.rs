@@ -6,19 +6,21 @@ use generic_array::{
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitsRegister, BitshiftRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register, MaskRegister,
-    NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage,
-    SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+    BitsRegister, BitshiftRegister, CoreRegister, Element, FloatRegister, IntegerRegister, LinAlg3Register,
+    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister,
+    UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
 macro_rules! decl_unsigned_scalar { ($i:ty: $ei:ty => $width:literal) => {paste::paste! {
 
-impl Register for [<u $width>] {
+impl CoreRegister for [<u $width>] {
     type Lanes = typenum::U1;
-
     type Element = $i;
     type Storage = $i;
+}
+
+impl Register for [<u $width>] {
     type HalfRegister = Self;
     type DoubleRegister = DoublePumpRegister<Self>;
 
@@ -40,6 +42,28 @@ impl Register for [<u $width>] {
     #[inline(always)] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs | rhs }
     #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> { !value }
     #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
+
+    const TRUTHY: Storage<Self> = Element::TRUTHY;
+    const FALSY: Storage<Self> = Element::FALSY;
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        if value[0] { <Self as Register>::TRUTHY } else { <Self as Register>::FALSY }
+    }
+
+    #[inline(always)] fn all(value: Storage<Self>) -> bool { value != 0 }
+    #[inline(always)] fn any(value: Storage<Self>) -> bool { value != 0 }
+    #[inline(always)] fn none(value: Storage<Self>) -> bool { value == 0 }
+
+    #[inline(always)]
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+        Some((value & 1) as u64)
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+        view.set(0, value.to_bool());
+    }
 
     // use msb + cmov/csel on x86/x86_64/ARM/AArch64
     const HAS_MSB_BLENDV: bool = cfg!(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"));
@@ -71,7 +95,10 @@ impl Register for [<u $width>] {
 
 impl BitshiftRegister for [<u $width>] {
     const HAS_TRUE_SHIFTV: bool = true; // Technically true!
+    const HAS_WIDE_BYTE_SHIFTS: bool = true; // Also technically true!
 
+    #[inline(always)] fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value << (8 * IMM8) }
+    #[inline(always)] fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value >> (8 * IMM8) }
     #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value << shift }
     #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value >> shift }
     #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { value << shifts }
@@ -112,30 +139,6 @@ impl SwizzleRegister for [<u $width>] {
     #[inline(always)]
     fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if idxs[0] & 0b1 == 0 { a } else { b }
-    }
-}
-
-impl PartialMaskRegister for [<u $width>] {
-    const TRUTHY: Storage<Self> = Element::TRUTHY;
-    const FALSY: Storage<Self> = Element::FALSY;
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        if value[0] { <Self as PartialMaskRegister>::TRUTHY } else { <Self as PartialMaskRegister>::FALSY }
-    }
-
-    #[inline(always)] fn all(value: Storage<Self>) -> bool { value != 0 }
-    #[inline(always)] fn any(value: Storage<Self>) -> bool { value != 0 }
-    #[inline(always)] fn none(value: Storage<Self>) -> bool { value == 0 }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some((value & 1) as u64)
-    }
-
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        view.set(0, value.to_bool());
     }
 }
 

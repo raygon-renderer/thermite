@@ -1,4 +1,5 @@
 use thermite::{
+    generic::GenericMask as _,
     mask::Mask,
     math::{
         TranscendentalMathWithPolicy,
@@ -6,8 +7,8 @@ use thermite::{
             PrecisionPolicy,
             policies::{AveragePrecision, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision},
         },
+        specialized::SpecializedTranscendentalMath,
     },
-    vector::generic::GenericMask as _,
 };
 
 use super::*;
@@ -15,6 +16,7 @@ use super::*;
 impl<V> SpecializedSpecialMath<f64> for V
 where
     V: TranscendentalMathWithPolicy<Element = f64>,
+    V: SpecializedTranscendentalMath<f64>,
 {
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {

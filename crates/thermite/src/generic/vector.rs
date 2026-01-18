@@ -2,14 +2,14 @@ use super::*;
 
 use crate::register::{
     BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
-    IntegerRegister, Lanes, MaskRegister, NumericRegister, PartialMaskRegister, PartialOrdRegister, Register,
-    SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+    IntegerRegister, Lanes, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister,
+    Storage, SwizzleRegister, UnsignedIntegerRegister,
 };
 
 impl<FROM, INTO> CastVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register,
-    INTO: CastRegister<FROM>,
+    INTO: Register + CastRegister<FROM>,
 {
     #[inline(always)]
     fn cast_from(from: Vector<FROM>) -> Self {
@@ -25,7 +25,7 @@ where
 impl<FROM, INTO> BitsVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register,
-    INTO: BitsRegister<FROM>,
+    INTO: Register + BitsRegister<FROM>,
 {
     #[inline(always)]
     fn from_bits(bits: Vector<FROM>) -> Self {
@@ -33,10 +33,10 @@ where
     }
 }
 
-impl<FROM, INTO> GenericCastMask<Mask<FROM>> for Mask<INTO>
+impl<FROM, INTO> CastMask<Mask<FROM>> for Mask<INTO>
 where
-    FROM: PartialMaskRegister,
-    INTO: CastMaskRegister<FROM>,
+    FROM: Register,
+    INTO: Register + CastMaskRegister<FROM>,
 {
     #[inline(always)]
     fn mask_from(from: Mask<FROM>) -> Self {
@@ -46,14 +46,14 @@ where
 
 impl<R> GenericSelectable for Vector<R>
 where
-    R: MaskRegister,
+    R: Register,
 {
     type SelectableMask = Mask<R>;
 
     #[inline(always)]
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
-        Mask<R>: GenericCastMask<M>,
+        Mask<R>: CastMask<M>,
     {
         Mask::mask_from(mask).select(t, f)
     }
@@ -61,20 +61,20 @@ where
 
 impl<R> GenericSelectable for Mask<R>
 where
-    R: MaskRegister,
+    R: Register,
 {
     type SelectableMask = Mask<R>;
 
     #[inline(always)]
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
-        Mask<R>: GenericCastMask<M>,
+        Mask<R>: CastMask<M>,
     {
         Mask::mask_from(mask).select(t, f)
     }
 }
 
-impl<R: MaskRegister> GenericMask<Vector<R>> for Mask<R> {
+impl<R: Register> GenericMask<Vector<R>> for Mask<R> {
     const FALSY: Self = Mask::<R>::FALSY;
     const TRUTHY: Self = Mask::<R>::TRUTHY;
 
@@ -120,6 +120,8 @@ impl<R: Register> GenericVector for Vector<R> {
 
     type USize = Vector<R::USize>;
     type ISize = Vector<R::ISize>;
+
+    type Mask = Mask<R>;
 
     #[inline(always)]
     fn splat_const<C>() -> Self where C: SplatConst<Self::Element> {
@@ -176,11 +178,6 @@ impl<R: BitshiftRegister> BitshiftVector for Vector<R> {
     #[inline(always)] fn shri<const I: i32>(self) -> Self { Vector::<R>::shri::<I>(self) }
     #[inline(always)] fn shlv(self, shifts: Self::USize) -> Self { Vector::<R>::shlv(self, shifts) }
     #[inline(always)] fn shrv(self, shifts: Self::USize) -> Self { Vector::<R>::shrv(self, shifts) }
-}
-
-#[rustfmt::skip]
-impl<R: MaskRegister> MaskedVector for Vector<R> {
-    type Mask = Mask<R>;
 }
 
 #[rustfmt::skip]
@@ -304,23 +301,11 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     const NAN: Self = Vector::<R>::NAN;
     const EPSILON: Self = Vector::<R>::EPSILON;
 
-    type Signed = Vector<R::Signed>;
-    type Bits = Vector<R::Bits>;
+
     type ExtendedPrecision = Vector<R::ExtendedPrecision>;
 
     const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
 
-    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
-    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
-
-    #[inline(always)] unsafe fn native_ldexp(self, exp: Self::Signed) -> Self {
-        unsafe { Vector(R::native_ldexp(self.0, exp.0)) }
-    }
-
-    #[inline(always)] unsafe fn native_frexp(self) -> (Self, Self::Signed) {
-        let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
-        (Vector(mantissa), Vector(exp))
-    }
 
     #[inline(always)] fn is_infinite(self) -> Self::Mask { Vector::<R>::is_infinite(self) }
     #[inline(always)] fn is_finite(self) -> Self::Mask { Vector::<R>::is_finite(self) }
@@ -352,5 +337,26 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     #[inline(always)] fn signed_zero(self) -> Self { Vector::<R>::signed_zero(self) }
     #[inline(always)] fn next_up(self) -> Self { Vector::<R>::next_up(self) }
     #[inline(always)] fn next_down(self) -> Self { Vector::<R>::next_down(self) }
+
+}
+
+#[rustfmt::skip]
+impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
+    type Signed = Vector<R::Signed>;
+    type Bits = Vector<R::Bits>;
+
+    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
+    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
+
+    #[inline(always)] unsafe fn native_ldexp(self, exp: Self::Signed) -> Self {
+        unsafe { Vector(R::native_ldexp(self.0, exp.0)) }
+    }
+
+    #[inline(always)] unsafe fn native_frexp(self) -> (Self, Self::Signed) {
+        let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
+        (Vector(mantissa), Vector(exp))
+    }
+
+
     #[inline(always)] fn total_order(self) -> Self::Signed { Vector::<R>::total_order(self) }
 }

@@ -1,4 +1,4 @@
-use thermite::vector::generic::FloatVector;
+use thermite::generic::FloatVector;
 
 use super::MapKernel;
 

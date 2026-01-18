@@ -8,8 +8,8 @@ use crate::{
     math::FloatConsts,
     register::{
         self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
-        LinAlg4Register, NumericRegister, PartialMaskRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        LinAlg4Register, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -23,9 +23,9 @@ use num_traits::{
     WrappingMul, WrappingSub, Zero,
 };
 
-pub mod generic;
 pub mod num;
 pub mod streaming;
+pub mod unaligned;
 
 /// SIMD Vector type.
 ///
@@ -35,24 +35,15 @@ pub mod streaming;
 pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
 #[doc(hidden)]
-pub trait IMaskOf {
-    type MaskRegister: PartialMaskRegister;
-}
-
-#[doc(hidden)]
 pub trait IRegisterOf {
     type Register: Register;
-}
-
-impl<R: PartialMaskRegister> IMaskOf for Vector<R> {
-    type MaskRegister = R;
 }
 
 impl<R: Register> IRegisterOf for Vector<R> {
     type Register = R;
 }
 
-impl<R: PartialMaskRegister> IRegisterOf for Mask<R> {
+impl<R: Register> IRegisterOf for Mask<R> {
     type Register = R;
 }
 
@@ -66,7 +57,7 @@ impl<R: PartialMaskRegister> IRegisterOf for Mask<R> {
 ///     x.is_negative()
 /// }
 /// ```
-pub type MaskOf<V> = Mask<<V as IMaskOf>::MaskRegister>;
+pub type MaskOf<V> = Mask<<V as IRegisterOf>::Register>;
 
 /// The register type corresponding to a given vector or mask type.
 pub type RegisterOf<V> = <V as IRegisterOf>::Register;
@@ -332,6 +323,58 @@ impl<R: Register> Vector<R> {
         unsafe { values.align_to_mut::<Self>() }
     }
 
+    /// Transform a slice of element values into an unaligned iterator of vectors,
+    /// returning any remaining elements as a suffix slice.
+    #[inline(always)]
+    pub fn from_slice_unaligned<'a>(values: &'a [R::Element]) -> (unaligned::Unaligned<'a, R>, &'a [R::Element]) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = num_vectors * Self::LANES;
+
+        let head = &values[..offset];
+        let tail = &values[offset..];
+
+        (unaligned::Unaligned(head), tail)
+    }
+
+    /// Transform a mutable slice of element values into an unaligned iterator of vectors,
+    /// returning any remaining elements as a suffix slice.
+    #[inline(always)]
+    pub fn from_slice_unaligned_mut<'a>(
+        values: &'a mut [R::Element],
+    ) -> (unaligned::UnalignedMut<'a, R>, &'a mut [R::Element]) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = num_vectors * Self::LANES;
+
+        let (head, tail) = values.split_at_mut(offset);
+
+        (unaligned::UnalignedMut(head), tail)
+    }
+
+    /// Like [`Vector::from_slice_unaligned`], but returns the remaining elements as a prefix slice.
+    #[inline(always)]
+    pub fn from_rslice_unaligned<'a>(values: &'a [R::Element]) -> (&'a [R::Element], unaligned::Unaligned<'a, R>) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = values.len() - num_vectors * Self::LANES;
+
+        let head = &values[..offset];
+        let tail = &values[offset..];
+
+        (head, unaligned::Unaligned(tail))
+    }
+
+    /// Like [`Vector::from_slice_unaligned_mut`], but returns the remaining elements as a prefix slice.
+    #[inline(always)]
+    pub fn from_rslice_unaligned_mut<'a>(
+        values: &'a mut [R::Element],
+    ) -> (&'a mut [R::Element], unaligned::UnalignedMut<'a, R>) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = values.len() - num_vectors * Self::LANES;
+
+        let (head, tail) = values.split_at_mut(offset);
+
+        (head, unaligned::UnalignedMut(tail))
+    }
+
     /// Iterate over a slice of element values as Vectors using non-temporal (streaming) loads.
     ///
     /// # Panics
@@ -567,7 +610,7 @@ impl<R: Register> Vector<R> {
     /// This is not a bitwise cast, but a conversion of the elements to the new type,
     /// and therefore may lose precision or change the representation of the data.
     #[inline(always)]
-    pub fn cast<INTO: CastRegister<R>>(self) -> Vector<INTO> {
+    pub fn cast<INTO: Register + CastRegister<R>>(self) -> Vector<INTO> {
         Vector(INTO::cast_from(self.0))
     }
 
@@ -581,7 +624,7 @@ impl<R: Register> Vector<R> {
     /// this is a good way to convert it without the overhead of
     /// fully conforming to the type's range.
     #[inline(always)]
-    pub fn fast_cast<INTO: CastRegister<R>>(self) -> Vector<INTO> {
+    pub fn fast_cast<INTO: Register + CastRegister<R>>(self) -> Vector<INTO> {
         Vector(INTO::fast_cast_from(self.0))
     }
 
@@ -616,7 +659,7 @@ impl<R: Register> Vector<R> {
     ///
     /// This is a bitwise cast, and therefore may not be safe if the types are not compatible.
     #[inline(always)]
-    pub fn into_bits<INTO: BitsRegister<R>>(self) -> Vector<INTO> {
+    pub fn into_bits<INTO: Register + BitsRegister<R>>(self) -> Vector<INTO> {
         Vector(INTO::from_bits(self.0))
     }
 

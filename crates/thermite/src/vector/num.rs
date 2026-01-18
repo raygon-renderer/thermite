@@ -3,15 +3,13 @@
 use core::ops::Deref;
 
 use crate::{
-    math::{FloatConsts, RealMath},
-    register::{FloatElement, FloatRegister},
-    vector::{
-        Vector,
-        generic::{
-            BitshiftVector, FloatVector, GenericCastMask, GenericMask, GenericSelectable, GenericVector, NumericVector,
-            PartialOrdVector, SignedVector,
-        },
+    generic::{
+        BitshiftVector, CastMask, FloatVector, GenericMask, GenericSelectable, GenericVector, NumericVector,
+        PartialOrdVector, SignedVector,
     },
+    math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath},
+    register::{FloatElement, FloatRegister},
+    vector::Vector,
 };
 
 /// Wraps a generic vector to provide implementations of `num_traits` traits.
@@ -51,7 +49,7 @@ where
     #[inline(always)]
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
-        Self::SelectableMask: GenericCastMask<M>,
+        Self::SelectableMask: CastMask<M>,
     {
         Self(<V as GenericSelectable>::select(mask, t.0, f.0))
     }
@@ -278,16 +276,16 @@ impl<V: FloatVector> num_traits::float::FloatCore for NumVector<V>
 #[rustfmt::skip]
 impl<V: FloatVector> num_traits::float::Float for NumVector<V>
 where
-    V::Element: num_traits::float::Float,
-    Self: RealMath,
+    V::Element: num_traits::float::Float + num_traits::float::FloatCore,
+    V: RealMath,
 {
     #[inline(always)] fn is_subnormal(self) -> bool { self.0.is_subnormal().any() }
 
-    #[inline(always)] fn to_degrees(self) -> Self { self * Self::FRAC_180_PI }
-    #[inline(always)] fn to_radians(self) -> Self { self * Self::FRAC_PI_180 }
+    #[inline(always)] fn to_degrees(self) -> Self { Self(self.0 * V::FRAC_180_PI) }
+    #[inline(always)] fn to_radians(self) -> Self { Self(self.0 * V::FRAC_PI_180) }
 
-    #[inline(always)] fn clamp(self, min: Self, max: Self) -> Self { self.clamp(min, max) }
-    #[inline(always)] fn copysign(self, sign: Self) -> Self { self.copysign(sign) }
+    #[inline(always)] fn clamp(self, min: Self, max: Self)  -> Self { Self(self.0.clamp(min.0, max.0)) }
+    #[inline(always)] fn copysign(self, sign: Self)         -> Self { Self(self.0.copysign(sign.0)) }
 
     #[inline(always)] fn infinity()             -> Self { Self(<V as FloatVector>::INFINITY) }
     #[inline(always)] fn neg_infinity()         -> Self { Self(<V as FloatVector>::NEG_INFINITY) }
@@ -298,8 +296,8 @@ where
     #[inline(always)] fn epsilon()              -> Self { Self(<V as FloatVector>::EPSILON) }
     #[inline(always)] fn max_value()            -> Self { Self(<V as NumericVector>::MAX) }
 
-    #[inline(always)] fn is_nan(self) -> bool { self.is_nan().any() }
-    #[inline(always)] fn is_infinite(self) -> bool { self.is_infinite().any() }
+    #[inline(always)] fn is_nan(self) -> bool { self.0.is_nan().any() }
+    #[inline(always)] fn is_infinite(self) -> bool { self.0.is_infinite().any() }
     #[inline(always)] fn is_finite(self) -> bool { self.0.is_finite().all() }
     #[inline(always)] fn is_normal(self) -> bool { self.0.is_normal().all() }
 
@@ -320,41 +318,45 @@ where
     /// Returns true if **all** lanes are positive, false otherwise.
     #[inline(always)] fn is_sign_positive(self) -> bool { self.0.is_positive().all() }
 
-    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { self.mul_add(a, b) }
-    #[inline(always)] fn recip(self) -> Self { Self::ONE / self }
-    #[inline(always)] fn powi(self, n: i32) -> Self { Math::powi(self, n) }
-    #[inline(always)] fn powf(self, n: Self) -> Self { Math::powf(self, n) }
-    #[inline(always)] fn sqrt(self) -> Self { self.sqrt() }
-    #[inline(always)] fn exp(self) -> Self { Math::exp(self) }
-    #[inline(always)] fn exp2(self) -> Self { Math::exp2(self) }
-    #[inline(always)] fn ln(self) -> Self { Math::ln(self) }
-    #[inline(always)] fn log(self, base: Self) -> Self { Math::log(self, base) }
-    #[inline(always)] fn log2(self) -> Self { Math::log2(self) }
-    #[inline(always)] fn log10(self) -> Self { Math::log10(self) }
+    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { Self(FloatVector::mul_adde(self.0, a.0, b.0)) }
+    #[inline(always)] fn recip(self)            -> Self { Self(V::ONE / self.0) }
+    #[inline(always)] fn powi(self, n: i32)     -> Self { Self(CoreMath::powi(self.0, n)) }
+    #[inline(always)] fn powf(self, n: Self)    -> Self { Self(TranscendentalMath::powf(self.0, n.0)) }
+    #[inline(always)] fn sqrt(self)             -> Self { Self(FloatVector::sqrt(self.0)) }
+    #[inline(always)] fn exp(self)              -> Self { Self(TranscendentalMath::exp(self.0)) }
+    #[inline(always)] fn exp2(self)             -> Self { Self(TranscendentalMath::exp2(self.0)) }
+    #[inline(always)] fn ln(self)               -> Self { Self(TranscendentalMath::ln(self.0)) }
+    #[inline(always)] fn log(self, base: Self)  -> Self { Self(TranscendentalMath::log(self.0, base.0)) }
+    #[inline(always)] fn log2(self)             -> Self { Self(TranscendentalMath::log2(self.0)) }
+    #[inline(always)] fn log10(self)            -> Self { Self(TranscendentalMath::log10(self.0)) }
 
-    #[inline(always)] fn max(self, other: Self) -> Self { self.max(other) }
-    #[inline(always)] fn min(self, other: Self) -> Self { self.min(other) }
+    #[inline(always)] fn max(self, other: Self) -> Self { Self(NumericVector::max(self.0, other.0)) }
+    #[inline(always)] fn min(self, other: Self) -> Self { Self(NumericVector::min(self.0, other.0)) }
 
-    #[inline(always)] fn abs_sub(self, other: Self) -> Self { (self - other).max(Self::ZERO) }
+    #[inline(always)] fn abs_sub(self, other: Self) -> Self { Self(NumericVector::max(V::ZERO, self.0 - other.0)) }
 
-    #[inline(always)] fn cbrt(self) -> Self { Math::cbrt(self) }
-    #[inline(always)] fn hypot(self, other: Self) -> Self { Math::hypot(self, other) }
-    #[inline(always)] fn sin(self) -> Self { Math::sin(self) }
-    #[inline(always)] fn cos(self) -> Self { Math::cos(self) }
-    #[inline(always)] fn tan(self) -> Self { Math::tan(self) }
-    #[inline(always)] fn asin(self) -> Self { Math::asin(self) }
-    #[inline(always)] fn acos(self) -> Self { Math::acos(self) }
-    #[inline(always)] fn atan(self) -> Self { Math::atan(self) }
-    #[inline(always)] fn atan2(self, other: Self) -> Self { Math::atan2(self, other) }
-    #[inline(always)] fn sin_cos(self) -> (Self, Self) { Math::sin_cos(self) }
-    #[inline(always)] fn exp_m1(self) -> Self { Math::exp_m1(self) }
-    #[inline(always)] fn ln_1p(self) -> Self { Math::ln_1p(self) }
-    #[inline(always)] fn sinh(self) -> Self { Math::sinh(self) }
-    #[inline(always)] fn cosh(self) -> Self { Math::cosh(self) }
-    #[inline(always)] fn tanh(self) -> Self { Math::tanh(self) }
-    #[inline(always)] fn asinh(self) -> Self { Math::asinh(self) }
-    #[inline(always)] fn acosh(self) -> Self { Math::acosh(self) }
-    #[inline(always)] fn atanh(self) -> Self { Math::atanh(self) }
+    #[inline(always)] fn sin_cos(self)              -> (Self, Self) {
+        let (s, c) = TranscendentalMath::sin_cos(self.0);
+        (Self(s), Self(c))
+    }
+
+    #[inline(always)] fn cbrt(self)                 -> Self { Self(TranscendentalMath::cbrt(self.0)) }
+    #[inline(always)] fn hypot(self, other: Self)   -> Self { Self(SpatialMath::hypot(self.0, other.0)) }
+    #[inline(always)] fn sin(self)                  -> Self { Self(TranscendentalMath::sin(self.0)) }
+    #[inline(always)] fn cos(self)                  -> Self { Self(TranscendentalMath::cos(self.0)) }
+    #[inline(always)] fn tan(self)                  -> Self { Self(TranscendentalMath::tan(self.0)) }
+    #[inline(always)] fn asin(self)                 -> Self { Self(TranscendentalMath::asin(self.0)) }
+    #[inline(always)] fn acos(self)                 -> Self { Self(TranscendentalMath::acos(self.0)) }
+    #[inline(always)] fn atan(self)                 -> Self { Self(TranscendentalMath::atan(self.0)) }
+    #[inline(always)] fn atan2(self, other: Self)   -> Self { Self(TranscendentalMath::atan2(self.0, other.0)) }
+    #[inline(always)] fn exp_m1(self)               -> Self { Self(TranscendentalMath::exp_m1(self.0)) }
+    #[inline(always)] fn ln_1p(self)                -> Self { Self(TranscendentalMath::ln_1p(self.0)) }
+    #[inline(always)] fn sinh(self)                 -> Self { Self(TranscendentalMath::sinh(self.0)) }
+    #[inline(always)] fn cosh(self)                 -> Self { Self(TranscendentalMath::cosh(self.0)) }
+    #[inline(always)] fn tanh(self)                 -> Self { Self(TranscendentalMath::tanh(self.0)) }
+    #[inline(always)] fn asinh(self)                -> Self { Self(TranscendentalMath::asinh(self.0)) }
+    #[inline(always)] fn acosh(self)                -> Self { Self(TranscendentalMath::acosh(self.0)) }
+    #[inline(always)] fn atanh(self)                -> Self { Self(TranscendentalMath::atanh(self.0)) }
 
     #[inline(always)] fn integer_decode(self) -> (u64, i16, i8) { num_traits::float::FloatCore::integer_decode(self) }
 }

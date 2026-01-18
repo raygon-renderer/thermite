@@ -1,7 +1,7 @@
 pub mod dot_product;
 pub mod loaders;
 
-use thermite::vector::generic::FloatVector;
+use thermite::generic::FloatVector;
 
 const fn const_max(a: usize, b: usize) -> usize {
     if a > b { a } else { b }

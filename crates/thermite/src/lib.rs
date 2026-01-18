@@ -78,6 +78,7 @@ pub mod vector;
 
 pub mod backend;
 pub mod divider;
+pub mod generic;
 pub mod mask;
 pub mod math;
 pub mod register;

@@ -12,8 +12,17 @@ use crate::{
     BranchfreeDivider, Divider, Mask, Swizzle, Vector,
     divider::{Denominator, vector::VectorDivider},
     math::FloatConsts,
-    register::{Element, FloatElement, Lanes},
+    register::{CastMaskRegister, Element, FloatElement, Lanes},
 };
+
+/// Simple associated constant splat trait.
+///
+/// Used with `GenericVector::splat_const` to splat compile-time constant values into vectors.
+///
+/// This is effectively a workaround for the lack of `const generics` for generic types.
+pub trait SplatConst<E> {
+    const VALUE: E;
+}
 
 /// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///
@@ -46,12 +55,12 @@ macro_rules! generic_splat {
             PhantomData<($($gen_param),+)>
         );
 
-        impl<$($gen_param $(: $bound)?),+> $crate::vector::generic::SplatConst<$ty>
+        impl<$($gen_param $(: $bound)?),+> $crate::generic::SplatConst<$ty>
         for __GenericSplatValue<$($gen_param),+> {
             const VALUE: $ty = const { $value };
         }
 
-        $crate::vector::generic::GenericVector::splat_const::<
+        $crate::generic::GenericVector::splat_const::<
             __GenericSplatValue<$($real_param),+>
         >()
     }};
@@ -59,33 +68,55 @@ macro_rules! generic_splat {
     // Static type, direct value
     ($ty:ty: $value:expr) => {{
         struct __ConstSplatValue;
-        impl $crate::vector::generic::SplatConst<$ty> for __ConstSplatValue {
+        impl $crate::generic::SplatConst<$ty> for __ConstSplatValue {
             const VALUE: $ty = const { $value };
         }
-        $crate::vector::generic::GenericVector::splat_const::<__ConstSplatValue>()
+        $crate::generic::GenericVector::splat_const::<__ConstSplatValue>()
     }};
 
     // Associated const value
     (<$ty:ty $(as $trait:path)?>::$associated:ident) => {{
         struct __ConstSplatValue;
-        impl $crate::vector::generic::SplatConst<$ty> for __ConstSplatValue {
+        impl $crate::generic::SplatConst<$ty> for __ConstSplatValue {
             const VALUE: $ty = const { <$ty $(as $trait)?>::$associated };
         }
-        $crate::vector::generic::GenericVector::splat_const::<__ConstSplatValue>()
+        $crate::generic::GenericVector::splat_const::<__ConstSplatValue>()
     }};
 }
 
-/// Simple associated constant splat trait.
-///
-/// Used with `GenericVector::splat_const` to splat compile-time constant values into vectors.
-///
-/// This is effectively a workaround for the lack of `const generics` for generic types.
-pub trait SplatConst<E> {
-    const VALUE: E;
+pub trait MaskInteroperable<A, B>: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+where
+    A: GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+{
 }
 
-pub trait GenericInteroperable<A, B>:
-    MaskedVector<Mask: GenericCastMask<A::Mask> + GenericCastMask<B::Mask>>
+pub trait PartiallyInteroperable<A, B>:
+    GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+    // casts
+    + CastVector<Self>
+    + CastVector<A>
+    + CastVector<B>
+where
+    A: CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+{
+}
+
+impl<V, A, B> PartiallyInteroperable<A, B> for V
+where
+    V: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+        // casts
+        + CastVector<V>
+        + CastVector<A>
+        + CastVector<B>,
+    A: CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
+    B: CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
+{
+}
+
+pub trait FullyInteroperable<A, B>:
+    GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
     // bits
     + BitsVector<Self>
     + BitsVector<A>
@@ -95,14 +126,14 @@ pub trait GenericInteroperable<A, B>:
     + CastVector<A>
     + CastVector<B>
 where
-    A: BitsVector<Self> + CastVector<Self> + MaskedVector<Lanes = Self::Lanes, Mask: GenericCastMask<Self::Mask> + GenericCastMask<B::Mask>>,
-    B: BitsVector<Self> + CastVector<Self> + MaskedVector<Lanes = Self::Lanes, Mask: GenericCastMask<Self::Mask> + GenericCastMask<A::Mask>>,
+    A: BitsVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: BitsVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
 {
 }
 
-impl<V, A, B> GenericInteroperable<A, B> for V
+impl<V, A, B> FullyInteroperable<A, B> for V
 where
-    V: MaskedVector<Mask: GenericCastMask<A::Mask> + GenericCastMask<B::Mask>>
+    V: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
         // bits
         + BitsVector<V>
         + BitsVector<A>
@@ -111,12 +142,8 @@ where
         + CastVector<V>
         + CastVector<A>
         + CastVector<B>,
-    A: BitsVector<V>
-        + CastVector<V>
-        + MaskedVector<Lanes = V::Lanes, Mask: GenericCastMask<V::Mask> + GenericCastMask<B::Mask>>,
-    B: BitsVector<V>
-        + CastVector<V>
-        + MaskedVector<Lanes = V::Lanes, Mask: GenericCastMask<V::Mask> + GenericCastMask<A::Mask>>,
+    A: BitsVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
+    B: BitsVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
 {
 }
 
@@ -136,6 +163,7 @@ pub trait GenericVector:
     + BitXorAssign<Self>
     + Not<Output = Self>
     + Index<usize, Output = Self::Element>
+    + GenericSelectable<SelectableMask = Self::Mask>
 {
     type Element: Element;
 
@@ -149,6 +177,7 @@ pub trait GenericVector:
             USize = Self::USize,
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::USize,
+            Mask: CastMask<Self::Mask>,
         > + CastVector<Self::ISize>
         + BitsVector<Self::ISize>;
 
@@ -157,8 +186,14 @@ pub trait GenericVector:
             USize = Self::USize,
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::ISize,
+            Mask: CastMask<Self::Mask>,
         > + CastVector<Self::USize>
         + BitsVector<Self::USize>;
+
+    type Mask: GenericMask<Self>
+        + GenericSelectable<SelectableMask = Self::Mask>
+        + CastMask<<Self::USize as GenericVector>::Mask>
+        + CastMask<<Self::ISize as GenericVector>::Mask>;
 
     fn splat(value: Self::Element) -> Self;
 
@@ -281,12 +316,12 @@ pub trait BitsVector<FROM: GenericVector>: GenericVector {
 }
 
 pub trait GenericMask<V: GenericVector>:
-    GenericSelectable<SelectableMask = Self>
-    + GenericCastMask<Self>
+    'static
     + Sized
     + Copy
     + core::fmt::Debug
-    + 'static
+    + GenericSelectable<SelectableMask = Self>
+    + CastMask<Self>
     + BitAnd<Self, Output = Self>
     + BitAndAssign<Self>
     + BitOr<Self, Output = Self>
@@ -310,7 +345,7 @@ pub trait GenericMask<V: GenericVector>:
     #[inline(always)]
     fn select<S>(self, t: S, f: S) -> S
     where
-        S: GenericSelectable<SelectableMask: GenericCastMask<Self>>,
+        S: GenericSelectable<SelectableMask: CastMask<Self>>,
     {
         S::select(self, t, f)
     }
@@ -318,7 +353,7 @@ pub trait GenericMask<V: GenericVector>:
     #[inline(always)]
     fn cast_mask<INTO>(self) -> INTO
     where
-        INTO: GenericCastMask<Self>,
+        INTO: CastMask<Self>,
     {
         INTO::mask_from(self)
     }
@@ -326,7 +361,7 @@ pub trait GenericMask<V: GenericVector>:
     #[inline(always)]
     fn swap<S>(self, a: &mut S, b: &mut S)
     where
-        S: GenericSelectable<SelectableMask: GenericCastMask<Self> + GenericCastMask<S::SelectableMask>>,
+        S: GenericSelectable<SelectableMask: CastMask<Self> + CastMask<S::SelectableMask>>,
     {
         let mask = S::SelectableMask::mask_from(self);
 
@@ -338,7 +373,7 @@ pub trait GenericMask<V: GenericVector>:
     }
 }
 
-pub trait GenericCastMask<FROM>: Sized {
+pub trait CastMask<FROM>: Sized {
     fn mask_from(from: FROM) -> Self;
 }
 
@@ -347,14 +382,10 @@ pub trait GenericSelectable: Copy {
 
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
-        Self::SelectableMask: GenericCastMask<M>;
+        Self::SelectableMask: CastMask<M>;
 }
 
-pub trait MaskedVector: GenericVector + GenericSelectable<SelectableMask = Self::Mask> {
-    type Mask: GenericMask<Self> + GenericSelectable<SelectableMask = Self::Mask>;
-}
-
-pub trait PartialOrdVector: MaskedVector + PartialEq {
+pub trait PartialOrdVector: GenericVector + PartialEq {
     fn cmp_lt(self, other: Self) -> Self::Mask;
     fn cmp_le(self, other: Self) -> Self::Mask;
     fn cmp_gt(self, other: Self) -> Self::Mask;
@@ -363,8 +394,12 @@ pub trait PartialOrdVector: MaskedVector + PartialEq {
     fn cmp_ne(self, other: Self) -> Self::Mask;
 }
 
+#[rustfmt::skip]
 pub trait NumericVector:
-    PartialOrdVector<Element: num_traits::Num>
+    PartialOrdVector<
+        Element: num_traits::Num,
+        // Mask: GenericCastMask<<Self::ISize as GenericVector>::Mask> + GenericCastMask<<Self::USize as GenericVector>::Mask>,
+    >
     + num_traits::NumOps
     + num_traits::NumAssignOps
     + core::iter::Sum
@@ -477,12 +512,7 @@ pub trait NumFloatVector:
 {
 }
 
-pub trait FloatVector:
-    SignedVector<Element: FloatElement>
-    + FloatConsts
-    + GenericInteroperable<Self::Signed, Self::Bits>
-    + CastVector<Self::ExtendedPrecision>
-{
+pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastVector<Self::ExtendedPrecision> {
     const HALF: Self;
     const NEG_ZERO: Self;
     const INFINITY: Self;
@@ -490,29 +520,9 @@ pub trait FloatVector:
     const NAN: Self;
     const EPSILON: Self;
 
-    type Signed: SignedIntegerVector<
-            Lanes = Self::Lanes,
-            Divider = Divider<<Self::Element as FloatElement>::Signed>,
-            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Signed>,
-            Element = <Self::Element as FloatElement>::Signed,
-        > + GenericInteroperable<Self, Self::Bits>;
-
-    type Bits: UnsignedIntegerVector<
-            Lanes = Self::Lanes,
-            Divider = Divider<<Self::Element as FloatElement>::Bits>,
-            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Bits>,
-            Element = <Self::Element as FloatElement>::Bits,
-        > + GenericInteroperable<Self, Self::Signed>;
-
     type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
 
     const HAS_TRUE_FMA: bool;
-
-    const HAS_NATIVE_LDEXP: bool;
-    const HAS_NATIVE_FREXP: bool;
-
-    unsafe fn native_ldexp(self, exp: Self::Signed) -> Self;
-    unsafe fn native_frexp(self) -> (Self, Self::Signed);
 
     fn is_infinite(self) -> Self::Mask;
     fn is_finite(self) -> Self::Mask;
@@ -549,6 +559,28 @@ pub trait FloatVector:
 
     fn next_up(self) -> Self;
     fn next_down(self) -> Self;
+}
+
+pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
+    type Signed: SignedIntegerVector<
+            Lanes = Self::Lanes,
+            Divider = Divider<<Self::Element as FloatElement>::Signed>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Signed>,
+            Element = <Self::Element as FloatElement>::Signed,
+        > + FullyInteroperable<Self, Self::Bits>;
+
+    type Bits: UnsignedIntegerVector<
+            Lanes = Self::Lanes,
+            Divider = Divider<<Self::Element as FloatElement>::Bits>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Bits>,
+            Element = <Self::Element as FloatElement>::Bits,
+        > + FullyInteroperable<Self, Self::Signed>;
+
+    const HAS_NATIVE_LDEXP: bool;
+    const HAS_NATIVE_FREXP: bool;
+
+    unsafe fn native_ldexp(self, exp: Self::Signed) -> Self;
+    unsafe fn native_frexp(self) -> (Self, Self::Signed);
 
     fn total_order(self) -> Self::Signed;
 }

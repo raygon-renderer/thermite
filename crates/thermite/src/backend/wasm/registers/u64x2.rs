@@ -123,6 +123,7 @@ impl Register for U64x2Wasm {
 
 impl BitshiftRegister for U64x2Wasm {
     const HAS_TRUE_SHIFTV: bool = false;
+    const HAS_WIDE_BYTE_SHIFTS: bool = false;
 
     #[inline(always)]
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {

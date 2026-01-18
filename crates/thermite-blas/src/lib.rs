@@ -1,7 +1,7 @@
 use thermite::{
+    generic::FloatVector,
     register::well_formed::WellFormedFloatElement,
     simd::{FloatSimd, Simd},
-    vector::generic::FloatVector,
 };
 
 pub mod argmx;

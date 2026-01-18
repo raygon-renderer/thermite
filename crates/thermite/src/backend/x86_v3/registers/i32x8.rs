@@ -7,7 +7,7 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, IntegerRegister, PartialMaskRegister, NumericRegister, PartialOrdRegister,
+        BitshiftRegister, CastRegister, CoreRegister, IntegerRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
         dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
@@ -19,11 +19,13 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct I32x8V3;
 
-impl Register for I32x8V3 {
+impl CoreRegister for I32x8V3 {
     type Lanes = typenum::U8;
-
     type Element = i32;
     type Storage = arch::__m256i;
+}
+
+impl Register for I32x8V3 {
     type HalfRegister = super::I32x4V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
@@ -98,6 +100,41 @@ impl Register for I32x8V3 {
         Self::HalfRegister: Register,
     {
         unsafe { arch::_mm256_setr_m128i(lo, hi) }
+    }
+
+    const FALSY: Storage<Self> = reg::<Self, 8>([0; 8]);
+    const TRUTHY: Storage<Self> = reg::<Self, 8>([-1; 8]);
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm256_cvtboolx8_to_epi32_mask_v3(value) }
+    }
+
+    #[inline(always)]
+    fn all(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_epi8(value) as u32 == 0xFFFF_FFFF }
+    }
+
+    #[inline(always)]
+    fn any(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_epi8(value) != 0 }
+    }
+
+    #[inline(always)]
+    fn none(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_epi8(value) == 0 }
+    }
+
+    #[inline(always)]
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+        Some(unsafe { arch::_mm256_movemask_ps(arch::_mm256_castsi256_ps(value)) as u64 })
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+        let mask = unsafe { arch::_mm256_movemask_ps(arch::_mm256_castsi256_ps(value)) as u32 };
+        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
+        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
 
     #[inline(always)]
@@ -178,6 +215,7 @@ impl Register for I32x8V3 {
 
 impl BitshiftRegister for I32x8V3 {
     const HAS_TRUE_SHIFTV: bool = true;
+    const HAS_WIDE_BYTE_SHIFTS: bool = false;
 
     #[inline(always)]
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
@@ -264,43 +302,6 @@ impl SwizzleRegister for I32x8V3 {
     //         )
     //     }
     // }
-}
-
-impl PartialMaskRegister for I32x8V3 {
-    const FALSY: Storage<Self> = reg::<Self, 8>([0; 8]);
-    const TRUTHY: Storage<Self> = reg::<Self, 8>([-1; 8]);
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm256_cvtboolx8_to_epi32_mask_v3(value) }
-    }
-
-    #[inline(always)]
-    fn all(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_epi8(value) as u32 == 0xFFFF_FFFF }
-    }
-
-    #[inline(always)]
-    fn any(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_epi8(value) != 0 }
-    }
-
-    #[inline(always)]
-    fn none(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_epi8(value) == 0 }
-    }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some(unsafe { arch::_mm256_movemask_ps(arch::_mm256_castsi256_ps(value)) as u64 })
-    }
-
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        let mask = unsafe { arch::_mm256_movemask_ps(arch::_mm256_castsi256_ps(value)) as u32 };
-        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
-        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
-    }
 }
 
 impl PartialOrdRegister for I32x8V3 {

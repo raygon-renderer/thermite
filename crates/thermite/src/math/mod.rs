@@ -5,7 +5,7 @@ pub mod policy;
 
 pub use consts::FloatConsts;
 
-use crate::vector::generic::FloatVector;
+use crate::generic::{FloatVector, FloatVectorWithBits};
 
 pub mod algorithms;
 pub mod specialized;
@@ -13,7 +13,7 @@ pub mod specialized;
 use policy::{DefaultPolicy, Policy};
 
 pub mod prelude {
-    pub use crate::vector::generic::FloatVector;
+    pub use crate::generic::FloatVector;
 
     pub use super::FloatConsts;
     pub use super::{
@@ -89,18 +89,19 @@ macro_rules! decl_math {
 }
 
 decl_math! {
-    /// This is the core set of mathematical operations that form the basis for more advanced functions.
-    trait Core: FloatVector {
+    /// Float-specific mathematical functions like `ldexp` and `frexp`.
+    trait Float: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
         fn ldexp[][](self: Self, exp: Self::Signed) -> Self;
 
         /// Decomposes `self` into its normalized fraction and an integral power of two.
         fn frexp[][](self: Self) -> (Self, Self::Signed);
+    }
+}
 
-        /// Returns the precision tolerance based on the selected policy. This is a good
-        /// default tolerance to use for numerical methods.
-        fn tolerance[][]() -> Self;
-
+decl_math! {
+    /// This is the core set of mathematical operations that form the basis for more advanced functions.
+    trait Core: FloatVector {
         /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
@@ -150,7 +151,7 @@ decl_math! {
         fn powi[][](self: Self, e: i32) -> Self;
 
         /// Returns `self` raised to the signed integer power of each element in `e`.
-        fn powiv[][](self: Self, e: Self::Signed) -> Self;
+        fn powiv[][](self: Self, e: Self::ISize) -> Self;
     }
 }
 
@@ -257,23 +258,55 @@ decl_math! {
 
 decl_math! {
     /// Spatial mathematical functions like norms and distances.
+    ///
+    /// These functions are primarily useful in dimensions higher than one.
     trait Spatial: CoreMathWithPolicy {
         /// Computes the Euclidean norm (hypotenuse) of `self` and `other`, i.e., `sqrt(self^2 + other^2)`.
         ///
         /// This is not higher performance than the naive implementation, but is more resistant to overflow and underflow.
         /// If using the worst precision policy, it becomes equivalent to the naive implementation.
+        ///
+        /// Check out [`hypot_n`](SpatialMath::hypot_n) for a more general version that computes the hypotenuse of N values.
         fn hypot[][](self: Self, other: Self) -> Self;
 
+        /// Computes the Euclidean norm (hypotenuse) of N values, i.e., `sqrt(x1^2 + x2^2 + ... + xN^2)`.
+        ///
+        /// This is typically higher performance than naively computing the sum of squares and then taking the square root,
+        /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
+        fn hypot_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// Computes the inverse Euclidean norm (inverse hypotenuse) of N values, i.e., `1 / sqrt(x1^2 + x2^2 + ... + xN^2)`.
+        ///
+        /// This is typically higher performance than naively computing the sum of squares, taking the square root, and then inverting,
+        /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
+        ///
+        /// At lower precision policies, we can take advantage of fast approximate inverse square root implementations for better performance.
+        fn inv_hypot_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// L1 Norm, or the "Manhattan" distance from the origin.
+        ///
+        /// For 1D vectors, this is equivalent to the absolute value.
         fn l1_norm[][](self: Self) -> Self;
+
+        /// L2 Norm, or the "Euclidean" distance from the origin.
+        ///
+        /// For 1D vectors, this is equivalent to the absolute value.
         fn l2_norm[][](self: Self) -> Self;
 
+        /// Squared L2 Norm, or the squared "Euclidean" distance from the origin.
+        ///
+        /// For 1D vectors, this is equivalent to squaring the value.
         fn l2_norm_squared[][](self: Self) -> Self;
     }
 }
 
 decl_math! {
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
-    trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
+    trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy & FloatMathWithPolicy {
+        /// Returns the precision tolerance based on the selected policy. This is a good
+        /// default tolerance to use for numerical methods.
+        fn tolerance[][]() -> Self;
+
         /// Converts angles from radians to degrees.
         fn to_degrees[][](self: Self) -> Self;
 

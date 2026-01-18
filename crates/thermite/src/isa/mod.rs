@@ -130,4 +130,31 @@ impl InstructionSet {
 
         a
     }
+
+    #[inline(always)]
+    pub const fn unaligned_is_cheap(self) -> bool {
+        match self {
+            // Scalar loads are always cheap
+            InstructionSet::Scalar => true,
+
+            // only x86 v3+ has efficient unaligned loads/stores usually
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            InstructionSet::X86V1 | InstructionSet::X86V2 => false,
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            InstructionSet::X86V3 | InstructionSet::X86V4 => true,
+
+            // Neon generally has efficient unaligned loads/stores
+            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            InstructionSet::NEON => true,
+
+            // WASM is uncertain, so assume not cheap
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+            InstructionSet::WASM32 => false,
+            #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
+            InstructionSet::WASM64 => false,
+
+            // unknown ISA
+            InstructionSet::Unknown => false,
+        }
+    }
 }

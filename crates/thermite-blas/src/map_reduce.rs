@@ -1,9 +1,9 @@
 use thermite::{
     Vector,
+    generic::FloatVector,
     generic_array::{GenericArray, typenum::Unsigned},
-    register::{FloatElement, Register, well_formed::WellFormedFloatElement},
+    register::{CoreRegister, FloatElement, Register, well_formed::WellFormedFloatElement},
     simd::{FloatSimd, SizedSimd},
-    vector::generic::FloatVector,
 };
 
 use crate::{LoadKernel, kernels::ProducerKernel};
@@ -165,7 +165,7 @@ where
             $(
                 // we don't want to use emulated (double-pumped) registers, only real SIMD registers
                 if !<$width as Register>::IS_EMULATED {
-                    let lane_width = <<$width as Register>::Lanes as Unsigned>::USIZE * L::READ_MULTIPLIER;
+                    let lane_width = <<$width as CoreRegister>::Lanes as Unsigned>::USIZE * L::READ_MULTIPLIER;
 
                     // accumulator registers, some of which may not be used depending on output size O,
                     // it's mostly just a compiler hint to accumulate in parallel

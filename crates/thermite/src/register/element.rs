@@ -1,6 +1,6 @@
 /// Common trait for types that can be used as elements in SIMD registers.
 pub trait Element:
-    Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug + 'static + num_traits::NumOps
+    'static + Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug + num_traits::NumOps
 {
     /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
     type USize: UnsignedIntegerElement<ISize = Self::ISize>;
@@ -114,33 +114,19 @@ impl<T> IntegerElement for T where
 }
 
 pub trait SignedIntegerElement: IntegerElement<ISize = Self> + num_traits::Signed + TryInto<isize> {}
-pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + TryInto<usize> {}
+pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + num_traits::Unsigned + TryInto<usize> {}
 
 impl<S> SignedIntegerElement for S where S: IntegerElement<ISize = S> + num_traits::Signed + TryInto<isize> {}
-impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + TryInto<usize> {}
+impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + num_traits::Unsigned + TryInto<usize> {}
 
 use core::ops::{Shl, Shr};
-
-#[cfg(feature = "std")]
-use num_traits::Float as FloatTrait;
-
-#[cfg(not(feature = "std"))]
-use num_traits::float::FloatCore as FloatTrait;
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement:
-    Element
-    + FloatTrait
-    + From<i8>
-    + core::fmt::Display
-    + crate::math::FloatConsts
-    + num_traits::Signed
-    + num_traits::FloatConst
-{
+pub trait FloatElement: Element + From<i8> + crate::math::FloatConsts + num_traits::Signed {
     type Bits: UnsignedIntegerElement<USize = Self::Bits>;
     type Signed: SignedIntegerElement<ISize = Self::Signed>;
 
@@ -172,7 +158,7 @@ pub trait FloatElement:
 
     #[inline(always)]
     fn fract(value: Self) -> Self {
-        value - value.trunc() // fallback implementation
+        value - FloatElement::trunc(value) // fallback implementation
     }
 
     fn next_up(value: Self) -> Self;
@@ -185,6 +171,7 @@ macro_rules! impl_float_element {
 
         const FREXP_BIAS_OFFSET: Self::Signed = Self::EXP_BIAS - 1;
         const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA) as _;
+        const MAX_U64: u64 = (1u64 << (Self::MANTISSA + 1));
     }};
 
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
@@ -228,8 +215,6 @@ macro_rules! impl_float_element {
             type Signed = $signed;
 
             impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
-
-            const MAX_U64: u64 = (1u64 << (Self::MANTISSA + 1));
 
             #[inline(always)]
             fn from_i64(value: i64) -> Self {
