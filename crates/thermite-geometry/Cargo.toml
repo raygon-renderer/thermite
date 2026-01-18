@@ -1,0 +1,7 @@
+[package]
+name = "thermite-geometry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thermite = { path = "../thermite" }
