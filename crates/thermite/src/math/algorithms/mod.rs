@@ -149,7 +149,7 @@ where
 
     while stride < values.len() {
         let mut i = 0;
-        let next_stride = stride * 2;
+        let next_stride = stride << 1; // x2
 
         while i + stride < values.len() {
             values[i] = op(values[i], values[i + stride]);
