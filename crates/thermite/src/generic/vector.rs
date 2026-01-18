@@ -338,6 +338,11 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     #[inline(always)] fn next_up(self) -> Self { Vector::<R>::next_up(self) }
     #[inline(always)] fn next_down(self) -> Self { Vector::<R>::next_down(self) }
 
+    #[inline(always)]
+    unsafe fn block_autovectorization(&mut self) {
+        unsafe { R::block_autovectorization(&mut self.0) };
+    }
+
 }
 
 #[rustfmt::skip]

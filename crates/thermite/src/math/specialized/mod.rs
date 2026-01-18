@@ -707,6 +707,7 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
         hypot_n_impl::<E, Self, P, N, false>(values)
     }
 
+    #[inline(always)]
     fn inv_hypot_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
         hypot_n_impl::<E, Self, P, N, true>(values)
     }

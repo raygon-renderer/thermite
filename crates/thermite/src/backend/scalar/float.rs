@@ -155,9 +155,17 @@ impl NumericRegister for [<f $width>] {
     #[inline(always)] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
     #[inline(always)] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
     #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
-    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.min(rhs) }
-    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.max(rhs) }
     #[inline(always)] fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
+    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, lhs, rhs) }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
+    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, rhs, lhs) }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
+    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { lhs } else { rhs } }
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
+    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { rhs } else { lhs } }
 }
 
 impl SignedRegister for [<f $width>] {
@@ -212,6 +220,26 @@ impl FloatRegister for [<f $width>] {
     // TODO: maybe at some point?
     const HAS_NATIVE_LDEXP: bool = false;
     const HAS_NATIVE_FREXP: bool = false;
+
+    #[inline(always)] unsafe fn block_autovectorization(value: &mut Storage<Self>) {
+        unsafe {
+            // x86_64: Use "xmm_reg" to keep it in the float/vector registers.
+            // aarch64: Use "vreg" (or "reg" often works as floats are standard).
+            #[cfg(target_arch = "x86_64")]
+            core::arch::asm!(
+                "/* {0} */",
+                inout(xmm_reg) *value, // tied operand: reads xmmN, writes xmmN
+                options(nomem, nostack, preserves_flags)
+            );
+
+            #[cfg(target_arch = "aarch64")]
+            core::arch::asm!(
+                "/* {0} */",
+                inout(vreg) *value,
+                options(nomem, nostack, preserves_flags)
+            );
+        }
+    }
 }
 
 }}} // end macro

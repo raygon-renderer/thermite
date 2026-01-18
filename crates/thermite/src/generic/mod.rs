@@ -559,6 +559,8 @@ pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastV
 
     fn next_up(self) -> Self;
     fn next_down(self) -> Self;
+
+    unsafe fn block_autovectorization(&mut self);
 }
 
 pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
@@ -585,5 +587,5 @@ pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Se
     fn total_order(self) -> Self::Signed;
 }
 
-mod scalar;
+// mod scalar;
 mod vector;

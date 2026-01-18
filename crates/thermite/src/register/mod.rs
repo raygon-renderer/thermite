@@ -1140,6 +1140,9 @@ pub trait FloatRegister:
     const HAS_NATIVE_LDEXP: bool;
     const HAS_NATIVE_FREXP: bool;
 
+    #[inline(always)]
+    unsafe fn block_autovectorization(_value: &mut Storage<Self>) {}
+
     #[inline(never)]
     unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
         unreachable!("native_ldexp is not implemented for this FloatRegister");
