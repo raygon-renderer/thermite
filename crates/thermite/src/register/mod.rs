@@ -496,6 +496,69 @@ pub trait Register: CoreRegister + MaskInteroperable<Self::USize, Self::ISize> {
     fn not(value: Storage<Self>) -> Storage<Self>;
 
     #[inline(always)]
+    fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        // Pattern Matching Logic (Disjunctive Normal Form)
+
+        let mut accumulator = Self::EMPTY;
+
+        if IMM == 0xCA {
+            // Special case for common select pattern: a ? b : c
+            // this is explicit to help the compiler optimize it better in debug builds
+            return Self::bitor(Self::bitand(a, b), Self::bitandnot(a, c));
+        }
+
+        // Case 0: inputs are 0, 0, 0
+        if (IMM & (1 << 0)) != 0 {
+            let term = Self::bitandnot(a, Self::bitandnot(b, Self::not(c)));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 1: inputs are 0, 0, 1
+        if (IMM & (1 << 1)) != 0 {
+            let term = Self::bitandnot(a, Self::bitandnot(b, c));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 2: inputs are 0, 1, 0
+        if (IMM & (1 << 2)) != 0 {
+            let term = Self::bitandnot(a, Self::bitand(b, Self::not(c)));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 3: inputs are 0, 1, 1
+        if (IMM & (1 << 3)) != 0 {
+            let term = Self::bitandnot(a, Self::bitand(b, c));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 4: inputs are 1, 0, 0
+        if (IMM & (1 << 4)) != 0 {
+            let term = Self::bitand(a, Self::bitandnot(b, Self::not(c)));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 5: inputs are 1, 0, 1
+        if (IMM & (1 << 5)) != 0 {
+            let term = Self::bitand(a, Self::bitandnot(b, c));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 6: inputs are 1, 1, 0
+        if (IMM & (1 << 6)) != 0 {
+            let term = Self::bitand(a, Self::bitand(b, Self::not(c)));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        // Case 7: inputs are 1, 1, 1
+        if (IMM & (1 << 7)) != 0 {
+            let term = Self::bitand(a, Self::bitand(b, c));
+            accumulator = Self::bitor(accumulator, term);
+        }
+
+        accumulator
+    }
+
+    #[inline(always)]
     fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::bitandnot(mask, lhs), Self::bitand(mask, rhs))
     }
@@ -854,10 +917,12 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
         while s != 0 {
             mask = Self::bitxor(mask, Self::shl(mask, s));
 
-            let left = Self::bitand(Self::shr(value, s), mask);
-            let right = Self::bitand(Self::shl(value, s), Self::not(mask));
+            let a = mask;
+            let b = Self::shr(value, s);
+            let c = Self::shl(value, s);
 
-            value = Self::bitor(left, right);
+            // standard select logic: (A & B) | (!A & C)
+            value = Self::ternlog::<{ crate::ternlog_imm!((A & B) | (!A & C)) }>(a, b, c);
 
             s >>= 1;
         }

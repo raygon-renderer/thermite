@@ -548,6 +548,71 @@ impl<R: Register> Vector<R> {
     /// or requires a more complex method.
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
+    /// Computes an arbitrary bitwise boolean function of three inputs (`a`, `b`, `c`)
+    /// based on the truth table specified by `IMM`.
+    ///
+    /// This function is a "programmable logic gate". It applies the logic defined in `IMM`
+    /// to every bit of the inputs in parallel.
+    ///
+    /// # How to Calculate `IMM`
+    /// The easiest way to find the correct `IMM` value is to perform your desired boolean
+    /// logic on these three specific "Magic Constants":
+    ///
+    /// * **A** = `0xF0` (Binary `11110000`)
+    /// * **B** = `0xCC` (Binary `11001100`)
+    /// * **C** = `0xAA` (Binary `10101010`)
+    ///
+    /// ## Example: `(A OR B) XOR C`
+    /// 1. `A | B` = `0xF0 | 0xCC` = `0xFC`
+    /// 2. `Result ^ C` = `0xFC ^ 0xAA` = `0x56`
+    /// 3. Therefore, `IMM = 0x56`.
+    ///
+    /// You can also use the [`ternlog_imm!`](crate::ternlog_imm) macro to compute
+    /// this at compile time.
+    ///
+    /// # Visualization using Disjunction Normal Form (DNF)
+    /// The constants `0xF0`, `0xCC`, and `0xAA` simply form a parallel truth table
+    /// for all 8 possible combinations of 3 bits:
+    ///
+    /// |  A  |  B  |  C  |  Bit Index  |  Term Logic (Minterm) |
+    /// |:---:|:---:|:---:|:-----------:|:---------------------:|
+    /// |  0  |  0  |  0  |      0      | ~A & ~B & ~C          |
+    /// |  0  |  0  |  1  |      1      | ~A & ~B &  C          |
+    /// |  0  |  1  |  0  |      2      | ~A &  B & ~C          |
+    /// |  0  |  1  |  1  |      3      | ~A &  B &  C          |
+    /// |  1  |  0  |  0  |      4      |  A & ~B & ~C          |
+    /// |  1  |  0  |  1  |      5      |  A & ~B &  C          |
+    /// |  1  |  1  |  0  |      6      |  A &  B & ~C          |
+    /// |  1  |  1  |  1  |      7      |  A &  B &  C          |
+    ///
+    /// If `IMM = 0x88` (Bit 3 and 7 set), the logic is:
+    /// - Bit 3 (0, 1, 1): `~A & B & C`
+    /// - Bit 7 (1, 1, 1): `A & B & C`
+    ///
+    /// As raw DNF, this becomes: `(~A & B & C) | (A & B & C)`.\
+    /// `~A` and `A` cancel out, simplifying to `B & C`.
+    ///
+    /// For each bit set in IMM, we effectively bitwise-OR each corresponding minterm.
+    ///
+    /// # Common Immediate Values
+    /// | Logic | Immediate | Description |
+    /// | :--- | :--- | :--- |
+    /// | `A ^ B ^ C` | `0x96` | **3-Way XOR** (Parity) |
+    /// | `(A & B) OR (~A & C)` | `0xCA` | **Bitwise Select** (If A=1 use B, else use C) |
+    /// | `(A & B) OR (A & C) OR (B & C)` | `0xE8` | **Majority** (True if 2+ inputs are 1) |
+    /// | `A OR B OR C` | `0xFE` | **3-Way OR** |
+    /// | `A ? B : 0` | `0xA0` | **Mask** (A & B) |
+    ///
+    /// # Performance Note
+    /// Since `IMM` is a compile-time constant, the compiler will optimize this function
+    /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
+    /// for your specific architecture. If using AVX512, there actually exists a single
+    /// instruction for this.
+    #[inline(always)]
+    pub fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {
+        Self(R::ternlog::<IMM>(a.0, b.0, c.0))
+    }
+
     /// Unpack and interleave elements from two vectors.
     ///
     /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,

@@ -232,6 +232,8 @@ pub trait GenericVector:
     /// !self & other
     fn bitandnot(self, other: Self) -> Self;
 
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+
     const HAS_SIMPLE_UNPACK: bool;
 
     fn unpack(self, other: Self) -> (Self, Self);

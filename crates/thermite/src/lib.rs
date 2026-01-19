@@ -108,3 +108,25 @@ pub fn likely(b: bool) -> bool {
 pub fn unlikely(b: bool) -> bool {
     if b { cold() } b
 }
+
+/// Generate ternlog immediate constant via arbitrary expressions. The
+/// constants A, B, and C are provided internally for convenience.
+///
+/// # Example
+///
+/// ```rust
+/// let result = thermite::ternlog_imm!(A & B | !A & C);
+/// assert_eq!(result, 0xCA);
+/// ```
+#[macro_export]
+macro_rules! ternlog_imm {
+    ($($tt:tt)*) => {
+        const {
+            const A: i32 = 0xF0; // Binary 11110000
+            const B: i32 = 0xCC; // Binary 11001100
+            const C: i32 = 0xAA; // Binary 10101010
+
+            $($tt)*
+        }
+    };
+}

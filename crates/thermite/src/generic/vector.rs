@@ -139,6 +139,10 @@ impl<R: Register> GenericVector for Vector<R> {
     #[inline(always)] fn swap_bytes(self) -> Self { Vector::<R>::swap_bytes(self) }
     #[inline(always)] fn bitandnot(self, other: Self) -> Self { Vector::<R>::bitandnot(self, other) }
 
+    #[inline(always)] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {
+        Vector::<R>::ternlog::<IMM>(a, b, c)
+    }
+
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
     #[inline(always)] fn unpack(self, other: Self) -> (Self, Self) { Vector::<R>::unpack(self, other) }
