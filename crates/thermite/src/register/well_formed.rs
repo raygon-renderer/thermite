@@ -20,16 +20,15 @@ pub trait WellFormedFloatElement:
 
 /// A Signed IntegerElement type that can itself be used as a SignedIntegerRegister.
 pub trait WellFormedSignedIntegerElement:
-    IntegerElement
-    + IntegerRegister<Element = Self, Storage = Self, ISize = Self, USize = <Self as Element>::USize>
+    IntegerElement<USize: CoreRegister>
     + num_traits::Signed
-    + SignedIntegerRegister<Element = Self, Storage = Self>
+    + SignedIntegerRegister<Element = Self, Storage = Self, ISize = Self, USize = <Self as Element>::USize>
 {
 }
 
 /// An Unsigned IntegerElement type that can itself be used as an UnsignedIntegerRegister.
 pub trait WellFormedUnsignedIntegerElement:
-    IntegerElement
+    IntegerElement<ISize: CoreRegister>
     + IntegerRegister<Element = Self, Storage = Self, USize = Self, ISize = <Self as Element>::ISize>
     + UnsignedIntegerRegister<Element = Self, Storage = Self>
 {
@@ -52,15 +51,14 @@ impl<F> WellFormedFloatElement for F where
 }
 
 impl<I> WellFormedSignedIntegerElement for I where
-    I: IntegerElement
-        + IntegerRegister<Element = I, Storage = I, ISize = I, USize = <I as Element>::USize>
+    I: IntegerElement<USize: CoreRegister>
         + num_traits::Signed
-        + SignedIntegerRegister<Element = I, Storage = I>
+        + SignedIntegerRegister<Element = I, Storage = I, ISize = I, USize = <I as Element>::USize>
 {
 }
 
 impl<U> WellFormedUnsignedIntegerElement for U where
-    U: IntegerElement
+    U: IntegerElement<ISize: CoreRegister>
         + IntegerRegister<Element = U, Storage = U, USize = U, ISize = <U as Element>::ISize>
         + UnsignedIntegerRegister<Element = U, Storage = U>
 {
@@ -74,6 +72,7 @@ pub trait WellFormedRegister:
     >
 {
 }
+
 impl<R> WellFormedRegister for R where
     R: Register<
             Element: Element<USize: WellFormedUnsignedIntegerElement, ISize: WellFormedSignedIntegerElement>,

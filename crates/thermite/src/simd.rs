@@ -12,7 +12,7 @@ use crate::{
     Vector,
     isa::InstructionSet,
     register::{
-        BitsRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, FullyInteroperable, IntegerRegister,
+        BitCastRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, FullyInteroperable, IntegerRegister,
         Lanes, LinAlg4Register, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
         UnsignedIntegerRegister, WidenRegister,
         element::IntegerElement,

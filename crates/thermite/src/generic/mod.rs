@@ -6,11 +6,14 @@ use core::ops::{
     Shl, ShlAssign, Shr, ShrAssign, Sub,
 };
 
+pub mod ops;
+
 use generic_array::GenericArray;
 
 use crate::{
     BranchfreeDivider, Divider, Mask, Swizzle, Vector,
     divider::{Denominator, vector::VectorDivider},
+    isa::InstructionSet,
     math::FloatConsts,
     register::{CastMaskRegister, Element, FloatElement, Lanes},
 };
@@ -155,13 +158,13 @@ pub trait GenericVector:
     + Copy
     + core::fmt::Debug
     + 'static
-    + BitAnd<Self, Output = Self>
-    + BitAndAssign<Self>
-    + BitOr<Self, Output = Self>
-    + BitOrAssign<Self>
-    + BitXor<Self, Output = Self>
-    + BitXorAssign<Self>
-    + Not<Output = Self>
+    + ops::BitAndMasked<Self::Mask, Self, Output = Self>
+    + ops::BitAndAssignMasked<Self::Mask, Self>
+    + ops::BitOrMasked<Self::Mask, Self, Output = Self>
+    + ops::BitOrAssignMasked<Self::Mask, Self>
+    + ops::BitXorMasked<Self::Mask, Self, Output = Self>
+    + ops::BitXorAssignMasked<Self::Mask, Self>
+    + ops::NotMasked<Self::Mask, Output = Self>
     + Index<usize, Output = Self::Element>
     + GenericSelectable<SelectableMask = Self::Mask>
 {
@@ -169,6 +172,8 @@ pub trait GenericVector:
 
     const EMPTY: Self;
     const LANES: usize;
+
+    const ISA: InstructionSet;
 
     type Lanes: Lanes;
 
@@ -191,7 +196,6 @@ pub trait GenericVector:
         + BitsVector<Self::USize>;
 
     type Mask: GenericMask<Self>
-        + GenericSelectable<SelectableMask = Self::Mask>
         + CastMask<<Self::USize as GenericVector>::Mask>
         + CastMask<<Self::ISize as GenericVector>::Mask>;
 
@@ -234,6 +238,11 @@ pub trait GenericVector:
 
     fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 
+    /// Masked zeroing: self & mask
+    fn z(self, mask: Self::Mask) -> Self;
+    /// Masked negated zeroing: self & !mask
+    fn nz(self, mask: Self::Mask) -> Self;
+
     const HAS_SIMPLE_UNPACK: bool;
 
     fn unpack(self, other: Self) -> (Self, Self);
@@ -273,20 +282,20 @@ pub trait GenericVector:
     {
         INTO::from_bits(self)
     }
-
-    const HAS_MSB_BLENDV: bool;
 }
 
+#[thermite_macros::vector_trait]
+#[conditional]
 pub trait BitshiftVector:
     GenericVector
-    + Shr<Self::USize, Output = Self>
-    + ShrAssign<Self::USize>
-    + Shl<Self::USize, Output = Self>
-    + ShlAssign<Self::USize>
-    + Shr<u32, Output = Self>
-    + ShrAssign<u32>
-    + Shl<u32, Output = Self>
-    + ShlAssign<u32>
+    + ops::ShrMasked<Self::Mask, Self::USize, Output = Self>
+    + ops::ShrAssignMasked<Self::Mask, Self::USize>
+    + ops::ShlMasked<Self::Mask, Self::USize, Output = Self>
+    + ops::ShlAssignMasked<Self::Mask, Self::USize>
+    + ops::ShrMasked<Self::Mask, u32, Output = Self>
+    + ops::ShrAssignMasked<Self::Mask, u32>
+    + ops::ShlMasked<Self::Mask, u32, Output = Self>
+    + ops::ShlAssignMasked<Self::Mask, u32>
 {
     const HAS_TRUE_SHIFTV: bool;
     const HAS_WIDE_BYTE_SHIFTS: bool;
@@ -322,7 +331,6 @@ pub trait GenericMask<V: GenericVector>:
     + Sized
     + Copy
     + core::fmt::Debug
-    + GenericSelectable<SelectableMask = Self>
     + CastMask<Self>
     + BitAnd<Self, Output = Self>
     + BitAndAssign<Self>
@@ -335,12 +343,9 @@ pub trait GenericMask<V: GenericVector>:
     const TRUTHY: Self;
     const FALSY: Self;
 
-    fn from_unchecked(vector: V) -> Self;
-
     fn all(self) -> bool;
     fn any(self) -> bool;
     fn none(self) -> bool;
-    fn value(self) -> V;
 
     fn native_bitmask(&self) -> Option<u64>;
 
@@ -397,13 +402,24 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 }
 
 #[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
 pub trait NumericVector:
     PartialOrdVector<
         Element: num_traits::Num,
         // Mask: GenericCastMask<<Self::ISize as GenericVector>::Mask> + GenericCastMask<<Self::USize as GenericVector>::Mask>,
     >
-    + num_traits::NumOps
-    + num_traits::NumAssignOps
+    + ops::AddMasked<Self::Mask, Self, Output = Self>
+    + ops::AddAssignMasked<Self::Mask, Self>
+    + ops::SubMasked<Self::Mask, Self, Output = Self>
+    + ops::SubAssignMasked<Self::Mask, Self>
+    + ops::MulMasked<Self::Mask, Self, Output = Self>
+    + ops::MulAssignMasked<Self::Mask, Self>
+    + ops::DivMasked<Self::Mask, Self, Output = Self>
+    + ops::DivAssignMasked<Self::Mask, Self>
+    + ops::RemMasked<Self::Mask, Self, Output = Self>
+    + ops::RemAssignMasked<Self::Mask, Self>
+    + num_traits::NumOps<Self>
+    + num_traits::NumAssignOps<Self>
     + core::iter::Sum
     + core::iter::Product
     + num_traits::Bounded
@@ -414,20 +430,21 @@ pub trait NumericVector:
     const MIN: Self;
     const MAX: Self;
 
-    fn is_zero(self) -> Self::Mask;
+    #[skip_masked] fn is_zero(self) -> Self::Mask;
 
     fn min(self, other: Self) -> Self;
     fn max(self, other: Self) -> Self;
-    fn clamp(self, min: Self, max: Self) -> Self;
 
-    fn min_element(self) -> Self::Element;
-    fn max_element(self) -> Self::Element;
+    #[skip_conditional] fn clamp(self, min: Self, max: Self) -> Self;
 
-    fn sum_elements(self) -> Self::Element;
-    fn prod_elements(self) -> Self::Element;
+    #[skip_masked] fn min_element(self) -> Self::Element;
+    #[skip_masked] fn max_element(self) -> Self::Element;
 
-    fn offset() -> Self;
-    fn indexed() -> Self;
+    #[skip_masked] fn sum_elements(self) -> Self::Element;
+    #[skip_masked] fn prod_elements(self) -> Self::Element;
+
+    #[skip_masked] fn offset() -> Self;
+    #[skip_masked] fn indexed() -> Self;
 }
 
 pub trait NumVector:
@@ -440,42 +457,56 @@ pub trait NumVector:
 {
 }
 
-pub trait SignedVector: NumericVector<Element: num_traits::Signed> + Neg<Output = Self> {
+#[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
+pub trait SignedVector: NumericVector<Element: num_traits::Signed> + ops::NegMasked<Self::Mask, Output = Self> {
     const NEG_ONE: Self;
     const MIN_POSITIVE: Self;
 
     fn abs(self) -> Self;
 
-    fn signum(self) -> Self;
+    #[skip_masked] fn signum(self) -> Self;
+
     fn copysign(self, sign: Self) -> Self;
 
-    fn is_positive(self) -> Self::Mask;
-    fn is_negative(self) -> Self::Mask;
+    #[skip_masked] fn is_positive(self) -> Self::Mask;
+    #[skip_masked] fn is_negative(self) -> Self::Mask;
 
     /// Based on if self is negative, select between `if_neg` and `if_pos`.
-    fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
+    #[skip_masked] fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
 }
 
 pub trait NumSignedVector: SignedVector + NumVector + num_traits::Signed {}
 
+#[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
 pub trait IntegerVector:
     NumericVector<Element: Denominator>
     + BitshiftVector
-    + Div<Self::Divider, Output = Self>
-    + Div<Self::BranchfreeDivider, Output = Self>
+    + ops::DivMasked<Self::Mask, Self::Divider, Output = Self>
+    + ops::DivMasked<Self::Mask, Self::BranchfreeDivider, Output = Self>
 {
     type Divider: Copy;
     type BranchfreeDivider: Copy;
     type VectorizedDivider: Copy;
 
+    fn mulhi(self, other: Self) -> Self;
+    fn mullo(self, other: Self) -> Self;
+
     fn wrapping_add(self, other: Self) -> Self;
     fn wrapping_sub(self, other: Self) -> Self;
     fn wrapping_mul(self, other: Self) -> Self;
 
-    fn create_divider(d: Self::Element) -> Self::Divider;
-    fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
+    fn saturating_add(self, other: Self) -> Self;
+    fn saturating_sub(self, other: Self) -> Self;
 
-    fn to_divider(self) -> Self::VectorizedDivider;
+    #[skip_masked] fn wrapping_sum(self) -> Self::Element;
+    #[skip_masked] fn wrapping_prod(self) -> Self::Element;
+
+    #[skip_masked] fn create_divider(d: Self::Element) -> Self::Divider;
+    #[skip_masked] fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
+
+    #[skip_masked] fn to_divider(self) -> Self::VectorizedDivider;
 
     fn rotate_right(self, n: u32) -> Self;
     fn rotate_left(self, n: u32) -> Self;
@@ -488,14 +519,18 @@ pub trait IntegerVector:
     fn leading_zeros(self) -> Self;
 }
 
+#[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
 pub trait SignedIntegerVector: SignedVector + IntegerVector {
     fn srai<const I: i32>(self) -> Self;
     fn sra(self, count: u32) -> Self;
     fn srav(self, counts: Self::USize) -> Self;
 }
 
+#[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
 pub trait UnsignedIntegerVector: IntegerVector {
-    fn is_power_of_two(self) -> Self::Mask;
+    #[skip_masked] fn is_power_of_two(self) -> Self::Mask;
 
     fn next_power_of_two_m1(self) -> Self;
     fn ilog2p1(self) -> Self;
@@ -514,6 +549,8 @@ pub trait NumFloatVector:
 {
 }
 
+#[rustfmt::skip]
+#[thermite_macros::vector_trait] #[conditional]
 pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastVector<Self::ExtendedPrecision> {
     const HALF: Self;
     const NEG_ZERO: Self;
@@ -526,12 +563,12 @@ pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastV
 
     const HAS_TRUE_FMA: bool;
 
-    fn is_infinite(self) -> Self::Mask;
-    fn is_finite(self) -> Self::Mask;
-    fn is_nan(self) -> Self::Mask;
-    fn is_zero_or_subnormal(self) -> Self::Mask;
-    fn is_normal(self) -> Self::Mask;
-    fn is_subnormal(self) -> Self::Mask;
+    #[skip_masked] fn is_infinite(self) -> Self::Mask;
+    #[skip_masked] fn is_finite(self) -> Self::Mask;
+    #[skip_masked] fn is_nan(self) -> Self::Mask;
+    #[skip_masked] fn is_zero_or_subnormal(self) -> Self::Mask;
+    #[skip_masked] fn is_normal(self) -> Self::Mask;
+    #[skip_masked] fn is_subnormal(self) -> Self::Mask;
 
     fn mul_adde(self, a: Self, b: Self) -> Self;
     fn mul_sube(self, a: Self, b: Self) -> Self;
@@ -562,9 +599,11 @@ pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastV
     fn next_up(self) -> Self;
     fn next_down(self) -> Self;
 
+    #[skip_masked]
     unsafe fn block_autovectorization(&mut self);
 }
 
+// These do not have masked variants
 pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
     type Signed: SignedIntegerVector<
             Lanes = Self::Lanes,
@@ -590,4 +629,4 @@ pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Se
 }
 
 // mod scalar;
-mod vector;
+// mod vector;

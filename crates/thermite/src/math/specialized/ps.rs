@@ -180,21 +180,21 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
         let not_big = t.cmp_le(V::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
 
-        let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2) & not_small.value(); // select(not_small, s, 0.0);
+        let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2);
 
         // small:  z = t / 1.0;
         // medium: z = (t-1.0) / (t+1.0);
         // big:    z = -1.0 / t;
 
-        // this trick avoids having to place a zero in any register
-        let a = (not_big.value() & t) + (not_small.value() & V::NEG_ONE);
-        let b = (not_big.value() & V::ONE) + (not_small.value() & t);
+        // lightweight select logic using zeroing and conditional adds
+        let a = V::NEG_ONE.z(not_small).add_c(not_big, t);
+        let b = V::ONE.z(not_big).add_c(not_small, t);
 
         let z = a / b;
         let z2 = z * z;
 
         z2.poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
-            .mul_adde(z2 * z, z + s)
+            .mul_adde(z2 * z, z.add_c(not_small, s)) // z += select(not_small, s, 0.0);
             .mul_sign(x)
     }
 
@@ -257,10 +257,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // medium: z = (t-1.0) / (t+1.0);
         let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0));
 
-        let a = t + (not_small.value() & neg_one);
-        let b = V::ONE + (not_small.value() & t);
+        let a = t + neg_one.z(not_small);
+        let b = V::ONE + t.z(not_small);
 
-        let s = not_small.value() & V::FRAC_PI_4;
+        let s = V::FRAC_PI_4.z(not_small);
 
         let z = a / b;
         let z2 = z * z;
@@ -458,7 +458,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
 
         // reduce range of x = +/- sqrt(2)/2
-        x += blend.value().bitandnot(x); // !blend.value() & x;
+        x.add_assign_c(!blend, x); // conditional assign, only if blend is false
         x -= one;
 
         // Taylor expansion, high precision
@@ -479,7 +479,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         lg1 *= x2 * x;
 
-        let ef = V::cast_from(exponent::<V>(x1)) + (blend.value() & one);
+        let ef = V::cast_from(exponent::<V>(x1)).add_c(blend, one);
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
@@ -814,7 +814,8 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
                 }
             });
 
-            xa &= xa.cmp_le(limit).value(); // set to zero if too large
+            // xa &= xa.cmp_le(limit)
+            xa = xa.z(xa.cmp_le(limit)); // set to zero if too large
         }
 
         xa * V::FRAC_2_PI

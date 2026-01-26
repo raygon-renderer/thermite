@@ -248,7 +248,7 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
 
         const {
             assert!(
-                !<Self::DoubleRegister as Register>::IS_EMULATED,
+                !<Self::DoubleRegister as CoreRegister>::IS_EMULATED,
                 "Wide register matrix multiplication requires true wide registers."
             );
         }

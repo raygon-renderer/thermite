@@ -58,7 +58,8 @@ pub fn divv_epi_bf<R: SignedIntegerRegister>(
     let q_sign = R::sra(q, const { size_of::<R::Element>() as u32 * 8 - 1 });
     // mask = (1 << shift) - is_power_of_two, Element makes this ugly but should compile down fine,
     // and despite Element being signed, shl and wrapping_sub are invariant to sign.
-    let mask = R::sub(R::shlv(R::ONE, shifts), is_power_of_two);
+    // Note that R::from_mask should fill the entire element with 0s or 1s appropriately, to be either 0 or -1.
+    let mask = R::sub(R::shlv(R::ONE, shifts), R::from_mask(is_power_of_two));
 
     q = R::add(q, R::bitand(q_sign, mask)); // q = q + (q_sign & mask)
     q = R::srav(q, shifts); // q >>= shift, arithmetic shift

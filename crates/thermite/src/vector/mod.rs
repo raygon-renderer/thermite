@@ -7,7 +7,7 @@ use crate::{
     mask::Mask,
     math::FloatConsts,
     register::{
-        self, BitsRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
+        self, BitCastRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
         LinAlg4Register, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
         SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
@@ -544,6 +544,24 @@ impl<R: Register> Vector<R> {
         Self(R::reverse(self.0))
     }
 
+    /// Zero out elements of the vector based on the given mask. If the mask lane is true,
+    /// the corresponding element is unchanged; if false, it is set to zero.
+    ///
+    /// Similar to a bitwise AND with the mask.
+    #[inline(always)]
+    pub fn z(self, mask: Mask<R>) -> Self {
+        Self(R::z(mask.0, self.0))
+    }
+
+    /// Non-zero out elements of the vector based on the given mask. If the mask lane is false,
+    /// the corresponding element is unchanged; if true, it is set to zero.
+    ///
+    /// Similar to a bitwise AND with the inverted mask.
+    #[inline(always)]
+    pub fn nz(self, mask: Mask<R>) -> Self {
+        Self(R::nz(mask.0, self.0))
+    }
+
     /// Whether the register type has a simple unpack implementation,
     /// or requires a more complex method.
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
@@ -724,7 +742,7 @@ impl<R: Register> Vector<R> {
     ///
     /// This is a bitwise cast, and therefore may not be safe if the types are not compatible.
     #[inline(always)]
-    pub fn into_bits<INTO: Register + BitsRegister<R>>(self) -> Vector<INTO> {
+    pub fn into_bits<INTO: Register + BitCastRegister<R>>(self) -> Vector<INTO> {
         Vector(INTO::from_bits(self.0))
     }
 
@@ -732,7 +750,7 @@ impl<R: Register> Vector<R> {
     #[inline(always)]
     pub fn from_bits<FROM: Register>(value: Vector<FROM>) -> Vector<R>
     where
-        R: BitsRegister<FROM>,
+        R: BitCastRegister<FROM>,
     {
         Vector(R::from_bits(value.0))
     }
@@ -942,14 +960,14 @@ impl<R: PartialOrdRegister> PartialEq for Vector<R> {
     /// Compare two vectors for equality, returning true only if all elements are equal.
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
-        R::all(R::eq(self.0, other.0))
+        Mask::<R>(R::eq(self.0, other.0)).all()
     }
 
     /// Compare two vectors for inequality, returning true if any element is not equal.
     #[allow(clippy::partialeq_ne_impl)] // sometimes might have better underlying implementation
     #[inline(always)]
     fn ne(&self, other: &Self) -> bool {
-        R::any(R::ne(self.0, other.0))
+        Mask::<R>(R::ne(self.0, other.0)).any()
     }
 }
 
@@ -1047,14 +1065,14 @@ where
     #[inline(always)]
     fn is_negative(&self) -> bool {
         // true if any element is negative
-        R::any(R::is_negative(self.0))
+        Mask::<R>(R::is_negative(self.0)).any()
     }
 
     /// Returns true if all elements in the vector are positive.
     #[inline(always)]
     fn is_positive(&self) -> bool {
         // true if all elements are positive
-        R::all(R::is_positive(self.0))
+        Mask::<R>(R::is_positive(self.0)).all()
     }
 }
 
@@ -1560,7 +1578,7 @@ impl<R: NumericRegister> Zero for Vector<R> {
     /// Returns true if **all** elements in the vector are zero.
     #[inline(always)]
     fn is_zero(&self) -> bool {
-        R::all(R::eq(self.0, R::ZERO))
+        Mask::<R>(R::eq(self.0, R::ZERO)).all()
     }
 
     #[inline(always)]
@@ -1578,7 +1596,7 @@ impl<R: NumericRegister> One for Vector<R> {
     /// Returns true if **all** elements in the vector are one.
     #[inline(always)]
     fn is_one(&self) -> bool {
-        R::all(R::eq(self.0, R::ONE))
+        Mask::<R>(R::eq(self.0, R::ONE)).all()
     }
 
     #[inline(always)]

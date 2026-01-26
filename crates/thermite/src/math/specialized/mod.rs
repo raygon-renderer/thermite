@@ -55,7 +55,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             let is_underflow = exp.cmp_le(Self::Signed::ZERO);
             let input_was_subnormal = biased_exp.cmp_eq(Self::Signed::ZERO);
 
-            result = (is_underflow | input_was_subnormal).value().bitandnot(result);
+            result = result.z(is_underflow | input_was_subnormal); // zero result if underflow or input was subnormal
         }
 
         Self::from_bits(result)
@@ -101,9 +101,10 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         if const { P::POLICY.check_overflow } {
             // if input was zero or subnormal, set fraction to zero and exponent to zero
-            let is_normal = biased_exp.cmp_ne(Self::Signed::ZERO).value();
-            exp &= is_normal;
-            fraction &= Self::Bits::from_bits(is_normal);
+            let is_normal = biased_exp.cmp_ne(Self::Signed::ZERO);
+
+            exp = exp.nz(is_normal); // zero exponent if input was NOT normal
+            fraction = fraction.nz(is_normal.cast_mask()); // zero fraction if input was NOT normal
         }
 
         (Self::from_bits(fraction), exp)
@@ -314,17 +315,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
             let nx = res * x;
 
-            // NOTE: e1 is bitcast to Self when `select` is used, so we use it for the MSB_BLENDV hack
-            // requirements
-            res = if Self::HAS_MSB_BLENDV {
-                // Move the lowest bit to the highest bit position
-                e1 <<= const { core::mem::size_of::<<Self::ISize as GenericVector>::Element>() as u32 * 8 - 1 };
-
-                // Blend the result based on the highest bit of e1
-                <Self::ISize as GenericVector>::Mask::from_unchecked(e1).select(nx, res)
-            } else {
-                e1.cmp_ne(Self::ISize::ZERO).select(nx, res)
-            };
+            res = e1.cmp_ne(Self::ISize::ZERO).select(nx, res);
 
             x *= x;
             e >>= 1;
@@ -742,8 +733,8 @@ pub trait SpecializedRealMath<E>:
 
     #[inline(always)]
     fn step<P: Policy>(self, t: Self) -> Self {
-        // bitwise AND is much faster than blendv
-        self.cmp_ge(t).value() & Self::ONE
+        // use z() masked zeroing to avoid branching or select
+        Self::ONE.z(self.cmp_ge(t))
     }
 
     #[inline(always)]

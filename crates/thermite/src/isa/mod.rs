@@ -157,4 +157,38 @@ impl InstructionSet {
             InstructionSet::Unknown => false,
         }
     }
+
+    pub const fn unroll_factor(self) -> usize {
+        match self {
+            InstructionSet::Scalar => 4,
+
+            // only x86 v3+ has efficient unaligned loads/stores usually
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            InstructionSet::X86V1 | InstructionSet::X86V2 | InstructionSet::X86V3 => 4,
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            InstructionSet::X86V4 => 8, // twice as many registers
+
+            // Neon generally has efficient unaligned loads/stores
+            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            InstructionSet::NEON => 4,
+
+            // WASM is uncertain, so assume not cheap
+            #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+            InstructionSet::WASM32 => 2,
+            #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
+            InstructionSet::WASM64 => 2,
+
+            // unknown ISA
+            InstructionSet::Unknown => 1,
+        }
+    }
+
+    pub const fn has_masked_operations(self) -> bool {
+        match self {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            InstructionSet::X86V4 => true, // AVX-512 has masked ops
+
+            _ => false,
+        }
+    }
 }

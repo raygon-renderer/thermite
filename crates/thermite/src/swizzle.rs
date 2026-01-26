@@ -74,21 +74,6 @@ where
     }
 }
 
-impl<R: Register> Swizzle<R::Lanes> for Mask<R>
-where
-    R: SwizzleRegister,
-{
-    #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self {
-        Mask(R::swizzle(self.0, other.0, indices))
-    }
-
-    #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self {
-        Mask(R::permutev(self.0, indices))
-    }
-}
-
 /// Swizzle lanes one or two vectors according to the given indices.
 ///
 /// If compiling with optimizations enabled, this macro will usually generate

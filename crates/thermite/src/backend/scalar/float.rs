@@ -6,9 +6,9 @@ use generic_array::{
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitsRegister, BitshiftRegister, CoreRegister, Element, FloatElement, FloatRegister, LinAlg3Register,
-    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-    SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
+    LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+    SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -16,50 +16,29 @@ macro_rules! decl_float_scalar { ($f:ty $(: $s:ident)? => $width:literal) => {pa
 
 impl CoreRegister for [<f $width>] {
     type Lanes = typenum::U1;
-    type Element = [<f $width>];
     type Storage = [<f $width>];
-}
-
-impl Register for [<f $width>] {
-    type HalfRegister = Self;
-    type DoubleRegister = DoublePumpRegister<Self>;
+    type Mask = Self;
 
     const IS_EMULATED: bool = false;
 
     const ISA: InstructionSet = InstructionSet::Scalar;
 
-    type ISize = [<i $width>];
-    type USize = [<u $width>];
-
     const EMPTY: Storage<Self> = 0.0;
 
-    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
-    #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { value }
-    #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
-    #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
-    #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
-
-    const TRUTHY: Storage<Self> = Element::TRUTHY;
-    const FALSY: Storage<Self> = Element::FALSY;
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        if value[0] { <Self as Register>::TRUTHY } else { <Self as Register>::FALSY }
+    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        core::hint::select_unpredictable(mask.to_bits() != 0, rhs, lhs)
     }
 
-    #[inline(always)] fn all(value: Storage<Self>) -> bool { value.to_bool() }
-    #[inline(always)] fn any(value: Storage<Self>) -> bool { value.to_bool() }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some(value.to_bool() as u64)
+    #[inline(always)] fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        core::hint::select_unpredictable(mask.to_bits() != 0, value, 0.0)
     }
 
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        view.set(0, value.to_bool());
+    #[inline(always)] fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        core::hint::select_unpredictable(mask.to_bits() == 0, value, 0.0)
     }
+}
 
+impl BitwiseRegister for [<f $width>] {
     #[inline(always)] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() ^ rhs.to_bits())
     }
@@ -75,19 +54,68 @@ impl Register for [<f $width>] {
     #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(!value.to_bits())
     }
+}
 
-    // use msb + cmov/csel on x86/x86_64/ARM/AArch64
-    const HAS_MSB_BLENDV: bool = cfg!(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"));
+impl MaskRegister for [<f $width>] {
+    const TRUTHY: Storage<Self> = Element::TRUTHY;
+    const FALSY: Storage<Self> = Element::FALSY;
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
-    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        core::hint::select_unpredictable((mask.to_bits() >> 31) != 0, rhs, lhs)
+    #[inline(always)]
+    fn set(mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+        if value { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        if mask != 0.0 { rhs } else { lhs }
+    #[inline(always)]
+    fn test(mask: Storage<Self>, lane: usize) -> bool { mask.to_bool() }
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
+
+    #[inline(always)] fn all(value: Storage<Self>) -> bool { value.to_bool() }
+    #[inline(always)] fn any(value: Storage<Self>) -> bool { value.to_bool() }
+
+    #[inline(always)]
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+        Some(value.to_bool() as u64)
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+        view.set(0, value.to_bool());
+    }
+}
+
+impl Register for [<f $width>] {
+    type HalfRegister = Self;
+    type DoubleRegister = DoublePumpRegister<Self>;
+
+    type Element = [<f $width>];
+
+    type ISize = [<i $width>];
+    type USize = [<u $width>];
+
+    const HAS_EQUAL_SIZE_MASK: bool = true;
+
+    #[inline(always)] fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> { value }
+    #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { mask }
+
+    #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self> {
+        if value.to_bool() { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
+    }
+
+    #[inline(always)] fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        // scalars don't use MSB for mask conversion, but we can use NEG_ZERO to extract the sign bit
+        // and convert to a mask
+        Self::into_mask(Self::bitand(value, Self::NEG_ZERO))
+    }
+
+    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
+    #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
+    #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
+    #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
 
     const HAS_SIMPLE_UNPACK: bool = true;
 

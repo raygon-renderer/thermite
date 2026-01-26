@@ -71,7 +71,7 @@ pub use self::aliases::*;
 
 macro_rules! impl_easy_casts {
     ($($from:ty as $to:ty),*) => {$(
-        impl $crate::register::BitsRegister<$from> for $to {
+        impl $crate::register::BitCastRegister<$from> for $to {
             #[inline(always)]
             fn from_bits(value: Storage<$from>) -> Storage<Self> {
                 unsafe { core::mem::transmute(value) }

@@ -1,7 +1,7 @@
 macro_rules! impl_bit_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(
-            impl $crate::register::BitsRegister<$from> for $to {
+            impl $crate::register::BitCastRegister<$from> for $to {
                 #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }

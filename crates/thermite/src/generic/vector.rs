@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::register::{
-    BitsRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
+    BitCastRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
     IntegerRegister, Lanes, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister,
     Storage, SwizzleRegister, UnsignedIntegerRegister,
 };
@@ -25,7 +25,7 @@ where
 impl<FROM, INTO> BitsVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register,
-    INTO: Register + BitsRegister<FROM>,
+    INTO: Register + BitCastRegister<FROM>,
 {
     #[inline(always)]
     fn from_bits(bits: Vector<FROM>) -> Self {
@@ -36,7 +36,7 @@ where
 impl<FROM, INTO> CastMask<Mask<FROM>> for Mask<INTO>
 where
     FROM: Register,
-    INTO: Register + CastMaskRegister<FROM>,
+    INTO: Register<Mask: CastMaskRegister<FROM::Mask>>,
 {
     #[inline(always)]
     fn mask_from(from: Mask<FROM>) -> Self {
@@ -59,29 +59,9 @@ where
     }
 }
 
-impl<R> GenericSelectable for Mask<R>
-where
-    R: Register,
-{
-    type SelectableMask = Mask<R>;
-
-    #[inline(always)]
-    fn select<M>(mask: M, t: Self, f: Self) -> Self
-    where
-        Mask<R>: CastMask<M>,
-    {
-        Mask::mask_from(mask).select(t, f)
-    }
-}
-
 impl<R: Register> GenericMask<Vector<R>> for Mask<R> {
     const FALSY: Self = Mask::<R>::FALSY;
     const TRUTHY: Self = Mask::<R>::TRUTHY;
-
-    #[inline(always)]
-    fn from_unchecked(vector: Vector<R>) -> Self {
-        Mask::<R>::from_unchecked(vector)
-    }
 
     #[inline(always)]
     fn all(self) -> bool {
@@ -99,11 +79,6 @@ impl<R: Register> GenericMask<Vector<R>> for Mask<R> {
     }
 
     #[inline(always)]
-    fn value(self) -> Vector<R> {
-        self.value()
-    }
-
-    #[inline(always)]
     fn native_bitmask(&self) -> Option<u64> {
         self.native_bitmask()
     }
@@ -115,6 +90,7 @@ impl<R: Register> GenericVector for Vector<R> {
 
     const EMPTY: Self = Vector::<R>::EMPTY;
     const LANES: usize = Vector::<R>::LANES;
+    const ISA: InstructionSet = R::ISA;
 
     type Lanes = R::Lanes;
 
@@ -143,6 +119,14 @@ impl<R: Register> GenericVector for Vector<R> {
         Vector::<R>::ternlog::<IMM>(a, b, c)
     }
 
+    #[inline(always)] fn z(self, mask: Self::Mask) -> Self {
+        Vector::<R>::z(self, mask)
+    }
+
+    #[inline(always)] fn nz(self, mask: Self::Mask) -> Self {
+        Vector::<R>::nz(self, mask)
+    }
+
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
     #[inline(always)] fn unpack(self, other: Self) -> (Self, Self) { Vector::<R>::unpack(self, other) }
@@ -167,8 +151,6 @@ impl<R: Register> GenericVector for Vector<R> {
     #[inline(always)] unsafe fn store(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store(self, ptr) } }
     #[inline(always)] unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_unaligned(self, ptr) } }
     #[inline(always)] unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_streaming(self, ptr) } }
-
-    const HAS_MSB_BLENDV: bool = R::HAS_MSB_BLENDV;
 }
 
 #[rustfmt::skip]

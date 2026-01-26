@@ -3,9 +3,9 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, CastRegister, CoreRegister, FloatRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister,
-        empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, FloatRegister, MaskRegister,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -17,22 +17,142 @@ pub struct F32x8V3;
 
 impl CoreRegister for F32x8V3 {
     type Lanes = generic_array::typenum::U8;
-    type Element = f32;
     type Storage = arch::__m256;
+    type Mask = Self;
+
+    const IS_EMULATED: bool = false;
+
+    const ISA: InstructionSet = InstructionSet::X86V3;
+
+    const EMPTY: Storage<Self> = empty_reg::<Self>();
+
+    #[inline(always)]
+    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_blendv_ps(lhs, rhs, mask) }
+    }
+
+    #[inline(always)]
+    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_and_ps(value, mask) }
+    }
+
+    #[inline(always)]
+    fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_andnot_ps(mask, value) }
+    }
+}
+
+impl MaskRegister for F32x8V3 {
+    const FALSY: Storage<Self> = reg::<Self, 8>([f32::from_bits(0); 8]);
+    const TRUTHY: Storage<Self> = reg::<Self, 8>([f32::from_bits(!0); 8]);
+
+    #[inline(always)]
+    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+        Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
+        mask
+    }
+
+    #[inline(always)]
+    fn test(mask: Storage<Self>, lane: usize) -> bool {
+        Self::as_array(&mask)[lane].to_bool()
+    }
+
+    #[inline(always)]
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm256_castsi256_ps(arch::_mm256_cvtboolx8_to_epi32_mask_v3(value)) }
+    }
+
+    #[inline(always)]
+    fn all(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_ps(value) == 0xff }
+    }
+
+    #[inline(always)]
+    fn any(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_ps(value) != 0 }
+    }
+
+    #[inline(always)]
+    fn none(value: Storage<Self>) -> bool {
+        unsafe { arch::_mm256_movemask_ps(value) == 0 }
+    }
+
+    #[inline(always)]
+    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+        Some(unsafe { arch::_mm256_movemask_ps(value) as u64 })
+    }
+
+    #[inline(always)]
+    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+        let mask = unsafe { arch::_mm256_movemask_ps(value) as u32 };
+        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
+        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
+    }
+}
+
+impl BitwiseRegister for F32x8V3 {
+    #[inline(always)]
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_xor_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_and_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_andnot_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_or_ps(lhs, rhs) }
+    }
+
+    #[inline(always)]
+    fn not(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_xor_ps(value, arch::_mm256_set1_ps(f32::from_bits(!0))) }
+    }
 }
 
 impl Register for F32x8V3 {
     type HalfRegister = super::f32x4::F32x4V3;
     type DoubleRegister = DoublePumpRegister<Self>;
 
-    const IS_EMULATED: bool = false;
-
-    const ISA: InstructionSet = InstructionSet::X86V3;
+    type Element = f32;
 
     type USize = super::U32x8V3;
     type ISize = super::I32x8V3;
 
-    const EMPTY: Storage<Self> = empty_reg::<Self>();
+    const HAS_EQUAL_SIZE_MASK: bool = true;
+
+    #[inline(always)]
+    fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        unsafe {
+            // value != 0.0
+            arch::_mm256_castsi256_ps(arch::_mm256_xor_si256(
+                arch::_mm256_set1_epi8(-1),
+                arch::_mm256_cmpeq_epi32(arch::_mm256_castps_si256(value), arch::_mm256_setzero_si256()),
+            ))
+        }
+    }
+
+    #[inline(always)]
+    fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
+        value
+    }
+
+    #[inline(always)]
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+        mask
+    }
+
+    #[inline(always)]
+    fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        value // floats support msb masks directly
+    }
 
     #[inline(always)]
     fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
@@ -96,73 +216,6 @@ impl Register for F32x8V3 {
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm256_stream_ps(ptr, value) }
     }
-
-    const FALSY: Storage<Self> = reg::<Self, 8>([f32::from_bits(0); 8]);
-    const TRUTHY: Storage<Self> = reg::<Self, 8>([f32::from_bits(!0); 8]);
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm256_castsi256_ps(arch::_mm256_cvtboolx8_to_epi32_mask_v3(value)) }
-    }
-
-    #[inline(always)]
-    fn all(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_ps(value) == 0xff }
-    }
-
-    #[inline(always)]
-    fn any(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_ps(value) != 0 }
-    }
-
-    #[inline(always)]
-    fn none(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm256_movemask_ps(value) == 0 }
-    }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some(unsafe { arch::_mm256_movemask_ps(value) as u64 })
-    }
-
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        let mask = unsafe { arch::_mm256_movemask_ps(value) as u32 };
-        let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
-        view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
-    }
-
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_xor_ps(lhs, rhs) }
-    }
-
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_and_ps(lhs, rhs) }
-    }
-
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_andnot_ps(lhs, rhs) }
-    }
-
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_or_ps(lhs, rhs) }
-    }
-
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_xor_ps(value, arch::_mm256_set1_ps(f32::from_bits(!0))) }
-    }
-
-    #[inline(always)]
-    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_blendv_ps(lhs, rhs, mask) }
-    }
-
-    const HAS_MSB_BLENDV: bool = true;
 
     #[inline(always)]
     fn reverse(value: Storage<Self>) -> Storage<Self> {

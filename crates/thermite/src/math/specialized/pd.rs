@@ -377,7 +377,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         let blend = x.cmp_gt(V::splat(SQRT_2 / 2.0));
 
-        x += blend.value().bitandnot(x); // !blend.value() & x
+        x.add_assign_c(!blend, x); // conditional assign, only if blend is false
         x -= V::ONE;
 
         let x2 = x * x;
@@ -404,7 +404,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             ],
         );
 
-        let ef = exponent_f(x1) + (blend.value() & V::ONE);
+        let ef = exponent_f(x1).add_c(blend, V::ONE); // conditional add, only if blend is true
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
@@ -755,12 +755,12 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     let not_big = t.cmp_le(t3po8);
     let not_small = t.cmp_ge(V::splat(0.66));
 
-    let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2) & not_small.value();
+    let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2);
+    let fac = not_big.select(morebitso2, morebits);
 
-    let fac = not_big.select(morebitso2, morebits) & not_small.value();
-
-    let a = (not_big.value() & t) + (not_small.value() & V::NEG_ONE);
-    let b = (not_big.value() & V::ONE) + (not_small.value() & t);
+    // lightweight select logic using zeroing and conditional adds
+    let a = V::NEG_ONE.z(not_small).add_c(not_big, t);
+    let b = V::ONE.z(not_big).add_c(not_small, t);
 
     let z = a / b;
 
@@ -782,7 +782,8 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     ]);
 
     // place additions before mul_add to lessen dependency chain
-    let mut re = re0.mul_adde(z * zz, z + s + fac);
+    // also use conditional adds to avoid branching
+    let mut re = re0.mul_adde(z * zz, z.add_c(not_small, s).add_c(not_small, fac));
 
     if ATAN2 {
         re = swapxy.select(V::FRAC_PI_2 - re, re);
@@ -986,7 +987,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
                 }
             });
 
-            xa &= xa.cmp_le(limit).value(); // set to zero if too large
+            xa = xa.z(xa.cmp_le(limit)); // set to zero if too large
         }
 
         xa * V::FRAC_2_PI
