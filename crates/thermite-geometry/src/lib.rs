@@ -3,6 +3,9 @@
 //! Each dimension of a geometric type is stored in a separate vector,
 //! allowing for efficient SIMD operations on multiple instances of the type,
 //! and potentially batch processing of geometric computations.
+//!
+//! Nothing is guaranteed to work when any dimension is zero, and you may
+//! even get compilation errors in that case.
 
 #![no_std]
 

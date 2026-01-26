@@ -6,6 +6,7 @@ use thermite::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(transparent)]
 pub struct Vector<V: FloatVector, const N: usize>(pub [V; N]);
 
 impl<V: FloatVector, const N: usize> Vector<V, N> {
@@ -177,14 +178,27 @@ impl<T, V: SpatialMathWithPolicy> VectorOps<V> for T where T: VectorOpsWithPolic
 impl<V: SpatialMathWithPolicy, const N: usize> VectorOpsWithPolicy<V> for Vector<V, N> {
     #[inline(always)]
     fn dot_p<P: Policy>(&self, other: &Self) -> V {
+        if N <= 3 {
+            let mut result = self[0] * other[0];
+
+            // Loop with FMA for small-dimensioned vectors for better performance/accuracy
+            for i in 1..N {
+                result = self[i].mul_adde(other[i], result);
+            }
+
+            return result;
+        }
+
         let mut tmp = self.0;
 
+        // parallel element-wise multiplication
         for (t, o) in tmp.iter_mut().zip(&other.0) {
             *t *= *o;
 
             unsafe { t.block_autovectorization() };
         }
 
+        // Log2(N) reduction
         thermite::math::algorithms::reduce_in_place(&mut tmp, |a, b| a + b);
 
         tmp[0]

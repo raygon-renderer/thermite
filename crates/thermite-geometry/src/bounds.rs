@@ -6,6 +6,7 @@ use crate::{Point, Vector};
 
 /// Axis-aligned bounds in N dimensions, where each dimension has a [min, max] coordinate pair.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(transparent)]
 pub struct Bounds<V: FloatVector, const N: usize>(pub [[V; 2]; N]);
 
 impl<V: FloatVector, const N: usize> Bounds<V, N> {

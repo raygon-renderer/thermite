@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, Sub};
+use core::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
 use thermite::generic::FloatVector;
 
@@ -6,16 +6,17 @@ use crate::Vector;
 
 /// Column-major matrix with C columns and R rows
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Matrix<V: FloatVector, const C: usize, const R: usize>(pub [[V; C]; R]);
+#[repr(transparent)]
+pub struct Matrix<V: FloatVector, const C: usize, const R: usize>(pub [[V; R]; C]);
 
 impl<V: FloatVector, const C: usize, const R: usize> Matrix<V, C, R> {
     #[inline(always)]
     pub const fn splat(value: V) -> Self {
-        Self([[value; C]; R])
+        Self([[value; R]; C])
     }
 
     #[inline(always)]
-    pub const fn new(elements: [[V; C]; R]) -> Self {
+    pub const fn new(elements: [[V; R]; C]) -> Self {
         Self(elements)
     }
 
@@ -35,6 +36,28 @@ impl<V: FloatVector, const C: usize, const R: usize> Matrix<V, C, R> {
         unsafe { core::hint::assert_unchecked(res.len() == (C * R)) };
 
         res
+    }
+}
+
+impl<V: FloatVector, I, const C: usize, const R: usize> Index<I> for Matrix<V, C, R>
+where
+    [[V; R]; C]: Index<I>,
+{
+    type Output = <[[V; R]; C] as Index<I>>::Output;
+
+    #[inline(always)]
+    fn index(&self, index: I) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl<V: FloatVector, I, const C: usize, const R: usize> IndexMut<I> for Matrix<V, C, R>
+where
+    [[V; R]; C]: IndexMut<I>,
+{
+    #[inline(always)]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }
 
@@ -97,17 +120,45 @@ impl<V: FloatVector, const C: usize, const R: usize> Matrix<V, C, R> {
     pub const fn transpose(&self) -> Matrix<V, R, C> {
         let mut result = Matrix::<V, R, C>::splat(V::ZERO);
 
-        let mut r = 0;
+        let mut c = 0;
 
-        while r < R {
-            let mut c = 0;
+        while c < C {
+            let mut r = 0;
 
-            while c < C {
-                result.0[c][r] = self.0[r][c];
-                c += 1;
+            while r < R {
+                result.0[r][c] = self.0[c][r];
+                r += 1;
             }
 
-            r += 1;
+            c += 1;
+        }
+
+        result
+    }
+}
+
+impl<V: FloatVector, const C: usize, const R: usize, const K: usize> Mul<Matrix<V, K, C>> for Matrix<V, C, R> {
+    type Output = Matrix<V, K, R>;
+
+    #[inline(always)]
+    fn mul(self, rhs: Matrix<V, K, C>) -> Self::Output {
+        let mut result = Matrix::<V, K, R>::splat(V::ZERO);
+
+        for c in 0..K {
+            let col_rhs = &rhs[c];
+
+            for r in 0..R {
+                let mut sum = self[0][r] * col_rhs[0];
+
+                for i in 1..C {
+                    sum = sum.mul_adde(self[i][r], col_rhs[i]);
+                }
+
+                result[c][r] = sum;
+            }
+
+            // Carefully tuned to avoid weird shuffles
+            unsafe { result[c][0].block_autovectorization() };
         }
 
         result
@@ -121,27 +172,47 @@ impl<V: FloatVector, const C: usize, const R: usize> Mul<Vector<V, C>> for Matri
     fn mul(self, rhs: Vector<V, C>) -> Self::Output {
         let mut result = Vector::<V, R>::splat(V::ZERO);
 
+        let scalar_0 = rhs[0];
+        let col_0 = &self[0];
+
         for r in 0..R {
-            let mut prod = rhs.0;
+            result[r] = col_0[r] * scalar_0;
+        }
 
-            // multiply, each component is independent so excellent ILP
-            for (p, c) in prod.iter_mut().zip(&self.0[r]) {
-                *p *= *c;
+        for c in 1..C {
+            let scalar = rhs[c];
+            let col = &self[c];
 
-                // For Scalars, LLVM will attempt to merge these loops unless we
-                // block autovectorization, and in this case the autovectorization
-                // is shit. Weird blends abound. It's better for everything if
-                // we just don't allow it.
-                //
-                // SAFETY: We want to prevent autovectorization here to improve ILP,
-                // and this generally has no effect if V is not Scalar.
-                unsafe { p.block_autovectorization() };
+            for r in 0..R {
+                result[r] = scalar.mul_adde(col[r], result[r]);
             }
+        }
 
-            // reduce sum using log2(C) depth tree, good ILP
-            thermite::math::algorithms::reduce_in_place(&mut prod, Add::add);
+        result
+    }
+}
 
-            result.0[r] = prod[0];
+// treat this as if it's a vec4 with w=0
+impl<V: FloatVector, const R: usize> Mul<Vector<V, 3>> for Matrix<V, 4, R> {
+    type Output = Vector<V, 3>;
+
+    fn mul(self, rhs: Vector<V, 3>) -> Self::Output {
+        let mut result = Vector::<V, 3>::splat(V::ZERO);
+
+        let scalar_0 = rhs[0];
+        let col_0 = &self[0];
+
+        for r in 0..3 {
+            result[r] = col_0[r] * scalar_0;
+        }
+
+        for c in 1..3 {
+            let scalar = rhs[c];
+            let col = &self[c];
+
+            for r in 0..3 {
+                result[r] = scalar.mul_adde(col[r], result[r]);
+            }
         }
 
         result

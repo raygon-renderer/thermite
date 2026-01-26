@@ -5,6 +5,7 @@ use thermite::generic::FloatVector;
 use crate::Vector;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(transparent)]
 pub struct Point<V: FloatVector, const N: usize>(pub [V; N]);
 
 impl<V: FloatVector, const N: usize> Point<V, N> {
