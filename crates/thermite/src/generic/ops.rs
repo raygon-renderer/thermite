@@ -19,27 +19,27 @@ macro_rules! decl_binary_ops {
         {}
 
         $(
-            #[doc = "Masked variants of the [`" $trait_name "`](core::ops::" $trait_name ") trait."]
-            pub trait [<$trait_name Masked>]<Mask, Rhs = Self>: core::ops::$trait_name<Rhs> {
-                #[doc = "Computes [`" $trait_name "`](core::ops::" $trait_name ") with `rhs` where `mask` is true."]
+            #[doc = "Masked variants of the [`" $trait_name "`] trait."]
+            pub trait [<$trait_name Masked>]<Mask, Rhs = Self>: $trait_name<Rhs> {
+                #[doc = "Computes [`" $trait_name "`] with `rhs` where `mask` is true."]
                 fn [<$method_name _c>](self, mask: Mask, rhs: Rhs) -> Self::Output;
 
-                #[doc = "Merges [`" $trait_name "`](core::ops::" $trait_name ") with `src` using `mask`, returning `src` where mask is false."]
+                #[doc = "Merges [`" $trait_name "`] with `src` using `mask`, returning `src` where mask is false."]
                 fn [<$method_name _m>](self, src: Self, mask: Mask, rhs: Rhs) -> Self::Output;
 
-                #[doc = "Computes [`" $trait_name "`](core::ops::" $trait_name ") masked (zeroed where mask is false)."]
+                #[doc = "Computes [`" $trait_name "`] masked (zeroed where mask is false)."]
                 fn [<$method_name _z>](self, mask: Mask, rhs: Rhs) -> Self::Output;
             }
 
-            #[doc = "Masked assignment variants of the [`" $trait_name "`](core::ops::" $trait_name "Assign) trait."]
-            pub trait [<$trait_name AssignMasked>]<Mask, Rhs = Self>: core::ops::[<$trait_name Assign>]<Rhs> {
-                #[doc = "Computes [`" $trait_name "Assign`](core::ops::" $trait_name "Assign) with `rhs` where `mask` is true."]
+            #[doc = "Masked assignment variants of the [`" $trait_name "`] trait."]
+            pub trait [<$trait_name AssignMasked>]<Mask, Rhs = Self>: [<$trait_name Assign>]<Rhs> {
+                #[doc = "Computes [`" $trait_name "Assign`] with `rhs` where `mask` is true."]
                 fn [<$method_name _assign_c>](&mut self, mask: Mask, rhs: Rhs);
 
-                #[doc = "Merges [`" $trait_name "Assign`](core::ops::" $trait_name "Assign) with `src` using `mask`, assigning `src` where mask is false."]
+                #[doc = "Merges [`" $trait_name "Assign`] with `src` using `mask`, assigning `src` where mask is false."]
                 fn [<$method_name _assign_m>](&mut self, src: Self, mask: Mask, rhs: Rhs);
 
-                #[doc = "Computes [`" $trait_name "Assign`](core::ops::" $trait_name "Assign) masked (zeroed where mask is false)."]
+                #[doc = "Computes [`" $trait_name "Assign`] masked (zeroed where mask is false)."]
                 fn [<$method_name _assign_z>](&mut self, mask: Mask, rhs: Rhs);
             }
         )*
@@ -48,17 +48,86 @@ macro_rules! decl_binary_ops {
 
 macro_rules! decl_unary_ops {
     ($($trait_name:ident::$method_name:ident),*) => {paste::paste! {$(
-        #[doc = "Masked variants of the [`" $trait_name "`](core::ops::" $trait_name ") trait."]
-        pub trait [<$trait_name Masked>]<Mask>: core::ops::$trait_name {
-            #[doc = "Computes [`" $trait_name "`](core::ops::" $trait_name ") where `mask` is true, does nothing where false."]
+        #[doc = "Masked variants of the [`" $trait_name "`] trait."]
+        pub trait [<$trait_name Masked>]<Mask>: $trait_name {
+            #[doc = "Computes [`" $trait_name "`] where `mask` is true, does nothing where false."]
             fn [<$method_name _c>](self, mask: Mask) -> Self::Output;
-            #[doc = "Merges [`" $trait_name "`](core::ops::" $trait_name ") with `src` using `mask`, returning `src` where mask is false."]
+            #[doc = "Merges [`" $trait_name "`] with `src` using `mask`, returning `src` where mask is false."]
             fn [<$method_name _m>](self, src: Self, mask: Mask) -> Self::Output;
-            #[doc = "Computes [`" $trait_name "`](core::ops::" $trait_name ") masked (zeroed where mask is false)."]
+            #[doc = "Computes [`" $trait_name "`] masked (zeroed where mask is false)."]
             fn [<$method_name _z>](self, mask: Mask) -> Self::Output;
         }
     )*}};
 }
+
+macro_rules! impl_binary_op {
+    ($trait_name:ident::$method_name:ident for $reg:ident, $rhs:ty) => {
+        paste::paste! {
+            impl<R: $reg + Register> $trait_name<$rhs> for Vector<R> {
+                type Output = Self;
+
+                #[inline(always)]
+                fn $method_name(self, rhs: $rhs) -> Self::Output {
+                    Vector(R::$method_name(self.0, rhs.0))
+                }
+            }
+
+            impl<R: $reg + Register> [<$trait_name Masked>]<Mask<R>, $rhs> for Vector<R> {
+                #[inline(always)]
+                fn [<$method_name _c>](self, mask: Mask<R>, rhs: $rhs) -> Self::Output {
+                    Vector(R::[<$method_name _c>](mask.0, self.0, rhs.0))
+                }
+
+                #[inline(always)]
+                fn [<$method_name _m>](self, src: Self, mask: Mask<R>, rhs: $rhs) -> Self::Output {
+                    Vector(R::[<$method_name _m>](src.0, mask.0, self.0, rhs.0))
+                }
+
+                #[inline(always)]
+                fn [<$method_name _z>](self, mask: Mask<R>, rhs: $rhs) -> Self::Output {
+                    Vector(R::[<$method_name _z>](mask.0, self.0, rhs.0))
+                }
+            }
+
+            impl<R: $reg + Register> [<$trait_name Assign>]<$rhs> for Vector<R> {
+                #[inline(always)]
+                fn [<$method_name _assign>](&mut self, rhs: $rhs) {
+                    self.0 = R::$method_name(self.0, rhs.0);
+                }
+            }
+
+            impl<R: $reg + Register> [<$trait_name AssignMasked>]<Mask<R>, $rhs> for Vector<R> {
+                #[inline(always)]
+                fn [<$method_name _assign_c>](&mut self, mask: Mask<R>, rhs: $rhs) {
+                    self.0 = R::[<$method_name _c>](mask.0, self.0, rhs.0);
+                }
+
+                #[inline(always)]
+                fn [<$method_name _assign_m>](&mut self, src: Self, mask: Mask<R>, rhs: $rhs) {
+                    self.0 = R::[<$method_name _m>](src.0, mask.0, self.0, rhs.0);
+                }
+
+                #[inline(always)]
+                fn [<$method_name _assign_z>](&mut self, mask: Mask<R>, rhs: $rhs) {
+                    self.0 = R::[<$method_name _z>](mask.0, self.0, rhs.0);
+                }
+            }
+        }
+    };
+}
+
+use core::ops::{
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Mul, MulAssign,
+    Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+};
+
+use num_traits::{MulAdd, MulAddAssign, SaturatingAdd, SaturatingSub};
+
+use crate::{
+    Mask, Vector,
+    generic::GenericVector,
+    register::{BitshiftRegister, BitwiseRegister, FloatRegister, NumericRegister, Register, SignedRegister},
+};
 
 decl_binary_ops!(Num;
     Add::add,
@@ -68,11 +137,35 @@ decl_binary_ops!(Num;
     Rem::rem
 );
 
-decl_binary_ops!(Bitwise: NotMasked;
+impl_binary_op!(Add::add for NumericRegister, Self);
+impl_binary_op!(Sub::sub for NumericRegister, Self);
+impl_binary_op!(Mul::mul for NumericRegister, Self);
+impl_binary_op!(Div::div for NumericRegister, Self);
+impl_binary_op!(Rem::rem for NumericRegister, Self);
+
+/// Trait for the bitwise AND NOT operation: `self & !rhs`
+pub trait BitAndNot<Rhs> {
+    type Output;
+
+    #[must_use]
+    fn bitandnot(self, rhs: Rhs) -> Self::Output;
+}
+
+/// Trait for the bitwise AND NOT assignment operation: `self &= !rhs`
+pub trait BitAndNotAssign<Rhs> {
+    fn bitandnot_assign(&mut self, rhs: Rhs);
+}
+
+decl_binary_ops!(Bitwise;
     BitAnd::bitand,
+    BitAndNot::bitandnot,
     BitOr::bitor,
     BitXor::bitxor
 );
+
+impl_binary_op!(BitAnd::bitand for BitwiseRegister, Self);
+impl_binary_op!(BitOr::bitor for BitwiseRegister, Self);
+impl_binary_op!(BitXor::bitxor for BitwiseRegister, Self);
 
 decl_binary_ops!(Bitshift;
     Shl::shl,
@@ -80,3 +173,349 @@ decl_binary_ops!(Bitshift;
 );
 
 decl_unary_ops!(Not::not, Neg::neg);
+
+impl<R: BitwiseRegister + Register> Not for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn not(self) -> Self::Output {
+        Vector(R::not(self.0))
+    }
+}
+
+impl<R: BitwiseRegister + Register> NotMasked<Mask<R>> for Vector<R> {
+    #[inline(always)]
+    fn not_c(self, mask: Mask<R>) -> Self::Output {
+        Vector(R::not_c(mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn not_m(self, src: Self, mask: Mask<R>) -> Self::Output {
+        Vector(R::not_m(src.0, mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn not_z(self, mask: Mask<R>) -> Self::Output {
+        Vector(R::not_z(mask.0, self.0))
+    }
+}
+
+impl<R: SignedRegister> Neg for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn neg(self) -> Self::Output {
+        Vector(R::neg(self.0))
+    }
+}
+
+impl<R: SignedRegister> NegMasked<Mask<R>> for Vector<R> {
+    #[inline(always)]
+    fn neg_c(self, mask: Mask<R>) -> Self::Output {
+        Vector(R::neg_c(mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn neg_m(self, src: Self, mask: Mask<R>) -> Self::Output {
+        Vector(R::neg_m(src.0, mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn neg_z(self, mask: Mask<R>) -> Self::Output {
+        Vector(R::neg_z(mask.0, self.0))
+    }
+}
+
+// NOTE: BitAndNot is unique in that the BitwiseRegister trait expects !lhs & rhs,
+// but since we want lhs & !rhs, the order of parameters is reversed here.
+impl<R: BitwiseRegister + Register> BitAndNot<Self> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn bitandnot(self, rhs: Self) -> Self::Output {
+        Vector(R::bitandnot(self.0, rhs.0))
+    }
+}
+
+impl<R: BitwiseRegister + Register> BitAndNotMasked<Mask<R>, Self> for Vector<R> {
+    #[inline(always)]
+    fn bitandnot_c(self, mask: Mask<R>, rhs: Self) -> Self::Output {
+        Vector(R::bitandnot_c(mask.0, rhs.0, self.0))
+    }
+
+    #[inline(always)]
+    fn bitandnot_m(self, src: Self, mask: Mask<R>, rhs: Self) -> Self::Output {
+        Vector(R::bitandnot_m(src.0, mask.0, rhs.0, self.0))
+    }
+
+    #[inline(always)]
+    fn bitandnot_z(self, mask: Mask<R>, rhs: Self) -> Self::Output {
+        Vector(R::bitandnot_z(mask.0, rhs.0, self.0))
+    }
+}
+
+impl<R: BitwiseRegister + Register> BitAndNotAssign<Self> for Vector<R> {
+    #[inline(always)]
+    fn bitandnot_assign(&mut self, rhs: Self) {
+        self.0 = R::bitandnot(rhs.0, self.0);
+    }
+}
+
+impl<R: BitwiseRegister + Register> BitAndNotAssignMasked<Mask<R>, Self> for Vector<R> {
+    #[inline(always)]
+    fn bitandnot_assign_c(&mut self, mask: Mask<R>, rhs: Self) {
+        self.0 = R::bitandnot_c(mask.0, rhs.0, self.0);
+    }
+
+    #[inline(always)]
+    fn bitandnot_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Self) {
+        self.0 = R::bitandnot_m(src.0, mask.0, rhs.0, self.0);
+    }
+
+    #[inline(always)]
+    fn bitandnot_assign_z(&mut self, mask: Mask<R>, rhs: Self) {
+        self.0 = R::bitandnot_z(mask.0, rhs.0, self.0);
+    }
+}
+
+pub trait MulAddMasked<Mask, A = Self, B = Self>: MulAdd<A, B> {
+    fn mul_add_c(self, mask: Mask, a: A, b: B) -> Self::Output;
+    fn mul_add_m(self, src: Self, mask: Mask, a: A, b: B) -> Self::Output;
+    fn mul_add_z(self, mask: Mask, a: A, b: B) -> Self::Output;
+}
+
+pub trait MulAddAssignMasked<Mask, A = Self, B = Self>: MulAddAssign<A, B> {
+    fn mul_add_assign_c(&mut self, mask: Mask, a: A, b: B);
+    fn mul_add_assign_m(&mut self, src: Self, mask: Mask, a: A, b: B);
+    fn mul_add_assign_z(&mut self, mask: Mask, a: A, b: B);
+}
+
+impl<R: FloatRegister> MulAdd<Self, Self> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul_add(self, a: Self, b: Self) -> Self::Output {
+        Vector(R::mul_add(self.0, a.0, b.0))
+    }
+}
+
+impl<R: FloatRegister> MulAddMasked<Mask<R>, Self, Self> for Vector<R> {
+    #[inline(always)]
+    fn mul_add_c(self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
+        Vector(R::mul_add_c(mask.0, self.0, a.0, b.0))
+    }
+
+    #[inline(always)]
+    fn mul_add_m(self, src: Self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
+        Vector(R::mul_add_m(src.0, mask.0, self.0, a.0, b.0))
+    }
+
+    #[inline(always)]
+    fn mul_add_z(self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
+        Vector(R::mul_add_z(mask.0, self.0, a.0, b.0))
+    }
+}
+
+// Vector shifts
+
+impl<R: BitshiftRegister> Shl<Vector<R::USize>> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shl(self, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shlv(self.0, rhs.0))
+    }
+}
+
+impl<R: BitshiftRegister> ShlMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shl_c(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shlv_c(mask.0, self.0, rhs.0))
+    }
+
+    #[inline(always)]
+    fn shl_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shlv_m(src.0, mask.0, self.0, rhs.0))
+    }
+
+    #[inline(always)]
+    fn shl_z(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shlv_z(mask.0, self.0, rhs.0))
+    }
+}
+
+impl<R: BitshiftRegister> Shr<Vector<R::USize>> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shr(self, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shrv(self.0, rhs.0))
+    }
+}
+
+impl<R: BitshiftRegister> ShrMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shr_c(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shrv_c(mask.0, self.0, rhs.0))
+    }
+
+    #[inline(always)]
+    fn shr_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shrv_m(src.0, mask.0, self.0, rhs.0))
+    }
+
+    #[inline(always)]
+    fn shr_z(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+        Vector(R::shrv_z(mask.0, self.0, rhs.0))
+    }
+}
+
+impl<R: BitshiftRegister> ShlAssign<Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shl_assign(&mut self, rhs: Vector<R::USize>) {
+        self.0 = R::shlv(self.0, rhs.0);
+    }
+}
+
+impl<R: BitshiftRegister> ShlAssignMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shl_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shlv_c(mask.0, self.0, rhs.0);
+    }
+
+    #[inline(always)]
+    fn shl_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shlv_m(src.0, mask.0, self.0, rhs.0);
+    }
+
+    #[inline(always)]
+    fn shl_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shlv_z(mask.0, self.0, rhs.0);
+    }
+}
+
+impl<R: BitshiftRegister> ShrAssign<Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shr_assign(&mut self, rhs: Vector<R::USize>) {
+        self.0 = R::shrv(self.0, rhs.0);
+    }
+}
+
+impl<R: BitshiftRegister> ShrAssignMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+    #[inline(always)]
+    fn shr_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shrv_c(mask.0, self.0, rhs.0);
+    }
+
+    #[inline(always)]
+    fn shr_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shrv_m(src.0, mask.0, self.0, rhs.0);
+    }
+
+    #[inline(always)]
+    fn shr_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+        self.0 = R::shrv_z(mask.0, self.0, rhs.0);
+    }
+}
+
+// Scalar shifts
+
+impl<R: BitshiftRegister> Shl<u32> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shl(self, rhs: u32) -> Self::Output {
+        Vector(R::shl(self.0, rhs))
+    }
+}
+
+impl<R: BitshiftRegister> ShlMasked<Mask<R>, u32> for Vector<R> {
+    #[inline(always)]
+    fn shl_c(self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shl_c(mask.0, self.0, rhs))
+    }
+
+    #[inline(always)]
+    fn shl_m(self, src: Self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shl_m(src.0, mask.0, self.0, rhs))
+    }
+
+    #[inline(always)]
+    fn shl_z(self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shl_z(mask.0, self.0, rhs))
+    }
+}
+
+impl<R: BitshiftRegister> Shr<u32> for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shr(self, rhs: u32) -> Self::Output {
+        Vector(R::shr(self.0, rhs))
+    }
+}
+
+impl<R: BitshiftRegister> ShrMasked<Mask<R>, u32> for Vector<R> {
+    #[inline(always)]
+    fn shr_c(self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shr_c(mask.0, self.0, rhs))
+    }
+
+    #[inline(always)]
+    fn shr_m(self, src: Self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shr_m(src.0, mask.0, self.0, rhs))
+    }
+
+    #[inline(always)]
+    fn shr_z(self, mask: Mask<R>, rhs: u32) -> Self::Output {
+        Vector(R::shr_z(mask.0, self.0, rhs))
+    }
+}
+
+impl<R: BitshiftRegister> ShlAssign<u32> for Vector<R> {
+    #[inline(always)]
+    fn shl_assign(&mut self, rhs: u32) {
+        self.0 = R::shl(self.0, rhs);
+    }
+}
+
+impl<R: BitshiftRegister> ShlAssignMasked<Mask<R>, u32> for Vector<R> {
+    #[inline(always)]
+    fn shl_assign_c(&mut self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shl_c(mask.0, self.0, rhs);
+    }
+
+    #[inline(always)]
+    fn shl_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shl_m(src.0, mask.0, self.0, rhs);
+    }
+
+    #[inline(always)]
+    fn shl_assign_z(&mut self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shl_z(mask.0, self.0, rhs);
+    }
+}
+
+impl<R: BitshiftRegister> ShrAssign<u32> for Vector<R> {
+    #[inline(always)]
+    fn shr_assign(&mut self, rhs: u32) {
+        self.0 = R::shr(self.0, rhs);
+    }
+}
+
+impl<R: BitshiftRegister> ShrAssignMasked<Mask<R>, u32> for Vector<R> {
+    #[inline(always)]
+    fn shr_assign_c(&mut self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shr_c(mask.0, self.0, rhs);
+    }
+
+    #[inline(always)]
+    fn shr_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shr_m(src.0, mask.0, self.0, rhs);
+    }
+
+    #[inline(always)]
+    fn shr_assign_z(&mut self, mask: Mask<R>, rhs: u32) {
+        self.0 = R::shr_z(mask.0, self.0, rhs);
+    }
+}

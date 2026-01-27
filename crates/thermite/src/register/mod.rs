@@ -142,7 +142,7 @@ where
     type BitmaskStorage = GenericArray<u32, Self::BitmaskLength>;
 }
 
-pub(crate) type Storage<R> = <R as CoreRegister>::Storage;
+pub type Storage<R> = <R as CoreRegister>::Storage;
 
 /// Core data types for a given register. These are simple types
 /// without any intertwining trait bounds.
