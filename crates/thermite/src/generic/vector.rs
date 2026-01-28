@@ -541,3 +541,24 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         R::mat4_inverse(unsafe { core::mem::transmute(m) })
     }
 }
+
+impl<R> FloatVectorWithRegister for Vector<R>
+where
+    R: FloatRegister,
+{
+    type Register = R;
+}
+
+impl<R> SignedIntegerVectorWithRegister for Vector<R>
+where
+    R: SignedIntegerRegister,
+{
+    type Register = R;
+}
+
+impl<R> UnsignedIntegerVectorWithRegister for Vector<R>
+where
+    R: UnsignedIntegerRegister,
+{
+    type Register = R;
+}

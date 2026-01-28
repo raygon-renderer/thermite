@@ -81,9 +81,9 @@ pub mod prelude {
             SubMasked as _,
         },
         generic::{
-            BitsVector, BitshiftVector, CastMask, CastVector, FloatVector, FloatVectorWithBits, GenericVector,
-            IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector, SplatConst,
-            SwizzleVector, UnsignedIntegerVector,
+            BitsVector, BitshiftVector, CastMask, CastVector, FloatVector, FloatVectorWithBits, GenericMask,
+            GenericVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector,
+            SplatConst, SwizzleVector, UnsignedIntegerVector,
         },
         math::FloatConsts,
         math::{

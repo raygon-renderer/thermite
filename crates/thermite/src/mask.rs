@@ -19,7 +19,7 @@ use crate::{
 /// all '1's' or '0's' bits in the underlying register.
 ///
 /// This is a wrapper around the underlying mask register type. It provides a way to create and manipulate masks
-/// for SIMD operations. See [`new`](Mask::new), [`new_unchecked`](Mask::new_unchecked), [`splat`](Mask::splat),
+/// for SIMD operations. See [`new`](Mask::new), [`splat`](Mask::splat),
 /// and [`From<bool>/From<Vector<R>>`](Mask::from) for creating masks from values.
 ///
 /// Masks are created by certain operations on vectors, such as comparisons, and can be used

@@ -12,8 +12,8 @@ use crate::{
     Vector,
     isa::InstructionSet,
     register::{
-        BitCastRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, FullyInteroperable, IntegerRegister,
-        Lanes, LinAlg4Register, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
+        BitCastRegister, CastMaskRegister, CastRegister, FloatElement, FloatRegister, FullyInteroperable,
+        IntegerRegister, Lanes, LinAlg4Register, NarrowRegister, Register, SignedIntegerRegister, SignedRegister,
         UnsignedIntegerRegister, WidenRegister,
         element::IntegerElement,
         well_formed::{WellFormedFloatElement, WellFormedSignedIntegerElement, WellFormedUnsignedIntegerElement},
@@ -461,92 +461,150 @@ macro_rules! decl_aliases {
     };
 }
 
-// use crate::vector::generic::{BitsVector, CastVector, FloatVector, SignedIntegerVector, UnsignedIntegerVector};
+use crate::generic::{
+    BitsVector, CastVector, FloatVectorWithRegister, SignedIntegerVectorWithRegister, UnsignedIntegerVectorWithRegister,
+};
 
-// pub trait NativeSimdVectors: NativeSimd {
-//     type f32xN: FloatVector<Register = <Self as NativeSimd>::f32xN>;
-//     type i32xN: SignedIntegerVector<Register = <Self as NativeSimd>::i32xN>;
-//     type u32xN: UnsignedIntegerVector<Register = <Self as NativeSimd>::u32xN>;
+pub trait NativeSimdVectors: NativeSimd {
+    type f32xN: FloatVectorWithRegister<
+            Register = <Self as NativeSimd>::f32xN,
+            Signed = <Self as NativeSimdVectors>::i32xN,
+            Bits = <Self as NativeSimdVectors>::u32xN,
+        >;
+    type i32xN: SignedIntegerVectorWithRegister<Register = <Self as NativeSimd>::i32xN>;
+    type u32xN: UnsignedIntegerVectorWithRegister<Register = <Self as NativeSimd>::u32xN>;
 
-//     type f64xN: FloatVector<Register = <Self as NativeSimd>::f64xN>;
-//     type i64xN: SignedIntegerVector<Register = <Self as NativeSimd>::i64xN>;
-//     type u64xN: UnsignedIntegerVector<Register = <Self as NativeSimd>::u64xN>;
-// }
+    type f64xN: FloatVectorWithRegister<
+            Register = <Self as NativeSimd>::f64xN,
+            Signed = <Self as NativeSimdVectors>::i64xN,
+            Bits = <Self as NativeSimdVectors>::u64xN,
+        >;
+    type i64xN: SignedIntegerVectorWithRegister<Register = <Self as NativeSimd>::i64xN>;
+    type u64xN: UnsignedIntegerVectorWithRegister<Register = <Self as NativeSimd>::u64xN>;
+}
 
-// impl<S: NativeSimd> NativeSimdVectors for S {
-//     type f32xN = Vector<<Self as NativeSimd>::f32xN>;
-//     type i32xN = Vector<<Self as NativeSimd>::i32xN>;
-//     type u32xN = Vector<<Self as NativeSimd>::u32xN>;
+impl<S: NativeSimd> NativeSimdVectors for S {
+    type f32xN = Vector<<Self as NativeSimd>::f32xN>;
+    type i32xN = Vector<<Self as NativeSimd>::i32xN>;
+    type u32xN = Vector<<Self as NativeSimd>::u32xN>;
 
-//     type f64xN = Vector<<Self as NativeSimd>::f64xN>;
-//     type i64xN = Vector<<Self as NativeSimd>::i64xN>;
-//     type u64xN = Vector<<Self as NativeSimd>::u64xN>;
-// }
+    type f64xN = Vector<<Self as NativeSimd>::f64xN>;
+    type i64xN = Vector<<Self as NativeSimd>::i64xN>;
+    type u64xN = Vector<<Self as NativeSimd>::u64xN>;
+}
 
-// pub trait SimdVectors: NativeSimdVectors + Simd {
-//     type f32x2: FloatVector<Register = <Self as Simd>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>;
-//     type i32x2: SignedIntegerVector<Register = <Self as Simd>::i32x2> + CastVector<<Self as SimdVectors>::i64x2>;
-//     type u32x2: UnsignedIntegerVector<Register = <Self as Simd>::u32x2> + CastVector<<Self as SimdVectors>::u64x2>;
+pub trait SimdVectors: NativeSimdVectors + Simd {
+    type f32x2: FloatVectorWithRegister<
+            Register = <Self as Simd>::f32x2,
+            Signed = <Self as SimdVectors>::i32x2,
+            Bits = <Self as SimdVectors>::u32x2,
+        > + CastVector<<Self as SimdVectors>::f64x2>;
+    type i32x2: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2>;
+    type u32x2: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2>;
 
-//     type f32x4: FloatVector<Register = <Self as Simd>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>;
-//     type i32x4: SignedIntegerVector<Register = <Self as Simd>::i32x4> + CastVector<<Self as SimdVectors>::i64x4>;
-//     type u32x4: UnsignedIntegerVector<Register = <Self as Simd>::u32x4> + CastVector<<Self as SimdVectors>::u64x4>;
+    type f32x4: FloatVectorWithRegister<
+            Register = <Self as Simd>::f32x4,
+            Signed = <Self as SimdVectors>::i32x4,
+            Bits = <Self as SimdVectors>::u32x4,
+        > + CastVector<<Self as SimdVectors>::f64x4>;
+    type i32x4: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4>;
+    type u32x4: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4>;
 
-//     type f32x8: FloatVector<Register = <Self as Simd>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>;
-//     type i32x8: SignedIntegerVector<Register = <Self as Simd>::i32x8> + CastVector<<Self as SimdVectors>::i64x8>;
-//     type u32x8: UnsignedIntegerVector<Register = <Self as Simd>::u32x8> + CastVector<<Self as SimdVectors>::u64x8>;
+    type f32x8: FloatVectorWithRegister<
+            Register = <Self as Simd>::f32x8,
+            Signed = <Self as SimdVectors>::i32x8,
+            Bits = <Self as SimdVectors>::u32x8,
+        > + CastVector<<Self as SimdVectors>::f64x8>;
+    type i32x8: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8>;
+    type u32x8: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8>;
 
-//     type f64x2: FloatVector<Register = <Self as Simd>::f64x2> + CastVector<<Self as SimdVectors>::f32x2>;
-//     type i64x2: SignedIntegerVector<Register = <Self as Simd>::i64x2> + CastVector<<Self as SimdVectors>::i32x2>;
-//     type u64x2: UnsignedIntegerVector<Register = <Self as Simd>::u64x2> + CastVector<<Self as SimdVectors>::u32x2>;
+    type f64x2: FloatVectorWithRegister<
+            Register = <Self as Simd>::f64x2,
+            Signed = <Self as SimdVectors>::i64x2,
+            Bits = <Self as SimdVectors>::u64x2,
+        > + CastVector<<Self as SimdVectors>::f32x2>;
+    type i64x2: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i64x2>
+        + CastVector<<Self as SimdVectors>::i32x2>;
+    type u64x2: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u64x2>
+        + CastVector<<Self as SimdVectors>::u32x2>;
 
-//     type f64x4: FloatVector<Register = <Self as Simd>::f64x4> + CastVector<<Self as SimdVectors>::f32x4>;
-//     type i64x4: SignedIntegerVector<Register = <Self as Simd>::i64x4> + CastVector<<Self as SimdVectors>::i32x4>;
-//     type u64x4: UnsignedIntegerVector<Register = <Self as Simd>::u64x4> + CastVector<<Self as SimdVectors>::u32x4>;
+    type f64x4: FloatVectorWithRegister<
+            Register = <Self as Simd>::f64x4,
+            Signed = <Self as SimdVectors>::i64x4,
+            Bits = <Self as SimdVectors>::u64x4,
+        > + CastVector<<Self as SimdVectors>::f32x4>;
+    type i64x4: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i64x4>
+        + CastVector<<Self as SimdVectors>::i32x4>;
+    type u64x4: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u64x4>
+        + CastVector<<Self as SimdVectors>::u32x4>;
 
-//     type f64x8: FloatVector<Register = <Self as Simd>::f64x8> + CastVector<<Self as SimdVectors>::f32x8>;
-//     type i64x8: SignedIntegerVector<Register = <Self as Simd>::i64x8> + CastVector<<Self as SimdVectors>::i32x8>;
-//     type u64x8: UnsignedIntegerVector<Register = <Self as Simd>::u64x8> + CastVector<<Self as SimdVectors>::u32x8>;
+    type f64x8: FloatVectorWithRegister<
+            Register = <Self as Simd>::f64x8,
+            Signed = <Self as SimdVectors>::i64x8,
+            Bits = <Self as SimdVectors>::u64x8,
+        > + CastVector<<Self as SimdVectors>::f32x8>;
+    type i64x8: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i64x8>
+        + CastVector<<Self as SimdVectors>::i32x8>;
+    type u64x8: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u64x8>
+        + CastVector<<Self as SimdVectors>::u32x8>;
 
-//     type f32x16: FloatVector<Register = <Self as Simd>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>;
-//     type i32x16: SignedIntegerVector<Register = <Self as Simd>::i32x16> + CastVector<<Self as SimdVectors>::i64x16>;
-//     type u32x16: UnsignedIntegerVector<Register = <Self as Simd>::u32x16> + CastVector<<Self as SimdVectors>::u64x16>;
+    type f32x16: FloatVectorWithRegister<
+            Register = <Self as Simd>::f32x16,
+            Signed = <Self as SimdVectors>::i32x16,
+            Bits = <Self as SimdVectors>::u32x16,
+        > + CastVector<<Self as SimdVectors>::f64x16>;
+    type i32x16: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16>;
+    type u32x16: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16>;
 
-//     type f64x16: FloatVector<Register = <Self as Simd>::f64x16> + CastVector<<Self as SimdVectors>::f32x16>;
-//     type i64x16: SignedIntegerVector<Register = <Self as Simd>::i64x16> + CastVector<<Self as SimdVectors>::i32x16>;
-//     type u64x16: UnsignedIntegerVector<Register = <Self as Simd>::u64x16> + CastVector<<Self as SimdVectors>::u32x16>;
-// }
+    type f64x16: FloatVectorWithRegister<
+            Register = <Self as Simd>::f64x16,
+            Signed = <Self as SimdVectors>::i64x16,
+            Bits = <Self as SimdVectors>::u64x16,
+        > + CastVector<<Self as SimdVectors>::f32x16>;
+    type i64x16: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i64x16>
+        + CastVector<<Self as SimdVectors>::i32x16>;
+    type u64x16: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u64x16>
+        + CastVector<<Self as SimdVectors>::u32x16>;
+}
 
-// impl<S: Simd> SimdVectors for S {
-//     type f32x2 = Vector<<Self as Simd>::f32x2>;
-//     type i32x2 = Vector<<Self as Simd>::i32x2>;
-//     type u32x2 = Vector<<Self as Simd>::u32x2>;
+impl<S: Simd> SimdVectors for S {
+    type f32x2 = Vector<<Self as Simd>::f32x2>;
+    type i32x2 = Vector<<Self as Simd>::i32x2>;
+    type u32x2 = Vector<<Self as Simd>::u32x2>;
 
-//     type f32x4 = Vector<<Self as Simd>::f32x4>;
-//     type i32x4 = Vector<<Self as Simd>::i32x4>;
-//     type u32x4 = Vector<<Self as Simd>::u32x4>;
+    type f32x4 = Vector<<Self as Simd>::f32x4>;
+    type i32x4 = Vector<<Self as Simd>::i32x4>;
+    type u32x4 = Vector<<Self as Simd>::u32x4>;
 
-//     type f32x8 = Vector<<Self as Simd>::f32x8>;
-//     type i32x8 = Vector<<Self as Simd>::i32x8>;
-//     type u32x8 = Vector<<Self as Simd>::u32x8>;
+    type f32x8 = Vector<<Self as Simd>::f32x8>;
+    type i32x8 = Vector<<Self as Simd>::i32x8>;
+    type u32x8 = Vector<<Self as Simd>::u32x8>;
 
-//     type f64x2 = Vector<<Self as Simd>::f64x2>;
-//     type i64x2 = Vector<<Self as Simd>::i64x2>;
-//     type u64x2 = Vector<<Self as Simd>::u64x2>;
+    type f64x2 = Vector<<Self as Simd>::f64x2>;
+    type i64x2 = Vector<<Self as Simd>::i64x2>;
+    type u64x2 = Vector<<Self as Simd>::u64x2>;
 
-//     type f64x4 = Vector<<Self as Simd>::f64x4>;
-//     type i64x4 = Vector<<Self as Simd>::i64x4>;
-//     type u64x4 = Vector<<Self as Simd>::u64x4>;
+    type f64x4 = Vector<<Self as Simd>::f64x4>;
+    type i64x4 = Vector<<Self as Simd>::i64x4>;
+    type u64x4 = Vector<<Self as Simd>::u64x4>;
 
-//     type f64x8 = Vector<<Self as Simd>::f64x8>;
-//     type i64x8 = Vector<<Self as Simd>::i64x8>;
-//     type u64x8 = Vector<<Self as Simd>::u64x8>;
+    type f64x8 = Vector<<Self as Simd>::f64x8>;
+    type i64x8 = Vector<<Self as Simd>::i64x8>;
+    type u64x8 = Vector<<Self as Simd>::u64x8>;
 
-//     type f32x16 = Vector<<Self as Simd>::f32x16>;
-//     type i32x16 = Vector<<Self as Simd>::i32x16>;
-//     type u32x16 = Vector<<Self as Simd>::u32x16>;
+    type f32x16 = Vector<<Self as Simd>::f32x16>;
+    type i32x16 = Vector<<Self as Simd>::i32x16>;
+    type u32x16 = Vector<<Self as Simd>::u32x16>;
 
-//     type f64x16 = Vector<<Self as Simd>::f64x16>;
-//     type i64x16 = Vector<<Self as Simd>::i64x16>;
-//     type u64x16 = Vector<<Self as Simd>::u64x16>;
-// }
+    type f64x16 = Vector<<Self as Simd>::f64x16>;
+    type i64x16 = Vector<<Self as Simd>::i64x16>;
+    type u64x16 = Vector<<Self as Simd>::u64x16>;
+}

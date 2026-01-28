@@ -53,7 +53,7 @@ impl<R: Register> IRegisterOf for Mask<R> {
 /// # Example
 /// ```
 /// # use thermite::vector::{Vector, MaskOf};
-/// # use thermite::backend::scalar::*;
+/// # use thermite::backend::scalar::prelude::*;
 /// fn example(x: f32x4) -> MaskOf<f32x4> {
 ///     x.is_negative()
 /// }

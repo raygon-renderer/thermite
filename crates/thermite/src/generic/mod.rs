@@ -772,6 +772,18 @@ pub trait NumFloatVector:
 {
 }
 
+pub trait FloatVectorWithRegister: FloatVectorWithBits {
+    type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
+}
+
+pub trait SignedIntegerVectorWithRegister: SignedIntegerVector {
+    type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
+}
+
+pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector {
+    type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
+}
+
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
 pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastVector<Self::ExtendedPrecision> {
@@ -951,7 +963,7 @@ pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Se
     ///
     /// # Example
     /// ```rust
-    /// # use thermite::backend::scalar::f32x4;
+    /// # use thermite::backend::scalar::prelude::*;
     /// let x = f32x4::NAN;
     /// let y = f32x4::ONE;
     /// let total_lt = x.total_order().cmp_lt(y.total_order());
