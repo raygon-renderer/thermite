@@ -91,7 +91,7 @@ impl Register for F64x2Wasm {
     }
 
     #[inline(always)]
-    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_laneselect(rhs, lhs, mask)
     }
 
@@ -286,7 +286,7 @@ impl SignedRegister for F64x2Wasm {
     }
 
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }

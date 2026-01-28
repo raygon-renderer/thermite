@@ -253,7 +253,7 @@ where
 
             while is_neg.any() {
                 res = is_neg.select(res / mod_z, res);
-                mod_z += Self::ONE & is_neg.value();
+                mod_z.add_assign_c(is_neg, Self::ONE);
                 is_neg = mod_z.is_negative();
             }
 
@@ -418,7 +418,7 @@ where
 
             // force multiplier to zero for tiny case, allowing the modified
             // lanczos sum and ln(t) to be combined for cheap
-            a &= is_not_tiny.value();
+            a = a.z(is_not_tiny);
         }
 
         let c = (lanczos_sum * t).ln_p::<P>();

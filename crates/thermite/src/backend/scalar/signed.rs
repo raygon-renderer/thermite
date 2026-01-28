@@ -26,7 +26,7 @@ impl CoreRegister for [<i $width>] {
     const EMPTY: Storage<Self> = 0;
 
     #[inline(always)]
-    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask != 0, rhs, lhs)
     }
 
@@ -51,12 +51,12 @@ impl MaskRegister for [<i $width>] {
     const FALSY: Storage<Self> = Element::FALSY;
 
     #[inline(always)]
-    fn set(mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         if value { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool { mask.to_bool() }
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool { mask.to_bool() }
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
@@ -216,7 +216,7 @@ impl SignedRegister for [<i $width>] {
     }
 
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), mask >> const { <$i>::BITS - 1 })
     }
 }

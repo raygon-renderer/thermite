@@ -28,3 +28,9 @@ pub use registers::Wasm;
 
 decl_aliases!(Wasm);
 pub use self::aliases::*;
+
+pub mod prelude {
+    pub use super::Wasm;
+    pub use super::aliases::*;
+    pub use crate::prelude::*;
+}

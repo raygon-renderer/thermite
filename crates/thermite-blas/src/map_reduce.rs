@@ -1,8 +1,8 @@
 use thermite::{
     Vector,
-    generic::FloatVector,
     generic_array::{GenericArray, typenum::Unsigned},
-    register::{CoreRegister, FloatElement, Register, well_formed::WellFormedFloatElement},
+    prelude::*,
+    register::{CoreRegister, FloatElement, well_formed::WellFormedFloatElement},
     simd::{FloatSimd, SizedSimd},
 };
 
@@ -164,7 +164,7 @@ where
         ($($width:ty),*) => {{
             $(
                 // we don't want to use emulated (double-pumped) registers, only real SIMD registers
-                if !<$width as Register>::IS_EMULATED {
+                if !<$width as CoreRegister>::IS_EMULATED {
                     let lane_width = <<$width as CoreRegister>::Lanes as Unsigned>::USIZE * L::READ_MULTIPLIER;
 
                     // accumulator registers, some of which may not be used depending on output size O,
@@ -267,7 +267,7 @@ where
     macro_rules! descend {
         ($($width:ty),*) => {{
             $(
-                if !<$width as Register>::IS_EMULATED {
+                if !<$width as CoreRegister>::IS_EMULATED {
                     // accumulator registers, some of which may not be used depending on output size O,
                     // it's mostly just a compiler hint to accumulate in parallel
                     let mut registers: GenericArray<[Vector<$width>; O], S::Registers> = unsafe { core::mem::zeroed() };

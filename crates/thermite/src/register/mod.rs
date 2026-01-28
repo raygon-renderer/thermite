@@ -471,7 +471,6 @@ pub trait Register:
         Self::as_array_mut(storage).iter_mut()
     }
 
-    #[skip_masked]
     fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
         const {
             assert!(
@@ -520,7 +519,6 @@ pub trait Register:
         lhs
     }
 
-    #[skip_masked]
     fn fold<F>(first: Self::Element, value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
@@ -528,7 +526,6 @@ pub trait Register:
         Self::as_array(&value).iter().fold(first, |acc, &v| f(acc, v))
     }
 
-    #[skip_masked]
     fn reduce<F>(value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
@@ -1085,16 +1082,9 @@ pub trait NumericRegister:
         value
     }
 
-    #[skip_masked]
     fn min_element(value: Storage<Self>) -> Self::Element;
-
-    #[skip_masked]
     fn max_element(value: Storage<Self>) -> Self::Element;
-
-    #[skip_masked]
     fn sum_elements(value: Storage<Self>) -> Self::Element;
-
-    #[skip_masked]
     fn prod_elements(value: Storage<Self>) -> Self::Element;
 
     /// Effectively the number of lanes in the register, splatted across the lanes.
@@ -1105,7 +1095,7 @@ pub trait NumericRegister:
 
 #[thermite_macros::register_trait]
 #[conditional]
-pub trait SignedRegister: NumericRegister {
+pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
     fn neg(value: Storage<Self>) -> Storage<Self>;
     fn abs(value: Storage<Self>) -> Storage<Self>;
 
@@ -1134,19 +1124,12 @@ pub trait SignedRegister: NumericRegister {
     const NEG_ONE: Storage<Self>;
     const MIN_POSITIVE: Storage<Self>;
 
-    #[skip_masked]
     fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::lt(value, Self::ZERO)
     }
 
-    #[skip_masked]
     fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ge(value, Self::ZERO)
-    }
-
-    #[skip_masked]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
-        Self::blendv(mask, value, Self::neg(value))
     }
 
     /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
@@ -1483,12 +1466,10 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    #[skip_masked]
     fn wrapping_sum(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_add(&b))
     }
 
-    #[skip_masked]
     fn wrapping_product(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_mul(&b))
     }
@@ -1519,7 +1500,7 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
 
 #[thermite_macros::register_trait]
 #[conditional]
-pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self> {
+pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self, Element: num_traits::Unsigned> {
     /// Returns `floor(log2(x)) + 1`
     fn ilog2p1(value: Storage<Self>) -> Storage<Self> {
         Self::count_ones(Self::next_power_of_two_m1(value))

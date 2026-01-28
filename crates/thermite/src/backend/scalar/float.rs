@@ -25,7 +25,7 @@ impl CoreRegister for [<f $width>] {
 
     const EMPTY: Storage<Self> = 0.0;
 
-    #[inline(always)] fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[inline(always)] fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask.to_bits() != 0, rhs, lhs)
     }
 
@@ -61,12 +61,12 @@ impl MaskRegister for [<f $width>] {
     const FALSY: Storage<Self> = Element::FALSY;
 
     #[inline(always)]
-    fn set(mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         if value { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool { mask.to_bool() }
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool { mask.to_bool() }
 
     #[inline(always)]
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
@@ -206,7 +206,7 @@ impl SignedRegister for [<f $width>] {
     #[inline(always)] fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.copysign(rhs) }
 
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         if mask.to_bool() { -value } else { value }
     }
 }

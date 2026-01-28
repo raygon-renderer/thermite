@@ -3,8 +3,8 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote, quote_spanned};
 use syn::{
-    Attribute, FnArg, GenericArgument, Ident, ImplItem, ItemImpl, ItemTrait, Pat, PathArguments, TraitItem, Type,
-    parse_macro_input, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
+    Attribute, FnArg, GenericArgument, Ident, ImplItem, ItemImpl, ItemTrait, Pat, PathArguments, ReturnType, TraitItem,
+    Type, parse_macro_input, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
 };
 
 const SKIP_MASKED: &str = "skip_masked";
@@ -50,7 +50,7 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
             method.attrs.push(parse_quote!(#[inline(always)]));
         }
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) {
+        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
             continue;
         }
 
@@ -143,7 +143,8 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // we only care about functions
         let ImplItem::Fn(method) = item else { continue };
 
-        let skip = skip_all || take_attribute(&mut method.attrs, SKIP_MASKED);
+        let skip =
+            skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output);
         let with_conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
             && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
 
@@ -247,7 +248,7 @@ pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // we only care about functions
         let ImplItem::Fn(method) = item else { continue };
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) {
+        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
             continue;
         }
 
@@ -290,7 +291,7 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
             method.attrs.push(parse_quote!(#[inline(always)]));
         }
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) {
+        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
             continue;
         }
 
@@ -361,7 +362,8 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     for item in &mut impl_block.items {
         let ImplItem::Fn(method) = item else { continue };
 
-        let skip = skip_all || take_attribute(&mut method.attrs, SKIP_MASKED);
+        let skip =
+            skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output);
         let with_conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
             && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
 
@@ -479,6 +481,43 @@ fn is_vectorlike_type(ty: &Type) -> bool {
 
     tp.path.is_ident("Self") || tp.path.segments.first().is_some_and(|s| s.ident == "Self") || tp.path.segments.last()
         .is_some_and(|s| s.ident == "Vector" || s.ident == "Mask")
+}
+
+fn is_ineligible_return_type(ty: &ReturnType) -> bool {
+    match ty {
+        ReturnType::Type(_, ty) => is_ineligible_type(ty),
+        ReturnType::Default => true,
+    }
+}
+
+fn is_ineligible_type(ty: &Type) -> bool {
+    let tp = match ty {
+        Type::Path(tp) => tp,
+        Type::Reference(r) => return is_ineligible_type(&r.elem),
+        _ => return false,
+    };
+
+    let Some(last) = tp.path.segments.last() else {
+        return false;
+    };
+
+    if last.ident == "Element" {
+        return true;
+    }
+
+    // `Storage<Self::Something>`
+    if last.ident == "Storage"
+        && let PathArguments::AngleBracketed(args) = &last.arguments
+        && let Some(GenericArgument::Type(inner)) = args.args.first()
+        && let Type::Path(inner_tp) = inner
+        && let Some(inner_first) = inner_tp.path.segments.first()
+        && inner_first.ident == "Self"
+        && inner_tp.path.segments.len() > 1
+    {
+        return true;
+    }
+
+    false
 }
 
 fn split_args_for_call(inputs: &Punctuated<FnArg, Comma>) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {

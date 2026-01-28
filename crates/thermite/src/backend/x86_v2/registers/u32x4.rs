@@ -50,13 +50,13 @@ impl CoreRegister for U32x4V2 {
 
 impl MaskRegister for U32x4V2 {
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -347,6 +347,7 @@ impl PartialOrdRegister for U32x4V2 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl NumericRegister for U32x4V2 {
     const ZERO: Storage<Self> = reg::<Self, 4>([0; 4]);
     const ONE: Storage<Self> = reg::<Self, 4>([1; 4]);
@@ -393,6 +394,18 @@ impl NumericRegister for U32x4V2 {
     #[inline(always)]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_epi32(lhs, rhs) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_add_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_sub_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
     #[inline(always)]

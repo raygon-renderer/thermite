@@ -91,7 +91,7 @@ impl Register for I32x4Wasm {
     }
 
     #[inline(always)]
-    fn blendv(mask: Storage<Self>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_laneselect(rhs, lhs, mask)
     }
 
@@ -290,13 +290,13 @@ impl SignedRegister for I32x4Wasm {
     }
 
     #[inline(always)]
-    fn is_negative(value: Storage<Self>) -> Storage<Self> {
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         // Arithmetic shift right by 31 to propagate the sign bit
         arch::i32x4_shr(value, 31)
     }
 
     #[inline(always)]
-    fn is_positive(value: Storage<Self>) -> Storage<Self> {
+    fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
         arch::i32x4_gt(value, Self::ZERO)
     }
 
@@ -306,7 +306,7 @@ impl SignedRegister for I32x4Wasm {
     }
 
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), Self::shri::<31>(mask))
     }
 }

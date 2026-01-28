@@ -53,13 +53,13 @@ impl MaskRegister for U64x2V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 2>([!0; 2]);
 
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -96,6 +96,7 @@ impl MaskRegister for U64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl BitwiseRegister for U64x2V3 {
     #[inline(always)]
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -246,6 +247,7 @@ impl Register for U64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl BitshiftRegister for U64x2V3 {
     const HAS_TRUE_SHIFTV: bool = true;
     const HAS_WIDE_BYTE_SHIFTS: bool = true;
@@ -320,6 +322,7 @@ impl PartialOrdRegister for U64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl NumericRegister for U64x2V3 {
     const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
     const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
@@ -352,11 +355,13 @@ impl NumericRegister for U64x2V3 {
         lo.wrapping_mul(hi)
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as typenum::Unsigned>::U64)
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as u64))

@@ -51,13 +51,13 @@ impl CoreRegister for I64x2V2 {
 
 impl MaskRegister for I64x2V2 {
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -323,6 +323,7 @@ impl PartialOrdRegister for I64x2V2 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl NumericRegister for I64x2V2 {
     const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
     const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
@@ -375,6 +376,18 @@ impl NumericRegister for I64x2V2 {
         unsafe { arch::_mm_sub_epi64(lhs, rhs) }
     }
 
+    #[skip_masked]
+    #[inline(always)]
+    fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_add_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_sub_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
+    }
+
     #[inline(always)]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
@@ -401,6 +414,7 @@ impl NumericRegister for I64x2V2 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedRegister for I64x2V2 {
     const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1; 2]);
     const MIN_POSITIVE: Storage<Self> = reg_splat::<Self>(1);
@@ -416,7 +430,7 @@ impl SignedRegister for I64x2V2 {
     }
 
     #[inline(always)]
-    fn is_negative(value: Storage<Self>) -> Storage<Self> {
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe { arch::_mm_signbits_epi64x_v1(value) }
     }
 
@@ -433,13 +447,15 @@ impl SignedRegister for I64x2V2 {
         unsafe { arch::_mm_copysign_epi64x_v2(lhs, rhs) }
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_blendv_epi8(Self::NEG_ONE, Self::ONE, arch::_mm_cmpgt_epi64(value, Self::NEG_ONE)) }
     }
 
+    #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), Self::shri::<63>(mask))
     }
 }

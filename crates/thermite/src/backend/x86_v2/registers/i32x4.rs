@@ -50,13 +50,13 @@ impl CoreRegister for I32x4V2 {
 
 impl MaskRegister for I32x4V2 {
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -334,25 +334,21 @@ impl NumericRegister for I32x4V2 {
     const MIN: Storage<Self> = reg::<Self, 4>([i32::MIN; 4]);
     const MAX: Storage<Self> = reg::<Self, 4>([i32::MAX; 4]);
 
-    #[skip_masked]
     #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_min_epi32 _mm_min_epi32)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_max_epi32 _mm_max_epi32)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_add_epi32 _mm_add_epi32)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_mullo_epi32 _mm_mullo_epi32)
@@ -376,6 +372,18 @@ impl NumericRegister for I32x4V2 {
     #[inline(always)]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_epi32(lhs, rhs) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_add_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_sub_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
     #[inline(always)]
@@ -414,15 +422,13 @@ impl SignedRegister for I32x4V2 {
         unsafe { arch::_mm_sign_epi32(value, Self::NEG_ONE) }
     }
 
-    #[skip_masked]
     #[inline(always)]
-    fn is_negative(value: Storage<Self>) -> Storage<Self> {
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe { arch::_mm_srai_epi32::<31>(value) }
     }
 
-    #[skip_masked]
     #[inline(always)]
-    fn is_positive(value: Storage<Self>) -> Storage<Self> {
+    fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::not(Self::is_negative(value))
     }
 
@@ -452,7 +458,7 @@ impl SignedRegister for I32x4V2 {
 
     #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), Self::shri::<31>(mask))
     }
 }
@@ -479,13 +485,11 @@ impl IntegerRegister for I32x4V2 {
         unsafe { arch::_mm_subs_epi32x_v2(lhs, rhs) }
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn wrapping_sum(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_add_epi32 _mm_add_epi32) as i32
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn wrapping_product(value: Storage<Self>) -> Self::Element {
         _mm_reduce_epi32_v1!(value; _mm_mullo_epi32 _mm_mullo_epi32) as i32

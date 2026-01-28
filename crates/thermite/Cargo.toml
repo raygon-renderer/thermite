@@ -5,11 +5,17 @@ edition = "2024"
 categories = ["no_std"]
 
 [features]
+default = ["document_registers", "wasm", "rand", "avx512-tier2"]
 
-disable_fma_emulation = [] # Disable fast FMA emulation to ensure correctness
+# Disable Fast FMA emulation to ensure correctness, instead using scalar libm fma,
+# which is very, very slow. Only set this feature if you need bitwise identical results with
+# scalar fma implementations. The emulated Fast FMA will be accurate, but not bitwise identical,
+# using compensated arithmetic.
+disable_fast_fma = []
+
 nightly = []
-std = ["num-traits/std"]   # required for decent scalar support
-partial-ord = []           # Implements PartialOrd for Vector, only if all lanes are that order
+std = ["num-traits/std"] # required for decent scalar support
+partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 document_registers = []
 neon = []
 

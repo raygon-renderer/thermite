@@ -8,6 +8,7 @@ use core::ops::{
 
 pub mod ops;
 
+use bitvec::{array::BitArray, view::BitViewSized};
 use generic_array::{GenericArray, typenum};
 
 use crate::{
@@ -186,6 +187,7 @@ pub trait GenericVector:
     /// Number of lanes in the vector, as a typenum.
     type Lanes: Lanes;
 
+    /// Unsigned Integer Type suitable for use with this vector.
     type USize: UnsignedIntegerVector<
             ISize = Self::ISize,
             USize = Self::USize,
@@ -195,6 +197,7 @@ pub trait GenericVector:
         > + CastVector<Self::ISize>
         + BitsVector<Self::ISize>;
 
+    /// Signed Integer Type suitable for use with this vector.
     type ISize: SignedIntegerVector<
             ISize = Self::ISize,
             USize = Self::USize,
@@ -204,6 +207,8 @@ pub trait GenericVector:
         > + CastVector<Self::USize>
         + BitsVector<Self::USize>;
 
+    /// Mask type for this vector. Masks are semantically boolean vectors indicating
+    /// true or false for each lane. They may or may not be represented as actual bits.
     type Mask: GenericMask<Self>
         + CastMask<<Self::USize as GenericVector>::Mask>
         + CastMask<<Self::ISize as GenericVector>::Mask>;
@@ -250,7 +255,7 @@ pub trait GenericVector:
     #[skip_masked] fn as_mut_slice(&mut self) -> &mut [Self::Element];
 
     /// Extract a single element from the vector at the given index.
-    #[skip_masked] fn extract<const I: usize>(self) -> Self::Element;
+    fn extract<const I: usize>(self) -> Self::Element;
 
     /// Replace a single element in the vector at the given index with a new value.
     #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self;
@@ -361,14 +366,14 @@ pub trait GenericVector:
     /// Fold the elements of the vector using the provided function and initial value.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
-    #[skip_masked] fn fold<F>(self, init: Self::Element, f: F) -> Self::Element
+    fn fold<F>(self, init: Self::Element, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element;
 
     /// Reduce the elements of the vector using the provided function.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
-    #[skip_masked] fn reduce<F>(self, f: F) -> Self::Element
+    fn reduce<F>(self, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element;
 
@@ -499,6 +504,8 @@ pub trait GenericMask<V: GenericVector>:
 
     fn native_bitmask(&self) -> Option<u64>;
 
+    fn bitmask(&self) -> BitArray<impl BitViewSized<Store = u32>>;
+
     #[inline(always)]
     fn select<S>(self, t: S, f: S) -> S
     where
@@ -601,21 +608,21 @@ pub trait NumericVector:
     /// Returns the minimum value in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
-    #[skip_masked] fn min_element(self) -> Self::Element;
+    fn min_element(self) -> Self::Element;
     /// Returns the maximum value in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
-    #[skip_masked] fn max_element(self) -> Self::Element;
+    fn max_element(self) -> Self::Element;
 
     /// Returns the sum of all elements in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
-    #[skip_masked] fn sum_elements(self) -> Self::Element;
+    fn sum_elements(self) -> Self::Element;
 
     /// Returns the product of all elements in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
-    #[skip_masked] fn prod_elements(self) -> Self::Element;
+    fn prod_elements(self) -> Self::Element;
 
     /// Effectively returns `Self::splat(Self::LANES as Self::Element)`.
     #[skip_masked] fn offset() -> Self;
@@ -639,16 +646,30 @@ pub trait NumVector:
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
 pub trait SignedVector: NumericVector<Element: num_traits::Signed> + ops::NegMasked<Self::Mask, Output = Self> {
+    /// A vector of the value "-1" in the element type.
     const NEG_ONE: Self;
+
+    /// A vector of the smallest positive (non-zero) value in the element type.
     const MIN_POSITIVE: Self;
 
+    /// Take the absolute value of the vector, element-wise.
     fn abs(self) -> Self;
 
+    /// For each element in the vector, return a new vector
+    /// where each element is either -1 or +1 depending
+    /// on the sign of the element.
     #[skip_masked] fn signum(self) -> Self;
 
+    /// For each element in the vector, set the sign of that
+    /// element to the sign of the corresponding element in the other vector.
     fn copysign(self, sign: Self) -> Self;
 
+    /// For each element in the vector, return a mask indicating
+    /// whether that element is negative.
     #[skip_masked] fn is_positive(self) -> Self::Mask;
+
+    /// For each element in the vector, return a mask indicating
+    /// whether that element is positive.
     #[skip_masked] fn is_negative(self) -> Self::Mask;
 
     /// Based on if self is negative, select between `if_neg` and `if_pos`.
@@ -682,8 +703,8 @@ pub trait IntegerVector:
     /// Perform saturating subtraction for each element of the vectors.
     fn saturating_sub(self, other: Self) -> Self;
 
-    #[skip_masked] fn wrapping_sum(self) -> Self::Element;
-    #[skip_masked] fn wrapping_prod(self) -> Self::Element;
+    fn wrapping_sum(self) -> Self::Element;
+    fn wrapping_prod(self) -> Self::Element;
 
     #[skip_masked] fn create_divider(d: Self::Element) -> Self::Divider;
     #[skip_masked] fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
@@ -724,7 +745,7 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector {
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait] #[conditional]
-pub trait UnsignedIntegerVector: IntegerVector {
+pub trait UnsignedIntegerVector: IntegerVector<Element: num_traits::Unsigned> {
     /// Determines if each unsigned integer element in the vector is a
     /// power of two, returning a mask indicating whether or not it is.
     #[skip_masked] fn is_power_of_two(self) -> Self::Mask;
@@ -1088,5 +1109,4 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     }
 }
 
-// mod scalar;
 mod vector;

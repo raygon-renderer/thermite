@@ -1,6 +1,6 @@
 //! Argmin/Argmax implementations using Thermite SIMD abstractions.
 
-use thermite::{Vector, register::well_formed::WellFormedFloatElement, simd::FloatSimd};
+use thermite::{Vector, prelude::*, register::well_formed::WellFormedFloatElement, simd::FloatSimd};
 
 use crate::LoadKernel;
 

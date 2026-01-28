@@ -317,7 +317,6 @@ where
         }
     }
 
-    #[skip_masked]
     fn fold<F>(first: Self::Element, value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
@@ -325,7 +324,6 @@ where
         R::fold(R::fold(first, value.0, &f), value.1, &f)
     }
 
-    #[skip_masked]
     fn reduce<F>(value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
@@ -425,10 +423,10 @@ where
     const MIN: Storage<Self> = Self(R::MIN, R::MIN);
     const MAX: Storage<Self> = Self(R::MAX, R::MAX);
 
-    #[skip_masked] fn max_element(value: Storage<Self>) -> Self::Element { R::max_element(R::max(value.0, value.1)) }
-    #[skip_masked] fn min_element(value: Storage<Self>) -> Self::Element { R::min_element(R::min(value.0, value.1)) }
-    #[skip_masked] fn sum_elements(value: Storage<Self>) -> Self::Element { R::sum_elements(R::add(value.0, value.1)) }
-    #[skip_masked] fn prod_elements(value: Storage<Self>) -> Self::Element { R::prod_elements(R::mul(value.0, value.1)) }
+    fn max_element(value: Storage<Self>) -> Self::Element { R::max_element(R::max(value.0, value.1)) }
+    fn min_element(value: Storage<Self>) -> Self::Element { R::min_element(R::min(value.0, value.1)) }
+    fn sum_elements(value: Storage<Self>) -> Self::Element { R::sum_elements(R::add(value.0, value.1)) }
+    fn prod_elements(value: Storage<Self>) -> Self::Element { R::prod_elements(R::mul(value.0, value.1)) }
 
     #[conditional] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
@@ -476,9 +474,6 @@ where
 
     #[skip_masked] fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {}
     #[skip_masked] fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {}
-
-    #[skip_masked]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip]
@@ -560,8 +555,8 @@ where
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 
-    #[skip_masked] fn wrapping_sum(value: Storage<Self>) -> Self::Element { R::wrapping_sum(R::add(value.0, value.1)) }
-    #[skip_masked] fn wrapping_product(value: Storage<Self>) -> Self::Element { R::wrapping_product(R::mul(value.0, value.1)) }
+    fn wrapping_sum(value: Storage<Self>) -> Self::Element { R::wrapping_sum(R::add(value.0, value.1)) }
+    fn wrapping_product(value: Storage<Self>) -> Self::Element { R::wrapping_product(R::mul(value.0, value.1)) }
 
     fn div_branched(value: Storage<Self>, divider: crate::divider::Divider<Self::Element>) -> Storage<Self> {}
 

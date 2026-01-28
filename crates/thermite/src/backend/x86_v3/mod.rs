@@ -17,3 +17,9 @@ pub use registers::X86V3;
 
 decl_aliases!(X86V3);
 pub use self::aliases::*;
+
+pub mod prelude {
+    pub use super::X86V3;
+    pub use super::aliases::*;
+    pub use crate::prelude::*;
+}

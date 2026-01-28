@@ -50,13 +50,13 @@ impl CoreRegister for F64x2V2 {
 
 impl MaskRegister for F64x2V2 {
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -313,25 +313,21 @@ impl NumericRegister for F64x2V2 {
     const MIN: Storage<Self> = reg::<Self, 2>([f64::MIN; 2]);
     const MAX: Storage<Self> = reg::<Self, 2>([f64::MAX; 2]);
 
-    #[skip_masked]
     #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_min_pd _mm_min_sd)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_max_pd _mm_max_sd)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_add_pd _mm_add_sd)
     }
 
-    #[skip_masked]
     #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_mul_pd _mm_mul_sd)
@@ -355,6 +351,18 @@ impl NumericRegister for F64x2V2 {
     #[inline(always)]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_pd(lhs, rhs) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_add_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_sub_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
     }
 
     #[inline(always)]
@@ -384,6 +392,7 @@ impl NumericRegister for F64x2V2 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedRegister for F64x2V2 {
     const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1.0; 2]);
     const MIN_POSITIVE: Storage<Self> = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
@@ -404,17 +413,20 @@ impl SignedRegister for F64x2V2 {
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
+    #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
+#[thermite_macros::bitand_z]
 impl FloatRegister for F64x2V2 {
     const HAS_TRUE_FMA: bool = false;
 
@@ -431,25 +443,25 @@ impl FloatRegister for F64x2V2 {
 
     const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 2>([0x7FF0_0000_0000_0000; 2]);
 
-    #[cfg(not(feature = "disable_fma_emulation"))]
+    #[cfg(not(feature = "disable_fast_fma"))]
     #[inline(always)]
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, acc) }
     }
 
-    #[cfg(not(feature = "disable_fma_emulation"))]
+    #[cfg(not(feature = "disable_fast_fma"))]
     #[inline(always)]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, Self::neg(acc)) }
     }
 
-    #[cfg(not(feature = "disable_fma_emulation"))]
+    #[cfg(not(feature = "disable_fast_fma"))]
     #[inline(always)]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, acc) }
     }
 
-    #[cfg(not(feature = "disable_fma_emulation"))]
+    #[cfg(not(feature = "disable_fast_fma"))]
     #[inline(always)]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, Self::neg(acc)) }

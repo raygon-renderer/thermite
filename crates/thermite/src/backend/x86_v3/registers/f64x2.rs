@@ -53,13 +53,13 @@ impl MaskRegister for F64x2V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 2>([f64::from_bits(!0); 2]);
 
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -96,6 +96,7 @@ impl MaskRegister for F64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl BitwiseRegister for F64x2V3 {
     #[inline(always)]
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -303,6 +304,7 @@ impl PartialOrdRegister for F64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl NumericRegister for F64x2V3 {
     const ZERO: Storage<Self> = reg::<Self, 2>([0.0; 2]);
     const ONE: Storage<Self> = reg::<Self, 2>([1.0; 2]);
@@ -351,6 +353,18 @@ impl NumericRegister for F64x2V3 {
         unsafe { arch::_mm_sub_pd(lhs, rhs) }
     }
 
+    #[skip_masked]
+    #[inline(always)]
+    fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_add_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
+    }
+
+    #[skip_masked]
+    #[inline(always)]
+    fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_sub_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
+    }
+
     #[inline(always)]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mul_pd(lhs, rhs) }
@@ -378,6 +392,7 @@ impl NumericRegister for F64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedRegister for F64x2V3 {
     const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1.0; 2]);
     const MIN_POSITIVE: Storage<Self> = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
@@ -398,17 +413,20 @@ impl SignedRegister for F64x2V3 {
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
+    #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
+#[thermite_macros::bitand_z]
 impl FloatRegister for F64x2V3 {
     const HAS_TRUE_FMA: bool = true;
 

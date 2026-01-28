@@ -68,6 +68,34 @@ macro_rules! MM_SHUFFLE_R {
     }};
 }
 
+pub mod prelude {
+    pub use crate::{
+        divider::{BranchfreeDivider, Divider},
+        generic::ops::{
+            AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndMasked as _,
+            BitAndNot as _, BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _,
+            BitOrAssignMasked as _, BitOrMasked as _, BitOrMasked as _, BitXorAssignMasked as _, BitXorMasked as _,
+            BitXorMasked as _, DivAssignMasked as _, DivMasked as _, MulAddAssignMasked as _, MulAddMasked as _,
+            MulAssignMasked as _, MulMasked as _, NegMasked as _, NotMasked as _, RemAssignMasked as _, RemMasked as _,
+            ShlAssignMasked as _, ShlMasked as _, ShrAssignMasked as _, ShrMasked as _, SubAssignMasked as _,
+            SubMasked as _,
+        },
+        generic::{
+            BitsVector, BitshiftVector, CastMask, CastVector, FloatVector, FloatVectorWithBits, GenericVector,
+            IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector, SplatConst,
+            SwizzleVector, UnsignedIntegerVector,
+        },
+        math::FloatConsts,
+        math::{
+            CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,
+            RealMathWithPolicy as _, SpatialMath as _, SpatialMathWithPolicy as _, TranscendentalMath as _,
+            TranscendentalMathWithPolicy as _,
+        },
+        register::DoublePump,
+        vector::Vector,
+    };
+}
+
 #[macro_use]
 mod internal_macros;
 

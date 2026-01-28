@@ -85,14 +85,19 @@ impl<R: Register> GenericMask<Vector<R>> for Mask<R> {
     fn native_bitmask(&self) -> Option<u64> {
         self.native_bitmask()
     }
+
+    #[inline(always)]
+    fn bitmask(&self) -> BitArray<impl BitViewSized<Store = u32>> {
+        self.bitmask()
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: Register> GenericVector for Vector<R> {
     type Element = R::Element;
 
-    const EMPTY: Self = Vector::<R>::EMPTY;
-    const LANES: usize = Vector::<R>::LANES;
+    const EMPTY: Self = Vector(R::EMPTY);
+    const LANES: usize = <R::Lanes as generic_array::typenum::Unsigned>::USIZE;
     const ISA: InstructionSet = R::ISA;
 
     type Lanes = R::Lanes;
@@ -114,7 +119,7 @@ impl<R: Register> GenericVector for Vector<R> {
 
     #[skip_masked] fn as_slice(&self) -> &[Self::Element] { Vector::<R>::as_slice(self) }
     #[skip_masked] fn as_mut_slice(&mut self) -> &mut [Self::Element] { Vector::<R>::as_mut_slice(self) }
-    #[skip_masked] fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
+    fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
     #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
 
     #[conditional] fn reverse(self) -> Self {}
@@ -136,10 +141,8 @@ impl<R: Register> GenericVector for Vector<R> {
     #[skip_masked]
     fn map<F>(self, f: F) -> Self where F: Fn(Self::Element) -> Self::Element { Vector(R::map(self.0, f)) }
 
-    #[skip_masked]
     fn fold<F>(self, init: Self::Element, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::fold(init, self.0, f) }
 
-    #[skip_masked]
     fn reduce<F>(self, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::reduce(self.0, f) }
 
     #[skip_masked] fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
@@ -189,11 +192,11 @@ impl<R: NumericRegister> NumericVector for Vector<R>
 where
     R::Element: num_traits::Num,
 {
-    const ZERO: Self = Vector::<R>::ZERO;
-    const ONE: Self = Vector::<R>::ONE;
-    const TWO: Self = Vector::<R>::TWO;
-    const MIN: Self = Vector::<R>::MIN;
-    const MAX: Self = Vector::<R>::MAX;
+    const ZERO: Self = Vector(R::ZERO);
+    const ONE: Self = Vector(R::ONE);
+    const TWO: Self = Vector(R::TWO);
+    const MIN: Self = Vector(R::MIN);
+    const MAX: Self = Vector(R::MAX);
 
     #[skip_masked] fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
 
@@ -202,25 +205,48 @@ where
 
     #[skip_masked] fn clamp(self, min: Self, max: Self) -> Self { self.min(max).max(min) }
 
-    #[skip_masked] fn min_element(self) -> Self::Element { R::min_element(self.0) }
-    #[skip_masked] fn max_element(self) -> Self::Element { R::max_element(self.0) }
+    fn min_element(self) -> Self::Element { R::min_element(self.0) }
+    fn max_element(self) -> Self::Element { R::max_element(self.0) }
 
-    #[skip_masked] fn sum_elements(self) -> Self::Element { R::sum_elements(self.0) }
-    #[skip_masked] fn prod_elements(self) -> Self::Element { R::prod_elements(self.0) }
+    fn sum_elements(self) -> Self::Element { R::sum_elements(self.0) }
+    fn prod_elements(self) -> Self::Element { R::prod_elements(self.0) }
 
     #[skip_masked] fn offset() -> Self { Vector(R::offset()) }
     #[skip_masked] fn indexed() -> Self { Vector(R::indexed()) }
 }
 
+impl<R: NumericRegister> core::iter::Sum for Vector<R> {
+    #[inline(always)]
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vector(R::ZERO), Add::add)
+    }
+}
+
+impl<R: NumericRegister> core::iter::Product for Vector<R> {
+    #[inline(always)]
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vector(R::ONE), Mul::mul)
+    }
+}
+
+impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
+    #[inline(always)]
+    fn max_value() -> Self {
+        Vector(R::MAX)
+    }
+
+    #[inline(always)]
+    fn min_value() -> Self {
+        Vector(R::MIN)
+    }
+}
+
 impl<R: NumericRegister> NumVector for Vector<R> where R::Element: num_traits::Num + num_traits::NumCast {}
 
 #[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
-impl<R: SignedRegister> SignedVector for Vector<R>
-where
-    R::Element: num_traits::Signed,
-{
-    const NEG_ONE: Self = Vector::<R>::NEG_ONE;
-    const MIN_POSITIVE: Self = Vector::<R>::MIN_POSITIVE;
+impl<R: SignedRegister> SignedVector for Vector<R> {
+    const NEG_ONE: Self = Vector(R::NEG_ONE);
+    const MIN_POSITIVE: Self = Vector(R::MIN_POSITIVE);
 
     fn abs(self) -> Self {}
 
@@ -228,12 +254,10 @@ where
 
     fn copysign(self, sign: Self) -> Self {}
 
-    #[skip_masked] fn is_positive(self) -> Self::Mask { Vector::<R>::is_positive(self) }
-    #[skip_masked] fn is_negative(self) -> Self::Mask { Vector::<R>::is_negative(self) }
+    #[skip_masked] fn is_positive(self) -> Self::Mask { Mask(R::is_positive(self.0)) }
+    #[skip_masked] fn is_negative(self) -> Self::Mask { Mask(R::is_negative(self.0)) }
 
-    #[skip_masked] fn select_negative(self, if_neg: Self, if_pos: Self) -> Self {
-        Vector::<R>::select_negative(self, if_neg, if_pos)
-    }
+    #[skip_masked] fn select_negative(self, if_neg: Self, if_pos: Self) -> Self {}
 }
 
 impl<R: SignedRegister> NumSignedVector for Vector<R> where R::Element: num_traits::Signed + num_traits::NumCast {}
@@ -257,8 +281,8 @@ where
     fn saturating_add(self, other: Self) -> Self {}
     fn saturating_sub(self, other: Self) -> Self {}
 
-    #[skip_masked] fn wrapping_sum(self) -> Self::Element { R::wrapping_sum(self.0) }
-    #[skip_masked] fn wrapping_prod(self) -> Self::Element { R::wrapping_product(self.0) }
+    fn wrapping_sum(self) -> Self::Element { R::wrapping_sum(self.0) }
+    fn wrapping_prod(self) -> Self::Element { R::wrapping_product(self.0) }
 
     #[skip_masked] fn create_divider(d: Self::Element) -> Self::Divider { Denominator::to_divider(d) }
     #[skip_masked] fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider { Denominator::to_branchfree_divider(d) }
@@ -361,7 +385,7 @@ where
 #[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
 impl<R: SignedIntegerRegister> SignedIntegerVector for Vector<R>
 where
-    R::Element: Denominator + num_traits::Signed,
+    R::Element: Denominator,
 {
     fn srai<const I: i32>(self) -> Self {}
     fn sra(self, count: u32) -> Self {}

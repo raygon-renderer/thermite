@@ -54,13 +54,13 @@ impl MaskRegister for I64x2V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 2>([-1; 2]);
 
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -97,6 +97,7 @@ impl MaskRegister for I64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl BitwiseRegister for I64x2V3 {
     #[inline(always)]
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -396,6 +397,7 @@ impl NumericRegister for I64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedRegister for I64x2V3 {
     const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1; 2]);
     const MIN_POSITIVE: Storage<Self> = reg_splat::<Self>(1);
@@ -411,7 +413,7 @@ impl SignedRegister for I64x2V3 {
     }
 
     #[inline(always)]
-    fn is_negative(value: Storage<Self>) -> Storage<Self> {
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe { arch::_mm_signbits_epi64x_v1(value) }
     }
 
@@ -428,13 +430,15 @@ impl SignedRegister for I64x2V3 {
         unsafe { arch::_mm_copysign_epi64x_v2(lhs, rhs) }
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_blendv_epi8(Self::NEG_ONE, Self::ONE, arch::_mm_cmpgt_epi64(value, Self::NEG_ONE)) }
     }
 
+    #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), Self::shri::<63>(mask))
     }
 }
@@ -522,6 +526,7 @@ impl IntegerRegister for I64x2V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedIntegerRegister for I64x2V3 {
     #[inline(always)]
     fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {

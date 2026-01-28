@@ -51,13 +51,13 @@ impl MaskRegister for I32x8V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 8>([-1; 8]);
 
     #[inline(always)]
-    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+    fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { Element::TRUTHY } else { Element::FALSY };
         mask
     }
 
     #[inline(always)]
-    fn test(mask: Storage<Self>, lane: usize) -> bool {
+    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
         Self::as_array(&mask)[lane].to_bool()
     }
 
@@ -94,6 +94,7 @@ impl MaskRegister for I32x8V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl BitwiseRegister for I32x8V3 {
     #[inline(always)]
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -437,6 +438,7 @@ impl NumericRegister for I32x8V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedRegister for I32x8V3 {
     const NEG_ONE: Storage<Self> = reg::<Self, 8>([-1; 8]);
     const MIN_POSITIVE: Storage<Self> = reg_splat::<Self>(1);
@@ -447,12 +449,12 @@ impl SignedRegister for I32x8V3 {
     }
 
     #[inline(always)]
-    fn is_negative(value: Storage<Self>) -> Storage<Self> {
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe { arch::_mm256_srai_epi32::<31>(value) }
     }
 
     #[inline(always)]
-    fn is_positive(value: Storage<Self>) -> Storage<Self> {
+    fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::not(Self::is_negative(value))
     }
 
@@ -468,6 +470,7 @@ impl SignedRegister for I32x8V3 {
         unsafe { arch::_mm256_sign_epi32(lhs, arch::_mm256_or_si256(rhs, arch::_mm256_set1_epi32(1))) }
     }
 
+    #[skip_masked]
     #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         // same thing as above, but negating 1 instead of an input value
@@ -479,8 +482,9 @@ impl SignedRegister for I32x8V3 {
         }
     }
 
+    #[skip_masked]
     #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitxor(value, mask), Self::shri::<31>(mask))
     }
 }
@@ -565,6 +569,7 @@ impl IntegerRegister for I32x8V3 {
     }
 }
 
+#[thermite_macros::bitand_z]
 impl SignedIntegerRegister for I32x8V3 {
     #[inline(always)]
     fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {

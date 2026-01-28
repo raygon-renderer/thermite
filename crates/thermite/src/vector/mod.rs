@@ -593,32 +593,6 @@ impl<R: Register> Vector<R> {
     }
 }
 
-impl<R: NumericRegister> core::iter::Sum for Vector<R> {
-    #[inline(always)]
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Vector(R::ZERO), Add::add)
-    }
-}
-
-impl<R: NumericRegister> core::iter::Product for Vector<R> {
-    #[inline(always)]
-    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Vector(R::ONE), Mul::mul)
-    }
-}
-
-impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
-    #[inline(always)]
-    fn max_value() -> Self {
-        Vector(R::MAX)
-    }
-
-    #[inline(always)]
-    fn min_value() -> Self {
-        Vector(R::MIN)
-    }
-}
-
 impl<R: PartialOrdRegister> PartialEq for Vector<R> {
     /// Compare two vectors for equality, returning true only if all elements are equal.
     #[inline(always)]
@@ -646,64 +620,7 @@ where
     }
 }
 
-impl<R: UnsignedIntegerRegister> num_traits::Unsigned for Vector<R> where R::Element: num_traits::Unsigned {}
-
-impl<R: SignedRegister> Vector<R> {
-    /// A vector of the value "-1" in the element type.
-    pub const NEG_ONE: Self = Self(R::NEG_ONE);
-
-    /// A vector of the smallest positive (non-zero) value in the element type.
-    pub const MIN_POSITIVE: Self = Self(R::MIN_POSITIVE);
-
-    /// Take the absolute value of the vector, element-wise.
-    #[inline(always)]
-    pub fn abs(self) -> Self {
-        Self(R::abs(self.0))
-    }
-
-    /// For each element in the vector, set the sign of that
-    /// element to the sign of the corresponding element in the other vector.
-    #[inline(always)]
-    pub fn copysign(self, rhs: Self) -> Self {
-        Self(R::copysign(self.0, rhs.0))
-    }
-
-    /// For each element in the vector, return a new vector
-    /// where each element is either -1 or +1 depending
-    /// on the sign of the element.
-    #[inline(always)]
-    pub fn signum(self) -> Self {
-        Self(R::signum(self.0))
-    }
-
-    /// For each element in the vector, return a mask indicating
-    /// whether that element is negative.
-    #[inline(always)]
-    pub fn is_negative(self) -> Mask<R> {
-        Mask(R::is_negative(self.0))
-    }
-
-    /// For each element in the vector, return a mask indicating
-    /// whether that element is positive.
-    #[inline(always)]
-    pub fn is_positive(self) -> Mask<R> {
-        Mask(R::is_positive(self.0))
-    }
-
-    /// Conditionally negate each lane in the vector based on the mask, where a `true` value
-    /// indicates that the lane should be negated.
-    #[inline(always)]
-    pub fn conditional_negate(self, mask: Mask<R>) -> Self {
-        Self(R::conditional_negate(self.0, mask.0))
-    }
-
-    /// Selects elements from `truthy` or `falsy` based on the mask,
-    /// where `true` in the mask selects from `truthy` and `false` selects from `falsy`.
-    #[inline(always)]
-    pub fn select_negative(self, truthy: Self, falsy: Self) -> Self {
-        Self(R::select_negative(self.0, falsy.0, truthy.0))
-    }
-}
+impl<R: UnsignedIntegerRegister> num_traits::Unsigned for Vector<R> {}
 
 impl<R: SignedRegister> Signed for Vector<R>
 where
