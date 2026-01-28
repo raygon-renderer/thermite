@@ -1229,8 +1229,9 @@ pub trait FloatRegister:
         // convert to unsigned to push one more zero bit.
         // On positive values, the mask is all zeros, so it's a no-op.
 
+        let shift = const { size_of::<Self::Element>() as u32 * 8 - 1 };
         let signed_bits = <Self::Signed as BitCastRegister<Self>>::from_bits(value);
-        let is_negative = <Self::Signed as SignedIntegerRegister>::srai::<64>(signed_bits);
+        let is_negative = <Self::Signed as SignedIntegerRegister>::sra(signed_bits, shift);
         let mask = <Self::Signed as BitshiftRegister>::shri::<1>(is_negative);
 
         Self::Signed::bitxor(signed_bits, mask)
