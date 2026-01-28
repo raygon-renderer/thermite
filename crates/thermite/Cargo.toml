@@ -16,6 +16,11 @@ neon = []
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
 wasm = []
 
+avx512-tier1 = []               # Oldest AVX512 CPUs
+avx512-tier2 = ["avx512-tier1"] # Common AVX512 CPUs
+avx512-tier3 = ["avx512-tier2"] # Modern AVX512 CPUs
+avx512-tier4 = ["avx512-tier3"] # Cutting-edge AVX512 CPUs
+
 [dependencies]
 thermite-macros = { path = "../thermite-macros" }
 fast_polynomial = { version = "0.4", default-features = false }
