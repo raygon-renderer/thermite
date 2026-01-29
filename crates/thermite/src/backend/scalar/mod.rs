@@ -6,12 +6,18 @@ pub mod unsigned;
 
 use crate::{
     isa::InstructionSet,
-    register::{Element, Storage, dp::DoublePumpRegister},
+    register::{Element, MaskElement, Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Scalar;
+
+pub mod prelude {
+    pub use super::Scalar;
+    pub use super::aliases::*;
+    pub use crate::prelude::*;
+}
 
 impl NativeSimd for Scalar {
     const ISA: InstructionSet = InstructionSet::Scalar;
@@ -106,7 +112,7 @@ macro_rules! impl_nontrivial_casts {
         impl $crate::register::CastMaskRegister<$from> for $to {
             #[inline(always)]
             fn mask_from(value: Storage<$from>) -> Storage<Self> {
-                Element::from_bool(value.to_bool())
+                MaskElement::from_bool(value.to_bool())
             }
         }
     )*};

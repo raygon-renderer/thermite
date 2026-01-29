@@ -462,7 +462,8 @@ macro_rules! decl_aliases {
 }
 
 use crate::generic::{
-    BitsVector, CastVector, FloatVectorWithRegister, SignedIntegerVectorWithRegister, UnsignedIntegerVectorWithRegister,
+    BitCastVector, CastVector, FloatVectorWithRegister, LinAlg4Vector, SignedIntegerVectorWithRegister,
+    UnsignedIntegerVectorWithRegister,
 };
 
 pub trait NativeSimdVectors: NativeSimd {
@@ -508,7 +509,8 @@ pub trait SimdVectors: NativeSimdVectors + Simd {
             Register = <Self as Simd>::f32x4,
             Signed = <Self as SimdVectors>::i32x4,
             Bits = <Self as SimdVectors>::u32x4,
-        > + CastVector<<Self as SimdVectors>::f64x4>;
+        > + CastVector<<Self as SimdVectors>::f64x4>
+        + LinAlg4Vector;
     type i32x4: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i32x4>
         + CastVector<<Self as SimdVectors>::i64x4>;
     type u32x4: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u32x4>
@@ -538,7 +540,8 @@ pub trait SimdVectors: NativeSimdVectors + Simd {
             Register = <Self as Simd>::f64x4,
             Signed = <Self as SimdVectors>::i64x4,
             Bits = <Self as SimdVectors>::u64x4,
-        > + CastVector<<Self as SimdVectors>::f32x4>;
+        > + CastVector<<Self as SimdVectors>::f32x4>
+        + LinAlg4Vector;
     type i64x4: SignedIntegerVectorWithRegister<Register = <Self as Simd>::i64x4>
         + CastVector<<Self as SimdVectors>::i32x4>;
     type u64x4: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::u64x4>

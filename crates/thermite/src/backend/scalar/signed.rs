@@ -7,8 +7,9 @@ use generic_array::{
 use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IntegerRegister,
-    LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-    SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+    ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister,
+    empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -47,8 +48,8 @@ impl BitwiseRegister for [<i $width>] {
 }
 
 impl MaskRegister for [<i $width>] {
-    const TRUTHY: Storage<Self> = Element::TRUTHY;
-    const FALSY: Storage<Self> = Element::FALSY;
+    const TRUTHY: Storage<Self> = MaskElement::TRUTHY;
+    const FALSY: Storage<Self> = MaskElement::FALSY;
 
     #[inline(always)]
     fn set(mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
@@ -168,12 +169,12 @@ impl SwizzleRegister for [<i $width>] {
 }
 
 impl PartialOrdRegister for [<i $width>] {
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs > rhs) }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs == rhs) }
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs >= rhs) }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs < rhs) }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs <= rhs) }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs != rhs) }
+    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs > rhs) }
+    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs == rhs) }
+    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs >= rhs) }
+    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs < rhs) }
+    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs <= rhs) }
+    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs != rhs) }
 }
 
 impl NumericRegister for [<i $width>] {

@@ -7,8 +7,8 @@ use generic_array::{
 use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IntegerRegister,
-    LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-    Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+    LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+    ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -47,8 +47,8 @@ impl BitwiseRegister for [<u $width>] {
 }
 
 impl MaskRegister for [<u $width>] {
-    const TRUTHY: Storage<Self> = Element::TRUTHY;
-    const FALSY: Storage<Self> = Element::FALSY;
+    const TRUTHY: Storage<Self> = MaskElement::TRUTHY;
+    const FALSY: Storage<Self> = MaskElement::FALSY;
 
     #[inline(always)]
     fn set(mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
@@ -167,12 +167,12 @@ impl SwizzleRegister for [<u $width>] {
 }
 
 impl PartialOrdRegister for [<u $width>] {
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs > rhs) }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs == rhs) }
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs >= rhs) }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs < rhs) }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs <= rhs) }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Element::from_bool(lhs != rhs) }
+    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs > rhs) }
+    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs == rhs) }
+    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs >= rhs) }
+    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs < rhs) }
+    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs <= rhs) }
+    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs != rhs) }
 }
 
 impl NumericRegister for [<u $width>] {
@@ -255,12 +255,12 @@ impl UnsignedIntegerRegister for [<u $width>] {
 
     #[inline(always)]
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {
-        Element::from_bool(value.is_power_of_two())
+        MaskElement::from_bool(value.is_power_of_two())
     }
 
     #[inline(always)]
     fn parity(value: Storage<Self>) -> Storage<Self> {
-        Element::from_bool(value.count_ones() % 2 == 1)
+        MaskElement::from_bool(value.count_ones() % 2 == 1)
     }
 }
 

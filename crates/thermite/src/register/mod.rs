@@ -15,7 +15,7 @@ pub mod element;
 pub mod linalg;
 pub mod well_formed;
 
-pub use element::{Element, FloatElement};
+pub use element::{Element, FloatElement, MaskElement};
 pub use linalg::{LinAlg3Register, LinAlg4Register, ValidLinAlg3Length};
 
 use generic_array::{
@@ -890,7 +890,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
         value = Self::swap_bytes(value);
 
         let mut s = size_of::<Self::Element>() as u32 * 4; // Start with half the bit width
-        let mut mask = Self::splat(Element::TRUTHY); // guaranteed to be all 1s
+        let mut mask = Self::not(Self::EMPTY); // All bits set
 
         // Update mask until it's at the byte level.
         // This is a separate loop because the compiler has an easier

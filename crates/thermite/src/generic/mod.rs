@@ -122,16 +122,16 @@ where
 pub trait FullyInteroperable<A, B>:
     GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
     // bits
-    + BitsVector<Self>
-    + BitsVector<A>
-    + BitsVector<B>
+    + BitCastVector<Self>
+    + BitCastVector<A>
+    + BitCastVector<B>
     // casts
     + CastVector<Self>
     + CastVector<A>
     + CastVector<B>
 where
-    A: BitsVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
-    B: BitsVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+    A: BitCastVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: BitCastVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
 {
 }
 
@@ -139,15 +139,15 @@ impl<V, A, B> FullyInteroperable<A, B> for V
 where
     V: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
         // bits
-        + BitsVector<V>
-        + BitsVector<A>
-        + BitsVector<B>
+        + BitCastVector<V>
+        + BitCastVector<A>
+        + BitCastVector<B>
         // casts
         + CastVector<V>
         + CastVector<A>
         + CastVector<B>,
-    A: BitsVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
-    B: BitsVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
+    A: BitCastVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
+    B: BitCastVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
 {
 }
 
@@ -160,16 +160,6 @@ pub trait GenericVector:
     + Copy
     + core::fmt::Debug
     + 'static
-    + ops::BitAndMasked<Self::Mask, Self, Output = Self>
-    + ops::BitAndAssignMasked<Self::Mask, Self>
-    + ops::BitAndNotMasked<Self::Mask, Self, Output = Self>
-    + ops::BitAndNotAssignMasked<Self::Mask, Self>
-    + ops::BitOrMasked<Self::Mask, Self, Output = Self>
-    + ops::BitOrAssignMasked<Self::Mask, Self>
-    + ops::BitXorMasked<Self::Mask, Self, Output = Self>
-    + ops::BitXorAssignMasked<Self::Mask, Self>
-    + ops::NotMasked<Self::Mask, Output = Self>
-    + Index<usize, Output = Self::Element>
     + GenericSelectable<SelectableMask = Self::Mask>
 {
     /// Scalar element type of the vector.
@@ -195,7 +185,7 @@ pub trait GenericVector:
             Element = <Self::Element as Element>::USize,
             Mask: CastMask<Self::Mask>,
         > + CastVector<Self::ISize>
-        + BitsVector<Self::ISize>;
+        + BitCastVector<Self::ISize>;
 
     /// Signed Integer Type suitable for use with this vector.
     type ISize: SignedIntegerVector<
@@ -205,16 +195,16 @@ pub trait GenericVector:
             Element = <Self::Element as Element>::ISize,
             Mask: CastMask<Self::Mask>,
         > + CastVector<Self::USize>
-        + BitsVector<Self::USize>;
+        + BitCastVector<Self::USize>;
 
     /// Mask type for this vector. Masks are semantically boolean vectors indicating
     /// true or false for each lane. They may or may not be represented as actual bits.
-    type Mask: GenericMask<Self>
+    type Mask: GenericMask
         + CastMask<<Self::USize as GenericVector>::Mask>
         + CastMask<<Self::ISize as GenericVector>::Mask>;
 
     /// Create a new vector from a single element by splatting it across all lanes.
-    #[skip_masked] fn splat(value: Self::Element) -> Self;
+    fn splat(value: Self::Element) -> Self;
 
     /// Splat a compile-time constant value into all lanes of the vector.
     ///
@@ -248,85 +238,21 @@ pub trait GenericVector:
     /// If `idx` is out of bounds for the vector's lanes.
     fn broadcastv(self, idx: usize) -> Self;
 
-    /// Returns a slice of the vector's elements.
-    #[skip_masked] fn as_slice(&self) -> &[Self::Element];
-
-    /// Returns a mutable slice of the vector's elements.
-    #[skip_masked] fn as_mut_slice(&mut self) -> &mut [Self::Element];
-
     /// Extract a single element from the vector at the given index.
     fn extract<const I: usize>(self) -> Self::Element;
 
+    fn extractv(self, idx: usize) -> Self::Element;
+
     /// Replace a single element in the vector at the given index with a new value.
     #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self;
+
+    #[skip_masked] fn insertv(self, idx: usize, value: Self::Element) -> Self;
 
     /// Reverse the order of the elements in the vector.
     #[conditional] fn reverse(self) -> Self;
 
     /// Swap the byte order of each element in the vector. i.e., converts between little-endian and big-endian.
     #[conditional] fn swap_bytes(self) -> Self;
-
-    /// Computes an arbitrary bitwise boolean function of three inputs (`a`, `b`, `c`)
-    /// based on the truth table specified by `IMM`.
-    ///
-    /// This function is a "programmable logic gate". It applies the logic defined in `IMM`
-    /// to every bit of the inputs in parallel.
-    ///
-    /// # How to Calculate `IMM`
-    /// The easiest way to find the correct `IMM` value is to perform your desired boolean
-    /// logic on these three specific "Magic Constants":
-    ///
-    /// * **A** = `0xF0` (Binary `11110000`)
-    /// * **B** = `0xCC` (Binary `11001100`)
-    /// * **C** = `0xAA` (Binary `10101010`)
-    ///
-    /// ## Example: `(A OR B) XOR C`
-    /// 1. `A | B` = `0xF0 | 0xCC` = `0xFC`
-    /// 2. `Result ^ C` = `0xFC ^ 0xAA` = `0x56`
-    /// 3. Therefore, `IMM = 0x56`.
-    ///
-    /// You can also use the [`ternlog_imm!`](crate::ternlog_imm) macro to compute
-    /// this at compile time.
-    ///
-    /// # Visualization using Disjunction Normal Form (DNF)
-    /// The constants `0xF0`, `0xCC`, and `0xAA` simply form a parallel truth table
-    /// for all 8 possible combinations of 3 bits:
-    ///
-    /// |  A  |  B  |  C  |  Bit Index  |  Term Logic (Minterm) |
-    /// |:---:|:---:|:---:|:-----------:|:---------------------:|
-    /// |  0  |  0  |  0  |      0      | ~A & ~B & ~C          |
-    /// |  0  |  0  |  1  |      1      | ~A & ~B &  C          |
-    /// |  0  |  1  |  0  |      2      | ~A &  B & ~C          |
-    /// |  0  |  1  |  1  |      3      | ~A &  B &  C          |
-    /// |  1  |  0  |  0  |      4      |  A & ~B & ~C          |
-    /// |  1  |  0  |  1  |      5      |  A & ~B &  C          |
-    /// |  1  |  1  |  0  |      6      |  A &  B & ~C          |
-    /// |  1  |  1  |  1  |      7      |  A &  B &  C          |
-    ///
-    /// If `IMM = 0x88` (Bit 3 and 7 set), the logic is:
-    /// - Bit 3 (0, 1, 1): `~A & B & C`
-    /// - Bit 7 (1, 1, 1): `A & B & C`
-    ///
-    /// As raw DNF, this becomes: `(~A & B & C) | (A & B & C)`.\
-    /// `~A` and `A` cancel out, simplifying to `B & C`.
-    ///
-    /// For each bit set in IMM, we effectively bitwise-OR each corresponding minterm.
-    ///
-    /// # Common Immediate Values
-    /// | Logic | Immediate | Description |
-    /// | :--- | :--- | :--- |
-    /// | `A ^ B ^ C` | `0x96` | **3-Way XOR** (Parity) |
-    /// | `(A & B) OR (~A & C)` | `0xCA` | **Bitwise Select** (If A=1 use B, else use C) |
-    /// | `(A & B) OR (A & C) OR (B & C)` | `0xE8` | **Majority** (True if 2+ inputs are 1) |
-    /// | `A OR B OR C` | `0xFE` | **3-Way OR** |
-    /// | `A ? B : 0` | `0xA0` | **Mask** (A & B) |
-    ///
-    /// # Performance Note
-    /// Since `IMM` is a compile-time constant, the compiler will optimize this function
-    /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
-    /// for your specific architecture. If using AVX512, there actually exists a single
-    /// instruction for this.
-    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 
     /// Zero out elements of the vector based on the given mask. If the mask lane is true,
     /// the corresponding element is unchanged; if false, it is set to zero.
@@ -396,7 +322,7 @@ pub trait GenericVector:
     #[inline(always)]
     #[skip_masked] fn into_bits<INTO>(self) -> INTO
     where
-        INTO: BitsVector<Self>,
+        INTO: BitCastVector<Self>,
     {
         INTO::from_bits(self)
     }
@@ -404,8 +330,85 @@ pub trait GenericVector:
 
 #[thermite_macros::vector_trait]
 #[conditional]
-pub trait BitshiftVector:
+pub trait BitwiseVector:
     GenericVector
+    + ops::BitAndMasked<Self::Mask, Self, Output = Self>
+    + ops::BitAndAssignMasked<Self::Mask, Self>
+    + ops::BitAndNotMasked<Self::Mask, Self, Output = Self>
+    + ops::BitAndNotAssignMasked<Self::Mask, Self>
+    + ops::BitOrMasked<Self::Mask, Self, Output = Self>
+    + ops::BitOrAssignMasked<Self::Mask, Self>
+    + ops::BitXorMasked<Self::Mask, Self, Output = Self>
+    + ops::BitXorAssignMasked<Self::Mask, Self>
+    + ops::NotMasked<Self::Mask, Output = Self>
+{
+    /// Computes an arbitrary bitwise boolean function of three inputs (`a`, `b`, `c`)
+    /// based on the truth table specified by `IMM`.
+    ///
+    /// This function is a "programmable logic gate". It applies the logic defined in `IMM`
+    /// to every bit of the inputs in parallel.
+    ///
+    /// # How to Calculate `IMM`
+    /// The easiest way to find the correct `IMM` value is to perform your desired boolean
+    /// logic on these three specific "Magic Constants":
+    ///
+    /// * **A** = `0xF0` (Binary `11110000`)
+    /// * **B** = `0xCC` (Binary `11001100`)
+    /// * **C** = `0xAA` (Binary `10101010`)
+    ///
+    /// ## Example: `(A OR B) XOR C`
+    /// 1. `A | B` = `0xF0 | 0xCC` = `0xFC`
+    /// 2. `Result ^ C` = `0xFC ^ 0xAA` = `0x56`
+    /// 3. Therefore, `IMM = 0x56`.
+    ///
+    /// You can also use the [`ternlog_imm!`](crate::ternlog_imm) macro to compute
+    /// this at compile time.
+    ///
+    /// # Visualization using Disjunction Normal Form (DNF)
+    /// The constants `0xF0`, `0xCC`, and `0xAA` simply form a parallel truth table
+    /// for all 8 possible combinations of 3 bits:
+    ///
+    /// |  A  |  B  |  C  |  Bit Index  |  Term Logic (Minterm) |
+    /// |:---:|:---:|:---:|:-----------:|:---------------------:|
+    /// |  0  |  0  |  0  |      0      | ~A & ~B & ~C          |
+    /// |  0  |  0  |  1  |      1      | ~A & ~B &  C          |
+    /// |  0  |  1  |  0  |      2      | ~A &  B & ~C          |
+    /// |  0  |  1  |  1  |      3      | ~A &  B &  C          |
+    /// |  1  |  0  |  0  |      4      |  A & ~B & ~C          |
+    /// |  1  |  0  |  1  |      5      |  A & ~B &  C          |
+    /// |  1  |  1  |  0  |      6      |  A &  B & ~C          |
+    /// |  1  |  1  |  1  |      7      |  A &  B &  C          |
+    ///
+    /// If `IMM = 0x88` (Bit 3 and 7 set), the logic is:
+    /// - Bit 3 (0, 1, 1): `~A & B & C`
+    /// - Bit 7 (1, 1, 1): `A & B & C`
+    ///
+    /// As raw DNF, this becomes: `(~A & B & C) | (A & B & C)`.\
+    /// `~A` and `A` cancel out, simplifying to `B & C`.
+    ///
+    /// For each bit set in IMM, we effectively bitwise-OR each corresponding minterm.
+    ///
+    /// # Common Immediate Values
+    /// | Logic | Immediate | Description |
+    /// | :--- | :--- | :--- |
+    /// | `A ^ B ^ C` | `0x96` | **3-Way XOR** (Parity) |
+    /// | `(A & B) OR (~A & C)` | `0xCA` | **Bitwise Select** (If A=1 use B, else use C) |
+    /// | `(A & B) OR (A & C) OR (B & C)` | `0xE8` | **Majority** (True if 2+ inputs are 1) |
+    /// | `A OR B OR C` | `0xFE` | **3-Way OR** |
+    /// | `A ? B : 0` | `0xA0` | **Mask** (A & B) |
+    ///
+    /// # Performance Note
+    /// Since `IMM` is a compile-time constant, the compiler will optimize this function
+    /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
+    /// for your specific architecture. If using AVX512, there actually exists a single
+    /// instruction for this.
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+}
+
+#[thermite_macros::vector_trait]
+#[conditional]
+pub trait BitshiftVector:
+    BitwiseVector
     + ops::ShrMasked<Self::Mask, Self::USize, Output = Self>
     + ops::ShrAssignMasked<Self::Mask, Self::USize>
     + ops::ShlMasked<Self::Mask, Self::USize, Output = Self>
@@ -477,11 +480,11 @@ pub trait CastVector<FROM: GenericVector>: GenericVector {
     }
 }
 
-pub trait BitsVector<FROM: GenericVector>: GenericVector {
+pub trait BitCastVector<FROM: GenericVector>: GenericVector {
     fn from_bits(bits: FROM) -> Self;
 }
 
-pub trait GenericMask<V: GenericVector>:
+pub trait GenericMask:
     'static
     + Sized
     + Copy
@@ -690,7 +693,13 @@ pub trait IntegerVector:
     type BranchfreeDivider: Copy;
     type VectorizedDivider: Copy;
 
+    /// Multiply two vectors, returning the high half of each product.
     fn mulhi(self, other: Self) -> Self;
+
+    /// Multiply two vectors, returning the low half of each product.
+    ///
+    /// This is usually the same as regular multiplication, but some architectures
+    /// have specialized instructions for this operation.
     fn mullo(self, other: Self) -> Self;
 
     // fn wrapping_add(self, other: Self) -> Self;
@@ -772,15 +781,18 @@ pub trait NumFloatVector:
 {
 }
 
-pub trait FloatVectorWithRegister: FloatVectorWithBits {
+/// Float vector types which have an associated hardware register type.
+pub trait FloatVectorWithRegister: FloatVectorWithBits<Mask = crate::Mask<Self::Register>> {
     type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-pub trait SignedIntegerVectorWithRegister: SignedIntegerVector {
+/// Signed integer vector types which have an associated hardware register type.
+pub trait SignedIntegerVectorWithRegister: SignedIntegerVector<Mask = crate::Mask<Self::Register>> {
     type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector {
+/// Unsigned integer vector types which have an associated hardware register type.
+pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector<Mask = crate::Mask<Self::Register>> {
     type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
@@ -918,7 +930,7 @@ pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastV
 }
 
 // These do not have masked variants
-pub trait FloatVectorWithBits: FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
+pub trait FloatVectorWithBits: BitwiseVector + FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
     type Signed: SignedIntegerVector<
             Lanes = Self::Lanes,
             Divider = Divider<<Self::Element as FloatElement>::Signed>,

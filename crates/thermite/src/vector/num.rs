@@ -4,8 +4,8 @@ use core::ops::Deref;
 
 use crate::{
     generic::{
-        BitshiftVector, CastMask, FloatVector, GenericMask, GenericSelectable, GenericVector, NumericVector,
-        PartialOrdVector, SignedVector,
+        BitshiftVector, BitwiseVector, CastMask, FloatVector, GenericMask, GenericSelectable, GenericVector,
+        NumericVector, PartialOrdVector, SignedVector,
     },
     math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath},
     register::{FloatElement, FloatRegister},
@@ -99,7 +99,7 @@ macro_rules! fwd_ops {
     )*}};
 }
 
-fwd_ops!(BINARY: GenericVector => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
+fwd_ops!(BINARY: BitwiseVector => BitAnd::bitand, BitOr::bitor, BitXor::bitxor);
 fwd_ops!(BINARY: NumericVector => Add::add, Sub::sub, Mul::mul, Div::div, Rem::rem);
 fwd_ops!(SHIFTS: BitshiftVector => Shl::shl, Shr::shr);
 fwd_ops!(UNARY: SignedVector => Neg::neg);

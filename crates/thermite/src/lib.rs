@@ -69,6 +69,8 @@ macro_rules! MM_SHUFFLE_R {
 }
 
 pub mod prelude {
+    pub use crate::{Mask, Vector};
+
     pub use crate::{
         divider::{BranchfreeDivider, Divider},
         generic::ops::{
@@ -81,9 +83,9 @@ pub mod prelude {
             SubMasked as _,
         },
         generic::{
-            BitsVector, BitshiftVector, CastMask, CastVector, FloatVector, FloatVectorWithBits, GenericMask,
-            GenericVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector,
-            SplatConst, SwizzleVector, UnsignedIntegerVector,
+            BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, FloatVector, FloatVectorWithBits,
+            GenericMask, GenericVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector,
+            SignedVector, SplatConst, SwizzleVector, UnsignedIntegerVector,
         },
         math::FloatConsts,
         math::{
@@ -91,8 +93,8 @@ pub mod prelude {
             RealMathWithPolicy as _, SpatialMath as _, SpatialMathWithPolicy as _, TranscendentalMath as _,
             TranscendentalMathWithPolicy as _,
         },
-        register::DoublePump,
-        vector::Vector,
+        register::{DoublePump, Element, FloatElement},
+        simd::{FloatSimd, NativeSimd, NativeSimdVectors, Simd, SimdVectors, SizedSimd, WideSimd},
     };
 }
 

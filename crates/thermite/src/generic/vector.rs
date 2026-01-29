@@ -3,9 +3,9 @@ use super::*;
 use crate::{
     generic::ops::DivMasked,
     register::{
-        BitCastRegister, BitshiftRegister, CastMaskRegister, CastRegister, Element, FloatElement, FloatRegister,
-        IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister, PartialOrdRegister, Register,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, Element, FloatElement,
+        FloatRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister, PartialOrdRegister,
+        Register, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -25,7 +25,7 @@ where
     }
 }
 
-impl<FROM, INTO> BitsVector<Vector<FROM>> for Vector<INTO>
+impl<FROM, INTO> BitCastVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register,
     INTO: Register + BitCastRegister<FROM>,
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<R: Register> GenericMask<Vector<R>> for Mask<R> {
+impl<R: Register> GenericMask for Mask<R> {
     const FALSY: Self = Mask::<R>::FALSY;
     const TRUTHY: Self = Mask::<R>::TRUTHY;
 
@@ -112,20 +112,24 @@ impl<R: Register> GenericVector for Vector<R> {
         const { Self::splat_const(C::VALUE) }
     }
 
-    #[skip_masked] fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
+    fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
 
     fn broadcast<const I: usize>(self) -> Self {}
     fn broadcastv(self, idx: usize) -> Self {}
 
-    #[skip_masked] fn as_slice(&self) -> &[Self::Element] { Vector::<R>::as_slice(self) }
-    #[skip_masked] fn as_mut_slice(&mut self) -> &mut [Self::Element] { Vector::<R>::as_mut_slice(self) }
     fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
+    fn extractv(self, idx: usize) -> Self::Element { self.as_slice()[idx] }
+
     #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
+
+    #[skip_masked] fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
+        let mut arr = self.as_mut_slice();
+        arr[idx] = value;
+        self
+    }
 
     #[conditional] fn reverse(self) -> Self {}
     #[conditional] fn swap_bytes(self) -> Self {}
-
-    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
 
     // The arguments of these are reversed for the register
     #[skip_masked] fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
@@ -153,6 +157,11 @@ impl<R: Register> GenericVector for Vector<R> {
     #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store(self, ptr) } }
     #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_unaligned(self, ptr) } }
     #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_streaming(self, ptr) } }
+}
+
+#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+impl<R: BitwiseRegister + Register> BitwiseVector for Vector<R> {
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
