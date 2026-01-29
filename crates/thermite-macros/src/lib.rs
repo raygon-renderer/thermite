@@ -479,8 +479,18 @@ fn is_vectorlike_type(ty: &Type) -> bool {
         _ => return false,
     };
 
-    tp.path.is_ident("Self") || tp.path.segments.first().is_some_and(|s| s.ident == "Self") || tp.path.segments.last()
-        .is_some_and(|s| s.ident == "Vector" || s.ident == "Mask")
+    // Allow `Self::*`
+    if tp.path.segments.first().is_some_and(|s| s.ident == "Self") {
+        // Unless it's `Self::Element`
+        if let Some(second) = tp.path.segments.get(1) && second.ident == "Element" {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Allow `Self`, `Vector`, `Mask`
+    tp.path.is_ident("Self") || tp.path.segments.last().is_some_and(|s| s.ident == "Vector" || s.ident == "Mask")
 }
 
 fn is_ineligible_return_type(ty: &ReturnType) -> bool {
