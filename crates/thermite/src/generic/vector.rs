@@ -423,8 +423,6 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
 
     type ExtendedPrecision = Vector<R::ExtendedPrecision>;
 
-    const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
-
     #[skip_masked] fn is_infinite(self)     -> Self::Mask { Mask(R::is_infinite(self.0)) }
     #[skip_masked] fn is_finite(self)       -> Self::Mask { Mask(R::is_finite(self.0)) }
     #[skip_masked] fn is_nan(self)          -> Self::Mask { Mask(R::is_nan(self.0)) }

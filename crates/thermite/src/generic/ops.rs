@@ -293,6 +293,12 @@ macro_rules! mul_add_ext {
         pub trait MulAddExt<A = Self, B = Self> {
             type Output;
 
+            /// Indicates whether the implementation uses true fused-multiply-add instructions.
+            ///
+            /// Non-`e` variants will always be accurate, regardless of this flag, but the `e` variants
+            /// will fallback to separate multiply and add operations if this is false.
+            const HAS_TRUE_FMA: bool;
+
             $(
                 $(#[$meta])*
                 fn $name(self, a: A, b: B) -> Self::Output;
@@ -302,11 +308,16 @@ macro_rules! mul_add_ext {
         impl<R: FloatRegister> MulAddExt<Self, Self> for Vector<R> {
             type Output = Self;
 
+            const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
+
             $(#[inline(always)] fn $name(self, a: Self, b: Self) -> Self::Output { Vector(R::$name(self.0, a.0, b.0)) } )*
         }
 
         /// Provides assignment variants of the fused multiply-add operations from [`MulAddExt`].
-        pub trait MulAddAssignExt<A = Self, B = Self> {
+        ///
+        /// Unlike regular assignment traits, this does require `MulAddExt` as a supertrait,
+        /// so we can access the associated `HAS_TRUE_FMA` constant.
+        pub trait MulAddAssignExt<A = Self, B = Self>: MulAddExt<A, B> {
             $(
                 $(#[$meta])*
                 fn [<$name _assign>](&mut self, a: A, b: B);
@@ -370,50 +381,70 @@ macro_rules! mul_add_ext {
 }
 
 mul_add_ext! {
-    /// Guaranteed fused-multiply-add operation, may fallback to slow scalar
-    /// evaluation if the target architecture does not support native FMA.
+    /// Guaranteed fused-multiply-add operation.
     ///
     /// If the target architecture does not support native FMA, this will use
     /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
     mul_add,
 
-    /// Guaranteed fused-multiply-subtract operation, may fallback to slow scalar
-    /// evaluation if the target architecture does not support native FMA.
+    /// Guaranteed fused-multiply-subtract operation.
     ///
     /// If the target architecture does not support native FMA, this will use
     /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
     mul_sub,
 
-    /// Guaranteed fused-negated-multiply-add operation, may fallback to slow scalar
-    /// evaluation if the target architecture does not support native FMA.
+    /// Guaranteed fused-negated-multiply-add operation.
     ///
     /// If the target architecture does not support native FMA, this will use
     /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
     nmul_add,
 
-    /// Guaranteed fused-negated-multiply-subtract operation, may fallback to slow scalar
-    /// evaluation if the target architecture does not support native FMA.
+    /// Guaranteed fused-negated-multiply-subtract operation.
     ///
     /// If the target architecture does not support native FMA, this will use
     /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
     nmul_sub,
 
-    /// Fused-multiply-add operation where possible. May degrade to separate multiply and add
+    /// Fused-multiply-add operation where possible. May gracefully degrade to separate multiply and add
     /// if the target architecture does not support native FMA.
     mul_adde,
 
-    /// Fused-multiply-subtract operation where possible. May degrade to separate multiply and subtract
+    /// Fused-multiply-subtract operation where possible. May gracefully degrade to separate multiply and subtract
     /// if the target architecture does not support native FMA.
     mul_sube,
 
-    /// Fused-negated-multiply-add operation where possible. May degrade to separate multiply and add
+    /// Fused-negated-multiply-add operation where possible. May gracefully degrade to separate multiply and add
     /// if the target architecture does not support native FMA.
     nmul_adde,
 
-    /// Fused-negated-multiply-subtract operation where possible. May degrade to separate multiply and subtract
+    /// Fused-negated-multiply-subtract operation where possible. May gracefully degrade to separate multiply and subtract
     /// if the target architecture does not support native FMA.
     nmul_sube
 }
+
+#[rustfmt::skip]
+macro_rules! impl_scalar_mul_add {
+    ($f:ty: $($name:ident),*) => {paste::paste! {
+        impl MulAddExt for $f {
+            type Output = Self;
+
+            const HAS_TRUE_FMA: bool = <$f as FloatRegister>::HAS_TRUE_FMA; // reused from FloatRegister
+
+            $(#[inline(always)] fn $name(self, a: Self, b: Self) -> Self::Output { <$f as FloatRegister>::$name(self, a, b) })*
+        }
+
+        impl MulAddAssignExt for $f {
+            $(#[inline(always)] fn [<$name _assign>](&mut self, a: Self, b: Self) { *self = <$f as FloatRegister>::$name(*self, a, b); })*
+        }
+    }};
+}
+
+impl_scalar_mul_add!(
+    f32: mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube
+);
+impl_scalar_mul_add!(
+    f64: mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube
+);
 
 // Vector shifts
 

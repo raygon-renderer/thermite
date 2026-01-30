@@ -564,10 +564,7 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
 pub trait NumericVector:
-    PartialOrdVector<
-        Element: num_traits::Num,
-        // Mask: GenericCastMask<<Self::ISize as GenericVector>::Mask> + GenericCastMask<<Self::USize as GenericVector>::Mask>,
-    >
+    PartialOrdVector<Element: num_traits::Num>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
     + ops::AddAssignMasked<Self::Mask, Self>
     + ops::SubMasked<Self::Mask, Self, Output = Self>
@@ -823,8 +820,6 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     ///
     /// If no such type exists, this will be the same as `Self`.
     type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
-
-    const HAS_TRUE_FMA: bool;
 
     /// Check if each element in the vector is infinite, returning a mask.
     #[skip_masked] fn is_infinite(self) -> Self::Mask;
