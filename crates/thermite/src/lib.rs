@@ -77,10 +77,10 @@ pub mod prelude {
             AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndMasked as _,
             BitAndNot as _, BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _,
             BitOrAssignMasked as _, BitOrMasked as _, BitOrMasked as _, BitXorAssignMasked as _, BitXorMasked as _,
-            BitXorMasked as _, DivAssignMasked as _, DivMasked as _, MulAddAssignMasked as _, MulAddMasked as _,
-            MulAssignMasked as _, MulMasked as _, NegMasked as _, NotMasked as _, RemAssignMasked as _, RemMasked as _,
-            ShlAssignMasked as _, ShlMasked as _, ShrAssignMasked as _, ShrMasked as _, SubAssignMasked as _,
-            SubMasked as _,
+            BitXorMasked as _, DivAssignMasked as _, DivMasked as _, MulAddAssignExt as _, MulAddAssignExtMasked as _,
+            MulAddExt as _, MulAddExtMasked as _, MulAssignMasked as _, MulMasked as _, NegMasked as _, NotMasked as _,
+            RemAssignMasked as _, RemMasked as _, ShlAssignMasked as _, ShlMasked as _, ShrAssignMasked as _,
+            ShrMasked as _, SubAssignMasked as _, SubMasked as _,
         },
         generic::{
             BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, FloatVector, FloatVectorWithBits,
@@ -107,6 +107,7 @@ pub mod isa;
 pub mod vector;
 
 pub mod backend;
+// pub mod batch;
 pub mod divider;
 pub mod generic;
 pub mod mask;

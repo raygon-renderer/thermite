@@ -798,7 +798,12 @@ pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector<Mask = crate:
 
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
-pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastVector<Self::ExtendedPrecision> {
+pub trait FloatVector: SignedVector<Element: FloatElement>
+    + FloatConsts
+    + CastVector<Self::ExtendedPrecision>
+    + ops::MulAddExtMasked<Self::Mask, Self, Self, Output = Self>
+    + ops::MulAddAssignExtMasked<Self::Mask, Self, Self>
+{
     /// The value `0.5` represented in this vector type.
     const HALF: Self;
     /// The value `-0.0` represented in this vector type.
@@ -838,58 +843,6 @@ pub trait FloatVector: SignedVector<Element: FloatElement> + FloatConsts + CastV
 
     /// Check if each element in the vector is subnormal, returning a mask.
     #[skip_masked] fn is_subnormal(self) -> Self::Mask;
-
-    /// Maybe fused Multiply-Add operation.
-    ///
-    /// If the instruction set does not support fused-multiply-add
-    /// instructions than this will fallback to regular operations.
-    fn mul_adde(self, a: Self, b: Self) -> Self;
-
-    /// Maybe fused Multiply-Subtract operation.
-    ///
-    /// If the instruction set does not support fused-multiply-add
-    /// instructions than this will fallback to regular operations.
-    fn mul_sube(self, a: Self, b: Self) -> Self;
-
-    /// Maybe fused Negate-Multiply-Add operation.
-    ///
-    /// If the instruction set does not support fused-multiply-add
-    /// instructions than this will fallback to regular operations.
-    fn nmul_adde(self, a: Self, b: Self) -> Self;
-
-    /// Maybe fused Negate-Multiply-Subtract operation.
-    ///
-    /// If the instruction set does not support fused-multiply-add
-    /// instructions than this will fallback to regular operations.
-    fn nmul_sube(self, a: Self, b: Self) -> Self;
-
-    /// Guaranteed fused Multiply-Add operation.
-    ///
-    /// On platforms where hardware FMA is not available,
-    /// this will still be accurate, but will be slower due
-    /// to emulation.
-    fn mul_add(self, a: Self, b: Self) -> Self;
-
-    /// Guaranteed fused Multiply-Subtract operation.
-    ///
-    /// On platforms where hardware FMA is not available,
-    /// this will still be accurate, but will be slower due
-    /// to emulation.
-    fn mul_sub(self, a: Self, b: Self) -> Self;
-
-    /// Guaranteed Negate-Multiply-Add operation.
-    ///
-    /// On platforms where hardware FMA is not available,
-    /// this will still be accurate, but will be slower due
-    /// to emulation.
-    fn nmul_add(self, a: Self, b: Self) -> Self;
-
-    /// Guaranteed Negate-Multiply-Subtract operation.
-    ///
-    /// On platforms where hardware FMA is not available,
-    /// this will still be accurate, but will be slower due
-    /// to emulation.
-    fn nmul_sub(self, a: Self, b: Self) -> Self;
 
     const HAS_APPROX_RCP: bool;
     const HAS_APPROX_RSQRT: bool;

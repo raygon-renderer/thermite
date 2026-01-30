@@ -134,7 +134,9 @@ use core::ops::{Shl, Shr};
 /// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
-pub trait FloatElement: Element + From<i8> + crate::math::FloatConsts + num_traits::Signed {
+pub trait FloatElement:
+    Element + crate::math::FloatConsts + num_traits::NumOps + core::ops::Neg<Output = Self>
+{
     type Bits: UnsignedIntegerElement<USize = Self::Bits>;
     type Signed: SignedIntegerElement<ISize = Self::Signed>;
 

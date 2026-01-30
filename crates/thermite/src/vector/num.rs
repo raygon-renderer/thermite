@@ -20,6 +20,10 @@ use crate::{
 ///
 /// Therefore, this wrapper type allows you to opt-in to using `num_traits`
 /// when needed, without causing conflicts in the main vector types.
+///
+/// Notably, the implementation of `MulAdd` uses `mul_adde` under the hood,
+/// which may fall back to separate multiply and add operations if a fused multiply-add
+/// is not available for the target architecture.
 #[repr(transparent)]
 pub struct NumVector<V: GenericVector>(pub V);
 
@@ -367,4 +371,11 @@ impl<V: FloatVector> num_traits::MulAdd<Self, Self> for NumVector<V> {
 
     #[inline(always)]
     fn mul_add(self, a: Self, b: Self) -> Self::Output { Self(self.0.mul_adde(a.0, b.0)) }
+}
+
+impl<V: FloatVector> num_traits::MulAddAssign<Self, Self> for NumVector<V> {
+    #[inline(always)]
+    fn mul_add_assign(&mut self, a: Self, b: Self) {
+        self.0 = self.0.mul_adde(a.0, b.0);
+    }
 }

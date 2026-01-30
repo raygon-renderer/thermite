@@ -432,15 +432,6 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     #[skip_masked] fn is_normal(self)       -> Self::Mask { Mask(R::is_normal(self.0)) }
     #[skip_masked] fn is_subnormal(self)    -> Self::Mask { Mask(R::is_subnormal(self.0)) }
 
-    fn mul_adde(self, a: Self, b: Self) -> Self {}
-    fn mul_sube(self, a: Self, b: Self) -> Self {}
-    fn nmul_adde(self, a: Self, b: Self) -> Self {}
-    fn nmul_sube(self, a: Self, b: Self) -> Self {}
-    fn mul_add(self, a: Self, b: Self) -> Self {}
-    fn mul_sub(self, a: Self, b: Self) -> Self {}
-    fn nmul_add(self, a: Self, b: Self) -> Self {}
-    fn nmul_sub(self, a: Self, b: Self) -> Self {}
-
     const HAS_APPROX_RCP: bool = R::HAS_APPROX_RCP;
     const HAS_APPROX_RSQRT: bool = R::HAS_APPROX_RSQRT;
 

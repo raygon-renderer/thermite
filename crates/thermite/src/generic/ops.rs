@@ -278,42 +278,141 @@ impl<R: BitwiseRegister + Register> BitAndNotAssignMasked<Mask<R>, Self> for Vec
     }
 }
 
-pub trait MulAddMasked<Mask, A = Self, B = Self>: MulAdd<A, B> {
-    fn mul_add_c(self, mask: Mask, a: A, b: B) -> Self::Output;
-    fn mul_add_m(self, src: Self, mask: Mask, a: A, b: B) -> Self::Output;
-    fn mul_add_z(self, mask: Mask, a: A, b: B) -> Self::Output;
+macro_rules! mul_add_ext {
+    ($($(#[$meta:meta])* $name:ident),*) => {paste::paste! {
+        /// Trait for fused multiply-add operations. This contains all variants of
+        /// fused multiply-add, including guaranteed FMA and maybe FMA versions.
+        ///
+        /// If the platform does _not_ have native FMA support, the guaranteed FMA
+        /// will either use a fast compensated arithmetic algorithm, or fall back to
+        /// slow scalar evaluation to ensure correctness.
+        ///
+        /// This trait is superior to `num_traits::MulAdd`, but does not include
+        /// it as a supertrait due to the potential for multiple
+        /// conflicting implementation warnings.
+        pub trait MulAddExt<A = Self, B = Self> {
+            type Output;
+
+            $(
+                $(#[$meta])*
+                fn $name(self, a: A, b: B) -> Self::Output;
+            )*
+        }
+
+        impl<R: FloatRegister> MulAddExt<Self, Self> for Vector<R> {
+            type Output = Self;
+
+            $(#[inline(always)] fn $name(self, a: Self, b: Self) -> Self::Output { Vector(R::$name(self.0, a.0, b.0)) } )*
+        }
+
+        /// Provides assignment variants of the fused multiply-add operations from [`MulAddExt`].
+        pub trait MulAddAssignExt<A = Self, B = Self> {
+            $(
+                $(#[$meta])*
+                fn [<$name _assign>](&mut self, a: A, b: B);
+            )*
+        }
+
+        impl<R: FloatRegister> MulAddAssignExt<Self, Self> for Vector<R> {
+            $(#[inline(always)] fn [<$name _assign>](&mut self, a: Self, b: Self) { self.0 = R::$name(self.0, a.0, b.0); } )*
+        }
+
+        /// Provides masked variants of the fused multiply-add operations from [`MulAddExt`].
+        pub trait MulAddExtMasked<Mask, A = Self, B = Self>: MulAddExt<A, B> {
+            $(
+                $(#[$meta])*
+                #[doc = "\n\nThis variant computes [`" $name "`](MulAddExt::" $name ") with `a` and `b` where `mask` is true."]
+                fn [<$name _c>](self, mask: Mask, a: A, b: B) -> Self::Output;
+
+                $(#[$meta])*
+                #[doc = "\n\nThis variant merges [`" $name "`](MulAddExt::" $name ") with `src` using `mask`, returning `src` where mask is false."]
+                fn [<$name _m>](self, src: Self, mask: Mask, a: A, b: B) -> Self::Output;
+
+                $(#[$meta])*
+                #[doc = "\n\nThis variant computes [`" $name "`](MulAddExt::" $name ") masked (zeroed where mask is false)."]
+                fn [<$name _z>](self, mask: Mask, a: A, b: B) -> Self::Output;
+            )*
+        }
+
+        impl<R: FloatRegister> MulAddExtMasked<Mask<R>, Self, Self> for Vector<R> {
+            $(
+                #[inline(always)] fn [<$name _c>](self, mask: Mask<R>, a: Self, b: Self) -> Self::Output { Vector(R::[<$name _c>](mask.0, self.0, a.0, b.0)) }
+                #[inline(always)] fn [<$name _m>](self, src: Self, mask: Mask<R>, a: Self, b: Self) -> Self::Output { Vector(R::[<$name _m>](src.0, mask.0, self.0, a.0, b.0)) }
+                #[inline(always)] fn [<$name _z>](self, mask: Mask<R>, a: Self, b: Self) -> Self::Output { Vector(R::[<$name _z>](mask.0, self.0, a.0, b.0)) }
+            )*
+        }
+
+        /// Provides masked assignment variants of the fused multiply-add operations from [`MulAddExt`].
+        pub trait MulAddAssignExtMasked<Mask, A = Self, B = Self>: MulAddAssignExt<A, B> {
+            $(
+                $(#[$meta])*
+                #[doc = "\n\nThis variant computes [`" $name "_assign`](MulAddAssignExt::" $name "_assign) with `a` and `b` where `mask` is true."]
+                fn [<$name _assign_c>](&mut self, mask: Mask, a: A, b: B);
+
+                $(#[$meta])*
+                #[doc = "\n\nThis variant merges [`" $name "_assign`](MulAddAssignExt::" $name "_assign) with `src` using `mask`, assigning `src` where mask is false."]
+                fn [<$name _assign_m>](&mut self, src: Self, mask: Mask, a: A, b: B);
+
+                $(#[$meta])*
+                #[doc = "\n\nThis variant computes [`" $name "_assign`](MulAddAssignExt::" $name "_assign) masked (zeroed where mask is false)."]
+                fn [<$name _assign_z>](&mut self, mask: Mask, a: A, b: B);
+            )*
+        }
+
+        impl<R: FloatRegister> MulAddAssignExtMasked<Mask<R>, Self, Self> for Vector<R> {
+            $(
+                #[inline(always)] fn [<$name _assign_c>](&mut self, mask: Mask<R>, a: Self, b: Self) { self.0 = R::[<$name _c>](mask.0, self.0, a.0, b.0); }
+                #[inline(always)] fn [<$name _assign_m>](&mut self, src: Self, mask: Mask<R>, a: Self, b: Self) { self.0 = R::[<$name _m>](src.0, mask.0, self.0, a.0, b.0); }
+                #[inline(always)] fn [<$name _assign_z>](&mut self, mask: Mask<R>, a: Self, b: Self) { self.0 = R::[<$name _z>](mask.0, self.0, a.0, b.0); }
+            )*
+        }
+    }};
 }
 
-pub trait MulAddAssignMasked<Mask, A = Self, B = Self>: MulAddAssign<A, B> {
-    fn mul_add_assign_c(&mut self, mask: Mask, a: A, b: B);
-    fn mul_add_assign_m(&mut self, src: Self, mask: Mask, a: A, b: B);
-    fn mul_add_assign_z(&mut self, mask: Mask, a: A, b: B);
-}
+mul_add_ext! {
+    /// Guaranteed fused-multiply-add operation, may fallback to slow scalar
+    /// evaluation if the target architecture does not support native FMA.
+    ///
+    /// If the target architecture does not support native FMA, this will use
+    /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
+    mul_add,
 
-impl<R: FloatRegister> MulAdd<Self, Self> for Vector<R> {
-    type Output = Self;
+    /// Guaranteed fused-multiply-subtract operation, may fallback to slow scalar
+    /// evaluation if the target architecture does not support native FMA.
+    ///
+    /// If the target architecture does not support native FMA, this will use
+    /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
+    mul_sub,
 
-    #[inline(always)]
-    fn mul_add(self, a: Self, b: Self) -> Self::Output {
-        Vector(R::mul_add(self.0, a.0, b.0))
-    }
-}
+    /// Guaranteed fused-negated-multiply-add operation, may fallback to slow scalar
+    /// evaluation if the target architecture does not support native FMA.
+    ///
+    /// If the target architecture does not support native FMA, this will use
+    /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
+    nmul_add,
 
-impl<R: FloatRegister> MulAddMasked<Mask<R>, Self, Self> for Vector<R> {
-    #[inline(always)]
-    fn mul_add_c(self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
-        Vector(R::mul_add_c(mask.0, self.0, a.0, b.0))
-    }
+    /// Guaranteed fused-negated-multiply-subtract operation, may fallback to slow scalar
+    /// evaluation if the target architecture does not support native FMA.
+    ///
+    /// If the target architecture does not support native FMA, this will use
+    /// either compensated arithmetic or slow scalar evaluation to ensure correctness.
+    nmul_sub,
 
-    #[inline(always)]
-    fn mul_add_m(self, src: Self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
-        Vector(R::mul_add_m(src.0, mask.0, self.0, a.0, b.0))
-    }
+    /// Fused-multiply-add operation where possible. May degrade to separate multiply and add
+    /// if the target architecture does not support native FMA.
+    mul_adde,
 
-    #[inline(always)]
-    fn mul_add_z(self, mask: Mask<R>, a: Self, b: Self) -> Self::Output {
-        Vector(R::mul_add_z(mask.0, self.0, a.0, b.0))
-    }
+    /// Fused-multiply-subtract operation where possible. May degrade to separate multiply and subtract
+    /// if the target architecture does not support native FMA.
+    mul_sube,
+
+    /// Fused-negated-multiply-add operation where possible. May degrade to separate multiply and add
+    /// if the target architecture does not support native FMA.
+    nmul_adde,
+
+    /// Fused-negated-multiply-subtract operation where possible. May degrade to separate multiply and subtract
+    /// if the target architecture does not support native FMA.
+    nmul_sube
 }
 
 // Vector shifts
