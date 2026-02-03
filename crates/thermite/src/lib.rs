@@ -80,19 +80,19 @@ pub mod prelude {
             BitXorMasked as _, DivAssignMasked as _, DivMasked as _, MulAddAssignExt as _, MulAddAssignExtMasked as _,
             MulAddExt as _, MulAddExtMasked as _, MulAssignMasked as _, MulMasked as _, NegMasked as _, NotMasked as _,
             RemAssignMasked as _, RemMasked as _, ShlAssignMasked as _, ShlMasked as _, ShrAssignMasked as _,
-            ShrMasked as _, SubAssignMasked as _, SubMasked as _,
+            ShrMasked as _, Square as _, SquareMasked as _, SubAssignMasked as _, SubMasked as _,
         },
         generic::{
             BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, FloatVector, FloatVectorWithBits,
             GenericMask, GenericVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector,
             SignedVector, SplatConst, SwizzleVector, UnsignedIntegerVector,
         },
-        math::FloatConsts,
         math::{
             CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,
             RealMathWithPolicy as _, SpatialMath as _, SpatialMathWithPolicy as _, TranscendentalMath as _,
             TranscendentalMathWithPolicy as _,
         },
+        math::{FloatConsts, policy::Policy},
         register::{DoublePump, Element, FloatElement},
         simd::{FloatSimd, NativeSimd, NativeSimdVectors, Simd, SimdVectors, SizedSimd, WideSimd},
     };

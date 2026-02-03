@@ -220,6 +220,11 @@ decl_math! {
         fn powf[][](self: Self, e: Self) -> Self;
         /// Returns the cube root of `self`.
         fn cbrt[][](self: Self) -> Self;
+        /// Returns the Nth root of `self`.
+        ///
+        /// This is often faster _and_ more accurate than using `powf(1.0 / N as float)`. Supports
+        /// negative numbers for odd N.
+        fn nth_root[const N: usize][N](self: Self) -> Self;
         /// Returns the natural logarithm of `self`.
         fn ln[][](self: Self) -> Self;
         /// Returns `ln(1 + x)` of `self`.
@@ -302,7 +307,7 @@ decl_math! {
 
 decl_math! {
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
-    trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy & FloatMathWithPolicy {
+    trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
         /// default tolerance to use for numerical methods.
         fn tolerance[][]() -> Self;

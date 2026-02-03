@@ -29,6 +29,11 @@ pub trait MaskElement: Sized + Copy + Default + PartialEq + core::fmt::Debug {
     }
 }
 
+pub trait SignedElement: Element + Neg<Output = Self> {
+    fn abs(self) -> Self;
+    fn signum(self) -> Self;
+}
+
 macro_rules! impl_element {
     ($(($t:ty, $u:ty, $s:ty)),+) => {$(
         impl MaskElement for $t {
@@ -57,6 +62,11 @@ macro_rules! impl_element {
             const FALSY: Self = <$f>::from_bits(0);
 
             #[inline(always)] fn to_bool(self) -> bool { self.to_bits() != 0 }
+        }
+
+        impl SignedElement for $f {
+            #[inline(always)] fn abs(self) -> Self { <$f>::abs(self) }
+            #[inline(always)] fn signum(self) -> Self { <$f>::signum(self) }
         }
 
         impl Element for $f {
@@ -127,7 +137,7 @@ pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + num_traits::Uns
 impl<S> SignedIntegerElement for S where S: IntegerElement<ISize = S> + num_traits::Signed + TryInto<isize> {}
 impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + num_traits::Unsigned + TryInto<usize> {}
 
-use core::ops::{Shl, Shr};
+use core::ops::{Neg, Shl, Shr};
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
@@ -135,30 +145,35 @@ use core::ops::{Shl, Shr};
 /// when they aren't available in the target architecture. Sometimes it's essential to have these
 /// fallbacks for correctness, given FMAs rounding behavior.
 pub trait FloatElement:
-    Element + crate::math::FloatConsts + num_traits::NumOps + core::ops::Neg<Output = Self>
+    SignedElement
+    + crate::math::FloatConsts
+    + num_traits::NumOps
+    + core::ops::Neg<Output = Self>
+    + crate::generic::ops::MulAddExt<Self, Self, Output = Self>
 {
-    type Bits: UnsignedIntegerElement<USize = Self::Bits>;
-    type Signed: SignedIntegerElement<ISize = Self::Signed>;
+    /// Try to represent this i64 value as this float type,
+    /// returning None if it cannot be represented exactly.
+    fn try_from_i64(value: i64) -> Option<Self>;
 
-    // maximum u32 that can be exactly represented in this float type without loss of precision
-    const MAX_U64: u64;
-    const MANTISSA: u32;
-    const EXP_BIAS: Self::Signed;
-    const MAX_BIASED_EXP: Self::Signed;
-    const EXP_LSB_MASK: Self::Bits;
-    const SIGN_MANTISSA_MASK: Self::Bits;
+    fn from_i64(value: i64) -> Self {
+        #[cold]
+        fn _panic_i64_overflow() -> ! {
+            panic!("i64 value exceeds maximum exact representable value for this float type")
+        }
 
-    const HALF_EXP_BITS: Self::Bits;
-    const FREXP_BIAS_OFFSET: Self::Signed;
+        Self::try_from_i64(value).unwrap_or_else(|| _panic_i64_overflow())
+    }
 
-    fn from_f64(value: f64) -> Self;
-    fn from_i64(value: i64) -> Self;
-    fn from_signed(value: Self::Signed) -> Self;
+    fn try_from_ratio(n: i64, d: i64) -> Option<Self>;
 
-    fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self;
-    fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self;
+    fn from_ratio(n: i64, d: i64) -> Self {
+        #[cold]
+        fn _panic_ratio_overflow() -> ! {
+            panic!("i64 ratio exceeds maximum exact representable value for this float type")
+        }
+
+        Self::try_from_ratio(n, d).unwrap_or_else(|| _panic_ratio_overflow())
+    }
 
     fn sqrt(value: Self) -> Self;
     fn floor(value: Self) -> Self;
@@ -175,6 +190,32 @@ pub trait FloatElement:
     fn next_down(value: Self) -> Self;
 }
 
+pub trait FloatElementWithBits: FloatElement {
+    type Bits: UnsignedIntegerElement<USize = Self::Bits>;
+    type Signed: SignedIntegerElement<ISize = Self::Signed>;
+
+    // maximum u32 that can be exactly represented in this float type without loss of precision
+    const MAX_U64: u64;
+    const MANTISSA: u32;
+    const EXP_BIAS: Self::Signed;
+    const MAX_BIASED_EXP: Self::Signed;
+    const EXP_LSB_MASK: Self::Bits;
+    const SIGN_MANTISSA_MASK: Self::Bits;
+
+    const HALF_EXP_BITS: Self::Bits;
+    const FREXP_BIAS_OFFSET: Self::Signed;
+
+    /// Convert from f64 to this float type, potentially losing precision.
+    fn from_f64(value: f64) -> Self;
+
+    fn from_signed(value: Self::Signed) -> Self;
+}
+
+trait FloatElementInternal: FloatElement {
+    fn try_from_i64(value: i64) -> Option<Self>;
+    fn try_from_ratio(n: i64, d: i64) -> Option<Self>;
+}
+
 macro_rules! impl_float_element {
     (CONSTS $($const:ident: $const_ty:ty = $value:expr;)+) => {paste::paste! {
         $(const $const: $const_ty = $value;)+
@@ -185,30 +226,45 @@ macro_rules! impl_float_element {
     }};
 
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
-        #[cfg(feature = "std")]
-        impl FloatElement for $t {
-            type Bits = $bits;
-            type Signed = $signed;
-
-            impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
-
+        impl FloatElementInternal for $t {
             #[inline(always)]
-            fn from_i64(value: i64) -> Self {
-                if value.unsigned_abs() < Self::MAX_U64 {
-                    value as $t // safe to convert directly
+            fn try_from_i64(value: i64) -> Option<Self> {
+                if crate::likely(value.unsigned_abs() < Self::MAX_U64) {
+                    Some(value as $t) // safe to convert directly
                 } else {
-                    panic!("Value exceeds maximum exact representable i64 in this float type");
+                    None
                 }
             }
 
-            #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
-            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
+            // This implementation is more accurate than simply doing n as f64 / d as f64,
+            // since that can lose precision when n and d are large but their ratio is small.
+            // Instead, we do integer division first, then add the fractional part. Although
+            // this is non-trivial, LLVM should optimize it down to a constant value when
+            // the inputs are known at compile time.
+            #[inline(always)]
+            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+                if d == 0 {
+                    return None;
+                }
 
-            #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, acc) }
-            #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(rhs, -acc) }
-            #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(-rhs, acc) }
-            #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { lhs.mul_add(-rhs, -acc) }
+                // fast path for values that both fit in the float exactly
+                if let (Some(n), Some(d)) = (<Self as FloatElementInternal>::try_from_i64(n), <Self as FloatElementInternal>::try_from_i64(d)) {
+                    return Some(n / d);
+                }
 
+                let (q, r) = (n / d, n % d);
+
+                let mut result = FloatElementInternal::try_from_i64(q)?;
+
+                // d may not be exactly representable, but this will still scale it correctly
+                result += (r as $t) / (d as $t);
+
+                Some(result)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl FloatElement for $t {
             #[inline(always)] fn sqrt(value: Self) -> Self { value.sqrt() }
             #[inline(always)] fn floor(value: Self) -> Self { value.floor() }
             #[inline(always)] fn ceil(value: Self) -> Self { value.ceil() }
@@ -217,32 +273,38 @@ macro_rules! impl_float_element {
             #[inline(always)] fn fract(value: Self) -> Self { value.fract() }
             #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
             #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
+
+            #[inline(always)]
+            fn try_from_i64(value: i64) -> Option<Self> {
+                FloatElementInternal::try_from_i64(value)
+            }
+
+            #[inline(always)]
+            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+                FloatElementInternal::try_from_ratio(n, d)
+            }
+        }
+
+        #[cfg(feature = "std")]
+        impl crate::generic::ops::MulAddExt for $t {
+            type Output = Self;
+
+            // trust the register implementation
+            const HAS_TRUE_FMA: bool = <$t as super::FloatRegister>::HAS_TRUE_FMA;
+
+            #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, acc) }
+            #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, -acc) }
+            #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, acc) }
+            #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, -acc) }
+
+            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
+            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
+            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
+            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
         }
 
         #[cfg(not(feature = "std"))]
         impl FloatElement for $t {
-            type Bits = $bits;
-            type Signed = $signed;
-
-            impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
-
-            #[inline(always)]
-            fn from_i64(value: i64) -> Self {
-                if value.unsigned_abs() < Self::MAX_U64 {
-                    value as $t // safe to convert directly
-                } else {
-                    panic!("Value exceeds maximum exact representable i64 in this float type");
-                }
-            }
-
-            #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
-            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
-
-            #[inline(always)] fn scalar_mul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, acc) }
-            #[inline(always)] fn scalar_mul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, rhs, -acc) }
-            #[inline(always)] fn scalar_nmul_add(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, -rhs, acc) }
-            #[inline(always)] fn scalar_nmul_sub(lhs: Self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](lhs, -rhs, -acc) }
-
             #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
             #[inline(always)] fn floor(value: Self) -> Self { libm::[<floor $($f)?>](value) }
             #[inline(always)] fn ceil(value: Self) -> Self { libm::[<ceil $($f)?>](value) }
@@ -250,6 +312,43 @@ macro_rules! impl_float_element {
             #[inline(always)] fn trunc(value: Self) -> Self { libm::[<trunc $($f)?>](value) }
             #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
             #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
+
+            #[inline(always)]
+            fn try_from_i64(value: i64) -> Option<Self> {
+                FloatElementInternal::try_from_i64(value)
+            }
+
+            #[inline(always)]
+            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+                FloatElementInternal::try_from_ratio(n, d)
+            }
+        }
+
+        #[cfg(not(feature = "std"))]
+        impl crate::generic::ops::MulAddExt for $t {
+            type Output = Self;
+
+            const HAS_TRUE_FMA: bool = false;
+
+            #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
+            #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
+            #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
+            #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
+
+            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
+            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
+            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
+            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc  }
+        }
+
+        impl FloatElementWithBits for $t {
+            type Bits = $bits;
+            type Signed = $signed;
+
+            impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
+
+            #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
+            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
         }
     }};
 }

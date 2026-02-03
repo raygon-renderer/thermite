@@ -4,6 +4,7 @@ use generic_array::{
     typenum::{self, Unsigned},
 };
 
+use crate::generic::ops::MulAddExt;
 use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
@@ -217,7 +218,7 @@ impl FloatRegister for [<f $width>] {
     type ExtendedPrecision = f64;
 
     // best guess we can do
-    const HAS_TRUE_FMA: bool = cfg!(any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"));
+    const HAS_TRUE_FMA: bool = cfg!(all(feature = "std", any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma")));
 
     const HALF: Storage<Self> = 0.5;
     const NEG_ZERO: Storage<Self> = -0.0;
@@ -231,10 +232,10 @@ impl FloatRegister for [<f $width>] {
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
-    #[inline(always)] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_mul_add(lhs, rhs, acc) }
-    #[inline(always)] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_mul_sub(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_nmul_add(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { FloatElement::scalar_nmul_sub(lhs, rhs, acc) }
+    #[inline(always)] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_add(lhs, rhs, acc) }
+    #[inline(always)] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_sub(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_add(lhs, rhs, acc) }
+    #[inline(always)] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_sub(lhs, rhs, acc) }
 
     #[inline(always)] fn sqrt(value: Storage<Self>) -> Storage<Self> { FloatElement::sqrt(value) }
     #[inline(always)] fn floor(value: Storage<Self>) -> Storage<Self> { FloatElement::floor(value) }

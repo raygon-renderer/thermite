@@ -129,6 +129,16 @@ use crate::{
     register::{BitshiftRegister, BitwiseRegister, FloatRegister, NumericRegister, Register, SignedRegister},
 };
 
+/// Trait for squaring a value: `self * self`
+///
+/// Some types are able to provide optimized implementations of squaring that are
+/// faster or more accurate than a simple multiplication with itself.
+pub trait Square {
+    type Output;
+
+    fn square(self) -> Self::Output;
+}
+
 decl_binary_ops!(Num;
     Add::add,
     Sub::sub,
@@ -172,7 +182,7 @@ decl_binary_ops!(Bitshift;
     Shr::shr
 );
 
-decl_unary_ops!(Not::not, Neg::neg);
+decl_unary_ops!(Not::not, Neg::neg, Square::square);
 
 impl<R: BitwiseRegister + Register> Not for Vector<R> {
     type Output = Self;
@@ -422,30 +432,6 @@ mul_add_ext! {
     nmul_sube
 }
 
-#[rustfmt::skip]
-macro_rules! impl_scalar_mul_add {
-    ($f:ty: $($name:ident),*) => {paste::paste! {
-        impl MulAddExt for $f {
-            type Output = Self;
-
-            const HAS_TRUE_FMA: bool = <$f as FloatRegister>::HAS_TRUE_FMA; // reused from FloatRegister
-
-            $(#[inline(always)] fn $name(self, a: Self, b: Self) -> Self::Output { <$f as FloatRegister>::$name(self, a, b) })*
-        }
-
-        impl MulAddAssignExt for $f {
-            $(#[inline(always)] fn [<$name _assign>](&mut self, a: Self, b: Self) { *self = <$f as FloatRegister>::$name(*self, a, b); })*
-        }
-    }};
-}
-
-impl_scalar_mul_add!(
-    f32: mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube
-);
-impl_scalar_mul_add!(
-    f64: mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube
-);
-
 // Vector shifts
 
 impl<R: BitshiftRegister> Shl<Vector<R::USize>> for Vector<R> {
@@ -649,3 +635,18 @@ impl<R: BitshiftRegister> ShrAssignMasked<Mask<R>, u32> for Vector<R> {
         self.0 = R::shr_z(mask.0, self.0, rhs);
     }
 }
+
+macro_rules! impl_square {
+    ($($ty:ty),*) => {$(
+        impl Square for $ty {
+            type Output = Self;
+
+            #[inline(always)]
+            fn square(self) -> Self::Output {
+                self * self
+            }
+        }
+    )*};
+}
+
+impl_square!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64);

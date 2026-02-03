@@ -2,63 +2,113 @@
 
 use thermite::{Vector, math::FloatConsts};
 
-pub struct CompensatedConst<T>(pub T, pub T);
-
-use super::{Compensated, CompensatedRegister};
+use super::{Compensated, ScalarValue};
 
 pub const LOG_TABLE_SIZE: usize = 30;
 
 /// Helper trait to store precomputed compensated logarithm table for small integer bases.
-pub trait CompensatedLogTable<T>: FloatConsts {
+pub trait CompensatedLogTable<T = Self>: FloatConsts {
     /// The log table entries for bases 3..32 as (high, low) pairs.
-    const LOG_TABLE: [(T, T); LOG_TABLE_SIZE];
+    const LOG_TABLE: [Compensated<T>; LOG_TABLE_SIZE];
+
+    /// Third part of extended precision ln(2), where the first two parts are provided by `LN_2`.
+    const LN_2_EXTENDED: [T; 3];
+}
+
+impl<R: thermite::register::FloatRegister> CompensatedLogTable<Self> for Vector<R>
+where
+    R::Element: CompensatedLogTable<R::Element>,
+{
+    const LOG_TABLE: [Compensated<Self>; LOG_TABLE_SIZE] = {
+        let mut table = [Compensated {
+            value: Vector::EMPTY,
+            error: Vector::EMPTY,
+        }; LOG_TABLE_SIZE];
+
+        let mut i = 0;
+
+        while i < LOG_TABLE_SIZE {
+            let c = <R::Element as CompensatedLogTable<R::Element>>::LOG_TABLE[i];
+
+            table[i] = Compensated {
+                value: Vector::splat_const(c.value),
+                error: Vector::splat_const(c.error),
+            };
+
+            i += 1;
+        }
+
+        table
+    };
+
+    const LN_2_EXTENDED: [Self; 3] = {
+        let mut table = [Vector::EMPTY; 3];
+        let mut i = 0;
+
+        while i < 3 {
+            table[i] = Vector::splat_const(<R::Element as CompensatedLogTable<R::Element>>::LN_2_EXTENDED[i]);
+
+            i += 1;
+        }
+
+        table
+    };
 }
 
 macro_rules! impl_consts {
     ($($const:ident),*) => {
-        pub trait SplitFloatConsts<T>: CompensatedLogTable<T> {
-            $(const $const: CompensatedConst<T>; )*
+        pub trait SplitFloatConsts<T = Self>: CompensatedLogTable<T> {
+            $(const $const: Compensated<T>; )*
         }
 
-        impl<R: CompensatedRegister> FloatConsts for Compensated<R> {
+        impl<V: ScalarValue> FloatConsts for Compensated<V> {
             $(const $const: Self = {
-                let CompensatedConst(hi, lo) = <R::Element as SplitFloatConsts<R::Element>>::$const;
-                Compensated::from_parts(Vector::splat_const(hi), Vector::splat_const(lo))
+                let c = <V as SplitFloatConsts<V>>::$const;
+                Compensated { value: c.value, error: c.error }
+            };)*
+        }
+
+        impl<R: thermite::register::FloatRegister> SplitFloatConsts<Self> for Vector<R>
+            where R::Element: SplitFloatConsts<R::Element>,
+        {
+            $(const $const: Compensated<Self> = {
+                let c = <R::Element as SplitFloatConsts<R::Element>>::$const;
+
+                Compensated {
+                    value: Vector::splat_const(c.value),
+                    error: Vector::splat_const(c.error),
+                }
             };)*
         }
     };
 
     ($t:ty { $($const:ident = ($high:literal, $low:literal)),* $(,)? }) => {paste::paste! {
-        impl FloatConsts for CompensatedConst<$t> {
-            $(const $const: Self = CompensatedConst(hexf::[<hex $t>]!($high), hexf::[<hex $t>]!($low));)*
-        }
-
         impl SplitFloatConsts<$t> for $t {
-            $(const $const: CompensatedConst<$t> = <CompensatedConst<$t> as FloatConsts>::$const;)*
+            $(const $const: Compensated<$t> = Compensated { value: hexf::[<hex $t>]!($high), error: hexf::[<hex $t>]!($low) };)*
         }
     }};
 
-    (LOG $ty:ty [ $(($hi:literal, $low:literal),)* $(,)? ]) => {paste::paste! {
+    (LOG $ty:ty [ $(($hi:literal, $low:literal),)* $(,)? ], [$($ln2_third:literal),*] ) => {paste::paste! {
         impl CompensatedLogTable<$ty> for $ty {
-            const LOG_TABLE: [( $ty, $ty ); LOG_TABLE_SIZE] = [
-                $( (hexf::[<hex $ty>]!($hi), hexf::[<hex $ty>]!($low)), )*
+            const LOG_TABLE: [Compensated<$ty>; LOG_TABLE_SIZE] = [
+                $( Compensated { value: hexf::[<hex $ty>]!($hi), error: hexf::[<hex $ty>]!($low) }, )*
             ];
+
+            const LN_2_EXTENDED: [$ty; 3] = [ $( hexf::[<hex $ty>]!($ln2_third), )* ];
         }
     }};
 }
 
 #[rustfmt::skip]
 impl_consts!(
-    ZERO,NEG_ZERO,ONE,E,EGAMMA,FRAC_1_PI,FRAC_1_SQRT_2,FRAC_1_SQRT_3,FRAC_2_PI,FRAC_1_SQRT_PI,
+    NEG_ZERO,E,EGAMMA,FRAC_1_PI,FRAC_1_SQRT_2,FRAC_1_SQRT_3,FRAC_2_PI,FRAC_1_SQRT_PI,
     FRAC_2_SQRT_PI,FRAC_SQRT_PI_2,FRAC_1_SQRT_TAU,FRAC_PI_2,FRAC_PI_3,FRAC_PI_4,FRAC_PI_6,FRAC_PI_8,
     FRAC_PI_180,FRAC_180_PI,LN_2,LN_10,LN_PI,FRAC_LN_PI_2,LOG2_10,LOG2_E,LOG10_2,LOG10_E,
-    PI,SQRT_2,SQRT_3,SQRT_E,TAU,SQRT_FRAC_PI_2,SQRT_2_PI,PHI,FRAC_1_3,FRAC_1_6,
+    PI,PI_SQUARED,PI_CUBED,PI_TESSERACTED,SQRT_2,SQRT_3,SQRT_E,TAU,SQRT_FRAC_PI_2,SQRT_2_PI,PHI,FRAC_1_3,FRAC_1_6,
     EPSILON,SQRT_EPSILON,FOURTH_ROOT_EPSILON);
 
 impl_consts!(f32 {
-    ZERO = ("0x0.0p+0", "0x0.0p+0"),
     NEG_ZERO = ("-0x0.0p+0", "0x0.0p+0"),
-    ONE = ("0x1.0000000000000p+0", "0x0.0p+0"),
     E = ("0x1.5bf0a80000000p+1", "0x1.628aee0000000p-24"),
     EGAMMA = ("0x1.2788d00000000p-1", "-0x1.c824f40000000p-28"),
     FRAC_1_PI = ("0x1.45f3060000000p-2", "0x1.b939100000000p-27"),
@@ -85,6 +135,9 @@ impl_consts!(f32 {
     LOG10_2 = ("0x1.3441360000000p-2", "-0x1.ec10c00000000p-27"),
     LOG10_E = ("0x1.bcb7b20000000p-2", "-0x1.5b235e0000000p-27"),
     PI = ("0x1.921fb60000000p+1", "-0x1.777a5c0000000p-24"),
+    PI_SQUARED = ("0x1.3bd3cc0000000p+3", "0x1.37c8bc0000000p-22"),
+    PI_CUBED = ("0x1.f019b60000000p+4", "-0x1.b1d8a00000000p-22"),
+    PI_TESSERACTED = ("0x1.85a2e80000000p+6", "0x1.8521040000000p-19"),
     SQRT_2 = ("0x1.6a09e60000000p+0", "0x1.9fcef40000000p-26"),
     SQRT_3 = ("0x1.bb67ae0000000p+0", "0x1.0b09960000000p-25"),
     SQRT_E = ("0x1.a612980000000p+0", "0x1.c3c0d40000000p-25"),
@@ -100,9 +153,7 @@ impl_consts!(f32 {
 });
 
 impl_consts!(f64 {
-    ZERO = ("0x0.0p+0", "0x0.0p+0"),
     NEG_ZERO = ("-0x0.0p+0", "0x0.0p+0"),
-    ONE = ("0x1.0000000000000p+0", "0x0.0p+0"),
     E = ("0x1.5bf0a8b145769p+1", "0x1.4d57ee2b1013ap-53"),
     EGAMMA = ("0x1.2788cfc6fb619p-1", "-0x1.6cb90701fbfabp-58"),
     FRAC_1_PI = ("0x1.45f306dc9c883p-2", "-0x1.6b01ec5417056p-56"),
@@ -129,6 +180,9 @@ impl_consts!(f64 {
     LOG10_2 = ("0x1.34413509f79ffp-2", "-0x1.9dc1da994fd21p-59"),
     LOG10_E = ("0x1.bcb7b1526e50ep-2", "0x1.95355baaafad3p-57"),
     PI = ("0x1.921fb54442d18p+1", "0x1.1a62633145c07p-53"),
+    PI_SQUARED = ("0x1.3bd3cc9be45dep+3", "0x1.692b71366cc04p-51"),
+    PI_CUBED = ("0x1.f019b59389d7cp+4", "0x1.e019558e5380dp-52"),
+    PI_TESSERACTED = ("0x1.85a2e8c290826p+6", "-0x1.cc0cdf4bfa1e7p-48"),
     SQRT_2 = ("0x1.6a09e667f3bcdp+0", "-0x1.bdd3413b26456p-54"),
     SQRT_3 = ("0x1.bb67ae8584caap+0", "0x1.cec95d0b5c1e3p-54"),
     SQRT_E = ("0x1.a61298e1e069cp+0", "-0x1.b4690082a4906p-55"),
@@ -174,7 +228,7 @@ impl_consts!(LOG f32 [
     ("0x1.2d12080000000p-2", "0x1.02e7c00000000p-27"),
     ("0x1.2a32160000000p-2", "-0x1.8a11340000000p-27"),
     ("0x1.2776c60000000p-2", "-0x1.e20c800000000p-27"),
-]);
+], ["0x1.62e4300000000p-1", "-0x1.05c6100000000p-29", "-0x1.950d880000000p-54"]);
 
 impl_consts!(LOG f64 [
     ("0x1.d20ae03bcc153p-1", "-0x1.3a34bf2f1ab83p-55"),
@@ -207,4 +261,4 @@ impl_consts!(LOG f64 [
     ("0x1.2d12088173e01p-2", "0x1.bffac2f932436p-57"),
     ("0x1.2a32153af765ep-2", "0x1.c22c8956209efp-56"),
     ("0x1.2776c50ef9bfep-2", "0x1.e4b29ccc535d4p-56"),
-]);
+], ["0x1.62e42fefa39efp-1", "0x1.abc9e3b39803fp-56", "0x1.7b57a079a1934p-111"]);

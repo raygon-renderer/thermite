@@ -25,8 +25,9 @@ use generic_array::{
 
 use crate::{
     divider::{BranchfreeDivider, Divider, vector::VectorDivider},
+    generic::ops::MulAddExt,
     isa::InstructionSet,
-    register::element::IntegerElement,
+    register::element::{FloatElementWithBits, IntegerElement},
 };
 
 /// Helper type alias for double-pumped vectors.
@@ -1039,6 +1040,9 @@ pub trait NumericRegister:
     #[conditional] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn square(lhs: Storage<Self>) -> Storage<Self> {
+        Self::mul(lhs, lhs)
+    }
 
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
@@ -1158,13 +1162,13 @@ where
 #[thermite_macros::register_trait]
 #[conditional]
 pub trait FloatRegister:
-    SignedRegister<Element: FloatElement>
+    SignedRegister<Element: FloatElementWithBits>
     + FullyInteroperable<Self::Bits, Self::Signed>
     + CastRegister<Self::ExtendedPrecision>
 {
-    type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Bits>
+    type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Bits>
         + FullyInteroperable<Self, Self::Signed>;
-    type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElement>::Signed>
+    type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Signed>
         + FullyInteroperable<Self, Self::Bits>;
 
     /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
@@ -1343,25 +1347,25 @@ pub trait FloatRegister:
 
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = FloatElement::scalar_mul_add(*lhs, rhs, acc);
+            *lhs = MulAddExt::mul_add(*lhs, rhs, acc);
         })
     }
 
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = FloatElement::scalar_mul_sub(*lhs, rhs, acc);
+            *lhs = MulAddExt::mul_sub(*lhs, rhs, acc);
         })
     }
 
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = FloatElement::scalar_nmul_add(*lhs, rhs, acc);
+            *lhs = MulAddExt::nmul_add(*lhs, rhs, acc);
         })
     }
 
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = FloatElement::scalar_nmul_sub(*lhs, rhs, acc);
+            *lhs = MulAddExt::nmul_sub(*lhs, rhs, acc);
         })
     }
 

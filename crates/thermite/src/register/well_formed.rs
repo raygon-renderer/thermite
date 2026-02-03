@@ -1,16 +1,18 @@
+use crate::register::element::FloatElementWithBits;
+
 use super::*;
 
 /// A FloatElement type that can itself be used as a FloatRegister,
 /// with its associated Signed and Bits types also being fully formed.
 pub trait WellFormedFloatElement:
-    FloatElement<
+    FloatElementWithBits<
         Signed: WellFormedSignedIntegerElement<
-            Element = <Self as FloatElement>::Signed,
-            Storage = <Self as FloatElement>::Signed,
+            Element = <Self as FloatElementWithBits>::Signed,
+            Storage = <Self as FloatElementWithBits>::Signed,
         >,
         Bits: WellFormedUnsignedIntegerElement<
-            Element = <Self as FloatElement>::Bits,
-            Storage = <Self as FloatElement>::Bits,
+            Element = <Self as FloatElementWithBits>::Bits,
+            Storage = <Self as FloatElementWithBits>::Bits,
         >,
         USize: WellFormedUnsignedIntegerElement<Element = <Self as Element>::USize, Storage = <Self as Element>::USize>,
         ISize: WellFormedSignedIntegerElement<Element = <Self as Element>::ISize, Storage = <Self as Element>::ISize>,
@@ -35,14 +37,14 @@ pub trait WellFormedUnsignedIntegerElement:
 }
 
 impl<F> WellFormedFloatElement for F where
-    F: FloatElement<
+    F: FloatElementWithBits<
             Signed: WellFormedSignedIntegerElement<
-                Element = <F as FloatElement>::Signed,
-                Storage = <F as FloatElement>::Signed,
+                Element = <F as FloatElementWithBits>::Signed,
+                Storage = <F as FloatElementWithBits>::Signed,
             >,
             Bits: WellFormedUnsignedIntegerElement<
-                Element = <F as FloatElement>::Bits,
-                Storage = <F as FloatElement>::Bits,
+                Element = <F as FloatElementWithBits>::Bits,
+                Storage = <F as FloatElementWithBits>::Bits,
             >,
             USize: WellFormedUnsignedIntegerElement<Element = <F as Element>::USize, Storage = <F as Element>::USize>,
             ISize: WellFormedSignedIntegerElement<Element = <F as Element>::ISize, Storage = <F as Element>::ISize>,
@@ -121,8 +123,8 @@ impl<R> WellFormedUnsignedIntegerRegister for R where
 pub trait WellFormedFloatRegister:
     FloatRegister<
         Element: WellFormedFloatElement,
-        Signed: WellFormedSignedIntegerRegister<Element = <Self::Element as FloatElement>::Signed>,
-        Bits: WellFormedUnsignedIntegerRegister<Element = <Self::Element as FloatElement>::Bits>,
+        Signed: WellFormedSignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::Signed>,
+        Bits: WellFormedUnsignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::Bits>,
     >
 {
 }
@@ -130,8 +132,8 @@ pub trait WellFormedFloatRegister:
 impl<F> WellFormedFloatRegister for F where
     F: FloatRegister<
             Element: WellFormedFloatElement,
-            Signed: WellFormedSignedIntegerRegister<Element = <F::Element as FloatElement>::Signed>,
-            Bits: WellFormedUnsignedIntegerRegister<Element = <F::Element as FloatElement>::Bits>,
+            Signed: WellFormedSignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::Signed>,
+            Bits: WellFormedUnsignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::Bits>,
         >
 {
 }

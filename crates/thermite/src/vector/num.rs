@@ -5,7 +5,7 @@ use core::ops::Deref;
 use crate::{
     generic::{
         BitshiftVector, BitwiseVector, CastMask, FloatVector, GenericMask, GenericSelectable, GenericVector,
-        NumericVector, PartialOrdVector, SignedVector,
+        NumVector as NumVectorTrait, NumericVector, PartialOrdVector, SignedVector,
     },
     math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath},
     register::{FloatElement, FloatRegister},
@@ -153,7 +153,10 @@ impl<V: PartialOrdVector> PartialEq for NumVector<V> {
     }
 }
 
-impl<V: NumericVector> num_traits::Num for NumVector<V> {
+impl<V: NumericVector> num_traits::Num for NumVector<V>
+where
+    V::Element: num_traits::Num,
+{
     type FromStrRadixErr = <V::Element as num_traits::Num>::FromStrRadixErr;
 
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {

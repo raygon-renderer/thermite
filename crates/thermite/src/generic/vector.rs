@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    generic::ops::DivMasked,
+    generic::ops::{DivMasked, Square, SquareMasked},
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, Element, FloatElement,
         FloatRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister, PartialOrdRegister,
@@ -11,7 +11,7 @@ use crate::{
 
 impl<FROM, INTO> CastVector<Vector<FROM>> for Vector<INTO>
 where
-    FROM: Register,
+    FROM: Register + CastRegister<INTO>,
     INTO: Register + CastRegister<FROM>,
 {
     #[inline(always)]
@@ -19,9 +19,18 @@ where
         Vector::<INTO>::from(from)
     }
 
+    fn cast_into(self) -> Vector<FROM> {
+        Vector::<FROM>::from(self)
+    }
+
     #[inline(always)]
     fn fast_cast_from(from: Vector<FROM>) -> Self {
         Vector::<INTO>::fast_from(from)
+    }
+
+    #[inline(always)]
+    fn fast_cast_into(self) -> Vector<FROM> {
+        Vector::<FROM>::fast_from(self)
     }
 }
 
@@ -89,6 +98,11 @@ impl<R: Register> GenericMask for Mask<R> {
     #[inline(always)]
     fn bitmask(&self) -> BitArray<impl BitViewSized<Store = u32>> {
         self.bitmask()
+    }
+
+    #[inline(always)]
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {
+        Mask(<R::Mask as BitwiseRegister>::ternlog::<IMM>(a.0, b.0, c.0))
     }
 }
 
@@ -222,6 +236,32 @@ where
 
     #[skip_masked] fn offset() -> Self { Vector(R::offset()) }
     #[skip_masked] fn indexed() -> Self { Vector(R::indexed()) }
+}
+
+impl<R: NumericRegister> Square for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn square(self) -> Self {
+        Vector(R::square(self.0))
+    }
+}
+
+impl<R: NumericRegister> SquareMasked<Mask<R>> for Vector<R> {
+    #[inline(always)]
+    fn square_c(self, mask: Mask<R>) -> Self {
+        Vector(R::square_c(mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn square_m(self, src: Self, mask: Mask<R>) -> Self {
+        Vector(R::square_m(src.0, mask.0, self.0))
+    }
+
+    #[inline(always)]
+    fn square_z(self, mask: Mask<R>) -> Self {
+        Vector(R::square_z(mask.0, self.0))
+    }
 }
 
 impl<R: NumericRegister> core::iter::Sum for Vector<R> {
@@ -450,6 +490,14 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     unsafe fn block_autovectorization(&mut self) {
         unsafe { R::block_autovectorization(&mut self.0) };
     }
+
+    #[skip_masked]
+    fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
+        values: [Self; N],
+        kernel: K,
+    ) -> Option<<K as AsFloatVectorWithBitsKernel<Self, N>>::Output> {
+        Some(kernel.with_bits(values))
+    }
 }
 
 #[rustfmt::skip]
@@ -468,7 +516,6 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
         let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
         (Vector(mantissa), Vector(exp))
     }
-
 
     #[inline(always)] fn total_order(self) -> Self::Signed { Vector(R::total_order(self.0)) }
 }

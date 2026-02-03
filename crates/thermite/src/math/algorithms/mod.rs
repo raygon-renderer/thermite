@@ -77,7 +77,7 @@ where
 
         let t = sum + delta;
 
-        if P::POLICY.precision.ge(PrecisionPolicy::Best) {
+        if P::POLICY.use_compensation {
             // if |sum| >= |input[i]| then
             //     c += (sum - t) + input[i] // If sum is bigger, low-order digits of input[i] are lost.
             // else
@@ -92,7 +92,7 @@ where
         n += 1;
     }
 
-    if P::POLICY.precision.ge(PrecisionPolicy::Best) {
+    if P::POLICY.use_compensation {
         sum += c; // apply any remaining compensation
     }
 

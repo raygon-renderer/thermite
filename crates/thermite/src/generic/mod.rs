@@ -16,7 +16,7 @@ use crate::{
     divider::{Denominator, vector::VectorDivider},
     isa::InstructionSet,
     math::FloatConsts,
-    register::{CastMaskRegister, Element, FloatElement, Lanes},
+    register::{CastMaskRegister, Element, FloatElement, Lanes, element::FloatElementWithBits},
 };
 
 /// Simple associated constant splat trait.
@@ -254,16 +254,14 @@ pub trait GenericVector:
     /// Swap the byte order of each element in the vector. i.e., converts between little-endian and big-endian.
     #[conditional] fn swap_bytes(self) -> Self;
 
-    /// Zero out elements of the vector based on the given mask. If the mask lane is true,
-    /// the corresponding element is unchanged; if false, it is set to zero.
+    /// (Zero If False) Zero elements if the corresponding mask lane is false; otherwise, leave unchanged.
     ///
-    /// Similar to a bitwise AND with the mask.
+    /// Similar to a `mask & self` operation.
     #[skip_masked] fn z(self, mask: Self::Mask) -> Self;
 
-    /// Non-zero out elements of the vector based on the given mask. If the mask lane is false,
-    /// the corresponding element is unchanged; if true, it is set to zero.
+    /// (Zero If True) Zero elements if the corresponding mask lane is true; otherwise, leave unchanged.
     ///
-    /// Similar to a bitwise AND with the inverted mask.
+    /// Similar to a `!mask & self` operation.
     #[skip_masked] fn nz(self, mask: Self::Mask) -> Self;
 
     /// Whether the register type has a simple unpack implementation,
@@ -473,10 +471,16 @@ pub trait SwizzleVector: GenericVector {
 
 pub trait CastVector<FROM: GenericVector>: GenericVector {
     fn cast_from(from: FROM) -> Self;
+    fn cast_into(self) -> FROM;
 
     #[inline(always)]
     fn fast_cast_from(from: FROM) -> Self {
         Self::cast_from(from)
+    }
+
+    #[inline(always)]
+    fn fast_cast_into(self) -> FROM {
+        Self::cast_into(self)
     }
 }
 
@@ -518,7 +522,7 @@ pub trait GenericMask:
     }
 
     #[inline(always)]
-    fn cast_mask<INTO>(self) -> INTO
+    fn cast<INTO>(self) -> INTO
     where
         INTO: CastMask<Self>,
     {
@@ -538,6 +542,8 @@ pub trait GenericMask:
         *a = a2;
         *b = b2;
     }
+
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 }
 
 pub trait CastMask<FROM>: Sized {
@@ -564,7 +570,7 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
 pub trait NumericVector:
-    PartialOrdVector<Element: num_traits::Num>
+    PartialOrdVector<Element: num_traits::NumOps>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
     + ops::AddAssignMasked<Self::Mask, Self>
     + ops::SubMasked<Self::Mask, Self, Output = Self>
@@ -575,6 +581,7 @@ pub trait NumericVector:
     + ops::DivAssignMasked<Self::Mask, Self>
     + ops::RemMasked<Self::Mask, Self, Output = Self>
     + ops::RemAssignMasked<Self::Mask, Self>
+    + ops::SquareMasked<Self::Mask, Output = Self>
     + num_traits::NumOps<Self>
     + num_traits::NumAssignOps<Self>
     + core::iter::Sum
@@ -634,7 +641,7 @@ pub trait NumericVector:
 }
 
 pub trait NumVector:
-    NumericVector
+    NumericVector<Element: num_traits::Num>
     + num_traits::Num
     + num_traits::NumCast
     + num_traits::NumAssign
@@ -643,9 +650,10 @@ pub trait NumVector:
 {
 }
 
+// TODO: Add back in some kind of `Signed` trait requirement for Element?
 #[rustfmt::skip]
 #[thermite_macros::vector_trait] #[conditional]
-pub trait SignedVector: NumericVector<Element: num_traits::Signed> + ops::NegMasked<Self::Mask, Output = Self> {
+pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self> {
     /// A vector of the value "-1" in the element type.
     const NEG_ONE: Self;
 
@@ -856,7 +864,7 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
 
     /// Round to nearest
     fn round(self) -> Self;
-     /// Truncate to int
+    /// Truncate to int
     fn trunc(self) -> Self;
     /// Fractional part
     fn fract(self) -> Self;
@@ -875,22 +883,99 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
 
     #[skip_masked]
     unsafe fn block_autovectorization(&mut self);
+
+    /// Attempt to upcast this FloatVector to a FloatVectorWithBits,
+    /// using the provided kernel. If not possible, returns None.
+    #[skip_masked]
+    fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
+        values: [Self; N],
+        kernel: K,
+    ) -> Option<<K as AsFloatVectorWithBitsKernel<Self, N>>::Output> {
+        None // Default implementation returns None
+    }
+}
+
+#[macro_export]
+macro_rules! with_bits {
+    // (($first_value:expr $(, $value:expr)+): $ty:ty as fn($first_decl:ident: $first_alias:ident $(,$decl:ident: $alias:ident)* ) -> $ret:ty $(where $($c:ty: $constraint:ident),*)? { $($body:tt)* }) => {{
+    //     $crate::with_bits!(($first_value): $ty as fn($first_decl: $first_alias) -> impl $ret $(where $($c: $constraint),*)? {
+    //         $crate::with_bits!(($($value),+): $ty as fn($($decl: $alias),*) -> $ret $(where $($c: $constraint),*)? {
+    //             $($body)*
+    //         })
+    //     })
+    // }};
+
+    ([$($values:expr),+]: [$ty:ty; $len:literal] as fn($decl:ident: [$alias:ident; _]) -> $ret:ty $(where $($c:ty: $constraint:ident),*)? { $($body:tt)* }) => {{
+        struct AnonymousAsFloatVectorWithBitsKernel<V>(core::marker::PhantomData<V>);
+
+        impl<V: FloatVector> $crate::generic::AsFloatVectorWithBitsKernel<V, $len> for AnonymousAsFloatVectorWithBitsKernel<V>
+            $(where $($c: $constraint),*)?
+        {
+            type Output = $ret;
+
+            fn with_bits<
+                $alias: FloatVectorWithBits<
+                        Element = V::Element,
+                        Lanes = V::Lanes,
+                        Mask = V::Mask,
+                        ISize = V::ISize,
+                        USize = V::USize,
+                        ExtendedPrecision = V::ExtendedPrecision,
+                    > + CastVector<V>,
+            >(
+                self,
+                $decl: [$alias; $len],
+            ) -> Self::Output {
+                $($body)*
+            }
+        }
+
+        <V as FloatVector>::with_bits(
+            [$($values),+],
+            AnonymousAsFloatVectorWithBitsKernel::<V>(core::marker::PhantomData),
+        )
+    }};
+}
+
+/// Some algorithms may benefit from being able to access the bitwise
+/// representation of floating point vectors. However, not all vectors
+/// support this functionality, and those that do may be passed as generic
+/// FloatVector. Therefore, this is a way of upcasting a FloatVector
+/// to a FloatVectorWithBits, if possible. If not possible, returns None.
+pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
+    type Output;
+
+    fn with_bits<
+        V: FloatVectorWithBits<
+                Element = O::Element,
+                Lanes = O::Lanes,
+                Mask = O::Mask,
+                ISize = O::ISize,
+                USize = O::USize,
+                ExtendedPrecision = O::ExtendedPrecision,
+            > + CastVector<O>,
+    >(
+        self,
+        v: [V; N],
+    ) -> Self::Output;
 }
 
 // These do not have masked variants
-pub trait FloatVectorWithBits: BitwiseVector + FloatVector + FullyInteroperable<Self::Signed, Self::Bits> {
+pub trait FloatVectorWithBits:
+    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::Signed, Self::Bits>
+{
     type Signed: SignedIntegerVector<
             Lanes = Self::Lanes,
-            Divider = Divider<<Self::Element as FloatElement>::Signed>,
-            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Signed>,
-            Element = <Self::Element as FloatElement>::Signed,
+            Divider = Divider<<Self::Element as FloatElementWithBits>::Signed>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Signed>,
+            Element = <Self::Element as FloatElementWithBits>::Signed,
         > + FullyInteroperable<Self, Self::Bits>;
 
     type Bits: UnsignedIntegerVector<
             Lanes = Self::Lanes,
-            Divider = Divider<<Self::Element as FloatElement>::Bits>,
-            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElement>::Bits>,
-            Element = <Self::Element as FloatElement>::Bits,
+            Divider = Divider<<Self::Element as FloatElementWithBits>::Bits>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Bits>,
+            Element = <Self::Element as FloatElementWithBits>::Bits,
         > + FullyInteroperable<Self, Self::Signed>;
 
     const HAS_NATIVE_LDEXP: bool;

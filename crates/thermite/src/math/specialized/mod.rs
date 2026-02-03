@@ -7,14 +7,24 @@ use crate::{
     mask::Mask,
     math::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
-        algorithms, policy::policies::ExtraPrecision,
+        algorithms,
+        policy::policies::{ExtraPrecision, LessPrecision, MediumPrecision},
     },
-    register::FloatElement,
+    register::element::{FloatElement, FloatElementWithBits},
     vector::num::NumVector,
 };
 
 // use super::MathWithPolicy;
 use super::policy::{Policy, PolicyParameters, PrecisionPolicy};
+
+mod generic;
+
+impl<E, V> SpecializedFloatMath<E> for V
+where
+    E: FloatElement,
+    V: FloatVectorWithBits<Element = E>,
+{
+}
 
 pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     #[inline(always)]
@@ -27,15 +37,16 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         let exp_lsb_mask: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::EXP_LSB_MASK
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK
         );
 
         let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::SIGN_MANTISSA_MASK
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK
         );
 
-        let biased_exp = Self::Signed::from_bits((bits >> <Self::Element as FloatElement>::MANTISSA) & exp_lsb_mask);
+        let biased_exp =
+            Self::Signed::from_bits((bits >> <Self::Element as FloatElementWithBits>::MANTISSA) & exp_lsb_mask);
 
         let mut exp = biased_exp + exp;
 
@@ -43,17 +54,17 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             // clamp exponent between 0 and max biased exponent
             exp = exp.max(Self::Signed::ZERO).min(crate::generic_splat!(
                 <Self> = <S: FloatVectorWithBits>
-                <S::Signed as GenericVector>::Element: <S::Element as FloatElement>::MAX_BIASED_EXP
+                <S::Signed as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP
             ));
         }
 
         let sign_mantissa = Self::Signed::from_bits(bits & sign_mantissa_mask);
 
-        let mut result = (exp << <Self::Element as FloatElement>::MANTISSA) | sign_mantissa;
+        let mut result = (exp << <Self::Element as FloatElementWithBits>::MANTISSA) | sign_mantissa;
 
         if const { P::POLICY.check_overflow } {
-            let is_underflow = exp.cmp_le(Self::Signed::ZERO);
-            let input_was_subnormal = biased_exp.cmp_eq(Self::Signed::ZERO);
+            let is_underflow = exp.is_negative();
+            let input_was_subnormal = biased_exp.is_zero();
 
             result = result.z(is_underflow | input_was_subnormal); // zero result if underflow or input was subnormal
         }
@@ -71,22 +82,22 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         let exp_lsb_mask: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::EXP_LSB_MASK
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK
         );
 
         let frexp_bias_offset: Self::Signed = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Signed as GenericVector>::Element: <S::Element as FloatElement>::FREXP_BIAS_OFFSET
+            <S::Signed as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET
         );
 
         let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::SIGN_MANTISSA_MASK
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK
         );
 
         let half_exp_bits: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::HALF_EXP_BITS
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::HALF_EXP_BITS
         );
 
         // (bits >> mantissa) & mask
@@ -104,7 +115,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             let is_normal = biased_exp.cmp_ne(Self::Signed::ZERO);
 
             exp = exp.nz(is_normal); // zero exponent if input was NOT normal
-            fraction = fraction.nz(is_normal.cast_mask()); // zero fraction if input was NOT normal
+            fraction = fraction.nz(is_normal.cast()); // zero fraction if input was NOT normal
         }
 
         (Self::from_bits(fraction), exp)
@@ -220,7 +231,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
                     return invert.select(corrected, res);
                 }
 
-                u *= u;
+                u = u.square();
             }
         }
 
@@ -229,77 +240,62 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn reciprocal<P: Policy>(self) -> Self {
-        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
-            Self::ONE / self
-        } else {
-            let mut y = self.rcp();
+        let mut y = self.rcp();
 
-            if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-                // one iteration of Newton's method
-                y = y * self.nmul_adde(y, Self::TWO);
-            }
-
-            y
+        // if we have approximate reciprocal and want better precision
+        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+            // one iteration of Newton's method
+            y = y * self.nmul_adde(y, Self::TWO);
         }
+
+        y
     }
 
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(self, a: Self) -> Self {
-        if const { !Self::HAS_APPROX_RCP || P::POLICY.precision.ge(PrecisionPolicy::Average) } {
-            a + Self::ONE / self
+        let mut y = self.rcp();
+
+        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+            // one iteration of Newton's method
+            y = y.mul_adde(self.nmul_adde(y, Self::TWO), a);
         } else {
-            let mut y = self.rcp();
-
-            if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-                // one iteration of Newton's method
-                y = y.mul_adde(self.nmul_adde(y, Self::TWO), a);
-            } else {
-                y += a;
-            }
-
-            y
+            y += a;
         }
+
+        y
     }
 
+    fn inverse_sqrt<P: Policy>(self) -> Self;
+
+    // TODO: Look into better algorithms than doubling
     #[inline(always)]
-    fn inverse_sqrt<P: Policy>(self) -> Self {
-        if const { !Self::HAS_APPROX_RSQRT || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            Self::ONE / self.sqrt()
-        } else {
-            let mut y = self.rsqrt();
-
-            if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-                let nx2 = Self::splat(E::from_f64(-0.5));
-                let threehalfs = Self::splat(E::from_f64(1.5));
-
-                // one iteration of Newton's method
-                y = y * (y * y).mul_adde(nx2, threehalfs);
-            }
-
-            y
-        }
-    }
-
-    #[inline(always)]
-    fn powi<P: Policy>(self, mut e: i32) -> Self {
+    fn powi<P: Policy>(self, e: i32) -> Self {
         let mut x = self;
         let mut res = Self::ONE;
 
-        if e < 0 {
-            e = -e;
+        let mut e = if e < 0 {
             x = Self::reciprocal::<P>(x);
-        }
+
+            e.wrapping_neg() as u32
+        } else {
+            e as u32
+        };
 
         while e != 0 {
             if e & 1 != 0 {
                 res *= x;
             }
 
-            x *= x;
+            x = x.square();
             e >>= 1;
         }
 
         res
+    }
+
+    #[inline(always)]
+    fn powic<P: Policy, const N: i32>(self) -> Self {
+        self.powi_p::<P>(N)
     }
 
     #[inline(always)]
@@ -317,7 +313,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
             res = e1.cmp_ne(Self::ISize::ZERO).select(nx, res);
 
-            x *= x;
+            x = x.square();
             e >>= 1;
 
             if e.cmp_ne(Self::ISize::ZERO).none() {
@@ -395,103 +391,25 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         s / c
     }
 
-    #[inline(always)]
-    fn sinc<P: Policy>(self) -> Self {
-        let x = self;
-
-        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            return Self::sin::<P>(x) * Self::reciprocal::<P>(x);
-        }
-
-        let is_tiny = x.abs().cmp_le(Self::FOURTH_ROOT_EPSILON);
-
-        let x2 = x * x;
-
-        // if branching, use Taylor series for tiny x without calling sine.
-        if !P::POLICY.avoid_branching && crate::unlikely(is_tiny.all()) {
-            if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
-                // use fma instead of division then subtraction, for improved performance
-                // at the cost of a tiny bit of precision with the 120 denominator
-                return x2.mul_adde(
-                    x2.mul_sube(Self::splat(FloatElement::from_f64(1.0 / 120.0)), Self::FRAC_1_6),
-                    Self::ONE,
-                );
-            }
-
-            let res = x2 / Self::splat(FloatElement::from_i64(120));
-            return x2.mul_add(res - Self::FRAC_1_6, Self::ONE);
-        }
-
-        // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
-        let num = is_tiny.select(x2, Self::sin::<P>(x));
-        let den = is_tiny.select(Self::splat(FloatElement::from_i64(120)), x);
-
-        // combined division, since division is expensive
-        let mut y = num / den;
-
-        y = is_tiny.select(x2.mul_adde(y - Self::FRAC_1_6, Self::ONE), y);
-
-        if P::POLICY.check_overflow {
-            y = x.is_infinite().select(Self::ZERO, y);
-        }
-
-        y
-    }
+    fn sinc<P: Policy>(self) -> Self;
 
     #[inline(always)]
     fn sinc_pi<P: Policy>(self) -> Self {
-        let x = self;
-
-        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            // forwards to the above medium-precision sinc implementation,
-            // which uses sin(x) * rcp(x)
-            return Self::sinc::<P>(x * FloatConsts::PI);
-        }
-
-        let pi_2_frac_6: Self = Self::splat(FloatElement::from_f64(
-            1.6449340668482264364724151666460251892189499012068, // pi^2/6
-        ));
-
-        let frac_120_pi_4: Self = Self::splat(FloatElement::from_f64(
-            1.2319178705621202226983339920542432970193362224366, // 120/pi^4, flipped for division
-        ));
-
-        let is_tiny = x.abs().cmp_le(Self::FOURTH_ROOT_EPSILON);
-
-        let x2 = x * x;
-
-        // if branching, use Taylor series for tiny x without calling sine.
-        if !P::POLICY.avoid_branching && crate::unlikely(is_tiny.all()) {
-            let pi_4_frac_120: Self = Self::splat(FloatElement::from_f64(
-                0.81174242528335364363700277240587592708106321393905,
-            ));
-
-            // unlike sinc, which has x^2/120 with 120 being an exact integer,
-            // sinc_pi has pi^4/120, and since pi is irrational and imprecise anyway, we
-            // can avoid the exact division by 120 in favor of multiplying by pi^4/120
-            return x2.mul_add(x2.mul_sube(pi_4_frac_120, pi_2_frac_6), Self::ONE);
-        }
-
-        // for very small x, sinc_pi(x) ~ 1 - (pi^2/6)*x^2 + (pi^4/120)*x^4
-        let num = is_tiny.select(x2, Self::sin_pi::<P>(x));
-        let den = is_tiny.select(frac_120_pi_4, x * Self::PI); // NOTE: first term is flipped for division
-
-        // combined division, since division is expensive
-        let mut y = num / den;
-
-        y = is_tiny.select(x2.mul_adde(y - pi_2_frac_6, Self::ONE), y);
-
-        if P::POLICY.check_overflow {
-            y = x.is_infinite().select(Self::ZERO, y);
-        }
-
-        y
+        Self::sinc::<P>(self * Self::PI)
     }
 
     fn sinh_cosh<P: Policy>(self) -> (Self, Self);
 
-    fn sinh<P: Policy>(self) -> Self;
-    fn cosh<P: Policy>(self) -> Self;
+    #[inline(always)]
+    fn sinh<P: Policy>(self) -> Self {
+        Self::sinh_cosh::<P>(self).0
+    }
+
+    #[inline(always)]
+    fn cosh<P: Policy>(self) -> Self {
+        Self::sinh_cosh::<P>(self).1
+    }
+
     fn tanh<P: Policy>(self) -> Self;
 
     fn asin<P: Policy>(self) -> Self;
@@ -512,47 +430,53 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn powf<P: Policy>(self, e: Self) -> Self;
     fn cbrt<P: Policy>(self) -> Self;
 
+    #[inline(always)]
+    fn nth_root<P: Policy, const N: usize>(self) -> Self {
+        let mut x = self;
+
+        match N {
+            0 => Self::NAN, // undefined
+            1 => x,
+            2 => x.sqrt(),
+            3 => x.cbrt_p::<P>(),
+            _ => {
+                let mut is_neg = GenericMask::FALSY;
+
+                // for odd powers, work with absolute value and restore sign later
+                if const { N & 1 == 1 } {
+                    is_neg = x.is_negative();
+                    x = x.abs(); // abs is faster than neg_c, just 1 AND
+                }
+
+                // initial guess using reduced precision
+                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as i64)));
+
+                // One iteration of Halley's method for nth root
+                let y_n = y.powi_p::<P>(N as i32);
+
+                let np1 = Self::splat(E::from_i64((N + 1) as i64));
+                let nm1 = Self::splat(E::from_i64((N - 1) as i64));
+
+                let n = y * (x - y_n); // half of numerator
+                let d = y_n.mul_adde(nm1, x * nm1);
+
+                y += ((n + n) / d);
+
+                if const { N & 1 == 1 } {
+                    y = y.neg_c(is_neg);
+                }
+
+                y
+            }
+        }
+    }
+
     fn ln<P: Policy>(self) -> Self;
     fn ln_1p<P: Policy>(self) -> Self;
     fn log2<P: Policy>(self) -> Self;
     fn log10<P: Policy>(self) -> Self;
 
-    /// log with arbitrary base N
-    #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
-        let x = self;
-
-        match N {
-            // 0 and 1 are special cases, and these are what Wolfram Alpha returns
-            0 => Self::ZERO,            // log(x)/log(0) = log(x)/-infinity = 0
-            1 => FloatVector::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
-            2 => Self::log2::<P>(x),
-            10 => Self::log10::<P>(x),
-            n if n <= 32 => {
-                #[rustfmt::skip] #[allow(clippy::approx_constant)]
-                const LOG_TABLE: [f64; 30] = [ // precomputed 1/Table[log(x), {x, 3, 32}]
-                    1.0 / 1.0986122886681096913952452369225257046474905578227, 1.0 / 1.3862943611198906188344642429163531361510002687205,
-                    1.0 / 1.6094379124341003746007593332261876395256013542685, 1.0 / 1.7917594692280550008124773583807022727229906921830,
-                    1.0 / 1.9459101490553133051053527434431797296370847295819, 1.0 / 2.0794415416798359282516963643745297042265004030808,
-                    1.0 / 2.1972245773362193827904904738450514092949811156455, 1.0 / 2.3025850929940456840179914546843642076011014886288,
-                    1.0 / 2.3978952727983705440619435779651292998217068539374, 1.0 / 2.4849066497880003102297094798388788407984908265433,
-                    1.0 / 2.5649493574615367360534874415653186048052679447602, 1.0 / 2.6390573296152586145225848649013562977125848639421,
-                    1.0 / 2.7080502011022100659960045701487133441730919120913, 1.0 / 2.7725887222397812376689284858327062723020005374410,
-                    1.0 / 2.8332133440562160802495346178731265355882030125857, 1.0 / 2.8903717578961646922077225953032279773704812500058,
-                    1.0 / 2.9444389791664404600090274318878535372373792612991, 1.0 / 2.9957322735539909934352235761425407756766016229890,
-                    1.0 / 3.0445224377234229965005979803657054342845752874046, 1.0 / 3.0910424533583158534791756994233058678972069882977,
-                    1.0 / 3.1354942159291496908067528318101961184423803148404, 1.0 / 3.1780538303479456196469416012970554088739909609035,
-                    1.0 / 3.2188758248682007492015186664523752790512027085370, 1.0 / 3.2580965380214820454707195630234951728807680791205,
-                    1.0 / 3.2958368660043290741857357107675771139424716734682, 1.0 / 3.3322045101752039239398169863595328657880849983024,
-                    1.0 / 3.3672958299864740271832720323619116054945129139227, 1.0 / 3.4011973816621553754132366916068899122485920464515,
-                    1.0 / 3.4339872044851462459291643245423572104499389304806, 1.0 / 3.4657359027997265470861606072908828403775006718013,
-                ];
-
-                Self::ln::<P>(x) * Self::splat(E::from_f64(LOG_TABLE[n - 3]))
-            }
-            _ => Self::ln::<P>(x) / Self::splat(E::from_f64(libm::log(N as f64))),
-        }
-    }
+    fn log_n<P: Policy, const N: usize>(self) -> Self;
 
     #[inline(always)]
     fn log<P: Policy>(self, base: Self) -> Self {
@@ -600,7 +524,7 @@ where
 
         return if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
             // Use the worst precision method, which is usually faster
-            let res = x.mul_adde(x, y * y);
+            let res = x.mul_adde(x, y.square());
 
             return if INV { res.inverse_sqrt_p::<P>() } else { res.sqrt() };
         } else {
@@ -662,7 +586,7 @@ where
 
     for x in &mut values {
         *x *= scale; // scale to prevent overflow
-        *x *= *x; // square in place
+        *x = x.square(); // square in place
     }
 
     // sum squares in place
@@ -713,9 +637,7 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
     fn l2_norm_squared<P: Policy>(self) -> Self;
 }
 
-pub trait SpecializedRealMath<E>:
-    SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> + SpecializedFloatMath<E>
-{
+pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> {
     #[inline(always)]
     fn tolerance<P: Policy>() -> Self {
         Self::splat(Self::Element::from_i64(P::POLICY.precision.tolerance()) * Self::Element::EPSILON)
@@ -762,7 +684,7 @@ pub trait SpecializedRealMath<E>:
             1 => t, // linear
             _ => {
                 t.powi_p::<P>(N as i32)
-                    * const { Smoothstep::<E, N>::COEFFICIENTS }
+                    * const { Smoothstep::<N>::COEFFICIENTS }
                         .into_iter()
                         .fold(Self::ZERO, |res, c| res.mul_adde(t, Self::splat(E::from_i64(c))))
             }
@@ -783,7 +705,7 @@ pub trait SpecializedRealMath<E>:
 
                 (bar, xa * bar)
             } else {
-                (Self::ONE / ba, xa / ba)
+                (ba.reciprocal_p::<P>(), xa / ba)
             };
         }
 
@@ -796,13 +718,14 @@ pub trait SpecializedRealMath<E>:
                     t = t.clamp(Self::ZERO, Self::ONE);
                 }
 
-                let y = const { Smoothstep::<E, N>::COEFFICIENTS }.into_iter().enumerate().fold(
-                    Self::ZERO,
-                    |res, (k, c)| {
-                        // order - k for derivative coefficient
-                        res.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
-                    },
-                );
+                let y =
+                    const { Smoothstep::<N>::COEFFICIENTS }
+                        .into_iter()
+                        .enumerate()
+                        .fold(Self::ZERO, |res, (k, c)| {
+                            // order - k for derivative coefficient
+                            res.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
+                        });
 
                 y * dt_dx * t.powi_p::<P>((N - 1) as i32)
             }
@@ -825,7 +748,7 @@ pub trait SpecializedRealMath<E>:
                 bar = ba.rcp();
                 bar_a = bar * a;
             } else {
-                bar = Self::ONE / ba;
+                bar = ba.reciprocal_p::<P>();
                 bar_a = a / ba;
             }
 
@@ -847,10 +770,10 @@ pub trait SpecializedRealMath<E>:
                 let mut t = y.nmul_adde(Self::TWO, Self::ONE).asin_p::<P>();
 
                 if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-                    t *= Self::splat(E::ONE / E::from_f64(3.0));
+                    t *= Self::splat(E::from_ratio(1, 3)); // multiply by 1/3 for medium precision
                 } else {
                     // exact division for higher precisions
-                    t /= Self::splat(E::from_f64(3.0));
+                    t /= Self::splat(E::from_i64(3));
                 }
 
                 t = Self::HALF - t.sin_p::<P>();
@@ -879,7 +802,7 @@ pub trait SpecializedRealMath<E>:
 
             let xn1 = t.powi_p::<P>((N - 1) as i32);
 
-            let (fx, fpx) = const { Smoothstep::<E, N>::COEFFICIENTS }.into_iter().enumerate().fold(
+            let (fx, fpx) = const { Smoothstep::<N>::COEFFICIENTS }.into_iter().enumerate().fold(
                 (Self::ZERO, Self::ZERO),
                 |(fx, fpx), (k, c)| {(
                     fx.mul_adde(t, Self::splat(E::from_i64(c))),
@@ -1042,9 +965,9 @@ const fn binomial(a: i32, b: i32) -> i64 {
 //     (n, d)
 // }
 
-pub struct Smoothstep<F: FloatElement, const N: usize>(PhantomData<[F; N]>);
+pub struct Smoothstep<const N: usize>(PhantomData<[i64; N]>);
 
-impl<F: FloatElement, const N: usize> Smoothstep<F, N> {
+impl<const N: usize> Smoothstep<N> {
     // ensure these coefficients are generated at compile time
     pub const COEFFICIENTS: [i64; N] = const {
         let mut coeffs = [0; N];
@@ -1053,10 +976,6 @@ impl<F: FloatElement, const N: usize> Smoothstep<F, N> {
         let mut k = 0;
         while k < N {
             let c = binomial(-1 - n, k as i32) * binomial(n + n + 1, n - k as i32);
-
-            if c.unsigned_abs() > F::MAX_U64 {
-                panic!("Binomial coefficient overflow");
-            }
 
             // store in reverse order for easier polynomial evaluation
             coeffs[N - k - 1] = c;

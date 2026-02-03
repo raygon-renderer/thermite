@@ -1,193 +1,244 @@
 // #![no_std]
-#![allow(unsafe_op_in_unsafe_fn)]
-
-use thermite::{
-    Mask, Vector,
-    mask::Selectable,
-    math::FloatConsts,
-    register::{CastMaskRegister, CastRegister, FloatElement, FloatRegister, MaskRegister},
-};
+#![allow(unused_variables)]
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
-use num_traits::{
-    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, NumCast, One, Signed, ToPrimitive, Zero, float::FloatCore,
-};
+use num_traits::{NumAssignOps, NumOps};
+use thermite::register::element::SignedElement;
+use thermite::{generic::GenericSelectable, prelude::*};
 
-//pub mod polyfills;
-//pub mod reg;
+use thermite::generic::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
+
 pub mod consts;
-use consts::SplitFloatConsts;
+pub mod math;
 
-mod math;
+#[cfg(feature = "special")]
+pub mod special;
 
-pub trait CompensatedElement: FloatElement + Signed + FloatConsts + SplitFloatConsts<Self> {
-    /// for Veltkamp's splitting, defined as 2^(ceil(p/2)) + 1,
-    /// where p is the number of bits in the significand.
+/// Scalar values that can be used in compensated arithmetic.
+///
+/// This also applies to [`Vector`]s whose elements implement this trait.
+///
+/// This can be implemented for anything so long as a suitable Veltkamp's
+/// splitting constant can be provided. It just doesn't make much sense
+/// on anything but scalar-like floating point types.
+///
+/// However, it's worth noting that if the type has true FMA support,
+/// as indicated by `MulAddExt::HAS_TRUE_FMA`, then
+/// the splitting constant is never used, so it can be a dummy value in that case.
+pub trait ScalarValue:
+    Copy + NumOps + NumAssignOps + MulAddExt<Output = Self> + Neg<Output = Self> + consts::SplitFloatConsts<Self>
+{
+    /// for Veltkamp's splitting
     const SPLITTER: Self;
 
+    /// The value zero. Named this way to avoid conflicts.
+    const SCALAR_ZERO: Self;
+
+    /// The value one. Named this way to avoid conflicts.
+    const SCALAR_ONE: Self;
+
     /// Empirical maximum |x| for which the erf_inv Maclaurin series converges
-    /// within 64 terms to full precision.
+    /// within 64 terms to full precision. This is only used when the `special`
+    /// crate feature is enabled, for the `erf_inv` function.
     const MAX_ERFINV_SERIES: Self;
+
+    /// Returns the value truncated to its integer component.
+    ///
+    /// Named this way to avoid conflicts. Required for the `Rem` implementation.
+    fn scalar_trunc(self) -> Self;
+
+    #[inline(always)]
+    fn two_sum(a: Self, b: Self) -> (Self, Self) {
+        let s = a + b;
+        let v = s - a;
+        let e = (a - (s - v)) + (b - v);
+        (s, e)
+    }
+
+    #[inline(always)]
+    fn two_diff(a: Self, b: Self) -> (Self, Self) {
+        let s = a - b;
+        let v = s - a;
+        let e = (a - (s - v)) - (b + v);
+        (s, e)
+    }
+
+    #[inline(always)]
+    fn two_prod(a: Self, b: Self) -> (Self, Self) {
+        // fast path if we have FMA available
+        if Self::HAS_TRUE_FMA {
+            let p = a * b;
+            let e = a.mul_sub(b, p);
+
+            return (p, e);
+        }
+
+        let splitter = Self::SPLITTER;
+
+        // Split a
+        let c_a = a * splitter;
+        let a_hi = c_a - (c_a - a);
+        let a_lo = a - a_hi;
+
+        // Split b
+        let c_b = b * splitter;
+        let b_hi = c_b - (c_b - b);
+        let b_lo = b - b_hi;
+
+        // exact product
+        let p = a * b;
+
+        let err = ((a_hi * b_hi - p) + a_hi * b_lo + a_lo * b_hi) + a_lo * b_lo;
+
+        (p, err)
+    }
+
+    #[inline(always)]
+    fn square(a: Self) -> (Self, Self) {
+        // fast path if we have FMA available
+        if Self::HAS_TRUE_FMA {
+            let p = a * a;
+            let e = a.mul_sub(a, p);
+
+            return (p, e);
+        }
+
+        let splitter = Self::SPLITTER;
+
+        // Split a
+        let c_a = a * splitter;
+        let a_hi = c_a - (c_a - a);
+        let a_lo = a - a_hi;
+
+        // exact product
+        let p = a * a;
+
+        let d = a_hi * a_lo;
+        let err = ((a_hi * a_hi - p) + d + d) + a_lo * a_lo;
+
+        (p, err)
+    }
 }
 
-impl CompensatedElement for f32 {
+impl ScalarValue for f32 {
     const SPLITTER: Self = ((1u64 << 12) + 1) as f32; // 2^12 + 1
-
+    const SCALAR_ZERO: Self = 0.0;
+    const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.75;
+
+    #[inline(always)]
+    fn scalar_trunc(self) -> Self {
+        FloatElement::trunc(self)
+    }
 }
 
-impl CompensatedElement for f64 {
+impl ScalarValue for f64 {
     const SPLITTER: Self = ((1u64 << 27) + 1) as f64; // 2^27 + 1
-
+    const SCALAR_ZERO: Self = 0.0;
+    const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.545;
-}
 
-pub trait CompensatedRegister: FloatRegister<Element: CompensatedElement> {}
-
-impl<R: FloatRegister> CompensatedRegister for R where R::Element: CompensatedElement {}
-
-#[repr(C)]
-pub struct Compensated<R: CompensatedRegister> {
-    value: Vector<R>,
-    error: Vector<R>,
-}
-
-const _: () = {
-    use core::fmt;
-
-    impl<R: CompensatedRegister> fmt::Debug for Compensated<R> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("Compensated")
-                .field("value", &self.value)
-                .field("error", &self.error)
-                .finish()
-        }
-    }
-};
-
-impl<R: CompensatedRegister> Selectable<R> for Compensated<R> {
     #[inline(always)]
-    fn select<M: MaskRegister>(mask: Mask<M>, truthy: Self, falsy: Self) -> Self
-    where
-        R: CastMaskRegister<M, Lanes = M::Lanes>,
-    {
-        let mask: Mask<R> = mask.cast(); // do this upfront for both parts
-
-        Compensated {
-            value: mask.select(truthy.value, falsy.value),
-            error: mask.select(truthy.error, falsy.error),
-        }
+    fn scalar_trunc(self) -> Self {
+        FloatElement::trunc(self)
     }
 }
 
-impl<R: CompensatedRegister> Clone for Compensated<R> {
-    fn clone(&self) -> Self {
-        *self
+impl<R: thermite::register::FloatRegister> ScalarValue for Vector<R>
+where
+    R::Element: ScalarValue,
+{
+    const SPLITTER: Self = Self::splat_const(<R::Element as ScalarValue>::SPLITTER);
+    const SCALAR_ZERO: Self = Self::ZERO;
+    const SCALAR_ONE: Self = Self::ONE;
+    const MAX_ERFINV_SERIES: Self = Self::splat_const(<R::Element as ScalarValue>::MAX_ERFINV_SERIES);
+
+    #[inline(always)]
+    fn scalar_trunc(self) -> Self {
+        self.trunc()
     }
 }
 
-impl<R: CompensatedRegister> Copy for Compensated<R> {}
+// /// NOTE: Nesting Compensated is not recommended. This is only implemented
+// /// for completeness. If you need higher precision, consider using a wider
+// /// base type instead, potentially a `BigFloat` from `thermite-bignum` instead of
+// /// `Compensated` values altogether.
+// impl<V: ScalarValue> ScalarValue for Compensated<V> {
+//     const SPLITTER: Self = const {
+//         assert!(
+//             V::HAS_TRUE_FMA,
+//             "Compensated<S> requires true FMA support to implement ScalarValue"
+//         );
 
-impl<R: CompensatedRegister> Compensated<R> {
-    pub const LANES: usize = <R::Lanes as thermite::generic_array::typenum::Unsigned>::USIZE;
+//         Self {
+//             value: V::SPLITTER,
+//             error: V::SCALAR_ZERO,
+//         }
+//     };
 
-    pub const EMPTY: Self = Self::new(Vector::EMPTY);
-    pub const ZERO: Self = Self::new(Vector::ZERO);
-    pub const ONE: Self = Self::new(Vector::ONE);
-    pub const NEG_ONE: Self = Self::new(Vector::NEG_ONE);
-    pub const MIN_POSITIVE: Self = Self::new(Vector::MIN_POSITIVE);
-    pub const TWO: Self = Self::new(Vector::TWO);
-    pub const HALF: Self = Self::new(Vector::HALF);
+//     const SCALAR_ZERO: Self = Self {
+//         value: V::SCALAR_ZERO,
+//         error: V::SCALAR_ZERO,
+//     };
 
-    pub const MIN: Self = Self::new(Vector::MIN);
-    pub const MAX: Self = Self::new(Vector::MAX);
+//     const SCALAR_ONE: Self = Self {
+//         value: V::SCALAR_ONE,
+//         error: V::SCALAR_ZERO,
+//     };
 
-    pub const NAN: Self = Self::new(Vector::NAN);
-    pub const INFINITY: Self = Self::new(Vector::INFINITY);
-    pub const NEG_INFINITY: Self = Self::new(Vector::NEG_INFINITY);
-    pub const NEG_ZERO: Self = Self::new(Vector::NEG_ZERO);
-    pub const EPSILON: Self = FloatConsts::EPSILON; // use split epsilon
+//     fn scalar_trunc(self) -> Self {
+//         Self {
+//             value: self.value.scalar_trunc(),
+//             error: V::SCALAR_ZERO,
+//         }
+//     }
+// }
 
+/// Trait for float vector types that can be used in compensated arithmetic.
+pub trait CompensatedFloatVector: ScalarValue + FloatVector<Element: ScalarValue> + CastVector<Self> {}
+impl<V> CompensatedFloatVector for V where V: ScalarValue + FloatVector<Element: ScalarValue> + CastVector<V> {}
+
+#[rustfmt::skip]
+impl<E: ScalarValue + Element> Element for Compensated<E> {
+    type ISize = <E as Element>::ISize;
+    type USize = <E as Element>::USize;
+
+    const ONE: Self = Self { value: E::ONE, error: E::ZERO };
+    const ZERO: Self = Self { value: E::ZERO, error: E::ZERO };
+
+    fn from_i8(value: i8) -> Self { Self { value: E::from_i8(value), error: E::ZERO } }
+    fn from_u8(value: u8) -> Self { Self { value: E::from_u8(value), error: E::ZERO } }
+    fn from_u16(value: u16) -> Self { Self { value: E::from_u16(value), error: E::ZERO } }
+}
+
+#[rustfmt::skip]
+impl<E: ScalarValue + SignedElement> SignedElement for Compensated<E> {
     #[inline(always)]
-    pub const fn new(value: Vector<R>) -> Self {
-        Self {
-            value,
-            error: Vector::ZERO,
-        }
-    }
-
-    #[inline(always)]
-    pub fn splat(value: R::Element) -> Self {
-        Self::new(Vector::splat(value))
-    }
-
-    #[inline(always)]
-    pub const fn splat_const(value: R::Element) -> Self {
-        Self::new(Vector::splat_const(value))
-    }
-
-    #[inline(always)]
-    pub const fn from_parts(value: Vector<R>, error: Vector<R>) -> Self {
-        Self { value, error }
-    }
-
-    #[inline(always)]
-    pub fn value(&self) -> Vector<R> {
-        self.value + self.error
-    }
-
-    #[inline(always)]
-    pub const fn raw_value(&self) -> Vector<R> {
-        self.value
-    }
-
-    #[inline(always)]
-    pub const fn error(&self) -> Vector<R> {
-        self.error
-    }
-
-    #[inline(always)]
-    pub fn cast<T>(self) -> Compensated<T>
-    where
-        T: CastRegister<R> + CompensatedRegister,
-        R: CastRegister<T>,
-    {
-        let value = self.value.cast();
-
-        let error = if const { size_of::<T::Element>() < size_of::<R::Element>() } {
-            // accumulate downcasting error
-            self.error + (self.value - value.cast())
+    fn abs(self) -> Self {
+        if self.value() < E::ZERO {
+            -self
         } else {
-            self.error
-        };
-
-        Compensated {
-            value,
-            error: error.cast(),
+            self
         }
     }
 
     #[inline(always)]
-    pub(crate) fn renormalized(value: Vector<R>, error: Vector<R>) -> Self {
-        let sum = value + error;
-        let err = error + (value - sum);
-        Self { value: sum, error: err }
+    fn signum(self) -> Self {
+        Self::new(self.value().signum())
     }
+}
 
+#[rustfmt::skip]
+impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
     #[inline(always)]
-    pub fn normalize(self) -> Self {
-        Self::renormalized(self.value, self.error)
-    }
+    fn sqrt(this: Self) -> Self {
+        let s = E::sqrt(this.value);
 
-    #[inline(always)]
-    pub fn sqrt(self) -> Self {
-        let s = self.value.sqrt();
-
-        let (p, e) = two_prod(s, s);
+        let (p, e) = E::two_prod(s, s);
 
         // sum of differences
-        let remainder = (self.value - p) + (self.error - e);
+        let remainder = (this.value - p) + (this.error - e);
 
         // correction term
         let corr = remainder / (s + s);
@@ -195,132 +246,119 @@ impl<R: CompensatedRegister> Compensated<R> {
         Self::renormalized(s, corr)
     }
 
+    #[inline(always)] fn floor(this: Self) -> Self { Self::new(E::floor(this.value())) }
+    #[inline(always)] fn ceil(this: Self) -> Self { Self::new(E::ceil(this.value())) }
+    #[inline(always)] fn round(this: Self) -> Self { Self::new(E::round(this.value())) }
+    #[inline(always)] fn trunc(this: Self) -> Self { Self::new(E::trunc(this.value())) }
+
+    // for these two, we rely on `renormalized` to avoid infinite error values
+    #[inline(always)] fn next_up(this: Self) -> Self { Self::renormalized(this.value, E::next_up(this.error)) }
+    #[inline(always)] fn next_down(this: Self) -> Self { Self::renormalized(this.value, E::next_down(this.error)) }
+
+    // TODO: Represent these more accurately
     #[inline(always)]
-    pub fn min(self, other: Self) -> Self {
-        let mask = self.value().cmp_lt(other.value());
-        Compensated {
-            value: mask.select(self.value, other.value),
-            error: mask.select(self.error, other.error),
+    fn try_from_i64(value: i64) -> Option<Self> {
+        E::try_from_i64(value).map(|v| Self::new(v))
+    }
+
+    #[inline(always)]
+    fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+        if d == 0 {
+            return None;
+        }
+
+        let df= <E as FloatElement>::try_from_i64(d)?;
+
+        // fast path for values that both fit in the float exactly
+        if let Some(n) = <E as FloatElement>::try_from_i64(n) {
+            return Some(Self::from_fraction(n, df));
+        }
+
+        let (q, r) = (n / d, n % d);
+
+        let mut result = Self::try_from_i64(q)?;
+
+        if r != 0 {
+            let rf = <E as FloatElement>::try_from_i64(r)?;
+
+            result += Self::from_fraction(rf, df);
+        }
+
+        Some(result)
+    }
+}
+
+/// Compensated arithmetic number type.
+///
+/// This type represents a number as the sum of two components: a high-order value and a low-order error term.
+/// Using these, it can effectively double the mantissa precision of standard floating-point types,
+/// providing significantly improved accuracy for a wide range of numerical computations.
+///
+/// `Compensated<f32 | f64>` have some functionality required for use as an `Element`
+/// in vectorized types, but cannot use the math library. Use `Vector<f32>` or `Vector<f64>`
+/// as the inner type for full functionality.
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct Compensated<V> {
+    pub value: V,
+    pub error: V,
+}
+
+impl<V: ScalarValue> Compensated<V> {
+    /// Creates a new compensated number with zero error term.
+    #[inline(always)]
+    pub const fn new(value: V) -> Self {
+        Self {
+            value,
+            error: V::SCALAR_ZERO,
         }
     }
 
+    /// Returns the normalized value `(value + error)`.
     #[inline(always)]
-    pub fn max(self, other: Self) -> Self {
-        let mask = self.value().cmp_gt(other.value());
-        Compensated {
-            value: mask.select(self.value, other.value),
-            error: mask.select(self.error, other.error),
+    pub fn value(self) -> V {
+        self.value + self.error
+    }
+
+    /// Returns the uncompensated value, with no error term applied.
+    #[inline(always)]
+    pub const fn uncompensated(self) -> V {
+        self.value
+    }
+
+    /// Returns the error term.
+    #[inline(always)]
+    pub const fn error(self) -> V {
+        self.error
+    }
+
+    /// Renormalizes a compensated number from a value and error term.
+    #[inline(always)]
+    pub(crate) fn renormalized(value: V, error: V) -> Self {
+        let sum = value + error;
+        let err = (value - sum) + error;
+        Self { value: sum, error: err }
+    }
+
+    #[inline(always)]
+    pub fn normalize(self) -> Self {
+        Self::renormalized(self.value, self.error)
+    }
+}
+
+impl<V: CompensatedFloatVector> Compensated<V> {
+    pub fn splat_value(value: V::Element) -> Self {
+        Self {
+            value: V::splat(value),
+            error: V::ZERO,
         }
-    }
-
-    #[inline(always)]
-    pub fn min_max(self, other: Self) -> (Self, Self) {
-        let mask = self.value().cmp_lt(other.value());
-
-        let min = Compensated {
-            value: mask.select(self.value, other.value),
-            error: mask.select(self.error, other.error),
-        };
-
-        let max = Compensated {
-            value: mask.select(other.value, self.value),
-            error: mask.select(other.error, self.error),
-        };
-
-        (min, max)
-    }
-
-    #[inline(always)]
-    pub fn clamp(self, min: Self, max: Self) -> Self {
-        let x = self.value();
-        let min_value = min.value();
-        let max_value = max.value();
-
-        let is_lt = x.cmp_lt(min_value);
-        let is_gt = x.cmp_gt(max_value);
-
-        let value = is_lt.select(min.value, is_gt.select(max.value, self.value));
-        let error = is_lt.select(min.error, is_gt.select(max.error, self.error));
-
-        Compensated { value, error }
-    }
-
-    #[inline(always)]
-    pub fn cmp_eq(&self, other: Self) -> Mask<R> {
-        self.value.cmp_eq(other.value) & self.error.cmp_eq(other.error)
-    }
-
-    #[inline(always)]
-    pub fn conditional_negate(self, mask: Mask<R>) -> Self {
-        Compensated {
-            value: self.value.conditional_negate(mask),
-            error: self.error.conditional_negate(mask),
-        }
-    }
-}
-
-#[inline(always)]
-fn two_sum<R: CompensatedRegister>(a: Vector<R>, b: Vector<R>) -> (Vector<R>, Vector<R>) {
-    let s = a + b;
-    let v = s - a;
-    let e = (a - (s - v)) + (b - v);
-    (s, e)
-}
-
-#[inline(always)]
-fn two_diff<R: CompensatedRegister>(a: Vector<R>, b: Vector<R>) -> (Vector<R>, Vector<R>) {
-    let s = a - b;
-    let v = s - a;
-    let e = (a - (s - v)) - (b + v);
-    (s, e)
-}
-
-#[inline(always)]
-fn two_prod<R: CompensatedRegister>(a: Vector<R>, b: Vector<R>) -> (Vector<R>, Vector<R>)
-where
-    R::Element: CompensatedElement,
-{
-    if R::HAS_TRUE_FMA {
-        let p = a * b;
-        let e = a.mul_sub(b, p);
-
-        return (p, e);
-    }
-
-    let splitter = Vector::splat(R::Element::SPLITTER);
-
-    // Split a
-    let c_a = a * splitter;
-    let a_hi = c_a - (c_a - a);
-    let a_lo = a - a_hi;
-
-    // Split b
-    let c_b = b * splitter;
-    let b_hi = c_b - (c_b - b);
-    let b_lo = b - b_hi;
-
-    // exact product
-    let p = a * b;
-
-    let err = ((a_hi * b_hi - p) + a_hi * b_lo + a_lo * b_hi) + a_lo * b_lo;
-
-    (p, err)
-}
-
-impl<R: CompensatedRegister> Add for Compensated<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn add(self, rhs: Self) -> Self {
-        let (s, e) = two_sum(self.value, rhs.value);
-        Self::renormalized(s, e + self.error + rhs.error)
     }
 }
 
 // for testing
 const ALLOW_UNNORMALIZED: bool = true;
 
-impl<R: CompensatedRegister> Compensated<R> {
+impl<V: ScalarValue> Compensated<V> {
     /// Accumulate rhs into self without renormalization.
     ///
     /// This should only be used in specific scenarios where renormalization is not desired,
@@ -328,7 +366,7 @@ impl<R: CompensatedRegister> Compensated<R> {
     #[inline(always)]
     pub fn accumulate_unnormalized(&mut self, rhs: Self) {
         if ALLOW_UNNORMALIZED {
-            let (s, e) = two_sum(self.value, rhs.value);
+            let (s, e) = V::two_sum(self.value, rhs.value);
             self.value = s;
             self.error += e + rhs.error;
         } else {
@@ -343,7 +381,7 @@ impl<R: CompensatedRegister> Compensated<R> {
     #[inline(always)]
     pub fn reduce_unnormalized(&mut self, rhs: Self) {
         if ALLOW_UNNORMALIZED {
-            let (s, e) = two_diff(self.value, rhs.value);
+            let (s, e) = V::two_diff(self.value, rhs.value);
             self.value = s;
             self.error = e + (self.error - rhs.error);
         } else {
@@ -352,107 +390,182 @@ impl<R: CompensatedRegister> Compensated<R> {
     }
 }
 
-impl<R: CompensatedRegister> Sub for Compensated<R> {
+#[rustfmt::skip]
+impl<V: ScalarValue> Neg for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn sub(self, rhs: Self) -> Self {
-        let (s, e) = two_diff(self.value, rhs.value);
+    fn neg(self) -> Self::Output {
+        Self { value: -self.value, error: -self.error }
+    }
+}
+
+impl<V: ScalarValue> Add<Self> for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn add(self, rhs: Self) -> Self::Output {
+        let (s, e) = V::two_sum(self.value, rhs.value);
+        Self::renormalized(s, e + self.error + rhs.error)
+    }
+}
+
+impl<V: ScalarValue> Add<V> for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn add(self, rhs: V) -> Self::Output {
+        let (s, e) = V::two_sum(self.value, rhs);
+        Self::renormalized(s, e + self.error)
+    }
+}
+
+impl<V: ScalarValue> Sub<Self> for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn sub(self, rhs: Self) -> Self::Output {
+        let (s, e) = V::two_diff(self.value, rhs.value);
         Self::renormalized(s, e + (self.error - rhs.error))
     }
 }
 
-impl<R: CompensatedRegister> Mul for Compensated<R> {
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl<V: ScalarValue> Sub<V> for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn mul(self, rhs: Self) -> Self {
-        let (p, e) = two_prod(self.value, rhs.value);
+    fn sub(self, rhs: V) -> Self::Output {
+        let (s, e) = V::two_diff(self.value, rhs);
+        Self::renormalized(s, e + self.error)
+    }
+}
 
-        let e = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(rhs.value, self.value.mul_add(rhs.error, e))
-        } else {
-            // 2 muls, 2 adds
-            let cross1 = self.value * rhs.error;
-            let cross2 = rhs.value * self.error;
+impl<V: ScalarValue> Square for Compensated<V> {
+    type Output = Self;
 
-            e + cross1 + cross2
-        };
+    #[inline(always)]
+    fn square(self) -> Self {
+        let (p, e) = V::square(self.value);
+
+        let d = self.error * self.value;
+
+        Self::renormalized(p, d + d + e)
+    }
+}
+
+impl<V: CompensatedFloatVector> SquareMasked<V::Mask> for Compensated<V> {
+    #[inline(always)]
+    fn square_c(self, mask: V::Mask) -> Self::Output {
+        mask.select(self.square(), self)
+    }
+
+    #[inline(always)]
+    fn square_m(self, src: Self, mask: V::Mask) -> Self::Output {
+        mask.select(self.square(), src)
+    }
+
+    #[inline(always)]
+    fn square_z(self, mask: V::Mask) -> Self::Output {
+        mask.select(self.square(), Self::ZERO)
+    }
+}
+
+impl<V: ScalarValue> Mul<Self> for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul(self, rhs: Self) -> Self::Output {
+        let (p, e) = V::two_prod(self.value, rhs.value);
+
+        let e = self.error.mul_adde(rhs.value, self.value.mul_adde(rhs.error, e));
 
         Self::renormalized(p, e)
     }
 }
 
-impl<R: CompensatedRegister> Div for Compensated<R> {
+impl<V: ScalarValue> Mul<V> for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul(self, rhs: V) -> Self {
+        // (a0 + a1) * b = a0*b + a1*b
+        let (p, e1) = V::two_prod(self.value, rhs);
+        // We just add a1*b to the error term
+        Self::renormalized(p, self.error.mul_adde(rhs, e1))
+    }
+}
+
+impl<V: ScalarValue> Div<Self> for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
     fn div(self, rhs: Self) -> Self {
         let q1 = self.value / rhs.value;
 
-        let (p_hi, p_lo) = two_prod(q1, rhs.value);
+        let (p_hi, p_lo) = V::two_prod(q1, rhs.value);
 
         // calculate the remainder r
-        let r = (self.value - p_hi) - p_lo + self.error - (q1 * rhs.error);
+        // let r = (self.value - p_hi) - p_lo + self.error - (q1 * rhs.error);
+        let r = (self.value - p_hi) - p_lo + q1.nmul_adde(rhs.error, self.error);
 
         Self::renormalized(q1, r / rhs.value)
     }
 }
 
-impl<R: CompensatedRegister> Rem for Compensated<R> {
-    type Output = Self;
+impl<V: ScalarValue> Compensated<V> {
+    pub fn div_scalar(num: V, denom: Self) -> Self {
+        let q1 = num / denom.value;
 
-    #[inline(always)]
-    fn rem(self, rhs: Self) -> Self {
-        let q = self / rhs;
-        let n = Compensated::new(-q.value.trunc());
-        rhs.mul_add(n, self)
+        let (p_hi, p_lo) = V::two_prod(q1, denom.value);
+
+        // calculate the remainder r
+        // let r = (self.value - p_hi) - p_lo + self.error - (q1 * rhs.error);
+        let r = (num - p_hi) - p_lo - (q1 * denom.error);
+
+        Compensated::renormalized(q1, r / denom.value)
     }
 }
 
-impl<R: CompensatedRegister> Add<Vector<R>> for Compensated<R> {
-    type Output = Self;
-
+impl<V: ScalarValue> Compensated<V> {
+    /// Creates a compensated number from a fraction `numerator / denominator`,
+    /// dividing with compensation.
     #[inline(always)]
-    fn add(self, rhs: Vector<R>) -> Self {
-        let (s, e) = two_sum(self.value, rhs);
-        Self::renormalized(s, e + self.error)
+    pub fn from_fraction(numerator: V, denominator: V) -> Self {
+        let q1 = numerator / denominator;
+
+        let (p_hi, p_lo) = V::two_prod(q1, denominator);
+
+        // calculate the remainder r
+        let r = (numerator - p_hi) - p_lo;
+
+        Self::renormalized(q1, r / denominator)
     }
 }
 
-impl<R: CompensatedRegister> Sub<Vector<R>> for Compensated<R> {
-    type Output = Self;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
+impl Compensated<f32> {
+    /// Create a compensated f32 value from an f64 value,
+    /// preserving as much precision as possible.
     #[inline(always)]
-    fn sub(self, rhs: Vector<R>) -> Self {
-        let (s, e) = two_diff(self.value, rhs);
-        Self::renormalized(s, e + self.error)
+    pub const fn from_f64(v: f64) -> Self {
+        let v_f32 = v as f32;
+        let err = v - (v_f32 as f64);
+        Self {
+            value: v_f32,
+            error: err as f32,
+        }
     }
 }
 
-impl<R: CompensatedRegister> Mul<Vector<R>> for Compensated<R> {
+impl<V: ScalarValue> Div<V> for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn mul(self, rhs: Vector<R>) -> Self {
-        // (a0 + a1) * b = a0*b + a1*b
-        let (p, e1) = two_prod(self.value, rhs);
-        // We just add a1*b to the error term
-        Self::renormalized(p, self.error.mul_adde(rhs, e1))
-    }
-}
-
-impl<R: CompensatedRegister> Div<Vector<R>> for Compensated<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn div(self, rhs: Vector<R>) -> Self {
+    fn div(self, rhs: V) -> Self {
         // same as regular division, but rhs has no error term
         let q1 = self.value / rhs;
 
-        let (p_hi, p_lo) = two_prod(q1, rhs);
+        let (p_hi, p_lo) = V::two_prod(q1, rhs);
 
         // calculate the remainder r
         let r = (self.value - p_hi) - p_lo + self.error;
@@ -461,368 +574,1151 @@ impl<R: CompensatedRegister> Div<Vector<R>> for Compensated<R> {
     }
 }
 
-impl<R: CompensatedRegister> Rem<Vector<R>> for Compensated<R> {
+impl<V: ScalarValue> Rem<Self> for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn rem(self, rhs: Vector<R>) -> Self {
+    fn rem(self, rhs: Self) -> Self {
         let q = self / rhs;
-        let n = Compensated::new(-q.value.trunc());
-        MulAdd::mul_add(n, rhs, self)
+        let n = Compensated::new(-q.value.scalar_trunc());
+        rhs.mul_add(n, self)
     }
 }
 
-impl<R: CompensatedRegister> Compensated<R> {
-    #[inline(always)]
-    pub fn mul_sub(self, b: Self, c: Self) -> Self {
-        let (p, e_prod_base) = two_prod(self.value, b.value);
-        let (s, e_diff) = two_diff(p, c.value);
-
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(b.value, self.value.mul_add(b.error, e_prod_base))
-        } else {
-            // 2 muls, 2 adds
-            let cross1 = self.value * b.error;
-            let cross2 = b.value * self.error;
-
-            e_prod_base + cross1 + cross2
-        };
-
-        // Subtract c.error because the operation is (a*b) - c
-        // The total error is the product error + subtraction error - c's error component
-        Self::renormalized(s, e_prod + e_diff - c.error)
-    }
-}
-
-impl<R: CompensatedRegister> MulAdd for Compensated<R> {
+impl<V: ScalarValue> Rem<V> for Compensated<V> {
     type Output = Self;
+
+    #[inline(always)]
+    fn rem(self, rhs: V) -> Self {
+        let q = self / rhs;
+        let n = Compensated::new(-q.value.scalar_trunc());
+        MulAddExt::mul_add(n, rhs, self)
+    }
+}
+
+#[rustfmt::skip]
+impl<V: ScalarValue> MulAddExt<Self, Self> for Compensated<V> {
+    type Output = Self;
+
+    // Compensated mul-add is always accurate, and have the same code paths,
+    // so we can just set this to true.
+    const HAS_TRUE_FMA: bool = true;
 
     #[inline(always)]
     fn mul_add(self, b: Self, c: Self) -> Self {
-        let (p, e_prod_base) = two_prod(self.value, b.value);
-        let (s, e_sum) = two_sum(p, c.value);
+        let (p, e_prod_base) = V::two_prod(self.value, b.value);
+        let (s, e_sum) = V::two_sum(p, c.value);
 
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(b.value, self.value.mul_add(b.error, e_prod_base))
-        } else {
-            // 2 muls, 2 adds
-            let cross1 = self.value * b.error;
-            let cross2 = b.value * self.error;
-            e_prod_base + cross1 + cross2
-        };
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_sum));
 
-        Self::renormalized(s, e_prod + e_sum + c.error)
+        Self::renormalized(s, e_prod + c.error)
     }
+
+    #[inline(always)]
+    fn mul_sub(self, b: Self, c: Self) -> Self::Output {
+        let (p, e_prod_base) = V::two_prod(self.value, b.value);
+        let (s, e_diff) = V::two_diff(p, c.value);
+
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_diff));
+
+        // Subtract c.error because the operation is (a*b) - c
+        // The total error is the product error + subtraction error - c's error component
+        Self::renormalized(s, e_prod - c.error)
+    }
+
+    #[inline(always)] fn nmul_add(self, a: Self, b: Self) -> Self::Output { self.mul_add(-a, b) }
+    #[inline(always)] fn nmul_sub(self, a: Self, b: Self) -> Self::Output { self.mul_sub(-a, b) }
+    #[inline(always)] fn mul_adde(self, a: Self, b: Self) -> Self::Output { self.mul_add(a, b) }
+    #[inline(always)] fn mul_sube(self, a: Self, b: Self) -> Self::Output { self.mul_sub(a, b) }
+    #[inline(always)] fn nmul_adde(self, a: Self, b: Self) -> Self::Output { self.nmul_add(a, b) }
+    #[inline(always)] fn nmul_sube(self, a: Self, b: Self) -> Self::Output { self.nmul_sub(a, b) }
 }
 
-impl<R: CompensatedRegister> MulAdd<Vector<R>> for Compensated<R> {
+#[rustfmt::skip]
+impl<V: ScalarValue> MulAddExt<V, Self> for Compensated<V> {
     type Output = Self;
 
+    const HAS_TRUE_FMA: bool = true;
+
     #[inline(always)]
-    fn mul_add(self, b: Vector<R>, c: Self) -> Self {
-        let (p, e_prod_base) = two_prod(self.value, b);
-        let (s, e_sum) = two_sum(p, c.value);
+    fn mul_add(self, b: V, c: Self) -> Self::Output {
+        let (p, e_prod_base) = V::two_prod(self.value, b);
+        let (s, e_sum) = V::two_sum(p, c.value);
 
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(b, e_prod_base)
-        } else {
-            // 1 mul, 1 add
-            e_prod_base + (self.error * b)
-        };
+        let e_prod = self.error.mul_adde(b, e_prod_base + e_sum);
 
-        Self::renormalized(s, e_prod + e_sum + c.error)
+        Self::renormalized(s, e_prod + c.error)
     }
+
+    #[inline(always)]
+    fn mul_sub(self, b: V, c: Self) -> Self::Output {
+        let (p, e_prod_base) = V::two_prod(self.value, b);
+        let (s, e_diff) = V::two_diff(p, c.value);
+
+        let e_prod = self.error.mul_adde(b, e_prod_base + e_diff);
+
+        Self::renormalized(s, e_prod - c.error)
+    }
+
+    #[inline(always)] fn nmul_add(self, a: V, b: Self) -> Self::Output { self.mul_add(-a, b) }
+    #[inline(always)] fn nmul_sub(self, a: V, b: Self) -> Self::Output { self.mul_sub(-a, b) }
+    #[inline(always)] fn mul_adde(self, a: V, b: Self) -> Self::Output { self.mul_add(a, b) }
+    #[inline(always)] fn mul_sube(self, a: V, b: Self) -> Self::Output { self.mul_sub(a, b) }
+    #[inline(always)] fn nmul_adde(self, a: V, b: Self) -> Self::Output { self.nmul_add(a, b) }
+    #[inline(always)] fn nmul_sube(self, a: V, b: Self) -> Self::Output { self.nmul_sub(a, b) }
 }
 
-impl<R: CompensatedRegister> MulAdd<Vector<R>, Vector<R>> for Compensated<R> {
+#[rustfmt::skip]
+impl<V: ScalarValue> MulAddExt<Self, V> for Compensated<V> {
     type Output = Self;
 
-    #[inline(always)]
-    fn mul_add(self, a: Vector<R>, b: Vector<R>) -> Self {
-        let (p, e_prod_base) = two_prod(self.value, a);
-        let (s, e_sum) = two_sum(p, b);
-
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 1 fma
-            self.error.mul_add(a, e_prod_base)
-        } else {
-            // 1 mul, 1 add
-            e_prod_base + (self.error * a)
-        };
-
-        Self::renormalized(s, e_prod + e_sum)
-    }
-}
-
-impl<R: CompensatedRegister> MulAdd<Self, Vector<R>> for Compensated<R> {
-    type Output = Self;
+    const HAS_TRUE_FMA: bool = true;
 
     #[inline(always)]
-    fn mul_add(self, a: Self, b: Vector<R>) -> Self::Output {
-        let (p, e_prod_base) = two_prod(self.value, a.value);
-        let (s, e_sum) = two_sum(p, b);
+    fn mul_add(self, a: Self, b: V) -> Self::Output {
+        let (p, e_prod_base) = V::two_prod(self.value, a.value);
+        let (s, e_sum) = V::two_sum(p, b);
 
-        let e_prod = if R::HAS_TRUE_FMA {
-            // 2 fmas
-            self.error.mul_add(a.value, self.value.mul_add(a.error, e_prod_base))
-        } else {
-            // 2 muls, 2 adds
-            let cross1 = self.value * a.error;
-            let cross2 = a.value * self.error;
+        let e_prod = self.error.mul_add(a.value, self.value.mul_add(a.error, e_prod_base + e_sum));
 
-            e_prod_base + cross1 + cross2
-        };
-
-        Self::renormalized(s, e_prod + e_sum)
+        Self::renormalized(s, e_prod)
     }
-}
 
-impl<R: CompensatedRegister> AddAssign for Compensated<R> {
     #[inline(always)]
-    fn add_assign(&mut self, other: Self) {
-        *self = self.add(other);
+    fn mul_sub(self, b: Self, c: V) -> Self::Output {
+        let (p, e_prod_base) = V::two_prod(self.value, b.value);
+        let (s, e_diff) = V::two_diff(p, c);
+
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_diff));
+
+        Self::renormalized(s, e_prod)
     }
+
+    #[inline(always)] fn nmul_add(self, a: Self, b: V) -> Self::Output { self.mul_add(-a, b) }
+    #[inline(always)] fn nmul_sub(self, a: Self, b: V) -> Self::Output { self.mul_sub(-a, b) }
+    #[inline(always)] fn mul_adde(self, a: Self, b: V) -> Self::Output { self.mul_add(a, b) }
+    #[inline(always)] fn mul_sube(self, a: Self, b: V) -> Self::Output { self.mul_sub(a, b) }
+    #[inline(always)] fn nmul_adde(self, a: Self, b: V) -> Self::Output { self.nmul_add(a, b) }
+    #[inline(always)] fn nmul_sube(self, a: Self, b: V) -> Self::Output { self.nmul_sub(a, b) }
 }
 
-impl<R: CompensatedRegister> SubAssign for Compensated<R> {
-    #[inline(always)]
-    fn sub_assign(&mut self, other: Self) {
-        *self = self.sub(other);
-    }
-}
-
-impl<R: CompensatedRegister> MulAssign for Compensated<R> {
-    #[inline(always)]
-    fn mul_assign(&mut self, other: Self) {
-        *self = self.mul(other);
-    }
-}
-
-impl<R: CompensatedRegister> DivAssign for Compensated<R> {
-    #[inline(always)]
-    fn div_assign(&mut self, other: Self) {
-        *self = self.div(other);
-    }
-}
-
-impl<R: CompensatedRegister> AddAssign<Vector<R>> for Compensated<R> {
-    #[inline(always)]
-    fn add_assign(&mut self, a: Vector<R>) {
-        *self = self.add(Compensated::new(a));
-    }
-}
-
-impl<R: CompensatedRegister> SubAssign<Vector<R>> for Compensated<R> {
-    #[inline(always)]
-    fn sub_assign(&mut self, a: Vector<R>) {
-        *self = self.sub(Compensated::new(a));
-    }
-}
-
-impl<R: CompensatedRegister> MulAssign<Vector<R>> for Compensated<R> {
-    #[inline(always)]
-    fn mul_assign(&mut self, a: Vector<R>) {
-        *self = self.mul(Compensated::new(a));
-    }
-}
-
-impl<R: CompensatedRegister> DivAssign<Vector<R>> for Compensated<R> {
-    #[inline(always)]
-    fn div_assign(&mut self, a: Vector<R>) {
-        *self = self.div(Compensated::new(a));
-    }
-}
-
-impl<R: CompensatedRegister> RemAssign<Vector<R>> for Compensated<R> {
-    #[inline(always)]
-    fn rem_assign(&mut self, a: Vector<R>) {
-        *self = self.rem(Compensated::new(a));
-    }
-}
-
-impl<R: CompensatedRegister, A, B> MulAddAssign<A, B> for Compensated<R>
+impl<V: Copy, T> AddAssign<T> for Compensated<V>
 where
-    Self: MulAdd<A, B, Output = Self>,
+    Self: Add<T, Output = Self>,
 {
     #[inline(always)]
-    fn mul_add_assign(&mut self, a: A, b: B) {
-        *self = self.mul_add(a, b);
+    fn add_assign(&mut self, rhs: T) {
+        *self = *self + rhs;
     }
 }
 
-impl<R: CompensatedRegister> One for Compensated<R> {
+impl<V: Copy, T> SubAssign<T> for Compensated<V>
+where
+    Self: Sub<T, Output = Self>,
+{
     #[inline(always)]
-    fn one() -> Self {
-        Self::new(Vector::ONE)
+    fn sub_assign(&mut self, rhs: T) {
+        *self = *self - rhs;
     }
 }
 
-impl<R: CompensatedRegister> Zero for Compensated<R> {
+impl<V: Copy, T> MulAssign<T> for Compensated<V>
+where
+    Self: Mul<T, Output = Self>,
+{
     #[inline(always)]
-    fn zero() -> Self {
-        Self::new(Vector::ZERO)
-    }
-
-    /// Returns `true` if all elements are zero.
-    #[inline(always)]
-    fn is_zero(&self) -> bool {
-        (self.value.is_zero() & self.error.is_zero()).all()
+    fn mul_assign(&mut self, rhs: T) {
+        *self = *self * rhs;
     }
 }
 
-impl<R: CompensatedRegister> ConstOne for Compensated<R> {
-    const ONE: Self = Self::new(Vector::ONE);
-}
-
-impl<R: CompensatedRegister> ConstZero for Compensated<R> {
-    const ZERO: Self = Self::new(Vector::ZERO);
-}
-
-impl<R: CompensatedRegister> PartialEq for Compensated<R> {
-    /// Returns true if all elements are equal.
+impl<V: Copy, T> DivAssign<T> for Compensated<V>
+where
+    Self: Div<T, Output = Self>,
+{
     #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        (self.value.cmp_eq(other.value) & self.error.cmp_eq(other.error)).all()
-    }
-
-    /// Returns true if any elements are not equal.
-    #[allow(clippy::partialeq_ne_impl)]
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        (self.value.cmp_ne(other.value) | self.error.cmp_ne(other.error)).any()
+    fn div_assign(&mut self, rhs: T) {
+        *self = *self / rhs;
     }
 }
 
-impl<R: CompensatedRegister> Num for Compensated<R> {
-    type FromStrRadixErr = <R::Element as Num>::FromStrRadixErr;
-
+impl<V: Copy, T> RemAssign<T> for Compensated<V>
+where
+    Self: Rem<T, Output = Self>,
+{
     #[inline(always)]
-    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        Ok(Self::new(Vector::from_str_radix(str, radix)?))
-    }
-}
-
-impl<R: CompensatedRegister> Neg for Compensated<R> {
-    type Output = Self;
-
-    #[inline(always)]
-    fn neg(self) -> Self {
-        Self {
-            value: -self.value,
-            error: -self.error,
-        }
-    }
-}
-
-impl<R: CompensatedRegister> Signed for Compensated<R> {
-    /// Computes the absolute value of `self`, without losing precision.
-    #[inline(always)]
-    fn abs(&self) -> Self {
-        let sign = self.value() & Vector::NEG_ZERO;
-
-        // the final value may differ in sign from the components,
-        // so negate both components based on the final value's sign
-        Self {
-            value: self.value ^ sign,
-            error: self.error ^ sign,
-        }
-    }
-
-    #[inline(always)]
-    fn abs_sub(&self, other: &Self) -> Self {
-        (*self - *other).max(Self::ZERO)
-    }
-
-    #[inline(always)]
-    fn is_negative(&self) -> bool {
-        Signed::is_negative(&self.value())
-    }
-
-    #[inline(always)]
-    fn is_positive(&self) -> bool {
-        Signed::is_positive(&self.value())
-    }
-
-    #[inline(always)]
-    fn signum(&self) -> Self {
-        Compensated::new(Signed::signum(&self.value()))
-    }
-}
-
-impl<R: CompensatedRegister> PartialOrd for Compensated<R> {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.value().partial_cmp(&other.value())
+    fn rem_assign(&mut self, rhs: T) {
+        *self = *self % rhs;
     }
 }
 
 #[rustfmt::skip]
-impl<R: CompensatedRegister> ToPrimitive for Compensated<R>
+impl<V: Copy, A, B> MulAddAssignExt<A, B> for Compensated<V>
 where
-    R::Element: num_traits::ToPrimitive,
+    Self: MulAddExt<A, B, Output = Self>,
 {
-    #[inline(always)] fn to_isize(&self) -> Option<isize> { self.value().extract::<0>().to_isize() }
-    #[inline(always)] fn to_i8(&self) -> Option<i8> { self.value().extract::<0>().to_i8() }
-    #[inline(always)] fn to_i16(&self) -> Option<i16> { self.value().extract::<0>().to_i16() }
-    #[inline(always)] fn to_i32(&self) -> Option<i32> { self.value().extract::<0>().to_i32() }
-    #[inline(always)] fn to_i128(&self) -> Option<i128> { self.value().extract::<0>().to_i128() }
-    #[inline(always)] fn to_usize(&self) -> Option<usize> { self.value().extract::<0>().to_usize() }
-    #[inline(always)] fn to_u8(&self) -> Option<u8> { self.value().extract::<0>().to_u8() }
-    #[inline(always)] fn to_u16(&self) -> Option<u16> { self.value().extract::<0>().to_u16() }
-    #[inline(always)] fn to_u32(&self) -> Option<u32> { self.value().extract::<0>().to_u32() }
-    #[inline(always)] fn to_u128(&self) -> Option<u128> { self.value().extract::<0>().to_u128() }
-    #[inline(always)] fn to_f32(&self) -> Option<f32> { self.value().extract::<0>().to_f32() }
-    #[inline(always)] fn to_f64(&self) -> Option<f64> { self.value().extract::<0>().to_f64() }
-    #[inline(always)] fn to_i64(&self) -> Option<i64> { self.value().extract::<0>().to_i64() }
-    #[inline(always)] fn to_u64(&self) -> Option<u64> { self.value().extract::<0>().to_u64() }
+    #[inline(always)] fn mul_add_assign(&mut self, a: A, b: B) { *self = self.mul_add(a, b); }
+    #[inline(always)] fn mul_sub_assign(&mut self, a: A, b: B) { *self = self.mul_sub(a, b); }
+    #[inline(always)] fn nmul_add_assign(&mut self, a: A, b: B) { *self = self.nmul_add(a, b); }
+    #[inline(always)] fn nmul_sub_assign(&mut self, a: A, b: B) { *self = self.nmul_sub(a, b); }
+    #[inline(always)] fn mul_adde_assign(&mut self, a: A, b: B) { *self = self.mul_adde(a, b); }
+    #[inline(always)] fn mul_sube_assign(&mut self, a: A, b: B) { *self = self.mul_sube(a, b); }
+    #[inline(always)] fn nmul_adde_assign(&mut self, a: A, b: B) { *self = self.nmul_adde(a, b); }
+    #[inline(always)] fn nmul_sube_assign(&mut self, a: A, b: B) { *self = self.nmul_sube(a, b); }
 }
 
-impl<R: CompensatedRegister> NumCast for Compensated<R> {
+macro_rules! impl_masked {
+    (MUL_ADD: $($method:ident),*) => {paste::paste! {
+        impl<V: CompensatedFloatVector, A, B> thermite::generic::ops::MulAddExtMasked<V::Mask, A, B> for Compensated<V>
+        where
+            Compensated<V>: MulAddExt<A, B, Output = Self>,
+        {
+            $(
+                #[inline(always)]
+                fn [<$method _c>](self, mask: V::Mask, a: A, b: B) -> Self {
+                    mask.select(self.[<$method>](a, b), self)
+                }
+
+                #[inline(always)]
+                fn [<$method _m>](self, src: Self, mask: V::Mask, a: A, b: B) -> Self {
+                    mask.select(self.[<$method>](a, b), src)
+                }
+
+                #[inline(always)]
+                fn [<$method _z>](self, mask: V::Mask, a: A, b: B) -> Self {
+                    mask.select(self.[<$method>](a, b), Self::EMPTY)
+                }
+            )*
+        }
+
+        impl<V: CompensatedFloatVector, A, B> thermite::generic::ops::MulAddAssignExtMasked<V::Mask, A, B> for Compensated<V>
+        where
+            Compensated<V>: MulAddExt<A, B, Output = Self>,
+        {
+            $(
+                #[inline(always)]
+                fn [<$method _assign_c>](&mut self, mask: V::Mask, a: A, b: B) {
+                    *self = mask.select(self.[<$method>](a, b), *self);
+                }
+
+                #[inline(always)]
+                fn [<$method _assign_m>](&mut self, src: Self, mask: V::Mask, a: A, b: B) {
+                    *self = mask.select(self.[<$method>](a, b), src);
+                }
+
+                #[inline(always)]
+                fn [<$method _assign_z>](&mut self, mask: V::Mask, a: A, b: B) {
+                    *self = mask.select(self.[<$method>](a, b), Self::EMPTY);
+                }
+            )*
+        }
+    }};
+
+    ($trait:ident::$method:ident) => {paste::paste! {
+        impl<V: CompensatedFloatVector, Rhs> thermite::generic::ops::[<$trait Masked>]<V::Mask, Rhs> for Compensated<V>
+        where
+            Compensated<V>: $trait<Rhs, Output = Self>,
+        {
+            #[inline(always)]
+            fn [<$method _c>](self, mask: V::Mask, rhs: Rhs) -> Self {
+                mask.select(self.$method(rhs), self)
+            }
+
+            #[inline(always)]
+            fn [<$method _m>](self, src: Self, mask: V::Mask, rhs: Rhs) -> Self {
+                mask.select(self.$method(rhs), src)
+            }
+
+            #[inline(always)]
+            fn [<$method _z>](self, mask: V::Mask, rhs: Rhs) -> Self {
+                mask.select(self.$method(rhs), Self::EMPTY)
+            }
+        }
+
+        impl<V: CompensatedFloatVector, Rhs> thermite::generic::ops::[<$trait AssignMasked>]<V::Mask, Rhs> for Compensated<V>
+        where
+            Compensated<V>: $trait<Rhs, Output = Self>,
+        {
+            #[inline(always)]
+            fn [<$method _assign_c>](&mut self, mask: V::Mask, rhs: Rhs) {
+                *self = mask.select(self.$method(rhs), *self);
+            }
+
+            #[inline(always)]
+            fn [<$method _assign_m>](&mut self, src: Self, mask: V::Mask, rhs: Rhs) {
+                *self = mask.select(self.$method(rhs), src);
+            }
+
+            #[inline(always)]
+            fn [<$method _assign_z>](&mut self, mask: V::Mask, rhs: Rhs) {
+                *self = mask.select(self.$method(rhs), Self::EMPTY);
+            }
+        }
+    }};
+}
+
+impl_masked!(MUL_ADD: mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube);
+impl_masked!(Add::add);
+impl_masked!(Sub::sub);
+impl_masked!(Mul::mul);
+impl_masked!(Div::div);
+impl_masked!(Rem::rem);
+
+impl<V: CompensatedFloatVector> GenericSelectable for Compensated<V> {
+    type SelectableMask = <V as GenericSelectable>::SelectableMask;
+
     #[inline(always)]
-    fn from<T: num_traits::ToPrimitive>(n: T) -> Option<Self> {
-        <Vector<R> as NumCast>::from(n).map(Compensated::new)
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Self::SelectableMask: CastMask<M>,
+    {
+        let mask = <Self::SelectableMask as CastMask<M>>::mask_from(mask);
+
+        Self {
+            value: mask.select(t.value, f.value),
+            error: mask.select(t.error, f.error),
+        }
     }
 }
 
 #[rustfmt::skip]
-impl<R: CompensatedRegister> FloatCore for Compensated<R> {
-    #[inline(always)] fn is_nan(self) -> bool { FloatCore::is_nan(self.value()) }
-    #[inline(always)] fn is_infinite(self) -> bool { FloatCore::is_infinite(self.value()) }
-    #[inline(always)] fn is_finite(self) -> bool { FloatCore::is_finite(self.value()) }
-    #[inline(always)] fn is_normal(self) -> bool { FloatCore::is_normal(self.value()) }
-    #[inline(always)] fn is_subnormal(self) -> bool { FloatCore::is_subnormal(self.value()) }
-    #[inline(always)] fn floor(self) -> Self { Compensated::new(self.value().floor()) }
-    #[inline(always)] fn ceil(self) -> Self { Compensated::new(self.value().ceil()) }
-    #[inline(always)] fn round(self) -> Self { Compensated::new(self.value().round()) }
-    #[inline(always)] fn trunc(self) -> Self { Compensated::new(self.value().trunc()) }
-    #[inline(always)] fn fract(self) -> Self { Compensated::new(self.value().fract()) }
-    #[inline(always)] fn abs(self) -> Self { Signed::abs(&self) }
-    #[inline(always)] fn signum(self) -> Self { Signed::signum(&self) }
-    #[inline(always)] fn is_sign_positive(self) -> bool { Signed::is_positive(&self) }
-    #[inline(always)] fn is_sign_negative(self) -> bool { Signed::is_negative(&self) }
+impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
+    type Element = Compensated<V::Element>;
 
-    #[inline(always)] fn min(self, other: Self) -> Self { self.min(other) }
-    #[inline(always)] fn max(self, other: Self) -> Self { self.max(other) }
-    #[inline(always)] fn clamp(self, min: Self, max: Self) -> Self { self.clamp(min, max) }
+    const EMPTY: Self = Self::new(V::ZERO);
+    const LANES: usize = V::LANES;
+    const ISA: thermite::isa::InstructionSet = V::ISA;
 
-    #[inline(always)] fn recip(self) -> Self { Self::ONE / self }
-    #[inline(always)] fn infinity() -> Self { Self::INFINITY }
-    #[inline(always)] fn neg_infinity() -> Self { Self::NEG_INFINITY }
-    #[inline(always)] fn nan() -> Self { Self::NAN }
-    #[inline(always)] fn neg_zero() -> Self { Self::NEG_ZERO }
-    #[inline(always)] fn min_value() -> Self { Self::MIN }
-    #[inline(always)] fn min_positive_value() -> Self { Self::MIN_POSITIVE }
-    #[inline(always)] fn epsilon() -> Self { Self::EPSILON }
-    #[inline(always)] fn max_value() -> Self { Self::MAX }
-    #[inline(always)] fn classify(self) -> core::num::FpCategory { FloatCore::classify(self.value()) }
-    #[inline(always)] fn to_degrees(self) -> Self { self * Self::FRAC_180_PI }
-    #[inline(always)] fn to_radians(self) -> Self { self * Self::FRAC_PI_180 }
+    type Lanes = V::Lanes;
+
+    type USize = V::USize;
+    type ISize = V::ISize;
+
+    type Mask = V::Mask;
 
     #[inline(always)]
-    fn integer_decode(self) -> (u64, i16, i8) {
-        FloatCore::integer_decode(self.value())
+    fn splat(value: Self::Element) -> Self {
+        Self {
+            value: V::splat(value.value),
+            error: V::splat(value.error),
+        }
+    }
+
+    #[inline(always)]
+    fn single(value: Self::Element) -> Self {
+        Self::new(V::single(value.value))
+    }
+
+    unsafe fn load(ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn load_streaming(ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn store(self, ptr: *mut Self::Element) {
+        todo!()
+    }
+
+    unsafe fn store_unaligned(self, ptr: *mut Self::Element) {
+        todo!()
+    }
+
+    unsafe fn store_streaming(self, ptr: *mut Self::Element) {
+        todo!()
+    }
+
+    #[inline(always)]
+    fn broadcast<const I: usize>(self) -> Self {
+        Self {
+            value: V::broadcast::<I>(self.value),
+            error: V::broadcast::<I>(self.error),
+        }
+    }
+
+    #[inline(always)]
+    fn broadcastv(self, idx: usize) -> Self {
+        Self {
+            value: V::broadcastv(self.value, idx),
+            error: V::broadcastv(self.error, idx),
+        }
+    }
+
+    #[inline(always)]
+    fn extract<const I: usize>(self) -> Self::Element {
+        let value = V::extract::<I>(self.value);
+        let error = V::extract::<I>(self.error);
+
+        Compensated { value, error }
+    }
+
+    #[inline(always)]
+    fn extractv(self, idx: usize) -> Self::Element {
+        let value = V::extractv(self.value, idx);
+        let error = V::extractv(self.error, idx);
+
+        Compensated { value, error }
+    }
+
+    #[inline(always)]
+    fn insert<const I: usize>(self, value: Self::Element) -> Self {
+        let Compensated { value, error } = value;
+
+        Self {
+            value: V::insert::<I>(self.value, value),
+            error: V::insert::<I>(self.error, error),
+        }
+    }
+
+    #[inline(always)]
+    fn insertv(self, idx: usize, value: Self::Element) -> Self {
+        let Compensated { value, error } = value;
+
+        Self {
+            value: V::insertv(self.value, idx, value),
+            error: V::insertv(self.error, idx, error),
+        }
+    }
+
+    #[inline(always)]
+    fn reverse(self) -> Self {
+        Self {
+            value: self.value.reverse(),
+            error: self.error.reverse(),
+        }
+    }
+
+    #[inline(always)]
+    fn swap_bytes(self) -> Self {
+        Self {
+            value: self.value.swap_bytes(),
+            error: self.error.swap_bytes(),
+        }
+    }
+
+    #[inline(always)]
+    fn z(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.z(mask),
+            error: self.error.z(mask),
+        }
+    }
+
+    #[inline(always)]
+    fn nz(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.nz(mask),
+            error: self.error.nz(mask),
+        }
+    }
+
+    const HAS_SIMPLE_UNPACK: bool = false;
+
+    fn unpack(self, other: Self) -> (Self, Self) {
+        todo!()
+    }
+
+    fn map<F>(mut self, f: F) -> Self
+    where
+        F: Fn(Self::Element) -> Self::Element,
+    {
+        for i in 0..Self::LANES {
+            self = self.insertv(i, f(self.extractv(i)));
+        }
+
+        self
+    }
+
+    fn fold<F>(self, mut init: Self::Element, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        for i in 0..Self::LANES {
+            init = f(init, self.extractv(i));
+        }
+
+        init
+    }
+
+    fn reduce<F>(self, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element,
+    {
+        let mut result = self.extractv(0);
+
+        for i in 1..Self::LANES {
+            result = f(result, self.extractv(i));
+        }
+
+        result
+    }
+
+    #[inline(always)] fn splat_m(value: Self::Element, src: Self, mask: Self::Mask) -> Self { mask.select(Self::splat(value), src) }
+    #[inline(always)] fn splat_z(value: Self::Element, mask: Self::Mask) -> Self { mask.select(Self::splat(value), Self::EMPTY) }
+    #[inline(always)] fn broadcast_m<const I: usize>(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), src) }
+    #[inline(always)] fn broadcast_z<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), Self::EMPTY) }
+    #[inline(always)] fn broadcastv_m(self, src: Self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), src) }
+    #[inline(always)] fn broadcastv_z(self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), Self::EMPTY) }
+    #[inline(always)] fn reverse_c(self, mask: Self::Mask) -> Self { mask.select(self.reverse(), self) }
+    #[inline(always)] fn reverse_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.reverse(), src) }
+    #[inline(always)] fn reverse_z(self, mask: Self::Mask) -> Self { mask.select(self.reverse(), Self::EMPTY) }
+    #[inline(always)] fn swap_bytes_c(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), self) }
+    #[inline(always)] fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), src) }
+    #[inline(always)] fn swap_bytes_z(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), Self::EMPTY) }
+}
+
+#[rustfmt::skip]
+impl<V: CompensatedFloatVector> PartialOrdVector for Compensated<V> {
+    #[inline(always)]
+    fn cmp_eq(self, other: Self) -> Self::Mask {
+        // Strictly equal if both components match
+        self.value.cmp_eq(other.value) & self.error.cmp_eq(other.error)
+    }
+
+    #[inline(always)]
+    fn cmp_ne(self, other: Self) -> Self::Mask {
+        // Not equal if either component differs
+        self.value.cmp_ne(other.value) | self.error.cmp_ne(other.error)
+    }
+
+    #[inline(always)]
+    fn cmp_lt(self, other: Self) -> Self::Mask {
+        let val_lt = self.value.cmp_lt(other.value);
+        let val_eq = self.value.cmp_eq(other.value);
+        let err_lt = self.error.cmp_lt(other.error);
+
+        // (value < other.value) OR (value == other.value AND error < other.error)
+        GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (B & C)) }>(val_lt, val_eq, err_lt)
+    }
+
+    #[inline(always)]
+    fn cmp_gt(self, other: Self) -> Self::Mask {
+        let val_gt = self.value.cmp_gt(other.value);
+        let val_eq = self.value.cmp_eq(other.value);
+        let err_gt = self.error.cmp_gt(other.error);
+
+        // (value > other.value) OR (value == other.value AND error > other.error)
+        GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (B & C)) }>(val_gt, val_eq, err_gt)
+    }
+
+    #[inline(always)]
+    fn cmp_le(self, other: Self) -> Self::Mask {
+        let val_lt = self.value.cmp_lt(other.value);
+        let val_eq = self.value.cmp_eq(other.value);
+        let err_le = self.error.cmp_le(other.error);
+
+        // (value < other.value) OR (value == other.value AND error <= other.error)
+        GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (B & C)) }>(val_lt, val_eq, err_le)
+    }
+
+    #[inline(always)]
+    fn cmp_ge(self, other: Self) -> Self::Mask {
+        let val_gt = self.value.cmp_gt(other.value);
+        let val_eq = self.value.cmp_eq(other.value);
+        let err_ge = self.error.cmp_ge(other.error);
+
+        // (value > other.value) OR (value == other.value AND error >= other.error)
+        GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (B & C)) }>(val_gt, val_eq, err_ge)
+    }
+}
+
+impl<V: ScalarValue> core::iter::Sum for Compensated<V> {
+    #[inline]
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut iter = iter.into_iter();
+
+        let Some(mut total) = iter.next() else {
+            return Compensated::new(V::SCALAR_ZERO);
+        };
+
+        for v in iter {
+            total += v;
+        }
+
+        total
+    }
+}
+
+impl<V: ScalarValue> core::iter::Product for Compensated<V> {
+    #[inline]
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut iter = iter.into_iter();
+
+        let Some(mut total) = iter.next() else {
+            return Compensated::new(V::SCALAR_ONE); // multiplicative identity
+        };
+
+        for v in iter {
+            total *= v;
+        }
+
+        total
+    }
+}
+
+// These are odd in that (value + error) can exceed the bounds of V,
+// but this is the most sensible implementation.
+#[rustfmt::skip]
+impl<V: CompensatedFloatVector> num_traits::Bounded for Compensated<V> {
+    #[inline(always)] fn min_value() -> Self { Self { value: V::min_value(), error: V::min_value() } }
+    #[inline(always)] fn max_value() -> Self { Self { value: V::max_value(), error: V::max_value() } }
+}
+
+impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
+    const ZERO: Self = Self::new(V::ZERO);
+    const ONE: Self = Self::new(V::ONE);
+    const TWO: Self = Self::new(V::TWO);
+
+    const MIN: Self = Self {
+        value: V::MIN,
+        error: V::MIN,
+    };
+
+    const MAX: Self = Self {
+        value: V::MAX,
+        error: V::MAX,
+    };
+
+    #[inline(always)]
+    fn is_zero(self) -> Self::Mask {
+        self.value().is_zero()
+    }
+
+    #[inline(always)]
+    fn min(self, other: Self) -> Self {
+        self.cmp_lt(other).select(self, other)
+    }
+
+    #[inline(always)]
+    fn max(self, other: Self) -> Self {
+        self.cmp_gt(other).select(self, other)
+    }
+
+    #[inline(always)]
+    fn clamp(self, min: Self, max: Self) -> Self {
+        let x = self.value();
+        let min_value = min.value();
+        let max_value = max.value();
+
+        let is_lt = x.cmp_lt(min_value);
+        let is_gt = x.cmp_gt(max_value);
+
+        let value = is_lt.select(min.value, is_gt.select(max.value, self.value));
+        let error = is_lt.select(min.error, is_gt.select(max.error, self.error));
+
+        Self { value, error }
+    }
+
+    #[inline(always)]
+    fn min_element(self) -> Self::Element {
+        let mut min_elem = self.extractv(0);
+        let mut min_value = min_elem.value();
+
+        for i in 1..Self::LANES {
+            let elem = self.extractv(i);
+            let value = elem.value();
+
+            if value < min_value {
+                min_elem = elem;
+                min_value = value;
+            }
+        }
+
+        min_elem
+    }
+
+    #[inline(always)]
+    fn max_element(self) -> Self::Element {
+        let mut max_elem = self.extractv(0);
+        let mut max_value = max_elem.value();
+
+        for i in 1..Self::LANES {
+            let elem = self.extractv(i);
+            let value = elem.value();
+
+            if value > max_value {
+                max_elem = elem;
+                max_value = value;
+            }
+        }
+
+        max_elem
+    }
+
+    fn sum_elements(self) -> Self::Element {
+        self.reduce(|a, b| a + b)
+    }
+
+    fn prod_elements(self) -> Self::Element {
+        self.reduce(|a, b| a * b)
+    }
+
+    #[inline(always)]
+    fn offset() -> Self {
+        Self::new(V::offset())
+    }
+
+    #[inline(always)]
+    fn indexed() -> Self {
+        Self::new(V::indexed())
+    }
+
+    fn min_c(self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn min_m(self, src: Self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn min_z(self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn max_c(self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn max_m(self, src: Self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn max_z(self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+}
+
+impl<V: CompensatedFloatVector> thermite::generic::ops::NegMasked<V::Mask> for Compensated<V> {
+    #[inline(always)]
+    fn neg_c(mut self, mask: V::Mask) -> Self {
+        self.value = self.value.neg_c(mask);
+        self.error = self.error.neg_c(mask);
+
+        self
+    }
+
+    #[inline(always)]
+    fn neg_m(mut self, src: Self, mask: V::Mask) -> Self {
+        self.value = self.value.neg_m(src.value, mask);
+        self.error = self.error.neg_m(src.error, mask);
+
+        self
+    }
+
+    #[inline(always)]
+    fn neg_z(mut self, mask: V::Mask) -> Self {
+        self.value = self.value.neg_z(mask);
+        self.error = self.error.neg_z(mask);
+
+        self
+    }
+}
+
+impl<V: CompensatedFloatVector> SignedVector for Compensated<V> {
+    const NEG_ONE: Self = Self::new(V::NEG_ONE);
+    const MIN_POSITIVE: Self = Self::new(V::MIN_POSITIVE);
+
+    #[inline(always)]
+    fn abs(self) -> Self {
+        self.neg_c(self.value().cmp_lt(V::ZERO))
+    }
+
+    #[inline(always)]
+    fn signum(self) -> Self {
+        Self::new(self.value().signum())
+    }
+
+    #[inline(always)]
+    fn is_positive(self) -> Self::Mask {
+        self.value().is_positive()
+    }
+
+    #[inline(always)]
+    fn is_negative(self) -> Self::Mask {
+        self.value().is_negative()
+    }
+
+    #[inline(always)]
+    fn select_negative(self, if_neg: Self, if_pos: Self) -> Self {
+        self.is_negative().select(if_neg, if_pos)
+    }
+
+    #[inline(always)]
+    fn copysign(self, sign: Self) -> Self {
+        let self_is_neg = self.is_negative();
+        let sign_is_neg = sign.is_negative();
+
+        self.neg_c(self_is_neg ^ sign_is_neg)
+    }
+
+    fn abs_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn abs_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn abs_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+    fn copysign_c(self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+    fn copysign_m(self, src: Self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+    fn copysign_z(self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+}
+
+// We need a single generic form of this since Rust only allows one
+// implementation of this given the nested generic parameters.
+impl<FROM, TO> CastVector<Compensated<FROM>> for Compensated<TO>
+where
+    FROM: CompensatedFloatVector + CastVector<TO>,
+    TO: CompensatedFloatVector + CastVector<FROM>,
+{
+    fn cast_into(self) -> Compensated<FROM> {
+        Compensated::<FROM>::cast_from(self)
+    }
+
+    fn cast_from(from: Compensated<FROM>) -> Self {
+        let from_size = size_of::<FROM::Element>();
+        let to_size = size_of::<TO::Element>();
+
+        // TODO: Maybe match on cmp ordering?
+        // Ord::cmp(&size_of::<FROM::Element>(), &size_of::<TO::Element>());
+        if from_size > to_size {
+            // --- Downsampling (f64-like -> f32-like) ---
+            // We lose precision, so we must capture the lost bits in the new error term.
+
+            // Project High -> Low
+            let value = TO::cast_from(from.value);
+
+            // Project Low -> High (check our work)
+            // Calculate residual (bits lost in cast) in High Precision
+            let delta = from.value - FROM::cast_from(value);
+
+            Self {
+                value,
+                // Accumulate total error (new lost bits + old error)
+                error: TO::cast_from(delta + from.error),
+            }
+        } else if from_size < to_size {
+            // --- Upsampling (f32-like -> f64-like) ---
+            // The larger type can hold the entire double-double sum losslessly.
+            // We collapse the pair into the single 'value' field to normalize it.
+
+            let v_hi = TO::cast_from(from.value);
+            let e_hi = TO::cast_from(from.error);
+
+            // Since f32+f32 (48 bits effective) fits in f64 (53 bits),
+            // this sum is exact.
+            Self {
+                value: v_hi + e_hi,
+                error: TO::ZERO,
+            }
+        } else {
+            // --- Same Precision (f64 -> f64 or f32 -> f32) ---
+            // Just a type conversion (or SIMD layout change) without precision change.
+            // Preserve the structure exactly.
+            Self {
+                value: TO::cast_from(from.value),
+                error: TO::cast_from(from.error),
+            }
+        }
+    }
+}
+
+#[rustfmt::skip]
+impl<V: CompensatedFloatVector> FloatVector for Compensated<V> {
+    const HALF: Self = Self::new(<V as FloatVector>::HALF);
+    const NEG_ZERO: Self = Self::new(<V as FloatVector>::NEG_ZERO);
+    const INFINITY: Self = Self::new(<V as FloatVector>::INFINITY);
+    const NEG_INFINITY: Self = Self::new(<V as FloatVector>::NEG_INFINITY);
+    const NAN: Self = Self::new(<V as FloatVector>::NAN);
+
+    const EPSILON: Self = Compensated {
+        value: V::ZERO,
+        error: <V as FloatVector>::EPSILON, // lower order bits get the epsilon
+    };
+
+    /// Don't use Compensated if you need to go higher precision than it provides.
+    ///
+    /// If you absolutely must, use [`CastVector`] to convert to a higher-precision type.
+    type ExtendedPrecision = Self;
+
+    // These are designed to provide reasonable results with reasonable performance.
+    #[inline(always)] fn is_infinite(self) -> Self::Mask { self.value().is_infinite() }
+    #[inline(always)] fn is_finite(self) -> Self::Mask { self.value().is_finite() }
+    #[inline(always)] fn is_nan(self) -> Self::Mask { self.value.is_nan() | self.error.is_nan() }
+    #[inline(always)] fn is_zero_or_subnormal(self) -> Self::Mask { self.value().is_zero_or_subnormal() }
+    #[inline(always)] fn is_normal(self) -> Self::Mask { self.value().is_normal() }
+    #[inline(always)] fn is_subnormal(self) -> Self::Mask { self.value.is_subnormal() | self.error.is_subnormal() }
+
+    const HAS_APPROX_RCP: bool = false;
+    const HAS_APPROX_RSQRT: bool = false;
+
+    #[inline(always)]
+    fn sqrt(self) -> Self {
+        let s = V::sqrt(self.value);
+
+        let (p, e) = ScalarValue::square(s);
+
+        // sum of differences
+        let remainder = (self.value - p) + (self.error - e);
+
+        // correction term
+        let corr = remainder / (s + s);
+
+        Self::renormalized(s, corr)
+    }
+
+    #[inline(always)] fn rsqrt(self) -> Self { Self::div_scalar(V::ONE, self.sqrt()) }
+    #[inline(always)] fn rcp(self) -> Self { Self::div_scalar(V::ONE, self) }
+
+    #[inline(always)] fn floor(self) -> Self { Self::new(self.value().floor()) }
+    #[inline(always)] fn ceil(self) -> Self { Self::new(self.value().ceil()) }
+    #[inline(always)] fn round(self) -> Self { Self::new(self.value().round()) }
+    #[inline(always)] fn trunc(self) -> Self { Self::new(self.value().trunc()) }
+    #[inline(always)] fn fract(self) -> Self { self - self.trunc() }
+
+    #[inline(always)]
+    fn mul_sign(self, sign: Self) -> Self {
+        let sign = sign.value();
+
+        Self {
+            value: self.value.mul_sign(sign),
+            error: self.error.mul_sign(sign),
+        }
+    }
+
+    #[inline(always)] fn signed_zero(self) -> Self { Self::new(self.value().signed_zero()) }
+
+    #[inline(always)] fn next_up(self) -> Self { Self::renormalized(self.value, self.error.next_up()) }
+    #[inline(always)] fn next_down(self) -> Self { Self::renormalized(self.value, self.error.next_down()) }
+
+    unsafe fn block_autovectorization(&mut self) {
+        unsafe {
+            self.value.block_autovectorization();
+            self.error.block_autovectorization();
+        }
+    }
+
+    fn sqrt_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn sqrt_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn sqrt_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rsqrt_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rsqrt_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rsqrt_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rcp_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rcp_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn rcp_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn floor_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn floor_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn floor_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn ceil_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn ceil_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn ceil_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn round_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn round_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn round_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn trunc_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn trunc_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn trunc_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn fract_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn fract_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn fract_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn mul_sign_c(self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+
+    fn mul_sign_m(self, src: Self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+
+    fn mul_sign_z(self, mask: Self::Mask, sign: Self) -> Self {
+        todo!()
+    }
+
+    fn signed_zero_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn signed_zero_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn signed_zero_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_up_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_up_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_up_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_down_c(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_down_m(self, src: Self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn next_down_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+}
+
+use core::fmt;
+
+impl<V: PrettyPrintScalar> fmt::Display for Compensated<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        <V as PrettyPrintScalar>::fmt(self.value, self.error, f)
+    }
+}
+
+trait PrettyPrintScalar: ScalarValue {
+    fn fmt(value: Self, error: Self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
+}
+
+impl PrettyPrintScalar for f32 {
+    fn fmt(value: Self, error: Self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if error == 0.0 {
+            write!(f, "{value}")
+        } else {
+            write!(f, "{}", (value as f64) + (error as f64))
+        }
+    }
+}
+
+impl PrettyPrintScalar for f64 {
+    fn fmt(mut value: Self, mut error: Self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if error == 0.0 {
+            return write!(f, "{value}");
+        };
+
+        if value < 0.0 {
+            write!(f, "-")?;
+
+            value = -value;
+            error = -error;
+        }
+
+        let c = Compensated { value, error };
+
+        let int_part = Compensated::new(c.value().trunc());
+        let mut frac_part = c - int_part;
+
+        write!(f, "{}", int_part.value as u64)?;
+
+        if frac_part.value() == 0.0 {
+            return Ok(());
+        }
+
+        f.write_str(".")?;
+
+        loop {
+            frac_part *= 10.0;
+
+            let digit = frac_part.value().trunc();
+
+            write!(f, "{}", digit as u64)?;
+
+            frac_part -= Compensated::new(digit);
+
+            if frac_part.value == 0.0 && frac_part.error == 0.0 {
+                break;
+            }
+        }
+
+        Ok(())
     }
 }

@@ -62,16 +62,15 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     #[inline(always)]
     fn hermitev<P: Policy>(x: Self, n: Self::USize) -> Self {
-        let one = Self::ONE;
         let i1 = Self::USize::ONE;
         let n_is_zero = n.cmp_eq(Self::USize::ZERO);
 
         let mut c = i1;
 
         // count `n = c.to_float()` separately to avoid expensive converting every iteration
-        let mut cf = one;
+        let mut cf = Self::ONE;
 
-        let mut p0 = one;
+        let mut p0 = Self::ONE;
         let mut p1 = x + x; // 2 * x
 
         loop {
@@ -89,10 +88,10 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             p1 = cont.select(next, p1);
 
             c += i1;
-            cf += one;
+            cf += Self::ONE;
         }
 
-        n_is_zero.select(one, p1)
+        n_is_zero.select(Self::ONE, p1)
     }
 
     #[inline(always)]
@@ -175,7 +174,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             x / c
         };
 
-        a * (Self::splat(E::from_f64(-0.5)) * xc * xc).exp_p::<P>()
+        a * (-Self::HALF * xc * xc).exp_p::<P>()
     }
 
     fn beta<P: Policy>(a: Self, b: Self) -> Self;
@@ -201,9 +200,9 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
         macro_rules! c { ($n:literal / $d:literal) => { Self::splat(E::from_i64($n) / E::from_i64($d)) }; }
 
-        let x2 = x * x;
-        let x4 = x2 * x2;
-        let x8 = x4 * x4;
+        let x2 = x.square();
+        let x4 = x2.square();
+        let x8 = x4.square();
 
         if const { N != 0 } {
             unsafe { core::hint::assert_unchecked(N == n); }

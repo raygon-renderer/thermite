@@ -4,59 +4,59 @@ import struct
 # Set precision high enough to capture the tail accurately
 decimal.getcontext().prec = 100
 
-def split_f64(val_str):
-    """Splits a high-precision string into two f64s (hi, lo)."""
-    # Accept either string or Decimal directly
+def split(val_str, parts=2, is_f32=False):
+    """
+    Splits a high-precision string/decimal into `parts` non-overlapping values.
+    Returns a tuple of python floats.
+    """
     if isinstance(val_str, decimal.Decimal):
         d = val_str
     else:
         d = decimal.Decimal(val_str)
 
-    # 1. Cast to native float (f64)
-    hi = float(d)
+    results = []
+    for _ in range(parts):
+        if is_f32:
+            # Round to f32 precision via struct round-trip
+            # struct.pack/unpack ensures the value is exactly representable in 32 bits
+            f_bytes = struct.pack('f', float(d))
+            val = struct.unpack('f', f_bytes)[0]
 
-    # 2. Subtract high from original to get exact remainder
-    #    Then cast remainder to f64
-    lo = float(d - decimal.Decimal(hi))
+            # Convert back to Decimal for exact subtraction
+            # Note: The python float 'val' is an f64, but it holds an f32 value.
+            # Converting it to Decimal preserves that exact value.
+            val_decimal = decimal.Decimal(float(val))
+        else:
+            # Native Python float is f64
+            val = float(d)
+            val_decimal = decimal.Decimal(val)
 
-    return hi, lo
+        results.append(val)
 
-def split_f32(val_str):
-    """Splits a high-precision string into two f32s (hi, lo)."""
-    # Accept either string or Decimal directly
-    if isinstance(val_str, decimal.Decimal):
-        d = val_str
-    else:
-        d = decimal.Decimal(val_str)
+        # Update the remainder
+        d -= val_decimal
 
-    # 1. Cast to f32 (via struct pack/unpack to force 32-bit rounding)
-    #    Python floats are f64, so we must round-trip through bytes.
-    hi_bytes = struct.pack('f', float(d))
-    hi = struct.unpack('f', hi_bytes)[0]
-
-    # 2. Subtract the EXACT f32 value from the original decimal
-    #    Note: We convert 'hi' (which is an f32 value stored in an f64)
-    #    back to Decimal to perform the subtraction.
-    rem_d = d - decimal.Decimal(float(hi))
-
-    # 3. Cast remainder to f32
-    lo_bytes = struct.pack('f', float(rem_d))
-    lo = struct.unpack('f', lo_bytes)[0]
-
-    return hi, lo
+    return tuple(results)
 
 def print_f64_result(name, val_str):
-    hi64, lo64 = split_f64(val_str)
+    hi64, lo64 = split(val_str, parts=2, is_f32=False)
     print(f"{name} = (\"{hi64.hex()}\", \"{lo64.hex()}\"),")
 
+def print_f64_triple_result(name, val_str):
+    hi, mid, lo = split(val_str, parts=3, is_f32=False)
+    print(f"{name} = (\"{hi.hex()}\", \"{mid.hex()}\", \"{lo.hex()}\"),")
+
 def print_f32_result(name, val_str):
-    hi32, lo32 = split_f32(val_str)
+    hi32, lo32 = split(val_str, parts=2, is_f32=True)
     print(f"{name} = (\"{float(hi32).hex()}\", \"{float(lo32).hex()}\"),")
+
+def print_f32_triple_result(name, val_str):
+    hi, mid, lo = split(val_str, parts=3, is_f32=True)
+    print(f"{name} = (\"{float(hi).hex()}\", \"{float(mid).hex()}\", \"{float(lo).hex()}\"),")
 
 if __name__ == "__main__":
     consts = {
-        "ZERO": "0.0",
-        "ONE": "1.0",
+        "NEG_ZERO": "-0.0",
         "E": "2.7182818284590452353602874713526624977572470937000",
         "EGAMMA": "0.57721566490153286060651209008240243104215933593992",
         "FRAC_1_PI": "0.31830988618379067153776752674502872406891929148091",
@@ -83,6 +83,9 @@ if __name__ == "__main__":
         "LOG10_2": "0.30102999566398119521373889472449302676818988146211",
         "LOG10_E": "0.43429448190325182765112891891660508229439700580367",
         "PI": "3.1415926535897932384626433832795028841971693993751",
+        "PI_SQUARED": "9.8696044010893586188344909998761511353136994072408",
+        "PI_CUBED": "31.006276680299820175476315067101395202225288565885",
+        "PI_TESSERACTED": "97.409091034002437236440332688705111249727585672685",
         "SQRT_2": "1.4142135623730950488016887242096980785696718753769",
         "SQRT_3": "1.7320508075688772935274463415058723669428052538104",
         "SQRT_E": "1.6487212707001281468486507878141635716537761007101",
@@ -128,13 +131,19 @@ if __name__ == "__main__":
     print("\n---- 1/ln(n) f64 [3..32] ----")
     print("[")
     for val in inv_logs:
-        hi, lo = split_f64(val)
+        hi, lo = split(val, parts=2, is_f32=False)
         print(f"    (\"{hi.hex()}\", \"{lo.hex()}\"),")
     print("]")
 
     print("\n---- 1/ln(n) f32 [3..32] ----")
     print("[")
     for val in inv_logs:
-        hi, lo = split_f32(val)
+        hi, lo = split(val, parts=2, is_f32=True)
         print(f"    (\"{float(hi).hex()}\", \"{float(lo).hex()}\"),")
     print("]")
+
+    print("\n---- LN_2 Triple Split (Calculated) ----")
+    # We calculate ln(2) fresh to ensure enough digits for the 3rd term
+    ln2_calc = decimal.Decimal(2).ln()
+    print_f64_triple_result("LN_2_F64", ln2_calc)
+    print_f32_triple_result("LN_2_F32", ln2_calc)

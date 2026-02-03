@@ -1,6 +1,4 @@
 use thermite::{
-    generic::GenericMask,
-    mask::Mask,
     math::{
         TranscendentalMathWithPolicy,
         policy::{
@@ -9,11 +7,12 @@ use thermite::{
         },
         specialized::SpecializedTranscendentalMath,
     },
+    prelude::*,
 };
 
 use super::*;
 
-impl<V> SpecializedSpecialMath<f32> for V
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedSpecialMath<f32> for V
 where
     V: TranscendentalMathWithPolicy<Element = f32>,
     V: SpecializedTranscendentalMath<f32>,

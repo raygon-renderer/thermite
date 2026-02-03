@@ -84,6 +84,12 @@ pub struct PolicyParameters {
     /// Note that this is the upper limit allowed for pathological cases, and many loops will
     /// terminate dynamically before this.
     pub max_iterations: usize,
+
+    /// If true, use compensated algorithms where available (such as Kahan summation).
+    ///
+    /// This attribute will change depending on the precision policy selected, and selecting
+    /// a new precision policy may overwrite this value. Apply combinators carefully.
+    pub use_compensation: bool,
 }
 
 impl PolicyParameters {
@@ -107,6 +113,7 @@ impl Policy for MyPolicy {
         precision: PrecisionPolicy::Average,
         avoid_branching: true,
         max_iterations: 10000,
+        use_compensation: true,
     };
 }
 
@@ -127,6 +134,9 @@ pub mod policies {
     /// e.g.: `Reference` -> `Best`, `Best` -> `Average`, `Average` -> `Medium`, `Medium` -> `Worst`
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct LessPrecision<P: Policy>(PhantomData<P>);
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct UseCompensation<P: Policy, const USE_COMPENSATION: bool>(PhantomData<P>);
 
     /// Policy adapter that modifies the base policy to change overflow checking.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -231,6 +241,7 @@ pub mod policies {
             precision: extra_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.precision.ge(PrecisionPolicy::Average),
         };
     }
 
@@ -241,6 +252,18 @@ pub mod policies {
             precision: less_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.precision.gt(PrecisionPolicy::Average),
+        };
+    }
+
+    impl<P: Policy, const USE_COMPENSATION: bool> Policy for UseCompensation<P, USE_COMPENSATION> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_iterations: P::POLICY.max_iterations,
+            use_compensation: USE_COMPENSATION,
         };
     }
 
@@ -251,6 +274,7 @@ pub mod policies {
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.use_compensation,
         };
     }
 
@@ -261,6 +285,7 @@ pub mod policies {
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.use_compensation,
         };
     }
 
@@ -271,6 +296,7 @@ pub mod policies {
             precision: P::POLICY.precision,
             avoid_branching: AVOID_BRANCHING,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.use_compensation,
         };
     }
 
@@ -281,6 +307,7 @@ pub mod policies {
             precision: P::POLICY.precision,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: MAX_ITERATIONS,
+            use_compensation: P::POLICY.use_compensation,
         };
     }
 
@@ -291,6 +318,7 @@ pub mod policies {
             precision: PrecisionPolicy::Worst,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: false,
         };
     }
 
@@ -301,6 +329,7 @@ pub mod policies {
             precision: PrecisionPolicy::Medium,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: false,
         };
     }
 
@@ -311,6 +340,7 @@ pub mod policies {
             precision: PrecisionPolicy::Average,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: false,
         };
     }
 
@@ -321,6 +351,7 @@ pub mod policies {
             precision: PrecisionPolicy::Best,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: true,
         };
     }
 
@@ -331,6 +362,7 @@ pub mod policies {
             precision: PrecisionPolicy::Reference,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
+            use_compensation: true,
         };
     }
 
@@ -345,6 +377,7 @@ pub mod policies {
             },
             avoid_branching: A::POLICY.avoid_branching,
             max_iterations: A::POLICY.max_iterations,
+            use_compensation: A::POLICY.use_compensation && B::POLICY.use_compensation,
         };
     }
 
@@ -355,6 +388,7 @@ pub mod policies {
             precision: PrecisionPolicy::Worst,
             avoid_branching: true,
             max_iterations: 1000,
+            use_compensation: false,
         };
     }
 
@@ -365,6 +399,7 @@ pub mod policies {
             precision: PrecisionPolicy::Medium,
             avoid_branching: false,
             max_iterations: 10000,
+            use_compensation: false,
         };
     }
 
@@ -375,6 +410,7 @@ pub mod policies {
             precision: PrecisionPolicy::Average,
             avoid_branching: false,
             max_iterations: 10000,
+            use_compensation: false,
         };
     }
 
@@ -385,6 +421,7 @@ pub mod policies {
             precision: PrecisionPolicy::Best,
             avoid_branching: false,
             max_iterations: 50000,
+            use_compensation: true,
         };
     }
 
@@ -398,6 +435,7 @@ pub mod policies {
             // instruction-level parallelism anyway.
             avoid_branching: false,
             max_iterations: 10000,
+            use_compensation: false,
         };
     }
 
@@ -408,6 +446,7 @@ pub mod policies {
             precision: PrecisionPolicy::Reference,
             avoid_branching: false,
             max_iterations: 100000,
+            use_compensation: true,
         };
     }
 }

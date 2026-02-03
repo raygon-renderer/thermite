@@ -3,9 +3,14 @@ use core::f64::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
-impl<V: FloatVectorWithBits<Element = f64>> SpecializedCoreMath<f64> for V {}
+impl<V: FloatVectorWithBits<Element = f64>> SpecializedCoreMath<f64> for V {
+    #[inline(always)]
+    fn inverse_sqrt<P: Policy>(self) -> Self {
+        super::generic::inverse_sqrt_internal::<V, f64, P>(self)
+    }
+}
+
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {}
-impl<V: FloatVectorWithBits<Element = f64>> SpecializedFloatMath<f64> for V {}
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpatialMath<f64> for V {
@@ -15,6 +20,21 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpatialMath<f64> for V {
 }
 
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> for V {
+    #[inline(always)]
+    fn sinc<P: Policy>(self) -> Self {
+        super::generic::sinc_internal::<V, f64, P>(self)
+    }
+
+    #[inline(always)]
+    fn sinc_pi<P: Policy>(self) -> Self {
+        super::generic::sinc_pi_internal::<V, f64, P>(self)
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy, const N: usize>(self) -> Self {
+        super::generic::log_n_internal::<V, f64, P, N>(self)
+    }
+
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
         sincos_d_internal::<P, V, false>(self)
@@ -472,8 +492,8 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(V::Signed::splat(0x07FF)).cast_mask::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
-        let underflow = ej.cmp_le(V::Signed::splat(0x0000)).cast_mask::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
+        let overflow = ej.cmp_ge(V::Signed::splat(0x07FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
+        let underflow = ej.cmp_le(V::Signed::splat(0x0000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
