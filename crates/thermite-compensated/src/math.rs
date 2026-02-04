@@ -131,10 +131,6 @@ where
             let neg_sin = bit1;
             let neg_cos = bit0 ^ bit1;
 
-            // prepare for conditional negate
-            let neg_sin: V::Mask = neg_sin.cast();
-            let neg_cos: V::Mask = neg_cos.cast();
-
             final_sin.value = final_sin.value.neg_c(neg_sin);
             final_sin.error = final_sin.error.neg_c(neg_sin);
 
@@ -187,6 +183,7 @@ where
         (final_sin, final_cos)
     }
 
+    #[inline(always)]
     fn sinc<P: Policy>(self) -> Self {
         // Use non-compensated 4th root epsilon for tiny check, since
         // the Taylor series is actually very good for very small x.
@@ -216,16 +213,37 @@ where
         y
     }
 
+    #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
-        todo!()
+        let abs_x = self.abs();
+        let ex = abs_x.exp_p::<P>();
+
+        let hex_inv = Self::HALF / ex;
+        let exh = Self::HALF * ex;
+
+        // sinh = (e^x - e^-x) / 2, sinh is an odd function, so sinh(x) == -sinh(-x)
+        // cosh = (e^x + e^-x) / 2, cosh is an even function, so cosh(x) == cosh(|x|)
+
+        ((exh - hex_inv).mul_sign(self), exh + hex_inv)
     }
 
+    #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
-        todo!()
+        // (e^x - e^-x) / 2
+        let abs_x = self.abs();
+        let ex = abs_x.exp_p::<P>();
+
+        ex.mul_sube(Self::HALF, Self::HALF / ex).mul_sign(self)
     }
 
+    #[inline(always)]
     fn cosh<P: Policy>(self) -> Self {
-        todo!()
+        // (e^x + e^-x) / 2
+        // cosh is an even function, so cosh(x) == cosh(|x|)
+        let abs_x = self.abs();
+        let ex = abs_x.exp_p::<P>();
+
+        ex.mul_adde(Self::HALF, Self::HALF / ex)
     }
 
     #[inline(always)]
@@ -238,14 +256,14 @@ where
     #[inline(always)]
     fn asin<P: Policy>(self) -> Self {
         // asin(x) = atan(x / sqrt(1 - x^2))
-        // (1-x)*(1+x) is generally more accurate than 1-x^2 near 1
-        let omx2 = (Self::ONE - self) * (self + V::ONE);
-        // if x=1, denom=0, atan approaches pi/2, handled correctly by atan2 ideally,
-        // but simple division might return Inf. atan(Inf) = pi/2.
-        // We use atan2 to handle the denom=0 case safely if needed, but atan_p handles Inf.
 
-        // Check domain? if |x| > 1, omx2 is negative, sqrt is NaN.
-        // Existing logic propagates NaN.
+        let omx2 = if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            -self.square() + V::ONE // less accurate but faster
+        } else {
+            // (1-x)*(1+x) is generally more accurate than 1-x^2 near 1
+            (Self::ONE - self) * (self + V::ONE)
+        };
+
         (self / omx2.sqrt()).atan_p::<P>()
     }
 
@@ -255,8 +273,84 @@ where
         Self::FRAC_PI_2 - self.asin_p::<P>()
     }
 
+    #[inline(always)]
     fn atan<P: Policy>(self) -> Self {
-        todo!()
+        let x = self;
+        let abs_x = x.abs();
+
+        // Constants
+        // tan(pi/8) = sqrt(2) - 1
+        let tan_pi_8 = Self::SQRT_2 - Self::ONE;
+
+        // 1. Argument Reduction
+        // Goal: reduce x to [0, tan(pi/8)] approx [0, 0.414]
+
+        // Check if x > 1
+        let gt_1 = abs_x.value().cmp_gt(V::ONE);
+
+        // if x > 1: x = 1/x
+        // We will compute pi/2 - atan(1/x) later
+        let mut curr = gt_1.select(abs_x.reciprocal_p::<P>(), abs_x);
+
+        // Check if x > tan(pi/8)
+        let gt_tan_pi8 = curr.value().cmp_gt(tan_pi_8.value());
+
+        // if x > tan(pi/8): x = (x-1)/(x+1)
+        // We will add pi/4 later
+        let shifted = (curr - Self::ONE) / (curr + Self::ONE);
+
+        curr = gt_tan_pi8.select(shifted, curr);
+
+        // 2. Series Evaluation
+        // z - z^3/3 + z^5/5 ...
+
+        let z = curr;
+        let z2 = -z.square(); // negative for alternating series subtraction
+
+        let mut sum = z;
+        let mut term = z;
+
+        let shift = if P::POLICY.unroll_loops { 2 } else { 0 };
+
+        let mut i = 1;
+        let max_i = (P::POLICY.max_iterations >> shift) + 1;
+
+        // atan is very slow to converge
+        while i < max_i {
+            let next_i = i + (1 << shift);
+            let prev = sum;
+
+            for k in i..next_i {
+                let div = (2 * k) + 1; // 3, 5, 7...
+
+                term *= z2;
+
+                // NOTE: Doesn't need explicit normalization later, due to sum being used
+                sum.accumulate_unnormalized(term / V::splat(FloatElement::from_i64(div as i64)));
+            }
+
+            if prev.cmp_eq(sum).all() {
+                // println!("atan converged at i={}", next_i - 1);
+                break;
+            }
+
+            i = next_i;
+        }
+
+        // If we did the tan(pi/8) shift, add pi/4
+        // sum = sum + pi/4
+        sum = gt_tan_pi8.select(sum + Self::FRAC_PI_4, sum);
+
+        // If we did the >1 inversion, subtract from pi/2
+        // sum = pi/2 - sum
+        sum = gt_1.select(Self::FRAC_PI_2 - sum, sum);
+
+        // Restore Sign
+        let xv = x.value();
+        sum.value = sum.value.mul_sign(xv);
+        sum.error = sum.error.mul_sign(xv);
+
+        sum
     }
 
     #[inline(always)]
@@ -465,12 +559,24 @@ where
         self.ln_p::<P>() * Self::LOG10_E
     }
 
+    #[inline(always)]
     fn log_n<P: Policy, const N: usize>(self) -> Self {
-        todo!()
+        match N {
+            0 => Self::ZERO,     // log(x)/log(0) = log(x)/-infinity = 0
+            1 => Self::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
+            2 => self.log2_p::<P>(),
+            10 => self.log10_p::<P>(),
+            n if n <= 32 => {
+                // Use precomputed 1/ln(n) table for small integer bases
+                self.ln_p::<P>() * <V as crate::consts::CompensatedLogTable<V>>::LOG_TABLE[n - 3]
+            }
+            _ => self.ln_p::<P>() / V::splat(FloatElement::from_i64(N as i64)).ln_p::<P>(),
+        }
     }
 
+    #[inline(always)]
     fn ln1m_expnx_ext<P: Policy>(self, lnx: Self) -> Self {
-        self.ln1m_expnx_ext_p::<P>(self.ln_p::<P>())
+        self.ln1m_expnx_p::<P>()
     }
 }
 
