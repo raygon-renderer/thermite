@@ -2,7 +2,7 @@ use thermite::{
     Vector,
     generic_array::{GenericArray, typenum::Unsigned},
     prelude::*,
-    register::{CoreRegister, FloatElement, well_formed::WellFormedFloatElement},
+    register::{CoreRegister, element::FloatElementWithBits, well_formed::WellFormedFloatElement},
     simd::{FloatSimd, SizedSimd},
 };
 
@@ -36,7 +36,7 @@ pub trait MapReduceKernel<T, const I: usize, const O: usize>: Sized {
     where
         L: LoadKernel<P, I>,
         T: WellFormedFloatElement,
-        S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
+        S: SizedSimd<T, <T as FloatElementWithBits>::Signed, <T as FloatElementWithBits>::Bits>,
     {
         map_reduce::<S, T, L, Self, 0, P, I, O>(loader, self, values)
     }
@@ -46,7 +46,7 @@ pub trait MapReduceKernel<T, const I: usize, const O: usize>: Sized {
     where
         L: LoadKernel<P, I>,
         T: WellFormedFloatElement,
-        S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
+        S: SizedSimd<T, <T as FloatElementWithBits>::Signed, <T as FloatElementWithBits>::Bits>,
     {
         map_reduce::<S, T, L, Self, N, P, I, O>(loader, self, values.map(|v| v.as_slice()))
     }
@@ -135,7 +135,7 @@ where
     // and that the Element type itself can be used as a Scalar register
     T: WellFormedFloatElement,
     // Contains SIMD types, like f32x4/f64x4 as fx4, etc., for the given precision T (f32 or f64)
-    S: SizedSimd<T, <T as FloatElement>::Signed, <T as FloatElement>::Bits>,
+    S: SizedSimd<T, <T as FloatElementWithBits>::Signed, <T as FloatElementWithBits>::Bits>,
     // Kernel for mapping and reducing
     K: MapReduceKernel<T, I, O>,
     // Loader for loading input vectors from arbitrary memory
