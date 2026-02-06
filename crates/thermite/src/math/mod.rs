@@ -1,5 +1,14 @@
 #![allow(clippy::needless_arbitrary_self_type)]
 
+//! Mathematical functions for floating-point vector types.
+//!
+//! This module provides a comprehensive set of mathematical operations tailored for floating-point vector types.
+//! It includes core mathematical functions, transcendental functions, spatial computations, and real-valued operations.
+//!
+//! The traits defined here are designed to be flexible and efficient, allowing for different precision and performance trade-offs
+//! through the use of policies. Each mathematical trait has a corresponding version that accepts a policy parameter,
+//! enabling fine-tuned control over the behavior of the functions.
+
 mod consts;
 pub mod policy;
 
@@ -126,15 +135,6 @@ decl_math! {
             denominator: &[Self::Element; D],
         ) -> Self;
 
-        /// Linearly interpolates between `a` and `b` based on the value of `self`.
-        ///
-        /// This operation is not clamped.
-        fn lerp[][](self: Self, a: Self, b: Self) -> Self;
-
-        /// Scales `self` from the input range `[in_min, in_max]` to the output range `[out_min, out_max]`.
-        ///
-        /// This operation is not clamped.
-        fn scale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
         /// Returns the multiplicative inverse of `self`, which is `1 / self`.
         ///
@@ -198,8 +198,7 @@ decl_math! {
         fn acos[][](self: Self) -> Self;
         /// Returns the arctangent of `self`.
         fn atan[][](self: Self) -> Self;
-        /// Returns the four-quadrant arctangent of `self` and `x`.
-        fn atan2[][](self: Self, x: Self) -> Self;
+
         /// Inverse hyperbolic sine
         fn asinh[][](self: Self) -> Self;
         /// Inverse hyperbolic cosine
@@ -261,6 +260,8 @@ decl_math! {
     }
 }
 
+// TODO: Create an associated type `Scalar` to return for spatial functions,
+// as Complex vectors may want to return real-valued norms/distances.
 decl_math! {
     /// Spatial mathematical functions like norms and distances.
     ///
@@ -318,6 +319,32 @@ decl_math! {
         /// Converts angles from degrees to radians.
         fn to_radians[][](self: Self) -> Self;
 
+        /// Wraps the angle (radians) in `self` to the range `[-π, π)`.
+        ///
+        /// The formula for this is `self - floor((self + π) / 2π) * 2π`
+        fn wrap_angle[][](self: Self) -> Self;
+
+        /// Computes the smallest difference between two angles (in radians),
+        /// taking into account angle wrapping.
+        ///
+        /// To get the "distance" between two angles, use the absolute value of the result.
+        fn angle_diff[][](self: Self, other: Self) -> Self;
+
+        /// Returns the four-quadrant arctangent of `self` and `x`.
+        ///
+        /// This method is only defined for real-valued types.
+        fn atan2[][](self: Self, x: Self) -> Self;
+
+        /// Linearly interpolates between `a` and `b` based on the value of `self`.
+        ///
+        /// This operation is not clamped.
+        fn lerp[][](self: Self, a: Self, b: Self) -> Self;
+
+        /// Scales `self` from the input range `[in_min, in_max]` to the output range `[out_min, out_max]`.
+        ///
+        /// This operation is not clamped.
+        fn scale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
+
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,
         /// not in terms of visual smoothness, though they are related in some ways.
@@ -334,6 +361,9 @@ decl_math! {
         fn smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
 
         /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
+        ///
+        /// N from 0..=2 have fast closed-form solutions, while higher N use numerical root-finding methods, which will inherently
+        /// be much slower.
         fn inverse_smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
 
         /// Derivative of the `smoothstep` function of order `2N-1`, at the given point.

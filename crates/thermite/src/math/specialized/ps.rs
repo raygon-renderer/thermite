@@ -1,4 +1,4 @@
-use crate::{divider::Divider, math::policy::policies::MediumPrecision, register::Element};
+use crate::{divider::Divider, math::policy::policies::MediumPrecision};
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -9,8 +9,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedCoreMath<f32> for V {
         super::generic::inverse_sqrt_internal::<V, f32, P>(self)
     }
 }
-
-impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {}
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f32>> SpecializedSpatialMath<f32> for V {
@@ -219,84 +217,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     }
 
     #[inline(always)]
-    fn atan2<P: Policy>(self, x: Self) -> Self {
-        let y = self;
-        let neg_one = V::NEG_ONE;
-        let zero = V::ZERO;
-
-        let x1 = x.abs();
-        let y1 = y.abs();
-
-        let swap_xy = y1.cmp_gt(x1);
-
-        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            let (a, b) = (x1, y1);
-
-            let n = swap_xy.select(b, a);
-            let d = swap_xy.select(a, b);
-
-            let mut k = n / d;
-
-            if P::POLICY.check_overflow {
-                let b_eq_zero = b.cmp_eq(V::ZERO);
-                let ab_eq = a.cmp_eq(b);
-
-                k = ab_eq.select(V::ONE, k);
-                k = b_eq_zero.select(V::ZERO, k);
-            }
-
-            let s = V::ONE - (V::ONE - k); // crush denormals
-
-            let t = s * s;
-
-            let mut r = t.mul_adde(s * V::splat(0.43157974), V::ONE)
-                / t.mul_adde(V::splat(0.05831938), V::splat(0.76443945))
-                    .mul_adde(t, V::ONE);
-
-            r = swap_xy.select(V::FRAC_PI_2 - r, r);
-            r = x.select_negative(V::PI - r, r);
-
-            return r.copysign(y);
-        }
-
-        let mut x2 = swap_xy.select(y1, x1);
-        let mut y2 = swap_xy.select(x1, y1);
-
-        if P::POLICY.check_overflow {
-            let both_infinite = (x.is_infinite() & y.is_infinite());
-
-            //if crate::unlikely(both_infinite.any())
-            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
-            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
-        }
-
-        // x = y = 0 will produce NAN. No problem, fixed below
-        let t = y2 / x2;
-
-        // small:  z = t / 1.0;
-        // medium: z = (t-1.0) / (t+1.0);
-        let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0));
-
-        let a = t + neg_one.z(not_small);
-        let b = V::ONE + t.z(not_small);
-
-        let s = V::FRAC_PI_4.z(not_small);
-
-        let z = a / b;
-        let z2 = z * z;
-
-        let mut re = z2
-            .poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
-            .mul_adde(z2 * z, z + s);
-
-        re = swap_xy.select(V::FRAC_PI_2 - re, re);
-        re = (x | y).cmp_eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
-        re = x.select_negative(V::PI - re, re); // also for x = -0.
-
-        re
-    }
-
-    #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
         let x0 = self;
         let x = x0.abs();
@@ -304,7 +224,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let x_small = x.cmp_le(V::splat(0.51));
 
-        let mut y1 = V::EMPTY;
         let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
@@ -324,7 +243,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         if P::POLICY.avoid_branching || x_small.any() {
-            y1 = x2
+            let y1 = x2
                 .poly_p::<P, _>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
                 .mul_adde(x2 * x, x);
 
@@ -341,7 +260,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let x_small = x1.cmp_lt(V::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
 
-        let mut y1 = V::EMPTY;
         let mut y2 = V::EMPTY;
 
         // if not all are small
@@ -363,14 +281,14 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // if any are small
         if P::POLICY.avoid_branching || x_small.any() {
-            y1 = x1.sqrt()
-                * x1.poly_p::<P, _>(&[
-                    1.4142135263E0,
-                    -1.1784741703E-1,
-                    2.6454905019E-2,
-                    -7.5272886713E-3,
-                    1.7596881071E-3,
-                ]);
+            #[rustfmt::skip]
+            let mut y1 = x1.sqrt() * x1.poly_p::<P, _>(&[
+                1.4142135263E0,
+                -1.1784741703E-1,
+                2.6454905019E-2,
+                -7.5272886713E-3,
+                1.7596881071E-3,
+            ]);
 
             if P::POLICY.check_overflow {
                 // result is NaN if less-than 1
@@ -389,7 +307,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let x_small = x.cmp_lt(V::splat(0.5));
 
-        let mut y1 = V::EMPTY;
         let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
@@ -410,15 +327,15 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         if P::POLICY.avoid_branching || x_small.any() {
             let x2 = x * x;
 
-            y1 = x2
-                .poly_p::<P, _>(&[
-                    3.33337300303E-1,
-                    1.99782164500E-1,
-                    1.46691431730E-1,
-                    8.24370301058E-2,
-                    1.81740078349E-1,
-                ])
-                .mul_adde(x2 * x, x);
+            #[rustfmt::skip]
+            let y1 = x2.poly_p::<P, _>(&[
+                3.33337300303E-1,
+                1.99782164500E-1,
+                1.46691431730E-1,
+                8.24370301058E-2,
+                1.81740078349E-1,
+            ])
+            .mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
         }
@@ -532,12 +449,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         x = e3.nmul_adde(ln2, x); // x -= e3 * float(VM_LN2);
 
         let x2 = x * x;
-        let x4 = x2 * x2;
 
         // Taylor expansion of exp
         let z = x
             .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
-            .mul_adde(x * x, x + one);
+            .mul_adde(x2, x + one);
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
@@ -767,6 +683,86 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     }
 }
 
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
+    #[inline(always)]
+    fn atan2<P: Policy>(self, x: Self) -> Self {
+        let y = self;
+        let neg_one = V::NEG_ONE;
+        let zero = V::ZERO;
+
+        let x1 = x.abs();
+        let y1 = y.abs();
+
+        let swap_xy = y1.cmp_gt(x1);
+
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let (a, b) = (x1, y1);
+
+            let n = swap_xy.select(b, a);
+            let d = swap_xy.select(a, b);
+
+            let mut k = n / d;
+
+            if P::POLICY.check_overflow {
+                let b_eq_zero = b.cmp_eq(V::ZERO);
+                let ab_eq = a.cmp_eq(b);
+
+                k = ab_eq.select(V::ONE, k);
+                k = b_eq_zero.select(V::ZERO, k);
+            }
+
+            let s = V::ONE - (V::ONE - k); // crush denormals
+
+            let t = s * s;
+
+            let mut r = t.mul_adde(s * V::splat(0.43157974), V::ONE)
+                / t.mul_adde(V::splat(0.05831938), V::splat(0.76443945))
+                    .mul_adde(t, V::ONE);
+
+            r = swap_xy.select(V::FRAC_PI_2 - r, r);
+            r = x.select_negative(V::PI - r, r);
+
+            return r.copysign(y);
+        }
+
+        let mut x2 = swap_xy.select(y1, x1);
+        let mut y2 = swap_xy.select(x1, y1);
+
+        if P::POLICY.check_overflow {
+            let both_infinite = x.is_infinite() & y.is_infinite();
+
+            //if crate::unlikely(both_infinite.any())
+            x2 = both_infinite.select(x2 & neg_one, x2); // get 1.0 with the sign of x
+            y2 = both_infinite.select(y2 & neg_one, y2); // get 1.0 with the sign of y
+        }
+
+        // x = y = 0 will produce NAN. No problem, fixed below
+        let t = y2 / x2;
+
+        // small:  z = t / 1.0;
+        // medium: z = (t-1.0) / (t+1.0);
+        let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0));
+
+        let a = t + neg_one.z(not_small);
+        let b = V::ONE + t.z(not_small);
+
+        let s = V::FRAC_PI_4.z(not_small);
+
+        let z = a / b;
+        let z2 = z * z;
+
+        let mut re = z2
+            .poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .mul_adde(z2 * z, z + s);
+
+        re = swap_xy.select(V::FRAC_PI_2 - re, re);
+        re = (x | y).cmp_eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
+        re = x.select_negative(V::PI - re, re); // also for x = -0.
+
+        re
+    }
+}
+
 // impl<V> SpecializedMath<f32> for V
 // where
 //     V: FloatVector<Element = f32>,
@@ -867,7 +863,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     let x2 = x * x;
 
     #[rustfmt::skip]
-    let mut s = x2.poly_p::<P, _>(&[
+    let s = x2.poly_p::<P, _>(&[
         -1.6666654611E-1,
         8.3321608736E-3,
         -1.9515295891E-4,
@@ -875,7 +871,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     .mul_adde(x2 * x, x);
 
     #[rustfmt::skip]
-    let mut c = x2.poly_p::<P, _>(&[
+    let c = x2.poly_p::<P, _>(&[
         4.166664568298827E-2,
         -1.388731625493765E-3,
         2.443315711809948E-5,
@@ -1048,7 +1044,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         }
 
-        let mut z = x
+        let z = x
             .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
             .mul_adde(x * x, x);
 

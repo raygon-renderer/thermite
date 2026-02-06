@@ -354,41 +354,6 @@ where
     }
 
     #[inline(always)]
-    fn atan2<P: Policy>(self, x: Self) -> Self {
-        // y = self
-        let y = self;
-        let x_value = x.value();
-        let zero = Self::ZERO;
-
-        // Handle x = 0
-        let x_is_zero = x_value.is_zero();
-
-        // If x=0, y>0 -> pi/2, y<0 -> -pi/2
-        // We can cheat: atan2(y, 0) is roughly atan(Inf * sign(y))
-        // But doing it explicitly is cleaner.
-
-        let pi_2 = Self::FRAC_PI_2;
-        let y_is_neg = y.value().cmp_lt(V::ZERO);
-        let on_axis_res = y_is_neg.select(-pi_2, pi_2);
-
-        // Standard case
-        let z = y / x;
-        let mut res = z.atan_p::<P>();
-
-        // Adjust quadrant based on x and y
-        // if x < 0:
-        //   if y >= 0: res += pi
-        //   if y < 0:  res -= pi
-
-        let x_is_neg = x_value.cmp_lt(V::ZERO);
-        let offset = Self::PI.neg_c(x_is_neg);
-
-        res = x_is_neg.select(res + offset, res);
-
-        x_is_zero.select(on_axis_res, res)
-    }
-
-    #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
         // ln(x + sqrt(x^2 + 1))
         // To avoid overflow for large x, use ln(2|x|) + ... or similar,
@@ -587,9 +552,44 @@ impl<V: CompensatedFloatVector> SpecializedSpatialMath<Compensated<V::Element>> 
     #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }
 }
 
-impl<V: CompensatedFloatVector> SpecializedRealMath<Compensated<V::Element>> for Compensated<V> where
-    V: RealMathWithPolicy
+impl<V: CompensatedFloatVector> SpecializedRealMath<Compensated<V::Element>> for Compensated<V>
+where
+    V: RealMathWithPolicy,
 {
+    #[inline(always)]
+    fn atan2<P: Policy>(self, x: Self) -> Self {
+        // y = self
+        let y = self;
+        let x_value = x.value();
+        let zero = Self::ZERO;
+
+        // Handle x = 0
+        let x_is_zero = x_value.is_zero();
+
+        // If x=0, y>0 -> pi/2, y<0 -> -pi/2
+        // We can cheat: atan2(y, 0) is roughly atan(Inf * sign(y))
+        // But doing it explicitly is cleaner.
+
+        let pi_2 = Self::FRAC_PI_2;
+        let y_is_neg = y.value().cmp_lt(V::ZERO);
+        let on_axis_res = y_is_neg.select(-pi_2, pi_2);
+
+        // Standard case
+        let z = y / x;
+        let mut res = z.atan_p::<P>();
+
+        // Adjust quadrant based on x and y
+        // if x < 0:
+        //   if y >= 0: res += pi
+        //   if y < 0:  res -= pi
+
+        let x_is_neg = x_value.cmp_lt(V::ZERO);
+        let offset = Self::PI.neg_c(x_is_neg);
+
+        res = x_is_neg.select(res + offset, res);
+
+        x_is_zero.select(on_axis_res, res)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

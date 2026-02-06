@@ -1,5 +1,5 @@
 use crate::divider::Divider;
-use core::f64::consts::{FRAC_1_PI, LN_10, LOG2_E, SQRT_2};
+use core::f64::consts::{LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
@@ -10,7 +10,12 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedCoreMath<f64> for V {
     }
 }
 
-impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {}
+impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
+    #[inline(always)]
+    fn atan2<P: Policy>(self, x: Self) -> Self {
+        atan_internal::<Self, P, true>(self, x)
+    }
+}
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpatialMath<f64> for V {
@@ -192,11 +197,6 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn atan<P: Policy>(self) -> Self {
         atan_internal::<Self, P, false>(self, V::ZERO)
-    }
-
-    #[inline(always)]
-    fn atan2<P: Policy>(self, x: Self) -> Self {
-        atan_internal::<Self, P, true>(self, x)
     }
 
     #[inline(always)]
@@ -460,7 +460,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         x = e3.nmul_adde(V::LN_2, x); // x -= e3 * VM_LN2;
 
         // Taylor coefficients for exp function, 1/n!
-        let mut z = x.poly_p::<P, _>(&[
+        let z = x.poly_p::<P, _>(&[
             1.0, // + 1
             1.0, // 1x
             1.0 / 2.0,
@@ -589,7 +589,6 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let mut t = Self::from_bits(ui);
 
         let r = (t * t) * (t / x); // encourage ILP
-        let r2 = r * r;
 
         t *= r.poly_p::<P, _>(&[
             1.87595182427177009643,   /* 0x3ffe03e6, 0x0f61e692 */
@@ -823,17 +822,11 @@ fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: b
 
     let x1 = is_big.select(V::ONE - xa, xa * xa);
 
-    let x2 = x1 * x1;
-    let x4 = x2 * x2;
-    let x8 = x4 * x4;
-
-    let undef = V::EMPTY;
-
-    let mut px = undef;
-    let mut qx = undef;
-    let mut rx = undef;
-    let mut sx = undef;
-    let mut xb = undef;
+    let mut px = V::EMPTY;
+    let mut qx = V::EMPTY;
+    let mut rx = V::EMPTY;
+    let mut sx = V::EMPTY;
+    let mut xb = V::EMPTY;
 
     // if not all are big (if any are small)
     if P::POLICY.avoid_branching || !is_big.all() {
@@ -1066,8 +1059,8 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
     if P::POLICY.check_overflow {
         let overflow = y.cmp_gt(V::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
-        let s = overflow.select(V::ZERO, s);
-        let c = overflow.select(V::ONE, c);
+        s = overflow.select(V::ZERO, s);
+        c = overflow.select(V::ONE, c);
     }
 
     let sin1 = swap.select(c, s);

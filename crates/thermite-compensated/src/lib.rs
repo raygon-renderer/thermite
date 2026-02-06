@@ -1,5 +1,5 @@
 // #![no_std]
-#![allow(unused_variables)]
+#![allow(unused_braces)]
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
@@ -1705,7 +1705,9 @@ impl PrettyPrintScalar for f64 {
 
         f.write_str(".")?;
 
-        loop {
+        let p = f.precision().unwrap_or(17); // default to max precision for f64
+
+        for _ in 0..p {
             frac_part *= 10.0;
 
             let digit = frac_part.value().trunc();

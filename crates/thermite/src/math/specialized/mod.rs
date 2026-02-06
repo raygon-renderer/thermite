@@ -4,18 +4,16 @@ use core::marker::PhantomData;
 
 use crate::{
     generic::*,
-    mask::Mask,
     math::{
-        CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
-        algorithms,
-        policy::policies::{ExtraPrecision, LessPrecision, MediumPrecision},
+        CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
+        policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::element::{FloatElement, FloatElementWithBits},
     vector::num::NumVector,
 };
 
 // use super::MathWithPolicy;
-use super::policy::{Policy, PolicyParameters, PrecisionPolicy};
+use super::policy::{Policy, PrecisionPolicy};
 
 mod generic;
 
@@ -307,47 +305,18 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         e = e.abs();
 
         loop {
-            let mut e1 = e & Self::ISize::ONE;
-
             let nx = res * x;
 
-            res = e1.cmp_ne(Self::ISize::ZERO).select(nx, res);
+            res = (e & Self::ISize::ONE).is_zero().select(res, nx);
 
-            x = x.square();
             e >>= 1;
 
-            if e.cmp_ne(Self::ISize::ZERO).none() {
+            if e.is_zero().all() {
                 return res;
             }
+
+            x = x.square();
         }
-
-        res
-    }
-
-    #[inline(always)]
-    fn lerp<P: Policy>(self, a: Self, b: Self) -> Self {
-        let t = self;
-
-        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
-            t.mul_add(b - a, a) // Fast and accurate, if available
-        } else {
-            (Self::ONE - t) * a + t * b // Accurate but slower than FMA
-        }
-    }
-
-    #[inline(always)]
-    fn scale<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
-        let in_range = in_max - in_min;
-
-        let mut t = self - in_min;
-
-        t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            t * in_range.rcp()
-        } else {
-            t / in_range
-        };
-
-        Self::lerp::<P>(t, out_min, out_max)
     }
 }
 
@@ -415,7 +384,6 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn asin<P: Policy>(self) -> Self;
     fn acos<P: Policy>(self) -> Self;
     fn atan<P: Policy>(self) -> Self;
-    fn atan2<P: Policy>(self, x: Self) -> Self;
 
     fn asinh<P: Policy>(self) -> Self;
     fn acosh<P: Policy>(self) -> Self;
@@ -458,9 +426,9 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
                 let nm1 = Self::splat(E::from_i64((N - 1) as i64));
 
                 let n = y * (x - y_n); // half of numerator
-                let d = y_n.mul_adde(nm1, x * nm1);
+                let d = y_n.mul_adde(np1, x * nm1);
 
-                y += ((n + n) / d);
+                y += (n + n) / d;
 
                 if const { N & 1 == 1 } {
                     y = y.neg_c(is_neg);
@@ -612,18 +580,20 @@ where
 }
 
 pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
+    // type Scalar: SpecializedRealMath<E>;
+
     #[inline(always)]
     fn hypot<P: Policy>(self, y: Self) -> Self {
         Self::hypot_n::<P, 2>([self, y])
     }
 
     #[inline(always)]
-    fn hypot_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
+    fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         hypot_n_impl::<E, Self, P, N, false>(values)
     }
 
     #[inline(always)]
-    fn inv_hypot_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
+    fn inv_hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         hypot_n_impl::<E, Self, P, N, true>(values)
     }
 
@@ -654,9 +624,48 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
+    fn wrap_angle<P: Policy>(self) -> Self {
+        // self - floor((self + π) / 2π) * 2π
+        (-Self::TAU).mul_adde(((self + Self::PI) * (Self::FRAC_1_PI * Self::HALF)).floor(), self)
+    }
+
+    #[inline(always)]
+    fn angle_diff<P: Policy>(self, other: Self) -> Self {
+        (self - other).wrap_angle_p::<P>()
+    }
+
+    fn atan2<P: Policy>(self, x: Self) -> Self;
+
+    #[inline(always)]
     fn step<P: Policy>(self, t: Self) -> Self {
         // use z() masked zeroing to avoid branching or select
         Self::ONE.z(self.cmp_ge(t))
+    }
+
+    #[inline(always)]
+    fn lerp<P: Policy>(self, a: Self, b: Self) -> Self {
+        let t = self;
+
+        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
+            t.mul_add(b - a, a) // Fast and accurate, if available
+        } else {
+            (Self::ONE - t) * a + t * b // Accurate but slower than FMA
+        }
+    }
+
+    #[inline(always)]
+    fn scale<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+        let in_range = in_max - in_min;
+
+        let mut t = self - in_min;
+
+        t = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            t * in_range.rcp()
+        } else {
+            t / in_range
+        };
+
+        Self::lerp::<P>(t, out_min, out_max)
     }
 
     #[inline(always)]
@@ -738,8 +747,10 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut bar = Self::ONE;
         let mut bar_a = Self::ONE; // (b - a) * a
 
-        // Start with an initial guess of 0.5, since that'll have the largest derivative
-        let mut x0 = Self::HALF;
+        //                             // Initial guess: y - 2y * (1 - y) * (y - 0.5)
+        // While we have a good initial guess for the inverse, S-curves are most stable at the
+        // midpoint, so start there. Converges much faster this way.
+        let mut x0 = Self::HALF; //(y + y).nmul_adde((Self::ONE - y) * (y - Self::HALF), y);
 
         if let Some((a, b)) = edges {
             ba = b - a;
@@ -793,7 +804,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         #[rustfmt::skip]
         let (Ok(v) | Err(v)) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, |x: Self| {
             let mut t = x;
-            let mut dt_dx = bar;
+            let dt_dx = bar;
 
             if edges.is_some() {
                 // adjust by precalculated scales
@@ -810,7 +821,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                 )},
             );
 
-            (t.mul_sube(xn1 * fx, y), fpx * dt_dx * xn1)
+            (t.mul_sube(xn1 * fx, y), (fpx * dt_dx * xn1).min(Self::HALF))
         });
 
         v
@@ -854,12 +865,12 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
-    fn smooth_interpolator_inverse<P: Policy>(mut y: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
+    fn smooth_interpolator_inverse<P: Policy>(y: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
         // k ln(1/y - 1)
         let l = k * (y.reciprocal_p::<P>() - Self::ONE).ln_p::<P>();
 
         // ((l + 2) - sqrt(l^2 + 4)) / 2l
-        let a = (l + Self::TWO);
+        let a = l + Self::TWO;
         let b = l.mul_adde(l, Self::splat(E::from_i64(4))).sqrt();
         let mut t = (a - b) / (Self::TWO * l);
 
