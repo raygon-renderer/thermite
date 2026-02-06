@@ -154,7 +154,7 @@ impl_binary_op!(Div::div for NumericRegister, Self);
 impl_binary_op!(Rem::rem for NumericRegister, Self);
 
 /// Trait for the bitwise AND NOT operation: `self & !rhs`
-pub trait BitAndNot<Rhs> {
+pub trait BitAndNot<Rhs = Self> {
     type Output;
 
     #[must_use]
@@ -162,7 +162,7 @@ pub trait BitAndNot<Rhs> {
 }
 
 /// Trait for the bitwise AND NOT assignment operation: `self &= !rhs`
-pub trait BitAndNotAssign<Rhs> {
+pub trait BitAndNotAssign<Rhs = Self> {
     fn bitandnot_assign(&mut self, rhs: Rhs);
 }
 

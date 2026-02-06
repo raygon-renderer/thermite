@@ -496,6 +496,8 @@ pub trait GenericMask:
     + CastMask<Self>
     + BitAnd<Self, Output = Self>
     + BitAndAssign<Self>
+    + ops::BitAndNot<Self, Output = Self>
+    + ops::BitAndNotAssign<Self>
     + BitOr<Self, Output = Self>
     + BitOrAssign<Self>
     + BitXor<Self, Output = Self>
