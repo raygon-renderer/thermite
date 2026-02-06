@@ -1,4 +1,9 @@
-use crate::{generic::GenericMask as _, math::policy::PrecisionPolicy};
+use std::ops::BitAnd as _;
+
+use crate::{
+    generic::{GenericMask as _, ops::BitAndNot as _},
+    math::policy::PrecisionPolicy,
+};
 
 use super::*;
 
@@ -9,35 +14,57 @@ use super::*;
 ///
 /// The given function `f` should return a tuple `(f(x), f'(x))`, where `f(x)` is the function value
 /// and `f'(x)` is its derivative at point `x`.
+///
+/// If bounds are provided, this will use a hybrid approach with bisection to ensure
+/// the root remains within the specified bounds. If there are points where the derivative is zero,
+/// this will help avoid divergence.
 #[inline(always)]
 pub fn newtons_method<V: FloatVector, P: Policy, F>(
     mut x: V,
     tolerance: V,
-    bounds: Option<(V, V)>,
+    mut bounds: Option<(V, V)>,
     mut f: F,
 ) -> Result<V, V>
 where
     F: FnMut(V) -> (V, V),
 {
-    for _ in 0..P::POLICY.max_iterations {
+    for _i in 0..P::POLICY.max_iterations {
         let (y, y_prime) = f(x);
-        let delta = y / y_prime;
 
-        let mut stop = delta.abs().cmp_le(tolerance);
-
-        if P::POLICY.check_overflow {
-            stop |= y_prime.abs().cmp_le(tolerance);
-        }
+        // If y=0 within tolerance, we're done.
+        let stop = y.abs().cmp_le(tolerance);
 
         if stop.all() {
+            // println!("Converged in {} iterations", _i);
             return Ok(x);
         }
 
-        x = stop.select(x, x - delta);
+        // We compute this speculatively. If y_prime is 0, this yields +/- Inf.
+        // SIMD handles Inf correctly (non-trapping), so we don't need to branch.
+        let x_newton = x - (y / y_prime);
 
-        if let Some((min, max)) = bounds {
-            x = x.clamp(min, max);
-        }
+        let next_x = if let Some((ref mut min, ref mut max)) = bounds {
+            // Update Bounds, "Shrink-wrap" logic
+            let is_negative = y.is_negative();
+
+            // Optimization: These selects are independent and pipeline well
+            *min = x.cmp_gt(*min).bitand(is_negative).select(x, *min);
+            *max = x.cmp_lt(*max).bitandnot(is_negative).select(x, *max); // x.cmp_lt(*max) & !is_negative
+
+            let x_bisection = (*min + *max) * V::HALF; // Midpoint Calculation
+
+            // Hybrid Logic, If x_newton is Inf, NaN, or Overshot, "inside_bounds" is False.
+            // This implicitly handles the "derivative is zero" case.
+            let inside_bounds = x_newton.cmp_gt(*min) & x_newton.cmp_lt(*max);
+
+            // If Newton behaved, keep it. If it exploded, use Bisection.
+            inside_bounds.select(x_newton, x_bisection)
+        } else {
+            // No bounds provided? We must trust Newton, even if it explodes.
+            x_newton
+        };
+
+        x = stop.select(x, next_x);
     }
 
     Err(x)
