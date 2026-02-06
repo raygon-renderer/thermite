@@ -185,7 +185,6 @@ impl_consts!(
     FRAC_1_6
 );
 
-use crate::register::FloatElement;
 use crate::{Vector, register::FloatRegister};
 use core::f32::consts as f32c;
 use core::f64::consts as f64c;

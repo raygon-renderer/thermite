@@ -1,18 +1,15 @@
 #![allow(missing_docs, clippy::missing_safety_doc)]
 #![deny(unconditional_recursion)] // just in case we miss one
 
-use core::ops::{
-    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, Index, Mul, Neg, Not, Rem,
-    Shl, ShlAssign, Shr, ShrAssign, Sub,
-};
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 pub mod ops;
 
 use bitvec::{array::BitArray, view::BitViewSized};
-use generic_array::{GenericArray, typenum};
+use generic_array::GenericArray;
 
 use crate::{
-    BranchfreeDivider, Divider, Mask, Swizzle, Vector,
+    BranchfreeDivider, Divider, Mask, Vector,
     divider::{Denominator, vector::VectorDivider},
     isa::InstructionSet,
     math::FloatConsts,

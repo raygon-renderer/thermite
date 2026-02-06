@@ -125,7 +125,6 @@ use num_traits::{MulAdd, MulAddAssign, SaturatingAdd, SaturatingSub};
 
 use crate::{
     Mask, Vector,
-    generic::GenericVector,
     register::{BitshiftRegister, BitwiseRegister, FloatRegister, NumericRegister, Register, SignedRegister},
 };
 

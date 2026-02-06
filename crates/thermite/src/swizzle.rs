@@ -1,11 +1,7 @@
-use generic_array::{
-    ArrayLength, GenericArray,
-    typenum::{self, Unsigned},
-};
+use generic_array::{ArrayLength, GenericArray};
 
 use crate::{
     Vector,
-    mask::Mask,
     register::{Register, SwizzleRegister},
 };
 

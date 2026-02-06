@@ -6,16 +6,14 @@ use generic_array::{
     ArrayLength,
     typenum::{U1, U2, U4, U8, U16},
 };
-use num_traits::Signed;
 
 use crate::{
     Vector,
     isa::InstructionSet,
     register::{
-        BitCastRegister, CastMaskRegister, CastRegister, FloatRegister, FullyInteroperable, IntegerRegister, Lanes,
-        LinAlg4Register, NarrowRegister, Register, SignedIntegerRegister, SignedRegister, UnsignedIntegerRegister,
-        WidenRegister,
-        element::{FloatElementWithBits, IntegerElement},
+        CastRegister, FloatRegister, FullyInteroperable, Lanes, LinAlg4Register, NarrowRegister, SignedIntegerRegister,
+        UnsignedIntegerRegister, WidenRegister,
+        element::FloatElementWithBits,
         well_formed::{WellFormedFloatElement, WellFormedSignedIntegerElement, WellFormedUnsignedIntegerElement},
     },
 };
@@ -462,7 +460,7 @@ macro_rules! decl_aliases {
 }
 
 use crate::generic::{
-    BitCastVector, CastVector, FloatVectorWithRegister, LinAlg4Vector, SignedIntegerVectorWithRegister,
+    CastVector, FloatVectorWithRegister, LinAlg4Vector, SignedIntegerVectorWithRegister,
     UnsignedIntegerVectorWithRegister,
 };
 

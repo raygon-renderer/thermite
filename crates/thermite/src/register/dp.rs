@@ -5,7 +5,7 @@
 use crate::{
     divider::vector::VectorDivider,
     isa::InstructionSet,
-    register::{Element, LinAlg4Register, SignedIntegerRegister, ValidLinAlg3Length},
+    register::{LinAlg4Register, SignedIntegerRegister, ValidLinAlg3Length},
 };
 
 use super::{
@@ -15,7 +15,7 @@ use super::{
 };
 
 use generic_array::{
-    ArrayLength, GenericArray,
+    GenericArray,
     typenum::{self, Unsigned},
 };
 
@@ -338,7 +338,7 @@ where
     // to actually mask here, due to the lane swapping, so
     // we just let the default impls handle it.
     #[skip_masked]
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
         Self(R::reverse(value.1), R::reverse(value.0))
     }
 

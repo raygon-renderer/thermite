@@ -862,7 +862,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     }
 
     #[skip_masked]
-    fn rolv_c(mask: Storage<Self::Mask>, value: Storage<Self>, mut shifts: Storage<Self::USize>) -> Storage<Self> {
+    fn rolv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
         // zero out the shifts where the mask is not set
         let mask = <<Self::USize as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
         Self::rolv(value, <Self::USize as CoreRegister>::z(mask, shifts))
@@ -880,7 +880,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     }
 
     #[skip_masked]
-    fn rorv_c(mask: Storage<Self::Mask>, value: Storage<Self>, mut shifts: Storage<Self::USize>) -> Storage<Self> {
+    fn rorv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
         let mask = <<Self::USize as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
         Self::rorv(value, <Self::USize as CoreRegister>::z(mask, shifts))
     }
@@ -1138,7 +1138,7 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
 
     /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
     #[skip_masked]
-    fn select_negative(mut value: Storage<Self>, falsy: Storage<Self>, truthy: Storage<Self>) -> Storage<Self> {
+    fn select_negative(value: Storage<Self>, falsy: Storage<Self>, truthy: Storage<Self>) -> Storage<Self> {
         // no matter the element type, float or integer, MSB is the sign bit
         Self::blendv(Self::msb_to_mask(value), falsy, truthy)
     }

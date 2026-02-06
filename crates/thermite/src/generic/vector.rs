@@ -1,3 +1,5 @@
+use core::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
+
 use super::*;
 
 use crate::{
@@ -137,7 +139,7 @@ impl<R: Register> GenericVector for Vector<R> {
     #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
 
     #[skip_masked] fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
-        let mut arr = self.as_mut_slice();
+        let arr = self.as_mut_slice();
         arr[idx] = value;
         self
     }

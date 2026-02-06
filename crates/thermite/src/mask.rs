@@ -8,11 +8,7 @@
 
 use crate::{
     Vector,
-    register::{
-        BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, Element, FloatRegister,
-        IntegerRegister, Lanes, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
-        Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-    },
+    register::{BitwiseRegister, CastMaskRegister, Lanes, MaskRegister, NumericRegister, Register, Storage},
 };
 
 /// SIMD Mask Vector, where each lane is a boolean value represented by
@@ -53,10 +49,7 @@ const _: () = {
     }
 };
 
-use generic_array::{
-    GenericArray,
-    typenum::{Unsigned, bit},
-};
+use generic_array::{GenericArray, typenum::Unsigned};
 
 impl<R: Register> const_default::ConstDefault for Mask<R> {
     const DEFAULT: Self = Self::FALSY;
@@ -211,6 +204,7 @@ where
     }
 }
 
+use crate::generic::ops::{BitAndNot, BitAndNotAssign};
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 impl<R: Register> BitAnd for Mask<R> {
@@ -226,6 +220,24 @@ impl<R: Register> BitAndAssign for Mask<R> {
     #[inline(always)]
     fn bitand_assign(&mut self, rhs: Self) {
         self.0 = <R::Mask as BitwiseRegister>::bitand(self.0, rhs.0);
+    }
+}
+
+impl<R: Register> BitAndNot for Mask<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn bitandnot(self, rhs: Self) -> Self::Output {
+        // exposed logic is reversed from register operation
+        Self(<R::Mask as BitwiseRegister>::bitandnot(rhs.0, self.0))
+    }
+}
+
+impl<R: Register> BitAndNotAssign for Mask<R> {
+    #[inline(always)]
+    fn bitandnot_assign(&mut self, rhs: Self) {
+        // exposed logic is reversed from register operation
+        self.0 = <R::Mask as BitwiseRegister>::bitandnot(rhs.0, self.0);
     }
 }
 

@@ -86,7 +86,7 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let m_doc = format!("Computes [`{name}`](Self::{name}) when `mask` is true, returns `{this}` where false.");
             new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                #(#doc)* #[doc = #m_doc] #[inline(always)] #sig_c {
+                #(#doc)* #[doc = #m_doc] #[inline(always)] #[allow(unused)] #sig_c {
                     Self::blendv(mask, #this, #call)
                 }
             }));
@@ -100,7 +100,7 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let m_doc = format!("Merges [`{name}`](Self::{name}) with `src` using `mask`.");
         new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_m.span() =>
-            #(#doc)* #[doc = #m_doc] #[inline(always)] #sig_m {
+            #(#doc)* #[doc = #m_doc] #[inline(always)] #[allow(unused)] #sig_m {
                 Self::blendv(mask, src, #call)
             }
         }));
@@ -112,7 +112,7 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
         new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_z.span() =>
-            #(#doc)* #[doc = #z_doc] #[inline(always)] #sig_z {
+            #(#doc)* #[doc = #z_doc] #[inline(always)] #[allow(unused)] #sig_z {
                 Self::blendv(mask, Self::EMPTY, #call)
             }
         }));
@@ -181,9 +181,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let c_name = &sig_c.ident;
 
                 new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                    #(#doc)*
-                    #[inline(always)]
-                    #sig_c {
+                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
                         #unsafety { DoublePumpRegister(
                             #reg_ty::#c_name #turbo(#c0),
                             #reg_ty::#c_name #turbo(#c1)
@@ -202,9 +200,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let m_name = &sig_m.ident;
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-                #(#doc)*
-                #[inline(always)]
-                #sig_m {
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
                     #unsafety { DoublePumpRegister(
                         #reg_ty::#m_name #turbo(#m0),
                         #reg_ty::#m_name #turbo(#m1)
@@ -221,9 +217,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let z_name = &sig_z.ident;
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-                #(#doc)*
-                #[inline(always)]
-                #sig_z {
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
                     #unsafety { DoublePumpRegister(
                         #reg_ty::#z_name #turbo(#z0),
                         #reg_ty::#z_name #turbo(#z1)
@@ -266,7 +260,7 @@ pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let z_doc = format!("Computes [`{name}`](Self::{name}) zero-masked using bitwise AND.");
         new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
             #(#doc)* #[doc = #z_doc]
-            #[inline(always)]
+            #[inline(always)] #[allow(unused)]
             #sig_z { Self::bitand(mask, #unsafety { Self::#name #turbo(#(#arg_names),*) }) }
         }));
     }
@@ -401,7 +395,7 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let c_name = &sig_c.ident;
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                #(#doc)* #[inline(always)] #sig_c {
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
                     Vector(#unsafety { #reg_ty::#c_name #turbo(mask.0, #args) })
                 }
             }));
@@ -419,7 +413,7 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let m_name = &sig_m.ident;
 
         new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-            #(#doc)* #[inline(always)] #sig_m {
+            #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
                 Vector(#unsafety { #reg_ty::#m_name #turbo(src.0, mask.0, #args) })
             }
         }));
@@ -435,7 +429,7 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let z_name = &sig_z.ident;
 
         new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-            #(#doc)* #[inline(always)] #sig_z {
+            #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
                 Vector(#unsafety { #reg_ty::#z_name #turbo(mask.0, #args) })
             }
         }));

@@ -1,9 +1,6 @@
 use std::ops::BitAnd as _;
 
-use crate::{
-    generic::{GenericMask as _, ops::BitAndNot as _},
-    math::policy::PrecisionPolicy,
-};
+use crate::generic::{GenericMask as _, ops::BitAndNot as _};
 
 use super::*;
 
@@ -192,7 +189,7 @@ where
 ///
 /// The end result is returned.
 #[inline(always)]
-pub fn reduce_array<V: Copy, const N: usize, F>(mut values: [V; N], mut op: F) -> V
+pub fn reduce_array<V: Copy, const N: usize, F>(mut values: [V; N], op: F) -> V
 where
     F: FnMut(V, V) -> V,
 {

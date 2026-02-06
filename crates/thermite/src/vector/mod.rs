@@ -1,6 +1,10 @@
 #![warn(missing_docs, clippy::missing_safety_doc)]
 
-//! Vector type and operations, where each vector wraps a low-level SIMD register type.
+//! Vector type wrapping low-level registers with a vector-like interface.
+//!
+//! Most vector features are provided by the [`GenericVector`](crate::generic) traits,
+//! but this is the underlying type that most vectors are based on, using low-level
+//! registers for various architectures.
 
 use crate::{
     divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
@@ -1291,7 +1295,7 @@ impl_unsigned_pow!(u8, u16, u32, u64, usize);
 #[cfg(feature = "rand")]
 const _: () = {
     use generic_array::sequence::GenericSequence;
-    use rand::{Fill, Rng, distr::Distribution};
+    use rand::{Fill, distr::Distribution};
 
     impl<R: Register> Distribution<Vector<R>> for rand::distr::Uniform<R::Element>
     where
