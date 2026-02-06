@@ -6,7 +6,7 @@ use thermite::{
     },
 };
 
-use crate::{Bounds, Point, Vector};
+use super::{Bounds, Point, Vector};
 
 pub struct Ray<V: FloatVector, const N: usize> {
     pub origin: Point<V, N>,

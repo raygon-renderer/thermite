@@ -2,7 +2,7 @@ use core::ops::{BitOr, BitOrAssign, Mul, MulAssign};
 
 use thermite::generic::FloatVector;
 
-use crate::{Point, Vector};
+use super::{Point, Vector};
 
 /// Axis-aligned bounds in N dimensions, where each dimension has a [min, max] coordinate pair.
 #[derive(Debug, Clone, Copy, PartialEq)]

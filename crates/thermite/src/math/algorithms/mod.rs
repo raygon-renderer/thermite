@@ -1,4 +1,4 @@
-use std::ops::BitAnd as _;
+use core::ops::BitAnd as _;
 
 use crate::generic::{GenericMask as _, ops::BitAndNot as _};
 

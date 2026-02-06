@@ -1,7 +1,7 @@
 use core::ops::{Add, Index, IndexMut, Mul, Sub};
 
 use thermite::{
-    generic::FloatVector,
+    generic::{FloatVector, GenericSelectable},
     math::policy::{DefaultPolicy, Policy},
 };
 
@@ -45,6 +45,17 @@ impl<V: FloatVector, const N: usize> Vector<V, N> {
     pub fn max(mut self, other: Self) -> Self {
         for i in 0..N {
             self.0[i] = self.0[i].max(other.0[i]);
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+
+    #[inline(always)]
+    pub fn clamp(mut self, min: Self, max: Self) -> Self {
+        for i in 0..N {
+            self.0[i] = self.0[i].clamp(min.0[i], max.0[i]);
 
             unsafe { self.0[i].block_autovectorization() };
         }
@@ -108,6 +119,21 @@ impl<V: FloatVector, const N: usize> Mul<Self> for Vector<V, N> {
     fn mul(mut self, rhs: Self) -> Self::Output {
         for i in 0..N {
             self.0[i] *= rhs.0[i];
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+}
+
+impl<V: FloatVector, const N: usize> Mul<V> for Vector<V, N> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul(mut self, rhs: V) -> Self::Output {
+        for i in 0..N {
+            self.0[i] *= rhs;
 
             unsafe { self.0[i].block_autovectorization() };
         }
@@ -248,5 +274,21 @@ impl<V: SpatialMathWithPolicy, const N: usize> VectorOpsWithPolicy<V> for Vector
         }
 
         result
+    }
+}
+
+impl<V: FloatVector, const N: usize> GenericSelectable for Vector<V, N> {
+    type SelectableMask = V::Mask;
+
+    #[inline(always)]
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Self::SelectableMask: thermite::prelude::CastMask<M>,
+    {
+        use thermite::prelude::GenericMask as _;
+
+        let mask = <Self::SelectableMask as thermite::prelude::CastMask<M>>::mask_from(mask);
+
+        Vector(core::array::from_fn(|i| mask.select(t.0[i], f.0[i])))
     }
 }

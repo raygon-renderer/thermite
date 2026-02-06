@@ -2,9 +2,12 @@ use core::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
 use thermite::generic::FloatVector;
 
-use crate::Vector;
+use super::Vector;
 
 /// Column-major matrix with C columns and R rows
+///
+/// The Index trait is implemented such that `matrix[c][r]`
+/// accesses the element at column `c` and row `r`, zero-indexed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(transparent)]
 pub struct Matrix<V: FloatVector, const C: usize, const R: usize>(pub [[V; R]; C]);
