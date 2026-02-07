@@ -1,149 +1,9 @@
-/// Common trait for types that can be used as elements in SIMD registers.
-pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug {
-    /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
-    type USize: UnsignedIntegerElement<ISize = Self::ISize>;
-    /// Signed integer type to be used with operations that require signed counts, such as shifts.
-    type ISize: SignedIntegerElement<USize = Self::USize>;
-
-    const ZERO: Self;
-    const ONE: Self;
-
-    fn from_i8(value: i8) -> Self;
-    fn from_u8(value: u8) -> Self;
-    fn from_u16(value: u16) -> Self;
-}
-
-pub trait MaskElement: Sized + Copy + Default + PartialEq + core::fmt::Debug {
-    /// When used as a mask, represents "true"
-    const TRUTHY: Self;
-    /// When used as a mask, represents "false"
-    const FALSY: Self;
-
-    /// Convert the element, as a mask, to a boolean value.
-    fn to_bool(self) -> bool;
-
-    /// Create the element, as a mask, from a boolean value.
-    #[inline(always)]
-    fn from_bool(value: bool) -> Self {
-        if value { Self::TRUTHY } else { Self::FALSY }
-    }
-}
-
-pub trait SignedElement: Element + Neg<Output = Self> {
-    fn abs(self) -> Self;
-    fn signum(self) -> Self;
-}
-
-macro_rules! impl_element {
-    ($(($t:ty, $u:ty, $s:ty)),+) => {$(
-        impl MaskElement for $t {
-            const TRUTHY: Self = !0;
-            const FALSY: Self = 0;
-
-            #[inline(always)] fn to_bool(self) -> bool { self != 0 }
-        }
-
-        impl Element for $t {
-            type USize = $u;
-            type ISize = $s;
-
-            const ZERO: Self = 0;
-            const ONE: Self = 1;
-
-            #[inline(always)] fn from_i8(value: i8) -> Self { value as $t }
-            #[inline(always)] fn from_u8(value: u8) -> Self { value as $t }
-            #[inline(always)] fn from_u16(value: u16) -> Self { value as $t }
-        }
-    )+};
-
-    (F $f:ty, $u:ty, $s:ty) => {
-        impl MaskElement for $f {
-            const TRUTHY: Self = <$f>::from_bits(!0);
-            const FALSY: Self = <$f>::from_bits(0);
-
-            #[inline(always)] fn to_bool(self) -> bool { self.to_bits() != 0 }
-        }
-
-        impl SignedElement for $f {
-            #[inline(always)] fn abs(self) -> Self { <$f>::abs(self) }
-            #[inline(always)] fn signum(self) -> Self { <$f>::signum(self) }
-        }
-
-        impl Element for $f {
-            type USize = $u;
-            type ISize = $s;
-
-            const ZERO: Self = 0.0;
-            const ONE: Self = 1.0;
-
-            #[inline(always)] fn from_i8(value: i8) -> Self { value as $f }
-            #[inline(always)] fn from_u8(value: u8) -> Self { value as $f }
-            #[inline(always)] fn from_u16(value: u16) -> Self { value as $f }
-        }
-    }
-}
-
-impl_element! {
-    //(u8, u8, i8),
-    (u16, u16, i16),
-    (u32, u32, i32),
-    (u64, u64, i64),
-    //(i8, u8, i8),
-    (i16, u16, i16),
-    (i32, u32, i32),
-    (i64, u64, i64)
-    //(f32, u32, i32),
-    //(f64, u64, i64)
-}
-
-impl_element!(F f32, u32, i32);
-impl_element!(F f64, u64, i64);
-
-/// A trait for integer element types that can be used in SIMD operations.
-///
-/// This trait is implemented for all primitive integer types that also implement `Element`, and
-/// wrapping addition and multiplication.
-pub trait IntegerElement:
-    Element
-    + crate::divider::Denominator
-    + num_traits::PrimInt
-    + num_traits::WrappingAdd
-    + num_traits::WrappingMul
-    + num_traits::WrappingSub
-    + Shr<Output = Self>
-    + Shl<Output = Self>
-    + Shr<Self::USize, Output = Self>
-    + Shl<Self::USize, Output = Self>
-{
-}
-
-impl<T> IntegerElement for T where
-    T: Element
-        + crate::divider::Denominator
-        + num_traits::PrimInt
-        + num_traits::WrappingAdd
-        + num_traits::WrappingMul
-        + num_traits::WrappingSub
-        + Shr<Output = Self>
-        + Shl<Output = Self>
-        + Shr<Self::USize, Output = Self>
-        + Shl<Self::USize, Output = Self>
-{
-}
-
-pub trait SignedIntegerElement: IntegerElement<ISize = Self> + num_traits::Signed + TryInto<isize> {}
-pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + num_traits::Unsigned + TryInto<usize> {}
-
-impl<S> SignedIntegerElement for S where S: IntegerElement<ISize = S> + num_traits::Signed + TryInto<isize> {}
-impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + num_traits::Unsigned + TryInto<usize> {}
-
-use core::ops::{Neg, Shl, Shr};
+use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
-/// Notably, this trait provides scalar fallback methods for true fused multiply-add (FMA) operations,
-/// when they aren't available in the target architecture. Sometimes it's essential to have these
-/// fallbacks for correctness, given FMAs rounding behavior.
+/// This provides common scalar fallbacks, as well as float specifications for
+/// non-IEE 754 floating point formats
 pub trait FloatElement:
     SignedElement
     + crate::math::FloatConsts
@@ -188,16 +48,45 @@ pub trait FloatElement:
 
     fn next_up(value: Self) -> Self;
     fn next_down(value: Self) -> Self;
+
+    /// Does the format support Infinity?
+    /// If FALSE, overflow saturates to MAX_FINITE instead of INF.
+    /// (e.g., E4M3 = false, E5M2 = true)
+    const HAS_INFINITY: bool;
+
+    /// Does the format distinguish between +0 and -0?
+    /// (Usually true, but some integer-like quantizations might not)
+    const HAS_SIGNED_ZERO: bool;
+
+    /// Does the format support subnormal numbers?
+    /// If FALSE, any value smaller than MinNormal is flushed to zero (FTZ).
+    const HAS_SUBNORMALS: bool;
 }
 
 pub trait FloatElementWithBits: FloatElement {
     type Bits: UnsignedIntegerElement<USize = Self::Bits>;
     type Signed: SignedIntegerElement<ISize = Self::Signed>;
 
+    const EXP_BITS: u32;
+    const MANTISSA_BITS: u32;
+    const EXP_BIAS: Self::Signed;
+
+    /// The specific bit pattern for NaN.
+    /// IEEE formats have a *range* of NaNs, but E4M3 has only *one* (0x7F).
+    const NAN_PATTERN: Option<Self::Bits>;
+
+    /// If !HAS_INFINITY, what is the max finite bit pattern?
+    /// Used for clamping overflow.
+    const MAX_FINITE_PATTERN: Self::Bits;
+
+    // /// Is there an implicit leading bit (1.xxx)?
+    // /// Almost always TRUE.
+    // /// Exception: x87 80-bit float (FALSE).
+    // const IMPLICIT_LEAD_BIT: bool = true;
+
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;
-    const MANTISSA: u32;
-    const EXP_BIAS: Self::Signed;
+
     const MAX_BIASED_EXP: Self::Signed;
     const EXP_LSB_MASK: Self::Bits;
     const SIGN_MANTISSA_MASK: Self::Bits;
@@ -221,8 +110,8 @@ macro_rules! impl_float_element {
         $(const $const: $const_ty = $value;)+
 
         const FREXP_BIAS_OFFSET: Self::Signed = Self::EXP_BIAS - 1;
-        const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA) as _;
-        const MAX_U64: u64 = (1u64 << (Self::MANTISSA + 1));
+        const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA_BITS) as _;
+        const MAX_U64: u64 = (1u64 << (Self::MANTISSA_BITS + 1));
     }};
 
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
@@ -283,6 +172,10 @@ macro_rules! impl_float_element {
             fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
                 FloatElementInternal::try_from_ratio(n, d)
             }
+
+            const HAS_INFINITY: bool = true;
+            const HAS_SIGNED_ZERO: bool = true;
+            const HAS_SUBNORMALS: bool = true;
         }
 
         #[cfg(feature = "std")]
@@ -322,6 +215,10 @@ macro_rules! impl_float_element {
             fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
                 FloatElementInternal::try_from_ratio(n, d)
             }
+
+            const HAS_INFINITY: bool = true;
+            const HAS_SIGNED_ZERO: bool = true;
+            const HAS_SUBNORMALS: bool = true;
         }
 
         #[cfg(not(feature = "std"))]
@@ -354,7 +251,8 @@ macro_rules! impl_float_element {
 }
 
 impl_float_element!(f32: f => u32, i32 {
-    MANTISSA: u32 = 23;
+    EXP_BITS: u32 = 8;
+    MANTISSA_BITS: u32 = 23;
     EXP_BIAS: i32 = 127;
     MAX_BIASED_EXP: i32 = 255;
 
@@ -363,10 +261,20 @@ impl_float_element!(f32: f => u32, i32 {
 
     // Clear bits 23-30
     SIGN_MANTISSA_MASK: u32 = 0x807F_FFFF;
+
+    // Canonical Quiet NaN: Sign=0, Exp=All 1s, Mantissa=100...0
+    // (Note: IEEE 754 allows many NaN patterns; this is just the standard "default")
+    NAN_PATTERN: Option<u32> = None; //0x7FC0_0000, but we don't want to use it
+
+    // Max Finite: Sign=0, Exp=254 (0xFE), Mantissa=All 1s
+    MAX_FINITE_PATTERN: u32 = 0x7F7F_FFFF;
+
+    // IMPLICIT_LEAD_BIT: bool = true;
 });
 
 impl_float_element!(f64 => u64, i64 {
-    MANTISSA: u32 = 52;
+    EXP_BITS: u32 = 11;
+    MANTISSA_BITS: u32 = 52;
     EXP_BIAS: i64 = 1023;
     MAX_BIASED_EXP: i64 = 2047;
 
@@ -375,4 +283,21 @@ impl_float_element!(f64 => u64, i64 {
 
     // Clear bits 52-62
     SIGN_MANTISSA_MASK: u64 = 0x800F_FFFF_FFFF_FFFF;
+
+    // Canonical Quiet NaN: Sign=0, Exp=All 1s, Mantissa=100...0
+    NAN_PATTERN: Option<u64> = None; //0x7FF8_0000_0000_0000, but we don't want to use it
+
+    // Max Finite: Sign=0, Exp=2046 (0x7FE), Mantissa=All 1s
+    MAX_FINITE_PATTERN: u64 = 0x7FEF_FFFF_FFFF_FFFF;
+
+    // IMPLICIT_LEAD_BIT: bool = true;
 });
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RoundingMode {
+    NearestTiesToEven,
+    Truncate,
+
+    #[cfg(feature = "rand")]
+    Stochastic(u64),
+}

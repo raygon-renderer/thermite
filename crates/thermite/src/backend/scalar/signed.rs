@@ -279,5 +279,7 @@ impl SignedIntegerRegister for [<i $width>] {
 
 }}} // end macro
 
+decl_signed_scalar!(i8: u8: i16 => 8);
+decl_signed_scalar!(i16: u16: i32 => 16);
 decl_signed_scalar!(i32: u32: i64 => 32);
 decl_signed_scalar!(i64: u64: i128 => 64);

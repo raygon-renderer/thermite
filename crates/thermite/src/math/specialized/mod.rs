@@ -3,12 +3,12 @@
 use core::marker::PhantomData;
 
 use crate::{
+    element::{FloatElement, FloatElementWithBits},
     generic::*,
     math::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
         policy::policies::{ExtraPrecision, LessPrecision},
     },
-    register::element::{FloatElement, FloatElementWithBits},
     vector::num::NumVector,
 };
 
@@ -44,7 +44,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
         );
 
         let biased_exp =
-            Self::Signed::from_bits((bits >> <Self::Element as FloatElementWithBits>::MANTISSA) & exp_lsb_mask);
+            Self::Signed::from_bits((bits >> <Self::Element as FloatElementWithBits>::MANTISSA_BITS) & exp_lsb_mask);
 
         let mut exp = biased_exp + exp;
 
@@ -58,7 +58,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         let sign_mantissa = Self::Signed::from_bits(bits & sign_mantissa_mask);
 
-        let mut result = (exp << <Self::Element as FloatElementWithBits>::MANTISSA) | sign_mantissa;
+        let mut result = (exp << <Self::Element as FloatElementWithBits>::MANTISSA_BITS) | sign_mantissa;
 
         if const { P::POLICY.check_overflow } {
             let is_underflow = exp.is_negative();
@@ -99,7 +99,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
         );
 
         // (bits >> mantissa) & mask
-        let biased_exp = Self::Signed::from_bits((bits >> E::MANTISSA) & exp_lsb_mask);
+        let biased_exp = Self::Signed::from_bits((bits >> E::MANTISSA_BITS) & exp_lsb_mask);
 
         // subtract bias to get actual exponent
         let mut exp: Self::Signed = biased_exp - frexp_bias_offset;

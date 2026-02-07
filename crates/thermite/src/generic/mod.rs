@@ -11,9 +11,10 @@ use generic_array::GenericArray;
 use crate::{
     BranchfreeDivider, Divider, Mask, Vector,
     divider::{Denominator, vector::VectorDivider},
+    element::FloatElementWithBits,
     isa::InstructionSet,
     math::FloatConsts,
-    register::{CastMaskRegister, Element, FloatElement, Lanes, element::FloatElementWithBits},
+    register::{CastMaskRegister, Element, FloatElement, Lanes},
 };
 
 /// Simple associated constant splat trait.

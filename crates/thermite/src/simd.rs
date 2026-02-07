@@ -9,11 +9,11 @@ use generic_array::{
 
 use crate::{
     Vector,
+    element::FloatElementWithBits,
     isa::InstructionSet,
     register::{
         CastRegister, FloatRegister, FullyInteroperable, Lanes, LinAlg4Register, NarrowRegister, SignedIntegerRegister,
         UnsignedIntegerRegister, WidenRegister,
-        element::FloatElementWithBits,
         well_formed::{WellFormedFloatElement, WellFormedSignedIntegerElement, WellFormedUnsignedIntegerElement},
     },
 };

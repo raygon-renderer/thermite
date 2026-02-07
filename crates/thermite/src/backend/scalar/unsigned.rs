@@ -266,5 +266,7 @@ impl UnsignedIntegerRegister for [<u $width>] {
 
 }}} // end macro
 
+decl_unsigned_scalar!(u8: u16 => 8);
+decl_unsigned_scalar!(u16: u32 => 16);
 decl_unsigned_scalar!(u32: u64 => 32);
 decl_unsigned_scalar!(u64: u128 => 64);

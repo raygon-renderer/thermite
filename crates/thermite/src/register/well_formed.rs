@@ -1,4 +1,4 @@
-use crate::register::element::FloatElementWithBits;
+use crate::element::FloatElementWithBits;
 
 use super::*;
 

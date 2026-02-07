@@ -11,11 +11,10 @@ macro_rules! s {
 }
 
 pub mod dp;
-pub mod element;
 pub mod linalg;
 pub mod well_formed;
 
-pub use element::{Element, FloatElement, MaskElement};
+pub use crate::element::{Element, FloatElement, MaskElement};
 pub use linalg::{LinAlg3Register, LinAlg4Register, ValidLinAlg3Length};
 
 use generic_array::{
@@ -25,9 +24,9 @@ use generic_array::{
 
 use crate::{
     divider::{BranchfreeDivider, Divider, vector::VectorDivider},
+    element::{FloatElementWithBits, IntegerElement},
     generic::ops::MulAddExt,
     isa::InstructionSet,
-    register::element::{FloatElementWithBits, IntegerElement},
 };
 
 /// Helper type alias for double-pumped vectors.
@@ -1243,22 +1242,46 @@ pub trait FloatRegister:
 
     #[skip_masked]
     fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {
+        if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
+            // If the type has a specific NaN pattern, we can check for that directly.
+            let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
+
+            // This will also imply that comparing values is similar to comparing integers,
+            // and it won't trigger a false positive.
+            return Self::eq(value, nan);
+        }
+
         // easiest way to check for NaN is to check if it's not equal to itself
         Self::ne(value, value)
     }
 
     #[skip_masked]
     fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
+            // If the type doesn't support infinity, then there are no infinite values.
+            return Self::Mask::FALSY;
+        }
+
         Self::eq(Self::abs(value), Self::INFINITY)
     }
 
     #[skip_masked]
     fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
+            // If the type doesn't support infinity, then all values are finite.
+            return Self::Mask::TRUTHY;
+        }
+
         Self::lt(Self::abs(value), Self::INFINITY)
     }
 
     #[skip_masked]
     fn is_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
+            // If the type doesn't support subnormals, then there are no subnormal values.
+            return Self::Mask::FALSY;
+        }
+
         // we're operating in the integer domain here
         let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
 
@@ -1282,6 +1305,11 @@ pub trait FloatRegister:
 
     #[skip_masked]
     fn is_zero_or_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
+            // If the type doesn't support subnormals, then there are no subnormal values.
+            return Self::eq(value, Self::ZERO);
+        }
+
         // we're operating in the integer domain here
         let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
 
@@ -1301,8 +1329,22 @@ pub trait FloatRegister:
         // "normal" is defined as not zero/subnormal, not infinite, and not NaN
         let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
 
+        // exp = 0 implies zero or subnormal
         let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
-        let exp_is_max = Self::Bits::eq(exp, Self::EXP_MASK);
+
+        let exp_is_max: Storage<<Self::Bits as CoreRegister>::Mask> =
+            if const { <Self::Element as FloatElement>::HAS_INFINITY } {
+                Self::Bits::eq(exp, Self::EXP_MASK) // exp is max implies infinity or NaN
+            } else if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
+                let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
+
+                // if NaN is represented by a specific pattern
+                <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(Self::eq(value, nan))
+            } else {
+                // If the type doesn't support infinity, then it also doesn't have a max exponent pattern.
+                // This value should be optimized out of the bitor below
+                <<Self::Bits as CoreRegister>::Mask as MaskRegister>::FALSY
+            };
 
         // normal if exp != 0 && exp != max, so 0 < exp < max is the normal range
         let is_not_normal = <Self::Bits as CoreRegister>::Mask::bitor(exp_is_max, exp_is_zero);

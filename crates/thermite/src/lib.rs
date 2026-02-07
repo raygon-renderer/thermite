@@ -122,6 +122,7 @@ pub mod vector;
 pub mod backend;
 // pub mod batch;
 pub mod divider;
+pub mod element;
 pub mod generic;
 pub mod mask;
 pub mod math;
