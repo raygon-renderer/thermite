@@ -7,9 +7,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, IntegerRegister, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg, MaskElement,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, IntegerRegister, MaskElement,
+        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage,
+        SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -174,6 +174,17 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
+    unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        // use load_z + 2 bitwise ops to emulate load_m without blendv or scalar fallbacks
+        unsafe { Self::bitor(Self::load_z(mask, ptr), Self::bitandnot(mask, src)) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { arch::_mm256_maskload_epi32(ptr as *const _, mask) }
+    }
+
+    #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_loadu_si256(ptr as *const _) }
     }
@@ -196,6 +207,30 @@ impl Register for U32x8V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm256_stream_si256(ptr as _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
+        unsafe { arch::_mm256_i32gather_epi32::<4>(ptr as *const _, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm256_mask_i32gather_epi32::<4>(src, ptr as *const _, indices, mask) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm256_mask_i32gather_epi32::<4>(Self::ZERO, ptr as *const _, indices, mask) }
     }
 
     #[inline(always)]

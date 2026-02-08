@@ -317,6 +317,59 @@ where
         }
     }
 
+    // NOTE: For gather/scatter, we do NOT add the lane offset to the pointer,
+    // since all indices are relative to that pointer, regardless of lane.
+
+    #[skip_masked]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
+        unsafe { Self(R::gather(ptr, indices.0), R::gather(ptr, indices.1)) }
+    }
+
+    #[skip_masked]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe {
+            Self(
+                R::gather_m(src.0, mask.0, ptr, indices.0),
+                R::gather_m(src.1, mask.1, ptr, indices.1),
+            )
+        }
+    }
+
+    #[skip_masked]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { Self(R::gather_z(mask.0, ptr, indices.0), R::gather_z(mask.1, ptr, indices.1)) }
+    }
+
+    #[skip_masked]
+    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<Self::USize>) {
+        unsafe {
+            R::scatter(value.0, ptr, indices.0);
+            R::scatter(value.1, ptr, indices.1);
+        }
+    }
+
+    #[skip_masked]
+    unsafe fn scatter_m(
+        value: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *mut Self::Element,
+        indices: Storage<Self::USize>,
+    ) {
+        unsafe {
+            R::scatter_m(value.0, mask.0, ptr, indices.0);
+            R::scatter_m(value.1, mask.1, ptr, indices.1);
+        }
+    }
+
     fn fold<F>(first: Self::Element, value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,

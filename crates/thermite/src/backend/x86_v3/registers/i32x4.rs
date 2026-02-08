@@ -196,6 +196,17 @@ impl Register for I32x4V3 {
     }
 
     #[inline(always)]
+    unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        // use load_z + 2 bitwise ops to emulate load_m without blendv or scalar fallbacks
+        unsafe { Self::bitor(Self::load_z(mask, ptr), Self::bitandnot(mask, src)) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { arch::_mm_maskload_epi32(ptr, mask) }
+    }
+
+    #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_loadu_si128(ptr as *const _) }
     }
@@ -223,6 +234,30 @@ impl Register for I32x4V3 {
     #[inline(always)]
     fn reverse(mut value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
+        unsafe { arch::_mm_i32gather_epi32::<4>(ptr as *const _, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i32gather_epi32::<4>(src, ptr as *const _, indices, mask) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i32gather_epi32::<4>(Self::ZERO, ptr as *const _, indices, mask) }
     }
 
     const HAS_SIMPLE_UNPACK: bool = true;

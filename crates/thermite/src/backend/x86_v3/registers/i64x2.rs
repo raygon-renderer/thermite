@@ -197,6 +197,17 @@ impl Register for I64x2V3 {
     }
 
     #[inline(always)]
+    unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        // use load_z + 2 bitwise ops to emulate load_m without blendv or scalar fallbacks
+        unsafe { Self::bitor(Self::load_z(mask, ptr), Self::bitandnot(mask, src)) }
+    }
+
+    #[inline(always)]
+    unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { arch::_mm_maskload_epi64(ptr, mask) }
+    }
+
+    #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_loadu_si128(ptr as *const _) }
     }
@@ -219,6 +230,30 @@ impl Register for I64x2V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
+        unsafe { arch::_mm_i64gather_epi64::<8>(ptr as *const _, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i64gather_epi64::<8>(src, ptr as *const _, indices, mask) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i64gather_epi64::<8>(Self::ZERO, ptr as *const _, indices, mask) }
     }
 
     #[inline(always)]

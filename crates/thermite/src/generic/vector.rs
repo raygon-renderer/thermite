@@ -167,12 +167,39 @@ impl<R: Register> GenericVector for Vector<R> {
 
     #[skip_masked] fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
 
-    #[skip_masked] unsafe fn load(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load(ptr) } }
-    #[skip_masked] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load_unaligned(ptr) } }
-    #[skip_masked] unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector::<R>::load_streaming(ptr) } }
-    #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store(self, ptr) } }
-    #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_unaligned(self, ptr) } }
-    #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { Vector::<R>::store_streaming(self, ptr) } }
+    unsafe fn load(ptr: *const Self::Element) -> Self {}
+
+    #[skip_masked] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_unaligned(ptr)) } }
+    #[skip_masked] unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_stream(ptr)) } }
+
+    #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element) { unsafe { R::store(ptr, self.0) } }
+    #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
+    #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
+
+    #[skip_masked]
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::USize) -> Self {
+        unsafe { Vector(R::gather(ptr, indices.0)) }
+    }
+
+    #[skip_masked]
+    unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: Self::USize) -> Self {
+        unsafe { Vector(R::gather_m(src.0, mask.0, ptr, indices.0)) }
+    }
+
+    #[skip_masked]
+    unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: Self::USize) -> Self {
+        unsafe { Vector(R::gather_z(mask.0, ptr, indices.0)) }
+    }
+
+    #[skip_masked]
+    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::USize) {
+        unsafe { R::scatter(self.0, ptr, indices.0) };
+    }
+
+    #[skip_masked]
+    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::USize) {
+        unsafe { R::scatter_m(self.0, mask.0, ptr, indices.0) };
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]

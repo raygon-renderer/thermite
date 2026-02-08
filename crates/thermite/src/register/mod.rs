@@ -368,6 +368,7 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
+    #[skip_masked]
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
         // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
         unsafe { core::ptr::read(ptr as *const Storage<Self>) }
@@ -375,8 +376,40 @@ pub trait Register:
 
     /// # SAFETY
     ///
+    /// The pointer must be valid, aligned, and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
+    #[skip_masked]
+    unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        unsafe {
+            let mut result = src;
+            let res = Self::as_array_mut(&mut result);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                res[i] = ptr.add(i).read();
+            }
+
+            result
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and point to a memory location
+    /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
+    #[skip_masked]
+    unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { Self::load_m(Self::EMPTY, mask, ptr) }
+    }
+
+    /// # SAFETY
+    ///
     /// The pointer must be valid and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
+    #[skip_masked]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         // SAFETY: This is safe as long as the pointer is valid and of the correct length.
         unsafe { core::ptr::read_unaligned(ptr as *const Storage<Self>) }
@@ -386,10 +419,132 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
+    #[skip_masked]
     unsafe fn load_stream(ptr: *const Self::Element) -> Storage<Self> {
         // Default to regular load if streaming loads are not supported.
         unsafe { Self::load(ptr) }
     }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[skip_masked]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let mut result = Self::EMPTY;
+
+            let res = Self::as_array_mut(&mut result);
+            let indices = <Self::USize as Register>::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
+
+                res[i] = ptr.add(idx).read();
+            }
+
+            result
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[skip_masked]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let mut result = src;
+
+            let res = Self::as_array_mut(&mut result);
+            let src = Self::as_array(&src);
+            let indices = <Self::USize as Register>::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
+
+                res[i] = ptr.add(idx).read();
+            }
+
+            result
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[skip_masked]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<Self::USize>,
+    ) -> Storage<Self> {
+        unsafe { Self::gather_m(Self::EMPTY, mask, ptr, indices) }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely written to based on the register's requirements.
+    #[skip_masked]
+    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<Self::USize>) {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let value = Self::as_array(&value);
+            let indices = <Self::USize as Register>::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
+                ptr.add(idx).write(value[i]);
+            }
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely written to based on the register's requirements.
+    #[skip_masked]
+    unsafe fn scatter_m(
+        value: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *mut Self::Element,
+        indices: Storage<Self::USize>,
+    ) {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let value = Self::as_array(&value);
+            let indices = <Self::USize as Register>::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
+                ptr.add(idx).write(value[i]);
+            }
+        }
+    }
+
+    // TODO: Masked stores? Would have to fallback to scalar on all but AVX-512,
+    // but could still be useful for some patterns.
 
     /// # SAFETY
     ///

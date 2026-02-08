@@ -94,7 +94,9 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         // --- Masked (_m) variant ---
         let mut sig_m = method.sig.clone();
-        sig_m.ident = format_ident!("{}_m", name);
+        let m_name = format_ident!("{}_m", name);
+
+        sig_m.ident = m_name.clone();
         sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
         sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
 
@@ -106,6 +108,8 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }));
 
         // --- Zeroed (_z) variant ---
+        // For this, the default behavior should actually be to call the _m variant with EMPTY,
+        // since the _m variant may have better defaults on older platforms.
         let mut sig_z = method.sig.clone();
         sig_z.ident = format_ident!("{}_z", name);
         sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
@@ -113,7 +117,7 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
         new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_z.span() =>
             #(#doc)* #[doc = #z_doc] #[inline(always)] #[allow(unused)] #sig_z {
-                Self::blendv(mask, Self::EMPTY, #call)
+                #unsafety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
             }
         }));
     }
@@ -296,11 +300,20 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let doc = get_doc_attrs(&method.attrs);
 
+        // 1 if method has a self receiver, 0 otherwise.
+        // We want to insert new arguments after the self receiver if it exists.
+        let insert_idx = method
+            .sig
+            .inputs
+            .first()
+            .map(|arg| matches!(arg, FnArg::Receiver(_)))
+            .unwrap_or(false) as usize;
+
         if conditional {
             // --- Conditional (_c) variant ---
             let mut sig_c = method.sig.clone();
             sig_c.ident = format_ident!("{}_c", name);
-            sig_c.inputs.insert(1, parse_quote!(mask: Self::Mask));
+            sig_c.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
 
             let m_doc = format!("Computes [`{name}`](Self::{name}) when `mask` is true, returns `self` where false.");
             new_items.push(TraitItem::Fn(
@@ -312,8 +325,8 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // signature: fn method_m(self, src: Storage<Self>, mask: Storage<Self::Mask>, ...)
         let mut sig_m = method.sig.clone();
         sig_m.ident = format_ident!("{}_m", name);
-        sig_m.inputs.insert(1, parse_quote!(mask: Self::Mask));
-        sig_m.inputs.insert(1, parse_quote!(src: Self));
+        sig_m.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
+        sig_m.inputs.insert(insert_idx, parse_quote!(src: Self));
 
         let m_doc = format!("Merges [`{name}`](Self::{name}) with `src` using `mask`.");
         new_items.push(TraitItem::Fn(
@@ -324,7 +337,7 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // signature: fn method_z(self, mask: Storage<Self::Mask>, ...)
         let mut sig_z = method.sig.clone();
         sig_z.ident = format_ident!("{}_z", name);
-        sig_z.inputs.insert(1, parse_quote!(mask: Self::Mask));
+        sig_z.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
 
         let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
         new_items.push(TraitItem::Fn(
@@ -383,6 +396,13 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let doc = get_doc_attrs(&method.attrs);
 
+        let insert_idx = method
+            .sig
+            .inputs
+            .first()
+            .map(|arg| matches!(arg, FnArg::Receiver(_)))
+            .unwrap_or(false) as usize;
+
         if with_conditional {
             // --- Generate _c ---
             let mut sig_c = method.sig.clone();
@@ -390,7 +410,7 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             let args = args_for_vector_call(&sig_c.inputs);
 
-            sig_c.inputs.insert(1, parse_quote!(mask: Mask<#reg_ty>));
+            sig_c.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
 
             let c_name = &sig_c.ident;
 
@@ -407,8 +427,8 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let args = args_for_vector_call(&sig_m.inputs);
 
-        sig_m.inputs.insert(1, parse_quote!(mask: Mask<#reg_ty>));
-        sig_m.inputs.insert(1, parse_quote!(src: Self));
+        sig_m.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
+        sig_m.inputs.insert(insert_idx, parse_quote!(src: Self));
 
         let m_name = &sig_m.ident;
 
@@ -424,7 +444,7 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let args = args_for_vector_call(&sig_z.inputs);
 
-        sig_z.inputs.insert(1, parse_quote!(mask: Mask<#reg_ty>));
+        sig_z.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
 
         let z_name = &sig_z.ident;
 

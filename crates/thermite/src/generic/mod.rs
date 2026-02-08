@@ -11,7 +11,7 @@ use generic_array::GenericArray;
 use crate::{
     BranchfreeDivider, Divider, Mask, Vector,
     divider::{Denominator, vector::VectorDivider},
-    element::FloatElementWithBits,
+    element::{FloatElementWithBits, UnsignedIntegerElement},
     isa::InstructionSet,
     math::FloatConsts,
     register::{CastMaskRegister, Element, FloatElement, Lanes},
@@ -149,6 +149,20 @@ where
 {
 }
 
+/// Internal helpers for generic vectors.
+trait GenericVectorExt: GenericVector {
+    #[inline(always)]
+    fn len_to_indices(len: usize) -> Self::USize {
+        let Ok(len) = <<Self::USize as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
+            panic!("Length {} exceeds maximum supported index for this vector type", len);
+        };
+
+        Self::USize::splat(len)
+    }
+}
+
+impl<V: GenericVector> GenericVectorExt for V {}
+
 /// Core trait for generic vector types.
 ///
 /// Provides the basis for further specialized vector traits.
@@ -219,13 +233,138 @@ pub trait GenericVector:
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
     #[skip_masked] fn single(value: Self::Element) -> Self;
 
-    #[skip_masked] unsafe fn load(ptr: *const Self::Element) -> Self;
+    /// Create a new vector from a slice of elements. The slice must have at least as many elements as the vector's lanes.
+    ///
+    /// This will emit an unaligned load.
+    ///
+    /// If you're looking for masked variants of this, those typically only exist for aligned inputs,
+    /// so you'll need an aligned pointer and use [`load_m`](Self::load_m) or [`load_z`](Self::load_z).
+    #[skip_masked]
+    fn from_slice(slice: &[Self::Element]) -> Self {
+        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to create a vector", Self::LANES);
+
+        unsafe { Self::load_unaligned(slice.as_ptr()) }
+    }
+
+    /// Copy the elements of the vector into a slice. The slice must have at least as many elements as the vector's lanes.
+    ///
+    /// This will emit an unaligned store.
+    #[skip_masked]
+    fn copy_to_slice(self, slice: &mut [Self::Element]) {
+        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to copy from a vector", Self::LANES);
+
+        unsafe { self.store_unaligned(slice.as_mut_ptr()) }
+    }
+
+    /// Gather elements from memory at the specified indices and return a new vector with those elements.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If any index is out of bounds for the slice length, or the slice length exceeds
+    /// the maximum supported index for this vector type.
+    #[skip_masked]
+    fn gather(slice: &[Self::Element], indices: Self::USize) -> Self {
+        if indices.cmp_lt(Self::len_to_indices(slice.len())).all() {
+            unsafe { Self::gather_ptr(slice.as_ptr(), indices) }
+        } else {
+            panic!("One or more indices are out of bounds for the slice length {}", slice.len());
+        }
+    }
+
+    /// Gather elements from memory at the specified indices, or return `or` if the index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    #[skip_masked]
+    fn gather_or(slice: &[Self::Element], indices: Self::USize, or: Self) -> Self {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+
+        unsafe { Self::gather_ptr_m(or, in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Gather elements from memory at the specified indices, or set the lane to zero
+    /// if the index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    #[skip_masked]
+    fn gather_or_zero(slice: &[Self::Element], indices: Self::USize) -> Self {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+
+        unsafe { Self::gather_ptr_z(in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Gather elements from memory at the specified indices, or return `or` if the `enable` mask is
+    /// `false` OR if any index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    #[skip_masked]
+    fn gather_if(slice: &[Self::Element], enable: Self::Mask, indices: Self::USize, or: Self) -> Self
+    where
+        Self::Element: Default,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+
+        unsafe { Self::gather_ptr_m(or, enable & in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Scatter elements from the given vector into memory at the specified indices. If the index is outside of the
+    /// bounds of the provided slice, the write is suppressed without panicking.
+    #[skip_masked]
+    fn scatter(self, slice: &mut [Self::Element], indices: Self::USize) {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+
+        unsafe { self.scatter_ptr_masked(in_bounds.cast(), slice.as_mut_ptr(), indices) }
+    }
+
+    /// Scatter elements from the given vector into memory at the specified indices, but only for lanes where the `enable` mask is `true`.
+    /// If the index is outside of the bounds of the provided slice, the write is suppressed without panicking.
+    #[skip_masked]
+    fn scatter_if(self, slice: &mut [Self::Element], enable: Self::Mask, indices: Self::USize) {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+
+        unsafe { self.scatter_ptr_masked(enable & in_bounds.cast(), slice.as_mut_ptr(), indices) }
+    }
+
+    unsafe fn load(ptr: *const Self::Element) -> Self;
+
     #[skip_masked] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self;
     #[skip_masked] unsafe fn load_streaming(ptr: *const Self::Element) -> Self;
 
     #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element);
     #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element);
     #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element);
+
+    /// Gather elements from memory at the specified indices and return a new vector with those elements.
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// For the masked variants, memory locations are never read from if the mask is false.
+    ///
+    /// # Safety
+    /// The caller must ensure the given memory locations given by `ptr + (size_of(Element) * index)`
+    /// are valid for reading for all indices where the mask is true.
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::USize) -> Self;
+
+    /// Scatter elements from the given vector into memory at the specified indices.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    #[skip_masked]
+    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::USize);
+
+    /// Scatter elements from the given vector into memory at the specified indices,
+    /// but only if the corresponding lane of the mask is true.
+    ///
+    /// The provided indices are in the number of elements, not bytes.
+    #[skip_masked]
+    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::USize);
 
     /// Broadcast the value of a single lane across all lanes of the vector.
     fn broadcast<const I: usize>(self) -> Self;
