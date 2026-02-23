@@ -351,11 +351,17 @@ impl ShuffleRegister for U64x2V3 {
     }
 }
 
-// impl PermuteRegister for U64x2V3 {
-//     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-//         unsafe { arch::_mm_permute_epi64x(value, IMM8) }
-//     }
-// }
+impl SwizzleRegister for U64x2V3 {
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
+            let idxs = arch::_mm_cvtepu32_epi64(idxs);
+            arch::_mm_permutevarx_epi64x_v2(value, idxs)
+        }
+    }
+}
 
 impl PartialOrdRegister for U64x2V3 {
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

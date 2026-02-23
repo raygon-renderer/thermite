@@ -262,6 +262,9 @@ where
 {
 }
 
+pub trait SwizzleVector: GenericVector + crate::swizzle::Swizzle<Self::Lanes> {}
+impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::Lanes> {}
+
 /// Core trait for generic vector types.
 ///
 /// Provides the basis for further specialized vector traits.
@@ -367,6 +370,34 @@ pub trait GenericVector:
         Self: ExtendVector<INTO, Element = INTO::Element>,
     {
         <Self as Extend<INTO>>::narrow(self)
+    }
+
+    /// Align a slice of elements to the vector's lane count, returning the aligned portion and any unaligned head or tail.
+    ///
+    /// If the vector's size in bytes does not match the size of its elements times the lane count, this will
+    /// return the entire slice as unaligned and empty aligned/remaining parts. This is rare, but may occur
+    /// if using a generic vector type that doesn't correspond to an actual hardware vector (for example, a 3-lane vector).
+    #[inline(always)]
+    fn align_slice(slice: &[Self::Element]) -> (&[Self::Element], &[Self], &[Self::Element]) {
+        if const { size_of::<Self>() != (size_of::<Self::Element>() * Self::LANES) } {
+            return (slice, &[], &[]);
+        };
+
+        unsafe { slice.align_to() }
+    }
+
+    /// Align a mutable slice of elements to the vector's lane count, returning the aligned portion and any unaligned head or tail.
+    ///
+    /// If the vector's size in bytes does not match the size of its elements times the lane count, this will
+    /// return the entire slice as unaligned and empty aligned/remaining parts. This is rare, but may occur
+    /// if using a generic vector type that doesn't correspond to an actual hardware vector (for example, a 3-lane vector).
+    #[inline(always)]
+    fn align_slice_mut(slice: &mut [Self::Element]) -> (&mut [Self::Element], &mut [Self], &mut [Self::Element]) {
+        if const { size_of::<Self>() != (size_of::<Self::Element>() * Self::LANES) } {
+            return (slice, &mut [], &mut []);
+        };
+
+        unsafe { slice.align_to_mut() }
     }
 
     /// Create a new vector from a slice of elements. The slice must have at least as many elements as the vector's lanes.
@@ -735,11 +766,6 @@ pub trait BitshiftVector:
 
     /// For each element in the vector, reverse the bits of that element.
     #[conditional] fn reverse_bits(self) -> Self;
-}
-
-pub trait SwizzleVector: GenericVector {
-    fn swizzle(self, other: Self, indices: GenericArray<u32, Self::Lanes>) -> Self;
-    fn permute(self, indices: GenericArray<u32, Self::Lanes>) -> Self;
 }
 
 pub trait CastVector<FROM: GenericVector>: GenericVector {

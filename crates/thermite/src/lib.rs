@@ -113,6 +113,7 @@ pub mod prelude {
             FixedWidthSimd, FloatSimd, NativeIsa, NativeSimd, NativeSimdVectors, NativeSimdVectorsWithRegisters, Simd,
             Simd3A, Simd3AVectors, Simd3AVectorsWithRegisters, SimdVectors, SimdVectorsWithRegisters, SizedSimd,
         },
+        swizzle::Swizzle as _,
     };
 }
 
@@ -125,7 +126,6 @@ pub mod isa;
 pub mod vector;
 
 pub mod backend;
-// pub mod batch;
 pub mod divider;
 pub mod element;
 pub mod generic;

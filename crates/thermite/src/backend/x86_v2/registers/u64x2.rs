@@ -310,14 +310,9 @@ impl ShuffleRegister for U64x2V2 {
 //     }
 // }
 
-// impl SwizzleRegister for U64x2V2 {
-//     const HAS_PERMUTEV: bool = true;
-
-//     #[inline(always)]
-//     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-//         unsafe { arch::_mm_permutevarx_epi64x_v2(value, core::mem::transmute(idxs)) }
-//     }
-// }
+impl SwizzleRegister for U64x2V2 {
+    const HAS_PERMUTEV: bool = false;
+}
 
 impl PartialOrdRegister for U64x2V2 {
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

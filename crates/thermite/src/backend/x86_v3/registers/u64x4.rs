@@ -252,6 +252,10 @@ impl Register for U64x4V3 {
     }
 }
 
+impl SwizzleRegister for U64x4V3 {
+    const HAS_PERMUTEV: bool = false;
+}
+
 impl<I> IndexableRegister<I> for U64x4V3
 where
     I: UnsignedIntegerRegister<Lanes = Self::Lanes>,

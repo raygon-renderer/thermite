@@ -271,6 +271,10 @@ impl Register for I64x4V3 {
     }
 }
 
+impl SwizzleRegister for I64x4V3 {
+    const HAS_PERMUTEV: bool = false;
+}
+
 impl IndexableRegister<super::U64x4V3> for I64x4V3 {
     #[inline(always)]
     unsafe fn gather(ptr: *const <I64x4V3 as Register>::Element, indices: Storage<super::U64x4V3>) -> Storage<I64x4V3> {

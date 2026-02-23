@@ -83,12 +83,12 @@ where
 macro_rules! swizzle {
     ($a:expr, $b:expr, [$($i:literal),* $(,)?]) => {{
         #[inline(always)]
-        fn __do_swizzle2<R: $crate::register::SwizzleRegister, S: $crate::swizzle::Swizzle<R>>(a: S, b: S) -> S {
+        fn __do_swizzle2<N: $crate::generic_array::ArrayLength, S: $crate::swizzle::Swizzle<N>>(a: S, b: S) -> S {
             use $crate::{swizzle::Swizzle, generic_array::typenum::Unsigned};
             a.swizzle(b, const {
                 let idxs = [$($i),*];
-                assert!(R::Lanes::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
-                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, R::Lanes>>(idxs) }
+                assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
+                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, N>>(idxs) }
             })
         }
 
@@ -97,12 +97,12 @@ macro_rules! swizzle {
 
     ($a:expr, [$($i:literal),* $(,)?]) => {{
         #[inline(always)]
-        fn __do_swizzle1<R: $crate::register::SwizzleRegister, S: $crate::swizzle::Swizzle<R>>(a: S) -> S {
+        fn __do_swizzle1<N: $crate::generic_array::ArrayLength, S: $crate::swizzle::Swizzle<N>>(a: S) -> S {
             use $crate::{swizzle::Swizzle, generic_array::typenum::Unsigned};
             a.permute(const {
                 let idxs = [$($i),*];
-                assert!(R::Lanes::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
-                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, R::Lanes>>(idxs) }
+                assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
+                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, N>>(idxs) }
             })
         }
 
