@@ -98,9 +98,10 @@ pub mod prelude {
             ShrMasked as _, Square as _, SquareMasked as _, SubAssignMasked as _, SubMasked as _,
         },
         generic::{
-            BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, FloatVector, FloatVectorWithBits,
-            GenericMask, GenericVector, IndexableVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector,
-            PartialOrdVector, SignedVector, SplatConst, SwizzleVector, UnsignedIntegerVector, VectorIndices,
+            BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, ConcatVector, ExtendVector,
+            FloatVector, FloatVectorWithBits, GenericMask, GenericVector, IndexableVector, IntegerVector,
+            LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector, SplatConst, SwizzleVector,
+            UnsignedIntegerVector, VectorIndices,
         },
         math::{
             CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,
@@ -108,7 +109,10 @@ pub mod prelude {
             TranscendentalMathWithPolicy as _,
         },
         math::{FloatConsts, policy::Policy},
-        simd::{FixedWidthSimd, FloatSimd, NativeSimd, NativeSimdVectors, Simd, SimdVectors, SizedSimd},
+        simd::{
+            FixedWidthSimd, FloatSimd, NativeIsa, NativeSimd, NativeSimdVectors, NativeSimdVectorsWithRegisters, Simd,
+            Simd3A, Simd3AVectors, Simd3AVectorsWithRegisters, SimdVectors, SimdVectorsWithRegisters, SizedSimd,
+        },
     };
 }
 

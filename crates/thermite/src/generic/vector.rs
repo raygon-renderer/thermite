@@ -5,10 +5,10 @@ use super::*;
 use crate::{
     generic::ops::{DivMasked, Square, SquareMasked},
     register::{
-        BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, Element, FloatElement,
-        FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister,
-        PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
-        UnsignedIntegerRegister,
+        BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister, Element,
+        ExtendRegister, FloatElement, FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register,
+        LinAlg4Register, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
+        SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -638,4 +638,66 @@ where
     R: UnsignedIntegerRegister,
 {
     type Register = R;
+}
+
+impl<R: Register, B: Register> Extend<Mask<R>> for Mask<B>
+where
+    B::Mask: ExtendRegister<R::Mask>,
+{
+    #[inline(always)]
+    fn extend(v: Mask<R>) -> Self {
+        Mask(B::Mask::extend(v.0))
+    }
+
+    #[inline(always)]
+    fn narrow(self) -> Mask<R> {
+        Mask(B::Mask::narrow(self.0))
+    }
+}
+
+impl<R: Register, B: Register> Concat<Mask<R>> for Mask<B>
+where
+    B::Mask: ConcatRegister<R::Mask>,
+{
+    #[inline(always)]
+    fn concat(lo: Mask<R>, hi: Mask<R>) -> Self {
+        Mask(B::Mask::concat(lo.0, hi.0))
+    }
+
+    #[inline(always)]
+    fn split(self) -> (Mask<R>, Mask<R>) {
+        let (lo, hi) = B::Mask::split(self.0);
+        (Mask(lo), Mask(hi))
+    }
+}
+
+impl<R: Register, B: Register> Extend<Vector<R>> for Vector<B>
+where
+    B: ExtendRegister<R>,
+{
+    #[inline(always)]
+    fn extend(v: Vector<R>) -> Self {
+        Vector(B::extend(v.0))
+    }
+
+    #[inline(always)]
+    fn narrow(self) -> Vector<R> {
+        Vector(B::narrow(self.0))
+    }
+}
+
+impl<R: Register, B: Register> Concat<Vector<R>> for Vector<B>
+where
+    B: ConcatRegister<R>,
+{
+    #[inline(always)]
+    fn concat(lo: Vector<R>, hi: Vector<R>) -> Self {
+        Vector(B::concat(lo.0, hi.0))
+    }
+
+    #[inline(always)]
+    fn split(self) -> (Vector<R>, Vector<R>) {
+        let (lo, hi) = B::split(self.0);
+        (Vector(lo), Vector(hi))
+    }
 }

@@ -227,12 +227,48 @@ where
     }
 }
 
+pub trait Concat<HALF>: Extend<HALF> {
+    fn concat(lo: HALF, hi: HALF) -> Self;
+    fn split(self) -> (HALF, HALF);
+}
+
+/// Zero-extend vectors or masks
+pub trait Extend<FROM> {
+    fn extend(v: FROM) -> Self;
+    fn narrow(self) -> FROM;
+}
+
+pub trait ConcatVector<HALF: GenericVector<Element = Self::Element>>:
+    Concat<HALF> + GenericVector<Mask: Concat<HALF::Mask>>
+{
+}
+
+/// Zero-extend vectors
+pub trait ExtendVector<FROM: GenericVector<Element = Self::Element>>:
+    Extend<FROM> + GenericVector<Mask: Extend<FROM::Mask>>
+{
+}
+
+impl<V: GenericVector, H: GenericVector<Element = V::Element>> ConcatVector<H> for V
+where
+    V: Concat<H>,
+    V::Mask: Concat<H::Mask>,
+{
+}
+impl<V: GenericVector, F: GenericVector<Element = V::Element>> ExtendVector<F> for V
+where
+    V: Extend<F>,
+    V::Mask: Extend<F::Mask>,
+{
+}
+
 /// Core trait for generic vector types.
 ///
 /// Provides the basis for further specialized vector traits.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait GenericVector:
     Sized
+    + Default
     + Copy
     + core::fmt::Debug
     + 'static
@@ -295,6 +331,43 @@ pub trait GenericVector:
 
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
     #[masked] fn single(value: Self::Element) -> Self;
+
+    /// Combine two vectors of the same type into one wider vector,
+    /// with `self` as the lower half and `hi` as the upper half.
+    fn concat<INTO>(self, hi: Self) -> INTO
+    where
+        INTO: ConcatVector<Self, Element = Self::Element>,
+    {
+        <INTO as Concat<Self>>::concat(self, hi)
+    }
+
+    /// Split this vector into two narrower vectors of the same type, with the lower
+    /// lanes in the first vector and the upper lanes in the second vector.
+    fn split<INTO: GenericVector>(self) -> (INTO, INTO)
+    where
+        Self: ConcatVector<INTO, Element = INTO::Element>,
+    {
+        <Self as Concat<INTO>>::split(self)
+    }
+
+    /// Zero-extend a narrower vector into this wider vector type, placing the
+    /// original values in the lower lanes and filling the upper lanes with zeros.
+    fn extend<INTO>(self) -> INTO
+    where
+        INTO: ExtendVector<Self, Element = Self::Element>,
+    {
+        <INTO as Extend<Self>>::extend(self)
+    }
+
+    /// Narrow this wider vector into a narrower vector by taking the lower lanes.
+    ///
+    /// The upper lanes are discarded.
+    fn narrow<INTO: GenericVector>(self) -> INTO
+    where
+        Self: ExtendVector<INTO, Element = INTO::Element>,
+    {
+        <Self as Extend<INTO>>::narrow(self)
+    }
 
     /// Create a new vector from a slice of elements. The slice must have at least as many elements as the vector's lanes.
     ///
@@ -692,6 +765,7 @@ pub trait GenericMask:
     'static
     + Sized
     + Copy
+    + Default
     + core::fmt::Debug
     + CastMask<Self>
     + BitAnd<Self, Output = Self>
@@ -1158,7 +1232,7 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
 
 // These do not have masked variants
 pub trait FloatVectorWithBits:
-    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::SignedBits, Self::Bits>
+    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::Bits, Self::SignedBits>
 {
     type SignedBits: SignedIntegerVector<
             Lanes = Self::Lanes,

@@ -1083,6 +1083,22 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     #[inline(always)] fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), src) }
     #[inline(always)] fn swap_bytes_z(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), Self::EMPTY) }
 
+    fn single_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self {
+        todo!()
+    }
+
+    fn single_z(mask: Self::Mask, value: Self::Element) -> Self {
+        todo!()
+    }
+
+    fn broadcast_c<const I: usize>(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn broadcastv_c(self, mask: Self::Mask, idx: usize) -> Self {
+        todo!()
+    }
+
 
 }
 

@@ -225,7 +225,7 @@ where
                     let mut hi = [Vector::ZERO; O];
 
                     for i in 0..O {
-                        let (l, h) = sum[i].split2();
+                        let (l, h) = sum[i].split();
                         lo[i] = l;
                         hi[i] = h;
                     }
@@ -319,7 +319,7 @@ where
                     let mut hi = [Vector::ZERO; O];
 
                     for i in 0..O {
-                        let (l, h) = sum[i].split2();
+                        let (l, h) = sum[i].split();
                         lo[i] = l;
                         hi[i] = h;
                     }

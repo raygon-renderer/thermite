@@ -55,6 +55,13 @@ impl<R: Register> const_default::ConstDefault for Mask<R> {
     const DEFAULT: Self = Self::FALSY;
 }
 
+impl<R: Register> Default for Mask<R> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::FALSY
+    }
+}
+
 impl<R: Register> Mask<R> {
     /// The number of lanes in the mask register.
     pub const LANES: usize = <R::Lanes as Unsigned>::USIZE;

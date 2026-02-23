@@ -40,13 +40,13 @@ use crate::{
     element::FindUSize,
     isa::InstructionSet,
     register::{Storage, dp::DoublePumpRegister},
-    simd::{NativeSimd, Simd},
+    simd::{NativeIsa, NativeSimd, Simd},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct X86V3;
 
-impl NativeSimd for X86V3 {
+impl NativeIsa for X86V3 {
     const ISA: InstructionSet = InstructionSet::X86V3;
 
     type Registers = generic_array::typenum::U16;
@@ -55,7 +55,9 @@ impl NativeSimd for X86V3 {
     type Native64Width = generic_array::typenum::U4;
 
     type NativeAlignment = crate::simd::Align32; // 256-bit vectors = 32 bytes
+}
 
+impl NativeSimd for X86V3 {
     type f32xN = F32x8V3;
     type i32xN = I32x8V3;
     type u32xN = U32x8V3;
