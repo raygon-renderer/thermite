@@ -65,7 +65,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
 
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {
-        if Self::Lanes::USIZE == 4 {
+        if const { Self::Lanes::USIZE == 4 } {
             Self::insert::<3>(value, Element::ZERO)
         } else {
             value
@@ -74,7 +74,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
 
     #[inline(always)]
     fn one4(value: Storage<Self>) -> Storage<Self> {
-        if Self::Lanes::USIZE == 4 {
+        if const { Self::Lanes::USIZE == 4 } {
             Self::insert::<3>(value, Element::ONE)
         } else {
             value
@@ -241,14 +241,14 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         rhs: &[Storage<Self>; 4],
     ) -> [Storage<Self>; 4]
     where
-        Self::DoubleRegister: FloatRegister<Element = Self::Element, HalfRegister = Self>,
+        Self: WideRegister<Wide: FloatRegister>,
     {
         // swap operands if not column-major
         let (lhs, rhs) = if const { COLUMN_MAJOR } { (lhs, rhs) } else { (rhs, lhs) };
 
         const {
             assert!(
-                !<Self::DoubleRegister as CoreRegister>::IS_EMULATED,
+                !<Self::Wide as CoreRegister>::IS_EMULATED,
                 "Wide register matrix multiplication requires true wide registers."
             );
         }
@@ -256,10 +256,10 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         // 1. Double-Pump the LHS (Basis Vectors)
         // We concat each column with itself so it exists in both the low and high lanes.
         // a0_wide = (Col0, Col0)
-        let a0 = Self::concat(lhs[0], lhs[0]);
-        let a1 = Self::concat(lhs[1], lhs[1]);
-        let a2 = Self::concat(lhs[2], lhs[2]);
-        let a3 = Self::concat(lhs[3], lhs[3]);
+        let a0 = Self::Wide::concat(lhs[0], lhs[0]);
+        let a1 = Self::Wide::concat(lhs[1], lhs[1]);
+        let a2 = Self::Wide::concat(lhs[2], lhs[2]);
+        let a3 = Self::Wide::concat(lhs[3], lhs[3]);
 
         // Define the macro locally to handle the "Broadcast -> Concat -> FMA" pipeline.
         // passing types ($Wide, $Narrow) explicitly avoids ambiguity.
@@ -270,18 +270,21 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
                 // Broadcast on narrow registers first (cheap), then concat into wide (cheap).
 
                 // x = (b_left.x ... | b_right.x ...)
-                let x = Self::concat(Self::broadcast::<0>($rhs_a), Self::broadcast::<0>($rhs_b));
-                let y = Self::concat(Self::broadcast::<1>($rhs_a), Self::broadcast::<1>($rhs_b));
-                let z = Self::concat(Self::broadcast::<2>($rhs_a), Self::broadcast::<2>($rhs_b));
-                let w = Self::concat(Self::broadcast::<3>($rhs_a), Self::broadcast::<3>($rhs_b));
+                let x = Self::Wide::concat(Self::broadcast::<0>($rhs_a), Self::broadcast::<0>($rhs_b));
+                let y = Self::Wide::concat(Self::broadcast::<1>($rhs_a), Self::broadcast::<1>($rhs_b));
+                let z = Self::Wide::concat(Self::broadcast::<2>($rhs_a), Self::broadcast::<2>($rhs_b));
+                let w = Self::Wide::concat(Self::broadcast::<3>($rhs_a), Self::broadcast::<3>($rhs_b));
+
+                // TODO: optimize this to use a single concat, then 4 shuffles, since 8-wide
+                // registers will reuse the immediate shuffle value for each 128-bit lane.
 
                 // B. Wide FMA Chain (Pairwise Optimization)
                 // We perform the math for Col N and Col N+1 simultaneously, then add the results together.
-                Self::DoubleRegister::add(
+                Self::Wide::add(
                     // (Col0 * x) + (Col1 * y)
-                    Self::DoubleRegister::mul_adde(a1, y, Self::DoubleRegister::mul(a0, x)),
+                    Self::Wide::mul_adde(a1, y, Self::Wide::mul(a0, x)),
                     // (Col2 * z) + (Col3 * w)
-                    Self::DoubleRegister::mul_adde(a3, w, Self::DoubleRegister::mul(a2, z)),
+                    Self::Wide::mul_adde(a3, w, Self::Wide::mul(a2, z)),
                 )
             }};
         }
@@ -293,8 +296,8 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         let wide_res_23 = compute_pair!(rhs[2], rhs[3]);
 
         // 4. Split and Return
-        let (c0, c1) = <Self::DoubleRegister as Register>::split(wide_res_01);
-        let (c2, c3) = <Self::DoubleRegister as Register>::split(wide_res_23);
+        let (c0, c1) = Self::Wide::split(wide_res_01);
+        let (c2, c3) = Self::Wide::split(wide_res_23);
 
         [c0, c1, c2, c3]
     }

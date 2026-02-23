@@ -9,7 +9,7 @@ pub mod arch {
 pub mod polyfills;
 pub mod registers;
 
-use crate::{register::DoublePump, vector::Vector};
+use crate::vector::Vector;
 
 pub use registers::X86V2;
 

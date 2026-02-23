@@ -19,6 +19,7 @@
 #![cfg_attr(feature = "nightly", allow(internal_features))]
 // Enable wasm64 simd on nightly
 #![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
+#![cfg_attr(all(feature = "nightly", feature = "std_simd"), feature(portable_simd))]
 
 #[cfg(feature = "nightly")]
 #[rustversion::not(nightly)]
@@ -86,6 +87,7 @@ pub mod prelude {
 
     pub use crate::{
         divider::{BranchfreeDivider, Divider},
+        element::{Element, FloatElement},
         generic::ops::{
             AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndMasked as _,
             BitAndNot as _, BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _,
@@ -97,8 +99,8 @@ pub mod prelude {
         },
         generic::{
             BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, FloatVector, FloatVectorWithBits,
-            GenericMask, GenericVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector,
-            SignedVector, SplatConst, SwizzleVector, UnsignedIntegerVector,
+            GenericMask, GenericVector, IndexableVector, IntegerVector, LinAlg3Vector, LinAlg4Vector, NumericVector,
+            PartialOrdVector, SignedVector, SplatConst, SwizzleVector, UnsignedIntegerVector, VectorIndices,
         },
         math::{
             CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,
@@ -106,8 +108,7 @@ pub mod prelude {
             TranscendentalMathWithPolicy as _,
         },
         math::{FloatConsts, policy::Policy},
-        register::{DoublePump, Element, FloatElement},
-        simd::{FloatSimd, NativeSimd, NativeSimdVectors, Simd, SimdVectors, SizedSimd, WideSimd},
+        simd::{FixedWidthSimd, FloatSimd, NativeSimd, NativeSimdVectors, Simd, SimdVectors, SizedSimd},
     };
 }
 
@@ -127,13 +128,14 @@ pub mod generic;
 pub mod mask;
 pub mod math;
 pub mod register;
+// pub mod transform;
+pub mod compat;
 
 #[doc(hidden)]
 pub mod swizzle;
 
 pub use divider::{BranchfreeDivider, Divider};
 pub use mask::Mask;
-pub use register::DoublePump;
 pub use swizzle::Swizzle;
 pub use vector::{MaskOf, Vector};
 

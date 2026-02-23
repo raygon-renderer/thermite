@@ -8,6 +8,8 @@ pub mod f64x2;
 pub mod i64x2;
 pub mod u64x2;
 
+pub mod half;
+
 pub use f32x4::F32x4V2;
 pub use i32x4::I32x4V2;
 pub use u32x4::U32x4V2;
@@ -18,8 +20,9 @@ pub use u64x2::U64x2V2;
 
 use crate::{
     backend::scalar::Scalar,
+    element::FindUSize,
     isa::InstructionSet,
-    register::{Storage, dp::DoublePumpRegister},
+    register::{IndexableRegister, Storage, dp::DoublePumpRegister, reduced::HalfRegister2},
     simd::{NativeSimd, Simd},
 };
 
@@ -45,10 +48,29 @@ impl NativeSimd for X86V2 {
     type u64xN = U64x2V2;
 }
 
+type F64x4V2 = DoublePumpRegister<F64x2V2>;
+type I64x4V2 = DoublePumpRegister<I64x2V2>;
+type U64x4V2 = DoublePumpRegister<U64x2V2>;
+
+// Scatter/Gather is not available in x86v2, so we must use fallback impls
+macro_rules! impl_indexable {
+    ($idx:ty => $($ty:ty),* $(,)?) => {$( impl IndexableRegister<$idx> for $ty {} )*};
+}
+
+impl_indexable!(<X86V2 as Simd>::u32x2 => F64x2V2, I64x2V2, U64x2V2);
+impl_indexable!(<X86V2 as Simd>::u64x2 => F64x2V2, I64x2V2, U64x2V2);
+impl_indexable!(<X86V2 as Simd>::u32x4 => <X86V2 as Simd>::f32x4, <X86V2 as Simd>::i32x4, <X86V2 as Simd>::u32x4, <X86V2 as Simd>::u64x4, <X86V2 as Simd>::i64x4, <X86V2 as Simd>::f64x4);
+impl_indexable!(<X86V2 as Simd>::u64x4 => <X86V2 as Simd>::f32x4, <X86V2 as Simd>::i32x4, <X86V2 as Simd>::u32x4);
+
 impl Simd for X86V2 {
-    type f32x2 = <Scalar as Simd>::f32x2;
-    type i32x2 = <Scalar as Simd>::i32x2;
-    type u32x2 = <Scalar as Simd>::u32x2;
+    type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
+    type usizex4 = <() as FindUSize<(), Self::u32x4, Self::u64x4>>::Output;
+    type usizex8 = <() as FindUSize<(), Self::u32x8, Self::u64x8>>::Output;
+    type usizex16 = <() as FindUSize<(), Self::u32x16, Self::u64x16>>::Output;
+
+    type f32x2 = half::F32x2V2;
+    type i32x2 = half::I32x2V2;
+    type u32x2 = half::U32x2V2;
 
     type f32x4 = F32x4V2;
     type i32x4 = I32x4V2;
@@ -62,9 +84,9 @@ impl Simd for X86V2 {
     type i32x8 = DoublePumpRegister<Self::i32x4>;
     type u32x8 = DoublePumpRegister<Self::u32x4>;
 
-    type f64x4 = DoublePumpRegister<Self::f64x2>;
-    type i64x4 = DoublePumpRegister<Self::i64x2>;
-    type u64x4 = DoublePumpRegister<Self::u64x2>;
+    type f64x4 = F64x4V2;
+    type i64x4 = I64x4V2;
+    type u64x4 = U64x4V2;
 
     type f64x8 = DoublePumpRegister<Self::f64x4>;
     type i64x8 = DoublePumpRegister<Self::i64x4>;
@@ -158,3 +180,19 @@ impl_mask_casts! {
     F64x2V2 as I64x2V2 => _mm_castpd_si128, // f64x2 -> i64x2
     F64x2V2 as U64x2V2 => _mm_castpd_si128, // f64x2 -> u64x2
 }
+
+macro_rules! impl_extend_same {
+    ($($ty:ty),* $(,)?) => {$( impl crate::register::ExtendRegister<$ty> for $ty {
+        #[inline(always)]
+        fn extend(value: Storage<$ty>) -> Storage<Self> {
+            value
+        }
+
+        #[inline(always)]
+        fn narrow(value: Storage<Self>) -> Storage<$ty> {
+            value
+        }
+    } )*};
+}
+
+impl_extend_same!(F32x4V2, I32x4V2, U32x4V2, F64x2V2, I64x2V2, U64x2V2);

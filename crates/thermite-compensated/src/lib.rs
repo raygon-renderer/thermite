@@ -4,7 +4,7 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
 use num_traits::{NumAssignOps, NumOps};
-use thermite::register::element::SignedElement;
+use thermite::element::SignedElement;
 use thermite::{generic::GenericSelectable, prelude::*};
 
 use thermite::generic::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
@@ -201,8 +201,8 @@ impl<V> CompensatedFloatVector for V where V: ScalarValue + FloatVector<Element:
 
 #[rustfmt::skip]
 impl<E: ScalarValue + Element> Element for Compensated<E> {
-    type ISize = <E as Element>::ISize;
-    type USize = <E as Element>::USize;
+    type Signed = <E as Element>::Signed;
+    type Unsigned = <E as Element>::Unsigned;
 
     const ONE: Self = Self { value: E::ONE, error: E::ZERO };
     const ZERO: Self = Self { value: E::ZERO, error: E::ZERO };
@@ -286,6 +286,10 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
 
         Some(result)
     }
+
+    const HAS_INFINITY: bool = E::HAS_INFINITY;
+    const HAS_SIGNED_ZERO: bool = E::HAS_SIGNED_ZERO;
+    const HAS_SUBNORMALS: bool = E::HAS_SUBNORMALS;
 }
 
 /// Compensated arithmetic number type.
@@ -891,8 +895,8 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
 
     type Lanes = V::Lanes;
 
-    type USize = V::USize;
-    type ISize = V::ISize;
+    type Unsigned = V::Unsigned;
+    type Signed = V::Signed;
 
     type Mask = V::Mask;
 
@@ -910,6 +914,14 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     }
 
     unsafe fn load(ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn load_m(src:Self,mask:Self::Mask,ptr: *const Self::Element) -> Self {
+        todo!()
+    }
+
+    unsafe fn load_z(mask:Self::Mask,ptr: *const Self::Element) -> Self {
         todo!()
     }
 
@@ -1058,8 +1070,8 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         result
     }
 
-    #[inline(always)] fn splat_m(value: Self::Element, src: Self, mask: Self::Mask) -> Self { mask.select(Self::splat(value), src) }
-    #[inline(always)] fn splat_z(value: Self::Element, mask: Self::Mask) -> Self { mask.select(Self::splat(value), Self::EMPTY) }
+    #[inline(always)] fn splat_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), src) }
+    #[inline(always)] fn splat_z(mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), Self::EMPTY) }
     #[inline(always)] fn broadcast_m<const I: usize>(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), src) }
     #[inline(always)] fn broadcast_z<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), Self::EMPTY) }
     #[inline(always)] fn broadcastv_m(self, src: Self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), src) }
@@ -1070,6 +1082,8 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     #[inline(always)] fn swap_bytes_c(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), self) }
     #[inline(always)] fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), src) }
     #[inline(always)] fn swap_bytes_z(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), Self::EMPTY) }
+
+
 }
 
 #[rustfmt::skip]

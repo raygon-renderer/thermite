@@ -2,8 +2,8 @@ use crate::{Compensated, CompensatedFloatVector, ScalarValue};
 
 use thermite::prelude::*;
 
+use thermite::element::FloatElementWithBits;
 use thermite::generic::AsFloatVectorWithBitsKernel;
-use thermite::register::element::FloatElementWithBits;
 
 use thermite::math::policy::{PrecisionPolicy, policies::CheckOverflow};
 use thermite::math::specialized::{
@@ -105,7 +105,7 @@ where
             as fn(values: [W; _]) -> (V::Mask, V::Mask) where V: CompensatedFloatVector
         {
             // Use integer mask logic on k. We can check the low 2 bits of k.
-            let k_int: W::Signed = values[0].cast();
+            let k_int: W::SignedBits = values[0].cast();
 
             // Construct bitmasks
             let bit0 = (k_int & NumericVector::ONE).cmp_ne(NumericVector::ZERO); // true if k % 2 != 0 (quadrants 1, 3)
@@ -610,14 +610,14 @@ const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
 
 // impl<V: FloatVectorWithBits> Compensated<V> {
 //     #[inline(always)]
-//     pub(crate) fn ldexp_p<P: Policy>(self, exp: V::Signed) -> Self {
+//     pub(crate) fn ldexp_p<P: Policy>(self, exp: V::SignedBits) -> Self {
 //         let value = self.value.ldexp_p::<P>(exp);
 //         let error = self.error.ldexp_p::<P>(exp);
 //         Self { value, error }
 //     }
 
 //     #[inline(always)]
-//     pub(crate) fn frexp_p<P: Policy>(self) -> (Self, V::Signed) {
+//     pub(crate) fn frexp_p<P: Policy>(self) -> (Self, V::SignedBits) {
 //         let (value, exp) = self.value.frexp_p::<P>();
 //         let result = Self {
 //             value,
@@ -707,8 +707,8 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                         Element = V::Element,
                         Lanes = V::Lanes,
                         Mask = V::Mask,
-                        ISize = V::ISize,
-                        USize = V::USize,
+                        Signed = V::Signed,
+                        Unsigned = V::Unsigned,
                         ExtendedPrecision = <V as FloatVector>::ExtendedPrecision,
                     > + CastVector<V>,
             >(
@@ -770,7 +770,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 }
 
                 // we only need k as an integer for ldexp
-                let mut k = k.cast::<W>().cast::<W::Signed>();
+                let mut k = k.cast::<W>().cast::<W::SignedBits>();
 
                 // exp_core returns either exp or expm1 of the reduced argument
                 let mut y = Compensated::<V>::exp_core::<P, MODE>(r);

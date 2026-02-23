@@ -12,7 +12,10 @@ macro_rules! s {
 
 pub mod dp;
 pub mod linalg;
+pub mod reduced;
 pub mod well_formed;
+
+use core::marker::PhantomData;
 
 pub use crate::element::{Element, FloatElement, MaskElement};
 pub use linalg::{LinAlg3Register, LinAlg4Register, ValidLinAlg3Length};
@@ -28,9 +31,6 @@ use crate::{
     generic::ops::MulAddExt,
     isa::InstructionSet,
 };
-
-/// Helper type alias for double-pumped vectors.
-pub type DoublePump<V> = <V as dp::DoublePumpVector>::DoublePumped;
 
 #[inline(always)]
 pub(crate) const fn reg<R: Register, const N: usize>(values: [R::Element; N]) -> Storage<R>
@@ -122,7 +122,9 @@ type RoundUpConst = typenum::U31;
 pub type MaskWordCount<Lanes> = typenum::Quot<typenum::Sum<Lanes, RoundUpConst>, BitsPerWord>;
 
 /// A trait for array length types representing the number of lanes in a SIMD register.
-pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst> {
+pub trait Lanes:
+    ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst> + core::ops::Shr<typenum::B1>
+{
     /// For a register of `Self` lanes, this is the number of `u32` words needed to hold a bitmask.
     ///
     /// Used in [`Mask::bitmask()`](crate::Mask::bitmask).
@@ -133,7 +135,7 @@ pub trait Lanes: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<Roun
 
 impl<T> Lanes for T
 where
-    T: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst>,
+    T: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst> + core::ops::Shr<typenum::B1>,
     typenum::Sum<T, RoundUpConst>: core::ops::Div<BitsPerWord>,
     MaskWordCount<T>: ArrayLength,
     GenericArray<u32, MaskWordCount<T>>: bitvec::view::BitViewSized<Store = u32>,
@@ -144,11 +146,23 @@ where
 
 pub type Storage<R> = <R as CoreRegister>::Storage;
 
+/// Value to give to `zeroupper_z`
+pub trait ZeroUpper {
+    /// The number of elements _remaining_ after zeroing.
+    const N: usize;
+}
+
+pub(crate) struct OwnLanes<R: CoreRegister>(PhantomData<R>);
+
+impl<R: CoreRegister> ZeroUpper for OwnLanes<R> {
+    const N: usize = <R::Lanes as Unsigned>::USIZE;
+}
+
 /// Core data types for a given register. These are simple types
 /// without any intertwining trait bounds.
 pub trait CoreRegister: 'static + Sized {
     type Lanes: Lanes;
-    type Storage: Sized + Copy + core::fmt::Debug;
+    type Storage: Sized + Copy;
     type Mask: MaskRegister<Lanes = Self::Lanes>;
 
     /// Indicates if the register is emulated in software.
@@ -167,26 +181,31 @@ pub trait CoreRegister: 'static + Sized {
         Self::z(<Self::Mask as BitwiseRegister>::not(mask), value)
     }
 
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self>;
+
+    #[inline(always)]
+    fn zeroupper(value: Storage<Self>) -> Storage<Self> {
+        Self::zeroupper_z::<OwnLanes<Self>>(value)
+    }
+
     const EMPTY: Storage<Self>;
 }
 
-#[thermite_macros::register_trait]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait BitwiseRegister: CoreRegister {
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-    fn not(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn not(value: Storage<Self>) -> Storage<Self>;
 
     /// !lhs & rhs
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::bitand(Self::not(lhs), rhs)
     }
 
     /// const A = 0xF0, B = 0xCC, C = 0xAA
-    #[rustfmt::skip]
-    fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
         let mut acc = Self::EMPTY;
 
         if IMM == 0xCA {
@@ -213,8 +232,7 @@ pub trait BitwiseRegister: CoreRegister {
     }
 
     /// const A = 0xC, B = 0xA
-    #[rustfmt::skip]
-    fn bilog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn bilog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         let mut acc = Self::EMPTY;
 
         // Disjunctive Normal Form (DNF) again
@@ -235,7 +253,6 @@ pub trait BitwiseRegister: CoreRegister {
 /// use 16-bit integers as storage, while AVX2 uses full SIMD registers with
 /// all `0` and `1` bits to represent `false` and `true`, respectively.
 #[thermite_macros::register_trait]
-#[skip_masked]
 pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> {
     const TRUTHY: Storage<Self>;
     const FALSY: Storage<Self>;
@@ -291,27 +308,21 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> {
 }
 
 /// SIMD Register trait where each Element implements the [`Element`] trait.
-#[thermite_macros::register_trait]
+#[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait Register:
     BitwiseRegister<
-    Mask: CastMaskRegister<<Self::USize as CoreRegister>::Mask> + CastMaskRegister<<Self::ISize as CoreRegister>::Mask>,
+    Mask: CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>
+              + CastMaskRegister<<Self::Signed as CoreRegister>::Mask>,
 >
 {
     type Element: Element;
 
-    // Note: These don't require :Register because it would introduce recursive type bounds.
-    type HalfRegister: Register<Element = Self::Element>;
-    type DoubleRegister;
-
     const HAS_EQUAL_SIZE_MASK: bool;
 
-    #[skip_masked]
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self>;
 
-    #[skip_masked]
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask>;
 
-    #[skip_masked]
     fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::into_mask(value)
     }
@@ -323,35 +334,34 @@ pub trait Register:
     /// and useful when dealing with sign bits.
     ///
     /// For floats this is often free, but for integers it'll have to effectively call `is_negative`.
-    #[skip_masked]
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask>;
 
     /// Unsigned integer register type with the same number of lanes, used for
     /// variable shifts and other operations.
-    type USize: UnsignedIntegerRegister<
-            ISize = Self::ISize,
-            USize = Self::USize,
+    type Unsigned: UnsignedIntegerRegister<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
             Lanes = Self::Lanes,
-            Element = <Self::Element as Element>::USize,
-            Mask: CastMaskRegister<Self::Mask>,
-        > + CastRegister<Self::ISize>
-        + BitCastRegister<Self::ISize>;
+            Element = <Self::Element as Element>::Unsigned,
+            Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<<Self::Signed as CoreRegister>::Mask>,
+        > + CastRegister<Self::Signed>
+        + BitCastRegister<Self::Signed>;
 
-    /// Signed integer register type with the same number of lanes.
-    type ISize: SignedIntegerRegister<
-            USize = Self::USize,
-            ISize = Self::ISize,
+    /// SignedBits integer register type with the same number of lanes.
+    type Signed: SignedIntegerRegister<
+            Unsigned = Self::Unsigned,
+            Signed = Self::Signed,
             Lanes = Self::Lanes,
-            Element = <Self::Element as Element>::ISize,
-            Mask: CastMaskRegister<Self::Mask>,
-        > + CastRegister<Self::USize>
-        + BitCastRegister<Self::USize>;
+            Element = <Self::Element as Element>::Signed,
+            Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>,
+        > + CastRegister<Self::Unsigned>
+        + BitCastRegister<Self::Unsigned>;
 
-    #[skip_masked]
+    #[masked]
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self>;
 
-    fn single(value: Self::Element) -> Storage<Self>;
-    fn splat(value: Self::Element) -> Storage<Self>;
+    #[masked] fn single(value: Self::Element) -> Storage<Self>;
+    #[masked] fn splat(value: Self::Element) -> Storage<Self>;
 
     #[conditional]
     fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
@@ -368,7 +378,6 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
         // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
         unsafe { core::ptr::read(ptr as *const Storage<Self>) }
@@ -378,7 +387,6 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
         unsafe {
             let mut result = src;
@@ -400,7 +408,6 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
         unsafe { Self::load_m(Self::EMPTY, mask, ptr) }
     }
@@ -409,8 +416,14 @@ pub trait Register:
     ///
     /// The pointer must be valid and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
+        const {
+            assert!(
+                size_of::<Storage<Self>>() == (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Size mismatch between register storage and array of elements"
+            );
+        }
+
         // SAFETY: This is safe as long as the pointer is valid and of the correct length.
         unsafe { core::ptr::read_unaligned(ptr as *const Storage<Self>) }
     }
@@ -419,128 +432,9 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn load_stream(ptr: *const Self::Element) -> Storage<Self> {
         // Default to regular load if streaming loads are not supported.
         unsafe { Self::load(ptr) }
-    }
-
-    /// # SAFETY
-    ///
-    /// The pointer must be valid, aligned, and pointing to memory locations that
-    /// can be safely read from based on the register's requirements.
-    #[skip_masked]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
-        let scale = size_of::<Self::Element>();
-
-        unsafe {
-            let mut result = Self::EMPTY;
-
-            let res = Self::as_array_mut(&mut result);
-            let indices = <Self::USize as Register>::as_array(&indices);
-
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
-                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
-
-                res[i] = ptr.add(idx).read();
-            }
-
-            result
-        }
-    }
-
-    /// # SAFETY
-    ///
-    /// The pointer must be valid, aligned, and pointing to memory locations that
-    /// can be safely read from based on the register's requirements.
-    #[skip_masked]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        let scale = size_of::<Self::Element>();
-
-        unsafe {
-            let mut result = src;
-
-            let res = Self::as_array_mut(&mut result);
-            let src = Self::as_array(&src);
-            let indices = <Self::USize as Register>::as_array(&indices);
-
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
-                if !<Self::Mask as MaskRegister>::test(mask, i) {
-                    continue;
-                }
-
-                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
-
-                res[i] = ptr.add(idx).read();
-            }
-
-            result
-        }
-    }
-
-    /// # SAFETY
-    ///
-    /// The pointer must be valid, aligned, and pointing to memory locations that
-    /// can be safely read from based on the register's requirements.
-    #[skip_masked]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { Self::gather_m(Self::EMPTY, mask, ptr, indices) }
-    }
-
-    /// # SAFETY
-    ///
-    /// The pointer must be valid, aligned, and pointing to memory locations that
-    /// can be safely written to based on the register's requirements.
-    #[skip_masked]
-    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<Self::USize>) {
-        let scale = size_of::<Self::Element>();
-
-        unsafe {
-            let value = Self::as_array(&value);
-            let indices = <Self::USize as Register>::as_array(&indices);
-
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
-                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
-                ptr.add(idx).write(value[i]);
-            }
-        }
-    }
-
-    /// # SAFETY
-    ///
-    /// The pointer must be valid, aligned, and pointing to memory locations that
-    /// can be safely written to based on the register's requirements.
-    #[skip_masked]
-    unsafe fn scatter_m(
-        value: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *mut Self::Element,
-        indices: Storage<Self::USize>,
-    ) {
-        let scale = size_of::<Self::Element>();
-
-        unsafe {
-            let value = Self::as_array(&value);
-            let indices = <Self::USize as Register>::as_array(&indices);
-
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
-                if !<Self::Mask as MaskRegister>::test(mask, i) {
-                    continue;
-                }
-
-                let idx: usize = scale * indices[i].try_into().unwrap_or_default();
-                ptr.add(idx).write(value[i]);
-            }
-        }
     }
 
     // TODO: Masked stores? Would have to fallback to scalar on all but AVX-512,
@@ -550,18 +444,37 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
         // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
         unsafe { core::ptr::write(ptr as *mut Storage<Self>, value) }
+    }
+
+    unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
+        unsafe {
+            let res = Self::as_array(&value);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                ptr.add(i).write(res[i]);
+            }
+        }
     }
 
     /// # SAFETY
     ///
     /// The pointer must be valid and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
+        const {
+            assert!(
+                size_of::<Storage<Self>>() == (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Size mismatch between register storage and array of elements"
+            );
+        }
+
         // SAFETY: This is safe as long as the pointer is valid and of the correct length.
         unsafe { core::ptr::write_unaligned(ptr as *mut Storage<Self>, value) }
     }
@@ -570,58 +483,23 @@ pub trait Register:
     ///
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
-    #[skip_masked]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         // Default to regular store if streaming stores are not supported.
         unsafe { Self::store(ptr, value) }
     }
 
-    // join/split fallbacks really shouldn't be used, but are here
-    // for when HalfRegister is () (i.e., no smaller register type exists),
-    // and if they _are_ used are at least a not-terrible fallback.
-
-    #[skip_masked]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        // NOTE: const_transmute will double-check sizes
-        unsafe { generic_array::const_transmute((lo, hi)) }
-    }
-
-    #[skip_masked]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        // NOTE: const_transmute will double-check sizes
-        unsafe { generic_array::const_transmute(value) }
-    }
-
-    #[skip_masked]
-    fn concat(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self::DoubleRegister>
-    where
-        Self::DoubleRegister: Register<HalfRegister = Self>,
-    {
-        <Self::DoubleRegister as Register>::join(lo, hi)
-    }
-
-    #[skip_masked]
     fn as_array(storage: &Storage<Self>) -> &GenericArray<Self::Element, Self::Lanes> {
         unsafe { &*(storage as *const Storage<Self> as *const GenericArray<Self::Element, Self::Lanes>) }
     }
 
-    #[skip_masked]
     fn as_array_mut(storage: &mut Storage<Self>) -> &mut GenericArray<Self::Element, Self::Lanes> {
         unsafe { &mut *(storage as *mut Storage<Self> as *mut GenericArray<Self::Element, Self::Lanes>) }
     }
 
-    #[skip_masked]
     fn iter(storage: &Storage<Self>) -> core::slice::Iter<'_, Self::Element> {
         Self::as_array(storage).iter()
     }
 
-    #[skip_masked]
     fn iter_mut(storage: &mut Storage<Self>) -> core::slice::IterMut<'_, Self::Element> {
         Self::as_array_mut(storage).iter_mut()
     }
@@ -637,7 +515,6 @@ pub trait Register:
         Self::as_array(&value)[I]
     }
 
-    #[skip_masked]
     fn insert<const I: usize>(mut value: Storage<Self>, element: Self::Element) -> Storage<Self> {
         const {
             assert!(
@@ -650,7 +527,6 @@ pub trait Register:
         value
     }
 
-    #[skip_masked]
     fn map<F>(mut value: Storage<Self>, mut f: F) -> Storage<Self>
     where
         F: FnMut(Self::Element) -> Self::Element,
@@ -662,7 +538,6 @@ pub trait Register:
         value
     }
 
-    #[skip_masked]
     fn zip<F>(mut lhs: Storage<Self>, rhs: Storage<Self>, f: F) -> Storage<Self>
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
@@ -720,12 +595,158 @@ pub trait Register:
     /// True if unpack is simple to implement for this register.
     const HAS_SIMPLE_UNPACK: bool;
 
-    #[skip_masked]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
 
     /// Swap the byte order of each element in the register.
-    #[conditional]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self>;
+}
+
+/// Combine and split registers.
+///
+/// This is used for widening and narrowing operations, where we want to combine
+/// two narrower registers into a wider one, or split a wider register into two narrower ones.
+pub trait ConcatRegister<HALF: CoreRegister>: ExtendRegister<HALF> {
+    fn concat(lo: Storage<HALF>, hi: Storage<HALF>) -> Storage<Self>;
+    fn split(value: Storage<Self>) -> (Storage<HALF>, Storage<HALF>);
+}
+
+pub trait SplitRegister<WIDE: ConcatRegister<Self>>: CoreRegister {}
+impl<HALF: CoreRegister, WIDE: CoreRegister> SplitRegister<WIDE> for HALF where WIDE: ConcatRegister<HALF> {}
+
+/// Zero-extend a narrower register into a wider register.
+pub trait ExtendRegister<FROM: CoreRegister>: CoreRegister {
+    fn extend(value: Storage<FROM>) -> Storage<Self>;
+
+    /// Narrow a wider register into a narrower register, discarding the upper bits.
+    fn narrow(value: Storage<Self>) -> Storage<FROM>;
+}
+
+pub trait NarrowRegister<TO: ExtendRegister<Self>>: CoreRegister {}
+impl<FROM: CoreRegister, TO: CoreRegister> NarrowRegister<TO> for FROM where TO: ExtendRegister<FROM> {}
+
+/// Register trait implemented for registers with known wider registers available, such as on AVX2 we can concat two 128-bit
+/// registers to one 256-bit register.
+pub trait WideRegister: Register
+where
+    typenum::Double<Self::Lanes>: Lanes,
+{
+    /// 2x Wide register
+    type Wide: ConcatRegister<Self> + Register<Element = Self::Element, Lanes = typenum::Double<Self::Lanes>>;
+}
+
+// pub trait IndexableFor<FOR: IndexableRegister<Self>>: UnsignedIntegerRegister<Lanes = FOR::Lanes> {}
+
+// impl<IDX, FOR> IndexableFor<FOR> for IDX
+// where
+//     IDX: UnsignedIntegerRegister<Lanes = FOR::Lanes>,
+//     FOR: IndexableRegister<Self>,
+// {
+// }
+
+pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: Register {
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<IDX>) -> Storage<Self> {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let mut result = Self::EMPTY;
+
+            let res = Self::as_array_mut(&mut result);
+            let indices = IDX::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                res[i] = ptr.add(indices[i].try_into().unwrap_unchecked()).read();
+            }
+
+            result
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<IDX>,
+    ) -> Storage<Self> {
+        let scale = size_of::<Self::Element>();
+
+        unsafe {
+            let mut result = src;
+
+            let res = Self::as_array_mut(&mut result);
+            let src = Self::as_array(&src);
+            let indices = IDX::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                res[i] = ptr.add(indices[i].try_into().unwrap_unchecked()).read();
+            }
+
+            result
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely read from based on the register's requirements.
+    #[inline(always)]
+    unsafe fn gather_z(mask: Storage<Self::Mask>, ptr: *const Self::Element, indices: Storage<IDX>) -> Storage<Self> {
+        unsafe { Self::gather_m(Self::EMPTY, mask, ptr, indices) }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely written to based on the register's requirements.
+    #[inline(always)]
+    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<IDX>) {
+        unsafe {
+            let value = Self::as_array(&value);
+            let indices = IDX::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                ptr.add(indices[i].try_into().unwrap_unchecked()).write(value[i]);
+            }
+        }
+    }
+
+    /// # SAFETY
+    ///
+    /// The pointer must be valid, aligned, and pointing to memory locations that
+    /// can be safely written to based on the register's requirements.
+    #[inline(always)]
+    unsafe fn scatter_m(
+        value: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *mut Self::Element,
+        indices: Storage<IDX>,
+    ) {
+        unsafe {
+            let value = Self::as_array(&value);
+            let indices = IDX::as_array(&indices);
+
+            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+                if !<Self::Mask as MaskRegister>::test(mask, i) {
+                    continue;
+                }
+
+                ptr.add(indices[i].try_into().unwrap_unchecked()).write(value[i]);
+            }
+        }
+    }
 }
 
 /// Shuffle registers using an immediate value.
@@ -758,7 +779,6 @@ const fn is_power_of_2(n: u32) -> bool {
 pub trait SwizzleRegister: Register {
     const HAS_PERMUTEV: bool;
 
-    #[skip_masked]
     fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
@@ -782,11 +802,11 @@ pub trait SwizzleRegister: Register {
         result
     }
 
+    #[masked]
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         Self::scalar_permutev(value, idxs)
     }
 
-    #[skip_masked]
     fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
@@ -820,6 +840,7 @@ pub trait SwizzleRegister: Register {
         result
     }
 
+    #[masked]
     fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         use typenum::Unsigned;
 
@@ -851,13 +872,13 @@ pub trait SwizzleRegister: Register {
 }
 
 #[rustfmt::skip]
-#[thermite_macros::register_trait] #[conditional]
+#[thermite_macros::register_trait]
 pub trait BitshiftRegister: Register<Element: IntegerElement> {
-    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self>;
-    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self>;
+    #[conditional] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self>;
+    #[conditional] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self>;
 
-    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self::shl(value, IMM8 as u32) }
-    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self::shr(value, IMM8 as u32) }
+    #[conditional] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self::shl(value, IMM8 as u32) }
+    #[conditional] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { Self::shr(value, IMM8 as u32) }
 
     /// Indicates if bshli/bshri are supported natively.
     const HAS_WIDE_BYTE_SHIFTS: bool;
@@ -865,7 +886,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// Shifts the ENTIRE register left by a constant amount of BYTES,
     /// filling with zeros. This is different from lane-wise shifts, and effectively
     /// treats the register as one large integer.
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
         let arr = Self::as_array_mut(&mut value);
         let lane_width = core::mem::size_of::<Self::Element>() * 8;
         let lanes = <Self::Lanes as Unsigned>::USIZE;
@@ -911,7 +932,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// Shifts the ENTIRE register right by a constant amount of BYTES,
     /// filling with zeros. This is different from lane-wise shifts, and effectively
     /// treats the register as one large integer.
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
         let arr = Self::as_array_mut(&mut value);
         let lane_width = core::mem::size_of::<Self::Element>() * 8;
         let lanes = <Self::Lanes as Unsigned>::USIZE;
@@ -958,11 +979,11 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// requires a scalar fallback.
     const HAS_TRUE_SHIFTV: bool;
 
-    fn shrv(mut value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[conditional] fn shrv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback
         for (r, s) in Self::as_array_mut(&mut value)
             .iter_mut()
-            .zip(<Self::USize as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_array(&shifts))
         {
             *r = *r >> *s;
         }
@@ -970,11 +991,11 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
         value
     }
 
-    fn shlv(mut value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[conditional] fn shlv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback
         for (r, s) in Self::as_array_mut(&mut value)
             .iter_mut()
-            .zip(<Self::USize as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_array(&shifts))
         {
             *r = *r << *s;
         }
@@ -983,63 +1004,61 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     }
 
     /// Rotate bits left
-    fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {
+    #[conditional] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {
         let width = (core::mem::size_of::<Self::Element>() * 8) as u32;
         Self::bitor(Self::shl(value, shift), Self::shr(value, width - shift))
     }
 
     /// Rotate bits right
-    fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {
+    #[conditional] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {
         let width = (core::mem::size_of::<Self::Element>() * 8) as u32;
         Self::bitor(Self::shr(value, shift), Self::shl(value, width - shift))
     }
 
     /// Rotate bits left by a constant amount
-    fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         Self::rol(value, IMM8 as u32)
     }
 
     /// Rotate bits right by a constant amount
-    fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         Self::ror(value, IMM8 as u32)
     }
 
-    #[skip_conditional]
-    fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[masked]
+    fn rolv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         let width = (size_of::<Self::Element>() * 8) as u16;
-        let width_vec = Self::USize::splat(Element::from_u16(width));
+        let width_vec = Self::Unsigned::splat(Element::from_u16(width));
 
         Self::bitor(
             Self::shlv(value, shifts),
-            Self::shrv(value, Self::USize::sub(width_vec, shifts)),
+            Self::shrv(value, Self::Unsigned::sub(width_vec, shifts)),
         )
     }
 
-    #[skip_masked]
-    fn rolv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    fn rolv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // zero out the shifts where the mask is not set
-        let mask = <<Self::USize as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
-        Self::rolv(value, <Self::USize as CoreRegister>::z(mask, shifts))
+        let mask = <<Self::Unsigned as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
+        Self::rolv(value, <Self::Unsigned as CoreRegister>::z(mask, shifts))
     }
 
-    #[skip_conditional]
-    fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[masked]
+    fn rorv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         let width = (size_of::<Self::Element>() * 8) as u16;
-        let width_vec = Self::USize::splat(Element::from_u16(width));
+        let width_vec = Self::Unsigned::splat(Element::from_u16(width));
 
         Self::bitor(
             Self::shrv(value, shifts),
-            Self::shlv(value, Self::USize::sub(width_vec, shifts)),
+            Self::shlv(value, Self::Unsigned::sub(width_vec, shifts)),
         )
     }
 
-    #[skip_masked]
-    fn rorv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
-        let mask = <<Self::USize as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
-        Self::rorv(value, <Self::USize as CoreRegister>::z(mask, shifts))
+    fn rorv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        let mask = <<Self::Unsigned as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
+        Self::rorv(value, <Self::Unsigned as CoreRegister>::z(mask, shifts))
     }
 
-    fn reverse_bits(mut value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn reverse_bits(mut value: Storage<Self>) -> Storage<Self> {
         // Use hardware byte swapping to handle bit reversals at the byte level and above.
         // This effectively handles s=32, s=16, s=8 for u64/u32/u16 in one go.
         value = Self::swap_bytes(value);
@@ -1076,56 +1095,6 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     }
 }
 
-pub trait WidenRegister<FROM>
-where
-    Self: Register<HalfRegister = FROM>,
-    FROM: Register<Element = Self::Element>,
-{
-    /// Truncate the register from another register type into this register type.
-    fn widen_from(value: FROM::Storage) -> Storage<Self>;
-
-    #[inline(always)]
-    fn join(lo: Storage<FROM>, hi: Storage<FROM>) -> Storage<Self> {
-        <Self as Register>::join(lo, hi)
-    }
-}
-
-impl<FROM, INTO> WidenRegister<FROM> for INTO
-where
-    INTO: Register<HalfRegister = FROM>,
-    FROM: Register<Element = INTO::Element>,
-{
-    #[inline(always)]
-    fn widen_from(value: Storage<FROM>) -> Storage<Self> {
-        INTO::join(value, FROM::EMPTY)
-    }
-}
-
-pub trait NarrowRegister<INTO>
-where
-    INTO: Register,
-    Self: Register<Element = INTO::Element, HalfRegister = INTO>,
-{
-    /// Extend the register from another register type into this register type.
-    fn narrow_from(value: Self::Storage) -> Storage<INTO>;
-
-    #[inline(always)]
-    fn split(value: Storage<Self>) -> (Storage<INTO>, Storage<INTO>) {
-        <Self as Register>::split(value)
-    }
-}
-
-impl<FROM, INTO> NarrowRegister<INTO> for FROM
-where
-    INTO: Register,
-    FROM: Register<Element = INTO::Element, HalfRegister = INTO>,
-{
-    #[inline(always)]
-    fn narrow_from(value: Storage<FROM>) -> Storage<INTO> {
-        FROM::split(value).0
-    }
-}
-
 /// A trait for registers that can be cast to/from other registers,
 /// including of varying element types.
 pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
@@ -1158,7 +1127,7 @@ pub trait CastMaskRegister<FROM: CoreRegister>: CoreRegister {
 }
 
 #[rustfmt::skip]
-#[thermite_macros::register_trait] #[skip_masked]
+#[thermite_macros::register_trait]
 pub trait PartialOrdRegister: Register {
     fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask>;
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask>;
@@ -1178,9 +1147,9 @@ pub trait PartialOrdRegister: Register {
 #[rustfmt::skip]
 #[thermite_macros::register_trait]
 pub trait NumericRegister:
-    PartialOrdRegister<ISize: CastRegister<Self>, USize: CastRegister<Self>>
-    + CastRegister<Self::ISize>
-    + CastRegister<Self::USize>
+    PartialOrdRegister<Signed: CastRegister<Self>, Unsigned: CastRegister<Self>>
+    + CastRegister<Self::Signed>
+    + CastRegister<Self::Unsigned>
 {
     const ZERO: Storage<Self>;
     const ONE: Storage<Self>;
@@ -1201,43 +1170,8 @@ pub trait NumericRegister:
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    fn sort(mut value: Storage<Self>) -> Storage<Self> {
-        let s = Self::as_array_mut(&mut value);
-
-        /// Compare-and-Swap: The atomic primitive of sorting networks.
-        /// LLVM optimizes this to `cmp` + `cmov` (Conditional Move), which is branchless.
-        #[inline(always)]
-        fn cas<T: PartialOrd>(s: &mut [T], i: usize, j: usize) {
-            // Note: slice indexing checks bounds.
-            // For maximal performance, you could use `get_unchecked` if unsafe is permitted,
-            // but the optimizer often elides checks in fixed-size networks anyway.
-            if s[i] > s[j] {
-                s.swap(i, j);
-            }
-        }
-
-        #[rustfmt::skip]
-        let () = match s.len() {
-            2 => cas(s, 0, 1),
-            4 => {
-                cas(s, 0, 1); cas(s, 2, 3); // Layer 1
-                cas(s, 0, 2); cas(s, 1, 3); // Layer 2
-                cas(s, 1, 2);               // Layer 3
-            },
-            // For N=8 or others, Insertion Sort is compact and very fast for N < 20
-            _ => {
-                for i in 1..s.len() {
-                    let mut j = i;
-                    // The compiler unrolls this loop well for small fixed bounds
-                    while j > 0 && s[j - 1] > s[j] {
-                        s.swap(j - 1, j);
-                        j -= 1;
-                    }
-                }
-            }
-        };
-
-        value
+    fn sort(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::sort::sort_any::<Self>(value)
     }
 
     fn min_element(value: Storage<Self>) -> Self::Element;
@@ -1251,13 +1185,11 @@ pub trait NumericRegister:
     fn indexed() -> Storage<Self>;
 }
 
-#[thermite_macros::register_trait]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
-    fn neg(value: Storage<Self>) -> Storage<Self>;
-    fn abs(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn neg(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn abs(value: Storage<Self>) -> Storage<Self>;
 
-    #[skip_masked]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         let is_neg = Self::is_negative(value);
         let is_zero = Self::eq(value, Self::ZERO);
@@ -1273,6 +1205,7 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
         }
     }
 
+    #[conditional]
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         let abs = Self::abs(lhs);
 
@@ -1291,424 +1224,66 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
     }
 
     /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
-    #[skip_masked]
     fn select_negative(value: Storage<Self>, falsy: Storage<Self>, truthy: Storage<Self>) -> Storage<Self> {
         // no matter the element type, float or integer, MSB is the sign bit
         Self::blendv(Self::msb_to_mask(value), falsy, truthy)
     }
 }
 
-#[inline(always)]
-fn zip_ternary<R: FloatRegister, F>(mut lhs: Storage<R>, rhs: Storage<R>, acc: Storage<R>, f: F) -> Storage<R>
-where
-    F: Fn(&mut R::Element, R::Element, R::Element),
-{
-    let rhs = R::iter(&rhs);
-    let acc = R::iter(&acc);
-
-    for ((lhs, rhs), acc) in R::iter_mut(&mut lhs).zip(rhs).zip(acc) {
-        f(lhs, *rhs, *acc);
-    }
-
-    lhs
-}
-
-#[thermite_macros::register_trait]
-#[conditional]
-pub trait FloatRegister:
-    SignedRegister<Element: FloatElementWithBits>
-    + FullyInteroperable<Self::Bits, Self::Signed>
-    + CastRegister<Self::ExtendedPrecision>
-{
-    type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Bits>
-        + FullyInteroperable<Self, Self::Signed>;
-    type Signed: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Signed>
-        + FullyInteroperable<Self, Self::Bits>;
-
-    /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
-    /// and this associated type provides that capability. If no higher-precision type is available,
-    /// this type should be the same as `Self` as a safe fallback.
-    type ExtendedPrecision: FloatRegister<Lanes = Self::Lanes> + CastRegister<Self>;
-
-    const HAS_TRUE_FMA: bool;
-
-    const HALF: Storage<Self>;
-    const NEG_ZERO: Storage<Self>;
-    const INFINITY: Storage<Self>;
-    const NEG_INFINITY: Storage<Self>;
-    const NAN: Storage<Self>;
-    const EPSILON: Storage<Self>;
-
-    const EXP_MASK: Storage<Self::Bits>;
-
-    const HAS_NATIVE_LDEXP: bool;
-    const HAS_NATIVE_FREXP: bool;
-
-    #[skip_masked]
-    unsafe fn block_autovectorization(_value: &mut Storage<Self>) {}
-
-    #[skip_masked]
-    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
-        unreachable!("native_ldexp is not implemented for this FloatRegister");
-    }
-
-    #[skip_masked]
-    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
-        unreachable!("native_frexp is not implemented for this FloatRegister");
-    }
-
-    #[skip_masked]
-    fn total_order(value: Storage<Self>) -> Storage<Self::Signed> {
-        // value ^ (is_negative(value) >> 1), where is_negative produces all 1s for negative and all 0s for positive,
-        // usually by shifting the sign bit to fill the register using an arithmetic shift right
-
-        // Original algorithm from Rust's f32/f64 total_cmp implementation:
-        //
-        // In case of negatives, flip all the bits except the sign
-        // to achieve a similar layout as two's complement integers
-        //
-        // Why does this work? IEEE 754 floats consist of three fields:
-        // Sign bit, exponent and mantissa. The set of exponent and mantissa
-        // fields as a whole have the property that their bitwise order is
-        // equal to the numeric magnitude where the magnitude is defined.
-        // The magnitude is not normally defined on NaN values, but
-        // IEEE 754 totalOrder defines the NaN values also to follow the
-        // bitwise order. This leads to order explained in the doc comment.
-        // However, the representation of magnitude is the same for negative
-        // and positive numbers – only the sign bit is different.
-        // To easily compare the floats as signed integers, we need to
-        // flip the exponent and mantissa bits in case of negative numbers.
-        // We effectively convert the numbers to "two's complement" form.
-        //
-        // To do the flipping, we construct a mask and XOR against it.
-        // We branchlessly calculate an "all-ones except for the sign bit"
-        // mask from negative-signed values: right shifting sign-extends
-        // the integer, so we "fill" the mask with sign bits, and then
-        // convert to unsigned to push one more zero bit.
-        // On positive values, the mask is all zeros, so it's a no-op.
-
-        let shift = const { size_of::<Self::Element>() as u32 * 8 - 1 };
-        let signed_bits = <Self::Signed as BitCastRegister<Self>>::from_bits(value);
-        let is_negative = <Self::Signed as SignedIntegerRegister>::sra(signed_bits, shift);
-        let mask = <Self::Signed as BitshiftRegister>::shri::<1>(is_negative);
-
-        Self::Signed::bitxor(signed_bits, mask)
-    }
-
-    #[skip_masked]
-    fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {
-        if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
-            // If the type has a specific NaN pattern, we can check for that directly.
-            let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
-
-            // This will also imply that comparing values is similar to comparing integers,
-            // and it won't trigger a false positive.
-            return Self::eq(value, nan);
-        }
-
-        // easiest way to check for NaN is to check if it's not equal to itself
-        Self::ne(value, value)
-    }
-
-    #[skip_masked]
-    fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {
-        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
-            // If the type doesn't support infinity, then there are no infinite values.
-            return Self::Mask::FALSY;
-        }
-
-        Self::eq(Self::abs(value), Self::INFINITY)
-    }
-
-    #[skip_masked]
-    fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {
-        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
-            // If the type doesn't support infinity, then all values are finite.
-            return Self::Mask::TRUTHY;
-        }
-
-        Self::lt(Self::abs(value), Self::INFINITY)
-    }
-
-    #[skip_masked]
-    fn is_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
-        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
-            // If the type doesn't support subnormals, then there are no subnormal values.
-            return Self::Mask::FALSY;
-        }
-
-        // we're operating in the integer domain here
-        let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
-
-        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
-        let rest = Self::Bits::bitandnot(Self::EXP_MASK, bits); // extract mantissa + sign bits
-
-        // shift mantissa to remove sign bit, and even though it's offset
-        // it'll still work since we're just checking for zero
-        let mantissa = Self::Bits::shli::<1>(rest);
-
-        // use eq here for both since there's always an instruction for that
-        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
-        let mantissa_is_zero = Self::Bits::eq(mantissa, Self::Bits::ZERO);
-
-        // float is subnormal if mantissa != 0 && exp == 0, and by using bitandnot we can avoid using ne above
-        let is_subnormal = <Self::Bits as CoreRegister>::Mask::bitandnot(mantissa_is_zero, exp_is_zero);
-
-        // convert back to self mask register
-        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_subnormal)
-    }
-
-    #[skip_masked]
-    fn is_zero_or_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
-        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
-            // If the type doesn't support subnormals, then there are no subnormal values.
-            return Self::eq(value, Self::ZERO);
-        }
-
-        // we're operating in the integer domain here
-        let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
-
-        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
-
-        // zero or subnormal if exp == 0, very simple
-        let is_zero_or_subnormal = Self::Bits::eq(exp, Self::Bits::ZERO);
-
-        // convert back to float register
-        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_zero_or_subnormal)
-    }
-
-    #[skip_masked]
-    fn is_normal(value: Storage<Self>) -> Storage<Self::Mask> {
-        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
-
-        // "normal" is defined as not zero/subnormal, not infinite, and not NaN
-        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
-
-        // exp = 0 implies zero or subnormal
-        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
-
-        let exp_is_max: Storage<<Self::Bits as CoreRegister>::Mask> =
-            if const { <Self::Element as FloatElement>::HAS_INFINITY } {
-                Self::Bits::eq(exp, Self::EXP_MASK) // exp is max implies infinity or NaN
-            } else if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
-                let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
-
-                // if NaN is represented by a specific pattern
-                <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(Self::eq(value, nan))
-            } else {
-                // If the type doesn't support infinity, then it also doesn't have a max exponent pattern.
-                // This value should be optimized out of the bitor below
-                <<Self::Bits as CoreRegister>::Mask as MaskRegister>::FALSY
-            };
-
-        // normal if exp != 0 && exp != max, so 0 < exp < max is the normal range
-        let is_not_normal = <Self::Bits as CoreRegister>::Mask::bitor(exp_is_max, exp_is_zero);
-
-        let is_normal = <Self::Bits as CoreRegister>::Mask::not(is_not_normal);
-
-        // convert back to float register
-        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_normal)
-    }
-
-    fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
-            Self::mul_add(lhs, rhs, acc)
-        } else {
-            Self::add(Self::mul(lhs, rhs), acc)
-        }
-    }
-
-    fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
-            Self::mul_sub(lhs, rhs, acc)
-        } else {
-            Self::sub(Self::mul(lhs, rhs), acc)
-        }
-    }
-
-    fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
-            Self::nmul_add(lhs, rhs, acc)
-        } else {
-            Self::sub(acc, Self::mul(lhs, rhs))
-        }
-    }
-
-    fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
-            Self::nmul_sub(lhs, rhs, acc)
-        } else {
-            Self::mul_sube(Self::neg(lhs), rhs, acc)
-        }
-    }
-
-    fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = MulAddExt::mul_add(*lhs, rhs, acc);
-        })
-    }
-
-    fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = MulAddExt::mul_sub(*lhs, rhs, acc);
-        })
-    }
-
-    fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = MulAddExt::nmul_add(*lhs, rhs, acc);
-        })
-    }
-
-    fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
-            *lhs = MulAddExt::nmul_sub(*lhs, rhs, acc);
-        })
-    }
-
-    fn sqrt(value: Storage<Self>) -> Storage<Self>;
-
-    fn rcp(value: Storage<Self>) -> Storage<Self> {
-        Self::div(Self::ONE, value)
-    }
-
-    fn rsqrt(value: Storage<Self>) -> Storage<Self> {
-        Self::rcp(Self::sqrt(value))
-    }
-
-    const HAS_APPROX_RSQRT: bool;
-    const HAS_APPROX_RCP: bool;
-
-    fn floor(value: Storage<Self>) -> Storage<Self>;
-    fn ceil(value: Storage<Self>) -> Storage<Self>;
-    fn round(value: Storage<Self>) -> Storage<Self>;
-    fn trunc(value: Storage<Self>) -> Storage<Self>;
-
-    fn fract(value: Storage<Self>) -> Storage<Self> {
-        Self::sub(value, Self::trunc(value))
-    }
-
-    fn mul_sign(value: Storage<Self>, sign: Storage<Self>) -> Storage<Self> {
-        Self::bitxor(value, Self::signed_zero(sign))
-    }
-
-    /// Returns a signed zero with the same sign as the given value
-    fn signed_zero(value: Storage<Self>) -> Storage<Self> {
-        Self::bitand(Self::NEG_ZERO, value)
-    }
-
-    fn next_up(value: Storage<Self>) -> Storage<Self> {
-        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
-        let abs = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::abs(value));
-
-        let is_nan = Self::is_nan(value);
-        let is_inf = Self::eq(value, Self::INFINITY);
-        let unchanged = Self::Mask::bitor(is_nan, is_inf);
-
-        // Use bitwise comparison for positive/zero check to handle -0.0 correctly
-        // (abs == bits) is true for positive numbers and +0.0, false for negative numbers and -0.0
-        let is_positive = Self::Bits::eq(abs, bits);
-        let is_zero = Self::Bits::eq(abs, <Self::Bits as BitCastRegister<Self>>::from_bits(Self::ZERO));
-
-        let add = Self::Bits::add(bits, Self::Bits::ONE);
-        let sub = Self::Bits::sub(bits, Self::Bits::ONE);
-
-        // If positive, add 1 (magnitude up). If negative, sub 1 (magnitude down towards -inf).
-        // blendv(mask, lhs, rhs) -> if mask { rhs } else { lhs }
-        let next_bits = Self::Bits::blendv(is_positive, sub, add);
-
-        // If zero, return MIN_POSITIVE (0x1)
-        let next_bits = Self::Bits::blendv(is_zero, next_bits, Self::Bits::ONE);
-
-        // cast mask from float mask to bits mask
-        let unchanged = <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(unchanged);
-
-        <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
-    }
-
-    fn next_down(value: Storage<Self>) -> Storage<Self> {
-        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
-        let abs = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::abs(value));
-
-        let is_nan = Self::is_nan(value);
-        let is_neg_inf = Self::eq(value, Self::NEG_INFINITY);
-        let unchanged = Self::Mask::bitor(is_nan, is_neg_inf);
-
-        let is_positive = Self::Bits::eq(abs, bits);
-        let is_zero = Self::Bits::eq(abs, <Self::Bits as BitCastRegister<Self>>::from_bits(Self::ZERO));
-
-        let add = Self::Bits::add(bits, Self::Bits::ONE);
-        let sub = Self::Bits::sub(bits, Self::Bits::ONE);
-
-        // If positive, sub 1 (magnitude down). If negative, add 1 (magnitude up towards -inf).
-        // blendv(mask, lhs, rhs) -> if mask { rhs } else { lhs }
-        let next_bits = Self::Bits::blendv(is_positive, add, sub);
-
-        // If zero, return -MIN_POSITIVE (0x80...01)
-        let sign_bit = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::NEG_ZERO);
-        let min_neg = Self::Bits::bitor(Self::Bits::ONE, sign_bit);
-
-        let next_bits = Self::Bits::blendv(is_zero, next_bits, min_neg);
-
-        // cast mask from float mask to bits mask
-        let unchanged = <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(unchanged);
-
-        <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
-    }
-}
-
 use num_traits::{WrappingAdd, WrappingMul};
 
-#[thermite_macros::register_trait]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {
-    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-    fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    fn wrapping_sum(value: Storage<Self>) -> Self::Element {
+    #[conditional] fn wrapping_sum(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_add(&b))
     }
 
-    fn wrapping_product(value: Storage<Self>) -> Self::Element {
+    #[conditional] fn wrapping_product(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_mul(&b))
     }
 
-    fn div_branched(value: Storage<Self>, divider: Divider<Self::Element>) -> Storage<Self>;
-    fn div_branchfree(value: Storage<Self>, divider: BranchfreeDivider<Self::Element>) -> Storage<Self>;
-    fn divv_branchfree(value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self>;
+    #[conditional] fn div_branched(value: Storage<Self>, divider: Divider<Self::Element>) -> Storage<Self>;
+    #[conditional] fn div_branchfree(value: Storage<Self>, divider: BranchfreeDivider<Self::Element>) -> Storage<Self>;
+    #[conditional] fn divv_branchfree(value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self>;
 
     const HAS_HARDWARE_POPCNT: bool;
 
-    fn count_ones(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn count_ones(value: Storage<Self>) -> Storage<Self>;
 
-    fn count_zeros(value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn count_zeros(value: Storage<Self>) -> Storage<Self> {
         Self::count_ones(Self::not(value))
     }
 
-    fn leading_zeros(value: Storage<Self>) -> Storage<Self>;
-    fn trailing_zeros(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn leading_zeros(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn trailing_zeros(value: Storage<Self>) -> Storage<Self>;
 
-    fn leading_ones(value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn leading_ones(value: Storage<Self>) -> Storage<Self> {
         Self::leading_zeros(Self::not(value))
     }
 
-    fn trailing_ones(value: Storage<Self>) -> Storage<Self> {
+    #[conditional] fn trailing_ones(value: Storage<Self>) -> Storage<Self> {
         Self::trailing_zeros(Self::not(value))
     }
 }
 
 #[thermite_macros::register_trait]
-#[conditional]
-pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self, Element: num_traits::Unsigned> {
+pub trait UnsignedIntegerRegister:
+    IntegerRegister<Unsigned = Self, Element: crate::element::UnsignedIntegerElement>
+{
     /// Returns `floor(log2(x)) + 1`
+    #[conditional]
     fn ilog2p1(value: Storage<Self>) -> Storage<Self> {
         Self::count_ones(Self::next_power_of_two_m1(value))
     }
 
     /// Next power of two minus 1
+    #[conditional]
     fn next_power_of_two_m1(mut value: Storage<Self>) -> Storage<Self> {
         let width = (size_of::<Self::Element>() * 8) as u32;
         let mut s = 1;
@@ -1722,12 +1297,12 @@ pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self, Element: num_tr
         value
     }
 
-    #[skip_masked]
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {
         // f = (v & (v - 1)) == 0
         Self::eq(Self::ZERO, Self::bitand(value, Self::sub(value, Self::ONE)))
     }
 
+    #[conditional]
     fn parity(mut value: Storage<Self>) -> Storage<Self> {
         let mut shift = size_of::<Self::Element>() as u32 * 4; // Start with half the bit width
 
@@ -1761,23 +1336,375 @@ pub trait UnsignedIntegerRegister: IntegerRegister<USize = Self, Element: num_tr
 }
 
 #[thermite_macros::register_trait]
-#[conditional]
-pub trait SignedIntegerRegister: IntegerRegister<ISize = Self> + SignedRegister {
+pub trait SignedIntegerRegister:
+    IntegerRegister<Signed = Self, Element: crate::element::SignedIntegerElement> + SignedRegister
+{
+    #[conditional]
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self>;
 
+    #[conditional]
     fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         Self::sra(value, IMM8 as u32)
     }
 
-    fn srav(mut value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[conditional]
+    fn srav(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback
         for (r, s) in Self::as_array_mut(&mut value)
             .iter_mut()
-            .zip(<Self::USize as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_array(&shifts))
         {
             *r = *r >> *s; // r in this context is signed, so this is an arithmetic shift
         }
 
         value
+    }
+}
+
+#[inline(always)]
+fn zip_ternary<R: FloatRegister, F>(mut lhs: Storage<R>, rhs: Storage<R>, acc: Storage<R>, f: F) -> Storage<R>
+where
+    F: Fn(&mut R::Element, R::Element, R::Element),
+{
+    let rhs = R::iter(&rhs);
+    let acc = R::iter(&acc);
+
+    for ((lhs, rhs), acc) in R::iter_mut(&mut lhs).zip(rhs).zip(acc) {
+        f(lhs, *rhs, *acc);
+    }
+
+    lhs
+}
+
+#[rustfmt::skip] #[thermite_macros::register_trait]
+pub trait FloatRegister:
+    SignedRegister<Element: FloatElementWithBits>
+    + FullyInteroperable<Self::Bits, Self::SignedBits>
+    + CastRegister<Self::ExtendedPrecision>
+{
+    type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Bits>
+        + FullyInteroperable<Self, Self::SignedBits>;
+    type SignedBits: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::SignedBits>
+        + FullyInteroperable<Self, Self::Bits>;
+
+    /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
+    /// and this associated type provides that capability. If no higher-precision type is available,
+    /// this type should be the same as `Self` as a safe fallback.
+    type ExtendedPrecision: FloatRegister<Lanes = Self::Lanes> + CastRegister<Self>;
+
+    const HAS_TRUE_FMA: bool;
+
+    const HALF: Storage<Self>;
+    const NEG_ZERO: Storage<Self>;
+    const INFINITY: Storage<Self>;
+    const NEG_INFINITY: Storage<Self>;
+    const NAN: Storage<Self>;
+    const EPSILON: Storage<Self>;
+
+    const EXP_MASK: Storage<Self::Bits>;
+
+    const HAS_NATIVE_LDEXP: bool;
+    const HAS_NATIVE_FREXP: bool;
+
+    unsafe fn block_autovectorization(_value: &mut Storage<Self>) {}
+
+    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
+        unreachable!("native_ldexp is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
+        unreachable!("native_frexp is not implemented for this FloatRegister");
+    }
+
+    fn total_order(value: Storage<Self>) -> Storage<Self::SignedBits> {
+        // value ^ (is_negative(value) >> 1), where is_negative produces all 1s for negative and all 0s for positive,
+        // usually by shifting the sign bit to fill the register using an arithmetic shift right
+
+        // Original algorithm from Rust's f32/f64 total_cmp implementation:
+        //
+        // In case of negatives, flip all the bits except the sign
+        // to achieve a similar layout as two's complement integers
+        //
+        // Why does this work? IEEE 754 floats consist of three fields:
+        // Sign bit, exponent and mantissa. The set of exponent and mantissa
+        // fields as a whole have the property that their bitwise order is
+        // equal to the numeric magnitude where the magnitude is defined.
+        // The magnitude is not normally defined on NaN values, but
+        // IEEE 754 totalOrder defines the NaN values also to follow the
+        // bitwise order. This leads to order explained in the doc comment.
+        // However, the representation of magnitude is the same for negative
+        // and positive numbers – only the sign bit is different.
+        // To easily compare the floats as signed integers, we need to
+        // flip the exponent and mantissa bits in case of negative numbers.
+        // We effectively convert the numbers to "two's complement" form.
+        //
+        // To do the flipping, we construct a mask and XOR against it.
+        // We branchlessly calculate an "all-ones except for the sign bit"
+        // mask from negative-signed values: right shifting sign-extends
+        // the integer, so we "fill" the mask with sign bits, and then
+        // convert to unsigned to push one more zero bit.
+        // On positive values, the mask is all zeros, so it's a no-op.
+
+        let shift = const { size_of::<Self::Element>() as u32 * 8 - 1 };
+        let signed_bits = <Self::SignedBits as BitCastRegister<Self>>::from_bits(value);
+        let is_negative = <Self::SignedBits as SignedIntegerRegister>::sra(signed_bits, shift);
+        let mask = <Self::SignedBits as BitshiftRegister>::shri::<1>(is_negative);
+
+        Self::SignedBits::bitxor(signed_bits, mask)
+    }
+
+    fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {
+        if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
+            // If the type has a specific NaN pattern, we can check for that directly.
+            let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
+
+            // This will also imply that comparing values is similar to comparing integers,
+            // and it won't trigger a false positive.
+            return Self::eq(value, nan);
+        }
+
+        // easiest way to check for NaN is to check if it's not equal to itself
+        Self::ne(value, value)
+    }
+
+    fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
+            // If the type doesn't support infinity, then there are no infinite values.
+            return Self::Mask::FALSY;
+        }
+
+        Self::eq(Self::abs(value), Self::INFINITY)
+    }
+
+    fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_INFINITY } {
+            // If the type doesn't support infinity, then all values are finite.
+            return Self::Mask::TRUTHY;
+        }
+
+        Self::lt(Self::abs(value), Self::INFINITY)
+    }
+
+    fn is_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
+            // If the type doesn't support subnormals, then there are no subnormal values.
+            return Self::Mask::FALSY;
+        }
+
+        // we're operating in the integer domain here
+        let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
+
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+        let rest = Self::Bits::bitandnot(Self::EXP_MASK, bits); // extract mantissa + sign bits
+
+        // shift mantissa to remove sign bit, and even though it's offset
+        // it'll still work since we're just checking for zero
+        let mantissa = Self::Bits::shli::<1>(rest);
+
+        // use eq here for both since there's always an instruction for that
+        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
+        let mantissa_is_zero = Self::Bits::eq(mantissa, Self::Bits::ZERO);
+
+        // float is subnormal if mantissa != 0 && exp == 0, and by using bitandnot we can avoid using ne above
+        let is_subnormal = <Self::Bits as CoreRegister>::Mask::bitandnot(mantissa_is_zero, exp_is_zero);
+
+        // convert back to self mask register
+        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_subnormal)
+    }
+
+    fn is_zero_or_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {
+        if const { !<Self::Element as FloatElement>::HAS_SUBNORMALS } {
+            // If the type doesn't support subnormals, then there are no subnormal values.
+            return Self::eq(value, Self::ZERO);
+        }
+
+        // we're operating in the integer domain here
+        let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
+
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+
+        // zero or subnormal if exp == 0, very simple
+        let is_zero_or_subnormal = Self::Bits::eq(exp, Self::Bits::ZERO);
+
+        // convert back to float register
+        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_zero_or_subnormal)
+    }
+
+    fn is_normal(value: Storage<Self>) -> Storage<Self::Mask> {
+        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
+
+        // "normal" is defined as not zero/subnormal, not infinite, and not NaN
+        let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
+
+        // exp = 0 implies zero or subnormal
+        let exp_is_zero = Self::Bits::eq(exp, Self::Bits::ZERO);
+
+        let exp_is_max: Storage<<Self::Bits as CoreRegister>::Mask> =
+            if const { <Self::Element as FloatElement>::HAS_INFINITY } {
+                Self::Bits::eq(exp, Self::EXP_MASK) // exp is max implies infinity or NaN
+            } else if let Some(nan_pattern) = <Self::Element as FloatElementWithBits>::NAN_PATTERN {
+                let nan = <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::splat(nan_pattern));
+
+                // if NaN is represented by a specific pattern
+                <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(Self::eq(value, nan))
+            } else {
+                // If the type doesn't support infinity, then it also doesn't have a max exponent pattern.
+                // This value should be optimized out of the bitor below
+                <<Self::Bits as CoreRegister>::Mask as MaskRegister>::FALSY
+            };
+
+        // normal if exp != 0 && exp != max, so 0 < exp < max is the normal range
+        let is_not_normal = <Self::Bits as CoreRegister>::Mask::bitor(exp_is_max, exp_is_zero);
+
+        let is_normal = <Self::Bits as CoreRegister>::Mask::not(is_not_normal);
+
+        // convert back to float register
+        <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_normal)
+    }
+
+    #[conditional] fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_TRUE_FMA {
+            Self::mul_add(lhs, rhs, acc)
+        } else {
+            Self::add(Self::mul(lhs, rhs), acc)
+        }
+    }
+
+    #[conditional] fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_TRUE_FMA {
+            Self::mul_sub(lhs, rhs, acc)
+        } else {
+            Self::sub(Self::mul(lhs, rhs), acc)
+        }
+    }
+
+    #[conditional] fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_TRUE_FMA {
+            Self::nmul_add(lhs, rhs, acc)
+        } else {
+            Self::sub(acc, Self::mul(lhs, rhs))
+        }
+    }
+
+    #[conditional] fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_TRUE_FMA {
+            Self::nmul_sub(lhs, rhs, acc)
+        } else {
+            Self::mul_sube(Self::neg(lhs), rhs, acc)
+        }
+    }
+
+    #[conditional] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
+            *lhs = MulAddExt::mul_add(*lhs, rhs, acc);
+        })
+    }
+
+    #[conditional] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
+            *lhs = MulAddExt::mul_sub(*lhs, rhs, acc);
+        })
+    }
+
+    #[conditional] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
+            *lhs = MulAddExt::nmul_add(*lhs, rhs, acc);
+        })
+    }
+
+    #[conditional] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+        zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
+            *lhs = MulAddExt::nmul_sub(*lhs, rhs, acc);
+        })
+    }
+
+    #[conditional] fn sqrt(value: Storage<Self>) -> Storage<Self>;
+
+    #[conditional] fn rcp(value: Storage<Self>) -> Storage<Self> {
+        Self::div(Self::ONE, value)
+    }
+
+    #[conditional] fn rsqrt(value: Storage<Self>) -> Storage<Self> {
+        Self::rcp(Self::sqrt(value))
+    }
+
+    const HAS_APPROX_RSQRT: bool;
+    const HAS_APPROX_RCP: bool;
+
+    #[conditional] fn floor(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn ceil(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn round(value: Storage<Self>) -> Storage<Self>;
+    #[conditional] fn trunc(value: Storage<Self>) -> Storage<Self>;
+
+    #[conditional] fn fract(value: Storage<Self>) -> Storage<Self> {
+        Self::sub(value, Self::trunc(value))
+    }
+
+    #[conditional] fn mul_sign(value: Storage<Self>, sign: Storage<Self>) -> Storage<Self> {
+        Self::bitxor(value, Self::signed_zero(sign))
+    }
+
+    /// Returns a signed zero with the same sign as the given value
+    #[conditional] fn signed_zero(value: Storage<Self>) -> Storage<Self> {
+        Self::bitand(Self::NEG_ZERO, value)
+    }
+
+    #[conditional] fn next_up(value: Storage<Self>) -> Storage<Self> {
+        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
+        let abs = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::abs(value));
+
+        let is_nan = Self::is_nan(value);
+        let is_inf = Self::eq(value, Self::INFINITY);
+        let unchanged = Self::Mask::bitor(is_nan, is_inf);
+
+        // Use bitwise comparison for positive/zero check to handle -0.0 correctly
+        // (abs == bits) is true for positive numbers and +0.0, false for negative numbers and -0.0
+        let is_positive = Self::Bits::eq(abs, bits);
+        let is_zero = Self::Bits::eq(abs, <Self::Bits as BitCastRegister<Self>>::from_bits(Self::ZERO));
+
+        let add = Self::Bits::add(bits, Self::Bits::ONE);
+        let sub = Self::Bits::sub(bits, Self::Bits::ONE);
+
+        // If positive, add 1 (magnitude up). If negative, sub 1 (magnitude down towards -inf).
+        // blendv(mask, lhs, rhs) -> if mask { rhs } else { lhs }
+        let next_bits = Self::Bits::blendv(is_positive, sub, add);
+
+        // If zero, return MIN_POSITIVE (0x1)
+        let next_bits = Self::Bits::blendv(is_zero, next_bits, Self::Bits::ONE);
+
+        // cast mask from float mask to bits mask
+        let unchanged = <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(unchanged);
+
+        <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
+    }
+
+    #[conditional] fn next_down(value: Storage<Self>) -> Storage<Self> {
+        let bits = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
+        let abs = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::abs(value));
+
+        let is_nan = Self::is_nan(value);
+        let is_neg_inf = Self::eq(value, Self::NEG_INFINITY);
+        let unchanged = Self::Mask::bitor(is_nan, is_neg_inf);
+
+        let is_positive = Self::Bits::eq(abs, bits);
+        let is_zero = Self::Bits::eq(abs, <Self::Bits as BitCastRegister<Self>>::from_bits(Self::ZERO));
+
+        let add = Self::Bits::add(bits, Self::Bits::ONE);
+        let sub = Self::Bits::sub(bits, Self::Bits::ONE);
+
+        // If positive, sub 1 (magnitude down). If negative, add 1 (magnitude up towards -inf).
+        // blendv(mask, lhs, rhs) -> if mask { rhs } else { lhs }
+        let next_bits = Self::Bits::blendv(is_positive, add, sub);
+
+        // If zero, return -MIN_POSITIVE (0x80...01)
+        let sign_bit = <Self::Bits as BitCastRegister<Self>>::from_bits(Self::NEG_ZERO);
+        let min_neg = Self::Bits::bitor(Self::Bits::ONE, sign_bit);
+
+        let next_bits = Self::Bits::blendv(is_zero, next_bits, min_neg);
+
+        // cast mask from float mask to bits mask
+        let unchanged = <<Self::Bits as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(unchanged);
+
+        <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
     }
 }

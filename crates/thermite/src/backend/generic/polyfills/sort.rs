@@ -124,3 +124,43 @@ where
     // Blend: Max at 1, 3, 5, 7 -> 0xAA
     cmp_merge::<R, 0xB1, 0xAA>(v)
 }
+
+#[inline(always)]
+pub fn sort_any<R: NumericRegister>(mut value: Storage<R>) -> Storage<R> {
+    let s = R::as_array_mut(&mut value);
+
+    /// Compare-and-Swap: The atomic primitive of sorting networks.
+    /// LLVM optimizes this to `cmp` + `cmov` (Conditional Move), which is branchless.
+    #[inline(always)]
+    fn cas<T: PartialOrd>(s: &mut [T], i: usize, j: usize) {
+        // Note: slice indexing checks bounds.
+        // For maximal performance, you could use `get_unchecked` if unsafe is permitted,
+        // but the optimizer often elides checks in fixed-size networks anyway.
+        if s[i] > s[j] {
+            s.swap(i, j);
+        }
+    }
+
+    #[rustfmt::skip]
+    let () = match s.len() {
+        2 => cas(s, 0, 1),
+        4 => {
+            cas(s, 0, 1); cas(s, 2, 3); // Layer 1
+            cas(s, 0, 2); cas(s, 1, 3); // Layer 2
+            cas(s, 1, 2);               // Layer 3
+        },
+        // For N=8 or others, Insertion Sort is compact and very fast for N < 20
+        _ => {
+            for i in 1..s.len() {
+                let mut j = i;
+                // The compiler unrolls this loop well for small fixed bounds
+                while j > 0 && s[j - 1] > s[j] {
+                    s.swap(j - 1, j);
+                    j -= 1;
+                }
+            }
+        }
+    };
+
+    value
+}

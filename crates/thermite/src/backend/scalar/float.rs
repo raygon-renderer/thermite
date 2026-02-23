@@ -8,8 +8,9 @@ use crate::generic::ops::MulAddExt;
 use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
-    LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShuffleRegister, SignedRegister, Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+    IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
+    PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+    ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -36,6 +37,10 @@ impl CoreRegister for [<f $width>] {
 
     #[inline(always)] fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask.to_bits() == 0, value, 0.0)
+    }
+
+    #[inline(always)] fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 1 } { value } else { Self::EMPTY } // if N == 0 zero everything
     }
 }
 
@@ -89,13 +94,10 @@ impl MaskRegister for [<f $width>] {
 }
 
 impl Register for [<f $width>] {
-    type HalfRegister = Self;
-    type DoubleRegister = DoublePumpRegister<Self>;
-
     type Element = [<f $width>];
 
-    type ISize = [<i $width>];
-    type USize = [<u $width>];
+    type Signed = [<i $width>];
+    type Unsigned = [<u $width>];
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -129,6 +131,12 @@ impl Register for [<f $width>] {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(value.to_bits().swap_bytes())
     }
+}
+
+impl<I> IndexableRegister<I> for [<f $width>]
+where
+    I: UnsignedIntegerRegister<Lanes = Self::Lanes>,
+{
 }
 
 impl ShuffleRegister for [<f $width>] {
@@ -214,7 +222,7 @@ impl SignedRegister for [<f $width>] {
 
 impl FloatRegister for [<f $width>] {
     type Bits = [<u $width>];
-    type Signed = [<i $width>];
+    type SignedBits = [<i $width>];
     type ExtendedPrecision = f64;
 
     // best guess we can do

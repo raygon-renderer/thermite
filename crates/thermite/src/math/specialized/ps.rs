@@ -457,21 +457,21 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
-        let ei: V::Signed = ee.fast_cast();
+        let ei: V::SignedBits = ee.fast_cast();
 
         // biased exponent of result:
-        let ej = ei + (V::Signed::from_bits(z.abs()) >> 23);
+        let ej = ei + (V::SignedBits::from_bits(z.abs()) >> 23);
 
         // add exponent by signed integer addition
-        let mut z = V::from_bits(V::Signed::from_bits(z) + (ei << 23));
+        let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 23));
 
         if !P::POLICY.check_overflow {
             return z;
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(V::Signed::splat(0x0FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(300.0));
-        let underflow = ej.cmp_le(V::Signed::splat(0x000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-300.0));
+        let overflow = ej.cmp_ge(V::SignedBits::splat(0x0FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(300.0));
+        let underflow = ej.cmp_le(V::SignedBits::splat(0x000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-300.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -839,7 +839,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
 
     let y = y.round();
 
-    let q: V::Bits = V::Signed::fast_cast_from(y).into_bits();
+    let q: V::Bits = V::SignedBits::fast_cast_from(y).into_bits();
 
     // pi/2 split into three parts for extended precision modular arithmetic
     let dp1f = crate::generic_splat!(f32: 0.78515625 * 2.0);
@@ -994,13 +994,13 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         let f = t - fi;
 
         // if the exponent exceeds this method's limitations, then it's far outside of the valid range for exp
-        let i: V::Signed = fi.fast_cast();
+        let i: V::SignedBits = fi.fast_cast();
 
         // polynomial approximation of 2^f
         let cf = f.poly_p::<P, _>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
 
         // scale 2^f by 2^i
-        let ci = V::Signed::from_bits(cf) + (i << 23);
+        let ci = V::SignedBits::from_bits(cf) + (i << 23);
 
         let z = V::from_bits(ci);
 
@@ -1083,9 +1083,9 @@ fn fraction2<V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
 }
 
 #[inline(always)]
-fn exponent<V: FloatVectorWithBits<Element = f32>>(x: V) -> V::Signed {
+fn exponent<V: FloatVectorWithBits<Element = f32>>(x: V) -> V::SignedBits {
     // shift out sign, extract exp, subtract bias
-    V::Signed::from_bits((V::Bits::from_bits(x).shli::<1>()).shri::<24>()) - V::Signed::splat(0x7F)
+    V::SignedBits::from_bits((V::Bits::from_bits(x).shli::<1>()).shri::<24>()) - V::SignedBits::splat(0x7F)
 }
 
 #[inline(always)]
@@ -1093,11 +1093,12 @@ fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // // https://github.com/nadavrot/fast_log/blob/83bd112c330976c291300eaa214e668f809367ab/src/log_approx.cc#L47
         // return fraction2::<V>(x).poly_p::<P, _>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
-        //     + (exponent::<V>(x) + V::Signed::ONE).cast();
+        //     + (exponent::<V>(x) + V::SignedBits::ONE).cast();
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L384
         // between 1e-4 and 1000, avg error: 0.00536, max error 0.0573 at 31.999878
-        return V::cast_from(V::Signed::from_bits(x)).mul_sube(V::splat(1.1920928955078125e-7), V::splat(126.94269504));
+        return V::cast_from(V::SignedBits::from_bits(x))
+            .mul_sube(V::splat(1.1920928955078125e-7), V::splat(126.94269504));
     }
 
     ln_f_internal::<P, V, false>(x) * V::LOG2_E
@@ -1108,7 +1109,8 @@ fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // ln(x) * LOG10_E
         // between 1e-4 and 1000, avg error: 0.00212, max error 0.0173 at 31.999878
-        return V::cast_from(V::Signed::from_bits(x)).mul_sube(V::splat(3.5885571887588505e-8), V::splat(38.213558906));
+        return V::cast_from(V::SignedBits::from_bits(x))
+            .mul_sube(V::splat(3.5885571887588505e-8), V::splat(38.213558906));
     }
 
     ln_f_internal::<P, V, false>(x) * V::LOG10_E
@@ -1121,7 +1123,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L393
         // between 1e-4 and 1000, avg error: 0.00536, max error 0.0397 at 3.9999847
-        return V::cast_from(V::Signed::from_bits(x1))
+        return V::cast_from(V::SignedBits::from_bits(x1))
             .mul_sube(V::splat(8.2629582881927490e-8), V::splat(87.989971088));
     }
 
@@ -1129,8 +1131,8 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
         // https://stackoverflow.com/a/39822314/2083075
         // natural log on [0x1.f7a5ecp-127, 0x1.fffffep127]. Maximum relative error 9.4529e-5
 
-        let a = V::Signed::from_bits(x0);
-        let e = (a - V::Signed::splat(0x3f2aaaab)) & V::Signed::splat(0xff800000u32 as i32);
+        let a = V::SignedBits::from_bits(x0);
+        let e = (a - V::SignedBits::splat(0x3f2aaaab)) & V::SignedBits::splat(0xff800000u32 as i32);
         let i = V::cast_from(e) * V::splat(1.19209290e-7);
         let mut f = V::from_bits(a - e);
 
@@ -1161,7 +1163,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
     let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
 
     x = blend.select(x, x + x); // x.conditional_add(x, !blend)
-    e = blend.select(e + V::Signed::ONE, e); // e.conditional_add(V::Signed::ONE, blend)
+    e = blend.select(e + V::SignedBits::ONE, e); // e.conditional_add(V::SignedBits::ONE, blend)
 
     let fe: V = e.cast();
 
@@ -1169,7 +1171,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
     x = if P1 {
         // log(x+1). Avoid loss of precision when adding 1 and later subtracting 1 if exponent = 0
-        e.cmp_eq(V::Signed::ZERO).select(x0, xp1)
+        e.cmp_eq(V::SignedBits::ZERO).select(x0, xp1)
     } else {
         xp1 // log(x). Expand around 1.0
     };

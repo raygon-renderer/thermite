@@ -3,9 +3,10 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, FloatRegister, MaskElement,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister,
-        Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
+        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
+        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -39,6 +40,22 @@ impl CoreRegister for F32x8V3 {
     #[inline(always)]
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_andnot_ps(mask, value) }
+    }
+
+    #[inline(always)]
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 8 } {
+            value
+        } else if const { Z::N == 4 } {
+            unsafe { arch::_mm256_zextps128_ps256(arch::_mm256_castps256_ps128(value)) }
+        } else {
+            unsafe {
+                arch::_mm256_and_ps(
+                    value,
+                    arch::_mm256_castsi256_ps(arch::_mm256_zeroupper_mask_epi32::<Z>()),
+                )
+            }
+        }
     }
 }
 
@@ -90,42 +107,60 @@ impl MaskRegister for F32x8V3 {
     }
 }
 
-#[thermite_macros::bitand_z]
+#[rustfmt::skip] #[thermite_macros::bitand_z]
 impl BitwiseRegister for F32x8V3 {
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_xor_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_and_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_andnot_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_or_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn not(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_xor_ps(value, arch::_mm256_set1_ps(f32::from_bits(!0))) }
     }
 }
 
-impl Register for F32x8V3 {
-    type HalfRegister = super::f32x4::F32x4V3;
-    type DoubleRegister = DoublePumpRegister<Self>;
+impl ConcatRegister<super::F32x4V3> for F32x8V3 {
+    #[inline(always)]
+    fn concat(lo: Storage<super::F32x4V3>, hi: Storage<super::F32x4V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_setr_m128(lo, hi) }
+    }
 
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<super::F32x4V3>, Storage<super::F32x4V3>) {
+        let lo = unsafe { arch::_mm256_castps256_ps128(value) };
+        let hi = unsafe { arch::_mm256_extractf128_ps(value, 1) };
+        (lo, hi)
+    }
+}
+
+impl ExtendRegister<super::F32x4V3> for F32x8V3 {
+    #[inline(always)]
+    fn extend(value: Storage<super::F32x4V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_zextps128_ps256(value) }
+    }
+
+    #[inline(always)]
+    fn narrow(value: Storage<Self>) -> Storage<super::F32x4V3> {
+        unsafe { arch::_mm256_castps256_ps128(value) }
+    }
+}
+
+impl Register for F32x8V3 {
     type Element = f32;
 
-    type USize = super::U32x8V3;
-    type ISize = super::I32x8V3;
+    type Signed = super::I32x8V3;
+    type Unsigned = super::U32x8V3;
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -153,24 +188,6 @@ impl Register for F32x8V3 {
     #[inline(always)]
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         value // floats support msb masks directly
-    }
-
-    #[inline(always)]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe { arch::_mm256_setr_m128(lo, hi) }
-    }
-
-    #[inline(always)]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        let lo = unsafe { arch::_mm256_castps256_ps128(value) };
-        let hi = unsafe { arch::_mm256_extractf128_ps(value, 1) };
-        (lo, hi)
     }
 
     #[inline(always)]
@@ -230,33 +247,10 @@ impl Register for F32x8V3 {
     }
 
     #[inline(always)]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
-        unsafe { arch::_mm256_i32gather_ps::<4>(ptr, indices) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm256_mask_i32gather_ps::<4>(src, ptr, indices, mask) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm256_mask_i32gather_ps::<4>(Self::ZERO, ptr, indices, mask) }
-    }
-
-    #[inline(always)]
     fn reverse(value: Storage<Self>) -> Storage<Self> {
+        // TODO: Improve this
         let (lo, hi) = Self::split(value);
-        Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
+        Self::concat(super::F32x4V3::reverse(hi), super::F32x4V3::reverse(lo))
     }
 
     const HAS_SIMPLE_UNPACK: bool = false;
@@ -290,6 +284,56 @@ impl Register for F32x8V3 {
     #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_psx_v3(value) }
+    }
+}
+
+impl IndexableRegister<super::U32x8V3> for F32x8V3 {
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U32x8V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_i32gather_ps::<4>(ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<super::U32x8V3>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm256_mask_i32gather_ps::<4>(src, ptr, indices, mask) }
+    }
+}
+
+impl IndexableRegister<DoublePumpRegister<super::U64x4V3>> for F32x8V3 {
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<DoublePumpRegister<super::U64x4V3>>) -> Storage<Self> {
+        let (lo_idx, hi_idx) = DoublePumpRegister::split(indices);
+
+        unsafe {
+            Self::concat(
+                arch::_mm256_i64gather_ps::<4>(ptr, lo_idx),
+                arch::_mm256_i64gather_ps::<4>(ptr, hi_idx),
+            )
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<DoublePumpRegister<super::U64x4V3>>,
+    ) -> Storage<Self> {
+        let (lo_src, hi_src) = Self::split(src);
+        let (lo_mask, hi_mask) = Self::split(mask);
+        let (lo_idx, hi_idx) = DoublePumpRegister::split(indices);
+
+        unsafe {
+            Self::concat(
+                arch::_mm256_mask_i64gather_ps::<4>(lo_src, ptr, lo_idx, lo_mask),
+                arch::_mm256_mask_i64gather_ps::<4>(hi_src, ptr, hi_idx, hi_mask),
+            )
+        }
     }
 }
 
@@ -373,80 +417,70 @@ impl NumericRegister for F32x8V3 {
     const MIN: Storage<Self> = reg::<Self, 8>([f32::MIN; 8]);
     const MAX: Storage<Self> = reg::<Self, 8>([f32::MAX; 8]);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_ps_v3!(value; _mm_min_ps _mm_min_ss)
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_ps_v3!(value; _mm_max_ps _mm_max_ss)
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_ps_v3!(value; _mm_add_ps _mm_add_ss)
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_ps_v3!(value; _mm_mul_ps _mm_mul_ss)
     }
 
-    #[inline(always)]
     fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as Unsigned>::USIZE as f32)
     }
 
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as f32))
     }
 
-    #[inline(always)]
+    #[masked]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_add_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_sub_ps(lhs, rhs) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_add_ps(lhs, arch::_mm256_and_ps(rhs, mask)) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_sub_ps(lhs, arch::_mm256_and_ps(rhs, mask)) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mul_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_div_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // https://stackoverflow.com/a/26342944/2083075
         Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
     }
 
-    #[inline(always)]
+    #[masked]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_min_ps(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_max_ps(lhs, rhs) }
     }
@@ -457,30 +491,26 @@ impl SignedRegister for F32x8V3 {
     const NEG_ONE: Storage<Self> = reg::<Self, 8>([-1.0; 8]);
     const MIN_POSITIVE: Storage<Self> = reg::<Self, 8>([f32::MIN_POSITIVE; 8]);
 
-    #[inline(always)]
+    #[masked]
     fn neg(value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::NEG_ZERO)
     }
 
-    #[inline(always)]
+    #[masked]
     fn abs(value: Storage<Self>) -> Storage<Self> {
         Self::bitandnot(Self::NEG_ZERO, value)
     }
 
-    #[inline(always)]
+    #[masked]
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // take everything but the sign from lhs, and copy the sign from rhs
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
@@ -491,7 +521,7 @@ impl FloatRegister for F32x8V3 {
     const HAS_TRUE_FMA: bool = true;
 
     type Bits = super::U32x8V3;
-    type Signed = super::I32x8V3;
+    type SignedBits = super::I32x8V3;
     type ExtendedPrecision = DoublePumpRegister<super::F64x4V3>;
 
     const HALF: Storage<Self> = reg::<Self, 8>([0.5; 8]);
@@ -503,57 +533,57 @@ impl FloatRegister for F32x8V3 {
 
     const EXP_MASK: Storage<Self::Bits> = reg::<Self::Bits, 8>([0x7F800000; 8]);
 
-    #[inline(always)]
+    #[masked]
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_fmadd_ps(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_fmsub_ps(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_fnmadd_ps(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_fnmsub_ps(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::mul_add(lhs, rhs, acc)
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::mul_sub(lhs, rhs, acc)
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::nmul_add(lhs, rhs, acc)
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::nmul_sub(lhs, rhs, acc)
     }
 
-    #[inline(always)]
+    #[masked]
     fn sqrt(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_sqrt_ps(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn rsqrt(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_rsqrt_ps(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn rcp(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_rcp_ps(value) }
     }
@@ -561,32 +591,32 @@ impl FloatRegister for F32x8V3 {
     const HAS_APPROX_RSQRT: bool = true;
     const HAS_APPROX_RCP: bool = true;
 
-    #[inline(always)]
+    #[masked]
     fn floor(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_floor_ps(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn ceil(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_ceil_ps(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn round(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_round_ps(value, arch::_MM_FROUND_TO_NEAREST_INT | arch::_MM_FROUND_NO_EXC) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_round_ps(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn next_up(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_nextupps_v3(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn next_down(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_nextdownps_v3(value) }
     }
@@ -604,7 +634,7 @@ impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {
             let lo = arch::_mm256_cvtps_pd(lo);
             let hi = arch::_mm256_cvtps_pd(hi);
 
-            DoublePumpRegister::join(lo, hi)
+            DoublePumpRegister::concat(lo, hi)
         }
     }
 }

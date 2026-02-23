@@ -26,7 +26,7 @@ where
 
 pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     #[inline(always)]
-    fn ldexp<P: Policy>(self, exp: Self::Signed) -> Self {
+    fn ldexp<P: Policy>(self, exp: Self::SignedBits) -> Self {
         if const { Self::HAS_NATIVE_LDEXP } {
             return unsafe { Self::native_ldexp(self, exp) };
         }
@@ -43,20 +43,21 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK
         );
 
-        let biased_exp =
-            Self::Signed::from_bits((bits >> <Self::Element as FloatElementWithBits>::MANTISSA_BITS) & exp_lsb_mask);
+        let biased_exp = Self::SignedBits::from_bits(
+            (bits >> <Self::Element as FloatElementWithBits>::MANTISSA_BITS) & exp_lsb_mask,
+        );
 
         let mut exp = biased_exp + exp;
 
         if const { P::POLICY.check_overflow } {
             // clamp exponent between 0 and max biased exponent
-            exp = exp.max(Self::Signed::ZERO).min(crate::generic_splat!(
+            exp = exp.max(Self::SignedBits::ZERO).min(crate::generic_splat!(
                 <Self> = <S: FloatVectorWithBits>
-                <S::Signed as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP
+                <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP
             ));
         }
 
-        let sign_mantissa = Self::Signed::from_bits(bits & sign_mantissa_mask);
+        let sign_mantissa = Self::SignedBits::from_bits(bits & sign_mantissa_mask);
 
         let mut result = (exp << <Self::Element as FloatElementWithBits>::MANTISSA_BITS) | sign_mantissa;
 
@@ -71,7 +72,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     }
 
     #[inline(always)]
-    fn frexp<P: Policy>(self) -> (Self, Self::Signed) {
+    fn frexp<P: Policy>(self) -> (Self, Self::SignedBits) {
         if const { Self::HAS_NATIVE_FREXP } {
             return unsafe { Self::native_frexp(self) };
         }
@@ -83,9 +84,9 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK
         );
 
-        let frexp_bias_offset: Self::Signed = crate::generic_splat!(
+        let frexp_bias_offset: Self::SignedBits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
-            <S::Signed as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET
+            <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET
         );
 
         let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
@@ -99,10 +100,10 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
         );
 
         // (bits >> mantissa) & mask
-        let biased_exp = Self::Signed::from_bits((bits >> E::MANTISSA_BITS) & exp_lsb_mask);
+        let biased_exp = Self::SignedBits::from_bits((bits >> E::MANTISSA_BITS) & exp_lsb_mask);
 
         // subtract bias to get actual exponent
-        let mut exp: Self::Signed = biased_exp - frexp_bias_offset;
+        let mut exp: Self::SignedBits = biased_exp - frexp_bias_offset;
 
         // extract sign and mantissa, then give it the correct exponent
         let sign_mantissa = bits & sign_mantissa_mask;
@@ -110,7 +111,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         if const { P::POLICY.check_overflow } {
             // if input was zero or subnormal, set fraction to zero and exponent to zero
-            let is_normal = biased_exp.cmp_ne(Self::Signed::ZERO);
+            let is_normal = biased_exp.cmp_ne(Self::SignedBits::ZERO);
 
             exp = exp.nz(is_normal); // zero exponent if input was NOT normal
             fraction = fraction.nz(is_normal.cast()); // zero fraction if input was NOT normal
@@ -297,7 +298,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     }
 
     #[inline(always)]
-    fn powiv<P: Policy>(self, mut e: Self::ISize) -> Self {
+    fn powiv<P: Policy>(self, mut e: Self::Signed) -> Self {
         let mut x = self;
         let mut res = Self::ONE;
 
@@ -307,7 +308,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         loop {
             let nx = res * x;
 
-            res = (e & Self::ISize::ONE).is_zero().select(res, nx);
+            res = (e & Self::Signed::ONE).is_zero().select(res, nx);
 
             e >>= 1;
 

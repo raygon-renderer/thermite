@@ -58,14 +58,23 @@ pub unsafe fn _mm_popcnt_epi64x_v2(v: __m128i) -> __m128i {
 // }
 
 #[inline(always)]
+pub unsafe fn _mm_bswap_epi16x_v2(value: __m128i) -> __m128i {
+    // Mask: 1 0 | 3 2 | 5 4 | 7 6 | 9 8 | 11 10 | 13 12 | 15 14
+    _mm_shuffle_epi8(
+        value,
+        _mm_setr_epi8(1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14),
+    )
+}
+
+#[inline(always)]
 pub unsafe fn _mm_bswap_epi32x_v2(x: __m128i) -> __m128i {
-    // Mask: 3 2 1 0  7 6 5 4  11 10 9 8  15 14 13 12
+    // Mask: 3 2 1 0 | 7 6 5 4 | 11 10 9 8 | 15 14 13 12
     _mm_shuffle_epi8(x, _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12))
 }
 
 #[inline(always)]
 pub unsafe fn _mm_bswap_epi64x_v2(x: __m128i) -> __m128i {
-    // Mask: 7 6 5 4 3 2 1 0  15 14 13 12 11 10 9 8
+    // Mask: 7 6 5 4 3 2 1 0 | 15 14 13 12 11 10 9 8
     _mm_shuffle_epi8(x, _mm_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8))
 }
 

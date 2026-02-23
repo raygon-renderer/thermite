@@ -5,8 +5,9 @@ pub mod signed;
 pub mod unsigned;
 
 use crate::{
+    element::USize,
     isa::InstructionSet,
-    register::{Element, MaskElement, Storage, dp::DoublePumpRegister},
+    register::{Element, ExtendRegister, MaskElement, Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
 };
 
@@ -39,6 +40,11 @@ impl NativeSimd for Scalar {
 }
 
 impl Simd for Scalar {
+    type usizex2 = DoublePumpRegister<USize>;
+    type usizex4 = DoublePumpRegister<Self::usizex2>;
+    type usizex8 = DoublePumpRegister<Self::usizex4>;
+    type usizex16 = DoublePumpRegister<Self::usizex8>;
+
     type f32x2 = DoublePumpRegister<f32>;
     type i32x2 = DoublePumpRegister<i32>;
     type u32x2 = DoublePumpRegister<u32>;
@@ -74,6 +80,22 @@ impl Simd for Scalar {
 
 decl_aliases!(Scalar);
 pub use self::aliases::*;
+
+macro_rules! impl_extends {
+    ($($ty:ty),* $(,)?) => {$( impl ExtendRegister<$ty> for $ty {
+        #[inline(always)]
+        fn extend(value: Storage<$ty>) -> Storage<Self> {
+            value
+        }
+
+        #[inline(always)]
+        fn narrow(value: Storage<Self>) -> Storage<$ty> {
+            value
+        }
+    })*};
+}
+
+impl_extends!(f32, i32, u32, f64, i64, u64);
 
 macro_rules! impl_easy_casts {
     ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(

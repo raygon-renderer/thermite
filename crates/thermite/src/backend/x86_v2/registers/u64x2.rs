@@ -8,9 +8,10 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, IntegerRegister, MaskElement,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister,
-        Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
+        IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister,
+        empty_reg, reg,
     },
     simd::Simd,
 };
@@ -45,6 +46,11 @@ impl CoreRegister for U64x2V2 {
     #[inline(always)]
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_andnot_si128(mask, value) }
+    }
+
+    #[inline(always)]
+    fn zeroupper_z<Z: crate::register::ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        super::I64x2V2::zeroupper_z::<Z>(value) // just reuse the i64 version since it's the same mask
     }
 }
 
@@ -96,42 +102,61 @@ impl MaskRegister for U64x2V2 {
     }
 }
 
-#[thermite_macros::bitand_z]
+#[rustfmt::skip] #[thermite_macros::bitand_z]
 impl BitwiseRegister for U64x2V2 {
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_si128(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_si128(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_andnot_si128(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_or_si128(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn not(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_si128(value, arch::_mm_set1_epi8(-1)) }
     }
 }
 
-impl Register for U64x2V2 {
-    type HalfRegister = u64; // Scalar register
-    type DoubleRegister = DoublePumpRegister<Self>;
+impl ConcatRegister<u64> for U64x2V2 {
+    fn concat(lo: Storage<u64>, hi: Storage<u64>) -> Storage<Self> {
+        unsafe { arch::_mm_setr_epi64x(lo as i64, hi as i64) }
+    }
 
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<u64>, Storage<u64>) {
+        unsafe {
+            let mut arr = [0; 2];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (arr[0], arr[1])
+        }
+    }
+}
+
+impl ExtendRegister<u64> for U64x2V2 {
+    #[inline(always)]
+    fn extend(value: Storage<u64>) -> Storage<Self> {
+        unsafe { arch::_mm_setr_epi64x(value as i64, 0) }
+    }
+
+    #[inline(always)]
+    fn narrow(value: Storage<Self>) -> Storage<u64> {
+        unsafe { arch::_mm_cvtsi128_si64(value) as u64 }
+    }
+}
+
+impl Register for U64x2V2 {
     type Element = u64;
 
-    type ISize = super::I64x2V2;
-    type USize = super::U64x2V2;
+    type Signed = super::I64x2V2;
+    type Unsigned = super::U64x2V2;
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -168,26 +193,6 @@ impl Register for U64x2V2 {
     #[inline(always)]
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi64x(value as i64) }
-    }
-
-    #[inline(always)]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe {
-            let mut arr = [0; 2];
-            Self::store_unaligned(arr.as_mut_ptr(), value);
-            (arr[0], arr[1])
-        }
-    }
-
-    #[inline(always)]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe { arch::_mm_setr_epu64x(lo, hi) }
     }
 
     #[inline(always)]
@@ -248,47 +253,40 @@ impl Register for U64x2V2 {
     }
 }
 
+#[rustfmt::skip] #[thermite_macros::bitand_z]
 impl BitshiftRegister for U64x2V2 {
     const HAS_TRUE_SHIFTV: bool = false;
     const HAS_WIDE_BYTE_SHIFTS: bool = true;
 
-    #[inline(always)]
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bslli_si128(value, IMM8) }
     }
 
-    #[inline(always)]
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bsrli_si128(value, IMM8) }
     }
 
-    #[inline(always)]
-    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
+    #[masked] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
     }
 
-    #[inline(always)]
-    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
+    #[masked] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_srl_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
     }
 
-    #[inline(always)]
-    fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[masked] fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe { arch::_mm_srlv_epi64x_v1(value, shifts) }
     }
 
-    #[inline(always)]
-    fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    #[masked] fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe { arch::_mm_sllv_epi64x_v1(value, shifts) }
     }
 
-    #[inline(always)]
-    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_slli_epi64(value, IMM8) }
     }
 
-    #[inline(always)]
-    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi64(value, IMM8) }
     }
 }
@@ -340,166 +338,145 @@ impl NumericRegister for U64x2V2 {
     const MIN: Storage<Self> = reg::<Self, 2>([u64::MIN; 2]);
     const MAX: Storage<Self> = reg::<Self, 2>([u64::MAX; 2]);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.min(hi)
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.max(hi)
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.wrapping_add(hi)
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.wrapping_mul(hi)
     }
 
-    #[inline(always)]
     fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as typenum::Unsigned>::U64)
     }
 
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as u64))
     }
 
-    #[inline(always)]
+    #[masked]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_add_epi64(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_epi64(lhs, rhs) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_add_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a / b })
     }
 
-    #[inline(always)]
+    #[masked]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a % b })
     }
 
-    #[inline(always)]
+    #[masked]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_min_epu64x_v2(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_max_epu64x_v2(lhs, rhs) }
     }
 }
 
+#[thermite_macros::bitand_z]
 impl IntegerRegister for U64x2V2 {
-    #[inline(always)]
+    #[masked]
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullhi_epu64x_v1(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::add(rhs, Self::min(lhs, Self::not(rhs)))
     }
 
-    #[inline(always)]
+    #[masked]
     fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::sub(Self::max(lhs, rhs), rhs)
     }
 
-    #[inline(always)]
     fn wrapping_sum(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.wrapping_add(hi)
     }
 
-    #[inline(always)]
     fn wrapping_product(value: Storage<Self>) -> Self::Element {
         let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
         lo.wrapping_mul(hi)
     }
 
-    #[inline(always)]
+    #[masked]
     fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
         arch::div_epu::<Self>(value, divider.multiplier(), divider.shift())
     }
 
-    #[inline(always)]
+    #[masked]
     fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
         arch::div_epu_bf::<Self>(value, divider.multiplier(), divider.shift())
     }
 
-    #[inline(always)]
+    #[masked]
     fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
         arch::divv_epu_bf::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
     }
 
     const HAS_HARDWARE_POPCNT: bool = false;
 
-    #[inline(always)]
+    #[masked]
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_popcnt_epi64x_v2(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn count_zeros(value: Storage<Self>) -> Storage<Self> {
         Self::count_ones(Self::not(value))
     }
 
-    #[inline(always)]
+    #[masked]
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
         Self::sub(Self::splat(32), Self::ilog2p1(value))
     }
 
-    #[inline(always)]
+    #[masked]
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
         super::I64x2V2::count_ones(value)
-    }
-
-    #[inline(always)]
-    fn leading_ones(value: Storage<Self>) -> Storage<Self> {
-        Self::leading_zeros(Self::not(value))
-    }
-
-    #[inline(always)]
-    fn trailing_ones(value: Storage<Self>) -> Storage<Self> {
-        Self::trailing_zeros(Self::not(value))
     }
 }
 

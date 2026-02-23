@@ -138,3 +138,33 @@ pub unsafe fn _mm_cvtepi64_epi32x_v2(a: __m128i, b: __m128i) -> __m128i {
     // Result: [ b2 | b0 | a2 | a0 ]
     _mm_blend_epi16(a_shuffled, b_shuffled, 0xF0)
 }
+
+#[inline(always)]
+pub unsafe fn _mm_cvtpd_epu32x_v2(xmm0: __m128d) -> __m128i {
+    // 1. Threshold: 2^31
+    let bound = _mm_set1_pd(f64::from_bits(0x41e0000000000000));
+
+    // 2. Generate Mask: xmm0 < 2^31
+    // Yields [M0, M1] where M_n is a 64-bit mask (0xFFFFFFFFFFFFFFFF or 0)
+    let cmp_mask = _mm_cmplt_pd(xmm0, bound);
+
+    // 3. Shuffle Mask: Align 64-bit masks to 32-bit output lanes
+    // cmp_mask in 32-bit chunks is conceptually [M0_lo, M0_hi, M1_lo, M1_hi].
+    // We shuffle it to [M0_lo, M1_lo, M1_hi, M1_hi] using 0b11_11_10_00.
+    let mask_32 = _mm_shuffle_epi32(_mm_castpd_si128(cmp_mask), 0b11_11_10_00);
+
+    // 4. High-Range Path (Offset Conversion)
+    let offset_f64 = _mm_sub_pd(xmm0, bound);
+    let offset_i32 = _mm_cvttpd_epi32(offset_f64);
+    let sign_flip = _mm_set1_epi32(0x80000000u32 as i32);
+    let offset_converted = _mm_xor_si128(offset_i32, sign_flip);
+
+    // 5. Low-Range Path (Direct Conversion)
+    let direct_converted = _mm_cvttpd_epi32(xmm0);
+
+    // 6. Bitwise Blend: (direct & mask) | (offset & ~mask)
+    _mm_or_si128(
+        _mm_and_si128(mask_32, direct_converted),
+        _mm_andnot_si128(mask_32, offset_converted),
+    )
+}

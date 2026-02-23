@@ -44,7 +44,7 @@ pub fn divv_epi_bf<R: SignedIntegerRegister>(
     let signs = R::sra(shifts, const { size_of::<R::Element>() as u32 * 8 - 1 }); // sign extended to element size
 
     // extract shifts and cast to unsigned for shifting
-    let shifts = <R::USize as CastRegister<R>>::cast_from(R::bitand(shifts, R::splat(shift_mask)));
+    let shifts = <R::Unsigned as CastRegister<R>>::cast_from(R::bitand(shifts, R::splat(shift_mask)));
 
     // q = mulhi(numers, multiplier) + numers
     let mut q = R::add(numers, R::mulhi(numers, multipliers));

@@ -3,83 +3,92 @@ use crate::element::FloatElementWithBits;
 use super::*;
 
 /// A FloatElement type that can itself be used as a FloatRegister,
-/// with its associated Signed and Bits types also being fully formed.
+/// with its associated SignedBits and Bits types also being fully formed.
 pub trait WellFormedFloatElement:
     FloatElementWithBits<
-        Signed: WellFormedSignedIntegerElement<
-            Element = <Self as FloatElementWithBits>::Signed,
-            Storage = <Self as FloatElementWithBits>::Signed,
+        SignedBits: WellFormedSignedIntegerElement<
+            Element = <Self as FloatElementWithBits>::SignedBits,
+            Storage = <Self as FloatElementWithBits>::SignedBits,
         >,
         Bits: WellFormedUnsignedIntegerElement<
             Element = <Self as FloatElementWithBits>::Bits,
             Storage = <Self as FloatElementWithBits>::Bits,
         >,
-        USize: WellFormedUnsignedIntegerElement<Element = <Self as Element>::USize, Storage = <Self as Element>::USize>,
-        ISize: WellFormedSignedIntegerElement<Element = <Self as Element>::ISize, Storage = <Self as Element>::ISize>,
+        Unsigned: WellFormedUnsignedIntegerElement<
+            Element = <Self as Element>::Unsigned,
+            Storage = <Self as Element>::Unsigned,
+        >,
+        Signed: WellFormedSignedIntegerElement<
+            Element = <Self as Element>::Signed,
+            Storage = <Self as Element>::Signed,
+        >,
     > + FloatRegister<Element = Self, Storage = Self>
 {
 }
 
-/// A Signed IntegerElement type that can itself be used as a SignedIntegerRegister.
+/// A SignedBits IntegerElement type that can itself be used as a SignedIntegerRegister.
 pub trait WellFormedSignedIntegerElement:
-    IntegerElement<USize: CoreRegister>
+    IntegerElement<Unsigned: CoreRegister>
     + num_traits::Signed
-    + SignedIntegerRegister<Element = Self, Storage = Self, ISize = Self, USize = <Self as Element>::USize>
+    + SignedIntegerRegister<Element = Self, Storage = Self, Signed = Self, Unsigned = <Self as Element>::Unsigned>
 {
 }
 
 /// An Unsigned IntegerElement type that can itself be used as an UnsignedIntegerRegister.
 pub trait WellFormedUnsignedIntegerElement:
-    IntegerElement<ISize: CoreRegister>
-    + IntegerRegister<Element = Self, Storage = Self, USize = Self, ISize = <Self as Element>::ISize>
+    IntegerElement<Signed: CoreRegister>
+    + IntegerRegister<Element = Self, Storage = Self, Unsigned = Self, Signed = <Self as Element>::Signed>
     + UnsignedIntegerRegister<Element = Self, Storage = Self>
 {
 }
 
 impl<F> WellFormedFloatElement for F where
     F: FloatElementWithBits<
-            Signed: WellFormedSignedIntegerElement<
-                Element = <F as FloatElementWithBits>::Signed,
-                Storage = <F as FloatElementWithBits>::Signed,
+            SignedBits: WellFormedSignedIntegerElement<
+                Element = <F as FloatElementWithBits>::SignedBits,
+                Storage = <F as FloatElementWithBits>::SignedBits,
             >,
             Bits: WellFormedUnsignedIntegerElement<
                 Element = <F as FloatElementWithBits>::Bits,
                 Storage = <F as FloatElementWithBits>::Bits,
             >,
-            USize: WellFormedUnsignedIntegerElement<Element = <F as Element>::USize, Storage = <F as Element>::USize>,
-            ISize: WellFormedSignedIntegerElement<Element = <F as Element>::ISize, Storage = <F as Element>::ISize>,
+            Unsigned: WellFormedUnsignedIntegerElement<
+                Element = <F as Element>::Unsigned,
+                Storage = <F as Element>::Unsigned,
+            >,
+            Signed: WellFormedSignedIntegerElement<Element = <F as Element>::Signed, Storage = <F as Element>::Signed>,
         > + FloatRegister<Element = F, Storage = F>
 {
 }
 
 impl<I> WellFormedSignedIntegerElement for I where
-    I: IntegerElement<USize: CoreRegister>
+    I: IntegerElement<Unsigned: CoreRegister>
         + num_traits::Signed
-        + SignedIntegerRegister<Element = I, Storage = I, ISize = I, USize = <I as Element>::USize>
+        + SignedIntegerRegister<Element = I, Storage = I, Signed = I, Unsigned = <I as Element>::Unsigned>
 {
 }
 
 impl<U> WellFormedUnsignedIntegerElement for U where
-    U: IntegerElement<ISize: CoreRegister>
-        + IntegerRegister<Element = U, Storage = U, USize = U, ISize = <U as Element>::ISize>
+    U: IntegerElement<Signed: CoreRegister>
+        + IntegerRegister<Element = U, Storage = U, Unsigned = U, Signed = <U as Element>::Signed>
         + UnsignedIntegerRegister<Element = U, Storage = U>
 {
 }
 
 pub trait WellFormedRegister:
     Register<
-        Element: Element<USize: WellFormedUnsignedIntegerElement, ISize: WellFormedSignedIntegerElement>,
-        USize: WellFormedUnsignedIntegerRegister<Element = <Self::Element as Element>::USize>,
-        ISize: WellFormedSignedIntegerRegister<Element = <Self::Element as Element>::ISize>,
+        Element: Element<Unsigned: WellFormedUnsignedIntegerElement, Signed: WellFormedSignedIntegerElement>,
+        Unsigned: WellFormedUnsignedIntegerRegister<Element = <Self::Element as Element>::Unsigned>,
+        Signed: WellFormedSignedIntegerRegister<Element = <Self::Element as Element>::Signed>,
     >
 {
 }
 
 impl<R> WellFormedRegister for R where
     R: Register<
-            Element: Element<USize: WellFormedUnsignedIntegerElement, ISize: WellFormedSignedIntegerElement>,
-            USize: WellFormedUnsignedIntegerRegister<Element = <R::Element as Element>::USize>,
-            ISize: WellFormedSignedIntegerRegister<Element = <R::Element as Element>::ISize>,
+            Element: Element<Unsigned: WellFormedUnsignedIntegerElement, Signed: WellFormedSignedIntegerElement>,
+            Unsigned: WellFormedUnsignedIntegerRegister<Element = <R::Element as Element>::Unsigned>,
+            Signed: WellFormedSignedIntegerRegister<Element = <R::Element as Element>::Signed>,
         >
 {
 }
@@ -87,8 +96,8 @@ impl<R> WellFormedRegister for R where
 pub trait WellFormedSignedIntegerRegister:
     SignedIntegerRegister<
         Element: WellFormedSignedIntegerElement,
-        USize: Register<Element = <Self::Element as Element>::USize>,
-        ISize = Self,
+        Unsigned: Register<Element = <Self::Element as Element>::Unsigned>,
+        Signed = Self,
     >
 {
 }
@@ -96,8 +105,8 @@ pub trait WellFormedSignedIntegerRegister:
 pub trait WellFormedUnsignedIntegerRegister:
     UnsignedIntegerRegister<
         Element: WellFormedUnsignedIntegerElement,
-        USize = Self,
-        ISize: Register<Element = <Self::Element as Element>::ISize>,
+        Unsigned = Self,
+        Signed: Register<Element = <Self::Element as Element>::Signed>,
     >
 {
 }
@@ -105,8 +114,8 @@ pub trait WellFormedUnsignedIntegerRegister:
 impl<R> WellFormedSignedIntegerRegister for R where
     R: SignedIntegerRegister<
             Element: WellFormedSignedIntegerElement,
-            USize: Register<Element = <R::Element as Element>::USize>,
-            ISize = R,
+            Unsigned: Register<Element = <R::Element as Element>::Unsigned>,
+            Signed = R,
         >
 {
 }
@@ -114,8 +123,8 @@ impl<R> WellFormedSignedIntegerRegister for R where
 impl<R> WellFormedUnsignedIntegerRegister for R where
     R: UnsignedIntegerRegister<
             Element: WellFormedUnsignedIntegerElement,
-            USize = R,
-            ISize: Register<Element = <R::Element as Element>::ISize>,
+            Unsigned = R,
+            Signed: Register<Element = <R::Element as Element>::Signed>,
         >
 {
 }
@@ -123,7 +132,7 @@ impl<R> WellFormedUnsignedIntegerRegister for R where
 pub trait WellFormedFloatRegister:
     FloatRegister<
         Element: WellFormedFloatElement,
-        Signed: WellFormedSignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::Signed>,
+        SignedBits: WellFormedSignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::SignedBits>,
         Bits: WellFormedUnsignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::Bits>,
     >
 {
@@ -132,7 +141,7 @@ pub trait WellFormedFloatRegister:
 impl<F> WellFormedFloatRegister for F where
     F: FloatRegister<
             Element: WellFormedFloatElement,
-            Signed: WellFormedSignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::Signed>,
+            SignedBits: WellFormedSignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::SignedBits>,
             Bits: WellFormedUnsignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::Bits>,
         >
 {

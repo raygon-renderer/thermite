@@ -8,9 +8,10 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, FloatRegister, MaskElement,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister,
-        Storage, SwizzleRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
+        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
+        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -45,6 +46,17 @@ impl CoreRegister for F64x2V3 {
     #[inline(always)]
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_andnot_pd(mask, value) }
+    }
+
+    #[inline(always)]
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 2 } {
+            value
+        } else if const { Z::N == 1 } {
+            unsafe { arch::_mm_castsi128_pd(arch::_mm_move_epi64(arch::_mm_castpd_si128(value))) }
+        } else {
+            Self::EMPTY // N == 0, so zero everything
+        }
     }
 }
 
@@ -96,42 +108,66 @@ impl MaskRegister for F64x2V3 {
     }
 }
 
-#[thermite_macros::bitand_z]
+#[rustfmt::skip] #[thermite_macros::bitand_z]
 impl BitwiseRegister for F64x2V3 {
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_andnot_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_or_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn not(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_pd(value, arch::_mm_set1_pd(f64::from_bits(!0))) }
     }
 }
 
-impl Register for F64x2V3 {
-    type HalfRegister = f64; // Scalar register
-    type DoubleRegister = super::F64x4V3;
+impl ConcatRegister<f64> for F64x2V3 {
+    #[inline(always)]
+    fn concat(lo: Storage<f64>, hi: Storage<f64>) -> Storage<Self> {
+        unsafe { arch::_mm_setr_pd(lo, hi) }
+    }
 
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<f64>, Storage<f64>) {
+        unsafe {
+            let mut arr = [0f64; 2];
+            Self::store_unaligned(arr.as_mut_ptr(), value);
+            (arr[0], arr[1])
+        }
+    }
+}
+
+impl ExtendRegister<f64> for F64x2V3 {
+    #[inline(always)]
+    fn extend(value: Storage<f64>) -> Storage<Self> {
+        unsafe { arch::_mm_setr_pd(value, 0.0) }
+    }
+
+    #[inline(always)]
+    fn narrow(value: Storage<Self>) -> Storage<f64> {
+        unsafe { arch::_mm_cvtsd_f64(value) }
+    }
+}
+
+impl WideRegister for F64x2V3 {
+    type Wide = super::F64x4V3;
+}
+
+impl Register for F64x2V3 {
     type Element = f64;
 
-    type ISize = super::I64x2V3;
-    type USize = super::U64x2V3;
+    type Signed = super::I64x2V3;
+    type Unsigned = super::U64x2V3;
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -177,26 +213,6 @@ impl Register for F64x2V3 {
     }
 
     #[inline(always)]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe {
-            let mut arr = [0f64; 2];
-            Self::store_unaligned(arr.as_mut_ptr(), value);
-            (arr[0], arr[1])
-        }
-    }
-
-    #[inline(always)]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe { arch::_mm_setr_pd(lo, hi) }
-    }
-
-    #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_load_pd(ptr) }
     }
@@ -238,30 +254,6 @@ impl Register for F64x2V3 {
     }
 
     #[inline(always)]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
-        unsafe { arch::_mm_i64gather_pd::<8>(ptr, indices) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm_mask_i64gather_pd::<8>(src, ptr, indices, mask) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm_mask_i64gather_pd::<8>(Self::ZERO, ptr, indices, mask) }
-    }
-
-    #[inline(always)]
     fn reverse(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_permute_pd(value, 0b01) }
     }
@@ -286,6 +278,38 @@ impl Register for F64x2V3 {
         let arr = Self::as_array(&value);
 
         f(arr[0], arr[1])
+    }
+}
+
+impl IndexableRegister<super::U64x2V3> for F64x2V3 {
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U64x2V3>) -> Storage<Self> {
+        unsafe { arch::_mm_i64gather_pd::<8>(ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<super::U64x2V3>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i64gather_pd::<8>(src, ptr, indices, mask) }
+    }
+}
+
+impl IndexableRegister<super::U32x2V3> for F64x2V3 {
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U32x2V3>) -> Storage<Self> {
+        unsafe { arch::_mm_i32gather_pd::<8>(ptr, indices.0) }
+    }
+
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<super::U32x2V3>,
+    ) -> Storage<Self> {
+        unsafe { arch::_mm_mask_i32gather_pd::<8>(src, ptr, indices.0, mask) }
     }
 }
 
@@ -348,80 +372,70 @@ impl NumericRegister for F64x2V3 {
     const MIN: Storage<Self> = reg::<Self, 2>([f64::MIN; 2]);
     const MAX: Storage<Self> = reg::<Self, 2>([f64::MAX; 2]);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_min_pd _mm_min_sd)
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_max_pd _mm_max_sd)
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_add_pd _mm_add_sd)
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm_reduce_pd_v1!(value; _mm_mul_pd _mm_mul_sd)
     }
 
-    #[inline(always)]
     fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as typenum::Unsigned>::USIZE as f64)
     }
 
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as f64))
     }
 
-    #[inline(always)]
+    #[masked]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_add_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_pd(lhs, rhs) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_add_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sub_pd(lhs, arch::_mm_and_pd(rhs, mask)) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mul_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_div_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // https://stackoverflow.com/a/26342944/2083075
         Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
     }
 
-    #[inline(always)]
+    #[masked]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_min_pd(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_max_pd(lhs, rhs) }
     }
@@ -432,30 +446,26 @@ impl SignedRegister for F64x2V3 {
     const NEG_ONE: Storage<Self> = reg::<Self, 2>([-1.0; 2]);
     const MIN_POSITIVE: Storage<Self> = reg::<Self, 2>([f64::MIN_POSITIVE; 2]);
 
-    #[inline(always)]
+    #[masked]
     fn neg(value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::NEG_ZERO)
     }
 
-    #[inline(always)]
+    #[masked]
     fn abs(value: Storage<Self>) -> Storage<Self> {
         Self::bitandnot(Self::NEG_ZERO, value)
     }
 
-    #[inline(always)]
+    #[masked]
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // take everything but the sign from lhs, and copy the sign from rhs
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
@@ -466,7 +476,7 @@ impl FloatRegister for F64x2V3 {
     const HAS_TRUE_FMA: bool = true;
 
     type Bits = super::U64x2V3;
-    type Signed = super::I64x2V3;
+    type SignedBits = super::I64x2V3;
     type ExtendedPrecision = Self; // f64 is the highest precision available
 
     const HALF: Storage<Self> = reg::<Self, 2>([0.5; 2]);
@@ -478,27 +488,27 @@ impl FloatRegister for F64x2V3 {
 
     const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 2>([0x7FF0_0000_0000_0000; 2]);
 
-    #[inline(always)]
+    #[masked]
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_pd(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmsub_pd(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fnmadd_pd(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fnmsub_pd(lhs, rhs, acc) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn sqrt(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_sqrt_pd(value) }
     }
@@ -506,22 +516,22 @@ impl FloatRegister for F64x2V3 {
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
-    #[inline(always)]
+    #[masked]
     fn floor(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_floor_pd(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn ceil(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_ceil_pd(value) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn round(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_NEAREST_INT | arch::_MM_FROUND_NO_EXC) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
@@ -543,7 +553,7 @@ impl CastRegister<F64x2V3> for <Scalar as Simd>::f32x2 {
         unsafe {
             let ps = arch::_mm_cvtpd_ps(value);
 
-            DoublePumpRegister(
+            DoublePumpRegister::concat(
                 arch::_mm_cvtss_f32(ps),
                 f32::from_bits(arch::_mm_extract_ps::<1>(ps) as u32),
             )

@@ -433,102 +433,102 @@ mul_add_ext! {
 
 // Vector shifts
 
-impl<R: BitshiftRegister> Shl<Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> Shl<Vector<R::Unsigned>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shl(self, rhs: Vector<R::USize>) -> Self::Output {
+    fn shl(self, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shlv(self.0, rhs.0))
     }
 }
 
-impl<R: BitshiftRegister> ShlMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShlMasked<Mask<R>, Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shl_c(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shl_c(self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shlv_c(mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
-    fn shl_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shl_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shlv_m(src.0, mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
-    fn shl_z(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shl_z(self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shlv_z(mask.0, self.0, rhs.0))
     }
 }
 
-impl<R: BitshiftRegister> Shr<Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> Shr<Vector<R::Unsigned>> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn shr(self, rhs: Vector<R::USize>) -> Self::Output {
+    fn shr(self, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shrv(self.0, rhs.0))
     }
 }
 
-impl<R: BitshiftRegister> ShrMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShrMasked<Mask<R>, Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shr_c(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shr_c(self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shrv_c(mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
-    fn shr_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shr_m(self, src: Self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shrv_m(src.0, mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
-    fn shr_z(self, mask: Mask<R>, rhs: Vector<R::USize>) -> Self::Output {
+    fn shr_z(self, mask: Mask<R>, rhs: Vector<R::Unsigned>) -> Self::Output {
         Vector(R::shrv_z(mask.0, self.0, rhs.0))
     }
 }
 
-impl<R: BitshiftRegister> ShlAssign<Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShlAssign<Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shl_assign(&mut self, rhs: Vector<R::USize>) {
+    fn shl_assign(&mut self, rhs: Vector<R::Unsigned>) {
         self.0 = R::shlv(self.0, rhs.0);
     }
 }
 
-impl<R: BitshiftRegister> ShlAssignMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShlAssignMasked<Mask<R>, Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shl_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shl_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shlv_c(mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
-    fn shl_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shl_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shlv_m(src.0, mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
-    fn shl_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shl_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shlv_z(mask.0, self.0, rhs.0);
     }
 }
 
-impl<R: BitshiftRegister> ShrAssign<Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShrAssign<Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shr_assign(&mut self, rhs: Vector<R::USize>) {
+    fn shr_assign(&mut self, rhs: Vector<R::Unsigned>) {
         self.0 = R::shrv(self.0, rhs.0);
     }
 }
 
-impl<R: BitshiftRegister> ShrAssignMasked<Mask<R>, Vector<R::USize>> for Vector<R> {
+impl<R: BitshiftRegister> ShrAssignMasked<Mask<R>, Vector<R::Unsigned>> for Vector<R> {
     #[inline(always)]
-    fn shr_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shr_assign_c(&mut self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shrv_c(mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
-    fn shr_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shr_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shrv_m(src.0, mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
-    fn shr_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::USize>) {
+    fn shr_assign_z(&mut self, mask: Mask<R>, rhs: Vector<R::Unsigned>) {
         self.0 = R::shrv_z(mask.0, self.0, rhs.0);
     }
 }

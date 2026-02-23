@@ -202,11 +202,11 @@ impl<R: Register> Vector<R> {
     /// const-generics. Unlike [`Vector::splat_const`], this is fine to use with dynamic values,
     /// it can just be more difficult to use in generic contexts.
     #[inline(always)]
-    pub const fn new<const N: usize>(values: [R::Element; N]) -> Self
+    pub fn new<const N: usize>(values: [R::Element; N]) -> Self
     where
         generic_array::typenum::Const<N>: generic_array::IntoArrayLength<ArrayLength = R::Lanes>,
     {
-        Self(register::reg::<R, N>(values))
+        Self(R::new(values.into()))
     }
 
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
@@ -425,76 +425,6 @@ impl<R: Register> Vector<R> {
     #[inline(always)]
     pub const fn empty() -> Self {
         Self::EMPTY
-    }
-
-    /// Widen the vector to a register of double the width, filling the high half with zeros.
-    #[inline(always)]
-    pub fn widen<INTO>(self) -> Vector<INTO>
-    where
-        INTO: Register<HalfRegister = R, Element = R::Element>,
-    {
-        Vector(INTO::join(self.0, R::EMPTY))
-    }
-
-    /// Narrow the vector to a register of half the width by taking the low half,
-    /// and discarding the high half.
-    #[inline(always)]
-    pub fn narrow(self) -> Vector<R::HalfRegister>
-    where
-        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
-    {
-        Vector(R::split(self.0).0)
-    }
-
-    /// Narrow the vector to a register of half the width by taking the high half,
-    /// and discarding the low half.
-    #[inline(always)]
-    pub fn narrow_high(self) -> Vector<R::HalfRegister>
-    where
-        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
-    {
-        Vector(R::split(self.0).1)
-    }
-
-    /// Join together low and high vectors to create a register of double the width.
-    #[inline(always)]
-    pub fn join(low: Vector<R::HalfRegister>, high: Vector<R::HalfRegister>) -> Self
-    where
-        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
-    {
-        Self(R::join(low.0, high.0))
-    }
-
-    /// Split the double-width register into two vectors, low and high.
-    #[inline(always)]
-    pub fn split(self) -> (Vector<R::HalfRegister>, Vector<R::HalfRegister>)
-    where
-        R::HalfRegister: Register<Element = R::Element, DoubleRegister = R>,
-    {
-        let (low, high) = R::split(self.0);
-        (Vector(low), Vector(high))
-    }
-
-    /// Split the register into two vectors of half the width. This does not
-    /// guarantee that the original register was double-width.
-    #[inline(always)]
-    pub fn split2(self) -> (Vector<R::HalfRegister>, Vector<R::HalfRegister>)
-    where
-        R::HalfRegister: Register<Element = R::Element>,
-    {
-        let (low, high) = R::split(self.0);
-        (Vector(low), Vector(high))
-    }
-
-    /// Concatenate two Vectors into one vector of twice the width. If a native register of
-    /// this width is available, it'll use that, otherwise it'll use a double-width register that
-    /// is just two of the original registers working together. This can be nested.
-    #[inline(always)]
-    pub fn concat(self, other: Self) -> Vector<R::DoubleRegister>
-    where
-        R::DoubleRegister: Register<HalfRegister = R, Element = R::Element>,
-    {
-        Vector(R::concat(self.0, other.0))
     }
 
     /// Returns a reference to the vector's elements as an array.

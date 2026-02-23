@@ -61,9 +61,9 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn hermitev<P: Policy>(x: Self, n: Self::USize) -> Self {
-        let i1 = Self::USize::ONE;
-        let n_is_zero = n.cmp_eq(Self::USize::ZERO);
+    fn hermitev<P: Policy>(x: Self, n: Self::Unsigned) -> Self {
+        let i1 = Self::Unsigned::ONE;
+        let n_is_zero = n.cmp_eq(Self::Unsigned::ZERO);
 
         let mut c = i1;
 

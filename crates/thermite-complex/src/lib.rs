@@ -2,7 +2,7 @@
 
 use thermite::{
     math::{
-        SpatialMathWithPolicy, TranscendentalMathWithPolicy,
+        RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
     register::FloatElement,
@@ -10,8 +10,8 @@ use thermite::{
 
 /// A trait for vectors that support the necessary mathematical operations
 /// to be used as the real and imaginary parts of a complex number.
-pub trait MathVector: TranscendentalMathWithPolicy + SpatialMathWithPolicy {}
-impl<V> MathVector for V where V: TranscendentalMathWithPolicy + SpatialMathWithPolicy {}
+pub trait MathVector: TranscendentalMathWithPolicy + SpatialMathWithPolicy + RealMathWithPolicy {}
+impl<V> MathVector for V where V: TranscendentalMathWithPolicy + SpatialMathWithPolicy + RealMathWithPolicy {}
 
 pub struct Complex<V: MathVector, P: Policy = DefaultPolicy> {
     pub re: V,
@@ -65,12 +65,9 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     }
 
     pub const I: Self = Self::new(V::ZERO, V::ONE);
+    pub const NEG_I: Self = Self::new(V::ZERO, V::NEG_ONE);
     pub const ZERO: Self = Self::new(V::ZERO, V::ZERO);
     pub const ONE: Self = Self::new(V::ONE, V::ZERO);
-}
-
-impl<V: MathVector, P: Policy> Complex<V, P> {
-    pub const NEG_I: Self = Self::new(V::ZERO, V::NEG_ONE);
 }
 
 impl<V: MathVector, P: Policy> Complex<V, P> {
@@ -325,7 +322,7 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
         let b = self.mul_add(Self::NEG_I, Self::ONE);
 
         // z/(2i) == -0.5i * z
-        (a.ln() - b.ln()) * Self::imag(V::splat(FloatElement::from_f64(-0.5)))
+        (a.ln() - b.ln()) * Self::imag(-V::HALF)
     }
 
     /// Computes the hyperbolic sine of `self`.

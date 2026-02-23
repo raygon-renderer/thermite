@@ -14,7 +14,7 @@ use crate::{
     element::{FloatElementWithBits, UnsignedIntegerElement},
     isa::InstructionSet,
     math::FloatConsts,
-    register::{CastMaskRegister, Element, FloatElement, Lanes},
+    register::{Element, FloatElement, Lanes},
 };
 
 /// Simple associated constant splat trait.
@@ -152,16 +152,80 @@ where
 /// Internal helpers for generic vectors.
 trait GenericVectorExt: GenericVector {
     #[inline(always)]
-    fn len_to_indices(len: usize) -> Self::USize {
-        let Ok(len) = <<Self::USize as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
+    fn len_to_indices<I: VectorIndices<Self>>(len: usize) -> I {
+        let Ok(len) = <<I as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
             panic!("Length {} exceeds maximum supported index for this vector type", len);
         };
 
-        Self::USize::splat(len)
+        I::splat(len)
     }
 }
 
 impl<V: GenericVector> GenericVectorExt for V {}
+
+/// Type that can be used as indices for gather/scatter operations of the vector type `V`
+pub trait VectorIndices<V: GenericVector>: UnsignedIntegerVector<Lanes = V::Lanes> {
+    unsafe fn gather_ptr(ptr: *const V::Element, indices: Self) -> V;
+    unsafe fn gather_ptr_m(src: V, mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
+    unsafe fn gather_ptr_z(mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
+
+    unsafe fn scatter_ptr(value: V, ptr: *mut V::Element, indices: Self);
+    unsafe fn scatter_ptr_m(value: V, mask: V::Mask, ptr: *mut V::Element, indices: Self);
+}
+
+pub trait IndexableVector<I: UnsignedIntegerVector<Lanes = Self::Lanes>>: GenericVector {
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: I) -> Self;
+    unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
+    unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
+
+    unsafe fn scatter_ptr(value: Self, ptr: *mut Self::Element, indices: I);
+    unsafe fn scatter_ptr_m(value: Self, mask: Self::Mask, ptr: *mut Self::Element, indices: I);
+}
+
+impl<I, V> VectorIndices<V> for I
+where
+    I: UnsignedIntegerVector<Lanes = V::Lanes>,
+    V: IndexableVector<I>,
+{
+    #[inline(always)]
+    unsafe fn gather_ptr(ptr: *const <V as GenericVector>::Element, indices: Self) -> V {
+        unsafe { V::gather_ptr(ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_ptr_m(
+        src: V,
+        mask: <V as GenericVector>::Mask,
+        ptr: *const <V as GenericVector>::Element,
+        indices: Self,
+    ) -> V {
+        unsafe { V::gather_ptr_m(src, mask, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_ptr_z(
+        mask: <V as GenericVector>::Mask,
+        ptr: *const <V as GenericVector>::Element,
+        indices: Self,
+    ) -> V {
+        unsafe { V::gather_ptr_z(mask, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_ptr(value: V, ptr: *mut <V as GenericVector>::Element, indices: Self) {
+        unsafe { V::scatter_ptr(value, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_ptr_m(
+        value: V,
+        mask: <V as GenericVector>::Mask,
+        ptr: *mut <V as GenericVector>::Element,
+        indices: Self,
+    ) {
+        unsafe { V::scatter_ptr_m(value, mask, ptr, indices) }
+    }
+}
 
 /// Core trait for generic vector types.
 ///
@@ -190,38 +254,37 @@ pub trait GenericVector:
     type Lanes: Lanes;
 
     /// Unsigned Integer Type suitable for use with this vector.
-    type USize: UnsignedIntegerVector<
-            ISize = Self::ISize,
-            USize = Self::USize,
+    type Unsigned: UnsignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
             Lanes = Self::Lanes,
-            Element = <Self::Element as Element>::USize,
-            Mask: CastMask<Self::Mask>,
-        > + CastVector<Self::ISize>
-        + BitCastVector<Self::ISize>;
+            Element = <Self::Element as Element>::Unsigned,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Signed as GenericVector>::Mask>,
+        > + CastVector<Self::Signed>
+        + BitCastVector<Self::Signed>;
 
-    /// Signed Integer Type suitable for use with this vector.
-    type ISize: SignedIntegerVector<
-            ISize = Self::ISize,
-            USize = Self::USize,
+    /// SignedBits Integer Type suitable for use with this vector.
+    type Signed: SignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
             Lanes = Self::Lanes,
-            Element = <Self::Element as Element>::ISize,
-            Mask: CastMask<Self::Mask>,
-        > + CastVector<Self::USize>
-        + BitCastVector<Self::USize>;
+            Element = <Self::Element as Element>::Signed,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Unsigned as GenericVector>::Mask>,
+        > + CastVector<Self::Unsigned>
+        + BitCastVector<Self::Unsigned>;
 
     /// Mask type for this vector. Masks are semantically boolean vectors indicating
     /// true or false for each lane. They may or may not be represented as actual bits.
     type Mask: GenericMask
-        + CastMask<<Self::USize as GenericVector>::Mask>
-        + CastMask<<Self::ISize as GenericVector>::Mask>;
+        + CastMask<<Self::Unsigned as GenericVector>::Mask>
+        + CastMask<<Self::Signed as GenericVector>::Mask>;
 
     /// Create a new vector from a single element by splatting it across all lanes.
-    fn splat(value: Self::Element) -> Self;
+    #[masked] fn splat(value: Self::Element) -> Self;
 
     /// Splat a compile-time constant value into all lanes of the vector.
     ///
     /// Use the `generic_splat!` macro to call this function with easier syntax.
-    #[skip_masked]
     #[inline(always)]
     fn splat_const<C>() -> Self
     where
@@ -231,7 +294,7 @@ pub trait GenericVector:
     }
 
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
-    #[skip_masked] fn single(value: Self::Element) -> Self;
+    #[masked] fn single(value: Self::Element) -> Self;
 
     /// Create a new vector from a slice of elements. The slice must have at least as many elements as the vector's lanes.
     ///
@@ -239,7 +302,6 @@ pub trait GenericVector:
     ///
     /// If you're looking for masked variants of this, those typically only exist for aligned inputs,
     /// so you'll need an aligned pointer and use [`load_m`](Self::load_m) or [`load_z`](Self::load_z).
-    #[skip_masked]
     fn from_slice(slice: &[Self::Element]) -> Self {
         assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to create a vector", Self::LANES);
 
@@ -249,7 +311,6 @@ pub trait GenericVector:
     /// Copy the elements of the vector into a slice. The slice must have at least as many elements as the vector's lanes.
     ///
     /// This will emit an unaligned store.
-    #[skip_masked]
     fn copy_to_slice(self, slice: &mut [Self::Element]) {
         assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to copy from a vector", Self::LANES);
 
@@ -263,10 +324,9 @@ pub trait GenericVector:
     /// # Panics
     /// If any index is out of bounds for the slice length, or the slice length exceeds
     /// the maximum supported index for this vector type.
-    #[skip_masked]
-    fn gather(slice: &[Self::Element], indices: Self::USize) -> Self {
-        if indices.cmp_lt(Self::len_to_indices(slice.len())).all() {
-            unsafe { Self::gather_ptr(slice.as_ptr(), indices) }
+    fn gather<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I) -> Self {
+        if indices.cmp_lt(Self::len_to_indices::<I>(slice.len())).all() {
+            unsafe { I::gather_ptr(slice.as_ptr(), indices) }
         } else {
             panic!("One or more indices are out of bounds for the slice length {}", slice.len());
         }
@@ -278,11 +338,12 @@ pub trait GenericVector:
     ///
     /// # Panics
     /// If the slice length exceeds the maximum supported index for this vector type.
-    #[skip_masked]
-    fn gather_or(slice: &[Self::Element], indices: Self::USize, or: Self) -> Self {
-        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+    fn gather_or<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I, or: Self) -> Self
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
 
-        unsafe { Self::gather_ptr_m(or, in_bounds.cast(), slice.as_ptr(), indices) }
+        unsafe { I::gather_ptr_m(or, in_bounds.cast(), slice.as_ptr(), indices) }
     }
 
     /// Gather elements from memory at the specified indices, or set the lane to zero
@@ -292,11 +353,12 @@ pub trait GenericVector:
     ///
     /// # Panics
     /// If the slice length exceeds the maximum supported index for this vector type.
-    #[skip_masked]
-    fn gather_or_zero(slice: &[Self::Element], indices: Self::USize) -> Self {
-        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+    fn gather_or_zero<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I) -> Self
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
 
-        unsafe { Self::gather_ptr_z(in_bounds.cast(), slice.as_ptr(), indices) }
+        unsafe { I::gather_ptr_z(in_bounds.cast(), slice.as_ptr(), indices) }
     }
 
     /// Gather elements from memory at the specified indices, or return `or` if the `enable` mask is
@@ -306,43 +368,46 @@ pub trait GenericVector:
     ///
     /// # Panics
     /// If the slice length exceeds the maximum supported index for this vector type.
-    #[skip_masked]
-    fn gather_if(slice: &[Self::Element], enable: Self::Mask, indices: Self::USize, or: Self) -> Self
+    fn gather_if<I: VectorIndices<Self>>(slice: &[Self::Element], enable: Self::Mask, indices: I, or: Self) -> Self
     where
+        Self::Mask: CastMask<I::Mask>,
         Self::Element: Default,
     {
-        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
 
-        unsafe { Self::gather_ptr_m(or, enable & in_bounds.cast(), slice.as_ptr(), indices) }
+        unsafe { I::gather_ptr_m(or, enable & in_bounds.cast(), slice.as_ptr(), indices) }
     }
 
     /// Scatter elements from the given vector into memory at the specified indices. If the index is outside of the
     /// bounds of the provided slice, the write is suppressed without panicking.
-    #[skip_masked]
-    fn scatter(self, slice: &mut [Self::Element], indices: Self::USize) {
-        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+    fn scatter<I: VectorIndices<Self>>(self, slice: &mut [Self::Element], indices: I)
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
 
-        unsafe { self.scatter_ptr_masked(in_bounds.cast(), slice.as_mut_ptr(), indices) }
+        unsafe { I::scatter_ptr_m(self, in_bounds.cast(), slice.as_mut_ptr(), indices) }
     }
 
     /// Scatter elements from the given vector into memory at the specified indices, but only for lanes where the `enable` mask is `true`.
     /// If the index is outside of the bounds of the provided slice, the write is suppressed without panicking.
-    #[skip_masked]
-    fn scatter_if(self, slice: &mut [Self::Element], enable: Self::Mask, indices: Self::USize) {
-        let in_bounds = indices.cmp_lt(Self::len_to_indices(slice.len()));
+    fn scatter_if<I: VectorIndices<Self>>(self, slice: &mut [Self::Element], enable: Self::Mask, indices: I)
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
 
-        unsafe { self.scatter_ptr_masked(enable & in_bounds.cast(), slice.as_mut_ptr(), indices) }
+        unsafe { I::scatter_ptr_m(self, enable & in_bounds.cast(), slice.as_mut_ptr(), indices) }
     }
 
-    unsafe fn load(ptr: *const Self::Element) -> Self;
+    #[masked] unsafe fn load(ptr: *const Self::Element) -> Self;
 
-    #[skip_masked] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self;
-    #[skip_masked] unsafe fn load_streaming(ptr: *const Self::Element) -> Self;
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self;
+    unsafe fn load_streaming(ptr: *const Self::Element) -> Self;
 
-    #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element);
-    #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element);
-    #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element);
+    unsafe fn store(self, ptr: *mut Self::Element);
+    unsafe fn store_unaligned(self, ptr: *mut Self::Element);
+    unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
+    /*
     /// Gather elements from memory at the specified indices and return a new vector with those elements.
     /// The provided indices are in number of elements, not bytes.
     ///
@@ -351,29 +416,30 @@ pub trait GenericVector:
     /// # Safety
     /// The caller must ensure the given memory locations given by `ptr + (size_of(Element) * index)`
     /// are valid for reading for all indices where the mask is true.
-    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::USize) -> Self;
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::Index) -> Self;
 
     /// Scatter elements from the given vector into memory at the specified indices.
     ///
     /// The provided indices are in number of elements, not bytes.
     #[skip_masked]
-    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::USize);
+    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::Index);
 
     /// Scatter elements from the given vector into memory at the specified indices,
     /// but only if the corresponding lane of the mask is true.
     ///
     /// The provided indices are in the number of elements, not bytes.
     #[skip_masked]
-    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::USize);
+    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::Index);
+    */
 
     /// Broadcast the value of a single lane across all lanes of the vector.
-    fn broadcast<const I: usize>(self) -> Self;
+    #[conditional] fn broadcast<const I: usize>(self) -> Self;
 
     /// Broadcast the value of a single lane across all lanes of the vector.
     ///
     /// # Panics
     /// If `idx` is out of bounds for the vector's lanes.
-    fn broadcastv(self, idx: usize) -> Self;
+    #[conditional] fn broadcastv(self, idx: usize) -> Self;
 
     /// Extract a single element from the vector at the given index.
     fn extract<const I: usize>(self) -> Self::Element;
@@ -381,9 +447,9 @@ pub trait GenericVector:
     fn extractv(self, idx: usize) -> Self::Element;
 
     /// Replace a single element in the vector at the given index with a new value.
-    #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self;
+    fn insert<const I: usize>(self, value: Self::Element) -> Self;
 
-    #[skip_masked] fn insertv(self, idx: usize, value: Self::Element) -> Self;
+    fn insertv(self, idx: usize, value: Self::Element) -> Self;
 
     /// Reverse the order of the elements in the vector.
     #[conditional] fn reverse(self) -> Self;
@@ -394,12 +460,12 @@ pub trait GenericVector:
     /// (Zero If False) Zero elements if the corresponding mask lane is false; otherwise, leave unchanged.
     ///
     /// Similar to a `mask & self` operation.
-    #[skip_masked] fn z(self, mask: Self::Mask) -> Self;
+    fn z(self, mask: Self::Mask) -> Self;
 
     /// (Zero If True) Zero elements if the corresponding mask lane is true; otherwise, leave unchanged.
     ///
     /// Similar to a `!mask & self` operation.
-    #[skip_masked] fn nz(self, mask: Self::Mask) -> Self;
+    fn nz(self, mask: Self::Mask) -> Self;
 
     /// Whether the register type has a simple unpack implementation,
     /// or requires a more complex method.
@@ -415,12 +481,12 @@ pub trait GenericVector:
     ///
     /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
     /// this will preserve the order of all elements, not just 128-bit chunks.
-    #[skip_masked] fn unpack(self, other: Self) -> (Self, Self);
+    fn unpack(self, other: Self) -> (Self, Self);
 
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
-    #[skip_masked] fn map<F>(self, f: F) -> Self
+    fn map<F>(self, f: F) -> Self
     where
         F: Fn(Self::Element) -> Self::Element;
 
@@ -438,24 +504,21 @@ pub trait GenericVector:
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element;
 
-    #[inline(always)]
-    #[skip_masked] fn cast<INTO>(self) -> INTO
+    #[inline(always)] fn cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
     {
         INTO::cast_from(self)
     }
 
-    #[inline(always)]
-    #[skip_masked] fn fast_cast<INTO>(self) -> INTO
+    #[inline(always)] fn fast_cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
     {
         INTO::fast_cast_from(self)
     }
 
-    #[inline(always)]
-    #[skip_masked] fn into_bits<INTO>(self) -> INTO
+    #[inline(always)] fn into_bits<INTO>(self) -> INTO
     where
         INTO: BitCastVector<Self>,
     {
@@ -463,8 +526,7 @@ pub trait GenericVector:
     }
 }
 
-#[thermite_macros::vector_trait]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait BitwiseVector:
     GenericVector
     + ops::BitAndMasked<Self::Mask, Self, Output = Self>
@@ -537,17 +599,18 @@ pub trait BitwiseVector:
     /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
     /// for your specific architecture. If using AVX512, there actually exists a single
     /// instruction for this.
-    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+    #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+
+    #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self;
 }
 
-#[thermite_macros::vector_trait]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait BitshiftVector:
     BitwiseVector
-    + ops::ShrMasked<Self::Mask, Self::USize, Output = Self>
-    + ops::ShrAssignMasked<Self::Mask, Self::USize>
-    + ops::ShlMasked<Self::Mask, Self::USize, Output = Self>
-    + ops::ShlAssignMasked<Self::Mask, Self::USize>
+    + ops::ShrMasked<Self::Mask, Self::Unsigned, Output = Self>
+    + ops::ShrAssignMasked<Self::Mask, Self::Unsigned>
+    + ops::ShlMasked<Self::Mask, Self::Unsigned, Output = Self>
+    + ops::ShlAssignMasked<Self::Mask, Self::Unsigned>
     + ops::ShrMasked<Self::Mask, u32, Output = Self>
     + ops::ShrAssignMasked<Self::Mask, u32>
     + ops::ShlMasked<Self::Mask, u32, Output = Self>
@@ -558,47 +621,47 @@ pub trait BitshiftVector:
 
     /// Treats the entire vector as a single large integer and shifts left by the immediate value
     /// number of BYTES. Not bits, bytes.
-    fn bshli<const I: i32>(self) -> Self;
+    #[conditional] fn bshli<const I: i32>(self) -> Self;
 
     /// Treats the entire vector as a single large integer and shifts right by the immediate value
     /// number of BYTES. Not bits, bytes.
-    fn bshri<const I: i32>(self) -> Self;
+    #[conditional] fn bshri<const I: i32>(self) -> Self;
 
     /// For each lane in the vector, shift left by the immediate value.
-    fn shli<const I: i32>(self) -> Self;
+    #[conditional] fn shli<const I: i32>(self) -> Self;
 
     /// For each lane in the vector, shift right by the immediate value.
-    fn shri<const I: i32>(self) -> Self;
+    #[conditional] fn shri<const I: i32>(self) -> Self;
 
     /// For each lane in the vector, shift left by the given value.
-    fn shlv(self, counts: Self::USize) -> Self;
+    #[conditional] fn shlv(self, counts: Self::Unsigned) -> Self;
 
     /// For each lane in the vector, shift right by the given value.
-    fn shrv(self, counts: Self::USize) -> Self;
+    #[conditional] fn shrv(self, counts: Self::Unsigned) -> Self;
 
     /// For each element in the vector, rotate the bits to the left by the given
     /// number of bits.
-    fn rol(self, shift: u32) -> Self;
+    #[conditional] fn rol(self, shift: u32) -> Self;
     /// For each element in the vector, rotate the bits to the right by the given
     /// number of bits.
-    fn ror(self, shift: u32) -> Self;
+    #[conditional] fn ror(self, shift: u32) -> Self;
     /// For each element in the vector, rotate the bits to the left by the immediate
     /// value number of bits.
-    fn roli<const I: i32>(self) -> Self;
+    #[conditional] fn roli<const I: i32>(self) -> Self;
     /// For each element in the vector, rotate the bits to the right by the immediate
     /// value number of bits.
-    fn rori<const I: i32>(self) -> Self;
+    #[conditional] fn rori<const I: i32>(self) -> Self;
 
     /// For each element in the vector, rotate the bits to the left by the given
     /// number of bits in the corresponding lane of `counts`.
-    fn rolv(self, counts: Self::USize) -> Self;
+    #[conditional] fn rolv(self, counts: Self::Unsigned) -> Self;
 
     /// For each element in the vector, rotate the bits to the right by the given
     /// number of bits in the corresponding lane of `counts`.
-    fn rorv(self, counts: Self::USize) -> Self;
+    #[conditional] fn rorv(self, counts: Self::Unsigned) -> Self;
 
     /// For each element in the vector, reverse the bits of that element.
-    fn reverse_bits(self) -> Self;
+    #[conditional] fn reverse_bits(self) -> Self;
 }
 
 pub trait SwizzleVector: GenericVector {
@@ -706,8 +769,7 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
     fn cmp_ne(self, other: Self) -> Self::Mask;
 }
 
-#[rustfmt::skip]
-#[thermite_macros::vector_trait] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait NumericVector:
     PartialOrdVector<Element: num_traits::NumOps>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
@@ -740,16 +802,16 @@ pub trait NumericVector:
     const MAX: Self;
 
     /// For each element in the vector, return a mask indicating whether that element is zero.
-    #[skip_masked] fn is_zero(self) -> Self::Mask;
+    fn is_zero(self) -> Self::Mask;
 
     /// Return the minimum of two vectors, element-wise.
-    fn min(self, other: Self) -> Self;
+    #[conditional] fn min(self, other: Self) -> Self;
 
     /// Return the maximum of two vectors, element-wise.
-    fn max(self, other: Self) -> Self;
+    #[conditional] fn max(self, other: Self) -> Self;
 
     /// Clamps the elements of the vector between the given minimum and maximum values.
-    #[skip_masked] fn clamp(self, min: Self, max: Self) -> Self;
+    fn clamp(self, min: Self, max: Self) -> Self;
 
     /// Returns the minimum value in the vector.
     ///
@@ -771,12 +833,12 @@ pub trait NumericVector:
     fn prod_elements(self) -> Self::Element;
 
     /// Effectively returns `Self::splat(Self::LANES as Self::Element)`.
-    #[skip_masked] fn offset() -> Self;
+    fn offset() -> Self;
 
     /// Returns a vector where each element is the index of the lane as that element type.
     ///
     /// `[0, 1, 2, 3]`, etc.
-    #[skip_masked] fn indexed() -> Self;
+    fn indexed() -> Self;
 }
 
 pub trait NumVector:
@@ -790,8 +852,7 @@ pub trait NumVector:
 }
 
 // TODO: Add back in some kind of `Signed` trait requirement for Element?
-#[rustfmt::skip]
-#[thermite_macros::vector_trait] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self> {
     /// A vector of the value "-1" in the element type.
     const NEG_ONE: Self;
@@ -800,33 +861,32 @@ pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self
     const MIN_POSITIVE: Self;
 
     /// Take the absolute value of the vector, element-wise.
-    fn abs(self) -> Self;
+    #[conditional] fn abs(self) -> Self;
 
     /// For each element in the vector, return a new vector
     /// where each element is either -1 or +1 depending
     /// on the sign of the element.
-    #[skip_masked] fn signum(self) -> Self;
+    fn signum(self) -> Self;
 
     /// For each element in the vector, set the sign of that
     /// element to the sign of the corresponding element in the other vector.
-    fn copysign(self, sign: Self) -> Self;
+    #[conditional] fn copysign(self, sign: Self) -> Self;
 
     /// For each element in the vector, return a mask indicating
     /// whether that element is negative.
-    #[skip_masked] fn is_positive(self) -> Self::Mask;
+    fn is_positive(self) -> Self::Mask;
 
     /// For each element in the vector, return a mask indicating
     /// whether that element is positive.
-    #[skip_masked] fn is_negative(self) -> Self::Mask;
+    fn is_negative(self) -> Self::Mask;
 
     /// Based on if self is negative, select between `if_neg` and `if_pos`.
-    #[skip_masked] fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
+    fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
 }
 
 pub trait NumSignedVector: SignedVector + NumVector + num_traits::Signed {}
 
-#[rustfmt::skip]
-#[thermite_macros::vector_trait] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait IntegerVector:
     NumericVector<Element: Denominator>
     + BitshiftVector
@@ -838,29 +898,29 @@ pub trait IntegerVector:
     type VectorizedDivider: Copy;
 
     /// Multiply two vectors, returning the high half of each product.
-    fn mulhi(self, other: Self) -> Self;
+    #[conditional] fn mulhi(self, other: Self) -> Self;
 
     /// Multiply two vectors, returning the low half of each product.
     ///
     /// This is usually the same as regular multiplication, but some architectures
     /// have specialized instructions for this operation.
-    fn mullo(self, other: Self) -> Self;
+    #[conditional] fn mullo(self, other: Self) -> Self;
 
     // fn wrapping_add(self, other: Self) -> Self;
     // fn wrapping_sub(self, other: Self) -> Self;
     // fn wrapping_mul(self, other: Self) -> Self;
 
     /// Perform saturating addition for each element of the vectors.
-    fn saturating_add(self, other: Self) -> Self;
+    #[conditional] fn saturating_add(self, other: Self) -> Self;
 
     /// Perform saturating subtraction for each element of the vectors.
-    fn saturating_sub(self, other: Self) -> Self;
+    #[conditional] fn saturating_sub(self, other: Self) -> Self;
 
-    fn wrapping_sum(self) -> Self::Element;
-    fn wrapping_prod(self) -> Self::Element;
+    #[conditional] fn wrapping_sum(self) -> Self::Element;
+    #[conditional] fn wrapping_prod(self) -> Self::Element;
 
-    #[skip_masked] fn create_divider(d: Self::Element) -> Self::Divider;
-    #[skip_masked] fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
+    fn create_divider(d: Self::Element) -> Self::Divider;
+    fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
 
     /// Use this vector as the denominators for a vectorized division operation.
     ///
@@ -875,42 +935,42 @@ pub trait IntegerVector:
     ///
     /// If unsigned, integer values of `1` present in the vector
     /// denominators will cause a panic.
-    #[skip_masked] fn to_divider(self) -> Self::VectorizedDivider;
+    fn to_divider(self) -> Self::VectorizedDivider;
 
     /// For each element in the vector, count the number of bits that are set to 1.
-    fn count_ones(self) -> Self;
+    #[conditional] fn count_ones(self) -> Self;
     /// For each element in the vector, count the number of bits that are set to 0.
-    fn count_zeros(self) -> Self;
+    #[conditional] fn count_zeros(self) -> Self;
     /// For each element in the vector, count the number of leading ones.
-    fn leading_ones(self) -> Self;
+    #[conditional] fn leading_ones(self) -> Self;
     /// For each element in the vector, count the number of leading zeros.
-    fn leading_zeros(self) -> Self;
+    #[conditional] fn leading_zeros(self) -> Self;
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_trait] #[conditional]
-pub trait SignedIntegerVector: SignedVector + IntegerVector {
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::element::SignedIntegerElement> {
     /// For each lane in the vector, right shift in sign bits by the immediate value.
-    fn srai<const I: i32>(self) -> Self;
+    #[conditional] fn srai<const I: i32>(self) -> Self;
     /// For each lane in the vector, right shift in sign bits by the given value.
-    fn sra(self, count: u32) -> Self;
+    #[conditional] fn sra(self, count: u32) -> Self;
     /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
-    fn srav(self, counts: Self::USize) -> Self;
+    #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_trait] #[conditional]
-pub trait UnsignedIntegerVector: IntegerVector<Element: num_traits::Unsigned> {
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::UnsignedIntegerElement> {
     /// Determines if each unsigned integer element in the vector is a
     /// power of two, returning a mask indicating whether or not it is.
-    #[skip_masked] fn is_power_of_two(self) -> Self::Mask;
+    fn is_power_of_two(self) -> Self::Mask;
 
     /// Returns the next power of two minus one for each unsigned integer
     /// element in the vector.
-    fn next_power_of_two_m1(self) -> Self;
+    #[conditional] fn next_power_of_two_m1(self) -> Self;
     /// Computes log2(x) + 1 for each unsigned integer element in the vector.
-    fn ilog2p1(self) -> Self;
+    #[conditional] fn ilog2p1(self) -> Self;
 
     /// Compute the parity of each unsigned integer lane in the vector.
-    fn parity(self) -> Self;
+    #[conditional] fn parity(self) -> Self;
 }
 
 use num_traits::float::FloatCore as CoreFloatTrait;
@@ -930,7 +990,7 @@ pub trait FloatVectorWithRegister: FloatVectorWithBits<Mask = crate::Mask<Self::
     type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-/// Signed integer vector types which have an associated hardware register type.
+/// SignedBits integer vector types which have an associated hardware register type.
 pub trait SignedIntegerVectorWithRegister: SignedIntegerVector<Mask = crate::Mask<Self::Register>> {
     type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
@@ -940,8 +1000,7 @@ pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector<Mask = crate:
     type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-#[rustfmt::skip]
-#[thermite_macros::vector_trait] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait FloatVector: SignedVector<Element: FloatElement>
     + FloatConsts
     + CastVector<Self::ExtendedPrecision>
@@ -969,63 +1028,61 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
 
     /// Check if each element in the vector is infinite, returning a mask.
-    #[skip_masked] fn is_infinite(self) -> Self::Mask;
+    fn is_infinite(self) -> Self::Mask;
 
     /// Check if each element in the vector is finite, returning a mask.
-    #[skip_masked] fn is_finite(self) -> Self::Mask;
+    fn is_finite(self) -> Self::Mask;
 
     /// Check if each element in the vector is NaN, returning a mask.
-    #[skip_masked] fn is_nan(self) -> Self::Mask;
+    fn is_nan(self) -> Self::Mask;
 
     /// Check if each element in the vector is zero or subnormal, returning a mask.
-    #[skip_masked] fn is_zero_or_subnormal(self) -> Self::Mask;
+    fn is_zero_or_subnormal(self) -> Self::Mask;
 
     /// Check if each element in the vector is normal, returning a mask.
-    #[skip_masked] fn is_normal(self) -> Self::Mask;
+    fn is_normal(self) -> Self::Mask;
 
     /// Check if each element in the vector is subnormal, returning a mask.
-    #[skip_masked] fn is_subnormal(self) -> Self::Mask;
+    fn is_subnormal(self) -> Self::Mask;
 
     const HAS_APPROX_RCP: bool;
     const HAS_APPROX_RSQRT: bool;
 
     /// Square root
-    fn sqrt(self) -> Self;
+    #[conditional] fn sqrt(self) -> Self;
 
     /// Approximate reciprocal square root, hardware dependent accuracy.
-    fn rsqrt(self) -> Self;
+    #[conditional] fn rsqrt(self) -> Self;
 
     /// Approximate reciprocal, hardware dependent accuracy.
-    fn rcp(self) -> Self;
+    #[conditional] fn rcp(self) -> Self;
 
-    fn floor(self) -> Self;
-    fn ceil(self) -> Self;
+    #[conditional] fn floor(self) -> Self;
+    #[conditional] fn ceil(self) -> Self;
 
     /// Round to nearest
-    fn round(self) -> Self;
+    #[conditional] fn round(self) -> Self;
     /// Truncate to int
-    fn trunc(self) -> Self;
+    #[conditional] fn trunc(self) -> Self;
     /// Fractional part
-    fn fract(self) -> Self;
+    #[conditional] fn fract(self) -> Self;
 
     /// Effectively `self * sign.signum()`, multiplying the sign bits.
-    fn mul_sign(self, sign: Self) -> Self;
+    #[conditional] fn mul_sign(self, sign: Self) -> Self;
 
     /// Returns zero with the sign of `self`, i.e.: only the sign bit is set.
-    fn signed_zero(self) -> Self;
+    #[conditional] fn signed_zero(self) -> Self;
 
     /// Returns the next representable value greater than the current value, towards positive infinity.
-    fn next_up(self) -> Self;
+    #[conditional] fn next_up(self) -> Self;
 
     /// Returns the next representable value less than the current value, towards negative infinity.
-    fn next_down(self) -> Self;
+    #[conditional] fn next_down(self) -> Self;
 
-    #[skip_masked]
     unsafe fn block_autovectorization(&mut self);
 
     /// Attempt to upcast this FloatVector to a FloatVectorWithBits,
     /// using the provided kernel. If not possible, returns None.
-    #[skip_masked]
     fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
         values: [Self; N],
         kernel: K,
@@ -1057,8 +1114,8 @@ macro_rules! with_bits {
                         Element = V::Element,
                         Lanes = V::Lanes,
                         Mask = V::Mask,
-                        ISize = V::ISize,
-                        USize = V::USize,
+                        Signed = V::Signed,
+                        Unsigned = V::Unsigned,
                         ExtendedPrecision = V::ExtendedPrecision,
                     > + CastVector<V>,
             >(
@@ -1089,8 +1146,8 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
                 Element = O::Element,
                 Lanes = O::Lanes,
                 Mask = O::Mask,
-                ISize = O::ISize,
-                USize = O::USize,
+                Signed = O::Signed,
+                Unsigned = O::Unsigned,
                 ExtendedPrecision = O::ExtendedPrecision,
             > + CastVector<O>,
     >(
@@ -1101,13 +1158,13 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
 
 // These do not have masked variants
 pub trait FloatVectorWithBits:
-    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::Signed, Self::Bits>
+    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::SignedBits, Self::Bits>
 {
-    type Signed: SignedIntegerVector<
+    type SignedBits: SignedIntegerVector<
             Lanes = Self::Lanes,
-            Divider = Divider<<Self::Element as FloatElementWithBits>::Signed>,
-            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Signed>,
-            Element = <Self::Element as FloatElementWithBits>::Signed,
+            Divider = Divider<<Self::Element as FloatElementWithBits>::SignedBits>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::SignedBits>,
+            Element = <Self::Element as FloatElementWithBits>::SignedBits,
         > + FullyInteroperable<Self, Self::Bits>;
 
     type Bits: UnsignedIntegerVector<
@@ -1115,13 +1172,13 @@ pub trait FloatVectorWithBits:
             Divider = Divider<<Self::Element as FloatElementWithBits>::Bits>,
             BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Bits>,
             Element = <Self::Element as FloatElementWithBits>::Bits,
-        > + FullyInteroperable<Self, Self::Signed>;
+        > + FullyInteroperable<Self, Self::SignedBits>;
 
     const HAS_NATIVE_LDEXP: bool;
     const HAS_NATIVE_FREXP: bool;
 
-    unsafe fn native_ldexp(self, exp: Self::Signed) -> Self;
-    unsafe fn native_frexp(self) -> (Self, Self::Signed);
+    unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self;
+    unsafe fn native_frexp(self) -> (Self, Self::SignedBits);
 
     /// Return a signed integer vector that is capable of encapsulating
     /// the "total order" of the floating point values in this vector,
@@ -1153,7 +1210,7 @@ pub trait FloatVectorWithBits:
     /// let total_lt = x.total_order().cmp_lt(y.total_order());
     /// assert!(total_lt.none()); // NaN is not less than 1.0 in total order
     /// ```
-    fn total_order(self) -> Self::Signed;
+    fn total_order(self) -> Self::SignedBits;
 }
 
 /// Vector suitable for 3D linear algebra operations.

@@ -7,9 +7,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, IntegerRegister, MaskElement,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
+        IndexableRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
+        PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -43,6 +44,11 @@ impl CoreRegister for U32x8V3 {
     #[inline(always)]
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_andnot_si256(mask, value) }
+    }
+
+    #[inline(always)]
+    fn zeroupper_z<Z: crate::register::ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        super::I32x8V3::zeroupper_z::<Z>(value)
     }
 }
 
@@ -94,42 +100,61 @@ impl MaskRegister for U32x8V3 {
     }
 }
 
-#[thermite_macros::bitand_z]
+#[rustfmt::skip] #[thermite_macros::bitand_z]
 impl BitwiseRegister for U32x8V3 {
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_xor_si256(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_and_si256(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_andnot_si256(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    #[masked] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_or_si256(lhs, rhs) }
     }
 
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
+    #[masked] fn not(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_xor_si256(value, arch::_mm256_set1_epi8(-1)) }
     }
 }
 
-impl Register for U32x8V3 {
-    type HalfRegister = super::U32x4V3;
-    type DoubleRegister = DoublePumpRegister<Self>;
+impl ConcatRegister<super::U32x4V3> for U32x8V3 {
+    #[inline(always)]
+    fn concat(lo: Storage<super::U32x4V3>, hi: Storage<super::U32x4V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_setr_m128i(lo, hi) }
+    }
 
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<super::U32x4V3>, Storage<super::U32x4V3>) {
+        let lo = unsafe { arch::_mm256_castsi256_si128(value) };
+        let hi = unsafe { arch::_mm256_extracti128_si256(value, 1) };
+
+        (lo, hi)
+    }
+}
+
+impl ExtendRegister<super::U32x4V3> for U32x8V3 {
+    #[inline(always)]
+    fn extend(value: Storage<super::U32x4V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_zextsi128_si256(value) }
+    }
+
+    #[inline(always)]
+    fn narrow(value: Storage<Self>) -> Storage<super::U32x4V3> {
+        unsafe { arch::_mm256_castsi256_si128(value) }
+    }
+}
+
+impl Register for U32x8V3 {
     type Element = u32;
 
-    type ISize = super::I32x8V3;
-    type USize = super::U32x8V3;
+    type Signed = super::I32x8V3;
+    type Unsigned = super::U32x8V3;
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -210,52 +235,9 @@ impl Register for U32x8V3 {
     }
 
     #[inline(always)]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
-        unsafe { arch::_mm256_i32gather_epi32::<4>(ptr as *const _, indices) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm256_mask_i32gather_epi32::<4>(src, ptr as *const _, indices, mask) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { arch::_mm256_mask_i32gather_epi32::<4>(Self::ZERO, ptr as *const _, indices, mask) }
-    }
-
-    #[inline(always)]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        let lo = unsafe { arch::_mm256_castsi256_si128(value) };
-        let hi = unsafe { arch::_mm256_extracti128_si256(value, 1) };
-
-        (lo, hi)
-    }
-
-    #[inline(always)]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        unsafe { arch::_mm256_setr_m128i(lo, hi) }
-    }
-
-    #[inline(always)]
     fn reverse(value: Storage<Self>) -> Storage<Self> {
         let (lo, hi) = Self::split(value);
-        Self::join(Self::HalfRegister::reverse(hi), Self::HalfRegister::reverse(lo))
+        Self::concat(super::U32x4V3::reverse(hi), super::U32x4V3::reverse(lo))
     }
 
     const HAS_SIMPLE_UNPACK: bool = super::I32x8V3::HAS_SIMPLE_UNPACK;
@@ -268,6 +250,32 @@ impl Register for U32x8V3 {
     #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_epi32x_v3(value) }
+    }
+}
+
+impl<I> IndexableRegister<I> for U32x8V3
+where
+    I: UnsignedIntegerRegister<Lanes = Self::Lanes>,
+    super::I32x8V3: IndexableRegister<I>,
+{
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<I>) -> Storage<Self> {
+        unsafe { super::I32x8V3::gather(ptr as *const _, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<I>,
+    ) -> Storage<Self> {
+        unsafe { super::I32x8V3::gather_m(src, mask, ptr as *const _, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(mask: Storage<Self::Mask>, ptr: *const Self::Element, indices: Storage<I>) -> Storage<Self> {
+        unsafe { super::I32x8V3::gather_z(mask, ptr as *const _, indices) }
     }
 }
 
@@ -287,12 +295,12 @@ impl BitshiftRegister for U32x8V3 {
     }
 
     #[inline(always)]
-    fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe { arch::_mm256_sllv_epi32(value, shifts) }
     }
 
     #[inline(always)]
-    fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe { arch::_mm256_srlv_epi32(value, shifts) }
     }
 
@@ -399,69 +407,61 @@ impl NumericRegister for U32x8V3 {
     const MIN: Storage<Self> = reg::<Self, 8>([u32::MIN; 8]);
     const MAX: Storage<Self> = reg::<Self, 8>([u32::MAX; 8]);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_epi32_v3!(value; _mm_min_epu32 _mm_min_epu32) as u32
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_epi32_v3!(value; _mm_max_epu32 _mm_max_epu32) as u32
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_epi32_v3!(value; _mm_add_epi32 _mm_add_epi32) as u32
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_epi32_v3!(value; _mm_mullo_epi32 _mm_mullo_epi32) as u32
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn offset() -> Storage<Self> {
         Self::splat(<Self::Lanes as typenum::Unsigned>::U32)
     }
 
-    #[skip_masked]
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         Self::new(GenericArray::generate(|i| i as u32))
     }
 
-    #[inline(always)]
+    #[masked]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_add_epi32(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_sub_epi32(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mullo_epi32(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a / b })
     }
 
-    #[inline(always)]
+    #[masked]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a % b })
     }
 
-    #[inline(always)]
+    #[masked]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_min_epu32(lhs, rhs) }
     }
 
-    #[inline(always)]
+    #[masked]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_max_epu32(lhs, rhs) }
     }
@@ -542,7 +542,7 @@ impl CastRegister<U32x8V3> for DoublePumpRegister<super::U64x4V3> {
             let lo = arch::_mm256_cvtepu32_epi64(lo);
             let hi = arch::_mm256_cvtepu32_epi64(hi);
 
-            Self::join(lo, hi)
+            Self::concat(lo, hi)
         }
     }
 }

@@ -1,3 +1,5 @@
+use crate::register::ZeroUpper;
+
 use super::*;
 
 // https://arxiv.org/pdf/1611.07612.pdf
@@ -30,6 +32,18 @@ pub unsafe fn _mm256_popcnt_epi32x_v3(v: __m256i) -> __m256i {
 }
 
 #[inline(always)]
+pub unsafe fn _mm256_bswap_epi16x_v3(value: __m256i) -> __m256i {
+    // Mask: 1 0 | 3 2 | 5 4 | 7 6 | 9 8 | 11 10 | 13 12 | 15 14
+    _mm256_shuffle_epi8(
+        value,
+        _mm256_setr_epi8(
+            1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14, // Lane 1
+            1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14, // Lane 2
+        ),
+    )
+}
+
+#[inline(always)]
 pub unsafe fn _mm256_bswap_epi32x_v3(x: __m256i) -> __m256i {
     // Note: vpshufb works within 128-bit lanes.
     // We repeat the 128-bit mask for both lanes.
@@ -57,4 +71,32 @@ pub unsafe fn _mm256_bswap_psx_v3(x: __m256) -> __m256 {
 #[inline(always)]
 pub unsafe fn _mm256_bswap_pdx_v3(x: __m256d) -> __m256d {
     _mm256_castsi256_pd(_mm256_bswap_epi64x_v3(_mm256_castpd_si256(x)))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_zeroupper_mask_epi32<Z: ZeroUpper>() -> __m256i {
+    use crate::element::MaskElement;
+
+    _mm256_setr_epi32(
+        i32::from_bool(0 < Z::N),
+        i32::from_bool(1 < Z::N),
+        i32::from_bool(2 < Z::N),
+        i32::from_bool(3 < Z::N),
+        i32::from_bool(4 < Z::N),
+        i32::from_bool(5 < Z::N),
+        i32::from_bool(6 < Z::N),
+        i32::from_bool(7 < Z::N),
+    )
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_zeroupper_mask_epi64<Z: ZeroUpper>() -> __m256i {
+    use crate::element::MaskElement;
+
+    _mm256_setr_epi64x(
+        i64::from_bool(0 < Z::N),
+        i64::from_bool(1 < Z::N),
+        i64::from_bool(2 < Z::N),
+        i64::from_bool(3 < Z::N),
+    )
 }

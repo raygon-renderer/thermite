@@ -479,21 +479,21 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         // contributions to exponent
         let ee = e1 + e2 + e3;
-        let ei: V::Signed = ee.fast_cast();
+        let ei: V::SignedBits = ee.fast_cast();
 
         // biased exponent of result:
-        let ej = ei + (V::Signed::from_bits(x.abs()) >> 52);
+        let ej = ei + (V::SignedBits::from_bits(x.abs()) >> 52);
 
         // add exponent by signed integer addition
-        let mut z = V::from_bits(V::Signed::from_bits(z) + (ei << 52));
+        let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 52));
 
         if !P::POLICY.check_overflow {
             return z;
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(V::Signed::splat(0x07FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
-        let underflow = ej.cmp_le(V::Signed::splat(0x0000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
+        let overflow = ej.cmp_ge(V::SignedBits::splat(0x07FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
+        let underflow = ej.cmp_le(V::SignedBits::splat(0x0000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -659,9 +659,9 @@ fn fraction2<V: FloatVectorWithBits<Element = f64>>(x: V) -> V {
 }
 
 #[inline(always)]
-fn exponent<V: FloatVectorWithBits<Element = f64>>(x: V) -> V::Signed {
+fn exponent<V: FloatVectorWithBits<Element = f64>>(x: V) -> V::SignedBits {
     // shift out sign, extract exp, subtract bias
-    V::Signed::from_bits((V::Bits::from_bits(x) << 1) >> 53) - V::Signed::splat(0x3FF)
+    V::SignedBits::from_bits((V::Bits::from_bits(x) << 1) >> 53) - V::SignedBits::splat(0x3FF)
 }
 
 #[inline(always)]

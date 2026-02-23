@@ -2,16 +2,15 @@
 
 #![warn(missing_docs, clippy::missing_safety_doc)]
 
-use crate::{
-    divider::vector::VectorDivider,
-    isa::InstructionSet,
-    register::{LinAlg4Register, SignedIntegerRegister, ValidLinAlg3Length},
-};
+use core::marker::PhantomData;
+
+use crate::{divider::vector::VectorDivider, isa::InstructionSet};
 
 use super::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, FloatRegister,
-    IntegerRegister, Lanes, LinAlg3Register, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-    SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+    BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister, CoreRegister,
+    ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register,
+    MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
+    SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -24,38 +23,11 @@ use generic_array::{
 /// This is used to create wider registers for SIMD operations when the underlying
 /// architectures are not wide enough.
 ///
-/// Don't use this trait directly, use the [`DoublePump`](super::DoublePump) alias instead:
-///
 /// ```ignore
 /// type f32x32 = DoublePump<f32x16>;
 /// ```
 #[repr(C)]
 pub struct DoublePumpRegister<R: CoreRegister>(pub(crate) Storage<R>, pub(crate) Storage<R>);
-
-const _: () = {
-    use core::fmt;
-
-    impl<R: CoreRegister> fmt::Debug for DoublePumpRegister<R> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_tuple("DoublePumpRegister")
-                .field(&self.0)
-                .field(&self.1)
-                .finish()
-        }
-    }
-};
-
-#[doc(hidden)]
-pub trait DoublePumpVector {
-    type DoublePumped;
-}
-
-impl<R: Register> DoublePumpVector for crate::vector::Vector<R>
-where
-    R::DoubleRegister: Register,
-{
-    type DoublePumped = crate::vector::Vector<R::DoubleRegister>;
-}
 
 impl<R: CoreRegister> Clone for DoublePumpRegister<R> {
     fn clone(&self) -> Self {
@@ -75,8 +47,37 @@ where
     }
 }
 
+impl<R: CoreRegister> ConcatRegister<R> for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    #[inline(always)]
+    fn concat(lo: Storage<R>, hi: Storage<R>) -> Storage<Self> {
+        Self(lo, hi)
+    }
+
+    #[inline(always)]
+    fn split(value: Storage<Self>) -> (Storage<R>, Storage<R>) {
+        (value.0, value.1)
+    }
+}
+
+impl<R: CoreRegister> ExtendRegister<R> for DoublePumpRegister<R>
+where
+    typenum::Double<R::Lanes>: Lanes,
+{
+    #[inline(always)]
+    fn extend(value: Storage<R>) -> Storage<Self> {
+        Self(value, R::EMPTY)
+    }
+
+    #[inline(always)]
+    fn narrow(value: Storage<Self>) -> Storage<R> {
+        value.0
+    }
+}
+
 #[thermite_macros::double_pump_impl]
-#[skip_masked]
 impl<R: CoreRegister> CoreRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -101,10 +102,29 @@ where
     fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self(R::z(mask.0, value.0), R::z(mask.1, value.1))
     }
+
+    fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self(R::nz(mask.0, value.0), R::nz(mask.1, value.1))
+    }
+
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N > <R::Lanes as Unsigned>::USIZE } {
+            // N > R::Lanes
+            struct ZeroHigher<R: CoreRegister, Z: ZeroUpper>(PhantomData<(R, Z)>);
+
+            impl<R: CoreRegister, Z: ZeroUpper> ZeroUpper for ZeroHigher<R, Z> {
+                const N: usize = Z::N - <R::Lanes as Unsigned>::USIZE;
+            }
+
+            Self(value.0, R::zeroupper_z::<ZeroHigher<R, Z>>(value.1))
+        } else {
+            // N <= R::Lanes, can just reuse Z
+            Self(R::zeroupper_z::<Z>(value.0), R::EMPTY)
+        }
+    }
 }
 
 #[thermite_macros::double_pump_impl]
-#[skip_masked]
 impl<R: MaskRegister> MaskRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -176,73 +196,48 @@ where
     }
 }
 
-#[thermite_macros::double_pump_impl]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: BitwiseRegister> BitwiseRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn not(value: Storage<Self>) -> Storage<Self> {}
-    fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {}
-    fn bilog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn not(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn bilog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
 }
 
-#[thermite_macros::double_pump_impl]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: Register> Register for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
     type Element = R::Element;
 
-    type HalfRegister = R;
-    type DoubleRegister = DoublePumpRegister<Self>;
-
-    type ISize = DoublePumpRegister<R::ISize>;
-    type USize = DoublePumpRegister<R::USize>;
+    type Signed = DoublePumpRegister<R::Signed>;
+    type Unsigned = DoublePumpRegister<R::Unsigned>;
 
     const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
-    #[skip_masked]
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
         Self(R::from_mask(mask.0), R::from_mask(mask.1))
     }
 
-    #[skip_masked]
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         DoublePumpRegister(R::into_mask(value.0), R::into_mask(value.1))
     }
 
-    #[skip_masked]
     fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
         DoublePumpRegister(R::into_mask_unchecked(value.0), R::into_mask_unchecked(value.1))
     }
 
-    #[skip_masked]
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         DoublePumpRegister(R::msb_to_mask(value.0), R::msb_to_mask(value.1))
     }
 
-    #[skip_masked]
-    fn split(value: Storage<Self>) -> (Storage<Self::HalfRegister>, Storage<Self::HalfRegister>)
-    where
-        Self::HalfRegister: Register,
-    {
-        (value.0, value.1)
-    }
-
-    #[skip_masked]
-    fn join(lo: Storage<Self::HalfRegister>, hi: Storage<Self::HalfRegister>) -> Storage<Self>
-    where
-        Self::HalfRegister: Register,
-    {
-        Self(lo, hi)
-    }
-
-    #[skip_masked]
     fn new(value: generic_array::GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
         // SAFETY: With arrays always being repr(C), we can safely transmute
         // the double-length array into the two half arrays for each register.
@@ -251,15 +246,26 @@ where
         Self(R::new(lhs), R::new(rhs))
     }
 
-    fn single(value: Self::Element) -> Storage<Self> {
-        Self(R::single(value), R::EMPTY)
+    fn single(value: Self::Element) -> Storage<Self> { Self(R::single(value), R::EMPTY) }
+
+    fn single_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
+        Self(R::single_m(src.0, mask.0, value), R::EMPTY)
     }
 
-    fn splat(value: Self::Element) -> Storage<Self> {
-        Self(R::splat(value), R::splat(value))
+    fn single_z(mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
+        Self(R::single_z(mask.0, value), R::EMPTY)
     }
 
-    #[conditional]
+    fn splat(value: Self::Element) -> Storage<Self> { Self(R::splat(value), R::splat(value)) }
+
+    fn splat_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
+        Self(R::splat_m(src.0, mask.0, value), R::splat_m(src.1, mask.1, value))
+    }
+
+    fn splat_z(mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
+        Self(R::splat_z(mask.0, value), R::splat_z(mask.1, value))
+    }
+
     fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
         // NOTE: using `broadcast::<I>(value)` doesn't work
         // because the const index is propagated before the conditional
@@ -267,7 +273,23 @@ where
         Self::broadcastv(value, I)
     }
 
-    #[conditional]
+    fn broadcast_c<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self::broadcastv_c(mask, value, I)
+    }
+
+    fn broadcast_m<const I: usize>(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        value: Storage<Self>,
+    ) -> Storage<Self> {
+        Self::broadcastv_m(src, mask, value, I)
+    }
+
+    fn broadcast_z<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self::broadcastv_z(mask, value, I)
+    }
+
+    // TODO: Come up with better masked defaults for this?
     fn broadcastv(value: Storage<Self>, idx: usize) -> Storage<Self> {
         let r = if idx < R::Lanes::USIZE {
             R::broadcastv(value.0, idx)
@@ -278,22 +300,18 @@ where
         Self(r, r)
     }
 
-    #[skip_masked]
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { Self(R::load(ptr), R::load(ptr.add(R::Lanes::USIZE))) }
     }
 
-    #[skip_masked]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { Self(R::load_unaligned(ptr), R::load_unaligned(ptr.add(R::Lanes::USIZE))) }
     }
 
-    #[skip_masked]
     unsafe fn load_stream(ptr: *const Self::Element) -> Storage<Self> {
         unsafe { Self(R::load_stream(ptr), R::load_stream(ptr.add(R::Lanes::USIZE))) }
     }
 
-    #[skip_masked]
     unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe {
             R::store(ptr, value.0);
@@ -301,7 +319,6 @@ where
         }
     }
 
-    #[skip_masked]
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe {
             R::store_unaligned(ptr, value.0);
@@ -309,64 +326,10 @@ where
         }
     }
 
-    #[skip_masked]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe {
             R::store_stream(ptr, value.0);
             R::store_stream(ptr.add(R::Lanes::USIZE), value.1);
-        }
-    }
-
-    // NOTE: For gather/scatter, we do NOT add the lane offset to the pointer,
-    // since all indices are relative to that pointer, regardless of lane.
-
-    #[skip_masked]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<Self::USize>) -> Storage<Self> {
-        unsafe { Self(R::gather(ptr, indices.0), R::gather(ptr, indices.1)) }
-    }
-
-    #[skip_masked]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe {
-            Self(
-                R::gather_m(src.0, mask.0, ptr, indices.0),
-                R::gather_m(src.1, mask.1, ptr, indices.1),
-            )
-        }
-    }
-
-    #[skip_masked]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<Self::USize>,
-    ) -> Storage<Self> {
-        unsafe { Self(R::gather_z(mask.0, ptr, indices.0), R::gather_z(mask.1, ptr, indices.1)) }
-    }
-
-    #[skip_masked]
-    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<Self::USize>) {
-        unsafe {
-            R::scatter(value.0, ptr, indices.0);
-            R::scatter(value.1, ptr, indices.1);
-        }
-    }
-
-    #[skip_masked]
-    unsafe fn scatter_m(
-        value: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *mut Self::Element,
-        indices: Storage<Self::USize>,
-    ) {
-        unsafe {
-            R::scatter_m(value.0, mask.0, ptr, indices.0);
-            R::scatter_m(value.1, mask.1, ptr, indices.1);
         }
     }
 
@@ -390,7 +353,6 @@ where
     // NOTE: This has masked variants, but it's too complicated
     // to actually mask here, due to the lane swapping, so
     // we just let the default impls handle it.
-    #[skip_masked]
     fn reverse(value: Storage<Self>) -> Storage<Self> {
         Self(R::reverse(value.1), R::reverse(value.0))
     }
@@ -399,7 +361,6 @@ where
     // so this is determined solely by the underlying register.
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
-    #[skip_masked]
     fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         let (r1_lo, r1_hi) = R::unpack(a.0, b.0);
         let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
@@ -407,14 +368,73 @@ where
         (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
     }
 
-    #[conditional]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        Self(R::swap_bytes(value.0), R::swap_bytes(value.1))
+    #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self> { }
+}
+
+impl<IDX, R: IndexableRegister<IDX>> IndexableRegister<DoublePumpRegister<IDX>> for DoublePumpRegister<R>
+where
+    IDX: UnsignedIntegerRegister<Lanes = R::Lanes>,
+    typenum::Double<R::Lanes>: Lanes,
+    typenum::Double<IDX::Lanes>: Lanes,
+{
+    // NOTE: For gather/scatter, we do NOT add the lane offset to the pointer,
+    // since all indices are relative to that pointer, regardless of lane.
+
+    #[inline(always)]
+    unsafe fn gather(
+        ptr: *const R::Element,
+        indices: Storage<DoublePumpRegister<IDX>>,
+    ) -> Storage<DoublePumpRegister<R>> {
+        unsafe { DoublePumpRegister(R::gather(ptr, indices.0), R::gather(ptr, indices.1)) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<DoublePumpRegister<R>>,
+        mask: Storage<DoublePumpRegister<R::Mask>>,
+        ptr: *const R::Element,
+        indices: Storage<DoublePumpRegister<IDX>>,
+    ) -> Storage<DoublePumpRegister<R>> {
+        unsafe {
+            DoublePumpRegister(
+                R::gather_m(src.0, mask.0, ptr, indices.0),
+                R::gather_m(src.1, mask.1, ptr, indices.1),
+            )
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(
+        mask: Storage<DoublePumpRegister<R::Mask>>,
+        ptr: *const R::Element,
+        indices: Storage<DoublePumpRegister<IDX>>,
+    ) -> Storage<DoublePumpRegister<R>> {
+        unsafe { DoublePumpRegister(R::gather_z(mask.0, ptr, indices.0), R::gather_z(mask.1, ptr, indices.1)) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter(value: Storage<Self>, ptr: *mut R::Element, indices: Storage<DoublePumpRegister<IDX>>) {
+        unsafe {
+            R::scatter(value.0, ptr, indices.0);
+            R::scatter(value.1, ptr, indices.1);
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_m(
+        value: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *mut R::Element,
+        indices: Storage<DoublePumpRegister<IDX>>,
+    ) {
+        unsafe {
+            R::scatter_m(value.0, mask.0, ptr, indices.0);
+            R::scatter_m(value.1, mask.1, ptr, indices.1);
+        }
     }
 }
 
-#[thermite_macros::double_pump_impl]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: BitshiftRegister> BitshiftRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -422,19 +442,19 @@ where
     const HAS_WIDE_BYTE_SHIFTS: bool = false;
     const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
 
-    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {}
-    fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {}
-    fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {}
-    fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {}
-    fn reverse_bits(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {}
+    #[conditional] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {}
+    #[conditional] fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {}
+    #[conditional] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {}
+    #[conditional] fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn rolv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn rorv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn reverse_bits(value: Storage<Self>) -> Storage<Self> {}
 }
 
 impl<FROM: MaskRegister, INTO: CastMaskRegister<FROM>> CastMaskRegister<DoublePumpRegister<FROM>>
@@ -449,8 +469,7 @@ where
     }
 }
 
-#[rustfmt::skip]
-#[thermite_macros::double_pump_impl] #[skip_masked]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: PartialOrdRegister> PartialOrdRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -463,8 +482,7 @@ where
     fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}
 }
 
-#[rustfmt::skip]
-#[thermite_macros::double_pump_impl]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: NumericRegister> NumericRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -510,8 +528,7 @@ where
     }
 }
 
-#[rustfmt::skip]
-#[thermite_macros::double_pump_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: SignedRegister> SignedRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -519,18 +536,17 @@ where
     const NEG_ONE: Storage<Self> = Self(R::NEG_ONE, R::NEG_ONE);
     const MIN_POSITIVE: Storage<Self> = Self(R::MIN_POSITIVE, R::MIN_POSITIVE);
 
-    fn neg(value: Storage<Self>) -> Storage<Self> {}
-    fn abs(value: Storage<Self>) -> Storage<Self> {}
-    fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn neg(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn abs(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 
-    #[skip_masked] fn signum(value: Storage<Self>) -> Storage<Self> {}
+    fn signum(value: Storage<Self>) -> Storage<Self> {}
 
-    #[skip_masked] fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {}
 }
 
-#[rustfmt::skip]
-#[thermite_macros::double_pump_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: FloatRegister> FloatRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -538,7 +554,7 @@ where
     const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
 
     type Bits = DoublePumpRegister<R::Bits>;
-    type Signed = DoublePumpRegister<R::Signed>;
+    type SignedBits = DoublePumpRegister<R::SignedBits>;
     type ExtendedPrecision = DoublePumpRegister<R::ExtendedPrecision>;
 
     const HALF: Storage<Self> = Self(R::HALF, R::HALF);
@@ -550,45 +566,43 @@ where
 
     const EXP_MASK: Storage<Self::Bits> = DoublePumpRegister(R::EXP_MASK, R::EXP_MASK);
 
-    #[skip_masked] fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_zero_or_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {}
-    #[skip_masked] fn is_normal(value: Storage<Self>) -> Storage<Self::Mask> {}
-    fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { }
-    fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { }
-    fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
-    fn sqrt(value: Storage<Self>) -> Storage<Self> {}
-    fn rsqrt(value: Storage<Self>) -> Storage<Self> {}
+    fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_zero_or_subnormal(value: Storage<Self>) -> Storage<Self::Mask> {}
+    fn is_normal(value: Storage<Self>) -> Storage<Self::Mask> {}
+    #[conditional] fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { }
+    #[conditional] fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { }
+    #[conditional] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn sqrt(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn rsqrt(value: Storage<Self>) -> Storage<Self> {}
 
     const HAS_APPROX_RSQRT: bool = R::HAS_APPROX_RSQRT;
     const HAS_APPROX_RCP: bool = R::HAS_APPROX_RCP;
 
-    fn rcp(value: Storage<Self>) -> Storage<Self> {}
-    fn floor(value: Storage<Self>) -> Storage<Self> {}
-    fn ceil(value: Storage<Self>) -> Storage<Self> {}
-    fn round(value: Storage<Self>) -> Storage<Self> {}
-    fn trunc(value: Storage<Self>) -> Storage<Self> {}
-    fn fract(value: Storage<Self>) -> Storage<Self> {}
-    fn next_up(value: Storage<Self>) -> Storage<Self> {}
-    fn next_down(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn rcp(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn floor(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn ceil(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn round(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn trunc(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn fract(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn next_up(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn next_down(value: Storage<Self>) -> Storage<Self> {}
 
     const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
     const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
 
-    #[skip_masked]
-    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::Signed>) -> Storage<Self> {
+    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
         unsafe { Self(R::native_ldexp(value.0, exp.0), R::native_ldexp(value.1, exp.1)) }
     }
 
-    #[skip_masked]
-    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::Signed>) {
+    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
         let (lo_val, lo_exp) = unsafe { R::native_frexp(value.0) };
         let (hi_val, hi_exp) = unsafe { R::native_frexp(value.1) };
 
@@ -596,20 +610,19 @@ where
     }
 }
 
-#[rustfmt::skip]
-#[thermite_macros::double_pump_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: IntegerRegister> IntegerRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 
-    fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-    fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 
-    fn wrapping_sum(value: Storage<Self>) -> Self::Element { R::wrapping_sum(R::add(value.0, value.1)) }
-    fn wrapping_product(value: Storage<Self>) -> Self::Element { R::wrapping_product(R::mul(value.0, value.1)) }
+    #[conditional] fn wrapping_sum(value: Storage<Self>) -> Self::Element { R::wrapping_sum(R::add(value.0, value.1)) }
+    #[conditional] fn wrapping_product(value: Storage<Self>) -> Self::Element { R::wrapping_product(R::mul(value.0, value.1)) }
 
     fn div_branched(value: Storage<Self>, divider: crate::divider::Divider<Self::Element>) -> Storage<Self> {}
 
@@ -620,25 +633,21 @@ where
 
     // these divv forms are explicitly implemented for the dividers' split logic
 
-    #[skip_masked]
     fn divv_branchfree(value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self> {
         let (lo, hi) = dividers.split();
         Self(R::divv_branchfree(value.0, lo), R::divv_branchfree(value.1, hi))
     }
 
-    #[skip_masked]
     fn divv_branchfree_c(mask: Storage<Self::Mask>, value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self> {
         let (lo, hi) = dividers.split();
         Self(R::divv_branchfree_c(mask.0, value.0, lo), R::divv_branchfree_c(mask.1, value.1, hi))
     }
 
-    #[skip_masked]
     fn divv_branchfree_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self> {
         let (lo, hi) = dividers.split();
         Self(R::divv_branchfree_m(src.0, mask.0, value.0, lo), R::divv_branchfree_m(src.1, mask.1, value.1, hi))
     }
 
-    #[skip_masked]
     fn divv_branchfree_z(mask: Storage<Self::Mask>, value: Storage<Self>, dividers: VectorDivider<Self>) -> Storage<Self> {
         let (lo, hi) = dividers.split();
         Self(R::divv_branchfree_z(mask.0, value.0, lo), R::divv_branchfree_z(mask.1, value.1, hi))
@@ -646,37 +655,34 @@ where
 
     const HAS_HARDWARE_POPCNT: bool = R::HAS_HARDWARE_POPCNT;
 
-    fn count_ones(value: Storage<Self>) -> Storage<Self> {}
-    fn count_zeros(value: Storage<Self>) -> Storage<Self> {}
-    fn leading_zeros(value: Storage<Self>) -> Storage<Self> {}
-    fn leading_ones(value: Storage<Self>) -> Storage<Self> {}
-    fn trailing_ones(value: Storage<Self>) -> Storage<Self> {}
-    fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn count_ones(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn count_zeros(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn leading_zeros(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn leading_ones(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn trailing_ones(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {}
 }
 
-#[thermite_macros::double_pump_impl]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: UnsignedIntegerRegister> UnsignedIntegerRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    fn ilog2p1(value: Storage<Self>) -> Storage<Self> {}
-    fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
-    fn parity(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn ilog2p1(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn parity(value: Storage<Self>) -> Storage<Self> {}
 
-    #[skip_masked]
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {}
 }
 
-#[thermite_macros::double_pump_impl]
-#[conditional]
+#[rustfmt::skip] #[thermite_macros::double_pump_impl]
 impl<R: SignedIntegerRegister> SignedIntegerRegister for DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
 {
-    fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    fn srav(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> {}
+    #[conditional] fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
+    #[conditional] fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
 }
 
 impl<R: SwizzleRegister> SwizzleRegister for DoublePumpRegister<R>

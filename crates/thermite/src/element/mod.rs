@@ -1,9 +1,29 @@
+pub trait FindUSize<U16, U32, U64> {
+    type Output;
+}
+
+impl<U16, U32, U64> FindUSize<U16, U32, U64> for () {
+    #[cfg(target_pointer_width = "16")]
+    type Output = U16;
+
+    #[cfg(target_pointer_width = "32")]
+    type Output = U32;
+
+    #[cfg(target_pointer_width = "64")]
+    type Output = U64;
+}
+
+/// The unsigned integer type corresponding to the pointer width of the target architecture.
+///
+/// It will be `u16` on 16-bit targets, `u32` on 32-bit targets, and `u64` on 64-bit targets.
+pub type USize = <() as FindUSize<u16, u32, u64>>::Output;
+
 /// Common trait for types that can be used as elements in SIMD registers.
 pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + core::fmt::Debug {
     /// Unsigned integer type to be used with operations that require unsigned counts, such as shifts.
-    type USize: UnsignedIntegerElement<ISize = Self::ISize>;
-    /// Signed integer type to be used with operations that require signed counts, such as shifts.
-    type ISize: SignedIntegerElement<USize = Self::USize>;
+    type Unsigned: UnsignedIntegerElement<Signed = Self::Signed>;
+    /// SignedBits integer type to be used with operations that require signed counts, such as shifts.
+    type Signed: SignedIntegerElement<Unsigned = Self::Unsigned>;
 
     const ZERO: Self;
     const ONE: Self;
@@ -44,8 +64,8 @@ macro_rules! impl_element {
         }
 
         impl Element for $t {
-            type USize = $u;
-            type ISize = $s;
+            type Unsigned = $u;
+            type Signed = $s;
 
             const ZERO: Self = 0;
             const ONE: Self = 1;
@@ -70,8 +90,8 @@ macro_rules! impl_element {
         }
 
         impl Element for $f {
-            type USize = $u;
-            type ISize = $s;
+            type Unsigned = $u;
+            type Signed = $s;
 
             const ZERO: Self = 0.0;
             const ONE: Self = 1.0;
@@ -112,8 +132,8 @@ pub trait IntegerElement:
     + num_traits::WrappingSub
     + core::ops::Shr<Output = Self>
     + core::ops::Shl<Output = Self>
-    + core::ops::Shr<Self::USize, Output = Self>
-    + core::ops::Shl<Self::USize, Output = Self>
+    + core::ops::Shr<Self::Unsigned, Output = Self>
+    + core::ops::Shl<Self::Unsigned, Output = Self>
 {
 }
 
@@ -126,16 +146,42 @@ impl<T> IntegerElement for T where
         + num_traits::WrappingSub
         + core::ops::Shr<Output = Self>
         + core::ops::Shl<Output = Self>
-        + core::ops::Shr<Self::USize, Output = Self>
-        + core::ops::Shl<Self::USize, Output = Self>
+        + core::ops::Shr<Self::Unsigned, Output = Self>
+        + core::ops::Shl<Self::Unsigned, Output = Self>
 {
 }
 
-pub trait SignedIntegerElement: IntegerElement<ISize = Self> + num_traits::Signed + TryInto<isize> {}
-pub trait UnsignedIntegerElement: IntegerElement<USize = Self> + num_traits::Unsigned + TryInto<usize> {}
+#[doc(hidden)]
+#[cfg(feature = "std_simd")]
+pub trait MaybeStdSimdElement: std::simd::SimdElement {}
 
-impl<S> SignedIntegerElement for S where S: IntegerElement<ISize = S> + num_traits::Signed + TryInto<isize> {}
-impl<U> UnsignedIntegerElement for U where U: IntegerElement<USize = U> + num_traits::Unsigned + TryInto<usize> {}
+#[cfg(feature = "std_simd")]
+impl<T> MaybeStdSimdElement for T where T: std::simd::SimdElement {}
+
+#[doc(hidden)]
+#[cfg(not(feature = "std_simd"))]
+pub trait MaybeStdSimdElement {}
+
+#[cfg(not(feature = "std_simd"))]
+impl<T> MaybeStdSimdElement for T {}
+
+pub trait SignedIntegerElement:
+    IntegerElement<Signed = Self> + num_traits::Signed + TryInto<isize> + MaybeStdSimdElement
+{
+}
+pub trait UnsignedIntegerElement:
+    IntegerElement<Unsigned = Self> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize> + MaybeStdSimdElement
+{
+}
+
+impl<S> SignedIntegerElement for S where
+    S: IntegerElement<Signed = S> + num_traits::Signed + TryInto<isize> + MaybeStdSimdElement
+{
+}
+impl<U> UnsignedIntegerElement for U where
+    U: IntegerElement<Unsigned = U> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize> + MaybeStdSimdElement
+{
+}
 
 pub mod float;
 pub use float::{FloatElement, FloatElementWithBits};

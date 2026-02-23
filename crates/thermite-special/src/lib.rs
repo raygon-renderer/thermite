@@ -119,7 +119,7 @@ decl_math! {
     /// The polynomial is calculated independently per-lane with the given degree in `n`.
     ///
     /// This uses the recurrence relation to compute the polynomial iteratively.
-    fn hermitev[][](self: Self, n: Self::USize) -> Self;
+    fn hermitev[][](self: Self, n: Self::Unsigned) -> Self;
 
     /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
     ///

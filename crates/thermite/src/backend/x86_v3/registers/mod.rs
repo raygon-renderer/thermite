@@ -15,6 +15,9 @@ pub mod u32x8;
 pub mod u64x2;
 pub mod u64x4;
 
+// pub mod i16x8;
+// pub mod u16x8;
+
 pub use f32x4::F32x4V3;
 pub use f32x8::F32x8V3;
 pub use f64x2::F64x2V3;
@@ -28,8 +31,13 @@ pub use u32x8::U32x8V3;
 pub use u64x2::U64x2V3;
 pub use u64x4::U64x4V3;
 
+pub mod half;
+
+pub use half::{F32x2V3, I32x2V3, U32x2V3};
+
 use crate::{
     backend::scalar::Scalar,
+    element::FindUSize,
     isa::InstructionSet,
     register::{Storage, dp::DoublePumpRegister},
     simd::{NativeSimd, Simd},
@@ -58,9 +66,14 @@ impl NativeSimd for X86V3 {
 }
 
 impl Simd for X86V3 {
-    type f32x2 = <Scalar as Simd>::f32x2;
-    type i32x2 = <Scalar as Simd>::i32x2;
-    type u32x2 = <Scalar as Simd>::u32x2;
+    type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
+    type usizex4 = <() as FindUSize<(), Self::u32x4, Self::u64x4>>::Output;
+    type usizex8 = <() as FindUSize<(), Self::u32x8, Self::u64x8>>::Output;
+    type usizex16 = <() as FindUSize<(), Self::u32x16, Self::u64x16>>::Output;
+
+    type f32x2 = F32x2V3;
+    type i32x2 = I32x2V3;
+    type u32x2 = U32x2V3;
 
     type f32x4 = F32x4V3;
     type i32x4 = I32x4V3;

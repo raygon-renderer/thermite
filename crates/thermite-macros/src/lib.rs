@@ -7,9 +7,8 @@ use syn::{
     Type, parse_macro_input, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
 };
 
-const SKIP_MASKED: &str = "skip_masked";
-const WITH_CONDITIONAL: &str = "conditional";
-const SKIP_CONDITIONAL: &str = "skip_conditional";
+const MASKED: &str = "masked";
+const CONDITIONAL: &str = "conditional";
 
 // --- Core Utilities ---
 
@@ -36,12 +35,24 @@ fn extract_trait_arg_names(inputs: &Punctuated<FnArg, Comma>) -> impl Iterator<I
     })
 }
 
+#[rustfmt::skip]
+fn skip_or_conditional_impl(method: &mut syn::ImplItemFn) -> (bool, bool) {
+    let conditional = take_attribute(&mut method.attrs, CONDITIONAL);
+    let skip = !(conditional || take_attribute(&mut method.attrs, MASKED)) || is_ineligible_return_type(&method.sig.output);
+    (skip, conditional)
+}
+
+#[rustfmt::skip]
+fn skip_or_conditional_trait(method: &mut syn::TraitItemFn) -> (bool, bool) {
+    let conditional = take_attribute(&mut method.attrs, CONDITIONAL);
+    let skip = !(conditional || take_attribute(&mut method.attrs, MASKED)) || is_ineligible_return_type(&method.sig.output);
+    (skip, conditional)
+}
+
 #[proc_macro_attribute]
 pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut trait_def = parse_macro_input!(item as ItemTrait);
     let mut new_items: Vec<TraitItem> = Vec::new();
-    let skip_all = take_attribute(&mut trait_def.attrs, SKIP_MASKED);
-    let all_conditional = take_attribute(&mut trait_def.attrs, WITH_CONDITIONAL);
 
     for item in &mut trait_def.items {
         let TraitItem::Fn(method) = item else { continue };
@@ -50,12 +61,11 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
             method.attrs.push(parse_quote!(#[inline(always)]));
         }
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
+        let (skip, with_conditional) = skip_or_conditional_trait(method);
+
+        if skip {
             continue;
         }
-
-        let with_conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
-            && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
 
         let name = &method.sig.ident;
         let arg_names: Vec<_> = extract_trait_arg_names(&method.sig.inputs).collect();
@@ -138,19 +148,13 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let skip_all = take_attribute(&mut impl_block.attrs, SKIP_MASKED);
-    let all_conditional = take_attribute(&mut impl_block.attrs, WITH_CONDITIONAL);
-
     let mut new_items = Vec::new();
 
     for item in &mut impl_block.items {
         // we only care about functions
         let ImplItem::Fn(method) = item else { continue };
 
-        let skip =
-            skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output);
-        let with_conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
-            && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
+        let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
         let unsafety = method.sig.unsafety.as_ref();
@@ -162,7 +166,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         // 1. Generate base body if empty
         if method.block.stmts.is_empty() {
-            let (args_0, args_1) = split_args_for_call(&method.sig.inputs);
+            let (args_0, args_1) = split_args_for_dp_call(&method.sig.inputs);
 
             method.block = parse_quote!({
                 #unsafety { DoublePumpRegister(
@@ -181,7 +185,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 sig_c.ident = format_ident!("{}_c", name);
                 sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
 
-                let (c0, c1) = split_args_for_call(&sig_c.inputs);
+                let (c0, c1) = split_args_for_dp_call(&sig_c.inputs);
                 let c_name = &sig_c.ident;
 
                 new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
@@ -200,7 +204,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
             sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
 
-            let (m0, m1) = split_args_for_call(&sig_m.inputs);
+            let (m0, m1) = split_args_for_dp_call(&sig_m.inputs);
             let m_name = &sig_m.ident;
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
@@ -217,7 +221,7 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
             sig_z.ident = format_ident!("{}_z", name);
             sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
 
-            let (z0, z1) = split_args_for_call(&sig_z.inputs);
+            let (z0, z1) = split_args_for_dp_call(&sig_z.inputs);
             let z_name = &sig_z.ident;
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
@@ -236,17 +240,108 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn reduced_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let mut new_items = Vec::new();
+    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
+        Some(ty) => ty,
+        None => {
+            return syn::Error::new_spanned(&impl_block.self_ty, "Expected ReducedRegister<R>")
+                .to_compile_error()
+                .into();
+        }
+    };
 
-    let skip_all = take_attribute(&mut impl_block.attrs, SKIP_MASKED);
+    let mut new_items = Vec::new();
 
     for item in &mut impl_block.items {
         // we only care about functions
         let ImplItem::Fn(method) = item else { continue };
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
+        let (skip, with_conditional) = skip_or_conditional_impl(method);
+
+        let name = &method.sig.ident;
+        let unsafety = method.sig.unsafety.as_ref();
+        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
+        let turbo = ty_gen.as_turbofish();
+
+        // always mark as #[inline(always)], even if there is a custom body
+        method.attrs.push(parse_quote!(#[inline(always)]));
+
+        // 1. Generate base body if empty
+        if method.block.stmts.is_empty() {
+            let args = args_for_reduced_call(&method.sig.inputs);
+
+            method.block = parse_quote!({
+                #unsafety { ReducedRegister( #reg_ty::#name #turbo(#args), PhantomData ) }
+            });
+        }
+
+        if !skip {
+            let doc = get_doc_attrs(&method.attrs);
+
+            if with_conditional {
+                // --- Generate _c ---
+                let mut sig_c = method.sig.clone();
+                sig_c.ident = format_ident!("{}_c", name);
+                sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+
+                let args = args_for_reduced_call(&sig_c.inputs);
+                let c_name = &sig_c.ident;
+
+                new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
+                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
+                        #unsafety { ReducedRegister( #reg_ty::#c_name #turbo(#args), PhantomData ) }
+                    }
+                }));
+            }
+
+            // --- Generate _m ---
+            let mut sig_m = method.sig.clone();
+            sig_m.ident = format_ident!("{}_m", name);
+            sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+            sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
+
+            let args = args_for_reduced_call(&sig_m.inputs);
+            let m_name = &sig_m.ident;
+
+            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
+                    #unsafety { ReducedRegister( #reg_ty::#m_name #turbo(#args), PhantomData ) }
+                }
+            }));
+
+            // --- Generate _z ---
+            let mut sig_z = method.sig.clone();
+            sig_z.ident = format_ident!("{}_z", name);
+            sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+
+            let args = args_for_reduced_call(&sig_z.inputs);
+            let z_name = &sig_z.ident;
+
+            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
+                    #unsafety { ReducedRegister( #reg_ty::#z_name #turbo(#args), PhantomData ) }
+                }
+            }));
+        }
+    }
+
+    impl_block.items.extend(new_items);
+    impl_block.into_token_stream().into()
+}
+
+#[proc_macro_attribute]
+pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut impl_block = parse_macro_input!(item as ItemImpl);
+    let mut new_items = Vec::new();
+
+    for item in &mut impl_block.items {
+        // we only care about functions
+        let ImplItem::Fn(method) = item else { continue };
+
+        let (skip, _) = skip_or_conditional_impl(method);
+
+        if skip {
             continue;
         }
 
@@ -278,9 +373,6 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut trait_def = parse_macro_input!(item as ItemTrait);
     let mut new_items: Vec<TraitItem> = Vec::new();
 
-    let skip_all = take_attribute(&mut trait_def.attrs, SKIP_MASKED);
-    let all_conditional = take_attribute(&mut trait_def.attrs, WITH_CONDITIONAL);
-
     for item in &mut trait_def.items {
         // we only care about functions
         let TraitItem::Fn(method) = item else { continue };
@@ -289,12 +381,11 @@ pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
             method.attrs.push(parse_quote!(#[inline(always)]));
         }
 
-        if skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output) {
+        let (skip, conditional) = skip_or_conditional_trait(method);
+
+        if skip {
             continue;
         }
-
-        let conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
-            && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
 
         let name = &method.sig.ident;
 
@@ -361,18 +452,12 @@ pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let skip_all = take_attribute(&mut impl_block.attrs, SKIP_MASKED);
-    let all_conditional = take_attribute(&mut impl_block.attrs, WITH_CONDITIONAL);
-
     let mut new_items = Vec::new();
 
     for item in &mut impl_block.items {
         let ImplItem::Fn(method) = item else { continue };
 
-        let skip =
-            skip_all || take_attribute(&mut method.attrs, SKIP_MASKED) || is_ineligible_return_type(&method.sig.output);
-        let with_conditional = (take_attribute(&mut method.attrs, WITH_CONDITIONAL) || all_conditional)
-            && !take_attribute(&mut method.attrs, SKIP_CONDITIONAL);
+        let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
         let unsafety = method.sig.unsafety.as_ref();
@@ -482,7 +567,7 @@ fn is_splittable(ty: &Type) -> bool {
     };
 
     tp.path.is_ident("Self") || tp.path.segments.last()
-        .is_some_and(|s| s.ident == "Storage" || s.ident == "DoublePumpRegister" || s.ident == "Self")
+        .is_some_and(|s| s.ident == "Storage" || s.ident == "DoublePumpRegister" || s.ident == "ReducedRegister" || s.ident == "Self")
 }
 
 #[rustfmt::skip]
@@ -544,7 +629,7 @@ fn is_ineligible_type(ty: &Type) -> bool {
     false
 }
 
-fn split_args_for_call(inputs: &Punctuated<FnArg, Comma>) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+fn split_args_for_dp_call(inputs: &Punctuated<FnArg, Comma>) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let mut a0 = Vec::new();
     let mut a1 = Vec::new();
 
@@ -566,6 +651,27 @@ fn split_args_for_call(inputs: &Punctuated<FnArg, Comma>) -> (proc_macro2::Token
     }
 
     (quote!(#(#a0),*), quote!(#(#a1),*))
+}
+
+fn args_for_reduced_call(inputs: &Punctuated<FnArg, Comma>) -> proc_macro2::TokenStream {
+    let args = inputs.iter().filter_map(|input| match input {
+        FnArg::Receiver(r) => Some(quote_spanned!(r.span() => self.0)),
+        FnArg::Typed(pt) => {
+            let Pat::Ident(pi) = &*pt.pat else {
+                return None;
+            };
+
+            let name = &pi.ident;
+
+            Some(if is_splittable(&pt.ty) {
+                quote!(#name.0)
+            } else {
+                name.to_token_stream()
+            })
+        }
+    });
+
+    quote!(#(#args),*)
 }
 
 fn args_for_vector_call(inputs: &Punctuated<FnArg, Comma>) -> proc_macro2::TokenStream {

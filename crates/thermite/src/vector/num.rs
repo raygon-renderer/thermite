@@ -90,13 +90,13 @@ macro_rules! fwd_ops {
                 core::ops::[<$trait Assign>]::[<$op _assign>](&mut self.0, rhs);
             }
         }
-        impl<V: $bound> core::ops::$trait<NumVector<V::USize>> for NumVector<V> {
-            type Output = Self; #[inline(always)] fn $op(self, rhs: NumVector<V::USize>) -> Self::Output {
+        impl<V: $bound> core::ops::$trait<NumVector<V::Unsigned>> for NumVector<V> {
+            type Output = Self; #[inline(always)] fn $op(self, rhs: NumVector<V::Unsigned>) -> Self::Output {
                 Self(core::ops::$trait::$op(self.0, rhs.0))
             }
         }
-        impl<V: $bound> core::ops::[<$trait Assign>]<NumVector<V::USize>> for NumVector<V> {
-            #[inline(always)] fn [<$op _assign>](&mut self, rhs: NumVector<V::USize>) {
+        impl<V: $bound> core::ops::[<$trait Assign>]<NumVector<V::Unsigned>> for NumVector<V> {
+            #[inline(always)] fn [<$op _assign>](&mut self, rhs: NumVector<V::Unsigned>) {
                 core::ops::[<$trait Assign>]::[<$op _assign>](&mut self.0, rhs.0);
             }
         }
@@ -325,7 +325,7 @@ where
     /// Returns true if **all** lanes are positive, false otherwise.
     #[inline(always)] fn is_sign_positive(self) -> bool { self.0.is_positive().all() }
 
-    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { Self(FloatVector::mul_adde(self.0, a.0, b.0)) }
+    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { Self(crate::generic::ops::MulAddExt::mul_adde(self.0, a.0, b.0)) }
     #[inline(always)] fn recip(self)            -> Self { Self(V::ONE / self.0) }
     #[inline(always)] fn powi(self, n: i32)     -> Self { Self(CoreMath::powi(self.0, n)) }
     #[inline(always)] fn powf(self, n: Self)    -> Self { Self(TranscendentalMath::powf(self.0, n.0)) }
@@ -355,7 +355,7 @@ where
     #[inline(always)] fn asin(self)                 -> Self { Self(TranscendentalMath::asin(self.0)) }
     #[inline(always)] fn acos(self)                 -> Self { Self(TranscendentalMath::acos(self.0)) }
     #[inline(always)] fn atan(self)                 -> Self { Self(TranscendentalMath::atan(self.0)) }
-    #[inline(always)] fn atan2(self, other: Self)   -> Self { Self(TranscendentalMath::atan2(self.0, other.0)) }
+    #[inline(always)] fn atan2(self, other: Self)   -> Self { Self(RealMath::atan2(self.0, other.0)) }
     #[inline(always)] fn exp_m1(self)               -> Self { Self(TranscendentalMath::exp_m1(self.0)) }
     #[inline(always)] fn ln_1p(self)                -> Self { Self(TranscendentalMath::ln_1p(self.0)) }
     #[inline(always)] fn sinh(self)                 -> Self { Self(TranscendentalMath::sinh(self.0)) }

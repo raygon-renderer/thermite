@@ -5,7 +5,7 @@ pub unsafe fn _mm_max_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
     // 1. Sign bit mask
     let sign_mask = _mm_set1_epu32x(0x80000000);
 
-    // 2. Prepare keys (Unsigned -> Signed)
+    // 2. Prepare keys (Unsigned -> SignedBits)
     let a_key = _mm_xor_si128(a, sign_mask);
     let b_key = _mm_xor_si128(b, sign_mask);
 
@@ -23,7 +23,7 @@ pub unsafe fn _mm_min_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
     // 1. Sign bit mask
     let sign_mask = _mm_set1_epu32x(0x80000000);
 
-    // 2. Prepare keys (Unsigned -> Signed)
+    // 2. Prepare keys (Unsigned -> SignedBits)
     let a_key = _mm_xor_si128(a, sign_mask);
     let b_key = _mm_xor_si128(b, sign_mask);
 

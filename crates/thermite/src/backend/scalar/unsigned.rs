@@ -6,9 +6,10 @@ use generic_array::{
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IntegerRegister,
-    LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-    ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IndexableRegister,
+    IntegerRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
+    Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, dp::DoublePumpRegister,
+    empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -36,6 +37,10 @@ impl CoreRegister for [<u $width>] {
 
     #[inline(always)] fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask == 0, value, 0)
+    }
+
+    #[inline(always)] fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 1 } { value } else { Self::EMPTY } // if N == 0 zero everything
     }
 }
 
@@ -79,13 +84,10 @@ impl MaskRegister for [<u $width>] {
 }
 
 impl Register for [<u $width>] {
-    type HalfRegister = Self;
-    type DoubleRegister = DoublePumpRegister<Self>;
-
     type Element = $i;
 
-    type ISize = [<i $width>];
-    type USize = [<u $width>];
+    type Signed = [<i $width>];
+    type Unsigned = [<u $width>];
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
@@ -117,6 +119,12 @@ impl Register for [<u $width>] {
     }
 }
 
+impl<I> IndexableRegister<I> for [<u $width>]
+where
+    I: UnsignedIntegerRegister<Lanes = Self::Lanes>,
+{
+}
+
 impl BitshiftRegister for [<u $width>] {
     const HAS_TRUE_SHIFTV: bool = true; // Technically true!
     const HAS_WIDE_BYTE_SHIFTS: bool = true; // Also technically true!
@@ -125,13 +133,13 @@ impl BitshiftRegister for [<u $width>] {
     #[inline(always)] fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value >> (8 * IMM8) }
     #[inline(always)] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value << shift }
     #[inline(always)] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value >> shift }
-    #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { value << shifts }
-    #[inline(always)] fn shrv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { value >> shifts }
+    #[inline(always)] fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value << shifts }
+    #[inline(always)] fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value >> shifts }
     #[inline(always)] fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value << IMM8 }
     #[inline(always)] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value >> IMM8 }
 
-    #[inline(always)] fn rolv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self::rol(value, shifts as _) }
-    #[inline(always)] fn rorv(value: Storage<Self>, shifts: Storage<Self::USize>) -> Storage<Self> { Self::ror(value, shifts as _) }
+    #[inline(always)] fn rolv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { Self::rol(value, shifts as _) }
+    #[inline(always)] fn rorv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { Self::ror(value, shifts as _) }
     #[inline(always)] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> { value.rotate_left(shift) }
     #[inline(always)] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> { value.rotate_right(shift) }
 

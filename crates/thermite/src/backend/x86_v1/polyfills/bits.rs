@@ -1,3 +1,5 @@
+use crate::register::ZeroUpper;
+
 use super::*;
 
 /// POLYFILL: Shift right and sign extend 64-bit integers
@@ -102,4 +104,16 @@ pub unsafe fn sse2_bswap_psx_v1(x: __m128) -> __m128 {
 #[inline(always)]
 pub unsafe fn sse2_bswap_pdx_v1(x: __m128d) -> __m128d {
     _mm_castsi128_pd(_mm_bswap_epi64x_v1(_mm_castpd_si128(x)))
+}
+
+#[inline(always)]
+pub unsafe fn _mm_zeroupper_mask_epi32<Z: ZeroUpper>() -> __m128i {
+    use crate::element::MaskElement;
+
+    _mm_setr_epi32(
+        i32::from_bool(0 < Z::N),
+        i32::from_bool(1 < Z::N),
+        i32::from_bool(2 < Z::N),
+        i32::from_bool(3 < Z::N),
+    )
 }

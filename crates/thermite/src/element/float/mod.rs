@@ -1,4 +1,8 @@
 use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
+use crate::generic::ops::MulAddExt;
+use crate::register::FloatRegister;
+
+pub mod ph;
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
@@ -9,7 +13,7 @@ pub trait FloatElement:
     + crate::math::FloatConsts
     + num_traits::NumOps
     + core::ops::Neg<Output = Self>
-    + crate::generic::ops::MulAddExt<Self, Self, Output = Self>
+    + MulAddExt<Self, Self, Output = Self>
 {
     /// Try to represent this i64 value as this float type,
     /// returning None if it cannot be represented exactly.
@@ -64,12 +68,12 @@ pub trait FloatElement:
 }
 
 pub trait FloatElementWithBits: FloatElement {
-    type Bits: UnsignedIntegerElement<USize = Self::Bits>;
-    type Signed: SignedIntegerElement<ISize = Self::Signed>;
+    type Bits: UnsignedIntegerElement<Unsigned = Self::Bits>;
+    type SignedBits: SignedIntegerElement<Signed = Self::SignedBits>;
 
     const EXP_BITS: u32;
     const MANTISSA_BITS: u32;
-    const EXP_BIAS: Self::Signed;
+    const EXP_BIAS: Self::SignedBits;
 
     /// The specific bit pattern for NaN.
     /// IEEE formats have a *range* of NaNs, but E4M3 has only *one* (0x7F).
@@ -87,17 +91,17 @@ pub trait FloatElementWithBits: FloatElement {
     // maximum u32 that can be exactly represented in this float type without loss of precision
     const MAX_U64: u64;
 
-    const MAX_BIASED_EXP: Self::Signed;
+    const MAX_BIASED_EXP: Self::SignedBits;
     const EXP_LSB_MASK: Self::Bits;
     const SIGN_MANTISSA_MASK: Self::Bits;
 
     const HALF_EXP_BITS: Self::Bits;
-    const FREXP_BIAS_OFFSET: Self::Signed;
+    const FREXP_BIAS_OFFSET: Self::SignedBits;
 
     /// Convert from f64 to this float type, potentially losing precision.
     fn from_f64(value: f64) -> Self;
 
-    fn from_signed(value: Self::Signed) -> Self;
+    fn from_signed(value: Self::SignedBits) -> Self;
 }
 
 trait FloatElementInternal: FloatElement {
@@ -109,7 +113,7 @@ macro_rules! impl_float_element {
     (CONSTS $($const:ident: $const_ty:ty = $value:expr;)+) => {paste::paste! {
         $(const $const: $const_ty = $value;)+
 
-        const FREXP_BIAS_OFFSET: Self::Signed = Self::EXP_BIAS - 1;
+        const FREXP_BIAS_OFFSET: Self::SignedBits = Self::EXP_BIAS - 1;
         const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA_BITS) as _;
         const MAX_U64: u64 = (1u64 << (Self::MANTISSA_BITS + 1));
     }};
@@ -179,21 +183,21 @@ macro_rules! impl_float_element {
         }
 
         #[cfg(feature = "std")]
-        impl crate::generic::ops::MulAddExt for $t {
+        impl MulAddExt for $t {
             type Output = Self;
 
             // trust the register implementation
-            const HAS_TRUE_FMA: bool = <$t as super::FloatRegister>::HAS_TRUE_FMA;
+            const HAS_TRUE_FMA: bool = <$t as FloatRegister>::HAS_TRUE_FMA;
 
             #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, acc) }
             #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, -acc) }
             #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, acc) }
             #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, -acc) }
 
-            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
-            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
-            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
-            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !Self::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
+            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
+            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
+            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
+            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
         }
 
         #[cfg(not(feature = "std"))]
@@ -222,7 +226,7 @@ macro_rules! impl_float_element {
         }
 
         #[cfg(not(feature = "std"))]
-        impl crate::generic::ops::MulAddExt for $t {
+        impl MulAddExt for $t {
             type Output = Self;
 
             const HAS_TRUE_FMA: bool = false;
@@ -240,12 +244,12 @@ macro_rules! impl_float_element {
 
         impl FloatElementWithBits for $t {
             type Bits = $bits;
-            type Signed = $signed;
+            type SignedBits = $signed;
 
             impl_float_element!(CONSTS $($const: $const_ty = $value;)*);
 
             #[inline(always)] fn from_f64(value: f64) -> Self { value as $t }
-            #[inline(always)] fn from_signed(value: Self::Signed) -> Self { value as $t }
+            #[inline(always)] fn from_signed(value: Self::SignedBits) -> Self { value as $t }
         }
     }};
 }

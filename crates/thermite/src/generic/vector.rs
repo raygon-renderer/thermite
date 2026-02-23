@@ -6,8 +6,9 @@ use crate::{
     generic::ops::{DivMasked, Square, SquareMasked},
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, Element, FloatElement,
-        FloatRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister, PartialOrdRegister,
-        Register, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, NumericRegister,
+        PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
+        UnsignedIntegerRegister,
     },
 };
 
@@ -118,27 +119,27 @@ impl<R: Register> GenericVector for Vector<R> {
 
     type Lanes = R::Lanes;
 
-    type USize = Vector<R::USize>;
-    type ISize = Vector<R::ISize>;
+    type Unsigned = Vector<R::Unsigned>;
+    type Signed = Vector<R::Signed>;
 
     type Mask = Mask<R>;
 
-    #[skip_masked]
     fn splat_const<C>() -> Self where C: SplatConst<Self::Element> {
         const { Self::splat_const(C::VALUE) }
     }
 
-    fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
+    #[masked] fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
+    #[masked] fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
 
-    fn broadcast<const I: usize>(self) -> Self {}
-    fn broadcastv(self, idx: usize) -> Self {}
+    #[conditional] fn broadcast<const I: usize>(self) -> Self {}
+    #[conditional] fn broadcastv(self, idx: usize) -> Self {}
 
     fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
     fn extractv(self, idx: usize) -> Self::Element { self.as_slice()[idx] }
 
-    #[skip_masked] fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
+    fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
 
-    #[skip_masked] fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
+    fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
         let arr = self.as_mut_slice();
         arr[idx] = value;
         self
@@ -148,85 +149,88 @@ impl<R: Register> GenericVector for Vector<R> {
     #[conditional] fn swap_bytes(self) -> Self {}
 
     // The arguments of these are reversed for the register
-    #[skip_masked] fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
-    #[skip_masked] fn nz(self, mask: Self::Mask) -> Self { Vector(R::nz(mask.0, self.0)) }
+    fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
+    fn nz(self, mask: Self::Mask) -> Self { Vector(R::nz(mask.0, self.0)) }
 
     const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
 
-    #[skip_masked] fn unpack(self, other: Self) -> (Self, Self) {
+    fn unpack(self, other: Self) -> (Self, Self) {
         let (lo, hi) = R::unpack(self.0, other.0);
         (Vector(lo), Vector(hi))
     }
 
-    #[skip_masked]
     fn map<F>(self, f: F) -> Self where F: Fn(Self::Element) -> Self::Element { Vector(R::map(self.0, f)) }
-
     fn fold<F>(self, init: Self::Element, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::fold(init, self.0, f) }
-
     fn reduce<F>(self, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::reduce(self.0, f) }
 
-    #[skip_masked] fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
+    #[masked] unsafe fn load(ptr: *const Self::Element) -> Self {}
 
-    unsafe fn load(ptr: *const Self::Element) -> Self {}
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_unaligned(ptr)) } }
+    unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_stream(ptr)) } }
 
-    #[skip_masked] unsafe fn load_unaligned(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_unaligned(ptr)) } }
-    #[skip_masked] unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_stream(ptr)) } }
+    unsafe fn store(self, ptr: *mut Self::Element) { unsafe { R::store(ptr, self.0) } }
+    unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
+    unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
+}
 
-    #[skip_masked] unsafe fn store(self, ptr: *mut Self::Element) { unsafe { R::store(ptr, self.0) } }
-    #[skip_masked] unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
-    #[skip_masked] unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
-
-    #[skip_masked]
-    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::USize) -> Self {
+#[rustfmt::skip]
+impl<R, I> IndexableVector<Vector<I>> for Vector<R>
+where
+    R: IndexableRegister<I>,
+    I: UnsignedIntegerRegister<Lanes = R::Lanes>,
+{
+    #[inline(always)]
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather(ptr, indices.0)) }
     }
 
-    #[skip_masked]
-    unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: Self::USize) -> Self {
+    #[inline(always)]
+    unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather_m(src.0, mask.0, ptr, indices.0)) }
     }
 
-    #[skip_masked]
-    unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: Self::USize) -> Self {
+    #[inline(always)]
+    unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather_z(mask.0, ptr, indices.0)) }
     }
 
-    #[skip_masked]
-    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::USize) {
-        unsafe { R::scatter(self.0, ptr, indices.0) };
+    #[inline(always)]
+    unsafe fn scatter_ptr(value: Self, ptr: *mut Self::Element, indices: Vector<I>) {
+        unsafe { R::scatter(value.0, ptr, indices.0) };
     }
 
-    #[skip_masked]
-    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::USize) {
-        unsafe { R::scatter_m(self.0, mask.0, ptr, indices.0) };
+    #[inline(always)]
+    unsafe fn scatter_ptr_m(value: Self, mask: Self::Mask, ptr: *mut Self::Element, indices: Vector<I>) {
+        unsafe { R::scatter_m(value.0, mask.0, ptr, indices.0) };
     }
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: BitwiseRegister + Register> BitwiseVector for Vector<R> {
-    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
+    #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
+    #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self {}
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: BitshiftRegister> BitshiftVector for Vector<R> {
     const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
     const HAS_WIDE_BYTE_SHIFTS: bool = R::HAS_WIDE_BYTE_SHIFTS;
 
-    fn bshli<const I: i32>(self) -> Self {}
-    fn bshri<const I: i32>(self) -> Self {}
-    fn shli<const I: i32>(self) -> Self {}
-    fn shri<const I: i32>(self) -> Self {}
-    fn shlv(self, shifts: Self::USize) -> Self {}
-    fn shrv(self, shifts: Self::USize) -> Self {}
+    #[conditional] fn bshli<const I: i32>(self) -> Self {}
+    #[conditional] fn bshri<const I: i32>(self) -> Self {}
+    #[conditional] fn shli<const I: i32>(self) -> Self {}
+    #[conditional] fn shri<const I: i32>(self) -> Self {}
+    #[conditional] fn shlv(self, shifts: Self::Unsigned) -> Self {}
+    #[conditional] fn shrv(self, shifts: Self::Unsigned) -> Self {}
 
-    fn rol(self, shift: u32) -> Self {}
-    fn ror(self, shift: u32) -> Self {}
-    fn roli<const I: i32>(self) -> Self {}
-    fn rori<const I: i32>(self) -> Self {}
-    fn rolv(self, counts: Self::USize) -> Self {}
-    fn rorv(self, counts: Self::USize) -> Self {}
+    #[conditional] fn rol(self, shift: u32) -> Self {}
+    #[conditional] fn ror(self, shift: u32) -> Self {}
+    #[conditional] fn roli<const I: i32>(self) -> Self {}
+    #[conditional] fn rori<const I: i32>(self) -> Self {}
+    #[conditional] fn rolv(self, counts: Self::Unsigned) -> Self {}
+    #[conditional] fn rorv(self, counts: Self::Unsigned) -> Self {}
 
-    fn reverse_bits(self) -> Self {}
+    #[conditional] fn reverse_bits(self) -> Self {}
 }
 
 #[rustfmt::skip]
@@ -239,7 +243,7 @@ impl<R: PartialOrdRegister> PartialOrdVector for Vector<R> {
     #[inline(always)] fn cmp_ne(self, other: Self) -> Self::Mask { Mask(R::ne(self.0, other.0)) }
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: NumericRegister> NumericVector for Vector<R>
 where
     R::Element: num_traits::Num,
@@ -250,12 +254,12 @@ where
     const MIN: Self = Vector(R::MIN);
     const MAX: Self = Vector(R::MAX);
 
-    #[skip_masked] fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
+    fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
 
-    fn min(self, other: Self) -> Self {}
-    fn max(self, other: Self) -> Self {}
+    #[conditional] fn min(self, other: Self) -> Self {}
+    #[conditional] fn max(self, other: Self) -> Self {}
 
-    #[skip_masked] fn clamp(self, min: Self, max: Self) -> Self { self.min(max).max(min) }
+    fn clamp(self, min: Self, max: Self) -> Self { self.min(max).max(min) }
 
     fn min_element(self) -> Self::Element { R::min_element(self.0) }
     fn max_element(self) -> Self::Element { R::max_element(self.0) }
@@ -263,8 +267,8 @@ where
     fn sum_elements(self) -> Self::Element { R::sum_elements(self.0) }
     fn prod_elements(self) -> Self::Element { R::prod_elements(self.0) }
 
-    #[skip_masked] fn offset() -> Self { Vector(R::offset()) }
-    #[skip_masked] fn indexed() -> Self { Vector(R::indexed()) }
+    fn offset() -> Self { Vector(R::offset()) }
+    fn indexed() -> Self { Vector(R::indexed()) }
 }
 
 impl<R: NumericRegister> Square for Vector<R> {
@@ -321,26 +325,26 @@ impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
 
 impl<R: NumericRegister> NumVector for Vector<R> where R::Element: num_traits::Num + num_traits::NumCast {}
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: SignedRegister> SignedVector for Vector<R> {
     const NEG_ONE: Self = Vector(R::NEG_ONE);
     const MIN_POSITIVE: Self = Vector(R::MIN_POSITIVE);
 
-    fn abs(self) -> Self {}
+    #[conditional] fn abs(self) -> Self {}
 
-    #[skip_masked] fn signum(self) -> Self {}
+    fn signum(self) -> Self {}
 
-    fn copysign(self, sign: Self) -> Self {}
+    #[conditional] fn copysign(self, sign: Self) -> Self {}
 
-    #[skip_masked] fn is_positive(self) -> Self::Mask { Mask(R::is_positive(self.0)) }
-    #[skip_masked] fn is_negative(self) -> Self::Mask { Mask(R::is_negative(self.0)) }
+    fn is_positive(self) -> Self::Mask { Mask(R::is_positive(self.0)) }
+    fn is_negative(self) -> Self::Mask { Mask(R::is_negative(self.0)) }
 
-    #[skip_masked] fn select_negative(self, if_neg: Self, if_pos: Self) -> Self {}
+    fn select_negative(self, if_neg: Self, if_pos: Self) -> Self {}
 }
 
 impl<R: SignedRegister> NumSignedVector for Vector<R> where R::Element: num_traits::Signed + num_traits::NumCast {}
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: IntegerRegister> IntegerVector for Vector<R>
 where
     R::Element: Denominator,
@@ -349,28 +353,28 @@ where
     type BranchfreeDivider = BranchfreeDivider<R::Element>;
     type VectorizedDivider = VectorDivider<R>;
 
-    fn mulhi(self, other: Self) -> Self {}
-    fn mullo(self, other: Self) -> Self {}
+    #[conditional] fn mulhi(self, other: Self) -> Self {}
+    #[conditional] fn mullo(self, other: Self) -> Self {}
 
     // fn wrapping_add(self, other: Self) -> Self {}
     // fn wrapping_sub(self, other: Self) -> Self {}
     // fn wrapping_mul(self, other: Self) -> Self {}
 
-    fn saturating_add(self, other: Self) -> Self {}
-    fn saturating_sub(self, other: Self) -> Self {}
+    #[conditional] fn saturating_add(self, other: Self) -> Self {}
+    #[conditional] fn saturating_sub(self, other: Self) -> Self {}
 
-    fn wrapping_sum(self) -> Self::Element { R::wrapping_sum(self.0) }
-    fn wrapping_prod(self) -> Self::Element { R::wrapping_product(self.0) }
+    #[conditional] fn wrapping_sum(self) -> Self::Element { R::wrapping_sum(self.0) }
+    #[conditional] fn wrapping_prod(self) -> Self::Element { R::wrapping_product(self.0) }
 
-    #[skip_masked] fn create_divider(d: Self::Element) -> Self::Divider { Denominator::to_divider(d) }
-    #[skip_masked] fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider { Denominator::to_branchfree_divider(d) }
+    fn create_divider(d: Self::Element) -> Self::Divider { Denominator::to_divider(d) }
+    fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider { Denominator::to_branchfree_divider(d) }
 
-    #[skip_masked] fn to_divider(self) -> Self::VectorizedDivider { VectorDivider::new(self) }
+    fn to_divider(self) -> Self::VectorizedDivider { VectorDivider::new(self) }
 
-    fn count_ones(self) -> Self {}
-    fn count_zeros(self) -> Self {}
-    fn leading_ones(self) -> Self {}
-    fn leading_zeros(self) -> Self {}
+    #[conditional] fn count_ones(self) -> Self {}
+    #[conditional] fn count_zeros(self) -> Self {}
+    #[conditional] fn leading_ones(self) -> Self {}
+    #[conditional] fn leading_zeros(self) -> Self {}
 }
 
 impl<R: IntegerRegister> Div<Divider<R::Element>> for Vector<R> {
@@ -460,28 +464,29 @@ where
     }
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: SignedIntegerRegister> SignedIntegerVector for Vector<R>
 where
     R::Element: Denominator,
 {
-    fn srai<const I: i32>(self) -> Self {}
-    fn sra(self, count: u32) -> Self {}
-    fn srav(self, counts: Self::USize) -> Self {}
+    #[conditional] fn srai<const I: i32>(self) -> Self {}
+    #[conditional] fn sra(self, count: u32) -> Self {}
+    #[conditional] fn srav(self, counts: Self::Unsigned) -> Self {}
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: UnsignedIntegerRegister> UnsignedIntegerVector for Vector<R>
 where
     R::Element: Denominator,
 {
-    #[skip_masked] fn is_power_of_two(self) -> Self::Mask { Mask(R::is_power_of_two(self.0)) }
-    fn next_power_of_two_m1(self) -> Self {}
-    fn ilog2p1(self) -> Self {}
-    fn parity(self) -> Self {}
+    fn is_power_of_two(self) -> Self::Mask { Mask(R::is_power_of_two(self.0)) }
+
+    #[conditional] fn next_power_of_two_m1(self) -> Self {}
+    #[conditional] fn ilog2p1(self) -> Self {}
+    #[conditional] fn parity(self) -> Self {}
 }
 
-#[rustfmt::skip] #[thermite_macros::vector_impl] #[conditional]
+#[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: FloatRegister> FloatVector for Vector<R> {
     const HALF: Self = Vector(R::HALF);
     const NEG_ZERO: Self = Vector(R::NEG_ZERO);
@@ -492,35 +497,33 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
 
     type ExtendedPrecision = Vector<R::ExtendedPrecision>;
 
-    #[skip_masked] fn is_infinite(self)     -> Self::Mask { Mask(R::is_infinite(self.0)) }
-    #[skip_masked] fn is_finite(self)       -> Self::Mask { Mask(R::is_finite(self.0)) }
-    #[skip_masked] fn is_nan(self)          -> Self::Mask { Mask(R::is_nan(self.0)) }
-    #[skip_masked] fn is_zero_or_subnormal(self) -> Self::Mask { Mask(R::is_zero_or_subnormal(self.0)) }
-    #[skip_masked] fn is_normal(self)       -> Self::Mask { Mask(R::is_normal(self.0)) }
-    #[skip_masked] fn is_subnormal(self)    -> Self::Mask { Mask(R::is_subnormal(self.0)) }
+    fn is_infinite(self)     -> Self::Mask { Mask(R::is_infinite(self.0)) }
+    fn is_finite(self)       -> Self::Mask { Mask(R::is_finite(self.0)) }
+    fn is_nan(self)          -> Self::Mask { Mask(R::is_nan(self.0)) }
+    fn is_zero_or_subnormal(self) -> Self::Mask { Mask(R::is_zero_or_subnormal(self.0)) }
+    fn is_normal(self)       -> Self::Mask { Mask(R::is_normal(self.0)) }
+    fn is_subnormal(self)    -> Self::Mask { Mask(R::is_subnormal(self.0)) }
 
     const HAS_APPROX_RCP: bool = R::HAS_APPROX_RCP;
     const HAS_APPROX_RSQRT: bool = R::HAS_APPROX_RSQRT;
 
-    fn sqrt(self) -> Self {}
-    fn rsqrt(self) -> Self {}
-    fn rcp(self) -> Self {}
-    fn floor(self) -> Self {}
-    fn ceil(self) -> Self {}
-    fn round(self) -> Self {}
-    fn trunc(self) -> Self {}
-    fn fract(self) -> Self {}
-    fn mul_sign(self, sign: Self) -> Self {}
-    fn signed_zero(self) -> Self {}
-    fn next_up(self) -> Self {}
-    fn next_down(self) -> Self {}
+    #[conditional] fn sqrt(self) -> Self {}
+    #[conditional] fn rsqrt(self) -> Self {}
+    #[conditional] fn rcp(self) -> Self {}
+    #[conditional] fn floor(self) -> Self {}
+    #[conditional] fn ceil(self) -> Self {}
+    #[conditional] fn round(self) -> Self {}
+    #[conditional] fn trunc(self) -> Self {}
+    #[conditional] fn fract(self) -> Self {}
+    #[conditional] fn mul_sign(self, sign: Self) -> Self {}
+    #[conditional] fn signed_zero(self) -> Self {}
+    #[conditional] fn next_up(self) -> Self {}
+    #[conditional] fn next_down(self) -> Self {}
 
-    #[skip_masked]
     unsafe fn block_autovectorization(&mut self) {
         unsafe { R::block_autovectorization(&mut self.0) };
     }
 
-    #[skip_masked]
     fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
         values: [Self; N],
         kernel: K,
@@ -531,22 +534,22 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
 
 #[rustfmt::skip]
 impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
-    type Signed = Vector<R::Signed>;
+    type SignedBits = Vector<R::SignedBits>;
     type Bits = Vector<R::Bits>;
 
     const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
     const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
 
-    #[inline(always)] unsafe fn native_ldexp(self, exp: Self::Signed) -> Self {
+    #[inline(always)] unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self {
         unsafe { Vector(R::native_ldexp(self.0, exp.0)) }
     }
 
-    #[inline(always)] unsafe fn native_frexp(self) -> (Self, Self::Signed) {
+    #[inline(always)] unsafe fn native_frexp(self) -> (Self, Self::SignedBits) {
         let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
         (Vector(mantissa), Vector(exp))
     }
 
-    #[inline(always)] fn total_order(self) -> Self::Signed { Vector(R::total_order(self.0)) }
+    #[inline(always)] fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
 }
 
 #[rustfmt::skip]

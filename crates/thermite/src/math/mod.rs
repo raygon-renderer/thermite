@@ -101,10 +101,10 @@ decl_math! {
     /// Float-specific mathematical functions like `ldexp` and `frexp`.
     trait Float: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
-        fn ldexp[][](self: Self, exp: Self::Signed) -> Self;
+        fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;
 
         /// Decomposes `self` into its normalized fraction and an integral power of two.
-        fn frexp[][](self: Self) -> (Self, Self::Signed);
+        fn frexp[][](self: Self) -> (Self, Self::SignedBits);
     }
 }
 
@@ -151,7 +151,7 @@ decl_math! {
         fn powi[][](self: Self, e: i32) -> Self;
 
         /// Returns `self` raised to the signed integer power of each element in `e`.
-        fn powiv[][](self: Self, e: Self::ISize) -> Self;
+        fn powiv[][](self: Self, e: Self::Signed) -> Self;
     }
 }
 
