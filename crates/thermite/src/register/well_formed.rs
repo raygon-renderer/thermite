@@ -1,3 +1,14 @@
+//! "Well Formed" Elements and Registers.
+//!
+//! An Element or Register type is "well formed" if it can itself be used as a Register,
+//! with its associated Unsigned and Signed types also being well formed,
+//! and in the case of FloatElement/FloatRegister, its associated SignedBits
+//! and Bits types also being well formed.
+//!
+//! This is a useful property for writing generic code that can operate on both
+//! Element and Register types without needing to worry about whether the
+//! associated Unsigned/Signed/SignedBits/Bits types are properly defined.
+
 use crate::element::FloatElementWithBits;
 
 use super::*;
@@ -130,7 +141,8 @@ impl<R> WellFormedUnsignedIntegerRegister for R where
 }
 
 pub trait WellFormedFloatRegister:
-    FloatRegister<
+    WellFormedRegister
+    + FloatRegister<
         Element: WellFormedFloatElement,
         SignedBits: WellFormedSignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::SignedBits>,
         Bits: WellFormedUnsignedIntegerRegister<Element = <Self::Element as FloatElementWithBits>::Bits>,
@@ -139,7 +151,8 @@ pub trait WellFormedFloatRegister:
 }
 
 impl<F> WellFormedFloatRegister for F where
-    F: FloatRegister<
+    F: WellFormedRegister
+        + FloatRegister<
             Element: WellFormedFloatElement,
             SignedBits: WellFormedSignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::SignedBits>,
             Bits: WellFormedUnsignedIntegerRegister<Element = <F::Element as FloatElementWithBits>::Bits>,
