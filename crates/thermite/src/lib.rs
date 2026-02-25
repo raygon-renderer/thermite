@@ -100,8 +100,8 @@ pub mod prelude {
         generic::{
             BitCastVector, BitshiftVector, BitwiseVector, CastMask, CastVector, ConcatVector, ExtendVector,
             FloatVector, FloatVectorWithBits, GenericMask, GenericVector, IndexableVector, IntegerVector,
-            LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedVector, SplatConst, SwizzleVector,
-            UnsignedIntegerVector, VectorIndices,
+            LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector, SignedIntegerVector, SignedVector,
+            SplatConst, SwizzleVector, UnsignedIntegerVector, VectorIndices,
         },
         math::{
             CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,

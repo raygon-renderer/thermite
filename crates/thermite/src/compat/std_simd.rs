@@ -1,10 +1,10 @@
 use generic_array::typenum::{Const, Unsigned};
 
-use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
-use std::simd::{MaskElement as StdMaskElement, SimdElement as StdSimdElement};
-//
 use crate::generic::ops::{BitAndNot, BitAndNotAssign, NotMasked};
-use crate::prelude::{BitwiseVector, FloatVector, GenericMask, NumericVector, PartialOrdVector, SignedVector};
+use crate::prelude::{
+    BitwiseVector, CastVector, FloatVector, GenericMask, NumericVector, PartialOrdVector, SignedIntegerVector,
+    SignedVector, UnsignedIntegerVector,
+};
 
 pub trait MaskElement: crate::element::MaskElement + StdMaskElement {}
 impl<T> MaskElement for T where T: crate::element::MaskElement + StdMaskElement {}
@@ -23,7 +23,8 @@ impl<T> SimdElement for T where
 use core::ops::Neg;
 
 use std::simd::{
-    LaneCount, Mask, Simd, SimdCast, SupportedLaneCount,
+    LaneCount, Mask, MaskElement as StdMaskElement, Simd, SimdCast, SimdElement as StdSimdElement, SupportedLaneCount,
+    cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
     num::{SimdFloat, SimdInt, SimdUint},
 };
 
@@ -34,12 +35,54 @@ use crate::{
     register::Lanes,
 };
 
-pub trait SimdNum<T: StdSimdElement>: Copy {
+pub struct StdSimd;
+
+// macro_rules! impl_std_simd_vectors {
+//     ($($len:literal),*) => {paste::paste! {
+//         impl crate::simd::SimdVectors for StdSimd {$(
+//             type [<f32 x $len>] = Simd<f32, $len>;
+//             type [<i32 x $len>] = Simd<i32, $len>;
+//             type [<u32 x $len>] = Simd<u32, $len>;
+//             type [<f64 x $len>] = Simd<f64, $len>;
+//             type [<i64 x $len>] = Simd<i64, $len>;
+//             type [<u64 x $len>] = Simd<u64, $len>;
+//         )*}
+//     }};
+// }
+// impl_std_simd_vectors!(2, 4, 8, 16);
+
+pub trait SimdNum<T: SimdElement>: Copy {
     type Cast<U: StdSimdElement>;
 
     const TWO: T;
     const MIN: T;
     const MAX: T;
+
+    type Lanes: Lanes;
+
+    type Mask: GenericMask
+        + CastMask<<Self::Unsigned as GenericVector>::Mask>
+        + CastMask<<Self::Signed as GenericVector>::Mask>;
+
+    /// Unsigned Integer Type suitable for use with this vector.
+    type Unsigned: UnsignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
+            Lanes = Self::Lanes,
+            Element = <T as Element>::Unsigned,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Signed as GenericVector>::Mask>,
+        > + CastVector<Self::Signed>
+        + BitCastVector<Self::Signed>;
+
+    /// SignedBits Integer Type suitable for use with this vector.
+    type Signed: SignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
+            Lanes = Self::Lanes,
+            Element = <T as Element>::Signed,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Unsigned as GenericVector>::Mask>,
+        > + CastVector<Self::Unsigned>
+        + BitCastVector<Self::Unsigned>;
 
     fn cast<U>(self) -> Self::Cast<U>
     where
@@ -58,9 +101,7 @@ pub trait SimdNum<T: StdSimdElement>: Copy {
     fn reverse_bits(self) -> Self;
 }
 
-pub trait SimdSigned<T: StdSimdElement>: SimdNum<T> + Neg<Output = Self> {
-    type Mask;
-
+pub trait SimdSigned<T: SimdElement>: SimdNum<T> + Neg<Output = Self> {
     const NEG_ONE: T;
     const MIN_POSITIVE: T;
 
@@ -74,13 +115,20 @@ pub trait SimdSigned<T: StdSimdElement>: SimdNum<T> + Neg<Output = Self> {
 
 #[rustfmt::skip]
 macro_rules! impl_float_simd {
-    ($ty:ty: $bits:ty) => {
+    ($ty:ty: $bits:ty: $signed:ty) => {
         impl<const N: usize> SimdNum<$ty> for Simd<$ty, N>
         where
             LaneCount<N>: SupportedLaneCount,
+            Const<N>: Lanes,
             Self: SimdFloat<Bits = Simd<$bits, N>, Scalar = $ty, Mask = Mask<<$ty as StdSimdElement>::Mask, N>>,
         {
             type Cast<U: StdSimdElement> = <Self as SimdFloat>::Cast<U>;
+
+            type Mask = Mask<<$ty as StdSimdElement>::Mask, N>;
+            type Lanes = Const<N>;
+
+            type Unsigned = Simd<$bits, N>;
+            type Signed = Simd<$signed, N>;
 
             const TWO: $ty = 2.0;
             const MIN: $ty = <$ty>::MIN;
@@ -100,23 +148,22 @@ macro_rules! impl_float_simd {
             #[inline(always)] fn swap_bytes(self) -> Self {
                 let bits = self.to_bits();
                 let swapped = SimdUint::swap_bytes(bits);
-                Self::from_bits(swapped)
+                <Self as SimdFloat>::from_bits(swapped)
             }
 
             #[inline(always)] fn reverse_bits(self) -> Self {
                 let bits = self.to_bits();
                 let reversed = SimdUint::reverse_bits(bits);
-                Self::from_bits(reversed)
+                <Self as SimdFloat>::from_bits(reversed)
             }
         }
 
         impl <const N: usize> SimdSigned<$ty> for Simd<$ty, N>
         where
             LaneCount<N>: SupportedLaneCount,
+            Const<N>: Lanes,
             Self: SimdFloat<Bits = Simd<$bits, N>, Scalar = $ty, Mask = Mask<<$ty as StdSimdElement>::Mask, N>>,
         {
-            type Mask = Mask<<$ty as StdSimdElement>::Mask, N>;
-
             const NEG_ONE: $ty = -1.0;
             const MIN_POSITIVE: $ty = <$ty>::MIN_POSITIVE;
 
@@ -129,18 +176,25 @@ macro_rules! impl_float_simd {
     };
 }
 
-impl_float_simd!(f32: u32);
-impl_float_simd!(f64: u64);
+impl_float_simd!(f32: u32: i32);
+impl_float_simd!(f64: u64: i64);
 
 #[rustfmt::skip]
 macro_rules! impl_signed_int_simd {
-    ($ty:ty) => {
+    ($ty:ty: $u:ty) => {
         impl<const N: usize> SimdNum<$ty> for Simd<$ty, N>
         where
             LaneCount<N>: SupportedLaneCount,
+            Const<N>: Lanes,
             Self: SimdInt<Scalar = $ty, Mask = Mask<<$ty as StdSimdElement>::Mask, N>>,
         {
             type Cast<U: StdSimdElement> = <Self as SimdInt>::Cast<U>;
+
+            type Mask = Mask<<$ty as StdSimdElement>::Mask, N>;
+            type Lanes = Const<N>;
+
+            type Signed = Self;
+            type Unsigned = Simd<$u, N>;
 
             const TWO: $ty = 2;
             const MIN: $ty = <$ty>::MIN;
@@ -153,9 +207,9 @@ macro_rules! impl_signed_int_simd {
             #[inline(always)] fn reduce_product(self) -> $ty { <Self as SimdInt>::reduce_product(self) }
             #[inline(always)] fn reduce_min(self) -> $ty { <Self as SimdInt>::reduce_min(self) }
             #[inline(always)] fn reduce_max(self) -> $ty { <Self as SimdInt>::reduce_max(self) }
-            #[inline(always)] fn simd_min(self, other: Self) -> Self { Simd::min(self, other) }
-            #[inline(always)] fn simd_max(self, other: Self) -> Self { Simd::max(self, other) }
-            #[inline(always)] fn simd_clamp(self, min: Self, max: Self) -> Self { Simd::clamp(self, min, max) }
+            #[inline(always)] fn simd_min(self, other: Self) -> Self { SimdOrd::simd_min(self, other) }
+            #[inline(always)] fn simd_max(self, other: Self) -> Self { SimdOrd::simd_max(self, other) }
+            #[inline(always)] fn simd_clamp(self, min: Self, max: Self) -> Self { SimdOrd::simd_clamp(self, min, max) }
 
             #[inline(always)] fn swap_bytes(self) -> Self { <Self as SimdInt>::swap_bytes(self) }
             #[inline(always)] fn reverse_bits(self) -> Self { <Self as SimdInt>::reverse_bits(self) }
@@ -164,10 +218,9 @@ macro_rules! impl_signed_int_simd {
         impl<const N: usize> SimdSigned<$ty> for Simd<$ty, N>
         where
             LaneCount<N>: SupportedLaneCount,
+            Const<N>: Lanes,
             Self: SimdInt<Scalar = $ty, Mask = Mask<<$ty as StdSimdElement>::Mask, N>>,
         {
-            type Mask = Mask<<$ty as StdSimdElement>::Mask, N>;
-
             const NEG_ONE: $ty = -1;
             const MIN_POSITIVE: $ty = 1;
 
@@ -180,26 +233,52 @@ macro_rules! impl_signed_int_simd {
                 sign.is_sign_negative().select(abs.neg(), abs)
             }
         }
+
+        impl<const N: usize> SimdNum<$u> for Simd<$u, N>
+        where
+            LaneCount<N>: SupportedLaneCount,
+            Const<N>: Lanes,
+            Self: SimdUint<Scalar = $u>,
+        {
+            type Cast<U: StdSimdElement> = <Self as SimdUint>::Cast<U>;
+
+            type Mask = Mask<<$u as StdSimdElement>::Mask, N>;
+            type Lanes = Const<N>;
+
+            type Signed = Self;
+            type Unsigned = Simd<$u, N>;
+
+            const TWO: $u = 2;
+            const MIN: $u = <$u>::MIN;
+            const MAX: $u = <$u>::MAX;
+
+            #[inline(always)]
+            fn cast<U>(self) -> Self::Cast<U> where U: SimdCast { <Self as SimdUint>::cast(self) }
+
+            #[inline(always)] fn reduce_sum(self) -> $u { <Self as SimdUint>::reduce_sum(self) }
+            #[inline(always)] fn reduce_product(self) -> $u { <Self as SimdUint>::reduce_product(self) }
+            #[inline(always)] fn reduce_min(self) -> $u { <Self as SimdUint>::reduce_min(self) }
+            #[inline(always)] fn reduce_max(self) -> $u { <Self as SimdUint>::reduce_max(self) }
+            #[inline(always)] fn simd_min(self, other: Self) -> Self { SimdOrd::simd_min(self, other) }
+            #[inline(always)] fn simd_max(self, other: Self) -> Self { SimdOrd::simd_max(self, other) }
+            #[inline(always)] fn simd_clamp(self, min: Self, max: Self) -> Self { SimdOrd::simd_clamp(self, min, max) }
+
+            #[inline(always)] fn swap_bytes(self) -> Self { <Self as SimdUint>::swap_bytes(self) }
+            #[inline(always)] fn reverse_bits(self) -> Self { <Self as SimdUint>::reverse_bits(self) }
+        }
     };
 }
 
-impl_signed_int_simd!(i8);
-impl_signed_int_simd!(i16);
-impl_signed_int_simd!(i32);
-impl_signed_int_simd!(i64);
-impl_signed_int_simd!(isize);
-
-// pub trait GenericSimdVector<T: SimdElement, const N: usize>: SimdNum<T> {
-//     type UnsignedSimd:
-// }
+impl_signed_int_simd!(i8: u8);
+impl_signed_int_simd!(i16: u16);
+impl_signed_int_simd!(i32: u32);
+impl_signed_int_simd!(i64: u64);
 
 impl<T: SimdElement, const N: usize> GenericVector for Simd<T, N>
 where
     LaneCount<N>: SupportedLaneCount,
     Const<N>: Lanes,
     Self: SimdNum<T>,
-    Simd<<T as Element>::Unsigned, N>: SimdNum<<T as Element>::Unsigned>,
-    Simd<<T as Element>::Signed, N>: SimdSigned<<T as Element>::Signed>,
 {
     type Element = T;
 
@@ -208,19 +287,19 @@ where
     const LANES: usize = N;
     const ISA: InstructionSet = InstructionSet::Unknown;
 
-    type Lanes = Const<N>;
-
-    type Unsigned = Simd<<T as Element>::Unsigned, N>;
-    type Signed = Simd<<T as Element>::Signed, N>;
-
-    type Mask = Mask<<T as StdSimdElement>::Mask, N>;
+    type Lanes = <Self as SimdNum<T>>::Lanes;
+    type Unsigned = <Self as SimdNum<T>>::Unsigned;
+    type Signed = <Self as SimdNum<T>>::Signed;
+    type Mask = <Self as SimdNum<T>>::Mask;
 
     fn splat(value: Self::Element) -> Self {
         Simd::splat(value)
     }
 
     fn single(value: Self::Element) -> Self {
-        todo!("set only the first element")
+        let mut arr = [Self::Element::ZERO; N];
+        arr[0] = value;
+        Self::from_array(arr)
     }
 
     fn splat_const<C>() -> Self
@@ -379,27 +458,27 @@ where
     }
 
     fn reverse_c(self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(self.reverse(), self)
     }
 
     fn reverse_m(self, src: Self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(self.reverse(), src)
     }
 
     fn reverse_z(self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(self.reverse(), Self::EMPTY)
     }
 
     fn swap_bytes_c(self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(GenericVector::swap_bytes(self), self)
     }
 
     fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(GenericVector::swap_bytes(self), src)
     }
 
     fn swap_bytes_z(self, mask: Self::Mask) -> Self {
-        todo!()
+        mask.select(GenericVector::swap_bytes(self), Self::EMPTY)
     }
 }
 
@@ -418,8 +497,9 @@ impl<T: SimdElement, const N: usize> GenericSelectable for Simd<T, N>
 where
     LaneCount<N>: SupportedLaneCount,
     Const<N>: Lanes,
+    Self: SimdNum<T>,
 {
-    type SelectableMask = Mask<<T as StdSimdElement>::Mask, N>;
+    type SelectableMask = <Self as SimdNum<T>>::Mask;
 
     #[inline(always)]
     fn select<M>(mask: M, t: Self, f: Self) -> Self
