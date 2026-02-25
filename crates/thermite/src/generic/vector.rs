@@ -129,7 +129,8 @@ impl<R: Register> GenericVector for Vector<R> {
     }
 
     #[masked] fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
-    #[masked] fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
+
+    fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
 
     #[conditional] fn broadcast<const I: usize>(self) -> Self {}
     #[conditional] fn broadcastv(self, idx: usize) -> Self {}

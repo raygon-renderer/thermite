@@ -13,7 +13,6 @@ default = ["document_registers", "wasm", "rand", "avx512-tier2"]
 # using compensated arithmetic.
 disable_fast_fma = []
 
-nightly = []
 std = ["num-traits/std"] # required for decent scalar support
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 document_registers = []
@@ -26,6 +25,11 @@ avx512-tier1 = []               # Oldest AVX512 CPUs
 avx512-tier2 = ["avx512-tier1"] # Common AVX512 CPUs
 avx512-tier3 = ["avx512-tier2"] # Modern AVX512 CPUs
 avx512-tier4 = ["avx512-tier3"] # Cutting-edge AVX512 CPUs
+
+# Nightly features
+nightly = []
+std_simd = ["nightly", "std"]
+
 
 [dependencies]
 thermite-macros = { path = "../thermite-macros" }

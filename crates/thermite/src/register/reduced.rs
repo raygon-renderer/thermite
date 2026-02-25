@@ -212,8 +212,6 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
     }
 
     #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { Self(R::single(value), PhantomData) }
-    #[inline(always)] fn single_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> { Self(R::single_m(src.0, mask.0, value), PhantomData) }
-    #[inline(always)] fn single_z(mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> { Self(R::single_z(mask.0, value), PhantomData) }
 
     #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { Self(R::splat(value), PhantomData) }
     #[inline(always)] fn splat_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> { Self(R::splat_m(src.0, mask.0, value), PhantomData) }

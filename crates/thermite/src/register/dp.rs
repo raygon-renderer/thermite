@@ -248,14 +248,6 @@ where
 
     fn single(value: Self::Element) -> Storage<Self> { Self(R::single(value), R::EMPTY) }
 
-    fn single_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
-        Self(R::single_m(src.0, mask.0, value), R::EMPTY)
-    }
-
-    fn single_z(mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {
-        Self(R::single_z(mask.0, value), R::EMPTY)
-    }
-
     fn splat(value: Self::Element) -> Storage<Self> { Self(R::splat(value), R::splat(value)) }
 
     fn splat_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {

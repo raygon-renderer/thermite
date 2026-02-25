@@ -33,7 +33,7 @@ pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + c
     fn from_u16(value: u16) -> Self;
 }
 
-pub trait MaskElement: Sized + Copy + Default + PartialEq + core::fmt::Debug {
+pub trait MaskElement: 'static + Sized + Copy + Default + PartialEq + core::fmt::Debug {
     /// When used as a mask, represents "true"
     const TRUTHY: Self;
     /// When used as a mask, represents "false"
@@ -151,35 +151,15 @@ impl<T> IntegerElement for T where
 {
 }
 
-#[doc(hidden)]
-#[cfg(feature = "std_simd")]
-pub trait MaybeStdSimdElement: std::simd::SimdElement {}
-
-#[cfg(feature = "std_simd")]
-impl<T> MaybeStdSimdElement for T where T: std::simd::SimdElement {}
-
-#[doc(hidden)]
-#[cfg(not(feature = "std_simd"))]
-pub trait MaybeStdSimdElement {}
-
-#[cfg(not(feature = "std_simd"))]
-impl<T> MaybeStdSimdElement for T {}
-
-pub trait SignedIntegerElement:
-    IntegerElement<Signed = Self> + num_traits::Signed + TryInto<isize> + MaybeStdSimdElement
-{
-}
+pub trait SignedIntegerElement: IntegerElement<Signed = Self> + num_traits::Signed + TryInto<isize> {}
 pub trait UnsignedIntegerElement:
-    IntegerElement<Unsigned = Self> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize> + MaybeStdSimdElement
+    IntegerElement<Unsigned = Self> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize>
 {
 }
 
-impl<S> SignedIntegerElement for S where
-    S: IntegerElement<Signed = S> + num_traits::Signed + TryInto<isize> + MaybeStdSimdElement
-{
-}
+impl<S> SignedIntegerElement for S where S: IntegerElement<Signed = S> + num_traits::Signed + TryInto<isize> {}
 impl<U> UnsignedIntegerElement for U where
-    U: IntegerElement<Unsigned = U> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize> + MaybeStdSimdElement
+    U: IntegerElement<Unsigned = U> + num_traits::Unsigned + TryInto<usize> + TryFrom<usize>
 {
 }
 

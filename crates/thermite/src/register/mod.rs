@@ -360,7 +360,8 @@ pub trait Register:
     #[masked]
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self>;
 
-    #[masked] fn single(value: Self::Element) -> Storage<Self>;
+    fn single(value: Self::Element) -> Storage<Self>;
+
     #[masked] fn splat(value: Self::Element) -> Storage<Self>;
 
     #[conditional]

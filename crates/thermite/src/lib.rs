@@ -126,14 +126,14 @@ pub mod isa;
 pub mod vector;
 
 pub mod backend;
+pub mod compat;
 pub mod divider;
 pub mod element;
 pub mod generic;
 pub mod mask;
 pub mod math;
 pub mod register;
-// pub mod transform;
-pub mod compat;
+pub mod transform;
 
 #[doc(hidden)]
 pub mod swizzle;

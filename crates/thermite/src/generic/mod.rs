@@ -333,7 +333,7 @@ pub trait GenericVector:
     }
 
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
-    #[masked] fn single(value: Self::Element) -> Self;
+    fn single(value: Self::Element) -> Self;
 
     /// Combine two vectors of the same type into one wider vector,
     /// with `self` as the lower half and `hi` as the upper half.
@@ -768,7 +768,7 @@ pub trait BitshiftVector:
     #[conditional] fn reverse_bits(self) -> Self;
 }
 
-pub trait CastVector<FROM: GenericVector>: GenericVector {
+pub trait CastVector<FROM: Sized>: Sized {
     fn cast_from(from: FROM) -> Self;
     fn cast_into(self) -> FROM;
 
@@ -783,7 +783,7 @@ pub trait CastVector<FROM: GenericVector>: GenericVector {
     }
 }
 
-pub trait BitCastVector<FROM: GenericVector>: GenericVector {
+pub trait BitCastVector<FROM: Sized>: Sized {
     fn from_bits(bits: FROM) -> Self;
 }
 
@@ -887,7 +887,6 @@ pub trait NumericVector:
     + num_traits::NumAssignOps<Self>
     + core::iter::Sum
     + core::iter::Product
-    + num_traits::Bounded
 {
     /// A vector of the value "0" in the element type.
     const ZERO: Self;
