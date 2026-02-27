@@ -694,9 +694,11 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             1 => t, // linear
             _ => {
                 t.powi_p::<P>(N as i32)
-                    * const { Smoothstep::<N>::COEFFICIENTS }
-                        .into_iter()
-                        .fold(Self::ZERO, |res, c| res.mul_adde(t, Self::splat(E::from_i64(c))))
+                    * const { Smoothstep::<N>::COEFFICIENTS }.into_iter().fold(
+                        Self::ZERO,
+                        #[inline(always)]
+                        move |res, c| res.mul_adde(t, Self::splat(E::from_i64(c))),
+                    )
             }
         }
     }
@@ -728,14 +730,14 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                     t = t.clamp(Self::ZERO, Self::ONE);
                 }
 
-                let y =
-                    const { Smoothstep::<N>::COEFFICIENTS }
-                        .into_iter()
-                        .enumerate()
-                        .fold(Self::ZERO, |res, (k, c)| {
-                            // order - k for derivative coefficient
-                            res.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
-                        });
+                let y = const { Smoothstep::<N>::COEFFICIENTS }.into_iter().enumerate().fold(
+                    Self::ZERO,
+                    #[inline(always)]
+                    move |res, (k, c)| {
+                        // order - k for derivative coefficient
+                        res.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
+                    },
+                );
 
                 y * dt_dx * t.powi_p::<P>((N - 1) as i32)
             }
@@ -803,7 +805,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let bounds = edges.or(Some((Self::ZERO, Self::ONE)));
 
         #[rustfmt::skip]
-        let (Ok(v) | Err(v)) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, |x: Self| {
+        let (Ok(v) | Err(v)) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, #[inline(always)] move |x: Self| {
             let mut t = x;
             let dt_dx = bar;
 
@@ -816,7 +818,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
             let (fx, fpx) = const { Smoothstep::<N>::COEFFICIENTS }.into_iter().enumerate().fold(
                 (Self::ZERO, Self::ZERO),
-                |(fx, fpx), (k, c)| {(
+                #[inline(always)] move |(fx, fpx), (k, c)| {(
                     fx.mul_adde(t, Self::splat(E::from_i64(c))),
                     fpx.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64))),
                 )},

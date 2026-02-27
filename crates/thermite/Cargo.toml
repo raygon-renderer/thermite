@@ -5,7 +5,7 @@ edition = "2024"
 categories = ["no_std"]
 
 [features]
-default = ["document_registers", "wasm", "rand", "avx512-tier2"]
+default = ["document_registers"]
 
 # Disable Fast FMA emulation to ensure correctness, instead using scalar libm fma,
 # which is very, very slow. Only set this feature if you need bitwise identical results with

@@ -8,8 +8,9 @@ crate-type = ["cdylib", "staticlib"] # Both dynamic and static
 
 [dependencies]
 paste = "1"
-thermite = { path = "../thermite" }
-libc = "0.2"
+thermite = { path = "../thermite", default-features = false }
+thermite-special = { path = "../thermite-special", default-features = false }
+libc = { version = "0.2", default-features = false }
 
 [build-dependencies]
 cbindgen = "0.29"

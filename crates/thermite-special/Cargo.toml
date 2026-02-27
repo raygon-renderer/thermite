@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-thermite = { path = "../thermite/" }
+thermite = { path = "../thermite/", default-features = false }
 paste = "1"
 
 [dev-dependencies]

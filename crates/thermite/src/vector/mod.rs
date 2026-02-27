@@ -178,22 +178,7 @@ impl<R: Register> Vector<R> {
     #[cfg(not(feature = "nightly"))]
     #[inline(never)]
     pub const fn splat_const(value: R::Element) -> Self {
-        unsafe {
-            use core::mem::transmute_copy;
-
-            // plain transmutes are faster than reg_splat for small lane counts
-            match Self::LANES {
-                0 => Self::EMPTY,
-                1 => transmute_copy(&[value; 1]),
-                2 => transmute_copy(&[value; 2]),
-                4 => transmute_copy(&[value; 4]),
-                8 => transmute_copy(&[value; 8]),
-                16 => transmute_copy(&[value; 16]),
-                32 => transmute_copy(&[value; 32]),
-                64 => transmute_copy(&[value; 64]),
-                _ => Self(register::reg_splat::<R>(value)),
-            }
-        }
+        Self(register::reg_splat::<R>(value))
     }
 
     /// Create a new vector from an array of elements.

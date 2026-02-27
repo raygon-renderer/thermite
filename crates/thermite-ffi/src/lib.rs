@@ -2,9 +2,44 @@
 
 #![no_std]
 
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+
 use core::ffi::c_char;
 
-use thermite::math::RealMathWithPolicy;
+use thermite::{
+    math::{CoreMathWithPolicy, RealMathWithPolicy, TranscendentalMathWithPolicy},
+    prelude::Policy,
+};
+use thermite_special::SpecialMathWithPolicy;
+
+/// Forms of RealMath methods with explicit generic parameters,
+/// such as order, dimensions, edges, etc.
+pub trait RealMathWithPolicyFfi: RealMathWithPolicy {
+    #[inline(always)]
+    fn smoothstep_p<P: Policy>(self) -> Self {
+        RealMathWithPolicy::smoothstep_p::<P, 2>(self, None)
+    }
+
+    #[inline(always)]
+    fn inverse_smoothstep_p<P: Policy>(self) -> Self {
+        RealMathWithPolicy::inverse_smoothstep_p::<P, 2>(self, None)
+    }
+
+    #[inline(always)]
+    fn smootherstep_p<P: Policy>(self) -> Self {
+        RealMathWithPolicy::smoothstep_p::<P, 3>(self, None)
+    }
+
+    #[inline(always)]
+    fn inverse_smootherstep_p<P: Policy>(self) -> Self {
+        RealMathWithPolicy::inverse_smoothstep_p::<P, 3>(self, None)
+    }
+}
+
+impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy {}
 
 use thermite::math::policy::{
     DefaultPolicy,
@@ -30,99 +65,151 @@ macro_rules! c_str {
     };
 }
 
-pub type InplacePtr = unsafe extern "C" fn(*mut f32, usize);
+pub type InplacePtr32 = unsafe extern "C" fn(*mut f32, usize);
+pub type InplacePtr64 = unsafe extern "C" fn(*mut f64, usize);
 
 macro_rules! decl_methods {
-    (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal] INPLACE[$($inplace:ident<$unroll:literal>),*]) => {paste::paste! {
+    (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal]
+        $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+
+    ) => {paste::paste! {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        pub const fn [<$isa:lower _ $policy:snake>]() -> Self {$(
+        pub const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
             #[inline(never)] #[target_feature(enable = $feature)]
-            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f32, len: usize) {
+            unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
                 struct [<$isa $policy $inplace:camel Kernel>];
 
-                impl<V: RealMathWithPolicy> thermite::transform::MapKernel<V> for [<$isa $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { input.[<$inplace _p>]::<$policy>() }
+                impl<V: $trait> thermite::transform::MapKernel<V> for [<$isa $policy $inplace:camel Kernel>] {
+                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
                 }
 
                 unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
                     core::slice::from_raw_parts_mut(ptr, len), &[<$isa $policy $inplace:camel Kernel>]
                 ) };
-            })*
+            }
+
+            #[inline(never)] #[target_feature(enable = $feature)]
+            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
+                struct [<$isa $policy $inplace:camel Kernel>];
+
+                impl<V: $trait> thermite::transform::MapKernel<V> for [<$isa $policy $inplace:camel Kernel>] {
+                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
+                }
+
+                unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
+                    core::slice::from_raw_parts_mut(ptr, len), &[<$isa $policy $inplace:camel Kernel>]
+                ) };
+            })*)+
 
             Self {
                 name: c_str!(stringify!($isa), "/", stringify!($policy)),
-                $([<$inplace _inplace>],)*
+                $($([<$inplace f_inplace>], [<$inplace _inplace>],)*)+
             }
         }
     }};
 
-    (SCALAR $policy:ty => INPLACE[$($inplace:ident),*]) => {paste::paste! {
-        pub const fn [<scalar_ $policy:snake>]() -> Self {$(
+    (SCALAR $policy:ty =>
+        $( INPLACE: $trait:ident [$($inplace:ident),*] ),+
+    ) => {paste::paste! {
+        pub const fn [<scalar_ $policy:snake>]() -> Self {$($(
             #[inline(never)]
-            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f32, len: usize) {
+            unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
                 struct [<Scalar $policy $inplace:camel Kernel>];
 
-                impl<V: RealMathWithPolicy> thermite::transform::MapKernel<V> for [<Scalar $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { input.[<$inplace _p>]::<$policy>() }
+                impl<V: $trait> thermite::transform::MapKernel<V> for [<Scalar $policy $inplace:camel Kernel>] {
+                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
                 }
 
                 unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
                     core::slice::from_raw_parts_mut(ptr, len), &[<Scalar $policy $inplace:camel Kernel>]
                 ) };
-            })*
+            }
+
+            #[inline(never)]
+            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
+                struct [<Scalar $policy $inplace:camel Kernel>];
+
+                impl<V: $trait> thermite::transform::MapKernel<V> for [<Scalar $policy $inplace:camel Kernel>] {
+                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
+                }
+
+                unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
+                    core::slice::from_raw_parts_mut(ptr, len), &[<Scalar $policy $inplace:camel Kernel>]
+                ) };
+            })*)+
 
             Self {
                 name: c_str!("Scalar/", stringify!($policy)),
-                $([<$inplace _inplace>],)*
+                $($([<$inplace f_inplace>], [<$inplace _inplace>],)*)+
             }
         }
     }};
 
-    (INPLACE [$($inplace:ident<$unroll:literal>),*]) => {paste::paste! {
+    ( $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+) => {paste::paste! {
         #[repr(C)]
         pub struct VTable {
-            $(
+            $($(
                 #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
                 /// # Safety
                 /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
-                pub [<$inplace _inplace>]: InplacePtr,
-            )*
+                pub [<$inplace f_inplace>]: InplacePtr32,
+
+                #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+                /// # Safety
+                /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+                pub [<$inplace _inplace>]: InplacePtr64,
+            )*)+
 
             pub name: *const c_char,
         }
 
         impl VTable {
-            decl_methods!(SCALAR DefaultPolicy => INPLACE[$($inplace),*]);
-            decl_methods!(SCALAR HighPerformance => INPLACE[$($inplace),*]);
-            decl_methods!(SCALAR HighPrecision => INPLACE[$($inplace),*]);
+            decl_methods!(SCALAR DefaultPolicy => $( INPLACE: $trait [$($inplace),*] ),+);
+            decl_methods!(SCALAR HighPerformance => $( INPLACE: $trait [$($inplace),*] ),+);
+            decl_methods!(SCALAR HighPrecision => $( INPLACE: $trait [$($inplace),*] ),+);
 
-            decl_methods!(ISA DefaultPolicy => x86_v2::X86V2 ["sse4.2"] INPLACE[$($inplace<$unroll>),*]);
-            decl_methods!(ISA HighPerformance => x86_v2::X86V2 ["sse4.2"] INPLACE[$($inplace<$unroll>),*]);
-            decl_methods!(ISA HighPrecision => x86_v2::X86V2 ["sse4.2"] INPLACE[$($inplace<$unroll>),*]);
+            decl_methods!(ISA DefaultPolicy => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(ISA HighPerformance => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(ISA HighPrecision => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
 
-            decl_methods!(ISA DefaultPolicy => x86_v3::X86V3 ["avx,avx2,fma"] INPLACE[$($inplace<$unroll>),*]);
-            decl_methods!(ISA HighPerformance => x86_v3::X86V3 ["avx,avx2,fma"] INPLACE[$($inplace<$unroll>),*]);
-            decl_methods!(ISA HighPrecision => x86_v3::X86V3 ["avx,avx2,fma"] INPLACE[$($inplace<$unroll>),*]);
+            decl_methods!(ISA DefaultPolicy => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(ISA HighPerformance => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(ISA HighPrecision => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
         }
 
-        $(
+        $($(
             #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
             /// # Safety
             /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
             #[inline(never)] #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<thermite_ $inplace _inplace>](ptr: *mut f32, len: usize) { unsafe { (THERMITE_VTABLE.[<$inplace _inplace>])(ptr, len) }; }
-        )*
+            pub unsafe extern "C" fn [<thermite_ $inplace f_inplace>](ptr: *mut f32, len: usize) { unsafe { (THERMITE_VTABLE.[<$inplace f_inplace>])(ptr, len) }; }
+
+            #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+            /// # Safety
+            /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+            #[inline(never)] #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<thermite_ $inplace _inplace>](ptr: *mut f64, len: usize) { unsafe { (THERMITE_VTABLE.[<$inplace _inplace>])(ptr, len) }; }
+        )*)+
     }};
 }
 
 decl_methods! {
-    INPLACE[
-        sin<2>, cos<2>, tan<1>, sin_pi<1>, cos_pi<1>, tan_pi<1>, sinc<1>, sinc_pi<1>,
-        sinh<2>, cosh<2>, asin<2>, acos<2>, atan<2>, asinh<2>, acosh<2>, atanh<1>,
-        exp<1>, exph<1>, exp2<1>, exp10<1>, exp_m1<1>,
-        ln<2>, ln_1p<2>, log2<2>, log10<2>,
-        cbrt<2>, inverse_sqrt<4>, reciprocal<4>,
-        wrap_angle<2>, to_degrees<4>, to_radians<4>
+    INPLACE: CoreMathWithPolicy [
+        inverse_sqrt[4], reciprocal[4]
+    ],
+    INPLACE: TranscendentalMathWithPolicy [
+        sin[2], cos[2], tan[1], sin_pi[1], cos_pi[1], tan_pi[1], sinc[1], sinc_pi[1],
+        sinh[2], cosh[2], asin[2], acos[2], atan[2], asinh[2], acosh[2], atanh[1],
+        exp[1], exph[1], exp2[1], exp10[1], exp_m1[1],
+        ln[2], ln_1p[2], log2[2], log10[2], cbrt[2]
+    ],
+    INPLACE: RealMathWithPolicy [
+        wrap_angle[2], to_degrees[4], to_radians[4]
+    ],
+    INPLACE: SpecialMathWithPolicy [
+        erf[2], erfc[2]
+    ],
+    INPLACE: RealMathWithPolicyFfi [
+        smoothstep[2], inverse_smoothstep[2], smootherstep[2], inverse_smootherstep[2]
     ]
 }
 
