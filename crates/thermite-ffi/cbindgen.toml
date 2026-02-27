@@ -1,0 +1,21 @@
+language = "C"
+include_guard = "THERMITE_H"
+cpp_compat = true
+
+no_includes = true
+sys_includes = ["stdint.h"]
+after_includes = """
+#ifdef _WIN32
+    // If we are consuming the DLL, import the symbols
+    #define THERMITE_API __declspec(dllimport)
+#else
+    // Fallback for Linux/macOS or static linking
+    #define THERMITE_API
+#endif
+"""
+
+[fn]
+prefix = "THERMITE_API"
+
+[export.rename]
+VTable = "Thermite"
