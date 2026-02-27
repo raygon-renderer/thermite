@@ -9,7 +9,7 @@ where
     let mut y = x.rsqrt();
 
     if const { V::HAS_APPROX_RSQRT && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-        let nx2 = V::splat(E::from_f64(-0.5));
+        let nx2 = x * V::splat(E::from_f64(-0.5));
         let threehalfs = V::splat(E::from_f64(1.5));
 
         // one iteration of Newton's method
