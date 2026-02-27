@@ -9,6 +9,17 @@ pub trait MapKernel<V> {
     fn map(&self, input: V) -> V;
 }
 
+#[inline(never)]
+fn map_scalar_inplace<F, K>(data: &mut [F], kernel: &K)
+where
+    F: WellFormedFloatElement,
+    K: MapKernel<Vector<F>>,
+{
+    for elem in data {
+        *elem = kernel.map(Vector::<F>(*elem)).extract::<0>();
+    }
+}
+
 #[inline(always)]
 pub fn map_inplace<S, F, K, const UNROLL: usize>(mut data: &mut [F], kernel: &K)
 where
@@ -16,6 +27,12 @@ where
     S: FloatSimd<F>,
     K: MapKernel<Vector<S::fxN>> + MapKernel<Vector<S::fx4>> + MapKernel<Vector<S::fx2>> + MapKernel<Vector<F>>,
 {
+    if const { matches!(S::ISA, crate::isa::InstructionSet::Scalar) } {
+        map_scalar_inplace(data, kernel);
+
+        return;
+    }
+
     let n = Vector::<S::fxN>::LANES;
     let len = data.len();
 
@@ -110,8 +127,5 @@ where
         data = new_data;
     };
 
-    // Scalar tail
-    for elem in data {
-        *elem = kernel.map(Vector::<F>(*elem)).extract::<0>();
-    }
+    map_scalar_inplace(data, kernel);
 }

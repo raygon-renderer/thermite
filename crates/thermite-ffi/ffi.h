@@ -436,6 +436,30 @@ typedef struct Thermite {
    */
   InplacePtr64 erfc_inplace;
   /**
+   * In-place `tgamma` operation using the current Thermite backend.
+   * # Safety
+   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   */
+  InplacePtr32 tgammaf_inplace;
+  /**
+   * In-place `tgamma` operation using the current Thermite backend.
+   * # Safety
+   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   */
+  InplacePtr64 tgamma_inplace;
+  /**
+   * In-place `lgamma` operation using the current Thermite backend.
+   * # Safety
+   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   */
+  InplacePtr32 lgammaf_inplace;
+  /**
+   * In-place `lgamma` operation using the current Thermite backend.
+   * # Safety
+   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   */
+  InplacePtr64 lgamma_inplace;
+  /**
    * In-place `smoothstep` operation using the current Thermite backend.
    * # Safety
    * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
@@ -951,6 +975,34 @@ THERMITE_API void thermite_erfcf_inplace(float *ptr, uintptr_t len);
  * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
  */
 THERMITE_API void thermite_erfc_inplace(double *ptr, uintptr_t len);
+
+/**
+ * In-place `tgamma` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ */
+THERMITE_API void thermite_tgammaf_inplace(float *ptr, uintptr_t len);
+
+/**
+ * In-place `tgamma` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ */
+THERMITE_API void thermite_tgamma_inplace(double *ptr, uintptr_t len);
+
+/**
+ * In-place `lgamma` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ */
+THERMITE_API void thermite_lgammaf_inplace(float *ptr, uintptr_t len);
+
+/**
+ * In-place `lgamma` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ */
+THERMITE_API void thermite_lgamma_inplace(double *ptr, uintptr_t len);
 
 /**
  * In-place `smoothstep` operation using the current Thermite backend.

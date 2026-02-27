@@ -76,27 +76,15 @@ macro_rules! decl_methods {
         pub const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
             #[inline(never)] #[target_feature(enable = $feature)]
             unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
-                struct [<$isa $policy $inplace:camel Kernel>];
-
-                impl<V: $trait> thermite::transform::MapKernel<V> for [<$isa $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
-                }
-
                 unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$isa $policy $inplace:camel Kernel>]
+                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
                 ) };
             }
 
             #[inline(never)] #[target_feature(enable = $feature)]
             unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
-                struct [<$isa $policy $inplace:camel Kernel>];
-
-                impl<V: $trait> thermite::transform::MapKernel<V> for [<$isa $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
-                }
-
                 unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$isa $policy $inplace:camel Kernel>]
+                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
                 ) };
             })*)+
 
@@ -113,27 +101,15 @@ macro_rules! decl_methods {
         pub const fn [<scalar_ $policy:snake>]() -> Self {$($(
             #[inline(never)]
             unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
-                struct [<Scalar $policy $inplace:camel Kernel>];
-
-                impl<V: $trait> thermite::transform::MapKernel<V> for [<Scalar $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
-                }
-
                 unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<Scalar $policy $inplace:camel Kernel>]
+                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
                 ) };
             }
 
             #[inline(never)]
             unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
-                struct [<Scalar $policy $inplace:camel Kernel>];
-
-                impl<V: $trait> thermite::transform::MapKernel<V> for [<Scalar $policy $inplace:camel Kernel>] {
-                    #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
-                }
-
                 unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<Scalar $policy $inplace:camel Kernel>]
+                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
                 ) };
             })*)+
 
@@ -141,6 +117,22 @@ macro_rules! decl_methods {
                 name: c_str!("Scalar/", stringify!($policy)),
                 $($([<$inplace f_inplace>], [<$inplace _inplace>],)*)+
             }
+        }
+    }};
+
+    (POLICY $policy:ty => $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+) => {paste::paste! {
+        $($(
+            struct [<$policy $inplace:camel Kernel>];
+
+            impl<V: $trait> thermite::transform::MapKernel<V> for [<$policy $inplace:camel Kernel>] {
+                #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
+            }
+        )*)+
+
+        impl VTable {
+            decl_methods!(SCALAR $policy => $( INPLACE: $trait [$($inplace),*] ),+);
+            decl_methods!(ISA $policy => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(ISA $policy => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
         }
     }};
 
@@ -162,19 +154,9 @@ macro_rules! decl_methods {
             pub name: *const c_char,
         }
 
-        impl VTable {
-            decl_methods!(SCALAR DefaultPolicy => $( INPLACE: $trait [$($inplace),*] ),+);
-            decl_methods!(SCALAR HighPerformance => $( INPLACE: $trait [$($inplace),*] ),+);
-            decl_methods!(SCALAR HighPrecision => $( INPLACE: $trait [$($inplace),*] ),+);
-
-            decl_methods!(ISA DefaultPolicy => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-            decl_methods!(ISA HighPerformance => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-            decl_methods!(ISA HighPrecision => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-
-            decl_methods!(ISA DefaultPolicy => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-            decl_methods!(ISA HighPerformance => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-            decl_methods!(ISA HighPrecision => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-        }
+        decl_methods!(POLICY DefaultPolicy => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+        decl_methods!(POLICY HighPerformance => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+        decl_methods!(POLICY HighPrecision => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
 
         $($(
             #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
@@ -197,8 +179,8 @@ decl_methods! {
         inverse_sqrt[4], reciprocal[4]
     ],
     INPLACE: TranscendentalMathWithPolicy [
-        sin[2], cos[2], tan[1], sin_pi[1], cos_pi[1], tan_pi[1], sinc[1], sinc_pi[1],
-        sinh[2], cosh[2], asin[2], acos[2], atan[2], asinh[2], acosh[2], atanh[1],
+        sin[1], cos[1], tan[1], sin_pi[1], cos_pi[1], tan_pi[1], sinc[1], sinc_pi[1],
+        sinh[1], cosh[1], asin[1], acos[1], atan[1], asinh[1], acosh[1], atanh[1],
         exp[1], exph[1], exp2[1], exp10[1], exp_m1[1],
         ln[2], ln_1p[2], log2[2], log10[2], cbrt[2]
     ],
@@ -206,7 +188,7 @@ decl_methods! {
         wrap_angle[2], to_degrees[4], to_radians[4]
     ],
     INPLACE: SpecialMathWithPolicy [
-        erf[2], erfc[2]
+        erf[2], erfc[2], tgamma[1], lgamma[1]
     ],
     INPLACE: RealMathWithPolicyFfi [
         smoothstep[2], inverse_smoothstep[2], smootherstep[2], inverse_smootherstep[2]

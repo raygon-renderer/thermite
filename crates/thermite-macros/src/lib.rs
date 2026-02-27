@@ -341,6 +341,8 @@ pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         let (skip, _) = skip_or_conditional_impl(method);
 
+        method.attrs.push(parse_quote!(#[inline(always)]));
+
         if skip {
             continue;
         }
