@@ -1225,9 +1225,9 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
     }
 
     /// On platforms where blendv only checks the MSB, this can be optimized to avoid comparisons.
-    fn select_negative(value: Storage<Self>, falsy: Storage<Self>, truthy: Storage<Self>) -> Storage<Self> {
+    fn select_negative(value: Storage<Self>, on_neg: Storage<Self>, on_pos: Storage<Self>) -> Storage<Self> {
         // no matter the element type, float or integer, MSB is the sign bit
-        Self::blendv(Self::msb_to_mask(value), falsy, truthy)
+        Self::blendv(Self::msb_to_mask(value), on_pos, on_neg)
     }
 }
 

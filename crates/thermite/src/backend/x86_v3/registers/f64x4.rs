@@ -32,8 +32,8 @@ impl CoreRegister for F64x4V3 {
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 
     #[inline(always)]
-    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_blendv_pd(lhs, rhs, mask) }
+    fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_blendv_pd(on_false, on_true, mask) }
     }
 
     #[inline(always)]

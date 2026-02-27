@@ -770,6 +770,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
 // }
 
+#[inline(always)]
 fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Max error about 0.00092, avg error about 0.00053
