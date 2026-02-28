@@ -19,3 +19,9 @@ prefix = "THERMITE_API"
 
 [export.rename]
 VTable = "Thermite"
+Int32 = "int32_t"
+Int32f = "int32_t"
+Intf = "int32_t"
+Int = "int64_t"
+Floatf = "float"
+Float = "double"
