@@ -37,6 +37,11 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy {
     fn inverse_smootherstep_p<P: Policy>(self) -> Self {
         RealMathWithPolicy::inverse_smoothstep_p::<P, 3>(self, None)
     }
+
+    #[inline(always)]
+    fn lerpv_p<P: Policy>(self, a: Self, b: Self) -> Self {
+        RealMathWithPolicy::lerp_p::<P>(self, a, b)
+    }
 }
 
 impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy {}
@@ -60,138 +65,236 @@ pub enum ThermitePrecisionPolicy {
 }
 
 macro_rules! c_str {
-    ($($s:expr),*) => {
-        concat!($($s),*, "\0").as_ptr() as *const c_char
-    };
+    ($($s:expr),*) => { concat!($($s),*, "\0").as_ptr() as *const c_char };
 }
-
-pub type InplacePtr32 = unsafe extern "C" fn(*mut f32, usize);
-pub type InplacePtr64 = unsafe extern "C" fn(*mut f64, usize);
 
 macro_rules! decl_methods {
     (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal]
-        $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+
+        $( MAPPING [
+            $(    ($($input:ident),+) $mapping:ident ($($output:ident),+)    ),*
+        ] ),+
     ) => {paste::paste! {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         pub const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
             #[inline(never)] #[target_feature(enable = $feature)]
-            unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
-                unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
+            unsafe extern "C" fn [<$mapping f>](len: usize, $($input: *const f32,)+ $($output: *mut f32),+) {
+                unsafe { thermite::transform::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
+                    len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel Kernel>]
                 ) };
             }
 
             #[inline(never)] #[target_feature(enable = $feature)]
-            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
-                unsafe { thermite::transform::map_inplace::<thermite::backend::$path::$isa, _, _, $unroll>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
+            unsafe extern "C" fn $mapping(len: usize, $($input: *const f64,)+ $($output: *mut f64),+) {
+                unsafe { thermite::transform::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
+                    len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel Kernel>]
                 ) };
             })*)+
 
             Self {
                 name: c_str!(stringify!($isa), "/", stringify!($policy)),
-                $($([<$inplace f_inplace>], [<$inplace _inplace>],)*)+
+                alignment: align_of::<<thermite::backend::$path::$isa as thermite::simd::NativeIsa>::NativeAlignment>(),
+                $($([<$mapping f>], $mapping,)*)+
             }
         }
     }};
 
     (SCALAR $policy:ty =>
-        $( INPLACE: $trait:ident [$($inplace:ident),*] ),+
+        $( MAPPING [
+            $(    ($($input:ident),+) $mapping:ident ($($output:ident),+)    ),*
+        ] ),+
     ) => {paste::paste! {
         pub const fn [<scalar_ $policy:snake>]() -> Self {$($(
             #[inline(never)]
-            unsafe extern "C" fn [<$inplace f_inplace>](ptr: *mut f32, len: usize) {
-                unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
+            unsafe extern "C" fn [<$mapping f>](len: usize, $($input: *const f32,)+ $($output: *mut f32),+) {
+                unsafe { thermite::transform::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
+                    len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel Kernel>]
                 ) };
             }
 
             #[inline(never)]
-            unsafe extern "C" fn [<$inplace _inplace>](ptr: *mut f64, len: usize) {
-                unsafe { thermite::transform::map_inplace::<thermite::backend::scalar::Scalar, _, _, 1>(
-                    core::slice::from_raw_parts_mut(ptr, len), &[<$policy $inplace:camel Kernel>]
+            unsafe extern "C" fn $mapping(len: usize, $($input: *const f64,)+ $($output: *mut f64),+) {
+                unsafe { thermite::transform::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
+                    len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel Kernel>]
                 ) };
             })*)+
 
             Self {
                 name: c_str!("Scalar/", stringify!($policy)),
-                $($([<$inplace f_inplace>], [<$inplace _inplace>],)*)+
+                alignment: align_of::<f32>(),
+                $($([<$mapping f>], $mapping,)*)+
             }
         }
     }};
 
-    (POLICY $policy:ty => $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+) => {paste::paste! {
-        $($(
-            struct [<$policy $inplace:camel Kernel>];
+    (@COUNT $($val:ident),*) => { <[&'static str]>::len(&[$(stringify!($val)),*]) };
 
-            impl<V: $trait> thermite::transform::MapKernel<V> for [<$policy $inplace:camel Kernel>] {
-                #[inline(always)] fn map(&self, input: V) -> V { <V as $trait>::[<$inplace _p>]::<$policy>(input) }
-            }
+    (POLICY $policy:ty =>
+        // automatically derived mapping kernels
+        $( MAPPING: $trait:ident [$(
+            ($($input:ident),+) $mapping:ident ($($output:ident),+)
+        ),*], )+
+
+        // implicitly defined mapping kernels defined elsewhere
+        IMPLICIT: [ $(
+            ($($input_i:ident),+) $implicit:ident ($($output_i:ident),+)
+        ),*]
+    ) => {paste::paste! {
+        $($(
+            /// cbindgen:ignore
+            struct [<$policy $mapping:camel Kernel>];
+
+            const _: () = {
+                const I: usize = decl_methods!(@COUNT $($input),*);
+                const O: usize = decl_methods!(@COUNT $($output),*);
+
+                impl<V: $trait> thermite::transform::MapKernel2<V, I, O> for [<$policy $mapping:camel Kernel>] {
+                    #[inline(always)] fn map(&self, [$($input),+]: [V; I]) -> [V; O] {
+                        let res = <V as $trait>::[<$mapping _p>]::<$policy>($($input),+);
+
+                        [res; 1]
+                    }
+                }
+            };
         )*)+
 
+        struct [<$policy SinCosKernel>];
+        struct [<$policy SinCosPiKernel>];
+        struct [<$policy SinhCoshKernel>];
+
+        const _: () = {
+            impl<V: TranscendentalMathWithPolicy> thermite::transform::MapKernel2<V, 1, 2> for [<$policy SinCosKernel>] {
+                #[inline(always)] fn map(&self, [x]: [V; 1]) -> [V; 2] {
+                    let (s, c) = <V as TranscendentalMathWithPolicy>::sin_cos_p::<$policy>(x); [s, c]
+                }
+            }
+
+            impl<V: TranscendentalMathWithPolicy> thermite::transform::MapKernel2<V, 1, 2> for [<$policy SinCosPiKernel>] {
+                #[inline(always)] fn map(&self, [x]: [V; 1]) -> [V; 2] {
+                    let (s, c) = <V as TranscendentalMathWithPolicy>::sincos_pi_p::<$policy>(x); [s, c]
+                }
+            }
+
+            impl<V: TranscendentalMathWithPolicy> thermite::transform::MapKernel2<V, 1, 2> for [<$policy SinhCoshKernel>] {
+                #[inline(always)] fn map(&self, [x]: [V; 1]) -> [V; 2] {
+                    let (sh, ch) = <V as TranscendentalMathWithPolicy>::sinh_cosh_p::<$policy>(x); [sh, ch]
+                }
+            }
+        };
+
         impl VTable {
-            decl_methods!(SCALAR $policy => $( INPLACE: $trait [$($inplace),*] ),+);
-            decl_methods!(ISA $policy => x86_v2::X86V2 ["sse4.2"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-            decl_methods!(ISA $policy => x86_v3::X86V3 ["avx,avx2,fma"] $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+            decl_methods!(SCALAR $policy => MAPPING [
+                $( $(($($input),+)  $mapping ($($output),+) ),* ,)*
+                $( ($($input_i),+) $implicit ($($output_i),+) ),*
+            ]);
+
+            decl_methods!(ISA $policy => x86_v2::X86V2 ["sse4.2"] MAPPING [
+                $( $(($($input),+)  $mapping ($($output),+) ),* ,)*
+                $( ($($input_i),+) $implicit ($($output_i),+) ),*
+            ]);
+            decl_methods!(ISA $policy => x86_v3::X86V3 ["avx,avx2,fma"] MAPPING [
+                $( $(($($input),+)  $mapping ($($output),+) ),* ,)*
+                $( ($($input_i),+) $implicit ($($output_i),+) ),*
+            ]);
         }
     }};
 
-    ( $( INPLACE: $trait:ident [$($inplace:ident[$unroll:literal]),*] ),+) => {paste::paste! {
+    (
+        // automatically derived mapping kernels
+        $( MAPPING: $trait:ident [$(
+            ($($input:ident),+) $mapping:ident ($($output:ident),+)
+        ),*],)+
+
+        // implicitly defined mapping kernels defined elsewhere
+        IMPLICIT: [ $(
+            ($($input_i:ident),+) $implicit:ident ($($output_i:ident),+)
+        ),*]
+    ) => {paste::paste! {
         #[repr(C)]
         pub struct VTable {
             $($(
-                #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+                #[doc = " `" $mapping "` operation using the given Thermite backend.\n"]
                 /// # Safety
-                /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
-                pub [<$inplace f_inplace>]: InplacePtr32,
+                /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+                pub [<$mapping f>]: unsafe extern "C" fn(len: usize, $( $input: *const f32, )+ $( $output: *mut f32 ),+),
 
-                #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+                #[doc = " `" $mapping "` operation using the given Thermite backend.\n"]
                 /// # Safety
-                /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
-                pub [<$inplace _inplace>]: InplacePtr64,
+                /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+                pub $mapping: unsafe extern "C" fn(len: usize, $( $input: *const f64, )+ $( $output: *mut f64 ),+),
             )*)+
 
+            $(
+                #[doc = " `" $implicit "` operation using the given Thermite backend.\n"]
+                /// # Safety
+                /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+                pub [<$implicit f>]: unsafe extern "C" fn(len: usize, $( $input_i: *const f32, )+ $( $output_i: *mut f32 ),+),
+
+                #[doc = " `" $implicit "` operation using the given Thermite backend.\n"]
+                /// # Safety
+                /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+                pub $implicit: unsafe extern "C" fn(len: usize, $( $input_i: *const f64, )+ $( $output_i: *mut f64 ),+),
+            )*
+
+            pub alignment: usize,
             pub name: *const c_char,
         }
 
-        decl_methods!(POLICY DefaultPolicy => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-        decl_methods!(POLICY HighPerformance => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
-        decl_methods!(POLICY HighPrecision => $( INPLACE: $trait [$($inplace[$unroll]),*] ),+);
+        decl_methods!(POLICY DefaultPolicy =>
+            $( MAPPING: $trait [$( ($($input),+) $mapping ($($output),+) ),*], )+
+            IMPLICIT: [$( ($($input_i),+) $implicit ($($output_i),+) ),*]
+        );
+        decl_methods!(POLICY HighPerformance =>
+            $( MAPPING: $trait [$( ($($input),+) $mapping ($($output),+) ),*], )+
+            IMPLICIT: [$( ($($input_i),+) $implicit ($($output_i),+) ),*]
+        );
+        decl_methods!(POLICY HighPrecision =>
+            $( MAPPING: $trait [$( ($($input),+) $mapping ($($output),+) ),*], )+
+            IMPLICIT: [$( ($($input_i),+) $implicit ($($output_i),+) ),*]
+        );
 
         $($(
-            #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+            #[doc = " `" $mapping "` operation using the current Thermite backend.\n"]
             /// # Safety
-            /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+            /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
             #[inline(never)] #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<thermite_ $inplace f_inplace>](ptr: *mut f32, len: usize) { unsafe { (THERMITE_VTABLE.[<$inplace f_inplace>])(ptr, len) }; }
+            pub unsafe extern "C" fn [<thermite_ $mapping f>](len: usize, $( $input: *const f32, )+ $( $output: *mut f32 ),+ )
+            { unsafe { (THERMITE_VTABLE.[<$mapping f>])(len, $( $input, )+ $( $output ),+ ) }; }
 
-            #[doc = " In-place `" $inplace "` operation using the current Thermite backend.\n"]
+            #[doc = " `" $mapping "` operation using the current Thermite backend.\n"]
             /// # Safety
-            /// The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+            /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
             #[inline(never)] #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<thermite_ $inplace _inplace>](ptr: *mut f64, len: usize) { unsafe { (THERMITE_VTABLE.[<$inplace _inplace>])(ptr, len) }; }
+            pub unsafe extern "C" fn [<thermite_ $mapping>](len: usize, $( $input: *const f64, )+ $( $output: *mut f64 ),+ )
+            { unsafe { (THERMITE_VTABLE.$mapping)(len, $( $input, )+ $( $output ),+ ) }; }
         )*)+
     }};
 }
 
 decl_methods! {
-    INPLACE: CoreMathWithPolicy [
-        inverse_sqrt[4], reciprocal[4]
+    MAPPING: CoreMathWithPolicy [
+        (x)inverse_sqrt(out), (x)reciprocal(out)
     ],
-    INPLACE: TranscendentalMathWithPolicy [
-        sin[1], cos[1], tan[1], sin_pi[1], cos_pi[1], tan_pi[1], sinc[1], sinc_pi[1],
-        sinh[1], cosh[1], asin[1], acos[1], atan[1], asinh[1], acosh[1], atanh[1],
-        exp[1], exph[1], exp2[1], exp10[1], exp_m1[1],
-        ln[2], ln_1p[2], log2[2], log10[2], cbrt[2]
+    MAPPING: TranscendentalMathWithPolicy [
+        (x)sin(y), (x)cos(y), (x)tan(y), (x)sin_pi(y), (x)cos_pi(y), (x)tan_pi(y), (x)sinc(y), (x)sinc_pi(y),
+        (x)sinh(y), (x)cosh(y), (x)tanh(y),
+        (y)asin(x), (y)acos(x), (y)atan(x), (y)asinh(x), (y)acosh(x), (y)atanh(x),
+        (x)exp(y), (x)exph(y), (x)exp2(y), (x)exp10(y), (x)exp_m1(y),
+        (x)ln(y), (x)ln_1p(y), (x)log2(y), (x)log10(y),
+        (x)cbrt(y), (x, e)powf(y)
     ],
-    INPLACE: RealMathWithPolicy [
-        wrap_angle[2], to_degrees[4], to_radians[4]
+    MAPPING: RealMathWithPolicy [
+        (x)wrap_angle(y), (x)to_degrees(y), (x)to_radians(y), (y, x)atan2(t)
     ],
-    INPLACE: SpecialMathWithPolicy [
-        erf[2], erfc[2], tgamma[1], lgamma[1]
+    MAPPING: SpecialMathWithPolicy [
+        (x)erf(y), (x)erfc(y), (x)tgamma(y), (x)lgamma(y)
     ],
-    INPLACE: RealMathWithPolicyFfi [
-        smoothstep[2], inverse_smoothstep[2], smootherstep[2], inverse_smootherstep[2]
+    MAPPING: RealMathWithPolicyFfi [
+        (x)smoothstep(y), (y)inverse_smoothstep(x),
+        (x)smootherstep(y), (y)inverse_smootherstep(x),
+        (t, a, b)lerpv(y)
+    ],
+    IMPLICIT: [
+        (x)sin_cos(sin, cos), (x)sin_cos_pi(sin, cos), (x)sinh_cosh(sinh, cosh)
     ]
 }
 

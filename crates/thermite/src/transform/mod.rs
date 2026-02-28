@@ -9,7 +9,7 @@ pub trait MapKernel<V> {
     fn map(&self, input: V) -> V;
 }
 
-#[inline(never)]
+#[cold]
 fn map_scalar_inplace<F, K>(data: &mut [F], kernel: &K)
 where
     F: WellFormedFloatElement,
@@ -128,4 +128,91 @@ where
     };
 
     map_scalar_inplace(data, kernel);
+}
+
+pub trait MapKernel2<V, const I: usize, const O: usize> {
+    fn map(&self, input: [V; I]) -> [V; O];
+}
+
+#[cold]
+unsafe fn map_overlapping_scalar<F, K, const I: usize, const O: usize>(
+    inputs: [*const F; I],
+    outputs: [*mut F; O],
+    len: usize, // Length of all input and output arrays.
+    kernel: &K,
+) where
+    F: WellFormedFloatElement,
+    K: MapKernel2<Vector<F>, I, O>,
+{
+    for i in 0..len {
+        let res = kernel.map(inputs.map(|ptr| unsafe { Vector::<F>(*ptr.add(i)) }));
+
+        for j in 0..O {
+            unsafe { *outputs[j].add(i) = res[j].0 };
+        }
+    }
+}
+
+/// Applies a generic mapping kernel over I inputs and O outputs,
+/// where the input and output vectors may overlap in memory. This can be
+/// used for in-place transformations or for transformations where the output is stored
+/// in a different location than the input.
+///
+/// # Safety
+/// - The caller must ensure that the input and output pointers are valid for reads and writes of `F` respectively.
+/// - The caller must ensure that the input and output slices do not overlap in a way that violates Rust's aliasing rules.
+/// - The caller must ensure that the input and output slices are properly aligned for `F`.
+/// - The caller must ensure that the length of the input and output slices is at least `I` and `O` respectively.
+#[inline(always)]
+pub unsafe fn map_overlapping<S, F, K, const I: usize, const O: usize>(
+    len: usize, // Length of all input and output arrays.
+    inputs: [*const F; I],
+    outputs: [*mut F; O],
+    kernel: &K,
+) where
+    F: WellFormedFloatElement,
+    S: FloatSimd<F>,
+    K: MapKernel2<Vector<S::fxN>, I, O>
+        + MapKernel2<Vector<S::fx4>, I, O>
+        + MapKernel2<Vector<S::fx2>, I, O>
+        + MapKernel2<Vector<F>, I, O>,
+{
+    let n = Vector::<S::fxN>::LANES;
+
+    if len < n || const { matches!(S::ISA, crate::isa::InstructionSet::Scalar) } {
+        unsafe { map_overlapping_scalar(inputs, outputs, len, kernel) };
+
+        return;
+    }
+
+    // 1. Calculate the offset for the final overlapping vector
+    let suffix_offset = len - n;
+
+    // 2. Pre-load the suffix for all inputs BEFORE any writes occur.
+    // This perfectly preserves the original data, making exact-in-place safe.
+    let mut suffix_inputs = [Vector::<S::fxN>::ZERO; I];
+    for i in 0..I {
+        suffix_inputs[i] = unsafe { Vector::<S::fxN>::load_unaligned(inputs[i].add(suffix_offset)) };
+    }
+
+    // 3. Main Loop
+    // We use `< suffix_offset` rather than `<=`. If len is exactly divisible by n,
+    // the suffix will exactly handle the final block, preventing unnecessary double-writes.
+    let mut idx = 0;
+    while idx < suffix_offset {
+        let loop_inputs = inputs.map(|ptr| unsafe { Vector::<S::fxN>::load_unaligned(ptr.add(idx)) });
+        let loop_outputs = kernel.map(loop_inputs); // --- KERNEL CALL SITE 1 ---
+
+        for j in 0..O {
+            unsafe { loop_outputs[j].store_unaligned(outputs[j].add(idx)) };
+        }
+
+        idx += n;
+    }
+
+    let suffix_outputs = kernel.map(suffix_inputs); // --- KERNEL CALL SITE 2 ---
+
+    for j in 0..O {
+        unsafe { suffix_outputs[j].store_unaligned(outputs[j].add(suffix_offset)) };
+    }
 }

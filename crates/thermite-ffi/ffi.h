@@ -34,479 +34,560 @@ enum ThermitePrecisionPolicy
 typedef int32_t ThermitePrecisionPolicy;
 #endif // __cplusplus
 
-typedef void (*InplacePtr32)(float*, uintptr_t);
-
-typedef void (*InplacePtr64)(double*, uintptr_t);
-
 typedef struct Thermite {
   /**
-   * In-place `inverse_sqrt` operation using the current Thermite backend.
+   * `inverse_sqrt` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 inverse_sqrtf_inplace;
+  void (*inverse_sqrtf)(uintptr_t len, const float *x, float *out);
   /**
-   * In-place `inverse_sqrt` operation using the current Thermite backend.
+   * `inverse_sqrt` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 inverse_sqrt_inplace;
+  void (*inverse_sqrt)(uintptr_t len, const double *x, double *out);
   /**
-   * In-place `reciprocal` operation using the current Thermite backend.
+   * `reciprocal` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 reciprocalf_inplace;
+  void (*reciprocalf)(uintptr_t len, const float *x, float *out);
   /**
-   * In-place `reciprocal` operation using the current Thermite backend.
+   * `reciprocal` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 reciprocal_inplace;
+  void (*reciprocal)(uintptr_t len, const double *x, double *out);
   /**
-   * In-place `sin` operation using the current Thermite backend.
+   * `sin` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 sinf_inplace;
+  void (*sinf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `sin` operation using the current Thermite backend.
+   * `sin` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 sin_inplace;
+  void (*sin)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `cos` operation using the current Thermite backend.
+   * `cos` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 cosf_inplace;
+  void (*cosf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `cos` operation using the current Thermite backend.
+   * `cos` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 cos_inplace;
+  void (*cos)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `tan` operation using the current Thermite backend.
+   * `tan` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 tanf_inplace;
+  void (*tanf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `tan` operation using the current Thermite backend.
+   * `tan` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 tan_inplace;
+  void (*tan)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `sin_pi` operation using the current Thermite backend.
+   * `sin_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 sin_pif_inplace;
+  void (*sin_pif)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `sin_pi` operation using the current Thermite backend.
+   * `sin_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 sin_pi_inplace;
+  void (*sin_pi)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `cos_pi` operation using the current Thermite backend.
+   * `cos_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 cos_pif_inplace;
+  void (*cos_pif)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `cos_pi` operation using the current Thermite backend.
+   * `cos_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 cos_pi_inplace;
+  void (*cos_pi)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `tan_pi` operation using the current Thermite backend.
+   * `tan_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 tan_pif_inplace;
+  void (*tan_pif)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `tan_pi` operation using the current Thermite backend.
+   * `tan_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 tan_pi_inplace;
+  void (*tan_pi)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `sinc` operation using the current Thermite backend.
+   * `sinc` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 sincf_inplace;
+  void (*sincf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `sinc` operation using the current Thermite backend.
+   * `sinc` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 sinc_inplace;
+  void (*sinc)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `sinc_pi` operation using the current Thermite backend.
+   * `sinc_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 sinc_pif_inplace;
+  void (*sinc_pif)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `sinc_pi` operation using the current Thermite backend.
+   * `sinc_pi` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 sinc_pi_inplace;
+  void (*sinc_pi)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `sinh` operation using the current Thermite backend.
+   * `sinh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 sinhf_inplace;
+  void (*sinhf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `sinh` operation using the current Thermite backend.
+   * `sinh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 sinh_inplace;
+  void (*sinh)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `cosh` operation using the current Thermite backend.
+   * `cosh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 coshf_inplace;
+  void (*coshf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `cosh` operation using the current Thermite backend.
+   * `cosh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 cosh_inplace;
+  void (*cosh)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `asin` operation using the current Thermite backend.
+   * `tanh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 asinf_inplace;
+  void (*tanhf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `asin` operation using the current Thermite backend.
+   * `tanh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 asin_inplace;
+  void (*tanh)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `acos` operation using the current Thermite backend.
+   * `asin` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 acosf_inplace;
+  void (*asinf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `acos` operation using the current Thermite backend.
+   * `asin` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 acos_inplace;
+  void (*asin)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `atan` operation using the current Thermite backend.
+   * `acos` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 atanf_inplace;
+  void (*acosf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `atan` operation using the current Thermite backend.
+   * `acos` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 atan_inplace;
+  void (*acos)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `asinh` operation using the current Thermite backend.
+   * `atan` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 asinhf_inplace;
+  void (*atanf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `asinh` operation using the current Thermite backend.
+   * `atan` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 asinh_inplace;
+  void (*atan)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `acosh` operation using the current Thermite backend.
+   * `asinh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 acoshf_inplace;
+  void (*asinhf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `acosh` operation using the current Thermite backend.
+   * `asinh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 acosh_inplace;
+  void (*asinh)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `atanh` operation using the current Thermite backend.
+   * `acosh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 atanhf_inplace;
+  void (*acoshf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `atanh` operation using the current Thermite backend.
+   * `acosh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 atanh_inplace;
+  void (*acosh)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `exp` operation using the current Thermite backend.
+   * `atanh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 expf_inplace;
+  void (*atanhf)(uintptr_t len, const float *y, float *x);
   /**
-   * In-place `exp` operation using the current Thermite backend.
+   * `atanh` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 exp_inplace;
+  void (*atanh)(uintptr_t len, const double *y, double *x);
   /**
-   * In-place `exph` operation using the current Thermite backend.
+   * `exp` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 exphf_inplace;
+  void (*expf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `exph` operation using the current Thermite backend.
+   * `exp` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 exph_inplace;
+  void (*exp)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `exp2` operation using the current Thermite backend.
+   * `exph` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 exp2f_inplace;
+  void (*exphf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `exp2` operation using the current Thermite backend.
+   * `exph` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 exp2_inplace;
+  void (*exph)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `exp10` operation using the current Thermite backend.
+   * `exp2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 exp10f_inplace;
+  void (*exp2f)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `exp10` operation using the current Thermite backend.
+   * `exp2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 exp10_inplace;
+  void (*exp2)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `exp_m1` operation using the current Thermite backend.
+   * `exp10` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 exp_m1f_inplace;
+  void (*exp10f)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `exp_m1` operation using the current Thermite backend.
+   * `exp10` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 exp_m1_inplace;
+  void (*exp10)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `ln` operation using the current Thermite backend.
+   * `exp_m1` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 lnf_inplace;
+  void (*exp_m1f)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `ln` operation using the current Thermite backend.
+   * `exp_m1` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 ln_inplace;
+  void (*exp_m1)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `ln_1p` operation using the current Thermite backend.
+   * `ln` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 ln_1pf_inplace;
+  void (*lnf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `ln_1p` operation using the current Thermite backend.
+   * `ln` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 ln_1p_inplace;
+  void (*ln)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `log2` operation using the current Thermite backend.
+   * `ln_1p` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 log2f_inplace;
+  void (*ln_1pf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `log2` operation using the current Thermite backend.
+   * `ln_1p` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 log2_inplace;
+  void (*ln_1p)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `log10` operation using the current Thermite backend.
+   * `log2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 log10f_inplace;
+  void (*log2f)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `log10` operation using the current Thermite backend.
+   * `log2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 log10_inplace;
+  void (*log2)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `cbrt` operation using the current Thermite backend.
+   * `log10` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 cbrtf_inplace;
+  void (*log10f)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `cbrt` operation using the current Thermite backend.
+   * `log10` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 cbrt_inplace;
+  void (*log10)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `wrap_angle` operation using the current Thermite backend.
+   * `cbrt` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 wrap_anglef_inplace;
+  void (*cbrtf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `wrap_angle` operation using the current Thermite backend.
+   * `cbrt` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 wrap_angle_inplace;
+  void (*cbrt)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `to_degrees` operation using the current Thermite backend.
+   * `powf` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 to_degreesf_inplace;
+  void (*powff)(uintptr_t len, const float *x, const float *e, float *y);
   /**
-   * In-place `to_degrees` operation using the current Thermite backend.
+   * `powf` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 to_degrees_inplace;
+  void (*powf)(uintptr_t len, const double *x, const double *e, double *y);
   /**
-   * In-place `to_radians` operation using the current Thermite backend.
+   * `wrap_angle` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 to_radiansf_inplace;
+  void (*wrap_anglef)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `to_radians` operation using the current Thermite backend.
+   * `wrap_angle` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 to_radians_inplace;
+  void (*wrap_angle)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `erf` operation using the current Thermite backend.
+   * `to_degrees` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 erff_inplace;
+  void (*to_degreesf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `erf` operation using the current Thermite backend.
+   * `to_degrees` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 erf_inplace;
+  void (*to_degrees)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `erfc` operation using the current Thermite backend.
+   * `to_radians` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 erfcf_inplace;
+  void (*to_radiansf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `erfc` operation using the current Thermite backend.
+   * `to_radians` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 erfc_inplace;
+  void (*to_radians)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `tgamma` operation using the current Thermite backend.
+   * `atan2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 tgammaf_inplace;
+  void (*atan2f)(uintptr_t len, const float *y, const float *x, float *t);
   /**
-   * In-place `tgamma` operation using the current Thermite backend.
+   * `atan2` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 tgamma_inplace;
+  void (*atan2)(uintptr_t len, const double *y, const double *x, double *t);
   /**
-   * In-place `lgamma` operation using the current Thermite backend.
+   * `erf` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 lgammaf_inplace;
+  void (*erff)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `lgamma` operation using the current Thermite backend.
+   * `erf` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 lgamma_inplace;
+  void (*erf)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `smoothstep` operation using the current Thermite backend.
+   * `erfc` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 smoothstepf_inplace;
+  void (*erfcf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `smoothstep` operation using the current Thermite backend.
+   * `erfc` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 smoothstep_inplace;
+  void (*erfc)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `inverse_smoothstep` operation using the current Thermite backend.
+   * `tgamma` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 inverse_smoothstepf_inplace;
+  void (*tgammaf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `inverse_smoothstep` operation using the current Thermite backend.
+   * `tgamma` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 inverse_smoothstep_inplace;
+  void (*tgamma)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `smootherstep` operation using the current Thermite backend.
+   * `lgamma` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 smootherstepf_inplace;
+  void (*lgammaf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `smootherstep` operation using the current Thermite backend.
+   * `lgamma` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 smootherstep_inplace;
+  void (*lgamma)(uintptr_t len, const double *x, double *y);
   /**
-   * In-place `inverse_smootherstep` operation using the current Thermite backend.
+   * `smoothstep` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
-  InplacePtr32 inverse_smootherstepf_inplace;
+  void (*smoothstepf)(uintptr_t len, const float *x, float *y);
   /**
-   * In-place `inverse_smootherstep` operation using the current Thermite backend.
+   * `smoothstep` operation using the given Thermite backend.
    * # Safety
-   * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
-  InplacePtr64 inverse_smootherstep_inplace;
+  void (*smoothstep)(uintptr_t len, const double *x, double *y);
+  /**
+   * `inverse_smoothstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*inverse_smoothstepf)(uintptr_t len, const float *y, float *x);
+  /**
+   * `inverse_smoothstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*inverse_smoothstep)(uintptr_t len, const double *y, double *x);
+  /**
+   * `smootherstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*smootherstepf)(uintptr_t len, const float *x, float *y);
+  /**
+   * `smootherstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*smootherstep)(uintptr_t len, const double *x, double *y);
+  /**
+   * `inverse_smootherstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*inverse_smootherstepf)(uintptr_t len, const float *y, float *x);
+  /**
+   * `inverse_smootherstep` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*inverse_smootherstep)(uintptr_t len, const double *y, double *x);
+  /**
+   * `lerpv` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*lerpvf)(uintptr_t len, const float *t, const float *a, const float *b, float *y);
+  /**
+   * `lerpv` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*lerpv)(uintptr_t len, const double *t, const double *a, const double *b, double *y);
+  /**
+   * `sin_cos` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*sin_cosf)(uintptr_t len, const float *x, float *sin, float *cos);
+  /**
+   * `sin_cos` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*sin_cos)(uintptr_t len, const double *x, double *sin, double *cos);
+  /**
+   * `sin_cos_pi` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*sin_cos_pif)(uintptr_t len, const float *x, float *sin, float *cos);
+  /**
+   * `sin_cos_pi` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*sin_cos_pi)(uintptr_t len, const double *x, double *sin, double *cos);
+  /**
+   * `sinh_cosh` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*sinh_coshf)(uintptr_t len, const float *x, float *sinh, float *cosh);
+  /**
+   * `sinh_cosh` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*sinh_cosh)(uintptr_t len, const double *x, double *sinh, double *cosh);
+  uintptr_t alignment;
   const char *name;
 } Thermite;
 
@@ -515,550 +596,872 @@ extern "C" {
 #endif // __cplusplus
 
 /**
- * In-place `inverse_sqrt` operation using the current Thermite backend.
+ * `inverse_sqrt` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_inverse_sqrtf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_inverse_sqrtf(uintptr_t len,
+                            const float *x,
+                            float *out);
 
 /**
- * In-place `inverse_sqrt` operation using the current Thermite backend.
+ * `inverse_sqrt` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_inverse_sqrt_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_inverse_sqrt(uintptr_t len,
+                           const double *x,
+                           double *out);
 
 /**
- * In-place `reciprocal` operation using the current Thermite backend.
+ * `reciprocal` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_reciprocalf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_reciprocalf(uintptr_t len,
+                          const float *x,
+                          float *out);
 
 /**
- * In-place `reciprocal` operation using the current Thermite backend.
+ * `reciprocal` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_reciprocal_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_reciprocal(uintptr_t len,
+                         const double *x,
+                         double *out);
 
 /**
- * In-place `sin` operation using the current Thermite backend.
+ * `sin` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_sinf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinf(uintptr_t len,
+                   const float *x,
+                   float *y);
 
 /**
- * In-place `sin` operation using the current Thermite backend.
+ * `sin` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_sin_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sin(uintptr_t len,
+                  const double *x,
+                  double *y);
 
 /**
- * In-place `cos` operation using the current Thermite backend.
+ * `cos` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_cosf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cosf(uintptr_t len,
+                   const float *x,
+                   float *y);
 
 /**
- * In-place `cos` operation using the current Thermite backend.
+ * `cos` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_cos_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cos(uintptr_t len,
+                  const double *x,
+                  double *y);
 
 /**
- * In-place `tan` operation using the current Thermite backend.
+ * `tan` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_tanf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tanf(uintptr_t len,
+                   const float *x,
+                   float *y);
 
 /**
- * In-place `tan` operation using the current Thermite backend.
+ * `tan` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_tan_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tan(uintptr_t len,
+                  const double *x,
+                  double *y);
 
 /**
- * In-place `sin_pi` operation using the current Thermite backend.
+ * `sin_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_sin_pif_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sin_pif(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `sin_pi` operation using the current Thermite backend.
+ * `sin_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_sin_pi_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sin_pi(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `cos_pi` operation using the current Thermite backend.
+ * `cos_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_cos_pif_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cos_pif(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `cos_pi` operation using the current Thermite backend.
+ * `cos_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_cos_pi_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cos_pi(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `tan_pi` operation using the current Thermite backend.
+ * `tan_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_tan_pif_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tan_pif(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `tan_pi` operation using the current Thermite backend.
+ * `tan_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_tan_pi_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tan_pi(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `sinc` operation using the current Thermite backend.
+ * `sinc` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_sincf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sincf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `sinc` operation using the current Thermite backend.
+ * `sinc` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_sinc_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinc(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `sinc_pi` operation using the current Thermite backend.
+ * `sinc_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_sinc_pif_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinc_pif(uintptr_t len,
+                       const float *x,
+                       float *y);
 
 /**
- * In-place `sinc_pi` operation using the current Thermite backend.
+ * `sinc_pi` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_sinc_pi_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinc_pi(uintptr_t len,
+                      const double *x,
+                      double *y);
 
 /**
- * In-place `sinh` operation using the current Thermite backend.
+ * `sinh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_sinhf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinhf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `sinh` operation using the current Thermite backend.
+ * `sinh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_sinh_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_sinh(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `cosh` operation using the current Thermite backend.
+ * `cosh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_coshf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_coshf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `cosh` operation using the current Thermite backend.
+ * `cosh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_cosh_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cosh(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `asin` operation using the current Thermite backend.
+ * `tanh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_asinf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tanhf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `asin` operation using the current Thermite backend.
+ * `tanh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_asin_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tanh(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `acos` operation using the current Thermite backend.
+ * `asin` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_acosf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_asinf(uintptr_t len,
+                    const float *y,
+                    float *x);
 
 /**
- * In-place `acos` operation using the current Thermite backend.
+ * `asin` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_acos_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_asin(uintptr_t len,
+                   const double *y,
+                   double *x);
 
 /**
- * In-place `atan` operation using the current Thermite backend.
+ * `acos` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_atanf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_acosf(uintptr_t len,
+                    const float *y,
+                    float *x);
 
 /**
- * In-place `atan` operation using the current Thermite backend.
+ * `acos` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_atan_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_acos(uintptr_t len,
+                   const double *y,
+                   double *x);
 
 /**
- * In-place `asinh` operation using the current Thermite backend.
+ * `atan` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_asinhf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atanf(uintptr_t len,
+                    const float *y,
+                    float *x);
 
 /**
- * In-place `asinh` operation using the current Thermite backend.
+ * `atan` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_asinh_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atan(uintptr_t len,
+                   const double *y,
+                   double *x);
 
 /**
- * In-place `acosh` operation using the current Thermite backend.
+ * `asinh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_acoshf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_asinhf(uintptr_t len,
+                     const float *y,
+                     float *x);
 
 /**
- * In-place `acosh` operation using the current Thermite backend.
+ * `asinh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_acosh_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_asinh(uintptr_t len,
+                    const double *y,
+                    double *x);
 
 /**
- * In-place `atanh` operation using the current Thermite backend.
+ * `acosh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_atanhf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_acoshf(uintptr_t len,
+                     const float *y,
+                     float *x);
 
 /**
- * In-place `atanh` operation using the current Thermite backend.
+ * `acosh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_atanh_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_acosh(uintptr_t len,
+                    const double *y,
+                    double *x);
 
 /**
- * In-place `exp` operation using the current Thermite backend.
+ * `atanh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_expf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atanhf(uintptr_t len,
+                     const float *y,
+                     float *x);
 
 /**
- * In-place `exp` operation using the current Thermite backend.
+ * `atanh` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_exp_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atanh(uintptr_t len,
+                    const double *y,
+                    double *x);
 
 /**
- * In-place `exph` operation using the current Thermite backend.
+ * `exp` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_exphf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_expf(uintptr_t len,
+                   const float *x,
+                   float *y);
 
 /**
- * In-place `exph` operation using the current Thermite backend.
+ * `exp` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_exph_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp(uintptr_t len,
+                  const double *x,
+                  double *y);
 
 /**
- * In-place `exp2` operation using the current Thermite backend.
+ * `exph` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_exp2f_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exphf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `exp2` operation using the current Thermite backend.
+ * `exph` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_exp2_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exph(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `exp10` operation using the current Thermite backend.
+ * `exp2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_exp10f_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp2f(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `exp10` operation using the current Thermite backend.
+ * `exp2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_exp10_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp2(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `exp_m1` operation using the current Thermite backend.
+ * `exp10` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_exp_m1f_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp10f(uintptr_t len,
+                     const float *x,
+                     float *y);
 
 /**
- * In-place `exp_m1` operation using the current Thermite backend.
+ * `exp10` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_exp_m1_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp10(uintptr_t len,
+                    const double *x,
+                    double *y);
 
 /**
- * In-place `ln` operation using the current Thermite backend.
+ * `exp_m1` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_lnf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp_m1f(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `ln` operation using the current Thermite backend.
+ * `exp_m1` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_ln_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_exp_m1(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `ln_1p` operation using the current Thermite backend.
+ * `ln` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_ln_1pf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_lnf(uintptr_t len,
+                  const float *x,
+                  float *y);
 
 /**
- * In-place `ln_1p` operation using the current Thermite backend.
+ * `ln` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_ln_1p_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_ln(uintptr_t len,
+                 const double *x,
+                 double *y);
 
 /**
- * In-place `log2` operation using the current Thermite backend.
+ * `ln_1p` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_log2f_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_ln_1pf(uintptr_t len,
+                     const float *x,
+                     float *y);
 
 /**
- * In-place `log2` operation using the current Thermite backend.
+ * `ln_1p` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_log2_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_ln_1p(uintptr_t len,
+                    const double *x,
+                    double *y);
 
 /**
- * In-place `log10` operation using the current Thermite backend.
+ * `log2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_log10f_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_log2f(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `log10` operation using the current Thermite backend.
+ * `log2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_log10_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_log2(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `cbrt` operation using the current Thermite backend.
+ * `log10` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_cbrtf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_log10f(uintptr_t len,
+                     const float *x,
+                     float *y);
 
 /**
- * In-place `cbrt` operation using the current Thermite backend.
+ * `log10` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_cbrt_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_log10(uintptr_t len,
+                    const double *x,
+                    double *y);
 
 /**
- * In-place `wrap_angle` operation using the current Thermite backend.
+ * `cbrt` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_wrap_anglef_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cbrtf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `wrap_angle` operation using the current Thermite backend.
+ * `cbrt` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_wrap_angle_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_cbrt(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `to_degrees` operation using the current Thermite backend.
+ * `powf` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_to_degreesf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_powff(uintptr_t len,
+                    const float *x,
+                    const float *e,
+                    float *y);
 
 /**
- * In-place `to_degrees` operation using the current Thermite backend.
+ * `powf` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_to_degrees_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_powf(uintptr_t len,
+                   const double *x,
+                   const double *e,
+                   double *y);
 
 /**
- * In-place `to_radians` operation using the current Thermite backend.
+ * `wrap_angle` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_to_radiansf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_wrap_anglef(uintptr_t len,
+                          const float *x,
+                          float *y);
 
 /**
- * In-place `to_radians` operation using the current Thermite backend.
+ * `wrap_angle` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_to_radians_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_wrap_angle(uintptr_t len,
+                         const double *x,
+                         double *y);
 
 /**
- * In-place `erf` operation using the current Thermite backend.
+ * `to_degrees` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_erff_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_to_degreesf(uintptr_t len,
+                          const float *x,
+                          float *y);
 
 /**
- * In-place `erf` operation using the current Thermite backend.
+ * `to_degrees` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_erf_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_to_degrees(uintptr_t len,
+                         const double *x,
+                         double *y);
 
 /**
- * In-place `erfc` operation using the current Thermite backend.
+ * `to_radians` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_erfcf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_to_radiansf(uintptr_t len,
+                          const float *x,
+                          float *y);
 
 /**
- * In-place `erfc` operation using the current Thermite backend.
+ * `to_radians` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_erfc_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_to_radians(uintptr_t len,
+                         const double *x,
+                         double *y);
 
 /**
- * In-place `tgamma` operation using the current Thermite backend.
+ * `atan2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_tgammaf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atan2f(uintptr_t len,
+                     const float *y,
+                     const float *x,
+                     float *t);
 
 /**
- * In-place `tgamma` operation using the current Thermite backend.
+ * `atan2` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_tgamma_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_atan2(uintptr_t len,
+                    const double *y,
+                    const double *x,
+                    double *t);
 
 /**
- * In-place `lgamma` operation using the current Thermite backend.
+ * `erf` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_lgammaf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_erff(uintptr_t len,
+                   const float *x,
+                   float *y);
 
 /**
- * In-place `lgamma` operation using the current Thermite backend.
+ * `erf` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_lgamma_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_erf(uintptr_t len,
+                  const double *x,
+                  double *y);
 
 /**
- * In-place `smoothstep` operation using the current Thermite backend.
+ * `erfc` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_smoothstepf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_erfcf(uintptr_t len,
+                    const float *x,
+                    float *y);
 
 /**
- * In-place `smoothstep` operation using the current Thermite backend.
+ * `erfc` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_smoothstep_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_erfc(uintptr_t len,
+                   const double *x,
+                   double *y);
 
 /**
- * In-place `inverse_smoothstep` operation using the current Thermite backend.
+ * `tgamma` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_inverse_smoothstepf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tgammaf(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `inverse_smoothstep` operation using the current Thermite backend.
+ * `tgamma` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_inverse_smoothstep_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_tgamma(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `smootherstep` operation using the current Thermite backend.
+ * `lgamma` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_smootherstepf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_lgammaf(uintptr_t len,
+                      const float *x,
+                      float *y);
 
 /**
- * In-place `smootherstep` operation using the current Thermite backend.
+ * `lgamma` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_smootherstep_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_lgamma(uintptr_t len,
+                     const double *x,
+                     double *y);
 
 /**
- * In-place `inverse_smootherstep` operation using the current Thermite backend.
+ * `smoothstep` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f32` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
-THERMITE_API void thermite_inverse_smootherstepf_inplace(float *ptr, uintptr_t len);
+THERMITE_API
+void thermite_smoothstepf(uintptr_t len,
+                          const float *x,
+                          float *y);
 
 /**
- * In-place `inverse_smootherstep` operation using the current Thermite backend.
+ * `smoothstep` operation using the current Thermite backend.
  * # Safety
- * The caller must ensure that `ptr` is valid for reads and writes of `len` `f64` elements.
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
-THERMITE_API void thermite_inverse_smootherstep_inplace(double *ptr, uintptr_t len);
+THERMITE_API
+void thermite_smoothstep(uintptr_t len,
+                         const double *x,
+                         double *y);
+
+/**
+ * `inverse_smoothstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_inverse_smoothstepf(uintptr_t len,
+                                  const float *y,
+                                  float *x);
+
+/**
+ * `inverse_smoothstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_inverse_smoothstep(uintptr_t len,
+                                 const double *y,
+                                 double *x);
+
+/**
+ * `smootherstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_smootherstepf(uintptr_t len,
+                            const float *x,
+                            float *y);
+
+/**
+ * `smootherstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_smootherstep(uintptr_t len,
+                           const double *x,
+                           double *y);
+
+/**
+ * `inverse_smootherstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_inverse_smootherstepf(uintptr_t len,
+                                    const float *y,
+                                    float *x);
+
+/**
+ * `inverse_smootherstep` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_inverse_smootherstep(uintptr_t len,
+                                   const double *y,
+                                   double *x);
+
+/**
+ * `lerpv` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_lerpvf(uintptr_t len,
+                     const float *t,
+                     const float *a,
+                     const float *b,
+                     float *y);
+
+/**
+ * `lerpv` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_lerpv(uintptr_t len,
+                    const double *t,
+                    const double *a,
+                    const double *b,
+                    double *y);
 
 /**
  * Initializes a Thermite FFI VTable instance with the specified precision policy, allowing the caller to choose
