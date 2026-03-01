@@ -108,6 +108,30 @@ typedef struct Thermite {
    */
   void (*round_v)(uintptr_t len, const double *x, double *y);
   /**
+   * `floor` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*floorf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `floor` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*floor_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `ceil` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*ceilf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `ceil` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*ceil_v)(uintptr_t len, const double *x, double *y);
+  /**
    * `trunc` operation using the given Thermite backend.
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
@@ -119,6 +143,138 @@ typedef struct Thermite {
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*trunc_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `next_up` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*next_upf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `next_up` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*next_up_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `next_down` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*next_downf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `next_down` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*next_down_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `min` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*minf_v)(uintptr_t len, const float *a, const float *b, float *y);
+  /**
+   * `min` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*min_v)(uintptr_t len, const double *a, const double *b, double *y);
+  /**
+   * `max` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*maxf_v)(uintptr_t len, const float *a, const float *b, float *y);
+  /**
+   * `max` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*max_v)(uintptr_t len, const double *a, const double *b, double *y);
+  /**
+   * `clamp` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*clampf_vs)(uintptr_t len, const float *x, float *y, float min, float max);
+  /**
+   * `clamp` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*clamp_vs)(uintptr_t len, const double *x, double *y, double min, double max);
+  /**
+   * `abs` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*absf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `abs` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*abs_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `signum` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*signumf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * `signum` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*signum_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * `mul_add` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*mul_addf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
+  /**
+   * `mul_add` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*mul_add_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
+  /**
+   * `mul_sub` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*mul_subf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
+  /**
+   * `mul_sub` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*mul_sub_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
+  /**
+   * `nmul_add` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*nmul_addf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
+  /**
+   * `nmul_add` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*nmul_add_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
+  /**
+   * `nmul_sub` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*nmul_subf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
+  /**
+   * `nmul_sub` operation using the given Thermite backend.
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*nmul_sub_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
   /**
    * `inverse_sqrt` operation using the given Thermite backend.
    * # Safety
@@ -800,6 +956,37 @@ extern "C" {
 #endif // __cplusplus
 
 /**
+ * Initializes a Thermite FFI VTable instance with the specified precision policy, allowing the caller to choose
+ * between different performance and accuracy trade-offs. This function does not allocate, and simply fills in the
+ * provided VTable struct with the appropriate function pointers based on the given precision policy and available instruction set.
+ *
+ * # Safety
+ * The caller must ensure that `vtable` is a valid pointer to a `VTable` instance.
+ */
+THERMITE_API
+void thermite_init_vtable(struct Thermite *vtable,
+                          ThermitePrecisionPolicy policy);
+
+/**
+ * Initializes the Thermite FFI, setting up the function pointers based on the current precision policy and available instruction set.
+ *
+ * If not set, the default precision policy is `ThermitePrecisionPolicy::DefaultPolicy`, which provides a good balance of
+ * performance and accuracy for most use cases. The caller can change the precision policy by calling
+ * `thermite_init_with_policy` instead of this function.
+ */
+THERMITE_API
+void thermite_init(void);
+
+/**
+ * Initializes the Thermite FFI with a specific precision policy, allowing the caller to choose between
+ * different performance and accuracy trade-offs.
+ */
+THERMITE_API
+void thermite_init_with_policy(ThermitePrecisionPolicy policy);
+
+THERMITE_API const char *thermite_backend_name(void);
+
+/**
  * `add` operation using the current Thermite backend.
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
@@ -930,6 +1117,46 @@ void thermite_round_v(uintptr_t len,
                       double *y);
 
 /**
+ * `floor` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_floorf_v(uintptr_t len,
+                       const float *x,
+                       float *y);
+
+/**
+ * `floor` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_floor_v(uintptr_t len,
+                      const double *x,
+                      double *y);
+
+/**
+ * `ceil` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_ceilf_v(uintptr_t len,
+                      const float *x,
+                      float *y);
+
+/**
+ * `ceil` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_ceil_v(uintptr_t len,
+                     const double *x,
+                     double *y);
+
+/**
  * `trunc` operation using the current Thermite backend.
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
@@ -948,6 +1175,250 @@ THERMITE_API
 void thermite_trunc_v(uintptr_t len,
                       const double *x,
                       double *y);
+
+/**
+ * `next_up` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_next_upf_v(uintptr_t len,
+                         const float *x,
+                         float *y);
+
+/**
+ * `next_up` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_next_up_v(uintptr_t len,
+                        const double *x,
+                        double *y);
+
+/**
+ * `next_down` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_next_downf_v(uintptr_t len,
+                           const float *x,
+                           float *y);
+
+/**
+ * `next_down` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_next_down_v(uintptr_t len,
+                          const double *x,
+                          double *y);
+
+/**
+ * `min` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_minf_v(uintptr_t len,
+                     const float *a,
+                     const float *b,
+                     float *y);
+
+/**
+ * `min` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_min_v(uintptr_t len,
+                    const double *a,
+                    const double *b,
+                    double *y);
+
+/**
+ * `max` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_maxf_v(uintptr_t len,
+                     const float *a,
+                     const float *b,
+                     float *y);
+
+/**
+ * `max` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_max_v(uintptr_t len,
+                    const double *a,
+                    const double *b,
+                    double *y);
+
+/**
+ * `clamp` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_clampf_vs(uintptr_t len,
+                        const float *x,
+                        float *y,
+                        float min,
+                        float max);
+
+/**
+ * `clamp` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_clamp_vs(uintptr_t len,
+                       const double *x,
+                       double *y,
+                       double min,
+                       double max);
+
+/**
+ * `abs` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_absf_v(uintptr_t len,
+                     const float *x,
+                     float *y);
+
+/**
+ * `abs` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_abs_v(uintptr_t len,
+                    const double *x,
+                    double *y);
+
+/**
+ * `signum` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_signumf_v(uintptr_t len,
+                        const float *x,
+                        float *y);
+
+/**
+ * `signum` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_signum_v(uintptr_t len,
+                       const double *x,
+                       double *y);
+
+/**
+ * `mul_add` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_mul_addf_v(uintptr_t len,
+                         const float *x,
+                         const float *a,
+                         const float *b,
+                         float *y);
+
+/**
+ * `mul_add` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_mul_add_v(uintptr_t len,
+                        const double *x,
+                        const double *a,
+                        const double *b,
+                        double *y);
+
+/**
+ * `mul_sub` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_mul_subf_v(uintptr_t len,
+                         const float *x,
+                         const float *a,
+                         const float *b,
+                         float *y);
+
+/**
+ * `mul_sub` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_mul_sub_v(uintptr_t len,
+                        const double *x,
+                        const double *a,
+                        const double *b,
+                        double *y);
+
+/**
+ * `nmul_add` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_nmul_addf_v(uintptr_t len,
+                          const float *x,
+                          const float *a,
+                          const float *b,
+                          float *y);
+
+/**
+ * `nmul_add` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_nmul_add_v(uintptr_t len,
+                         const double *x,
+                         const double *a,
+                         const double *b,
+                         double *y);
+
+/**
+ * `nmul_sub` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_nmul_subf_v(uintptr_t len,
+                          const float *x,
+                          const float *a,
+                          const float *b,
+                          float *y);
+
+/**
+ * `nmul_sub` operation using the current Thermite backend.
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_nmul_sub_v(uintptr_t len,
+                         const double *x,
+                         const double *a,
+                         const double *b,
+                         double *y);
 
 /**
  * `inverse_sqrt` operation using the current Thermite backend.
@@ -2104,37 +2575,6 @@ void thermite_gaussian_vs(uintptr_t len,
                           double *y,
                           double a,
                           double c);
-
-/**
- * Initializes a Thermite FFI VTable instance with the specified precision policy, allowing the caller to choose
- * between different performance and accuracy trade-offs. This function does not allocate, and simply fills in the
- * provided VTable struct with the appropriate function pointers based on the given precision policy and available instruction set.
- *
- * # Safety
- * The caller must ensure that `vtable` is a valid pointer to a `VTable` instance.
- */
-THERMITE_API
-void thermite_init_vtable(struct Thermite *vtable,
-                          ThermitePrecisionPolicy policy);
-
-/**
- * Initializes the Thermite FFI, setting up the function pointers based on the current precision policy and available instruction set.
- *
- * If not set, the default precision policy is `ThermitePrecisionPolicy::DefaultPolicy`, which provides a good balance of
- * performance and accuracy for most use cases. The caller can change the precision policy by calling
- * `thermite_init_with_policy` instead of this function.
- */
-THERMITE_API
-void thermite_init(void);
-
-/**
- * Initializes the Thermite FFI with a specific precision policy, allowing the caller to choose between
- * different performance and accuracy trade-offs.
- */
-THERMITE_API
-void thermite_init_with_policy(ThermitePrecisionPolicy policy);
-
-THERMITE_API const char *thermite_backend_name(void);
 
 #ifdef __cplusplus
 }  // extern "C"

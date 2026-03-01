@@ -107,10 +107,12 @@ where
         p0 * y
     }
 
+    #[inline(always)]
     fn tgamma<P: Policy>(x: Self) -> Self {
         todo!()
     }
 
+    #[inline(always)]
     fn lgamma_r<P: Policy>(x: Self) -> (Self, Self) {
         todo!()
     }

@@ -693,12 +693,14 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             0 => Self::step::<P>(t, Self::HALF),
             1 => t, // linear
             _ => {
-                t.powi_p::<P>(N as i32)
-                    * const { Smoothstep::<N>::COEFFICIENTS }.into_iter().fold(
-                        Self::ZERO,
-                        #[inline(always)]
-                        move |res, c| res.mul_adde(t, Self::splat(E::from_i64(c))),
-                    )
+                let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
+                let mut y = Self::splat(E::from_i64(coeffs[0]));
+
+                for &c in &coeffs[1..] {
+                    y = y.mul_adde(t, Self::splat(E::from_i64(c)));
+                }
+
+                y * t.powi_p::<P>(N as i32)
             }
         }
     }
@@ -730,14 +732,15 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                     t = t.clamp(Self::ZERO, Self::ONE);
                 }
 
-                let y = const { Smoothstep::<N>::COEFFICIENTS }.into_iter().enumerate().fold(
-                    Self::ZERO,
-                    #[inline(always)]
-                    move |res, (k, c)| {
-                        // order - k for derivative coefficient
-                        res.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64)))
-                    },
-                );
+                let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
+                let mut y = Self::splat(E::from_i64(coeffs[0] * (2 * N - 1) as i64));
+                let mut k = 1;
+
+                for &c in &coeffs[1..] {
+                    // order - k for derivative coefficient
+                    y = y.mul_adde(t, Self::splat(E::from_i64(c * (2 * N - k - 1) as i64)));
+                    k += 1;
+                }
 
                 y * dt_dx * t.powi_p::<P>((N - 1) as i32)
             }
@@ -816,13 +819,19 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
             let xn1 = t.powi_p::<P>((N - 1) as i32);
 
-            let (fx, fpx) = const { Smoothstep::<N>::COEFFICIENTS }.into_iter().enumerate().fold(
-                (Self::ZERO, Self::ZERO),
-                #[inline(always)] move |(fx, fpx), (k, c)| {(
-                    fx.mul_adde(t, Self::splat(E::from_i64(c))),
-                    fpx.mul_adde(t, Self::splat(E::from_i64(c) * E::from_i64((2 * N - k - 1) as i64))),
-                )},
-            );
+            let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
+
+            let mut fx = Self::splat(E::from_i64(coeffs[0]));
+            let mut fpx = Self::splat(E::from_i64(coeffs[0] * (2 * N - 1) as i64));
+
+            let mut k = 1;
+
+            for &c in &coeffs[1..] {
+                fx = fx.mul_adde(t, Self::splat(E::from_i64(c)));
+                fpx = fpx.mul_adde(t, Self::splat(E::from_i64(c * (2 * N - k - 1) as i64)));
+
+                k += 1;
+            }
 
             (t.mul_sube(xn1 * fx, y), (fpx * dt_dx * xn1).min(Self::HALF))
         });

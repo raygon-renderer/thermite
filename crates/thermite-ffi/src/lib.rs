@@ -1,5 +1,5 @@
 // cargo expand -p thermite-ffi > ffi.rs && cbindgen -q -l c --crate thermite-ffi ffi.rs > ffi.h && echo "Done"
-// cargo build --profile release-ffi -p thermite-ffi && Copy-Item ../../target/release-ffi/thermite_ffi.dll && upx -9 --ultra-brute thermite_ffi.dll && echo "Done"
+// cargo build --profile release-ffi -p thermite-ffi && Copy-Item ../../target/release-ffi/thermite_ffi.dll && mpress -b -s thermite_ffi.dll && echo "Done"
 // cl.exe test.c /O2 /GL /link "../../target/release-ffi/thermite_ffi.dll.lib" ntdll.lib /LTCG /OPT:REF /OPT:ICF
 
 #![no_std]
@@ -29,41 +29,31 @@ const _: () = {
 
 /// Forms of RealMath methods with explicit generic parameters,
 /// such as order, dimensions, edges, etc.
+#[rustfmt::skip]
 pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
-    #[inline(always)]
-    fn add_v_p<P: Policy>(self, other: Self) -> Self {
-        self + other
+    #[inline(always)] fn add_v_p<P: Policy>(self, other: Self) -> Self { self + other }
+    #[inline(always)] fn sub_v_p<P: Policy>(self, other: Self) -> Self { self - other }
+    #[inline(always)] fn mul_v_p<P: Policy>(self, other: Self) -> Self { self * other }
+    #[inline(always)] fn div_v_p<P: Policy>(self, other: Self) -> Self { self / other }
+    #[inline(always)] fn rem_v_p<P: Policy>(self, other: Self) -> Self { self % other }
+    #[inline(always)] fn round_v_p<P: Policy>(self) -> Self { self.round() }
+    #[inline(always)] fn floor_v_p<P: Policy>(self) -> Self { self.floor() }
+    #[inline(always)] fn ceil_v_p<P: Policy>(self) -> Self { self.ceil() }
+    #[inline(always)] fn trunc_v_p<P: Policy>(self) -> Self { self.trunc() }
+    #[inline(always)] fn next_up_v_p<P: Policy>(self) -> Self { self.next_up() }
+    #[inline(always)] fn next_down_v_p<P: Policy>(self) -> Self { self.next_down() }
+    #[inline(always)] fn min_v_p<P: Policy>(self, other: Self) -> Self { self.min(other) }
+    #[inline(always)] fn max_v_p<P: Policy>(self, other: Self) -> Self { self.max(other) }
+    #[inline(always)] fn clamp_vs_p<P: Policy>(self, min: Self::Element, max: Self::Element) -> Self {
+        self.clamp(Self::splat(min), Self::splat(max))
     }
+    #[inline(always)] fn abs_v_p<P: Policy>(self) -> Self { self.abs() }
+    #[inline(always)] fn signum_v_p<P: Policy>(self) -> Self { self.signum() }
 
-    #[inline(always)]
-    fn sub_v_p<P: Policy>(self, other: Self) -> Self {
-        self - other
-    }
-
-    #[inline(always)]
-    fn mul_v_p<P: Policy>(self, other: Self) -> Self {
-        self * other
-    }
-
-    #[inline(always)]
-    fn div_v_p<P: Policy>(self, other: Self) -> Self {
-        self / other
-    }
-
-    #[inline(always)]
-    fn rem_v_p<P: Policy>(self, other: Self) -> Self {
-        self % other
-    }
-
-    #[inline(always)]
-    fn round_v_p<P: Policy>(self) -> Self {
-        self.round()
-    }
-
-    #[inline(always)]
-    fn trunc_v_p<P: Policy>(self) -> Self {
-        self.trunc()
-    }
+    #[inline(always)] fn mul_add_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.mul_add(a, b) }
+    #[inline(always)] fn mul_sub_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.mul_sub(a, b) }
+    #[inline(always)] fn nmul_add_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.nmul_add(a, b) }
+    #[inline(always)] fn nmul_sub_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.nmul_sub(a, b) }
 
     #[inline(always)]
     fn smoothstep_p<P: Policy>(self) -> Self {
@@ -298,86 +288,6 @@ macro_rules! decl_methods {
     }};
 }
 
-decl_methods! {
-    MAPPING: RealMathWithPolicyFfi [
-        (a, b)add v add_v(y),
-        (a, b)sub v sub_v(y),
-        (a, b)mul v mul_v(y),
-        (a, b)div v div_v(y),
-        (a, b)rem v rem_v(y),
-        (x)round v round_v(y),
-        (x)trunc v trunc_v(y)
-    ],
-    MAPPING: CoreMathWithPolicy [
-        (x)inverse_sqrt v inverse_sqrt(out),
-        (x)reciprocal v reciprocal(out)
-    ],
-    MAPPING: TranscendentalMathWithPolicy [
-        (x)sin_cos vv sin_cos(sin, cos),
-        (x)sin_cos_pi vv sincos_pi(sin, cos),
-        (x)sinh_cosh vv sinh_cosh(sinh, cosh),
-        (x)sin v sin(y),
-        (x)cos v cos(y),
-        (x)tan v tan(y),
-        (x)sin_pi v sin_pi(y),
-        (x)cos_pi v cos_pi(y),
-        (x)tan_pi v tan_pi(y),
-        (x)sinc v sinc(y),
-        (x)sinc_pi v sinc_pi(y),
-        (x)sinh v sinh(y),
-        (x)cosh v cosh(y),
-        (x)tanh v tanh(y),
-        (y)asin v asin(x),
-        (y)acos v acos(x),
-        (y)atan v atan(x),
-        (y)asinh v asinh(x),
-        (y)acosh v acosh(x),
-        (y)atanh v atanh(x),
-        (x)exp v exp(y),
-        (x)exph v exph(y),
-        (x)exp2 v exp2(y),
-        (x)exp10 v exp10(y),
-        (x)exp_m1 v exp_m1(y),
-        (x)ln v ln(y),
-        (x)ln_1p v ln_1p(y),
-        (x)log2 v log2(y),
-        (x)log10 v log10(y),
-        (x, base)log v log(y),
-        (x)cbrt v cbrt(y),
-        (x, e)powf v powf(y)
-    ],
-    MAPPING: RealMathWithPolicy [
-        (x)wrap_angle v wrap_angle(y),
-        (a, b)angle_diff v angle_diff(d),
-        (x)to_degrees v to_degrees(y),
-        (x)to_radians v to_radians(y),
-        (y, x)atan2 v atan2(t),
-        (t, a, b)lerp v lerp(y)
-    ],
-    MAPPING: SpatialMathWithPolicy [
-        (x, y)hypot v hypot(out)
-    ],
-    MAPPING: SpecialMathWithPolicy [
-        (x)erf v erf(y),
-        (x)erfc v erfc(y),
-        (y)erfinv v erfinv(x),
-        (x)tgamma v tgamma(y),
-        (x)lgamma v lgamma(y),
-        (x, y)beta v beta(z),
-    ],
-    MAPPING: RealMathWithPolicyFfi [
-        (x)smoothstep v smoothstep(y),
-        (y)inverse_smoothstep v inverse_smoothstep(x),
-        (x)smootherstep v smootherstep(y),
-        (y)inverse_smootherstep v inverse_smootherstep(x),
-        (x) [k: Float] smooth_interpolator v smooth_interpolator_vs(y),
-        (x) [edge: Float] step v step_vs(y),
-        (x) [a: Float, b: Float] lerp vs lerp_vs(y),
-        (x) [exp: Int32] powi vs powi_vs(y),
-        (x) [a: Float, c: Float] gaussian vs gaussian_vs(y)
-    ]
-}
-
 static mut THERMITE_POLICY: ThermitePrecisionPolicy = ThermitePrecisionPolicy::DefaultPolicy;
 static mut THERMITE_VTABLE: VTable = VTable::scalar_default_policy();
 
@@ -447,4 +357,97 @@ pub extern "C" fn thermite_backend_name() -> *const c_char {
     // the string it points to will still be valid.
     // #[allow(static_mut_refs)]
     unsafe { THERMITE_VTABLE.name }
+}
+
+decl_methods! {
+    MAPPING: RealMathWithPolicyFfi [
+        (a, b)add v add_v(y),
+        (a, b)sub v sub_v(y),
+        (a, b)mul v mul_v(y),
+        (a, b)div v div_v(y),
+        (a, b)rem v rem_v(y),
+        (x)round v round_v(y),
+        (x)floor v floor_v(y),
+        (x)ceil v ceil_v(y),
+        (x)trunc v trunc_v(y),
+        (x)next_up v next_up_v(y),
+        (x)next_down v next_down_v(y),
+        (a, b)min v min_v(y),
+        (a, b)max v max_v(y),
+        (x)[min: Float, max: Float] clamp vs clamp_vs(y),
+        (x)abs v abs_v(y),
+        (x)signum v signum_v(y),
+        (x, a, b)mul_add v mul_add_v(y),
+        (x, a, b)mul_sub v mul_sub_v(y),
+        (x, a, b)nmul_add v nmul_add_v(y),
+        (x, a, b)nmul_sub v nmul_sub_v(y)
+    ],
+    MAPPING: CoreMathWithPolicy [
+        (x)inverse_sqrt v inverse_sqrt(out),
+        (x)reciprocal v reciprocal(out)
+    ],
+    MAPPING: TranscendentalMathWithPolicy [
+        (x)sin_cos vv sin_cos(sin, cos),
+        (x)sin_cos_pi vv sincos_pi(sin, cos),
+        (x)sinh_cosh vv sinh_cosh(sinh, cosh),
+        (x)sin v sin(y),
+        (x)cos v cos(y),
+        (x)tan v tan(y),
+        (x)sin_pi v sin_pi(y),
+        (x)cos_pi v cos_pi(y),
+        (x)tan_pi v tan_pi(y),
+        (x)sinc v sinc(y),
+        (x)sinc_pi v sinc_pi(y),
+        (x)sinh v sinh(y),
+        (x)cosh v cosh(y),
+        (x)tanh v tanh(y),
+        (y)asin v asin(x),
+        (y)acos v acos(x),
+        (y)atan v atan(x),
+        (y)asinh v asinh(x),
+        (y)acosh v acosh(x),
+        (y)atanh v atanh(x),
+        (x)exp v exp(y),
+        (x)exph v exph(y),
+        (x)exp2 v exp2(y),
+        (x)exp10 v exp10(y),
+        (x)exp_m1 v exp_m1(y),
+        (x)ln v ln(y),
+        (x)ln_1p v ln_1p(y),
+        (x)log2 v log2(y),
+        (x)log10 v log10(y),
+        (x, base)log v log(y),
+        (x)cbrt v cbrt(y),
+        (x, e)powf v powf(y)
+    ],
+    MAPPING: RealMathWithPolicy [
+        (x)wrap_angle v wrap_angle(y),
+        (a, b)angle_diff v angle_diff(d),
+        (x)to_degrees v to_degrees(y),
+        (x)to_radians v to_radians(y),
+        (y, x)atan2 v atan2(t),
+        (t, a, b)lerp v lerp(y)
+    ],
+    MAPPING: SpatialMathWithPolicy [
+        (x, y)hypot v hypot(out)
+    ],
+    MAPPING: SpecialMathWithPolicy [
+        (x)erf v erf(y),
+        (x)erfc v erfc(y),
+        (y)erfinv v erfinv(x),
+        (x)tgamma v tgamma(y),
+        (x)lgamma v lgamma(y),
+        (x, y)beta v beta(z),
+    ],
+    MAPPING: RealMathWithPolicyFfi [
+        (x)smoothstep v smoothstep(y),
+        (y)inverse_smoothstep v inverse_smoothstep(x),
+        (x)smootherstep v smootherstep(y),
+        (y)inverse_smootherstep v inverse_smootherstep(x),
+        (x) [k: Float] smooth_interpolator v smooth_interpolator_vs(y),
+        (x) [edge: Float] step v step_vs(y),
+        (x) [a: Float, b: Float] lerp vs lerp_vs(y),
+        (x) [exp: Int32] powi vs powi_vs(y),
+        (x) [a: Float, c: Float] gaussian vs gaussian_vs(y)
+    ]
 }

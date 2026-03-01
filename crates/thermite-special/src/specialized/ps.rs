@@ -429,6 +429,7 @@ where
         (y, signum)
     }
 
+    #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
         let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
 
