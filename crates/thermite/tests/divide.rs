@@ -1,7 +1,7 @@
 #![allow(clippy::unnecessary_cast)]
 
 use thermite::{
-    backend::x86_v3::*,
+    backend::x86_v3::prelude::*,
     divider::{BranchfreeDivider, Divider},
 };
 

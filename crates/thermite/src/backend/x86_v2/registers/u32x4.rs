@@ -214,11 +214,14 @@ impl Register for U32x4V2 {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = true;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x4V2::interleave(a, b)
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x4V2::deinterleave(a, b)
     }
 
     #[inline(always)]

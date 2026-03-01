@@ -230,11 +230,19 @@ impl Register for F32x4V3 {
         unsafe { arch::_mm_permute_ps(value, 0b11_01_10_00) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = true;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            let a = arch::_mm_shuffle_ps(a, b, 0x88);
+            let b = arch::_mm_shuffle_ps(a, b, 0xDD);
+
+            (a, b)
+        }
     }
 
     #[inline(always)]

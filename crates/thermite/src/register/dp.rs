@@ -349,15 +349,18 @@ where
         Self(R::reverse(value.1), R::reverse(value.0))
     }
 
-    // double-pump logic for unpack does not add extra complexity,
-    // so this is determined solely by the underlying register.
-    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
-
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let (r1_lo, r1_hi) = R::unpack(a.0, b.0);
-        let (r2_lo, r2_hi) = R::unpack(a.1, b.1);
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (r1_lo, r1_hi) = R::interleave(a.0, b.0);
+        let (r2_lo, r2_hi) = R::interleave(a.1, b.1);
 
         (DoublePumpRegister(r1_lo, r1_hi), DoublePumpRegister(r2_lo, r2_hi))
+    }
+
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (a_lo, b_lo) = R::deinterleave(a.0, a.1);
+        let (a_hi, b_hi) = R::deinterleave(b.0, b.1);
+
+        (DoublePumpRegister(a_lo, a_hi), DoublePumpRegister(b_lo, b_hi))
     }
 
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self> { }

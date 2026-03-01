@@ -106,10 +106,13 @@ impl Register for [<u $width>] {
     #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
     #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
 
-    const HAS_SIMPLE_UNPACK: bool = true;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        (a, b) // no-op for scalar
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         (a, b) // no-op for scalar
     }
 

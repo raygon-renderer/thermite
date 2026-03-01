@@ -240,11 +240,14 @@ impl Register for U32x8V3 {
         Self::concat(super::U32x4V3::reverse(hi), super::U32x4V3::reverse(lo))
     }
 
-    const HAS_SIMPLE_UNPACK: bool = super::I32x8V3::HAS_SIMPLE_UNPACK;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x8V3::interleave(a, b) // reuse signed implementation
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        super::I32x8V3::unpack(a, b) // reuse signed implementation
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x8V3::deinterleave(a, b) // reuse signed implementation
     }
 
     #[inline(always)]

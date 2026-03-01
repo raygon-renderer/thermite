@@ -242,10 +242,13 @@ impl Register for F64x2V2 {
         unsafe { arch::_mm_shuffle_pd(value, value, 0b01) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = true;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
     }
 

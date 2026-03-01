@@ -613,20 +613,20 @@ impl<R: FloatRegister> num_traits::FloatConst for Vector<R> {
     fn LOG2_10() -> Self where Self: Sized + Div<Self, Output = Self> { const { Self::splat_const(FloatConsts::LOG2_10) } }
 }
 
-impl<R: ShuffleRegister> Vector<R> {
-    /// Shuffle vectors according to the mask in IMM8. Note that this
-    /// instruction does not work like expected.
-    ///
-    /// For each 128-bit subvector, it interleaves A and B, selecting
-    /// from A for imm8 bits 0:1 and 2:3, then from B using bits 4:5 and 6:7
-    ///
-    /// If the inputs are larger than 128 bits, it repeats this for each 128 bits
-    /// **_using the same imm8 indices_**.
-    #[inline(always)]
-    pub fn interleave<const IMM8: i32>(self, other: Self) -> Self {
-        Self(R::shuffle::<IMM8>(self.0, other.0))
-    }
-}
+// impl<R: ShuffleRegister> Vector<R> {
+//     /// Shuffle vectors according to the mask in IMM8. Note that this
+//     /// instruction does not work like expected.
+//     ///
+//     /// For each 128-bit subvector, it interleaves A and B, selecting
+//     /// from A for imm8 bits 0:1 and 2:3, then from B using bits 4:5 and 6:7
+//     ///
+//     /// If the inputs are larger than 128 bits, it repeats this for each 128 bits
+//     /// **_using the same imm8 indices_**.
+//     #[inline(always)]
+//     pub fn interleave<const IMM8: i32>(self, other: Self) -> Self {
+//         Self(R::shuffle::<IMM8>(self.0, other.0))
+//     }
+// }
 
 impl<R: Register> Index<usize> for Vector<R> {
     type Output = R::Element;

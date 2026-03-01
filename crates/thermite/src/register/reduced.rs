@@ -1,4 +1,4 @@
-#![warn(missing_docs, clippy::missing_safety_doc)]
+#![warn(clippy::missing_safety_doc)]
 
 use core::{marker::PhantomData, ops::Sub};
 
@@ -323,10 +323,13 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        todo!()
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a:Storage<Self> ,b:Storage<Self>) -> (Storage<Self> ,Storage<Self>) {
         todo!()
     }
 

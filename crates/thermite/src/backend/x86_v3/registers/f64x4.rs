@@ -255,21 +255,29 @@ impl Register for F64x4V3 {
         unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            let u_lo = arch::_mm256_unpacklo_pd(a, b);
+            let u_hi = arch::_mm256_unpackhi_pd(a, b);
+
+            let res_lo = arch::_mm256_permute2f128_pd(u_lo, u_hi, 0x20);
+            let res_hi = arch::_mm256_permute2f128_pd(u_lo, u_hi, 0x31);
+
+            (res_lo, res_hi)
+        }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            // 1. Local Interleave
-            // Use shuffle_pd (0x0/0xF) instead of unpacklo/hi for that 0.5 CPI throughput on some CPUs
-            let t1 = arch::_mm256_shuffle_pd(a, b, 0x0); // "unpacklo" equivalent
-            let t2 = arch::_mm256_shuffle_pd(a, b, 0xF); // "unpackhi" equivalent
+            let t0 = arch::_mm256_permute2f128_pd(a, b, 0x20);
+            let t1 = arch::_mm256_permute2f128_pd(a, b, 0x31);
 
-            // 2. Lane Fix, may run in parallel
-            let res_a = arch::_mm256_permute4x64_pd(t1, 0xD8);
-            let res_b = arch::_mm256_permute4x64_pd(t2, 0xD8);
+            let a = arch::_mm256_unpacklo_pd(t0, t1);
+            let b = arch::_mm256_unpackhi_pd(t0, t1);
 
-            (res_a, res_b)
+            (a, b)
         }
     }
 

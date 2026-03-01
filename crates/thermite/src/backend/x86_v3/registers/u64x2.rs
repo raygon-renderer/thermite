@@ -243,11 +243,14 @@ impl Register for U64x2V3 {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE_R!(2, 3, 0, 1) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = super::I64x2V3::HAS_SIMPLE_UNPACK;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I64x2V3::interleave(a, b) // reuse signed implementation
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        super::I64x2V3::unpack(a, b) // reuse signed implementation
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I64x2V3::deinterleave(a, b) // reuse signed implementation
     }
 
     #[inline(always)]

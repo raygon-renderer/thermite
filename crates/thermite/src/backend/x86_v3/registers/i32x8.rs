@@ -245,35 +245,35 @@ impl Register for I32x8V3 {
         Self::concat(super::I32x4V3::reverse(hi), super::I32x4V3::reverse(lo))
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            // 1. In-lane interleaves for 32-bit integers
+            let u_lo = arch::_mm256_unpacklo_epi32(a, b);
+            let u_hi = arch::_mm256_unpackhi_epi32(a, b);
+
+            // 2. Cross-lane permutations using vperm2i128
+            let res_lo = arch::_mm256_permute2x128_si256(u_lo, u_hi, 0x20);
+            let res_hi = arch::_mm256_permute2x128_si256(u_lo, u_hi, 0x31);
+
+            (res_lo, res_hi)
+        }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            // 1. Group 128-bit lanes (Integer Domain)
-            // t1 = [a_lo, b_lo]
-            let t1 = arch::_mm256_permute2x128_si256(a, b, 0x20);
-            // t2 = [a_hi, b_hi]
-            let t2 = arch::_mm256_permute2x128_si256(a, b, 0x31);
+            let t0 = arch::_mm256_permute2x128_si256(a, b, 0x20);
+            let t1 = arch::_mm256_permute2x128_si256(a, b, 0x31);
 
-            // 2. Shuffle locally using Float instructions
-            // We cast to f32 to access _mm256_shuffle_ps.
-            // This is a "zero-cost" cast (reinterpretation), though on some older
-            // CPUs it might incur a 1-cycle domain crossing penalty, which is
-            // still cheaper than the 3-4 integer instructions needed to replace it.
+            // Zero-cost cast to utilize the highly efficient float shuffle
+            let t0_ps = arch::_mm256_castsi256_ps(t0);
             let t1_ps = arch::_mm256_castsi256_ps(t1);
-            let t2_ps = arch::_mm256_castsi256_ps(t2);
 
-            // Mask 0x88 (10 00 10 00): Selects indices 0, 2 from both inputs
-            // Effectively gathers all even indices (the 'a's)
-            let res_a_ps = arch::_mm256_shuffle_ps(t1_ps, t2_ps, 0x88);
+            let a = arch::_mm256_castps_si256(arch::_mm256_shuffle_ps(t0_ps, t1_ps, 0x88));
+            let b = arch::_mm256_castps_si256(arch::_mm256_shuffle_ps(t0_ps, t1_ps, 0xDD));
 
-            // Mask 0xDD (11 01 11 01): Selects indices 1, 3 from both inputs
-            // Effectively gathers all odd indices (the 'b's)
-            let res_b_ps = arch::_mm256_shuffle_ps(t1_ps, t2_ps, 0xDD);
-
-            // 3. Cast back to Integer
-            (arch::_mm256_castps_si256(res_a_ps), arch::_mm256_castps_si256(res_b_ps))
+            (a, b)
         }
     }
 

@@ -571,10 +571,6 @@ pub trait GenericVector:
     /// Similar to a `!mask & self` operation.
     fn nz(self, mask: Self::Mask) -> Self;
 
-    /// Whether the register type has a simple unpack implementation,
-    /// or requires a more complex method.
-    const HAS_SIMPLE_UNPACK: bool;
-
     /// Unpack and interleave elements from two vectors.
     ///
     /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,
@@ -585,7 +581,14 @@ pub trait GenericVector:
     ///
     /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
     /// this will preserve the order of all elements, not just 128-bit chunks.
-    fn unpack(self, other: Self) -> (Self, Self);
+    fn interleave(self, other: Self) -> (Self, Self);
+
+    /// Pack and deinterleave elements from two vectors. This is the inverse operation of `interleave`.
+    ///
+    /// The resulting vector contains the deinterleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, b0, a1, b1]` and `b = [a2, b2, a3, b3]`, the result will be
+    /// `[a0, a1, a2, a3]` and `[b0, b1, b2, b3]`.
+    fn deinterleave(self, other: Self) -> (Self, Self);
 
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///

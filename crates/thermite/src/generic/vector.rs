@@ -153,10 +153,13 @@ impl<R: Register> GenericVector for Vector<R> {
     fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
     fn nz(self, mask: Self::Mask) -> Self { Vector(R::nz(mask.0, self.0)) }
 
-    const HAS_SIMPLE_UNPACK: bool = R::HAS_SIMPLE_UNPACK;
+    fn interleave(self, other: Self) -> (Self, Self) {
+        let (lo, hi) = R::interleave(self.0, other.0);
+        (Vector(lo), Vector(hi))
+    }
 
-    fn unpack(self, other: Self) -> (Self, Self) {
-        let (lo, hi) = R::unpack(self.0, other.0);
+    fn deinterleave(self, other: Self) -> (Self, Self) {
+        let (lo, hi) = R::deinterleave(self.0, other.0);
         (Vector(lo), Vector(hi))
     }
 

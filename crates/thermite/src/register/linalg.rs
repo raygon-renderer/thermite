@@ -175,24 +175,24 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         // r1: [10, 11, 12, 13]
         // tmp0 (UnpackLo) -> [00, 10, 01, 11] (Rows 0+1 mixed lower)
         // tmp1 (UnpackHi) -> [02, 12, 03, 13] (Rows 0+1 mixed upper)
-        let (tmp0, tmp1) = Self::unpack(m[0], m[1]);
+        let (tmp0, tmp1) = Self::interleave(m[0], m[1]);
 
         // r2: [20, 21, 22, 23]
         // r3: [30, 31, 32, 33]
         // tmp2 (UnpackLo) -> [20, 30, 21, 31] (Rows 2+3 mixed lower)
         // tmp3 (UnpackHi) -> [22, 32, 23, 33] (Rows 2+3 mixed upper)
-        let (tmp2, tmp3) = Self::unpack(m[2], m[3]);
+        let (tmp2, tmp3) = Self::interleave(m[2], m[3]);
 
         // Stage 2: Swap 64-bit blocks (mixing the results of Stage 1)
         // Final columns are created by unpacking the results of Stage 1.
 
         // Col0 = UnpackLo(tmp0, tmp2) -> [00, 10, 20, 30]
         // Col1 = UnpackHi(tmp0, tmp2) -> [01, 11, 21, 31]
-        let (c0, c1) = Self::unpack(tmp0, tmp2);
+        let (c0, c1) = Self::interleave(tmp0, tmp2);
 
         // Col2 = UnpackLo(tmp1, tmp3) -> [02, 12, 22, 32]
         // Col3 = UnpackHi(tmp1, tmp3) -> [03, 13, 23, 33]
-        let (c2, c3) = Self::unpack(tmp1, tmp3);
+        let (c2, c3) = Self::interleave(tmp1, tmp3);
 
         [c0, c1, c2, c3]
     }

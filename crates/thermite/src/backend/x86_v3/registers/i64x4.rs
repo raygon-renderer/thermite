@@ -244,24 +244,29 @@ impl Register for I64x4V3 {
         unsafe { arch::_mm256_permute4x64_epi64::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            let u_lo = arch::_mm256_unpacklo_epi64(a, b);
+            let u_hi = arch::_mm256_unpackhi_epi64(a, b);
+
+            let res_lo = arch::_mm256_permute2x128_si256(u_lo, u_hi, 0x20);
+            let res_hi = arch::_mm256_permute2x128_si256(u_lo, u_hi, 0x31);
+
+            (res_lo, res_hi)
+        }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            // 1. Unpack to de-interleave locally within 128-bit lanes
-            // v0 becomes [a0, a2, a1, a3]
-            let v0 = arch::_mm256_unpacklo_epi64(a, b);
-            // v1 becomes [b0, b2, b1, b3]
-            let v1 = arch::_mm256_unpackhi_epi64(a, b);
+            let t0 = arch::_mm256_permute2x128_si256(a, b, 0x20);
+            let t1 = arch::_mm256_permute2x128_si256(a, b, 0x31);
 
-            // 2. Permute to cross lanes and fix the order
-            // We want indices 0, 2, 1, 3 (swap middle two elements)
-            // _MM_SHUFFLE(3, 1, 2, 0) = 0b11_01_10_00 = 0xD8
-            let real_lo = arch::_mm256_permute4x64_epi64(v0, 0xD8);
-            let real_hi = arch::_mm256_permute4x64_epi64(v1, 0xD8);
+            let a = arch::_mm256_unpacklo_epi64(t0, t1);
+            let b = arch::_mm256_unpackhi_epi64(t0, t1);
 
-            (real_lo, real_hi)
+            (a, b)
         }
     }
 

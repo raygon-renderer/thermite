@@ -242,7 +242,7 @@ impl<L: LoadKernel<2, 2>> LoadKernel<2, 4> for DeInterleavedLoad<L> {
         let [a1, b1] = unsafe { self.0.load::<V>(ptrs.map(|ptr| ptr.add(V::LANES * L::READ_MULTIPLIER))) };
 
         // unpack interleaved complex numbers
-        let ((ar, ai), (br, bi)) = (a0.unpack(a1), b0.unpack(b1));
+        let ((ar, ai), (br, bi)) = (a0.deinterleave(a1), b0.deinterleave(b1));
 
         [ar, ai, br, bi]
     }

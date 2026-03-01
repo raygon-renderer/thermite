@@ -593,10 +593,8 @@ pub trait Register:
         value
     }
 
-    /// True if unpack is simple to implement for this register.
-    const HAS_SIMPLE_UNPACK: bool;
-
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
 
     /// Swap the byte order of each element in the register.
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self>;

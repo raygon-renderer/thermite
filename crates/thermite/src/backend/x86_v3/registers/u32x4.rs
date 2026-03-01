@@ -217,11 +217,14 @@ impl Register for U32x4V3 {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = super::I32x4V3::HAS_SIMPLE_UNPACK;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x4V3::interleave(a, b) // reuse signed implementation
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        super::I32x4V3::unpack(a, b) // reuse signed implementation
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I32x4V3::deinterleave(a, b) // reuse signed implementation
     }
 
     #[inline(always)]

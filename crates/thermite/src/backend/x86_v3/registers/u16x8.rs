@@ -129,7 +129,6 @@ impl Register for U16x8V3 {
 
     type Element = u16;
 
-
     type Unsigned = super::U16x8V3;
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
@@ -230,11 +229,11 @@ impl Register for U16x8V3 {
         todo!()
     }
 
-    const HAS_SIMPLE_UNPACK: bool = super::I16x8V3::HAS_SIMPLE_UNPACK;
+    const HAS_SIMPLE_INTERLEAVE: bool = super::I16x8V3::HAS_SIMPLE_INTERLEAVE;
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        super::I16x8V3::unpack(a, b) // reuse signed implementation
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        super::I16x8V3::interleave(a, b) // reuse signed implementation
     }
 
     #[inline(always)]

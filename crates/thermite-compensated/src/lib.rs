@@ -1029,10 +1029,26 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = false;
+    #[inline(always)]
+    fn interleave(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.interleave(other.value);
+        let (error_lo, error_hi) = self.error.interleave(other.error);
 
-    fn unpack(self, other: Self) -> (Self, Self) {
-        todo!()
+        (
+            Self { value: value_lo, error: error_lo },
+            Self { value: value_hi, error: error_hi },
+        )
+    }
+
+    #[inline(always)]
+    fn deinterleave(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.deinterleave(other.value);
+        let (error_lo, error_hi) = self.error.deinterleave(other.error);
+
+        (
+            Self { value: value_lo, error: error_lo },
+            Self { value: value_hi, error: error_hi },
+        )
     }
 
     fn map<F>(mut self, f: F) -> Self
@@ -1072,8 +1088,10 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
 
     #[inline(always)] fn splat_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), src) }
     #[inline(always)] fn splat_z(mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), Self::EMPTY) }
+    #[inline(always)] fn broadcast_c<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), self) }
     #[inline(always)] fn broadcast_m<const I: usize>(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), src) }
     #[inline(always)] fn broadcast_z<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), Self::EMPTY) }
+    #[inline(always)] fn broadcastv_c(self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), self) }
     #[inline(always)] fn broadcastv_m(self, src: Self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), src) }
     #[inline(always)] fn broadcastv_z(self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), Self::EMPTY) }
     #[inline(always)] fn reverse_c(self, mask: Self::Mask) -> Self { mask.select(self.reverse(), self) }
@@ -1082,24 +1100,6 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     #[inline(always)] fn swap_bytes_c(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), self) }
     #[inline(always)] fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), src) }
     #[inline(always)] fn swap_bytes_z(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), Self::EMPTY) }
-
-    fn single_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn single_z(mask: Self::Mask, value: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn broadcast_c<const I: usize>(self, mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn broadcastv_c(self, mask: Self::Mask, idx: usize) -> Self {
-        todo!()
-    }
-
-
 }
 
 #[rustfmt::skip]
@@ -1195,8 +1195,8 @@ impl<V: ScalarValue> core::iter::Product for Compensated<V> {
 // but this is the most sensible implementation.
 #[rustfmt::skip]
 impl<V: CompensatedFloatVector> num_traits::Bounded for Compensated<V> {
-    #[inline(always)] fn min_value() -> Self { Self { value: V::min_value(), error: V::min_value() } }
-    #[inline(always)] fn max_value() -> Self { Self { value: V::max_value(), error: V::max_value() } }
+    #[inline(always)] fn min_value() -> Self { Self { value: V::MIN, error: V::MIN } }
+    #[inline(always)] fn max_value() -> Self { Self { value: V::MAX, error: V::MAX } }
 }
 
 impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {

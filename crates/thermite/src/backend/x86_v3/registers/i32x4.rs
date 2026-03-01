@@ -224,11 +224,23 @@ impl Register for I32x4V3 {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
-    const HAS_SIMPLE_UNPACK: bool = true;
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
+    }
 
     #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            // Zero-cost cast to utilize the efficient float shuffle
+            let a = arch::_mm_castsi128_ps(a);
+            let b = arch::_mm_castsi128_ps(b);
+
+            let res_a = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0x88));
+            let res_b = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0xDD));
+
+            (res_a, res_b)
+        }
     }
 
     #[inline(always)]
