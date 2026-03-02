@@ -30,8 +30,7 @@ macro_rules! decl_math {
         /// the [`SpecialMath`] trait as well for all types that implement this one.
         #[thermite_dispatch::dispatch(Self)]
         pub trait SpecialMathWithPolicy: TranscendentalMathWithPolicy {$(
-            $(#[$meta])*
-            fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+            $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
         )*}
 
@@ -47,12 +46,9 @@ macro_rules! decl_math {
         /// that accepts a policy parameter as the first generic argument.
         #[thermite_dispatch::dispatch(Self)]
         pub trait SpecialMath: SpecialMathWithPolicy {$(
-            $(#[$meta])*
-            #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
+            $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                SpecialMathWithPolicy::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*)
-            }
+            { SpecialMathWithPolicy::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
         )*}
 
         impl<M> SpecialMath for M where M: SpecialMathWithPolicy {}
@@ -65,16 +61,12 @@ macro_rules! decl_math {
             #[cfg(not(feature = "disable_dispatch"))]
             $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                V::$name::<P, $($generic_names),*>($($arg_name),*)
-            }
+            { V::$name::<P, $($generic_names),*>($($arg_name),*) }
 
             #[cfg(feature = "disable_dispatch")]
             $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                V::$name::<P, $($generic_names),*>($($arg_name),*)
-            }
+            { V::$name::<P, $($generic_names),*>($($arg_name),*) }
         )*}
     }};
 }

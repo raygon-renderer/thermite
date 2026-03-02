@@ -36,913 +36,1099 @@ typedef int32_t ThermitePrecisionPolicy;
 
 typedef struct Thermite {
   /**
-   * `add` operation using the given Thermite backend.
+   * Floating-point addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*addf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `add` operation using the given Thermite backend.
+   * Floating-point addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*add_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `sub` operation using the given Thermite backend.
+   * Floating-point subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*subf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `sub` operation using the given Thermite backend.
+   * Floating-point subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sub_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `mul` operation using the given Thermite backend.
+   * Floating-point multiplication
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*mulf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `mul` operation using the given Thermite backend.
+   * Floating-point multiplication
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*mul_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `div` operation using the given Thermite backend.
+   * Floating-point division
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*divf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `div` operation using the given Thermite backend.
+   * Floating-point division
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*div_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `rem` operation using the given Thermite backend.
+   * Floating-point remainder (modulo/fmod)
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*remf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `rem` operation using the given Thermite backend.
+   * Floating-point remainder (modulo/fmod)
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*rem_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `round` operation using the given Thermite backend.
+   * Rounds a floating-point number to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*roundf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `round` operation using the given Thermite backend.
+   * Rounds a floating-point number to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*round_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `floor` operation using the given Thermite backend.
+   * Rounds a floating-point number down to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*floorf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `floor` operation using the given Thermite backend.
+   * Rounds a floating-point number down to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*floor_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `ceil` operation using the given Thermite backend.
+   * Rounds a floating-point number up to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*ceilf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `ceil` operation using the given Thermite backend.
+   * Rounds a floating-point number up to the nearest integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*ceil_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `trunc` operation using the given Thermite backend.
+   * Truncates a floating-point number, removing the fractional part
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*truncf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `trunc` operation using the given Thermite backend.
+   * Truncates a floating-point number, removing the fractional part
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*trunc_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `next_up` operation using the given Thermite backend.
+   * Computes the fractional part of a floating-point number
+   *
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*fractf_v)(uintptr_t len, const float *x, float *y);
+  /**
+   * Computes the fractional part of a floating-point number
+   *
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*fract_v)(uintptr_t len, const double *x, double *y);
+  /**
+   * Computes the next representable floating-point value greater than the input
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*next_upf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `next_up` operation using the given Thermite backend.
+   * Computes the next representable floating-point value greater than the input
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*next_up_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `next_down` operation using the given Thermite backend.
+   * Computes the next representable floating-point value less than the input
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*next_downf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `next_down` operation using the given Thermite backend.
+   * Computes the next representable floating-point value less than the input
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*next_down_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `min` operation using the given Thermite backend.
+   * Computes the minimum of two floating-point numbers
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*minf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `min` operation using the given Thermite backend.
+   * Computes the minimum of two floating-point numbers
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*min_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `max` operation using the given Thermite backend.
+   * Computes the maximum of two floating-point numbers
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*maxf_v)(uintptr_t len, const float *a, const float *b, float *y);
   /**
-   * `max` operation using the given Thermite backend.
+   * Computes the maximum of two floating-point numbers
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*max_v)(uintptr_t len, const double *a, const double *b, double *y);
   /**
-   * `clamp` operation using the given Thermite backend.
+   * Clamps a floating-point number between a minimum and maximum scalar value
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*clampf_vs)(uintptr_t len, const float *x, float *y, float min, float max);
   /**
-   * `clamp` operation using the given Thermite backend.
+   * Clamps a floating-point number between a minimum and maximum scalar value
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*clamp_vs)(uintptr_t len, const double *x, double *y, double min, double max);
   /**
-   * `abs` operation using the given Thermite backend.
+   * Computes the absolute value of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*absf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `abs` operation using the given Thermite backend.
+   * Computes the absolute value of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*abs_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `signum` operation using the given Thermite backend.
+   * Computes the sign of a floating-point number, returning -1.0 for negative values, 1.0 for positive values, and 0.0 for zero
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*signumf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `signum` operation using the given Thermite backend.
+   * Computes the sign of a floating-point number, returning -1.0 for negative values, 1.0 for positive values, and 0.0 for zero
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*signum_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `mul_add` operation using the given Thermite backend.
+   * Computes (x * a) + b with only one rounding error, yielding a more accurate
+   * result than a separate multiplication and addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*mul_addf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
   /**
-   * `mul_add` operation using the given Thermite backend.
+   * Computes (x * a) + b with only one rounding error, yielding a more accurate
+   * result than a separate multiplication and addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*mul_add_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
   /**
-   * `mul_sub` operation using the given Thermite backend.
+   * Computes (x * a) - b with only one rounding error, yielding a more accurate
+   * result than a separate multiplication and subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*mul_subf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
   /**
-   * `mul_sub` operation using the given Thermite backend.
+   * Computes (x * a) - b with only one rounding error, yielding a more accurate
+   * result than a separate multiplication and subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*mul_sub_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
   /**
-   * `nmul_add` operation using the given Thermite backend.
+   * Computes -(x * a) + b with only one rounding error, yielding a more accurate
+   * result than a separate negated multiplication and addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*nmul_addf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
   /**
-   * `nmul_add` operation using the given Thermite backend.
+   * Computes -(x * a) + b with only one rounding error, yielding a more accurate
+   * result than a separate negated multiplication and addition
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*nmul_add_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
   /**
-   * `nmul_sub` operation using the given Thermite backend.
+   * Computes -(x * a) - b with only one rounding error, yielding a more accurate
+   * result than a separate negated multiplication and subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*nmul_subf_v)(uintptr_t len, const float *x, const float *a, const float *b, float *y);
   /**
-   * `nmul_sub` operation using the given Thermite backend.
+   * Computes -(x * a) - b with only one rounding error, yielding a more accurate
+   * result than a separate negated multiplication and subtraction
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*nmul_sub_v)(uintptr_t len, const double *x, const double *a, const double *b, double *y);
   /**
-   * `inverse_sqrt` operation using the given Thermite backend.
+   * Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*inverse_sqrtf_v)(uintptr_t len, const float *x, float *out);
   /**
-   * `inverse_sqrt` operation using the given Thermite backend.
+   * Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*inverse_sqrt_v)(uintptr_t len, const double *x, double *out);
   /**
-   * `reciprocal` operation using the given Thermite backend.
+   * Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*reciprocalf_v)(uintptr_t len, const float *x, float *out);
   /**
-   * `reciprocal` operation using the given Thermite backend.
+   * Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*reciprocal_v)(uintptr_t len, const double *x, double *out);
   /**
-   * `sin_cos` operation using the given Thermite backend.
+   * Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sin_cosf_vv)(uintptr_t len, const float *x, float *sin, float *cos);
   /**
-   * `sin_cos` operation using the given Thermite backend.
+   * Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sin_cos_vv)(uintptr_t len, const double *x, double *sin, double *cos);
   /**
-   * `sin_cos_pi` operation using the given Thermite backend.
+   * Compute both sine and cosine of the input multiplied by π simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sin_cos_pif_vv)(uintptr_t len, const float *x, float *sin, float *cos);
   /**
-   * `sin_cos_pi` operation using the given Thermite backend.
+   * Compute both sine and cosine of the input multiplied by π simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sin_cos_pi_vv)(uintptr_t len, const double *x, double *sin, double *cos);
   /**
-   * `sinh_cosh` operation using the given Thermite backend.
+   * Compute both hyperbolic sine and hyperbolic cosine of the input simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sinh_coshf_vv)(uintptr_t len, const float *x, float *sinh, float *cosh);
   /**
-   * `sinh_cosh` operation using the given Thermite backend.
+   * Compute both hyperbolic sine and hyperbolic cosine of the input simultaneously, which will be more efficient than computing them separately.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sinh_cosh_vv)(uintptr_t len, const double *x, double *sinh, double *cosh);
   /**
-   * `sin` operation using the given Thermite backend.
+   * Computes the sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sinf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `sin` operation using the given Thermite backend.
+   * Computes the sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sin_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `cos` operation using the given Thermite backend.
+   * Computes the cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*cosf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `cos` operation using the given Thermite backend.
+   * Computes the cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*cos_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `tan` operation using the given Thermite backend.
+   * Computes the tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*tanf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `tan` operation using the given Thermite backend.
+   * Computes the tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*tan_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `sin_pi` operation using the given Thermite backend.
+   * Computes the sine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the sine.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sin_pif_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `sin_pi` operation using the given Thermite backend.
+   * Computes the sine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the sine.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sin_pi_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `cos_pi` operation using the given Thermite backend.
+   * Computes the cosine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the cosine.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*cos_pif_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `cos_pi` operation using the given Thermite backend.
+   * Computes the cosine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the cosine.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*cos_pi_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `tan_pi` operation using the given Thermite backend.
+   * Computes the tangent of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the tangent.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*tan_pif_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `tan_pi` operation using the given Thermite backend.
+   * Computes the tangent of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the tangent.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*tan_pi_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `sinc` operation using the given Thermite backend.
+   * Computes the sinc function, defined as sin(πx)/(πx) for x != 0 and 1 for x = 0
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sincf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `sinc` operation using the given Thermite backend.
+   * Computes the sinc function, defined as sin(πx)/(πx) for x != 0 and 1 for x = 0
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sinc_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `sinc_pi` operation using the given Thermite backend.
+   * Computes the sinc function of the input multiplied by π, defined as sin(π^2 x)/(π^2 x) for x != 0 and 1 for x = 0,
+   * which may be more accurate for certain inputs than multiplying the input by π and then taking the sinc.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sinc_pif_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `sinc_pi` operation using the given Thermite backend.
+   * Computes the sinc function of the input multiplied by π, defined as sin(π^2 x)/(π^2 x) for x != 0 and 1 for x = 0,
+   * which may be more accurate for certain inputs than multiplying the input by π and then taking the sinc.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sinc_pi_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `sinh` operation using the given Thermite backend.
+   * Computes the hyperbolic sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*sinhf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `sinh` operation using the given Thermite backend.
+   * Computes the hyperbolic sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*sinh_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `cosh` operation using the given Thermite backend.
+   * Computes the hyperbolic cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*coshf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `cosh` operation using the given Thermite backend.
+   * Computes the hyperbolic cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*cosh_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `tanh` operation using the given Thermite backend.
+   * Computes the hyperbolic tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*tanhf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `tanh` operation using the given Thermite backend.
+   * Computes the hyperbolic tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*tanh_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `asin` operation using the given Thermite backend.
+   * Computes the inverse sine (arcsine) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*asinf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `asin` operation using the given Thermite backend.
+   * Computes the inverse sine (arcsine) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*asin_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `acos` operation using the given Thermite backend.
+   * Computes the inverse cosine (arccosine) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*acosf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `acos` operation using the given Thermite backend.
+   * Computes the inverse cosine (arccosine) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*acos_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `atan` operation using the given Thermite backend.
+   * Computes the inverse tangent (arctangent) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*atanf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `atan` operation using the given Thermite backend.
+   * Computes the inverse tangent (arctangent) of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*atan_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `asinh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*asinhf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `asinh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic sine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*asinh_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `acosh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*acoshf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `acosh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic cosine of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*acosh_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `atanh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*atanhf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `atanh` operation using the given Thermite backend.
+   * Computes the inverse hyperbolic tangent of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*atanh_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `exp` operation using the given Thermite backend.
+   * Computes the exponential of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*expf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `exp` operation using the given Thermite backend.
+   * Computes the exponential of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*exp_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `exph` operation using the given Thermite backend.
+   * Computes the half-exponential of a floating-point number, defined as exp(x)/2
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*exphf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `exph` operation using the given Thermite backend.
+   * Computes the half-exponential of a floating-point number, defined as exp(x)/2
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*exph_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `exp2` operation using the given Thermite backend.
+   * Computes 2 raised to the power of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*exp2f_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `exp2` operation using the given Thermite backend.
+   * Computes 2 raised to the power of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*exp2_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `exp10` operation using the given Thermite backend.
+   * Computes 10 raised to the power of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*exp10f_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `exp10` operation using the given Thermite backend.
+   * Computes 10 raised to the power of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*exp10_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `exp_m1` operation using the given Thermite backend.
+   * Computes the exponential of a floating-point number minus one, which may be more accurate for small inputs than computing exp(x) - 1 directly.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*exp_m1f_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `exp_m1` operation using the given Thermite backend.
+   * Computes the exponential of a floating-point number minus one, which may be more accurate for small inputs than computing exp(x) - 1 directly.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*exp_m1_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `ln` operation using the given Thermite backend.
+   * Computes the natural logarithm of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*lnf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `ln` operation using the given Thermite backend.
+   * Computes the natural logarithm of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*ln_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `ln_1p` operation using the given Thermite backend.
+   * Computes the natural logarithm of one plus a floating-point number, which may be more accurate for small inputs than computing ln(1 + x) directly.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*ln_1pf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `ln_1p` operation using the given Thermite backend.
+   * Computes the natural logarithm of one plus a floating-point number, which may be more accurate for small inputs than computing ln(1 + x) directly.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*ln_1p_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `log2` operation using the given Thermite backend.
+   * Computes the base-2 logarithm of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*log2f_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `log2` operation using the given Thermite backend.
+   * Computes the base-2 logarithm of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*log2_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `log10` operation using the given Thermite backend.
+   * Computes the base-10 logarithm of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*log10f_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `log10` operation using the given Thermite backend.
+   * Computes the base-10 logarithm of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*log10_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `log` operation using the given Thermite backend.
+   * Computes the logarithm of a floating-point number with respect to an arbitrary base
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*logf_v)(uintptr_t len, const float *x, const float *base, float *y);
   /**
-   * `log` operation using the given Thermite backend.
+   * Computes the logarithm of a floating-point number with respect to an arbitrary base
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*log_v)(uintptr_t len, const double *x, const double *base, double *y);
   /**
-   * `cbrt` operation using the given Thermite backend.
+   * Computes the cube root of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*cbrtf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `cbrt` operation using the given Thermite backend.
+   * Computes the cube root of a floating-point number
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*cbrt_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `powf` operation using the given Thermite backend.
+   * Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*powff_v)(uintptr_t len, const float *x, const float *e, float *y);
   /**
-   * `powf` operation using the given Thermite backend.
+   * Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*powf_v)(uintptr_t len, const double *x, const double *e, double *y);
   /**
-   * `wrap_angle` operation using the given Thermite backend.
+   * Wraps an angle in radians to the range [-π, π)
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*wrap_anglef_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `wrap_angle` operation using the given Thermite backend.
+   * Wraps an angle in radians to the range [-π, π)
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*wrap_angle_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `angle_diff` operation using the given Thermite backend.
+   * Computes the absolute difference between two angles
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*angle_difff_v)(uintptr_t len, const float *a, const float *b, float *d);
   /**
-   * `angle_diff` operation using the given Thermite backend.
+   * Computes the absolute difference between two angles
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*angle_diff_v)(uintptr_t len, const double *a, const double *b, double *d);
   /**
-   * `to_degrees` operation using the given Thermite backend.
+   * Converts an angle from radians to degrees
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*to_degreesf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `to_degrees` operation using the given Thermite backend.
+   * Converts an angle from radians to degrees
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*to_degrees_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `to_radians` operation using the given Thermite backend.
+   * Converts an angle from degrees to radians
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*to_radiansf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `to_radians` operation using the given Thermite backend.
+   * Converts an angle from degrees to radians
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*to_radians_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `atan2` operation using the given Thermite backend.
+   * Computes the angle (in radians) between the positive x-axis and the point (x, y), using the signs of both arguments to determine the correct quadrant of the result.
+   *
+   * This may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*atan2f_v)(uintptr_t len, const float *y, const float *x, float *t);
   /**
-   * `atan2` operation using the given Thermite backend.
+   * Computes the angle (in radians) between the positive x-axis and the point (x, y), using the signs of both arguments to determine the correct quadrant of the result.
+   *
+   * This may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*atan2_v)(uintptr_t len, const double *y, const double *x, double *t);
   /**
-   * `lerp` operation using the given Thermite backend.
+   * Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*lerpf_v)(uintptr_t len, const float *t, const float *a, const float *b, float *y);
   /**
-   * `lerp` operation using the given Thermite backend.
+   * Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*lerp_v)(uintptr_t len, const double *t, const double *a, const double *b, double *y);
   /**
-   * `hypot` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*hypotf_v)(uintptr_t len, const float *x, const float *y, float *out);
   /**
-   * `hypot` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*hypot_v)(uintptr_t len, const double *x, const double *y, double *out);
   /**
-   * `erf` operation using the given Thermite backend.
+   * Computes the error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*erff_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `erf` operation using the given Thermite backend.
+   * Computes the error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*erf_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `erfc` operation using the given Thermite backend.
+   * Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*erfcf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `erfc` operation using the given Thermite backend.
+   * Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*erfc_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `erfinv` operation using the given Thermite backend.
+   * Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*erfinvf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `erfinv` operation using the given Thermite backend.
+   * Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*erfinv_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `tgamma` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*tgammaf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `tgamma` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*tgamma_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `lgamma` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*lgammaf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `lgamma` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*lgamma_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `beta` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*betaf_v)(uintptr_t len, const float *x, const float *y, float *z);
   /**
-   * `beta` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*beta_v)(uintptr_t len, const double *x, const double *y, double *z);
   /**
-   * `smoothstep` operation using the given Thermite backend.
+   * 3rd-order smoothstep interpolation function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*smoothstepf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `smoothstep` operation using the given Thermite backend.
+   * 3rd-order smoothstep interpolation function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*smoothstep_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `inverse_smoothstep` operation using the given Thermite backend.
+   * Inverse of the 3rd-order smoothstep function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*inverse_smoothstepf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `inverse_smoothstep` operation using the given Thermite backend.
+   * Inverse of the 3rd-order smoothstep function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*inverse_smoothstep_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `smootherstep` operation using the given Thermite backend.
+   * 5th-order smoothstep interpolation function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*smootherstepf_v)(uintptr_t len, const float *x, float *y);
   /**
-   * `smootherstep` operation using the given Thermite backend.
+   * 5th-order smoothstep interpolation function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*smootherstep_v)(uintptr_t len, const double *x, double *y);
   /**
-   * `inverse_smootherstep` operation using the given Thermite backend.
+   * Inverse of the 5th-order smoothstep function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*inverse_smootherstepf_v)(uintptr_t len, const float *y, float *x);
   /**
-   * `inverse_smootherstep` operation using the given Thermite backend.
+   * Inverse of the 5th-order smoothstep function
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*inverse_smootherstep_v)(uintptr_t len, const double *y, double *x);
   /**
-   * `smooth_interpolator` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*smooth_interpolatorf_v)(uintptr_t len, const float *x, float *y, float k);
   /**
-   * `smooth_interpolator` operation using the given Thermite backend.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*smooth_interpolator_v)(uintptr_t len, const double *x, double *y, double k);
   /**
-   * `step` operation using the given Thermite backend.
+   *
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+   */
+  void (*smooth_interpolator_inversef_v)(uintptr_t len, const float *y, float *x, float k);
+  /**
+   *
+   * # Safety
+   * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+   */
+  void (*smooth_interpolator_inverse_v)(uintptr_t len, const double *y, double *x, double k);
+  /**
+   * Step function that returns 0.0 if x < edge and 1.0 if x >= edge
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*stepf_v)(uintptr_t len, const float *x, float *y, float edge);
   /**
-   * `step` operation using the given Thermite backend.
+   * Step function that returns 0.0 if x < edge and 1.0 if x >= edge
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*step_v)(uintptr_t len, const double *x, double *y, double edge);
   /**
-   * `lerp` operation using the given Thermite backend.
+   * Linear interpolation between scalars a and b by x, where x is in the range [0, 1]
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*lerpf_vs)(uintptr_t len, const float *x, float *y, float a, float b);
   /**
-   * `lerp` operation using the given Thermite backend.
+   * Linear interpolation between scalars a and b by x, where x is in the range [0, 1]
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*lerp_vs)(uintptr_t len, const double *x, double *y, double a, double b);
   /**
-   * `powi` operation using the given Thermite backend.
+   * Raises x to the power of exp, where exp is an integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*powif_vs)(uintptr_t len, const float *x, float *y, int32_t exp);
   /**
-   * `powi` operation using the given Thermite backend.
+   * Raises x to the power of exp, where exp is an integer
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
   void (*powi_vs)(uintptr_t len, const double *x, double *y, int32_t exp);
   /**
-   * `gaussian` operation using the given Thermite backend.
+   * Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+   *
+   * The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
    */
   void (*gaussianf_vs)(uintptr_t len, const float *x, float *y, float a, float c);
   /**
-   * `gaussian` operation using the given Thermite backend.
+   * Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+   *
+   * The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
+   *
    * # Safety
    * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
    */
@@ -987,7 +1173,8 @@ void thermite_init_with_policy(ThermitePrecisionPolicy policy);
 THERMITE_API const char *thermite_backend_name(void);
 
 /**
- * `add` operation using the current Thermite backend.
+ * Floating-point addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -998,7 +1185,8 @@ void thermite_addf_v(uintptr_t len,
                      float *y);
 
 /**
- * `add` operation using the current Thermite backend.
+ * Floating-point addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1009,7 +1197,8 @@ void thermite_add_v(uintptr_t len,
                     double *y);
 
 /**
- * `sub` operation using the current Thermite backend.
+ * Floating-point subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1020,7 +1209,8 @@ void thermite_subf_v(uintptr_t len,
                      float *y);
 
 /**
- * `sub` operation using the current Thermite backend.
+ * Floating-point subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1031,7 +1221,8 @@ void thermite_sub_v(uintptr_t len,
                     double *y);
 
 /**
- * `mul` operation using the current Thermite backend.
+ * Floating-point multiplication
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1042,7 +1233,8 @@ void thermite_mulf_v(uintptr_t len,
                      float *y);
 
 /**
- * `mul` operation using the current Thermite backend.
+ * Floating-point multiplication
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1053,7 +1245,8 @@ void thermite_mul_v(uintptr_t len,
                     double *y);
 
 /**
- * `div` operation using the current Thermite backend.
+ * Floating-point division
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1064,7 +1257,8 @@ void thermite_divf_v(uintptr_t len,
                      float *y);
 
 /**
- * `div` operation using the current Thermite backend.
+ * Floating-point division
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1075,7 +1269,8 @@ void thermite_div_v(uintptr_t len,
                     double *y);
 
 /**
- * `rem` operation using the current Thermite backend.
+ * Floating-point remainder (modulo/fmod)
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1086,7 +1281,8 @@ void thermite_remf_v(uintptr_t len,
                      float *y);
 
 /**
- * `rem` operation using the current Thermite backend.
+ * Floating-point remainder (modulo/fmod)
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1097,7 +1293,8 @@ void thermite_rem_v(uintptr_t len,
                     double *y);
 
 /**
- * `round` operation using the current Thermite backend.
+ * Rounds a floating-point number to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1107,7 +1304,8 @@ void thermite_roundf_v(uintptr_t len,
                        float *y);
 
 /**
- * `round` operation using the current Thermite backend.
+ * Rounds a floating-point number to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1117,7 +1315,8 @@ void thermite_round_v(uintptr_t len,
                       double *y);
 
 /**
- * `floor` operation using the current Thermite backend.
+ * Rounds a floating-point number down to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1127,7 +1326,8 @@ void thermite_floorf_v(uintptr_t len,
                        float *y);
 
 /**
- * `floor` operation using the current Thermite backend.
+ * Rounds a floating-point number down to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1137,7 +1337,8 @@ void thermite_floor_v(uintptr_t len,
                       double *y);
 
 /**
- * `ceil` operation using the current Thermite backend.
+ * Rounds a floating-point number up to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1147,7 +1348,8 @@ void thermite_ceilf_v(uintptr_t len,
                       float *y);
 
 /**
- * `ceil` operation using the current Thermite backend.
+ * Rounds a floating-point number up to the nearest integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1157,7 +1359,8 @@ void thermite_ceil_v(uintptr_t len,
                      double *y);
 
 /**
- * `trunc` operation using the current Thermite backend.
+ * Truncates a floating-point number, removing the fractional part
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1167,7 +1370,8 @@ void thermite_truncf_v(uintptr_t len,
                        float *y);
 
 /**
- * `trunc` operation using the current Thermite backend.
+ * Truncates a floating-point number, removing the fractional part
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1177,7 +1381,30 @@ void thermite_trunc_v(uintptr_t len,
                       double *y);
 
 /**
- * `next_up` operation using the current Thermite backend.
+ * Computes the fractional part of a floating-point number
+ *
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_fractf_v(uintptr_t len,
+                       const float *x,
+                       float *y);
+
+/**
+ * Computes the fractional part of a floating-point number
+ *
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_fract_v(uintptr_t len,
+                      const double *x,
+                      double *y);
+
+/**
+ * Computes the next representable floating-point value greater than the input
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1187,7 +1414,8 @@ void thermite_next_upf_v(uintptr_t len,
                          float *y);
 
 /**
- * `next_up` operation using the current Thermite backend.
+ * Computes the next representable floating-point value greater than the input
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1197,7 +1425,8 @@ void thermite_next_up_v(uintptr_t len,
                         double *y);
 
 /**
- * `next_down` operation using the current Thermite backend.
+ * Computes the next representable floating-point value less than the input
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1207,7 +1436,8 @@ void thermite_next_downf_v(uintptr_t len,
                            float *y);
 
 /**
- * `next_down` operation using the current Thermite backend.
+ * Computes the next representable floating-point value less than the input
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1217,7 +1447,8 @@ void thermite_next_down_v(uintptr_t len,
                           double *y);
 
 /**
- * `min` operation using the current Thermite backend.
+ * Computes the minimum of two floating-point numbers
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1228,7 +1459,8 @@ void thermite_minf_v(uintptr_t len,
                      float *y);
 
 /**
- * `min` operation using the current Thermite backend.
+ * Computes the minimum of two floating-point numbers
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1239,7 +1471,8 @@ void thermite_min_v(uintptr_t len,
                     double *y);
 
 /**
- * `max` operation using the current Thermite backend.
+ * Computes the maximum of two floating-point numbers
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1250,7 +1483,8 @@ void thermite_maxf_v(uintptr_t len,
                      float *y);
 
 /**
- * `max` operation using the current Thermite backend.
+ * Computes the maximum of two floating-point numbers
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1261,7 +1495,8 @@ void thermite_max_v(uintptr_t len,
                     double *y);
 
 /**
- * `clamp` operation using the current Thermite backend.
+ * Clamps a floating-point number between a minimum and maximum scalar value
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1273,7 +1508,8 @@ void thermite_clampf_vs(uintptr_t len,
                         float max);
 
 /**
- * `clamp` operation using the current Thermite backend.
+ * Clamps a floating-point number between a minimum and maximum scalar value
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1285,7 +1521,8 @@ void thermite_clamp_vs(uintptr_t len,
                        double max);
 
 /**
- * `abs` operation using the current Thermite backend.
+ * Computes the absolute value of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1295,7 +1532,8 @@ void thermite_absf_v(uintptr_t len,
                      float *y);
 
 /**
- * `abs` operation using the current Thermite backend.
+ * Computes the absolute value of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1305,7 +1543,8 @@ void thermite_abs_v(uintptr_t len,
                     double *y);
 
 /**
- * `signum` operation using the current Thermite backend.
+ * Computes the sign of a floating-point number, returning -1.0 for negative values, 1.0 for positive values, and 0.0 for zero
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1315,7 +1554,8 @@ void thermite_signumf_v(uintptr_t len,
                         float *y);
 
 /**
- * `signum` operation using the current Thermite backend.
+ * Computes the sign of a floating-point number, returning -1.0 for negative values, 1.0 for positive values, and 0.0 for zero
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1325,7 +1565,9 @@ void thermite_signum_v(uintptr_t len,
                        double *y);
 
 /**
- * `mul_add` operation using the current Thermite backend.
+ * Computes (x * a) + b with only one rounding error, yielding a more accurate
+ * result than a separate multiplication and addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1337,7 +1579,9 @@ void thermite_mul_addf_v(uintptr_t len,
                          float *y);
 
 /**
- * `mul_add` operation using the current Thermite backend.
+ * Computes (x * a) + b with only one rounding error, yielding a more accurate
+ * result than a separate multiplication and addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1349,7 +1593,9 @@ void thermite_mul_add_v(uintptr_t len,
                         double *y);
 
 /**
- * `mul_sub` operation using the current Thermite backend.
+ * Computes (x * a) - b with only one rounding error, yielding a more accurate
+ * result than a separate multiplication and subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1361,7 +1607,9 @@ void thermite_mul_subf_v(uintptr_t len,
                          float *y);
 
 /**
- * `mul_sub` operation using the current Thermite backend.
+ * Computes (x * a) - b with only one rounding error, yielding a more accurate
+ * result than a separate multiplication and subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1373,7 +1621,9 @@ void thermite_mul_sub_v(uintptr_t len,
                         double *y);
 
 /**
- * `nmul_add` operation using the current Thermite backend.
+ * Computes -(x * a) + b with only one rounding error, yielding a more accurate
+ * result than a separate negated multiplication and addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1385,7 +1635,9 @@ void thermite_nmul_addf_v(uintptr_t len,
                           float *y);
 
 /**
- * `nmul_add` operation using the current Thermite backend.
+ * Computes -(x * a) + b with only one rounding error, yielding a more accurate
+ * result than a separate negated multiplication and addition
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1397,7 +1649,9 @@ void thermite_nmul_add_v(uintptr_t len,
                          double *y);
 
 /**
- * `nmul_sub` operation using the current Thermite backend.
+ * Computes -(x * a) - b with only one rounding error, yielding a more accurate
+ * result than a separate negated multiplication and subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1409,7 +1663,9 @@ void thermite_nmul_subf_v(uintptr_t len,
                           float *y);
 
 /**
- * `nmul_sub` operation using the current Thermite backend.
+ * Computes -(x * a) - b with only one rounding error, yielding a more accurate
+ * result than a separate negated multiplication and subtraction
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1421,7 +1677,8 @@ void thermite_nmul_sub_v(uintptr_t len,
                          double *y);
 
 /**
- * `inverse_sqrt` operation using the current Thermite backend.
+ * Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1431,7 +1688,8 @@ void thermite_inverse_sqrtf_v(uintptr_t len,
                               float *out);
 
 /**
- * `inverse_sqrt` operation using the current Thermite backend.
+ * Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1441,7 +1699,8 @@ void thermite_inverse_sqrt_v(uintptr_t len,
                              double *out);
 
 /**
- * `reciprocal` operation using the current Thermite backend.
+ * Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1451,7 +1710,8 @@ void thermite_reciprocalf_v(uintptr_t len,
                             float *out);
 
 /**
- * `reciprocal` operation using the current Thermite backend.
+ * Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1461,7 +1721,8 @@ void thermite_reciprocal_v(uintptr_t len,
                            double *out);
 
 /**
- * `sin_cos` operation using the current Thermite backend.
+ * Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1472,7 +1733,8 @@ void thermite_sin_cosf_vv(uintptr_t len,
                           float *cos);
 
 /**
- * `sin_cos` operation using the current Thermite backend.
+ * Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1483,7 +1745,8 @@ void thermite_sin_cos_vv(uintptr_t len,
                          double *cos);
 
 /**
- * `sin_cos_pi` operation using the current Thermite backend.
+ * Compute both sine and cosine of the input multiplied by π simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1494,7 +1757,8 @@ void thermite_sin_cos_pif_vv(uintptr_t len,
                              float *cos);
 
 /**
- * `sin_cos_pi` operation using the current Thermite backend.
+ * Compute both sine and cosine of the input multiplied by π simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1505,7 +1769,8 @@ void thermite_sin_cos_pi_vv(uintptr_t len,
                             double *cos);
 
 /**
- * `sinh_cosh` operation using the current Thermite backend.
+ * Compute both hyperbolic sine and hyperbolic cosine of the input simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1516,7 +1781,8 @@ void thermite_sinh_coshf_vv(uintptr_t len,
                             float *cosh);
 
 /**
- * `sinh_cosh` operation using the current Thermite backend.
+ * Compute both hyperbolic sine and hyperbolic cosine of the input simultaneously, which will be more efficient than computing them separately.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1527,7 +1793,8 @@ void thermite_sinh_cosh_vv(uintptr_t len,
                            double *cosh);
 
 /**
- * `sin` operation using the current Thermite backend.
+ * Computes the sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1537,7 +1804,8 @@ void thermite_sinf_v(uintptr_t len,
                      float *y);
 
 /**
- * `sin` operation using the current Thermite backend.
+ * Computes the sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1547,7 +1815,8 @@ void thermite_sin_v(uintptr_t len,
                     double *y);
 
 /**
- * `cos` operation using the current Thermite backend.
+ * Computes the cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1557,7 +1826,8 @@ void thermite_cosf_v(uintptr_t len,
                      float *y);
 
 /**
- * `cos` operation using the current Thermite backend.
+ * Computes the cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1567,7 +1837,8 @@ void thermite_cos_v(uintptr_t len,
                     double *y);
 
 /**
- * `tan` operation using the current Thermite backend.
+ * Computes the tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1577,7 +1848,8 @@ void thermite_tanf_v(uintptr_t len,
                      float *y);
 
 /**
- * `tan` operation using the current Thermite backend.
+ * Computes the tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1587,7 +1859,8 @@ void thermite_tan_v(uintptr_t len,
                     double *y);
 
 /**
- * `sin_pi` operation using the current Thermite backend.
+ * Computes the sine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the sine.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1597,7 +1870,8 @@ void thermite_sin_pif_v(uintptr_t len,
                         float *y);
 
 /**
- * `sin_pi` operation using the current Thermite backend.
+ * Computes the sine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the sine.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1607,7 +1881,8 @@ void thermite_sin_pi_v(uintptr_t len,
                        double *y);
 
 /**
- * `cos_pi` operation using the current Thermite backend.
+ * Computes the cosine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the cosine.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1617,7 +1892,8 @@ void thermite_cos_pif_v(uintptr_t len,
                         float *y);
 
 /**
- * `cos_pi` operation using the current Thermite backend.
+ * Computes the cosine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the cosine.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1627,7 +1903,8 @@ void thermite_cos_pi_v(uintptr_t len,
                        double *y);
 
 /**
- * `tan_pi` operation using the current Thermite backend.
+ * Computes the tangent of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the tangent.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1637,7 +1914,8 @@ void thermite_tan_pif_v(uintptr_t len,
                         float *y);
 
 /**
- * `tan_pi` operation using the current Thermite backend.
+ * Computes the tangent of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the tangent.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1647,7 +1925,8 @@ void thermite_tan_pi_v(uintptr_t len,
                        double *y);
 
 /**
- * `sinc` operation using the current Thermite backend.
+ * Computes the sinc function, defined as sin(πx)/(πx) for x != 0 and 1 for x = 0
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1657,7 +1936,8 @@ void thermite_sincf_v(uintptr_t len,
                       float *y);
 
 /**
- * `sinc` operation using the current Thermite backend.
+ * Computes the sinc function, defined as sin(πx)/(πx) for x != 0 and 1 for x = 0
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1667,7 +1947,9 @@ void thermite_sinc_v(uintptr_t len,
                      double *y);
 
 /**
- * `sinc_pi` operation using the current Thermite backend.
+ * Computes the sinc function of the input multiplied by π, defined as sin(π^2 x)/(π^2 x) for x != 0 and 1 for x = 0,
+ * which may be more accurate for certain inputs than multiplying the input by π and then taking the sinc.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1677,7 +1959,9 @@ void thermite_sinc_pif_v(uintptr_t len,
                          float *y);
 
 /**
- * `sinc_pi` operation using the current Thermite backend.
+ * Computes the sinc function of the input multiplied by π, defined as sin(π^2 x)/(π^2 x) for x != 0 and 1 for x = 0,
+ * which may be more accurate for certain inputs than multiplying the input by π and then taking the sinc.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1687,7 +1971,8 @@ void thermite_sinc_pi_v(uintptr_t len,
                         double *y);
 
 /**
- * `sinh` operation using the current Thermite backend.
+ * Computes the hyperbolic sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1697,7 +1982,8 @@ void thermite_sinhf_v(uintptr_t len,
                       float *y);
 
 /**
- * `sinh` operation using the current Thermite backend.
+ * Computes the hyperbolic sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1707,7 +1993,8 @@ void thermite_sinh_v(uintptr_t len,
                      double *y);
 
 /**
- * `cosh` operation using the current Thermite backend.
+ * Computes the hyperbolic cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1717,7 +2004,8 @@ void thermite_coshf_v(uintptr_t len,
                       float *y);
 
 /**
- * `cosh` operation using the current Thermite backend.
+ * Computes the hyperbolic cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1727,7 +2015,8 @@ void thermite_cosh_v(uintptr_t len,
                      double *y);
 
 /**
- * `tanh` operation using the current Thermite backend.
+ * Computes the hyperbolic tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1737,7 +2026,8 @@ void thermite_tanhf_v(uintptr_t len,
                       float *y);
 
 /**
- * `tanh` operation using the current Thermite backend.
+ * Computes the hyperbolic tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1747,7 +2037,8 @@ void thermite_tanh_v(uintptr_t len,
                      double *y);
 
 /**
- * `asin` operation using the current Thermite backend.
+ * Computes the inverse sine (arcsine) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1757,7 +2048,8 @@ void thermite_asinf_v(uintptr_t len,
                       float *x);
 
 /**
- * `asin` operation using the current Thermite backend.
+ * Computes the inverse sine (arcsine) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1767,7 +2059,8 @@ void thermite_asin_v(uintptr_t len,
                      double *x);
 
 /**
- * `acos` operation using the current Thermite backend.
+ * Computes the inverse cosine (arccosine) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1777,7 +2070,8 @@ void thermite_acosf_v(uintptr_t len,
                       float *x);
 
 /**
- * `acos` operation using the current Thermite backend.
+ * Computes the inverse cosine (arccosine) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1787,7 +2081,8 @@ void thermite_acos_v(uintptr_t len,
                      double *x);
 
 /**
- * `atan` operation using the current Thermite backend.
+ * Computes the inverse tangent (arctangent) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1797,7 +2092,8 @@ void thermite_atanf_v(uintptr_t len,
                       float *x);
 
 /**
- * `atan` operation using the current Thermite backend.
+ * Computes the inverse tangent (arctangent) of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1807,7 +2103,8 @@ void thermite_atan_v(uintptr_t len,
                      double *x);
 
 /**
- * `asinh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1817,7 +2114,8 @@ void thermite_asinhf_v(uintptr_t len,
                        float *x);
 
 /**
- * `asinh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic sine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1827,7 +2125,8 @@ void thermite_asinh_v(uintptr_t len,
                       double *x);
 
 /**
- * `acosh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1837,7 +2136,8 @@ void thermite_acoshf_v(uintptr_t len,
                        float *x);
 
 /**
- * `acosh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic cosine of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1847,7 +2147,8 @@ void thermite_acosh_v(uintptr_t len,
                       double *x);
 
 /**
- * `atanh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1857,7 +2158,8 @@ void thermite_atanhf_v(uintptr_t len,
                        float *x);
 
 /**
- * `atanh` operation using the current Thermite backend.
+ * Computes the inverse hyperbolic tangent of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1867,7 +2169,8 @@ void thermite_atanh_v(uintptr_t len,
                       double *x);
 
 /**
- * `exp` operation using the current Thermite backend.
+ * Computes the exponential of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1877,7 +2180,8 @@ void thermite_expf_v(uintptr_t len,
                      float *y);
 
 /**
- * `exp` operation using the current Thermite backend.
+ * Computes the exponential of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1887,7 +2191,8 @@ void thermite_exp_v(uintptr_t len,
                     double *y);
 
 /**
- * `exph` operation using the current Thermite backend.
+ * Computes the half-exponential of a floating-point number, defined as exp(x)/2
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1897,7 +2202,8 @@ void thermite_exphf_v(uintptr_t len,
                       float *y);
 
 /**
- * `exph` operation using the current Thermite backend.
+ * Computes the half-exponential of a floating-point number, defined as exp(x)/2
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1907,7 +2213,8 @@ void thermite_exph_v(uintptr_t len,
                      double *y);
 
 /**
- * `exp2` operation using the current Thermite backend.
+ * Computes 2 raised to the power of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1917,7 +2224,8 @@ void thermite_exp2f_v(uintptr_t len,
                       float *y);
 
 /**
- * `exp2` operation using the current Thermite backend.
+ * Computes 2 raised to the power of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1927,7 +2235,8 @@ void thermite_exp2_v(uintptr_t len,
                      double *y);
 
 /**
- * `exp10` operation using the current Thermite backend.
+ * Computes 10 raised to the power of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1937,7 +2246,8 @@ void thermite_exp10f_v(uintptr_t len,
                        float *y);
 
 /**
- * `exp10` operation using the current Thermite backend.
+ * Computes 10 raised to the power of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1947,7 +2257,8 @@ void thermite_exp10_v(uintptr_t len,
                       double *y);
 
 /**
- * `exp_m1` operation using the current Thermite backend.
+ * Computes the exponential of a floating-point number minus one, which may be more accurate for small inputs than computing exp(x) - 1 directly.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1957,7 +2268,8 @@ void thermite_exp_m1f_v(uintptr_t len,
                         float *y);
 
 /**
- * `exp_m1` operation using the current Thermite backend.
+ * Computes the exponential of a floating-point number minus one, which may be more accurate for small inputs than computing exp(x) - 1 directly.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1967,7 +2279,8 @@ void thermite_exp_m1_v(uintptr_t len,
                        double *y);
 
 /**
- * `ln` operation using the current Thermite backend.
+ * Computes the natural logarithm of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1977,7 +2290,8 @@ void thermite_lnf_v(uintptr_t len,
                     float *y);
 
 /**
- * `ln` operation using the current Thermite backend.
+ * Computes the natural logarithm of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -1987,7 +2301,8 @@ void thermite_ln_v(uintptr_t len,
                    double *y);
 
 /**
- * `ln_1p` operation using the current Thermite backend.
+ * Computes the natural logarithm of one plus a floating-point number, which may be more accurate for small inputs than computing ln(1 + x) directly.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -1997,7 +2312,8 @@ void thermite_ln_1pf_v(uintptr_t len,
                        float *y);
 
 /**
- * `ln_1p` operation using the current Thermite backend.
+ * Computes the natural logarithm of one plus a floating-point number, which may be more accurate for small inputs than computing ln(1 + x) directly.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2007,7 +2323,8 @@ void thermite_ln_1p_v(uintptr_t len,
                       double *y);
 
 /**
- * `log2` operation using the current Thermite backend.
+ * Computes the base-2 logarithm of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2017,7 +2334,8 @@ void thermite_log2f_v(uintptr_t len,
                       float *y);
 
 /**
- * `log2` operation using the current Thermite backend.
+ * Computes the base-2 logarithm of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2027,7 +2345,8 @@ void thermite_log2_v(uintptr_t len,
                      double *y);
 
 /**
- * `log10` operation using the current Thermite backend.
+ * Computes the base-10 logarithm of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2037,7 +2356,8 @@ void thermite_log10f_v(uintptr_t len,
                        float *y);
 
 /**
- * `log10` operation using the current Thermite backend.
+ * Computes the base-10 logarithm of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2047,7 +2367,8 @@ void thermite_log10_v(uintptr_t len,
                       double *y);
 
 /**
- * `log` operation using the current Thermite backend.
+ * Computes the logarithm of a floating-point number with respect to an arbitrary base
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2058,7 +2379,8 @@ void thermite_logf_v(uintptr_t len,
                      float *y);
 
 /**
- * `log` operation using the current Thermite backend.
+ * Computes the logarithm of a floating-point number with respect to an arbitrary base
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2069,7 +2391,8 @@ void thermite_log_v(uintptr_t len,
                     double *y);
 
 /**
- * `cbrt` operation using the current Thermite backend.
+ * Computes the cube root of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2079,7 +2402,8 @@ void thermite_cbrtf_v(uintptr_t len,
                       float *y);
 
 /**
- * `cbrt` operation using the current Thermite backend.
+ * Computes the cube root of a floating-point number
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2089,7 +2413,8 @@ void thermite_cbrt_v(uintptr_t len,
                      double *y);
 
 /**
- * `powf` operation using the current Thermite backend.
+ * Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2100,7 +2425,8 @@ void thermite_powff_v(uintptr_t len,
                       float *y);
 
 /**
- * `powf` operation using the current Thermite backend.
+ * Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2111,7 +2437,8 @@ void thermite_powf_v(uintptr_t len,
                      double *y);
 
 /**
- * `wrap_angle` operation using the current Thermite backend.
+ * Wraps an angle in radians to the range [-π, π)
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2121,7 +2448,8 @@ void thermite_wrap_anglef_v(uintptr_t len,
                             float *y);
 
 /**
- * `wrap_angle` operation using the current Thermite backend.
+ * Wraps an angle in radians to the range [-π, π)
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2131,7 +2459,8 @@ void thermite_wrap_angle_v(uintptr_t len,
                            double *y);
 
 /**
- * `angle_diff` operation using the current Thermite backend.
+ * Computes the absolute difference between two angles
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2142,7 +2471,8 @@ void thermite_angle_difff_v(uintptr_t len,
                             float *d);
 
 /**
- * `angle_diff` operation using the current Thermite backend.
+ * Computes the absolute difference between two angles
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2153,7 +2483,8 @@ void thermite_angle_diff_v(uintptr_t len,
                            double *d);
 
 /**
- * `to_degrees` operation using the current Thermite backend.
+ * Converts an angle from radians to degrees
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2163,7 +2494,8 @@ void thermite_to_degreesf_v(uintptr_t len,
                             float *y);
 
 /**
- * `to_degrees` operation using the current Thermite backend.
+ * Converts an angle from radians to degrees
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2173,7 +2505,8 @@ void thermite_to_degrees_v(uintptr_t len,
                            double *y);
 
 /**
- * `to_radians` operation using the current Thermite backend.
+ * Converts an angle from degrees to radians
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2183,7 +2516,8 @@ void thermite_to_radiansf_v(uintptr_t len,
                             float *y);
 
 /**
- * `to_radians` operation using the current Thermite backend.
+ * Converts an angle from degrees to radians
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2193,7 +2527,10 @@ void thermite_to_radians_v(uintptr_t len,
                            double *y);
 
 /**
- * `atan2` operation using the current Thermite backend.
+ * Computes the angle (in radians) between the positive x-axis and the point (x, y), using the signs of both arguments to determine the correct quadrant of the result.
+ *
+ * This may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2204,7 +2541,10 @@ void thermite_atan2f_v(uintptr_t len,
                        float *t);
 
 /**
- * `atan2` operation using the current Thermite backend.
+ * Computes the angle (in radians) between the positive x-axis and the point (x, y), using the signs of both arguments to determine the correct quadrant of the result.
+ *
+ * This may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2215,7 +2555,8 @@ void thermite_atan2_v(uintptr_t len,
                       double *t);
 
 /**
- * `lerp` operation using the current Thermite backend.
+ * Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2227,7 +2568,8 @@ void thermite_lerpf_v(uintptr_t len,
                       float *y);
 
 /**
- * `lerp` operation using the current Thermite backend.
+ * Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2239,7 +2581,7 @@ void thermite_lerp_v(uintptr_t len,
                      double *y);
 
 /**
- * `hypot` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2250,7 +2592,7 @@ void thermite_hypotf_v(uintptr_t len,
                        float *out);
 
 /**
- * `hypot` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2261,7 +2603,8 @@ void thermite_hypot_v(uintptr_t len,
                       double *out);
 
 /**
- * `erf` operation using the current Thermite backend.
+ * Computes the error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2271,7 +2614,8 @@ void thermite_erff_v(uintptr_t len,
                      float *y);
 
 /**
- * `erf` operation using the current Thermite backend.
+ * Computes the error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2281,7 +2625,8 @@ void thermite_erf_v(uintptr_t len,
                     double *y);
 
 /**
- * `erfc` operation using the current Thermite backend.
+ * Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2291,7 +2636,8 @@ void thermite_erfcf_v(uintptr_t len,
                       float *y);
 
 /**
- * `erfc` operation using the current Thermite backend.
+ * Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2301,7 +2647,8 @@ void thermite_erfc_v(uintptr_t len,
                      double *y);
 
 /**
- * `erfinv` operation using the current Thermite backend.
+ * Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2311,7 +2658,8 @@ void thermite_erfinvf_v(uintptr_t len,
                         float *x);
 
 /**
- * `erfinv` operation using the current Thermite backend.
+ * Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2321,7 +2669,7 @@ void thermite_erfinv_v(uintptr_t len,
                        double *x);
 
 /**
- * `tgamma` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2331,7 +2679,7 @@ void thermite_tgammaf_v(uintptr_t len,
                         float *y);
 
 /**
- * `tgamma` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2341,7 +2689,7 @@ void thermite_tgamma_v(uintptr_t len,
                        double *y);
 
 /**
- * `lgamma` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2351,7 +2699,7 @@ void thermite_lgammaf_v(uintptr_t len,
                         float *y);
 
 /**
- * `lgamma` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2361,7 +2709,7 @@ void thermite_lgamma_v(uintptr_t len,
                        double *y);
 
 /**
- * `beta` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2372,7 +2720,7 @@ void thermite_betaf_v(uintptr_t len,
                       float *z);
 
 /**
- * `beta` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2383,7 +2731,8 @@ void thermite_beta_v(uintptr_t len,
                      double *z);
 
 /**
- * `smoothstep` operation using the current Thermite backend.
+ * 3rd-order smoothstep interpolation function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2393,7 +2742,8 @@ void thermite_smoothstepf_v(uintptr_t len,
                             float *y);
 
 /**
- * `smoothstep` operation using the current Thermite backend.
+ * 3rd-order smoothstep interpolation function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2403,7 +2753,8 @@ void thermite_smoothstep_v(uintptr_t len,
                            double *y);
 
 /**
- * `inverse_smoothstep` operation using the current Thermite backend.
+ * Inverse of the 3rd-order smoothstep function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2413,7 +2764,8 @@ void thermite_inverse_smoothstepf_v(uintptr_t len,
                                     float *x);
 
 /**
- * `inverse_smoothstep` operation using the current Thermite backend.
+ * Inverse of the 3rd-order smoothstep function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2423,7 +2775,8 @@ void thermite_inverse_smoothstep_v(uintptr_t len,
                                    double *x);
 
 /**
- * `smootherstep` operation using the current Thermite backend.
+ * 5th-order smoothstep interpolation function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2433,7 +2786,8 @@ void thermite_smootherstepf_v(uintptr_t len,
                               float *y);
 
 /**
- * `smootherstep` operation using the current Thermite backend.
+ * 5th-order smoothstep interpolation function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2443,7 +2797,8 @@ void thermite_smootherstep_v(uintptr_t len,
                              double *y);
 
 /**
- * `inverse_smootherstep` operation using the current Thermite backend.
+ * Inverse of the 5th-order smoothstep function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2453,7 +2808,8 @@ void thermite_inverse_smootherstepf_v(uintptr_t len,
                                       float *x);
 
 /**
- * `inverse_smootherstep` operation using the current Thermite backend.
+ * Inverse of the 5th-order smoothstep function
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2463,7 +2819,7 @@ void thermite_inverse_smootherstep_v(uintptr_t len,
                                      double *x);
 
 /**
- * `smooth_interpolator` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2474,7 +2830,7 @@ void thermite_smooth_interpolatorf_v(uintptr_t len,
                                      float k);
 
 /**
- * `smooth_interpolator` operation using the current Thermite backend.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2485,7 +2841,30 @@ void thermite_smooth_interpolator_v(uintptr_t len,
                                     double k);
 
 /**
- * `step` operation using the current Thermite backend.
+ *
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
+ */
+THERMITE_API
+void thermite_smooth_interpolator_inversef_v(uintptr_t len,
+                                             const float *y,
+                                             float *x,
+                                             float k);
+
+/**
+ *
+ * # Safety
+ * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
+ */
+THERMITE_API
+void thermite_smooth_interpolator_inverse_v(uintptr_t len,
+                                            const double *y,
+                                            double *x,
+                                            double k);
+
+/**
+ * Step function that returns 0.0 if x < edge and 1.0 if x >= edge
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2496,7 +2875,8 @@ void thermite_stepf_v(uintptr_t len,
                       float edge);
 
 /**
- * `step` operation using the current Thermite backend.
+ * Step function that returns 0.0 if x < edge and 1.0 if x >= edge
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2507,7 +2887,8 @@ void thermite_step_v(uintptr_t len,
                      double edge);
 
 /**
- * `lerp` operation using the current Thermite backend.
+ * Linear interpolation between scalars a and b by x, where x is in the range [0, 1]
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2519,7 +2900,8 @@ void thermite_lerpf_vs(uintptr_t len,
                        float b);
 
 /**
- * `lerp` operation using the current Thermite backend.
+ * Linear interpolation between scalars a and b by x, where x is in the range [0, 1]
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2531,7 +2913,8 @@ void thermite_lerp_vs(uintptr_t len,
                       double b);
 
 /**
- * `powi` operation using the current Thermite backend.
+ * Raises x to the power of exp, where exp is an integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2542,7 +2925,8 @@ void thermite_powif_vs(uintptr_t len,
                        int32_t exp);
 
 /**
- * `powi` operation using the current Thermite backend.
+ * Raises x to the power of exp, where exp is an integer
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */
@@ -2553,7 +2937,10 @@ void thermite_powi_vs(uintptr_t len,
                       int32_t exp);
 
 /**
- * `gaussian` operation using the current Thermite backend.
+ * Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+ *
+ * The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
  */
@@ -2565,7 +2952,10 @@ void thermite_gaussianf_vs(uintptr_t len,
                            float c);
 
 /**
- * `gaussian` operation using the current Thermite backend.
+ * Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+ *
+ * The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
+ *
  * # Safety
  * The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
  */

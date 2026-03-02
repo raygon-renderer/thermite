@@ -79,9 +79,7 @@ macro_rules! decl_math {
         pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
             $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*)
-            }
+            { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
         )*}
 
         impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
@@ -94,16 +92,12 @@ macro_rules! decl_math {
             #[cfg(not(feature = "disable_dispatch"))]
             $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*)
-            }
+            { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
 
             #[cfg(feature = "disable_dispatch")]
             $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
-            {
-                <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*)
-            }
+            { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
         )*}
     }};
 }

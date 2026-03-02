@@ -8,6 +8,10 @@ pub enum InstructionSet {
     /// Scalar (no SIMD)
     Scalar,
 
+    /// Standard library SIMD types (e.g. std::simd::Simd) when available.
+    #[cfg(feature = "std_simd")]
+    StdSimd,
+
     /// Unknown ISA, usually the result of register emulation,
     /// such as with Glam vectors as registers.
     Unknown,
@@ -64,8 +68,6 @@ impl InstructionSet {
     #[inline(always)]
     pub const fn num_registers(&self) -> usize {
         match self {
-            InstructionSet::Scalar | InstructionSet::Unknown => 1, // Scalar has 1 "register"
-
             // x86-v1 has 8 XMM registers
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             InstructionSet::X86V1 => 8,
@@ -84,6 +86,8 @@ impl InstructionSet {
 
             #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
             InstructionSet::WASM64 => 16, // TODO: Verify
+
+            _ => 1,
         }
     }
 
@@ -154,7 +158,7 @@ impl InstructionSet {
             InstructionSet::WASM64 => false,
 
             // unknown ISA
-            InstructionSet::Unknown => false,
+            _ => false,
         }
     }
 
@@ -179,7 +183,7 @@ impl InstructionSet {
             InstructionSet::WASM64 => 2,
 
             // unknown ISA
-            InstructionSet::Unknown => 1,
+            _ => 1,
         }
     }
 
