@@ -109,13 +109,16 @@ impl<R: Register> GenericMask for Mask<R> {
     }
 }
 
+impl<R: Register> crate::simd::HasIsa for Vector<R> {
+    const ISA: InstructionSet = R::ISA;
+}
+
 #[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: Register> GenericVector for Vector<R> {
     type Element = R::Element;
 
     const EMPTY: Self = Vector(R::EMPTY);
     const LANES: usize = <R::Lanes as generic_array::typenum::Unsigned>::USIZE;
-    const ISA: InstructionSet = R::ISA;
 
     type Lanes = R::Lanes;
 

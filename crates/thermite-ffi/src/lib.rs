@@ -1,4 +1,4 @@
-// cargo expand -p thermite-ffi > ffi.rs && cbindgen -q -l c --crate thermite-ffi ffi.rs > ffi.h && echo "Done"
+// cargo expand -p thermite-ffi --all-features > ffi.rs && cbindgen -q -l c --crate thermite-ffi ffi.rs > ffi.h && echo "Done"
 // cargo build --profile release-ffi -p thermite-ffi && Copy-Item ../../target/release-ffi/thermite_ffi.dll && mpress -b -s thermite_ffi.dll && echo "Done"
 // cl.exe test.c /O2 /GL /link "../../target/release-ffi/thermite_ffi.dll.lib" ntdll.lib /LTCG /OPT:REF /OPT:ICF
 
@@ -40,6 +40,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
     #[inline(always)] fn floor_v_p<P: Policy>(self) -> Self { self.floor() }
     #[inline(always)] fn ceil_v_p<P: Policy>(self) -> Self { self.ceil() }
     #[inline(always)] fn trunc_v_p<P: Policy>(self) -> Self { self.trunc() }
+    #[inline(always)] fn fract_v_p<P: Policy>(self) -> Self { self.fract() }
     #[inline(always)] fn next_up_v_p<P: Policy>(self) -> Self { self.next_up() }
     #[inline(always)] fn next_down_v_p<P: Policy>(self) -> Self { self.next_down() }
     #[inline(always)] fn min_v_p<P: Policy>(self, other: Self) -> Self { self.min(other) }
@@ -55,6 +56,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
     #[inline(always)] fn nmul_add_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.nmul_add(a, b) }
     #[inline(always)] fn nmul_sub_v_p<P: Policy>(self, a: Self, b: Self) -> Self { self.nmul_sub(a, b) }
 
+    /// 3rd-order smoothstep
     #[inline(always)]
     fn smoothstep_p<P: Policy>(self) -> Self {
         RealMathWithPolicy::smoothstep_p::<P, 2>(self, None)
@@ -65,6 +67,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
         RealMathWithPolicy::inverse_smoothstep_p::<P, 2>(self, None)
     }
 
+    /// 5th-order smoothstep
     #[inline(always)]
     fn smootherstep_p<P: Policy>(self) -> Self {
         RealMathWithPolicy::smoothstep_p::<P, 3>(self, None)
@@ -96,6 +99,11 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
     }
 
     #[inline(always)]
+    fn smooth_interpolator_inverse_vs_p<P: Policy>(self, k: Self::Element) -> Self {
+        RealMathWithPolicy::smooth_interpolator_inverse_p::<P>(self, None, Self::splat(k))
+    }
+
+    #[inline(always)]
     fn gaussian_vs_p<P: Policy>(self, a: Self::Element, c: Self::Element) -> Self {
         SpecialMathWithPolicy::gaussian_p::<P>(self, Self::splat(a), Self::splat(c))
     }
@@ -124,6 +132,9 @@ pub enum ThermitePrecisionPolicy {
 macro_rules! c_str {
     ($($s:expr),*) => { concat!($($s),*, "\0").as_ptr() as *const c_char };
 }
+
+// these are removed from the public API, but are useful in the macros for
+// generating the VTable methods, and cbindgen will ignore them.
 
 /// cbindgen:ignore
 type Int32 = i32;
@@ -201,6 +212,7 @@ macro_rules! decl_methods {
     (POLICY $policy:ty =>
         // automatically derived mapping kernels
         $( MAPPING: $trait:ident [$(
+            $(#[$meta:meta])*
             ($($input:ident),+) $([ $($scalar:ident: $ty:ty),+ ])? $mapping:ident $suffix:ident $method:ident ($($output:ident),+)
         ),* $(,)?] ),+
     ) => {paste::paste! {
@@ -243,17 +255,20 @@ macro_rules! decl_methods {
 
     (
         $( MAPPING: $trait:ident [$(
+            $(#[$meta:meta])*
             ($($input:ident),+) $([ $($scalar:ident: $ty:ty),+ ])? $mapping:ident $suffix:ident $method:ident ($($output:ident),+)
         ),* $(,)?]),+
     ) => {paste::paste! {
         #[repr(C)]
         pub struct VTable {
             $($(
-                #[doc = " `" $mapping "` operation using the given Thermite backend.\n"]
+                $(#[$meta])*
+                ///
                 /// # Safety
                 /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
                 pub [<$mapping f_ $suffix>]: unsafe extern "C" fn(len: usize, $( $input: *const f32, )+ $( $output: *mut f32, )+ $( $($scalar: [<$ty f>],)+ )?),
-                #[doc = " `" $mapping "` operation using the given Thermite backend.\n"]
+                $(#[$meta])*
+                ///
                 /// # Safety
                 /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
                 pub [<$mapping _ $suffix>]: unsafe extern "C" fn(len: usize, $( $input: *const f64, )+ $( $output: *mut f64, )+ $( $($scalar: $ty,)+ )?),
@@ -264,21 +279,27 @@ macro_rules! decl_methods {
         }
 
         decl_methods!(POLICY DefaultPolicy =>
-            $( MAPPING: $trait [$( ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
+            $( MAPPING: $trait [$( $(#[$meta])* ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
+
+        #[cfg(feature = "high_performance")]
         decl_methods!(POLICY HighPerformance =>
-            $( MAPPING: $trait [$( ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
+            $( MAPPING: $trait [$( $(#[$meta])* ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
+
+        #[cfg(feature = "high_precision")]
         decl_methods!(POLICY HighPrecision =>
-            $( MAPPING: $trait [$( ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
+            $( MAPPING: $trait [$( $(#[$meta])* ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
 
         $($(
-            #[doc = " `" $mapping "` operation using the current Thermite backend.\n"]
+            $(#[$meta])*
+            ///
             /// # Safety
             /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
             #[inline(never)] #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<thermite_ $mapping f_ $suffix>](len: usize, $( $input: *const f32, )+ $( $output: *mut f32, )+ $( $($scalar: [<$ty f>],)+ )?)
             { unsafe { (THERMITE_VTABLE.[<$mapping f_ $suffix>])(len, $( $input, )+ $( $output, )+ $( $($scalar,)+ )? ) }; }
 
-            #[doc = " `" $mapping "` operation using the current Thermite backend.\n"]
+            $(#[$meta])*
+            ///
             /// # Safety
             /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
             #[inline(never)] #[unsafe(no_mangle)]
@@ -297,15 +318,25 @@ impl VTable {
         use thermite::isa::InstructionSet;
 
         match (policy, InstructionSet::get()) {
-            (ThermitePrecisionPolicy::DefaultPolicy, InstructionSet::X86V2) => Self::x86v2_default_policy(),
-            (ThermitePrecisionPolicy::DefaultPolicy, InstructionSet::X86V3) => Self::x86v3_default_policy(),
+            #[cfg(feature = "high_performance")]
             (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V2) => Self::x86v2_high_performance(),
+            #[cfg(feature = "high_performance")]
             (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V3) => Self::x86v3_high_performance(),
+
+            #[cfg(feature = "high_precision")]
             (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V2) => Self::x86v2_high_precision(),
+            #[cfg(feature = "high_precision")]
             (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V3) => Self::x86v3_high_precision(),
-            (ThermitePrecisionPolicy::DefaultPolicy, _) => Self::scalar_default_policy(),
+
+            (_, InstructionSet::X86V2) => Self::x86v2_default_policy(),
+            (_, InstructionSet::X86V3) => Self::x86v3_default_policy(),
+
+            #[cfg(feature = "high_performance")]
             (ThermitePrecisionPolicy::HighPerformance, _) => Self::scalar_high_performance(),
+            #[cfg(feature = "high_precision")]
             (ThermitePrecisionPolicy::HighPrecision, _) => Self::scalar_high_precision(),
+
+            (_, _) => Self::scalar_default_policy(),
         }
     }
 
@@ -324,9 +355,7 @@ impl VTable {
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn thermite_init_vtable(vtable: *mut VTable, policy: ThermitePrecisionPolicy) {
-    unsafe {
-        *vtable = VTable::get(policy);
-    }
+    unsafe { *vtable = VTable::get(policy) };
 }
 
 /// Initializes the Thermite FFI, setting up the function pointers based on the current precision policy and available instruction set.
@@ -361,93 +390,176 @@ pub extern "C" fn thermite_backend_name() -> *const c_char {
 
 decl_methods! {
     MAPPING: RealMathWithPolicyFfi [
+        /// Floating-point addition
         (a, b)add v add_v(y),
+        /// Floating-point subtraction
         (a, b)sub v sub_v(y),
+        /// Floating-point multiplication
         (a, b)mul v mul_v(y),
+        /// Floating-point division
         (a, b)div v div_v(y),
+        /// Floating-point remainder (modulo/fmod)
         (a, b)rem v rem_v(y),
+        /// Rounds a floating-point number to the nearest integer
         (x)round v round_v(y),
+        /// Rounds a floating-point number down to the nearest integer
         (x)floor v floor_v(y),
+        /// Rounds a floating-point number up to the nearest integer
         (x)ceil v ceil_v(y),
+        /// Truncates a floating-point number, removing the fractional part
         (x)trunc v trunc_v(y),
+        /// Computes the fractional part of a floating-point number
+        (x)fract v fract_v(y),
+        /// Computes the next representable floating-point value greater than the input
         (x)next_up v next_up_v(y),
+        /// Computes the next representable floating-point value less than the input
         (x)next_down v next_down_v(y),
+        /// Computes the minimum of two floating-point numbers
         (a, b)min v min_v(y),
+        /// Computes the maximum of two floating-point numbers
         (a, b)max v max_v(y),
+        /// Clamps a floating-point number between a minimum and maximum scalar value
         (x)[min: Float, max: Float] clamp vs clamp_vs(y),
+        /// Computes the absolute value of a floating-point number
         (x)abs v abs_v(y),
+        /// Computes the sign of a floating-point number, returning -1.0 for negative values, 1.0 for positive values, and 0.0 for zero
         (x)signum v signum_v(y),
+        /// Computes (x * a) + b with only one rounding error, yielding a more accurate
+        /// result than a separate multiplication and addition
         (x, a, b)mul_add v mul_add_v(y),
+        /// Computes (x * a) - b with only one rounding error, yielding a more accurate
+        /// result than a separate multiplication and subtraction
         (x, a, b)mul_sub v mul_sub_v(y),
+        /// Computes -(x * a) + b with only one rounding error, yielding a more accurate
+        /// result than a separate negated multiplication and addition
         (x, a, b)nmul_add v nmul_add_v(y),
+        /// Computes -(x * a) - b with only one rounding error, yielding a more accurate
+        /// result than a separate negated multiplication and subtraction
         (x, a, b)nmul_sub v nmul_sub_v(y)
     ],
     MAPPING: CoreMathWithPolicy [
+        /// Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
         (x)inverse_sqrt v inverse_sqrt(out),
+        /// Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
         (x)reciprocal v reciprocal(out)
     ],
     MAPPING: TranscendentalMathWithPolicy [
+        /// Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
         (x)sin_cos vv sin_cos(sin, cos),
+        /// Compute both sine and cosine of the input multiplied by π simultaneously, which will be more efficient than computing them separately.
         (x)sin_cos_pi vv sincos_pi(sin, cos),
+        /// Compute both hyperbolic sine and hyperbolic cosine of the input simultaneously, which will be more efficient than computing them separately.
         (x)sinh_cosh vv sinh_cosh(sinh, cosh),
+        /// Computes the sine of a floating-point number
         (x)sin v sin(y),
+        /// Computes the cosine of a floating-point number
         (x)cos v cos(y),
+        /// Computes the tangent of a floating-point number
         (x)tan v tan(y),
+        /// Computes the sine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the sine.
         (x)sin_pi v sin_pi(y),
+        /// Computes the cosine of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the cosine.
         (x)cos_pi v cos_pi(y),
+        /// Computes the tangent of the input multiplied by π, which may be more accurate for certain inputs than multiplying the input by π and then taking the tangent.
         (x)tan_pi v tan_pi(y),
+        /// Computes the sinc function, defined as sin(πx)/(πx) for x != 0 and 1 for x = 0
         (x)sinc v sinc(y),
+        /// Computes the sinc function of the input multiplied by π, defined as sin(π^2 x)/(π^2 x) for x != 0 and 1 for x = 0,
+        /// which may be more accurate for certain inputs than multiplying the input by π and then taking the sinc.
         (x)sinc_pi v sinc_pi(y),
+        /// Computes the hyperbolic sine of a floating-point number
         (x)sinh v sinh(y),
+        /// Computes the hyperbolic cosine of a floating-point number
         (x)cosh v cosh(y),
+        /// Computes the hyperbolic tangent of a floating-point number
         (x)tanh v tanh(y),
+        /// Computes the inverse sine (arcsine) of a floating-point number
         (y)asin v asin(x),
+        /// Computes the inverse cosine (arccosine) of a floating-point number
         (y)acos v acos(x),
+        /// Computes the inverse tangent (arctangent) of a floating-point number
         (y)atan v atan(x),
+        /// Computes the inverse hyperbolic sine of a floating-point number
         (y)asinh v asinh(x),
+        /// Computes the inverse hyperbolic cosine of a floating-point number
         (y)acosh v acosh(x),
+        /// Computes the inverse hyperbolic tangent of a floating-point number
         (y)atanh v atanh(x),
+        /// Computes the exponential of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
         (x)exp v exp(y),
+        /// Computes the half-exponential of a floating-point number, defined as exp(x)/2
         (x)exph v exph(y),
+        /// Computes 2 raised to the power of a floating-point number
         (x)exp2 v exp2(y),
+        /// Computes 10 raised to the power of a floating-point number
         (x)exp10 v exp10(y),
+        /// Computes the exponential of a floating-point number minus one, which may be more accurate for small inputs than computing exp(x) - 1 directly.
         (x)exp_m1 v exp_m1(y),
+        /// Computes the natural logarithm of a floating-point number, which may vary in accuracy and performance based on the chosen precision policy.
         (x)ln v ln(y),
+        /// Computes the natural logarithm of one plus a floating-point number, which may be more accurate for small inputs than computing ln(1 + x) directly.
         (x)ln_1p v ln_1p(y),
+        /// Computes the base-2 logarithm of a floating-point number
         (x)log2 v log2(y),
+        /// Computes the base-10 logarithm of a floating-point number
         (x)log10 v log10(y),
+        /// Computes the logarithm of a floating-point number with respect to an arbitrary base
         (x, base)log v log(y),
+        /// Computes the cube root of a floating-point number
         (x)cbrt v cbrt(y),
+        /// Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
         (x, e)powf v powf(y)
     ],
     MAPPING: RealMathWithPolicy [
+        /// Wraps an angle in radians to the range [-π, π)
         (x)wrap_angle v wrap_angle(y),
+        /// Computes the absolute difference between two angles
         (a, b)angle_diff v angle_diff(d),
+        /// Converts an angle from radians to degrees
         (x)to_degrees v to_degrees(y),
+        /// Converts an angle from degrees to radians
         (x)to_radians v to_radians(y),
+        /// Computes the angle (in radians) between the positive x-axis and the point (x, y), using the signs of both arguments to determine the correct quadrant of the result.
+        ///
+        /// This may vary in accuracy and performance based on the chosen precision policy.
         (y, x)atan2 v atan2(t),
+        /// Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
         (t, a, b)lerp v lerp(y)
     ],
     MAPPING: SpatialMathWithPolicy [
         (x, y)hypot v hypot(out)
     ],
     MAPPING: SpecialMathWithPolicy [
+        /// Computes the error function, which may vary in accuracy and performance based on the chosen precision policy.
         (x)erf v erf(y),
+        /// Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
         (x)erfc v erfc(y),
+        /// Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
         (y)erfinv v erfinv(x),
         (x)tgamma v tgamma(y),
         (x)lgamma v lgamma(y),
         (x, y)beta v beta(z),
     ],
     MAPPING: RealMathWithPolicyFfi [
+        /// 3rd-order smoothstep interpolation function
         (x)smoothstep v smoothstep(y),
+        /// Inverse of the 3rd-order smoothstep function
         (y)inverse_smoothstep v inverse_smoothstep(x),
+        /// 5th-order smoothstep interpolation function
         (x)smootherstep v smootherstep(y),
+        /// Inverse of the 5th-order smoothstep function
         (y)inverse_smootherstep v inverse_smootherstep(x),
         (x) [k: Float] smooth_interpolator v smooth_interpolator_vs(y),
+        (y) [k: Float] smooth_interpolator_inverse v smooth_interpolator_inverse_vs(x),
+        /// Step function that returns 0.0 if x < edge and 1.0 if x >= edge
         (x) [edge: Float] step v step_vs(y),
+        /// Linear interpolation between scalars a and b by x, where x is in the range [0, 1]
         (x) [a: Float, b: Float] lerp vs lerp_vs(y),
+        /// Raises x to the power of exp, where exp is an integer
         (x) [exp: Int32] powi vs powi_vs(y),
+        /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+        ///
+        /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
         (x) [a: Float, c: Float] gaussian vs gaussian_vs(y)
     ]
 }

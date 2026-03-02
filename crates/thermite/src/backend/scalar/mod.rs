@@ -8,7 +8,7 @@ use crate::{
     element::USize,
     isa::InstructionSet,
     register::{Element, ExtendRegister, MaskElement, Storage, dp::DoublePumpRegister},
-    simd::{NativeIsa, NativeSimd, Simd},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,9 +20,11 @@ pub mod prelude {
     pub use crate::prelude::*;
 }
 
-impl NativeIsa for Scalar {
+impl HasIsa for Scalar {
     const ISA: InstructionSet = InstructionSet::Scalar;
+}
 
+impl NativeIsa for Scalar {
     type Registers = generic_array::typenum::U16;
 
     type Native32Width = generic_array::typenum::U1;

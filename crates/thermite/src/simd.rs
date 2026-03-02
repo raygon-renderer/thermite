@@ -37,10 +37,12 @@ pub struct Align32;
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Align64;
 
-#[rustfmt::skip]
-pub trait NativeIsa: Clone + Copy + PartialEq + Eq + Hash {
+pub trait HasIsa {
     const ISA: InstructionSet;
+}
 
+#[rustfmt::skip]
+pub trait NativeIsa: HasIsa + Clone + Copy + PartialEq + Eq + Hash {
     type Registers: ArrayLength;
 
     /// Largest native 32-bit SIMD width

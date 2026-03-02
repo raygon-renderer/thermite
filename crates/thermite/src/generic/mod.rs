@@ -269,13 +269,9 @@ impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::
 ///
 /// Provides the basis for further specialized vector traits.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
-pub trait GenericVector:
-    Sized
-    + Default
-    + Copy
-    + core::fmt::Debug
-    + 'static
+pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + GenericSelectable<SelectableMask = Self::Mask>
+    + crate::simd::HasIsa
 {
     /// Scalar element type of the vector.
     type Element: Element;
@@ -285,9 +281,6 @@ pub trait GenericVector:
 
     /// Number of lanes in the vector.
     const LANES: usize;
-
-    /// The instruction set used by this vector type.
-    const ISA: InstructionSet;
 
     /// Number of lanes in the vector, as a typenum.
     type Lanes: Lanes;

@@ -56,6 +56,7 @@ macro_rules! decl_math {
         #[doc = "which uses the [`DefaultPolicy`]. All floating-point vector types that implement"]
         #[doc = "the necessary internal math operations will automatically implement this trait, and"]
         #[doc = "the [`" $trait "Math`] trait as well for all types that implement this one."]
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
         pub trait [<$trait MathWithPolicy>] $(: $($bound +)+)? {$(
             $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -74,6 +75,7 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "All methods here have an associated method in [`" $trait "MathWithPolicy`] with a `_p` suffix"]
         #[doc = "that accepts a policy parameter as the first generic argument."]
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
         pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
             $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -85,10 +87,19 @@ macro_rules! decl_math {
         impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
 
         // Note: The FloatVector<Element = E> bound is necessary to ensure E is bounded.
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
         impl<E, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
             where V: specialized::[<Specialized $trait Math>]<E>
         {$(
-            #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+            #[cfg(not(feature = "disable_dispatch"))]
+            $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            {
+                <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*)
+            }
+
+            #[cfg(feature = "disable_dispatch")]
+            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             {
                 <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*)
@@ -115,13 +126,13 @@ decl_math! {
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        fn poly[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn poly[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
 
         /// Computes the polynomial with the given coefficients at `self`, but with the coefficients in reverse order.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        fn poly_rev[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn poly_rev[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
 
         /// Computes the ratio of two polynomials at `self`, given the numerator and denominator coefficients.
         ///
@@ -129,12 +140,11 @@ decl_math! {
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        fn poly_rational[const N: usize, const D: usize][N, D](
+        #[skip_dispatch] fn poly_rational[const N: usize, const D: usize][N, D](
             self: Self,
             numerator: &[Self::Element; N],
             denominator: &[Self::Element; D],
         ) -> Self;
-
 
         /// Returns the multiplicative inverse of `self`, which is `1 / self`.
         ///
@@ -311,7 +321,7 @@ decl_math! {
     trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
         /// default tolerance to use for numerical methods.
-        fn tolerance[][]() -> Self;
+        #[skip_dispatch] fn tolerance[][]() -> Self;
 
         /// Converts angles from radians to degrees.
         fn to_degrees[][](self: Self) -> Self;

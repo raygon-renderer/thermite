@@ -142,6 +142,8 @@ pub use divider::{BranchfreeDivider, Divider};
 pub use mask::Mask;
 pub use swizzle::Swizzle;
 pub use vector::{MaskOf, Vector};
+pub use isa::InstructionSet;
+pub use simd::HasIsa;
 
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
 #[inline]

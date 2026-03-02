@@ -1,0 +1,17 @@
+[package]
+name = "thermite-dispatch"
+version = "0.1.0"
+authors = ["novacrazy <novacrazy@gmail.com>"]
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+proc-macro2 = "1"
+syn = { version = "2", features = ["full", "extra-traits", "visit", "visit-mut"] }
+
+[features]
+neon = []
+wasm = []

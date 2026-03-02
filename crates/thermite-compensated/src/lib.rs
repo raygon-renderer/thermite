@@ -885,13 +885,16 @@ impl<V: CompensatedFloatVector> GenericSelectable for Compensated<V> {
     }
 }
 
+impl<V: thermite::simd::HasIsa> thermite::simd::HasIsa for Compensated<V> {
+    const ISA: thermite::isa::InstructionSet = V::ISA;
+}
+
 #[rustfmt::skip]
 impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     type Element = Compensated<V::Element>;
 
     const EMPTY: Self = Self::new(V::ZERO);
     const LANES: usize = V::LANES;
-    const ISA: thermite::isa::InstructionSet = V::ISA;
 
     type Lanes = V::Lanes;
 

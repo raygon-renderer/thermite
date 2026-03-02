@@ -6,6 +6,15 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib", "staticlib"] # Both dynamic and static
 
+[features]
+default = ["high_performance", "high_precision"] # Enable all policies by default
+
+high_performance = [] # Enable high-performance policy
+high_precision = []   # Enable high-precision policy
+
+# Disable dispatch in thermite for maximum performance, but massive code bloat
+disable_dispatch = ["thermite/disable_dispatch", "thermite-special/disable_dispatch"]
+
 [dependencies]
 paste = "1"
 thermite = { path = "../thermite", default-features = false }

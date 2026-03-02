@@ -3,8 +3,12 @@ name = "thermite-special"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+disable_dispatch = ["thermite/disable_dispatch"] # Disable dispatch in thermite for maximum performance, but massive code bloat
+
 [dependencies]
-thermite = { path = "../thermite/", default-features = false }
+thermite = { path = "../thermite", default-features = false }
+thermite-dispatch = { path = "../dispatch", default-features = false }
 paste = "1"
 
 [dev-dependencies]

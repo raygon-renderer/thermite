@@ -28,6 +28,7 @@ macro_rules! decl_math {
         /// which uses the [`DefaultPolicy`]. All floating-point vector types that implement
         /// the necessary internal math operations will automatically implement this trait, and
         /// the [`SpecialMath`] trait as well for all types that implement this one.
+        #[thermite_dispatch::dispatch(Self)]
         pub trait SpecialMathWithPolicy: TranscendentalMathWithPolicy {$(
             $(#[$meta])*
             fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
@@ -44,6 +45,7 @@ macro_rules! decl_math {
         ///
         /// All methods here have an associated method in [`SpecialMathWithPolicy`] with a `_p` suffix
         /// that accepts a policy parameter as the first generic argument.
+        #[thermite_dispatch::dispatch(Self)]
         pub trait SpecialMath: SpecialMathWithPolicy {$(
             $(#[$meta])*
             #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
@@ -55,11 +57,20 @@ macro_rules! decl_math {
 
         impl<M> SpecialMath for M where M: SpecialMathWithPolicy {}
 
+        #[thermite_dispatch::dispatch(Self)]
         impl<E, V: FloatVector<Element = E>> SpecialMathWithPolicy for V
         where
             V: SpecializedSpecialMath<E>,
         {$(
-            #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+            #[cfg(not(feature = "disable_dispatch"))]
+            $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            {
+                V::$name::<P, $($generic_names),*>($($arg_name),*)
+            }
+
+            #[cfg(feature = "disable_dispatch")]
+            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             {
                 V::$name::<P, $($generic_names),*>($($arg_name),*)

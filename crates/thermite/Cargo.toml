@@ -13,6 +13,11 @@ default = ["document_registers"]
 # using compensated arithmetic.
 disable_fast_fma = []
 
+# Disable all static dispatch on the SIMD ISA, instead opting for an #[inline(always)] signatures.
+# This will bloat code, and if you do not guarantee that the function will be inlined, it will be very slow.
+# Only enable this feature if you know what you're doing.
+disable_dispatch = []
+
 std = ["num-traits/std"] # required for decent scalar support
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 document_registers = []
@@ -33,6 +38,7 @@ std_simd = ["nightly", "std"]
 
 [dependencies]
 thermite-macros = { path = "../thermite-macros" }
+thermite-dispatch = { path = "../dispatch" }
 fast_polynomial = { version = "0.4", default-features = false }
 generic-array = { git = "https://github.com/fizyk20/generic-array", features = ["bitvec"] }
 bitvec = { version = "1.0.1", default-features = false }

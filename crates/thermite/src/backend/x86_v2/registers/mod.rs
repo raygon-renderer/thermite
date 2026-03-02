@@ -23,15 +23,17 @@ use crate::{
     element::FindUSize,
     isa::InstructionSet,
     register::{IndexableRegister, Storage, dp::DoublePumpRegister, reduced::HalfRegister2},
-    simd::{NativeIsa, NativeSimd, Simd},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct X86V2;
 
-impl NativeIsa for X86V2 {
+impl HasIsa for X86V2 {
     const ISA: InstructionSet = InstructionSet::X86V2;
+}
 
+impl NativeIsa for X86V2 {
     type Registers = generic_array::typenum::U16;
 
     type Native32Width = generic_array::typenum::U4;
