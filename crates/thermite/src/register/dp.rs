@@ -9,8 +9,8 @@ use crate::{divider::vector::VectorDivider, isa::InstructionSet};
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister, CoreRegister,
     ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register,
-    MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
-    SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
+    MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
+    SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -590,8 +590,7 @@ where
     #[conditional] fn next_up(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_down(value: Storage<Self>) -> Storage<Self> {}
 
-    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
-    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
+    const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 
     unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
         unsafe { Self(R::native_ldexp(value.0, exp.0), R::native_ldexp(value.1, exp.1)) }
@@ -602,6 +601,69 @@ where
         let (hi_val, hi_exp) = unsafe { R::native_frexp(value.1) };
 
         (Self(lo_val, hi_val), DoublePumpRegister(lo_exp, hi_exp))
+    }
+
+    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (lo_sin, lo_cos) = unsafe { R::native_sin_cos(value.0) };
+        let (hi_sin, hi_cos) = unsafe { R::native_sin_cos(value.1) };
+
+        (Self(lo_sin, hi_sin), Self(lo_cos, hi_cos))
+    }
+
+    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_sin(value.0) },
+            unsafe { R::native_sin(value.1) },
+        )
+    }
+
+    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_cos(value.0) },
+            unsafe { R::native_cos(value.1) },
+        )
+    }
+
+    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_tan(value.0) },
+            unsafe { R::native_tan(value.1) },
+        )
+    }
+
+    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_exp2(value.0) },
+            unsafe { R::native_exp2(value.1) },
+        )
+    }
+
+    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_log2(value.0) },
+            unsafe { R::native_log2(value.1) },
+        )
+    }
+
+    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_exp(value.0) },
+            unsafe { R::native_exp(value.1) },
+        )
+    }
+
+    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_ln(value.0) },
+            unsafe { R::native_ln(value.1) },
+        )
+    }
+
+    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+        Self(
+            unsafe { R::native_powf(base.0, exp.0) },
+            unsafe { R::native_powf(base.1, exp.1) },
+        )
     }
 }
 

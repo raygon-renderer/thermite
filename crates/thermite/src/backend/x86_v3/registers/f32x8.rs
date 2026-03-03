@@ -4,9 +4,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        dp::DoublePumpRegister, empty_reg, reg,
+        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+        ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -621,8 +621,7 @@ impl FloatRegister for F32x8V3 {
         unsafe { arch::_mm256_nextdownps_v3(value) }
     }
 
-    const HAS_NATIVE_LDEXP: bool = false;
-    const HAS_NATIVE_FREXP: bool = false;
+    const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
 impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {

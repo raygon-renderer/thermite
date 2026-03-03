@@ -35,12 +35,82 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
+        if const {
+            P::POLICY.precision.le(PrecisionPolicy::Average)
+                && Self::NATIVE_CAP.has(NativeCapability::SIN | NativeCapability::COS)
+        } {
+            return unsafe { self.native_sin_cos() };
+        }
+
         sin_cos_f_internal::<P, V, false>(self)
     }
 
     #[inline(always)]
+    fn sin<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::SIN) } {
+            return unsafe { self.native_sin() };
+        }
+
+        self.sin_cos::<P>().0
+    }
+
+    #[inline(always)]
+    fn cos<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::COS) } {
+            return unsafe { self.native_cos() };
+        }
+
+        self.sin_cos::<P>().1
+    }
+
+    #[inline(always)]
+    fn tan<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::TAN) } {
+            return unsafe { self.native_tan() };
+        }
+
+        let (s, c) = self.sin_cos::<P>();
+        s / c
+    }
+
+    #[inline(always)]
     fn sincos_pi<P: Policy>(self) -> (Self, Self) {
+        if const {
+            P::POLICY.precision.le(PrecisionPolicy::Average)
+                && Self::NATIVE_CAP.has(NativeCapability::SIN | NativeCapability::COS)
+        } {
+            return unsafe { (self * Self::PI).native_sin_cos() };
+        }
+
         sin_cos_f_internal::<P, V, true>(self)
+    }
+
+    #[inline(always)]
+    fn sin_pi<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::SIN) } {
+            return unsafe { (self * Self::PI).native_sin() };
+        }
+
+        self.sincos_pi::<P>().0
+    }
+
+    #[inline(always)]
+    fn cos_pi<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::COS) } {
+            return unsafe { (self * Self::PI).native_cos() };
+        }
+
+        self.sincos_pi::<P>().1
+    }
+
+    #[inline(always)]
+    fn tan_pi<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::TAN) } {
+            return unsafe { (self * Self::PI).native_tan() };
+        }
+
+        let (s, c) = self.sincos_pi::<P>();
+        s / c
     }
 
     #[inline(always)]
@@ -370,6 +440,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::POWF) } {
+            return unsafe { self.native_powf(y) };
+        }
+
         let x0 = self;
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
@@ -966,6 +1040,16 @@ fn pow2n_f<V: FloatVectorWithBits<Element = f32>>(n: V) -> V {
 
 #[inline(always)]
 fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: u8>(x0: V) -> V {
+    if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+        if const { V::NATIVE_CAP.has(NativeCapability::EXP) && MODE == EXP_MODE_EXP } {
+            return unsafe { x0.native_exp() };
+        }
+
+        if const { V::NATIVE_CAP.has(NativeCapability::EXP2) && MODE == EXP_MODE_POW2 } {
+            return unsafe { x0.native_exp2() };
+        }
+    }
+
     let mut x = x0;
     let mut r;
 
@@ -1020,23 +1104,23 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
                 x *= V::LN_2;
             }
             EXP_MODE_POW10 => {
-                let log10_2_hi = V::splat(0.301025391); // log10(2) in two parts
-                let log10_2_lo = V::splat(4.60503907E-6);
+                let log10_2_hi = V::splat(-0.301025391); // log10(2) in two parts
+                let log10_2_lo = V::splat(-4.60503907E-6);
 
                 r = (x0 * V::splat(LN_10 * LOG2_E)).round();
 
-                x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
-                x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
+                x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
+                x = r.mul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
                 x *= V::LN_10;
             }
             EXP_MODE_EXP | EXP_MODE_EXPM1 | EXP_MODE_EXPH => {
-                let ln2f_hi = V::splat(0.693359375);
-                let ln2f_lo = V::splat(-2.12194440e-4);
+                let ln2f_hi = V::splat(-0.693359375);
+                let ln2f_lo = V::splat(2.12194440e-4);
 
                 r = (x0 * V::LOG2_E).round();
 
-                x = r.nmul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
-                x = r.nmul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
+                x = r.mul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
+                x = r.mul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
 
                 if const { MODE == EXP_MODE_EXPH } {
                     r -= V::ONE;
@@ -1091,6 +1175,10 @@ fn exponent<V: FloatVectorWithBits<Element = f32>>(x: V) -> V::SignedBits {
 
 #[inline(always)]
 fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
+    if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LOG2) } {
+        return unsafe { x.native_log2() };
+    }
+
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // // https://github.com/nadavrot/fast_log/blob/83bd112c330976c291300eaa214e668f809367ab/src/log_approx.cc#L47
         // return fraction2::<V>(x).poly_p::<P, _>(&[-3.21430967, 6.30371424, -4.42852392, 1.33755322])
@@ -1107,6 +1195,10 @@ fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
 
 #[inline(always)]
 fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
+    if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LOG2) } {
+        return unsafe { x.native_log2() * V::LOG10_2 };
+    }
+
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // ln(x) * LOG10_E
         // between 1e-4 and 1000, avg error: 0.00212, max error 0.0173 at 31.999878
@@ -1119,6 +1211,11 @@ fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
 
 #[inline(always)]
 fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: bool>(x0: V) -> V {
+    // TODO: How to handle P1?
+    if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LN) && !P1 } {
+        return unsafe { x0.native_ln() };
+    }
+
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         let x1 = if P1 { x0 + V::ONE } else { x0 };
 

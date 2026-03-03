@@ -14,7 +14,7 @@ use crate::{
     element::{FloatElementWithBits, UnsignedIntegerElement},
     isa::InstructionSet,
     math::FloatConsts,
-    register::{Element, FloatElement, Lanes},
+    register::{Element, FloatElement, Lanes, NativeCapability},
 };
 
 /// Simple associated constant splat trait.
@@ -1269,11 +1269,19 @@ pub trait FloatVectorWithBits:
             Element = <Self::Element as FloatElementWithBits>::Bits,
         > + FullyInteroperable<Self, Self::SignedBits>;
 
-    const HAS_NATIVE_LDEXP: bool;
-    const HAS_NATIVE_FREXP: bool;
+    const NATIVE_CAP: NativeCapability;
 
     unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self;
     unsafe fn native_frexp(self) -> (Self, Self::SignedBits);
+    unsafe fn native_sin_cos(self) -> (Self, Self);
+    unsafe fn native_sin(self) -> Self;
+    unsafe fn native_cos(self) -> Self;
+    unsafe fn native_tan(self) -> Self;
+    unsafe fn native_exp2(self) -> Self;
+    unsafe fn native_log2(self) -> Self;
+    unsafe fn native_exp(self) -> Self;
+    unsafe fn native_ln(self) -> Self;
+    unsafe fn native_powf(self, exp: Self) -> Self;
 
     /// Return a signed integer vector that is capable of encapsulating
     /// the "total order" of the floating point values in this vector,

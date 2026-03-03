@@ -2,18 +2,13 @@
 
 use core::{marker::PhantomData, ops::Sub};
 
-use crate::{
-    BranchfreeDivider, Divider,
-    divider::vector::VectorDivider,
-    isa::InstructionSet,
-    register::{ExtendRegister, IndexableRegister},
-};
+use crate::{BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet};
 
 use super::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, FloatRegister,
-    IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, MaskRegister, NumericRegister, PartialOrdRegister,
-    Register, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-    ValidLinAlg3Length, ZeroUpper,
+    BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
+    FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, MaskRegister,
+    NativeCapability, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
+    SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -752,8 +747,7 @@ where
 
     const EXP_MASK: Storage<Self::Bits> = ReducedRegister(R::EXP_MASK, PhantomData);
 
-    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
-    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
+    const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 
     unsafe fn block_autovectorization(value: &mut Storage<Self>) {
         unsafe { R::block_autovectorization(&mut value.0) }
@@ -766,6 +760,43 @@ where
     unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
         let (val, exp) = unsafe { R::native_frexp(value.0) };
         (Self(val, PhantomData), ReducedRegister(exp, PhantomData))
+    }
+
+    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, c) = unsafe { R::native_sin_cos(value.0) };
+        (Self(s, PhantomData), Self(c, PhantomData))
+    }
+
+    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_sin(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_cos(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_tan(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_exp2(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_log2(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_exp(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_ln(value.0) }, PhantomData)
+    }
+
+    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_powf(base.0, exp.0) }, PhantomData)
     }
 
     fn total_order(value: Storage<Self>) -> Storage<Self::SignedBits> {}

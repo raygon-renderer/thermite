@@ -9,6 +9,7 @@ use crate::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
         policy::policies::{ExtraPrecision, LessPrecision},
     },
+    register::NativeCapability,
     vector::num::NumVector,
 };
 
@@ -27,7 +28,7 @@ where
 pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     #[inline(always)]
     fn ldexp<P: Policy>(self, exp: Self::SignedBits) -> Self {
-        if const { Self::HAS_NATIVE_LDEXP } {
+        if const { Self::NATIVE_CAP.has(NativeCapability::LDEXP) } {
             return unsafe { Self::native_ldexp(self, exp) };
         }
 
@@ -73,7 +74,7 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
     #[inline(always)]
     fn frexp<P: Policy>(self) -> (Self, Self::SignedBits) {
-        if const { Self::HAS_NATIVE_FREXP } {
+        if const { Self::NATIVE_CAP.has(NativeCapability::FREXP) } {
             return unsafe { Self::native_frexp(self) };
         }
 

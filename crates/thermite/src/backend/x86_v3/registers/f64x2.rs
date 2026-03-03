@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper,
-        dp::DoublePumpRegister, empty_reg, reg,
+        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+        WideRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -539,8 +539,7 @@ impl FloatRegister for F64x2V3 {
         unsafe { arch::_mm_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
     }
 
-    const HAS_NATIVE_LDEXP: bool = false;
-    const HAS_NATIVE_FREXP: bool = false;
+    const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
 impl CastRegister<<Scalar as Simd>::f32x2> for F64x2V3 {

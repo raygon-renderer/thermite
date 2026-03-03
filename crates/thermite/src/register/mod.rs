@@ -1375,6 +1375,30 @@ where
     lhs
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct NativeCapability(pub u64);
+
+impl NativeCapability {
+    pub const fn has(&self, cap: u64) -> bool {
+        (self.0 & cap) == cap
+    }
+
+    pub const NONE: Self = Self(0);
+
+    pub const LDEXP: u64 = 1 << 0;
+    pub const FREXP: u64 = 1 << 1;
+
+    pub const SIN: u64 = 1 << 2;
+    pub const COS: u64 = 1 << 3;
+    pub const TAN: u64 = 1 << 4;
+    pub const EXP2: u64 = 1 << 5;
+    pub const LOG2: u64 = 1 << 6;
+    pub const EXP: u64 = 1 << 7;
+    pub const LN: u64 = 1 << 8;
+    pub const POWF: u64 = 1 << 9;
+}
+
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait FloatRegister:
     SignedRegister<Element: FloatElementWithBits>
@@ -1402,8 +1426,7 @@ pub trait FloatRegister:
 
     const EXP_MASK: Storage<Self::Bits>;
 
-    const HAS_NATIVE_LDEXP: bool;
-    const HAS_NATIVE_FREXP: bool;
+    const NATIVE_CAP: NativeCapability;
 
     unsafe fn block_autovectorization(_value: &mut Storage<Self>) {}
 
@@ -1413,6 +1436,42 @@ pub trait FloatRegister:
 
     unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
         unreachable!("native_frexp is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unreachable!("native_sin_cos is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_sin is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_cos is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_tan is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_exp2 is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_ln2 is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_exp is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_log is not implemented for this FloatRegister");
+    }
+
+    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+        unreachable!("native_powf is not implemented for this FloatRegister");
     }
 
     fn total_order(value: Storage<Self>) -> Storage<Self::SignedBits> {

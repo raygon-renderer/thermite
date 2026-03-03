@@ -916,25 +916,25 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         EXP_MODE_POW10 => {
             max_x = 307.65;
 
-            let log10_2_hi = V::splat(0.30102999554947019); // log10(2) in two parts
-            let log10_2_lo = V::splat(1.1451100899212592E-10);
+            let log10_2_hi = V::splat(-0.30102999554947019); // log10(2) in two parts
+            let log10_2_lo = V::splat(-1.1451100899212592E-10);
 
             r = (x0 * V::splat(LN_10 * LOG2_E)).round();
 
-            x = r.nmul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
-            x = r.nmul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
+            x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
+            x = r.mul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
             x *= V::LN_10;
         }
         _ => {
             max_x = const { if MODE == EXP_MODE_EXP { 708.39 } else { 709.7 } };
 
-            let ln2d_hi = V::splat(0.693145751953125);
-            let ln2d_lo = V::splat(1.42860682030941723212E-6);
+            let ln2d_hi = V::splat(-0.693145751953125);
+            let ln2d_lo = V::splat(-1.42860682030941723212E-6);
 
             r = (x0 * V::splat(LOG2_E)).round();
 
-            x = r.nmul_adde(ln2d_hi, x); // x -= r * ln2_hi;
-            x = r.nmul_adde(ln2d_lo, x); // x -= r * ln2_lo;
+            x = r.mul_adde(ln2d_hi, x); // x -= r * ln2_hi;
+            x = r.mul_adde(ln2d_lo, x); // x -= r * ln2_lo;
 
             if MODE == EXP_MODE_EXPH {
                 r -= V::ONE;

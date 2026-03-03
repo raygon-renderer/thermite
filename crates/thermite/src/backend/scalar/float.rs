@@ -8,9 +8,9 @@ use crate::generic::ops::MulAddExt;
 use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
-    IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-    PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-    ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+    IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability, NumericRegister,
+    PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+    UnsignedIntegerRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -258,8 +258,7 @@ impl FloatRegister for [<f $width>] {
     #[inline(always)] fn next_down(value: Storage<Self>) -> Storage<Self> { FloatElement::next_down(value) }
 
     // TODO: maybe at some point?
-    const HAS_NATIVE_LDEXP: bool = false;
-    const HAS_NATIVE_FREXP: bool = false;
+    const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 
     #[inline(always)] unsafe fn block_autovectorization(value: &mut Storage<Self>) {
         unsafe {

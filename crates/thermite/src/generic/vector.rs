@@ -7,8 +7,8 @@ use crate::{
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister, Element,
         ExtendRegister, FloatElement, FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register,
-        LinAlg4Register, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
-        SwizzleRegister, UnsignedIntegerRegister,
+        LinAlg4Register, NativeCapability, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
+        SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -544,8 +544,7 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
     type SignedBits = Vector<R::SignedBits>;
     type Bits = Vector<R::Bits>;
 
-    const HAS_NATIVE_LDEXP: bool = R::HAS_NATIVE_LDEXP;
-    const HAS_NATIVE_FREXP: bool = R::HAS_NATIVE_FREXP;
+    const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 
     #[inline(always)] unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self {
         unsafe { Vector(R::native_ldexp(self.0, exp.0)) }
@@ -555,6 +554,20 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
         let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
         (Vector(mantissa), Vector(exp))
     }
+
+    #[inline(always)] unsafe fn native_sin_cos(self) -> (Self, Self) {
+        let (sin, cos) = unsafe { R::native_sin_cos(self.0) };
+        (Vector(sin), Vector(cos))
+    }
+
+    #[inline(always)] unsafe fn native_sin(self) -> Self { unsafe { Vector(R::native_sin(self.0)) } }
+    #[inline(always)] unsafe fn native_cos(self) -> Self { unsafe { Vector(R::native_cos(self.0)) } }
+    #[inline(always)] unsafe fn native_tan(self) -> Self { unsafe { Vector(R::native_tan(self.0)) } }
+    #[inline(always)] unsafe fn native_exp2(self) -> Self { unsafe { Vector(R::native_exp2(self.0)) } }
+    #[inline(always)] unsafe fn native_log2(self) -> Self { unsafe { Vector(R::native_log2(self.0)) } }
+    #[inline(always)] unsafe fn native_exp(self) -> Self { unsafe { Vector(R::native_exp(self.0)) } }
+    #[inline(always)] unsafe fn native_ln(self) -> Self { unsafe { Vector(R::native_ln(self.0)) } }
+    #[inline(always)] unsafe fn native_powf(self, exp: Self) -> Self { unsafe { Vector(R::native_powf(self.0, exp.0)) } }
 
     #[inline(always)] fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
 }
