@@ -41,7 +41,7 @@ jobs:
               run: cargo build --profile release-ffi -p thermite-ffi --target ${{ matrix.target }}
 
             - name: Generate C Header
-              run: cbindgen --config thermite/thermite-ffi/cbindgen.toml --crate thermite-ffi --output thermite.h
+              run: cbindgen --config crates/thermite-ffi/cbindgen.toml --crate thermite-ffi --output thermite.h
 
             - name: Package artifacts
               shell: bash
