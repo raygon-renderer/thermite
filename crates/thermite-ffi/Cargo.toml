@@ -6,6 +6,7 @@ edition = "2024"
 [lib]
 name = "thermite"
 crate-type = ["cdylib", "staticlib"] # Both dynamic and static
+doc = false
 
 [features]
 default = ["high_performance", "high_precision"] # Enable all policies by default
