@@ -140,8 +140,8 @@ where
 }
 
 impl<R: Register> GenericMask for Mask<R> {
-    const FALSY: Self = Mask::<R>::FALSY;
-    const TRUTHY: Self = Mask::<R>::TRUTHY;
+    const FALSY: Self = Mask(<R::Mask as MaskRegister>::FALSY);
+    const TRUTHY: Self = Mask(<R::Mask as MaskRegister>::TRUTHY);
 
     #[inline(always)]
     fn all(self) -> bool {
