@@ -34,8 +34,8 @@ jobs:
             - name: Setup Rust cache
               uses: Swatinem/rust-cache@v2
 
-            - name: Install cbindgen and cargo-expand
-              run: cargo install cbindgen cargo-expand
+            - name: Install cbindgen
+              run: cargo install cbindgen
 
             - name: Generate C Header
               run: cbindgen --config crates/thermite-ffi/cbindgen.toml --crate thermite-ffi --output thermite.h
@@ -47,11 +47,11 @@ jobs:
               shell: bash
               run: |
                   mkdir -p staging
-                  cp target/release-ffi/${{ matrix.artifact_name }} staging/
+                  cp target/${{ matrix.target }}/release-ffi/${{ matrix.artifact_name }} staging/
                   cp thermite.h staging/
                   cd staging
                   if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-                    cp ../target/release-ffi/thermite.dll.lib ./
+                    cp ../target/${{ matrix.target }}/release-ffi/thermite.dll.lib ./
 
                     7z a../${{ matrix.archive_name }} *
                   else

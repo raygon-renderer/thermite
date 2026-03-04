@@ -25,3 +25,6 @@ Intf = "int32_t"
 Int = "int64_t"
 Floatf = "float"
 Float = "double"
+
+[parse.expand]
+crates = ["thermite-ffi"]
