@@ -5,7 +5,9 @@ edition = "2024"
 categories = ["no_std"]
 
 [features]
-default = ["document_registers"]
+default = ["document_registers", "macros"]
+
+macros = [] # Include `dispatch` in the exports
 
 # Disable Fast FMA emulation to ensure correctness, instead using scalar libm fma,
 # which is very, very slow. Only set this feature if you need bitwise identical results with
@@ -18,9 +20,9 @@ disable_fast_fma = []
 # Only enable this feature if you know what you're doing.
 disable_dispatch = []
 
+document_registers = []
 std = ["num-traits/std"] # required for decent scalar support
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
-document_registers = []
 neon = []
 
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
@@ -35,15 +37,14 @@ avx512-tier4 = ["avx512-tier3"] # Cutting-edge AVX512 CPUs
 nightly = []
 std_simd = ["nightly", "std"]
 
-
 [dependencies]
 thermite-macros = { path = "../thermite-macros" }
 thermite-dispatch = { path = "../dispatch" }
+libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 fast_polynomial = { version = "0.4", default-features = false }
 generic-array = { git = "https://github.com/fizyk20/generic-array", features = ["bitvec"] }
 bitvec = { version = "1.0.1", default-features = false }
 const-default = { version = "1.0.0", default-features = false }
-libm = "0.2.13"
 paste = "1.0.15"
 num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"

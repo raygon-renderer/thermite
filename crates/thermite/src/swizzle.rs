@@ -75,7 +75,7 @@ where
 /// If compiling with optimizations enabled, this macro will usually generate
 /// efficient swizzle/permutation instructions.
 ///
-/// This works for any type that implements the [`Swizzle`] trait, such as [`Vector`] and [`Mask`].
+/// This works for any type that implements the [`Swizzle`] trait, such as [`Vector`].
 ///
 /// The indices can either be given as a constant literal array, or an expression that evaluates to
 /// a `GenericArray<u32, R::Lanes>` for dynamic shuffling.

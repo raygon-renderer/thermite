@@ -450,6 +450,12 @@ pub trait Register:
         unsafe { core::ptr::write(ptr as *mut Storage<Self>, value) }
     }
 
+    /// # Safety
+    ///
+    /// The pointer must be valid, align, and point to a memory location where, when the mask is true,
+    /// is valid for writing a value of type `Self::Element`.
+    ///
+    /// The memory locations where the mask is false are not accessed.
     unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
         unsafe {
             let res = Self::as_array(&value);
@@ -1375,6 +1381,14 @@ where
     lhs
 }
 
+/// Native Capability bitflags
+///
+/// Some backends may provide "native" implementations of certain functions. For example,
+/// BigInt/BigFloat may support native ldexp/frexp in ways that will be much faster than bitcasting
+/// and manipulating that way.
+///
+/// GPUs may also have native instructions for transcendentals, which the Math library can take
+/// advantage of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct NativeCapability(pub u64);
@@ -1428,48 +1442,88 @@ pub trait FloatRegister:
 
     const NATIVE_CAP: NativeCapability;
 
+    /// LLVM sometimes attempts to further autovectorize our vectorized code, and ends up making it far worse.
+    /// Inserting this into a tight loop will prevent that from happening,
+    /// and it has no effect on the generated code otherwise. No codegen is produced.
+    ///
+    /// # Safety
+    ///
+    /// This method is generally safe, but will drastically affect codegen. Use with caution.
     unsafe fn block_autovectorization(_value: &mut Storage<Self>) {}
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
         unreachable!("native_ldexp is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
         unreachable!("native_frexp is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unreachable!("native_sin_cos is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_sin is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_cos is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_tan is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp2 is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_ln2 is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_log is not implemented for this FloatRegister");
     }
 
+    /// # Safety
+    /// This method interfaces with underlying intrinsics and may produce undefined behavior on
+    /// invalid inputs. Use with caution.
     unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
         unreachable!("native_powf is not implemented for this FloatRegister");
     }

@@ -30,6 +30,9 @@ fn nightly_check() {
 pub extern crate bitvec;
 pub extern crate generic_array;
 
+#[cfg(feature = "macros")]
+pub use thermite_dispatch::dispatch;
+
 /// Creates a shuffle mask for various instructions. Note
 /// that the order of the arguments is reversed from the
 /// normal order of the lanes, so `MM_SHUFFLE!(3, 2, 1, 0)`

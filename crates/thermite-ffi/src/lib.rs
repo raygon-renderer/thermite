@@ -1,3 +1,34 @@
+//! Thermite SIMD-Accelerated batch operations for C-ABI applications.
+//!
+//! This crate provides a set of functions that take arbitrary length arrays and performs
+//! operations on them, often using SIMD-accelerated algorithms. The algorithms are designed
+//! to support the same pointer for inputs and outputs, so in-place mapping is implicit,
+//! but it does NOT support writing to different portions of the same array
+//! (i.e., giving an offset pointer to the output).
+//!
+//! To get the most performance, the library must be initialized with [`thermite_init`] or
+//! functions must be accessed via a custom-allocated [`VTable`]
+//! (exported to the C header as `Thermite`). Upon initialization, the vtable is populated
+//! with methods from the appropriate backend with the desired precision policy.
+//!
+//! Either the global or individual vtables can be initialized with a given precision policy,
+//! which affects the speed and accuracy of the results. See [`ThermitePrecisionPolicy`]
+//! for more on that.
+//!
+//! This library is primarily intended to be dynamically linked. To that end, code size has
+//! been reduced as much as reasonably possible while retaining performance, but as a result
+//! not all functions are inlined nor all loops unrolled. If a larger library binary is
+//! acceptable, the `disable_dispatch` crate feature will disable dispatch indirection and
+//! force all algorithms to be inlined. An example of this is how many functions here rely on
+//! the `exp` function internally. Enabling `disable_dispatch` will force the compiler to
+//! copy the entire `exp` implementation into each and every function that uses it,
+//! potentially improving performance by removing a function call and allowing LLVM
+//! to interweave the `exp` computation better, at the cost of bumping the binary size
+//! considerably.
+//!
+//! Furthermore, using a tool like `mpress` to compress the binary may be desired, but that's
+//! more of a personal preference in the end.
+
 // cargo expand -p thermite-ffi --all-features > ffi.rs && cbindgen -q -l c --crate thermite-ffi ffi.rs > ffi.h && echo "Done"
 // cargo build --profile release-ffi -p thermite-ffi && Copy-Item ../../target/release-ffi/thermite_ffi.dll && mpress -b -s thermite_ffi.dll && echo "Done"
 // cl.exe test.c /O2 /GL /link "../../target/release-ffi/thermite_ffi.dll.lib" ntdll.lib /LTCG /OPT:REF /OPT:ICF
