@@ -26,8 +26,8 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
 
-            - name: Install Stable Rust
-              uses: dtolnay/rust-toolchain@stable
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@nightly
               with:
                   targets: ${{ matrix.target }}
 
