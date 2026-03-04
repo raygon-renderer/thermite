@@ -33,7 +33,7 @@ jobs:
 
       - name: Generate timestamp HTML snippet
         run: |
-          echo "<div style='text-align: center; margin-top: 2rem; padding: 10px; font-size: 0.8em; color: #888;'>Last built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')</div>" > doc-footer.html
+          echo "<div style='position: absolute; bottom: 0; width: 100%; text-align: center; padding: 10px; font-size: 0.8em; color: #888;'>Last built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')</div>" > doc-footer.html
 
       - name: Build workspace documentation
         run: cargo doc --workspace --no-deps
