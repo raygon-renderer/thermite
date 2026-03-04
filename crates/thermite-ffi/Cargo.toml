@@ -5,7 +5,7 @@ edition = "2024"
 
 [lib]
 name = "thermite"
-crate-type = ["cdylib", "staticlib"] # Both dynamic and static
+crate-type = ["cdylib"]
 doc = false
 
 [features]
