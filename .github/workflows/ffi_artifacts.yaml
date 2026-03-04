@@ -1,4 +1,4 @@
-name: Build Thermite FFI Artifacts
+name: Thermite FFI Build
 
 on:
   push:
@@ -53,7 +53,7 @@ jobs:
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             cp ../target/${{ matrix.target }}/release-ffi/thermite.dll.lib ./
 
-            ../crates/thermite-ffi/tools/mpress.exe -b -s thermite.dll
+            ../crates/thermite-ffi/tools/mpress.exe -s thermite.dll
 
             7z a ../${{ matrix.archive_name }} *
           else
