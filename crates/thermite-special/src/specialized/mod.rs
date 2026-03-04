@@ -1,12 +1,16 @@
 #![allow(clippy::excessive_precision)]
 
 use thermite::{
-    generic::{GenericMask, NumericVector, PartialOrdVector},
+    mask::GenericMask,
     math::{
         CoreMathWithPolicy, FloatConsts, TranscendentalMathWithPolicy as _,
-        policy::{Policy, PrecisionPolicy, policies::ExtraPrecision},
+        policy::{
+            Policy, PrecisionPolicy,
+            policies::{ExtraPrecision, LessPrecision},
+        },
     },
     register::{Element, FloatElement},
+    vector::{NumericVector, PartialOrdVector},
 };
 
 use super::SpecialMathWithPolicy as _;

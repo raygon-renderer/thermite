@@ -4,6 +4,7 @@ use crate::{
     Vector,
     divider::Denominator,
     register::{Element, IntegerRegister, Lanes, Register, dp::DoublePumpRegister},
+    vector::GenericVector as _,
 };
 
 /// Precomputed multipliers and shifts for branchless vectorized division
@@ -57,7 +58,7 @@ where
         let mut multipliers = GenericArray::default();
         let mut shifts = GenericArray::default();
 
-        for ((m, s), d) in multipliers.iter_mut().zip(shifts.iter_mut()).zip(divisor.as_array()) {
+        for ((m, s), d) in multipliers.iter_mut().zip(shifts.iter_mut()).zip(divisor.as_slice()) {
             let divisor = d.try_to_branchfree_divider()?;
 
             *m = divisor.multiplier();
@@ -65,8 +66,8 @@ where
         }
 
         Ok(VectorDivider {
-            multipliers: Vector::from_array(multipliers),
-            shifts: Vector::from_array(shifts),
+            multipliers: Vector(R::new(multipliers)),
+            shifts: Vector(R::new(shifts)),
         })
     }
 }

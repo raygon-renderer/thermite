@@ -4,14 +4,15 @@ use generic_array::{
     typenum::{self, Unsigned},
 };
 
-use crate::generic::ops::MulAddExt;
-use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
     IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
     UnsignedIntegerRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
 };
+
+use crate::isa::InstructionSet;
+use crate::vector::ops::MulAddExt;
 
 #[rustfmt::skip]
 macro_rules! decl_float_scalar { ($f:ty $(: $s:ident)? => $width:literal) => {paste::paste! {

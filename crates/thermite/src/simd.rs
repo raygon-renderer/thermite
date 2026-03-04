@@ -662,7 +662,7 @@ macro_rules! decl_aliases {
     };
 }
 
-use crate::generic::{
+use crate::vector::{
     CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithBits, FloatVectorWithRegister,
     FullyInteroperable as FIV, GenericVector, IndexableVector, LinAlg4Vector, SignedIntegerVector,
     SignedIntegerVectorWithRegister, SwizzleVector, UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,

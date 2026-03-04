@@ -1,4 +1,4 @@
-use thermite::generic::{FloatVector, NumericVector};
+use thermite::vector::{FloatVector, NumericVector};
 
 use crate::map_reduce::MapReduceKernel;
 

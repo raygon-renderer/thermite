@@ -1,8 +1,9 @@
 use core::ops::{Add, Index, IndexMut, Mul, Sub};
 
 use thermite::{
-    generic::{FloatVector, GenericSelectable},
+    mask::GenericSelectable,
     math::policy::{DefaultPolicy, Policy},
+    vector::FloatVector,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

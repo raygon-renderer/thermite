@@ -3,7 +3,7 @@ use crate::{Compensated, CompensatedFloatVector, ScalarValue};
 use thermite::prelude::*;
 
 use thermite::element::FloatElementWithBits;
-use thermite::generic::AsFloatVectorWithBitsKernel;
+use thermite::vector::AsFloatVectorWithBitsKernel;
 
 use thermite::math::policy::{PrecisionPolicy, policies::CheckOverflow};
 use thermite::math::specialized::{

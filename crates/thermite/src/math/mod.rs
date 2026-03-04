@@ -14,7 +14,7 @@ pub mod policy;
 
 pub use consts::FloatConsts;
 
-use crate::generic::{FloatVector, FloatVectorWithBits};
+use crate::vector::{FloatVector, FloatVectorWithBits};
 
 pub mod algorithms;
 pub mod specialized;
@@ -22,7 +22,7 @@ pub mod specialized;
 use policy::{DefaultPolicy, Policy};
 
 pub mod prelude {
-    pub use crate::generic::FloatVector;
+    pub use crate::vector::FloatVector;
 
     pub use super::FloatConsts;
     pub use super::{

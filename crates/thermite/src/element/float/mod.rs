@@ -1,6 +1,6 @@
 use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
-use crate::generic::ops::MulAddExt;
 use crate::register::FloatRegister;
+use crate::vector::ops::MulAddExt;
 
 pub mod ph;
 

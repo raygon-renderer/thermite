@@ -11,6 +11,72 @@ use crate::{
     register::{BitwiseRegister, CastMaskRegister, Lanes, MaskRegister, NumericRegister, Register, Storage},
 };
 
+pub trait CastMask<FROM>: Sized {
+    fn mask_from(from: FROM) -> Self;
+}
+
+pub trait GenericSelectable: Copy {
+    type SelectableMask: Copy;
+
+    fn select<M>(mask: M, t: Self, f: Self) -> Self
+    where
+        Self::SelectableMask: CastMask<M>;
+}
+
+#[rustfmt::skip]
+pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
+    + CastMask<Self>
+    + BitAnd<Self, Output = Self> + BitAndAssign<Self>
+    + crate::vector::ops::BitAndNot<Self, Output = Self>
+    + crate::vector::ops::BitAndNotAssign<Self>
+    + BitOr<Self, Output = Self> + BitOrAssign<Self>
+    + BitXor<Self, Output = Self> + BitXorAssign<Self>
+    + Not<Output = Self>
+{
+    const TRUTHY: Self;
+    const FALSY: Self;
+
+    fn all(self) -> bool;
+    fn any(self) -> bool;
+    fn none(self) -> bool;
+
+    fn native_bitmask(&self) -> Option<u64>;
+
+    fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>>;
+
+    #[inline(always)]
+    fn select<S>(self, t: S, f: S) -> S
+    where
+        S: GenericSelectable<SelectableMask: CastMask<Self>>,
+    {
+        S::select(self, t, f)
+    }
+
+    #[inline(always)]
+    fn cast<INTO>(self) -> INTO
+    where
+        INTO: CastMask<Self>,
+    {
+        INTO::mask_from(self)
+    }
+
+    #[inline(always)]
+    fn swap<S>(self, a: &mut S, b: &mut S)
+    where
+        S: GenericSelectable<SelectableMask: CastMask<Self> + CastMask<S::SelectableMask>>,
+    {
+        let mask = S::SelectableMask::mask_from(self);
+
+        let a2 = S::select(mask, *a, *b);
+        let b2 = S::select(mask, *b, *a);
+
+        *a = a2;
+        *b = b2;
+    }
+
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+}
+
 /// SIMD Mask Vector, where each lane is a boolean value represented by
 /// all '1's' or '0's' bits in the underlying register.
 ///
@@ -62,109 +128,49 @@ impl<R: Register> Default for Mask<R> {
     }
 }
 
-impl<R: Register> Mask<R> {
-    /// The number of lanes in the mask register.
-    pub const LANES: usize = <R::Lanes as Unsigned>::USIZE;
-
-    /// A mask with all bits set to `true`.
-    pub const TRUTHY: Mask<R> = Mask(<R::Mask as MaskRegister>::TRUTHY);
-
-    /// A mask with all bits set to `false`.
-    pub const FALSY: Mask<R> = Mask(<R::Mask as MaskRegister>::FALSY);
-
-    /// Create a new mask from an array of `bool` values.
-    ///
-    /// This is not zero-cost, but is sufficiently efficient on modern platforms.
+impl<FROM, INTO> CastMask<Mask<FROM>> for Mask<INTO>
+where
+    FROM: Register,
+    INTO: Register<Mask: CastMaskRegister<FROM::Mask>>,
+{
     #[inline(always)]
-    pub fn new(values: impl Into<GenericArray<bool, R::Lanes>>) -> Self {
-        Self(R::Mask::new_mask(values.into()))
+    fn mask_from(from: Mask<FROM>) -> Self {
+        Mask(<INTO::Mask as CastMaskRegister<FROM::Mask>>::mask_from(from.0))
     }
+}
 
-    /// Create a mask with all bits set to the same boolean value.
-    #[inline(always)]
-    pub const fn splat(value: bool) -> Self {
-        if value { Self::TRUTHY } else { Self::FALSY }
-    }
+impl<R: Register> GenericMask for Mask<R> {
+    const FALSY: Self = Mask::<R>::FALSY;
+    const TRUTHY: Self = Mask::<R>::TRUTHY;
 
-    /// Cast this mask to another mask type.
     #[inline(always)]
-    pub fn cast<INTO: Register<Mask: CastMaskRegister<R::Mask>>>(self) -> Mask<INTO> {
-        Mask(<INTO::Mask as CastMaskRegister<R::Mask>>::mask_from(self.0))
-    }
-
-    /// Create a mask by casting from another mask type.
-    #[inline(always)]
-    pub fn from_mask<FROM: Register>(mask: Mask<FROM>) -> Mask<R>
-    where
-        R::Mask: CastMaskRegister<FROM::Mask>,
-    {
-        Mask(<R::Mask as CastMaskRegister<FROM::Mask>>::mask_from(mask.0))
-    }
-
-    /// Returns a bitmask representation of the mask as a native integer type, if supported.
-    ///
-    /// The bitmask will have one bit per lane in the register, with the least significant bit
-    /// corresponding to lane 0.
-    ///
-    /// If the register does not support native bitmask extraction, or it exceeds 64 lanes,
-    /// this will return `None`.
-    #[inline(always)]
-    pub fn native_bitmask(&self) -> Option<u64> {
-        <R::Mask as MaskRegister>::native_bitmask(self.0)
-    }
-
-    /// Returns a bitmask representation of the mask as a [`GenericBitArray`](generic_array::GenericBitArray).
-    ///
-    /// The length of this bitmask is determined by the number of lanes in the register, as
-    /// `ceil(LANES / 32)`, but with typenum's type-level integers. `u32` was chosen as the storage
-    /// type for better compatibility with the actual SIMD operations on most platforms.
-    #[inline(always)]
-    pub fn bitmask(&self) -> bitvec::array::BitArray<<R::Lanes as Lanes>::BitmaskStorage> {
-        <R::Mask as MaskRegister>::bitmask(self.0)
-    }
-
-    /// Returns `true` if **all** bits in the mask are `true`.
-    #[inline(always)]
-    pub fn all(self) -> bool {
+    fn all(self) -> bool {
         <R::Mask as MaskRegister>::all(self.0)
     }
 
-    /// Returns `true` if **any** bit in the mask is `true`.
     #[inline(always)]
-    pub fn any(self) -> bool {
+    fn any(self) -> bool {
         <R::Mask as MaskRegister>::any(self.0)
     }
 
-    /// Returns `true` if **none** of the bits in the mask are `true` (i.e. all bits are `false`).
     #[inline(always)]
-    pub fn none(self) -> bool {
+    fn none(self) -> bool {
         <R::Mask as MaskRegister>::none(self.0)
     }
 
-    /// For each lane in mask, if the lane is `true`, the corresponding lane in `truthy` is selected,
-    /// otherwise the corresponding lane in `falsy` is selected.
     #[inline(always)]
-    pub fn select<T, S>(self, truthy: T, falsy: T) -> T
-    where
-        T: Selectable<S>,
-        S: Register<Mask: CastMaskRegister<R::Mask, Lanes = R::Lanes>>,
-    {
-        T::select(self, truthy, falsy)
+    fn native_bitmask(&self) -> Option<u64> {
+        <R::Mask as MaskRegister>::native_bitmask(self.0)
     }
 
-    /// For each lane of the mask, if the lane is `true`, swap the corresponding lanes in `a` and `b`.
     #[inline(always)]
-    pub fn swap<S>(self, a: &mut Vector<S>, b: &mut Vector<S>)
-    where
-        S: Register<Mask: CastMaskRegister<R::Mask, Lanes = R::Lanes>>,
-    {
-        let mask = <S::Mask as CastMaskRegister<R::Mask>>::mask_from(self.0);
+    fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>> {
+        <R::Mask as MaskRegister>::bitmask(self.0)
+    }
 
-        let a2 = S::blendv(mask, a.0, b.0);
-        let b2 = S::blendv(mask, b.0, a.0);
-
-        a.0 = a2;
-        b.0 = b2;
+    #[inline(always)]
+    fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {
+        Mask(<R::Mask as BitwiseRegister>::ternlog::<IMM>(a.0, b.0, c.0))
     }
 }
 
@@ -211,7 +217,7 @@ where
     }
 }
 
-use crate::generic::ops::{BitAndNot, BitAndNotAssign};
+use crate::vector::ops::{BitAndNot, BitAndNotAssign};
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
 
 impl<R: Register> BitAnd for Mask<R> {

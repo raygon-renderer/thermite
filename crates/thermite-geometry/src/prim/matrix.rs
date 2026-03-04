@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
-use thermite::generic::FloatVector;
+use thermite::vector::FloatVector;
 
 use super::Vector;
 

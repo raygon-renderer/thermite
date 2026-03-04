@@ -187,7 +187,7 @@ macro_rules! decl_methods {
         ] ),+
     ) => {paste::paste! {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        pub const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
+        const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
             #[inline(never)] #[target_feature(enable = $feature)]
             unsafe extern "C" fn [<$mapping f_ $suffix>](len: usize, $($input: *const f32,)+ $($output: *mut f32,)+ $( $($scalar: [<$ty f>],)+ )?) {
                 unsafe { thermite::transform::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
@@ -215,7 +215,7 @@ macro_rules! decl_methods {
             $(    ($($input:ident),+) $([ $($scalar:ident: $ty:ty),+ ])? $mapping:ident $suffix:ident ($($output:ident),+)    ),* $(,)?
         ] ),+
     ) => {paste::paste! {
-        pub const fn [<scalar_ $policy:snake>]() -> Self {$($(
+        const fn [<scalar_ $policy:snake>]() -> Self {$($(
             #[inline(never)]
             unsafe extern "C" fn [<$mapping f_ $suffix>](len: usize, $($input: *const f32,)+ $($output: *mut f32,)+ $( $($scalar: [<$ty f>],)+ )?) {
                 unsafe { thermite::transform::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(

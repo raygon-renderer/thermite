@@ -1,6 +1,6 @@
 #![allow(clippy::approx_constant)]
 
-use thermite::{Vector, math::FloatConsts};
+use thermite::{Vector, math::FloatConsts, vector::GenericVector as _};
 
 use super::{Compensated, ScalarValue};
 

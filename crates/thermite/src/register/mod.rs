@@ -28,8 +28,8 @@ use generic_array::{
 use crate::{
     divider::{BranchfreeDivider, Divider, vector::VectorDivider},
     element::{FloatElementWithBits, IntegerElement},
-    generic::ops::MulAddExt,
     isa::InstructionSet,
+    vector::ops::MulAddExt,
 };
 
 #[inline(always)]
@@ -1152,7 +1152,7 @@ pub trait PartialOrdRegister: Register {
 #[rustfmt::skip]
 #[thermite_macros::register_trait]
 pub trait NumericRegister:
-    PartialOrdRegister<Signed: CastRegister<Self>, Unsigned: CastRegister<Self>>
+    PartialOrdRegister<Signed: CastRegister<Self>, Unsigned: CastRegister<Self>, Element: num_traits::NumOps>
     + CastRegister<Self::Signed>
     + CastRegister<Self::Unsigned>
 {
@@ -1819,4 +1819,22 @@ pub trait FloatRegister:
 
         <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
     }
+
+    // fn abs_ulp_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self::Bits> {
+    //     let a_nan = Self::is_nan(a);
+    //     let b_nan = Self::is_nan(b);
+    //     let nan = Self::Mask::bitor(a_nan, b_nan);
+
+    //     let a = <Self::SignedBits as BitCastRegister<Self>>::from_bits(a);
+    //     let b = <Self::SignedBits as BitCastRegister<Self>>::from_bits(b);
+
+    //     let sign_bit = <Self::SignedBits as NumericRegister>::MIN;
+
+    //     let a_sign = <Self::SignedBits as SignedRegister>::is_negative(a);
+    //     let b_sign = <Self::SignedBits as SignedRegister>::is_negative(b);
+
+    //     let a_mapped = <Self::SignedBits as CoreRegister>::blendv(a_sign, on_false, on_true);
+
+    //     todo!()
+    // }
 }

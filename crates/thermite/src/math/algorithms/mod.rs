@@ -1,6 +1,7 @@
 use core::ops::BitAnd as _;
 
-use crate::generic::{GenericMask as _, ops::BitAndNot as _};
+use crate::mask::GenericMask as _;
+use crate::vector::ops::BitAndNot as _;
 
 use super::*;
 

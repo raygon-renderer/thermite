@@ -4,13 +4,13 @@ use core::marker::PhantomData;
 
 use crate::{
     element::{FloatElement, FloatElementWithBits},
-    generic::*,
+    mask::*,
     math::{
         CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
-    vector::num::NumVector,
+    vector::*,
 };
 
 // use super::MathWithPolicy;
@@ -137,8 +137,8 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         }
 
         // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
-        let res = fast_polynomial::poly_f_n::<_, _, N>(NumVector(x), |i| unsafe {
-            NumVector(Self::splat(*coeffs.get_unchecked(i)))
+        let res = fast_polynomial::poly_f_n::<_, _, N>(crate::vector::NumVector(x), |i| unsafe {
+            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(i)))
         });
 
         res.0
@@ -157,8 +157,8 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
             return res;
         }
 
-        let res = fast_polynomial::poly_f_n::<_, _, N>(NumVector(x), |i| unsafe {
-            NumVector(Self::splat(*coeffs.get_unchecked(N - 1 - i)))
+        let res = fast_polynomial::poly_f_n::<_, _, N>(crate::vector::NumVector(x), |i| unsafe {
+            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(N - 1 - i)))
         });
 
         res.0

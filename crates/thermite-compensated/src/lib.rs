@@ -5,9 +5,10 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 
 use num_traits::{NumAssignOps, NumOps};
 use thermite::element::SignedElement;
-use thermite::{generic::GenericSelectable, prelude::*};
+use thermite::vector::{SplatVector, SplatVectorValue};
+use thermite::{mask::GenericSelectable, prelude::*};
 
-use thermite::generic::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
+use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
 
 pub mod consts;
 pub mod math;
@@ -306,6 +307,13 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
 pub struct Compensated<V> {
     pub value: V,
     pub error: V,
+}
+
+impl<V: ScalarValue> thermite::const_default::ConstDefault for Compensated<V> {
+    const DEFAULT: Self = Compensated {
+        value: V::SCALAR_ZERO,
+        error: V::SCALAR_ZERO,
+    };
 }
 
 impl<V: ScalarValue> Compensated<V> {
@@ -773,7 +781,7 @@ where
 
 macro_rules! impl_masked {
     (MUL_ADD: $($method:ident),*) => {paste::paste! {
-        impl<V: CompensatedFloatVector, A, B> thermite::generic::ops::MulAddExtMasked<V::Mask, A, B> for Compensated<V>
+        impl<V: CompensatedFloatVector, A, B> thermite::vector::ops::MulAddExtMasked<V::Mask, A, B> for Compensated<V>
         where
             Compensated<V>: MulAddExt<A, B, Output = Self>,
         {
@@ -795,7 +803,7 @@ macro_rules! impl_masked {
             )*
         }
 
-        impl<V: CompensatedFloatVector, A, B> thermite::generic::ops::MulAddAssignExtMasked<V::Mask, A, B> for Compensated<V>
+        impl<V: CompensatedFloatVector, A, B> thermite::vector::ops::MulAddAssignExtMasked<V::Mask, A, B> for Compensated<V>
         where
             Compensated<V>: MulAddExt<A, B, Output = Self>,
         {
@@ -819,7 +827,7 @@ macro_rules! impl_masked {
     }};
 
     ($trait:ident::$method:ident) => {paste::paste! {
-        impl<V: CompensatedFloatVector, Rhs> thermite::generic::ops::[<$trait Masked>]<V::Mask, Rhs> for Compensated<V>
+        impl<V: CompensatedFloatVector, Rhs> thermite::vector::ops::[<$trait Masked>]<V::Mask, Rhs> for Compensated<V>
         where
             Compensated<V>: $trait<Rhs, Output = Self>,
         {
@@ -839,7 +847,7 @@ macro_rules! impl_masked {
             }
         }
 
-        impl<V: CompensatedFloatVector, Rhs> thermite::generic::ops::[<$trait AssignMasked>]<V::Mask, Rhs> for Compensated<V>
+        impl<V: CompensatedFloatVector, Rhs> thermite::vector::ops::[<$trait AssignMasked>]<V::Mask, Rhs> for Compensated<V>
         where
             Compensated<V>: $trait<Rhs, Output = Self>,
         {
@@ -889,6 +897,31 @@ impl<V: thermite::simd::HasIsa> thermite::simd::HasIsa for Compensated<V> {
     const ISA: thermite::isa::InstructionSet = V::ISA;
 }
 
+impl<V: CompensatedFloatVector> SplatVector<Compensated<V::Element>> for Compensated<V> {
+    type Splat<T: SplatConst<Compensated<V::Element>>> = Self;
+}
+
+#[rustfmt::skip]
+impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatVectorValue<E, Compensated<V>> for Compensated<V> {
+    const VALUE: Compensated<V> = const {
+        struct Value<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>>(core::marker::PhantomData<(V, E)>);
+        struct Error<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>>(core::marker::PhantomData<(V, E)>);
+
+        impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatConst<V::Element> for Value<V, E> {
+            const VALUE: V::Element = <E as SplatConst<Compensated<V::Element>>>::VALUE.value;
+        }
+
+        impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatConst<V::Element> for Error<V, E> {
+            const VALUE: V::Element = <E as SplatConst<Compensated<V::Element>>>::VALUE.error;
+        }
+
+        Compensated {
+            value: thermite::vector::splat::<V, Value<V, E>>(),
+            error: thermite::vector::splat::<V, Error<V, E>>(),
+        }
+    };
+}
+
 #[rustfmt::skip]
 impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     type Element = Compensated<V::Element>;
@@ -902,6 +935,13 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     type Signed = V::Signed;
 
     type Mask = V::Mask;
+
+    fn new<const N:usize>(value: [Self::Element; N]) -> Self
+    where
+        thermite::generic_array::typenum::Const<N> :thermite::generic_array::IntoArrayLength<ArrayLength = Self::Lanes>
+    {
+        todo!()
+    }
 
     #[inline(always)]
     fn splat(value: Self::Element) -> Self {
@@ -1326,7 +1366,7 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
     }
 }
 
-impl<V: CompensatedFloatVector> thermite::generic::ops::NegMasked<V::Mask> for Compensated<V> {
+impl<V: CompensatedFloatVector> thermite::vector::ops::NegMasked<V::Mask> for Compensated<V> {
     #[inline(always)]
     fn neg_c(mut self, mask: V::Mask) -> Self {
         self.value = self.value.neg_c(mask);

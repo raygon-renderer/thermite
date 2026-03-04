@@ -126,6 +126,8 @@ pub trait FloatConsts {
     const FRAC_1_6: Self;
 }
 
+use crate::vector::{SplatConst, SplatVector, SplatVectorValue};
+
 macro_rules! impl_consts {
     (@ $ty:ty { $($name:ident = $value:expr),* $(,)? }) => {
         impl FloatConsts for $ty {
@@ -135,7 +137,11 @@ macro_rules! impl_consts {
 
     ($($name:ident),*) => {
         impl<R: FloatRegister<Element: FloatConsts>> FloatConsts for Vector<R> {
-            $(const $name: Self = const { Self::splat_const(<R::Element as FloatConsts>::$name) };)*
+            $(const $name: Self = const {
+                struct FC<R: FloatRegister>(core::marker::PhantomData<R>);
+                impl<R: FloatRegister> SplatConst<R::Element> for FC<R> { const VALUE: R::Element = <R::Element as FloatConsts>::$name; }
+                <<Vector<R> as SplatVector<R::Element>>::Splat<FC<R>> as SplatVectorValue<FC<R>, Vector<R>>>::VALUE
+            };)*
         }
     };
 }

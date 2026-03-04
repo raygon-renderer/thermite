@@ -1,239 +1,515 @@
-#![warn(missing_docs, clippy::missing_safety_doc)]
+#![allow(missing_docs, clippy::missing_safety_doc)]
+#![deny(unconditional_recursion)] // just in case we miss one
 
-//! Vector type wrapping low-level registers with a vector-like interface.
-//!
-//! Most vector features are provided by the [`GenericVector`](crate::generic) traits,
-//! but this is the underlying type that most vectors are based on, using low-level
-//! registers for various architectures.
+use core::{
+    marker::PhantomData,
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not},
+};
+
+use bitvec::{array::BitArray, view::BitViewSized};
+use generic_array::{GenericArray, typenum};
 
 use crate::{
-    divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
-    generic::*,
-    mask::Mask,
+    BranchfreeDivider, Divider, Mask,
+    divider::{Denominator, vector::VectorDivider},
+    element::{FloatElementWithBits, UnsignedIntegerElement},
+    isa::InstructionSet,
+    mask::{CastMask, GenericMask, GenericSelectable},
     math::FloatConsts,
-    register::{
-        self, BitCastRegister, BitshiftRegister, CastRegister, FloatRegister, IntegerRegister, LinAlg3Register,
-        LinAlg4Register, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-    },
+    register::{Element, FloatElement, Lanes, NativeCapability},
 };
 
-use core::ops::{
-    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut,
-    Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
-};
+mod num;
+mod splat;
 
-use num_traits::{
-    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, Signed, WrappingAdd,
-    WrappingMul, WrappingSub, Zero,
-};
+#[allow(clippy::module_inception)]
+mod vector;
 
-pub mod num;
-pub mod streaming;
-pub mod unaligned;
+pub mod ops;
 
-/// SIMD Vector type.
+pub use self::num::NumVector;
+pub use self::splat::{SplatConst, SplatVector, SplatVectorValue, splat};
+pub use self::vector::{MaskOf, RegisterOf, Vector};
+
+/// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///
-/// This wraps a low-level register type and provides a vector-like interface, including
-/// operator overloading and element-wise operations.
-#[repr(transparent)]
-pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
-
-#[doc(hidden)]
-pub trait IRegisterOf {
-    type Register: Register;
-}
-
-impl<R: Register> IRegisterOf for Vector<R> {
-    type Register = R;
-}
-
-impl<R: Register> IRegisterOf for Mask<R> {
-    type Register = R;
-}
-
-/// The mask type corresponding to a given vector type.
+/// There are three forms of this macro:
+/// ```ignore
+/// // 1. Generic type parameters with bounds
+/// // used when the type depends on generic parameters, and especially `Self`
+/// let exp_lsb_mask: Self::Bits = crate::generic_splat!(
+///     <Self> = <S: FloatVector>
+///     <S::Bits as GenericVector>::Element: <S::Element as FloatElement>::EXP_LSB_MASK
+/// );
 ///
-/// # Example
+/// // 2. Static type, direct value
+/// // used when the type is known and the value is a literal or const expression
+/// let zero: Vector<u32x4> = crate::generic_splat!(u32: 0);
+///
+/// // 3. Associated const value
+/// // used when the value is an associated constant of a type
+/// let infinity: Vector<f32x4> = crate::generic_splat!(<f32>::INFINITY);
 /// ```
-/// # use thermite::vector::{Vector, MaskOf};
-/// # use thermite::backend::scalar::prelude::*;
-/// fn example(x: f32x4) -> MaskOf<f32x4> {
-///     x.is_negative()
-/// }
-/// ```
-pub type MaskOf<V> = Mask<<V as IRegisterOf>::Register>;
+#[macro_export]
+macro_rules! generic_splat {
+    (
+        <$($real_param:ident),+> = <$($gen_param:ident $(: $bound:path)?),+ $(,)?>
+        $ty:ty : $value:expr
+    ) => {{
+        use core::marker::PhantomData;
 
-/// The register type corresponding to a given vector or mask type.
-pub type RegisterOf<V> = <V as IRegisterOf>::Register;
+        struct __GenericSplatValue<$($gen_param $(: $bound)?),+>(
+            PhantomData<($($gen_param),+)>
+        );
 
-impl<R: Register> Clone for Vector<R> {
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<R: Register> Copy for Vector<R> {}
-
-const _: () = {
-    use core::fmt;
-
-    impl<R: Register> fmt::Debug for Vector<R> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let mut t = f.debug_tuple("Vector");
-
-            for v in R::as_array(&self.0) {
-                t.field(&v);
-            }
-
-            t.finish()
+        impl<$($gen_param $(: $bound)?),+> $crate::vector::SplatConst<$ty>
+        for __GenericSplatValue<$($gen_param),+> {
+            const VALUE: $ty = const { $value };
         }
-    }
-};
 
-use generic_array::{GenericArray, typenum::Unsigned};
+        const { $crate::vector::splat::<_,
+            __GenericSplatValue<$($real_param),+>
+        >() }
+    }};
 
-impl<R: Register> const_default::ConstDefault for Vector<R> {
-    const DEFAULT: Self = Self::EMPTY;
+    // Static type, direct value
+    ($ty:ty: $value:expr) => {{
+        struct __ConstSplatValue;
+        impl $crate::vector::SplatConst<$ty> for __ConstSplatValue {
+            const VALUE: $ty = const { $value };
+        }
+        const { $crate::vector::splat::<_, __ConstSplatValue>() }
+    }};
+
+    // Associated const value
+    (<$ty:ty $(as $trait:path)?>::$associated:ident) => {{
+        struct __ConstSplatValue;
+        impl $crate::vector::SplatConst<$ty> for __ConstSplatValue {
+            const VALUE: $ty = const { <$ty $(as $trait)?>::$associated };
+        }
+        const { $crate::vector::splat::<_, __ConstSplatValue>() }
+    }};
 }
 
-impl<R: Register> Default for Vector<R> {
+pub trait MaskInteroperable<A, B>: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+where
+    A: GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+{
+}
+
+pub trait PartiallyInteroperable<A, B>:
+    GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+    // casts
+    + CastVector<Self>
+    + CastVector<A>
+    + CastVector<B>
+where
+    A: CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+{
+}
+
+impl<V, A, B> PartiallyInteroperable<A, B> for V
+where
+    V: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+        // casts
+        + CastVector<V>
+        + CastVector<A>
+        + CastVector<B>,
+    A: CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
+    B: CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
+{
+}
+
+pub trait FullyInteroperable<A, B>:
+    GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+    // bits
+    + BitCastVector<Self>
+    + BitCastVector<A>
+    + BitCastVector<B>
+    // casts
+    + CastVector<Self>
+    + CastVector<A>
+    + CastVector<B>
+where
+    A: BitCastVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
+    B: BitCastVector<Self> + CastVector<Self> + GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<A::Mask>>,
+{
+}
+
+impl<V, A, B> FullyInteroperable<A, B> for V
+where
+    V: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
+        // bits
+        + BitCastVector<V>
+        + BitCastVector<A>
+        + BitCastVector<B>
+        // casts
+        + CastVector<V>
+        + CastVector<A>
+        + CastVector<B>,
+    A: BitCastVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<B::Mask>>,
+    B: BitCastVector<V> + CastVector<V> + GenericVector<Lanes = V::Lanes, Mask: CastMask<V::Mask> + CastMask<A::Mask>>,
+{
+}
+
+/// Internal helpers for generic vectors.
+trait GenericVectorExt: GenericVector {
     #[inline(always)]
-    fn default() -> Self {
-        Self::EMPTY
+    fn len_to_indices<I: VectorIndices<Self>>(len: usize) -> I {
+        let Ok(len) = <<I as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
+            panic!("Length {} exceeds maximum supported index for this vector type", len);
+        };
+
+        I::splat(len)
     }
 }
 
-impl<R: Register> Vector<R> {
+impl<V: GenericVector> GenericVectorExt for V {}
+
+/// Type that can be used as indices for gather/scatter operations of the vector type `V`
+pub trait VectorIndices<V: GenericVector>: UnsignedIntegerVector<Lanes = V::Lanes> {
+    unsafe fn gather_ptr(ptr: *const V::Element, indices: Self) -> V;
+    unsafe fn gather_ptr_m(src: V, mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
+    unsafe fn gather_ptr_z(mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
+
+    unsafe fn scatter_ptr(value: V, ptr: *mut V::Element, indices: Self);
+    unsafe fn scatter_ptr_m(value: V, mask: V::Mask, ptr: *mut V::Element, indices: Self);
+}
+
+pub trait IndexableVector<I: UnsignedIntegerVector<Lanes = Self::Lanes>>: GenericVector {
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: I) -> Self;
+    unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
+    unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
+
+    unsafe fn scatter_ptr(value: Self, ptr: *mut Self::Element, indices: I);
+    unsafe fn scatter_ptr_m(value: Self, mask: Self::Mask, ptr: *mut Self::Element, indices: I);
+}
+
+impl<I, V> VectorIndices<V> for I
+where
+    I: UnsignedIntegerVector<Lanes = V::Lanes>,
+    V: IndexableVector<I>,
+{
+    #[inline(always)]
+    unsafe fn gather_ptr(ptr: *const <V as GenericVector>::Element, indices: Self) -> V {
+        unsafe { V::gather_ptr(ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_ptr_m(
+        src: V,
+        mask: <V as GenericVector>::Mask,
+        ptr: *const <V as GenericVector>::Element,
+        indices: Self,
+    ) -> V {
+        unsafe { V::gather_ptr_m(src, mask, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_ptr_z(
+        mask: <V as GenericVector>::Mask,
+        ptr: *const <V as GenericVector>::Element,
+        indices: Self,
+    ) -> V {
+        unsafe { V::gather_ptr_z(mask, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_ptr(value: V, ptr: *mut <V as GenericVector>::Element, indices: Self) {
+        unsafe { V::scatter_ptr(value, ptr, indices) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_ptr_m(
+        value: V,
+        mask: <V as GenericVector>::Mask,
+        ptr: *mut <V as GenericVector>::Element,
+        indices: Self,
+    ) {
+        unsafe { V::scatter_ptr_m(value, mask, ptr, indices) }
+    }
+}
+
+pub trait Concat<HALF>: Extend<HALF> {
+    fn concat(lo: HALF, hi: HALF) -> Self;
+    fn split(self) -> (HALF, HALF);
+}
+
+/// Zero-extend vectors or masks
+pub trait Extend<FROM> {
+    fn extend(v: FROM) -> Self;
+    fn narrow(self) -> FROM;
+}
+
+pub trait ConcatVector<HALF: GenericVector<Element = Self::Element>>:
+    Concat<HALF> + GenericVector<Mask: Concat<HALF::Mask>>
+{
+}
+
+/// Zero-extend vectors
+pub trait ExtendVector<FROM: GenericVector<Element = Self::Element>>:
+    Extend<FROM> + GenericVector<Mask: Extend<FROM::Mask>>
+{
+}
+
+impl<V: GenericVector, H: GenericVector<Element = V::Element>> ConcatVector<H> for V
+where
+    V: Concat<H>,
+    V::Mask: Concat<H::Mask>,
+{
+}
+impl<V: GenericVector, F: GenericVector<Element = V::Element>> ExtendVector<F> for V
+where
+    V: Extend<F>,
+    V::Mask: Extend<F::Mask>,
+{
+}
+
+pub trait SwizzleVector: GenericVector + crate::swizzle::Swizzle<Self::Lanes> {}
+impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::Lanes> {}
+
+/// Core trait for generic vector types.
+///
+/// Provides the basis for further specialized vector traits.
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
+    + const_default::ConstDefault
+    + SplatVector<Self::Element>
+    + GenericSelectable<SelectableMask = Self::Mask>
+    + crate::simd::HasIsa
+{
+    /// Scalar element type of the vector.
+    type Element: Element;
+
+    /// A vector with all elements zeroed.
+    const EMPTY: Self;
+
     /// Number of lanes in the vector.
-    pub const LANES: usize = <R::Lanes as Unsigned>::USIZE;
+    const LANES: usize;
 
-    /// Create a new vector from a single element by splatting it across all lanes.
-    ///
-    /// If you're seeing this documentation, you are using the `nightly` feature on the nightly branch of Rust.
-    /// This version of `splat` uses `const_eval_select` to choose the best implementation
-    /// based on whether it's used in a const context or not.
-    #[cfg(feature = "nightly")]
-    #[rustversion::nightly]
-    #[inline(always)]
-    pub const fn splat(value: R::Element) -> Self {
-        // On nightly, we can use const_eval_select to choose the best implementation
-        // based on whether we're in a const context or not.
-        #[inline(always)]
-        const fn splat_const_impl<R: Register>(value: R::Element) -> Vector<R> {
-            Vector(register::reg_splat::<R>(value))
-        }
+    /// Number of lanes in the vector, as a typenum.
+    type Lanes: Lanes;
 
-        #[inline(always)]
-        fn splat_runtime_impl<R: Register>(value: R::Element) -> Vector<R> {
-            Vector(R::splat(value))
-        }
+    /// Unsigned Integer Type suitable for use with this vector.
+    type Unsigned: UnsignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
+            Lanes = Self::Lanes,
+            Element = <Self::Element as Element>::Unsigned,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Signed as GenericVector>::Mask>,
+        > + CastVector<Self::Signed>
+        + BitCastVector<Self::Signed>;
 
-        // SAFETY: This is safe because both branches return the same type.
-        unsafe { core::intrinsics::const_eval_select((value,), splat_const_impl, splat_runtime_impl) }
-    }
+    /// SignedBits Integer Type suitable for use with this vector.
+    type Signed: SignedIntegerVector<
+            Signed = Self::Signed,
+            Unsigned = Self::Unsigned,
+            Lanes = Self::Lanes,
+            Element = <Self::Element as Element>::Signed,
+            Mask: CastMask<Self::Mask> + CastMask<<Self::Unsigned as GenericVector>::Mask>,
+        > + CastVector<Self::Unsigned>
+        + BitCastVector<Self::Unsigned>;
 
-    /// **READ DOCS** Create a new vector from a single element by splatting it across all lanes.
-    ///
-    /// If you're seeing this documentation, you are using the `nightly` feature on the nightly branch of Rust,
-    /// in which case this is the same as [`Vector::splat`], which is `const` and automatically chooses the
-    /// best implementation based on whether it's used in a const context or not.
-    ///
-    /// Without the nightly features, this is still a `const` version of [`Vector::splat`]. However, if
-    /// used with any dynamic value it will likely produce suboptimal code. Use this only if you
-    /// need to use it in a const context that will be precalculated at compile time. You don't
-    /// have to worry about that, though, since the nightly version of this function will
-    /// just work as expected.
-    #[cfg(feature = "nightly")]
-    #[rustversion::nightly]
-    #[inline(always)]
-    pub const fn splat_const(value: R::Element) -> Self {
-        Self::splat(value)
-    }
-
-    /// Create a new vector from a single element by splatting it across all lanes.
-    ///
-    /// If you **NEED** to use this in a const-context, use [`Vector::splat_const`] instead, but
-    /// it has downsides if used in non-const contexts.
-    ///
-    /// If you using the nightly branch of Rust, _and_ the `nightly` crate feature,
-    /// this version of `splat` will be `const` and automatically choose the
-    /// best implementation based on whether it's used in a const context or not.
-    #[cfg(not(feature = "nightly"))]
-    #[inline(always)]
-    pub fn splat(value: R::Element) -> Self {
-        Self(R::splat(value))
-    }
-
-    /// **READ DOCS** Create a new vector from a single element by splatting it across all lanes.
-    ///
-    /// This is a const version of [`Vector::splat`]. However, if used with any dynamic value
-    /// it will likely produce suboptimal code. Use this only if you need to use it in a const context
-    /// that will be precalculated at compile time.
-    ///
-    /// Wrap this call in a `const { }` block to ensure it is evaluated at compile time. This function
-    /// is marked as `#[inline(never)]` to intentionally disallow optimizations and make it easier to
-    /// debug.
-    #[cfg(not(feature = "nightly"))]
-    #[inline(never)]
-    pub const fn splat_const(value: R::Element) -> Self {
-        Self(register::reg_splat::<R>(value))
-    }
+    /// Mask type for this vector. Masks are semantically boolean vectors indicating
+    /// true or false for each lane. They may or may not be represented as actual bits.
+    type Mask: GenericMask
+        + CastMask<<Self::Unsigned as GenericVector>::Mask>
+        + CastMask<<Self::Signed as GenericVector>::Mask>;
 
     /// Create a new vector from an array of elements.
-    ///
-    /// This is similar to [`Vector::from_array`], but `const` and more limited due to its use of
-    /// const-generics. Unlike [`Vector::splat_const`], this is fine to use with dynamic values,
-    /// it can just be more difficult to use in generic contexts.
-    #[inline(always)]
-    pub fn new<const N: usize>(values: [R::Element; N]) -> Self
-    where
-        generic_array::typenum::Const<N>: generic_array::IntoArrayLength<ArrayLength = R::Lanes>,
-    {
-        Self(R::new(values.into()))
-    }
+    fn new<const N: usize>(value: [Self::Element; N]) -> Self
+        where generic_array::typenum::Const<N>: generic_array::IntoArrayLength<ArrayLength = Self::Lanes>;
+
+    /// Create a new vector from a single element by splatting it across all lanes.
+    #[masked] fn splat(value: Self::Element) -> Self;
 
     /// Create a new vector with the first lane set to the given value, and all other lanes set to zero.
-    #[inline(always)]
-    pub fn single(value: R::Element) -> Self {
-        Self(R::single(value))
+    fn single(value: Self::Element) -> Self;
+
+    /// Combine two vectors of the same type into one wider vector,
+    /// with `self` as the lower half and `hi` as the upper half.
+    fn concat<INTO>(self, hi: Self) -> INTO
+    where
+        INTO: ConcatVector<Self, Element = Self::Element>,
+    {
+        <INTO as Concat<Self>>::concat(self, hi)
     }
 
-    /// Broadcast the value of a single lane across all lanes of the vector.
-    #[inline(always)]
-    pub fn broadcast<const I: usize>(self) -> Self {
-        Self(R::broadcast::<I>(self.0))
+    /// Split this vector into two narrower vectors of the same type, with the lower
+    /// lanes in the first vector and the upper lanes in the second vector.
+    fn split<INTO: GenericVector>(self) -> (INTO, INTO)
+    where
+        Self: ConcatVector<INTO, Element = INTO::Element>,
+    {
+        <Self as Concat<INTO>>::split(self)
     }
 
-    /// Broadcast the value of a single lane across all lanes of the vector.
+    /// Zero-extend a narrower vector into this wider vector type, placing the
+    /// original values in the lower lanes and filling the upper lanes with zeros.
+    fn extend<INTO>(self) -> INTO
+    where
+        INTO: ExtendVector<Self, Element = Self::Element>,
+    {
+        <INTO as Extend<Self>>::extend(self)
+    }
+
+    /// Narrow this wider vector into a narrower vector by taking the lower lanes.
+    ///
+    /// The upper lanes are discarded.
+    fn narrow<INTO: GenericVector>(self) -> INTO
+    where
+        Self: ExtendVector<INTO, Element = INTO::Element>,
+    {
+        <Self as Extend<INTO>>::narrow(self)
+    }
+
+    /// Align a slice of elements to the vector's lane count, returning the aligned portion and any unaligned head or tail.
+    ///
+    /// If the vector's size in bytes does not match the size of its elements times the lane count, this will
+    /// return the entire slice as unaligned and empty aligned/remaining parts. This is rare, but may occur
+    /// if using a generic vector type that doesn't correspond to an actual hardware vector (for example, a 3-lane vector).
+    #[inline(always)]
+    fn align_slice(slice: &[Self::Element]) -> (&[Self::Element], &[Self], &[Self::Element]) {
+        if const { size_of::<Self>() != (size_of::<Self::Element>() * Self::LANES) } {
+            return (slice, &[], &[]);
+        };
+
+        unsafe { slice.align_to() }
+    }
+
+    /// Align a mutable slice of elements to the vector's lane count, returning the aligned portion and any unaligned head or tail.
+    ///
+    /// If the vector's size in bytes does not match the size of its elements times the lane count, this will
+    /// return the entire slice as unaligned and empty aligned/remaining parts. This is rare, but may occur
+    /// if using a generic vector type that doesn't correspond to an actual hardware vector (for example, a 3-lane vector).
+    #[inline(always)]
+    fn align_slice_mut(slice: &mut [Self::Element]) -> (&mut [Self::Element], &mut [Self], &mut [Self::Element]) {
+        if const { size_of::<Self>() != (size_of::<Self::Element>() * Self::LANES) } {
+            return (slice, &mut [], &mut []);
+        };
+
+        unsafe { slice.align_to_mut() }
+    }
+
+    /// Create a new vector from a slice of elements. The slice must have at least as many elements as the vector's lanes.
+    ///
+    /// This will emit an unaligned load.
+    ///
+    /// If you're looking for masked variants of this, those typically only exist for aligned inputs,
+    /// so you'll need an aligned pointer and use [`load_m`](Self::load_m) or [`load_z`](Self::load_z).
+    fn from_slice(slice: &[Self::Element]) -> Self {
+        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to create a vector", Self::LANES);
+
+        unsafe { Self::load_unaligned(slice.as_ptr()) }
+    }
+
+    /// Copy the elements of the vector into a slice. The slice must have at least as many elements as the vector's lanes.
+    ///
+    /// This will emit an unaligned store.
+    fn copy_to_slice(self, slice: &mut [Self::Element]) {
+        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to copy from a vector", Self::LANES);
+
+        unsafe { self.store_unaligned(slice.as_mut_ptr()) }
+    }
+
+    /// Gather elements from memory at the specified indices and return a new vector with those elements.
+    ///
+    /// The provided indices are in number of elements, not bytes.
     ///
     /// # Panics
-    /// If `idx` is out of bounds for the vector's lanes.
-    #[inline(always)]
-    pub fn broadcastv(self, idx: usize) -> Self {
-        Self(R::broadcastv(self.0, idx))
+    /// If any index is out of bounds for the slice length, or the slice length exceeds
+    /// the maximum supported index for this vector type.
+    fn gather<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I) -> Self {
+        if indices.cmp_lt(Self::len_to_indices::<I>(slice.len())).all() {
+            unsafe { I::gather_ptr(slice.as_ptr(), indices) }
+        } else {
+            panic!("One or more indices are out of bounds for the slice length {}", slice.len());
+        }
+    }
+
+    /// Gather elements from memory at the specified indices, or return `or` if the index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    fn gather_or<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I, or: Self) -> Self
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
+
+        unsafe { I::gather_ptr_m(or, in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Gather elements from memory at the specified indices, or set the lane to zero
+    /// if the index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    fn gather_or_zero<I: VectorIndices<Self>>(slice: &[Self::Element], indices: I) -> Self
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
+
+        unsafe { I::gather_ptr_z(in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Gather elements from memory at the specified indices, or return `or` if the `enable` mask is
+    /// `false` OR if any index is out of bounds.
+    ///
+    /// The provided indices are in number of elements, not bytes.
+    ///
+    /// # Panics
+    /// If the slice length exceeds the maximum supported index for this vector type.
+    fn gather_if<I: VectorIndices<Self>>(slice: &[Self::Element], enable: Self::Mask, indices: I, or: Self) -> Self
+    where
+        Self::Mask: CastMask<I::Mask>,
+        Self::Element: Default,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
+
+        unsafe { I::gather_ptr_m(or, enable & in_bounds.cast(), slice.as_ptr(), indices) }
+    }
+
+    /// Scatter elements from the given vector into memory at the specified indices. If the index is outside of the
+    /// bounds of the provided slice, the write is suppressed without panicking.
+    fn scatter<I: VectorIndices<Self>>(self, slice: &mut [Self::Element], indices: I)
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
+
+        unsafe { I::scatter_ptr_m(self, in_bounds.cast(), slice.as_mut_ptr(), indices) }
+    }
+
+    /// Scatter elements from the given vector into memory at the specified indices, but only for lanes where the `enable` mask is `true`.
+    /// If the index is outside of the bounds of the provided slice, the write is suppressed without panicking.
+    fn scatter_if<I: VectorIndices<Self>>(self, slice: &mut [Self::Element], enable: Self::Mask, indices: I)
+        where Self::Mask: CastMask<I::Mask>,
+    {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<I>(slice.len()));
+
+        unsafe { I::scatter_ptr_m(self, enable & in_bounds.cast(), slice.as_mut_ptr(), indices) }
     }
 
     /// Load a vector from an **aligned** pointer to its elements.
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
-    /// that is at least `R::Lanes` elements long.
-    #[inline(always)]
-    pub unsafe fn load(ptr: *const R::Element) -> Self {
-        unsafe { Self(R::load(ptr)) }
-    }
+    /// that is at least `Self::Lanes` elements long.
+    #[masked] unsafe fn load(ptr: *const Self::Element) -> Self;
 
     /// Load a vector from an **unaligned** pointer to its elements.
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid and points to a memory region
-    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
-    #[inline(always)]
-    pub unsafe fn load_unaligned(ptr: *const R::Element) -> Self {
-        unsafe { Self(R::load_unaligned(ptr)) }
-    }
+    /// that is at least `Self::Lanes` elements long.
+    ///
+    /// Unaligned access may be slower on some older architectures.
+    unsafe fn load_unaligned(ptr: *const Self::Element) -> Self;
 
     /// Load a vector from a pointer to its elements using non-temporal (streaming) loads.
     ///
@@ -242,33 +518,24 @@ impl<R: Register> Vector<R> {
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
-    /// that is at least `R::Lanes` elements long.
-    #[inline(always)]
-    pub unsafe fn load_streaming(ptr: *const R::Element) -> Self {
-        unsafe { Self(R::load_stream(ptr)) }
-    }
+    /// that is at least `Self::Lanes` elements long.
+    unsafe fn load_streaming(ptr: *const Self::Element) -> Self;
 
     /// Store the vector to an **aligned** pointer to its elements.
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
-    /// that is at least `R::Lanes` elements long.
-    #[inline(always)]
-    pub unsafe fn store(self, ptr: *mut R::Element) {
-        // SAFETY: The caller must ensure that the pointer is valid and aligned.
-        unsafe { R::store(ptr, self.0) }
-    }
+    /// that is at least `Self::Lanes` elements long.
+    unsafe fn store(self, ptr: *mut Self::Element);
 
     /// Store the vector to an **unaligned** pointer to its elements.
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid and points to a memory region
-    /// that is at least `R::Lanes` elements long. Unaligned access may be slower on some architectures.
-    #[inline(always)]
-    pub unsafe fn store_unaligned(self, ptr: *mut R::Element) {
-        // SAFETY: The caller must ensure that the pointer is valid.
-        unsafe { R::store_unaligned(ptr, self.0) }
-    }
+    /// that is at least `Self::Lanes` elements long. Unaligned access may be slower on some architectures.
+    ///
+    /// Unaligned access may be slower on some older architectures.
+    unsafe fn store_unaligned(self, ptr: *mut Self::Element);
 
     /// Store the vector to a pointer to its elements using non-temporal (streaming) stores.
     ///
@@ -277,975 +544,874 @@ impl<R: Register> Vector<R> {
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
-    /// that is at least `R::Lanes` elements long.
-    pub unsafe fn store_streaming(self, ptr: *mut R::Element) {
-        // SAFETY: The caller must ensure that the pointer is valid and aligned.
-        unsafe { R::store_stream(ptr, self.0) }
-    }
+    /// that is at least `Self::Lanes` elements long.
+    unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
-    /// Transforms a slice of element values into a slice of vectors, with
-    /// alignment and length checks. A prefix and/or suffix slice may be returned if the slice is
-    /// not aligned or if the length is not a multiple of the number of lanes in the vector.
+    /*
+    /// Gather elements from memory at the specified indices and return a new vector with those elements.
+    /// The provided indices are in number of elements, not bytes.
     ///
-    /// # Example
+    /// For the masked variants, memory locations are never read from if the mask is false.
     ///
-    /// ```rust,ignore
-    /// let (&[], values, &[]) = i32x4::from_slice(&[1, 2, 3, 4]) else {
-    ///     panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
-    /// };
+    /// # Safety
+    /// The caller must ensure the given memory locations given by `ptr + (size_of(Element) * index)`
+    /// are valid for reading for all indices where the mask is true.
+    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::Index) -> Self;
+
+    /// Scatter elements from the given vector into memory at the specified indices.
     ///
-    /// assert_eq!(values, &[i32x4::new([1, 2, 3, 4])]);
-    /// ```
-    #[inline(always)]
-    pub fn from_slice(values: &[R::Element]) -> (&[R::Element], &[Self], &[R::Element]) {
-        // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
-        // which is really all that's needed to consider it a slice of registers.
-        unsafe { values.align_to::<Self>() }
-    }
+    /// The provided indices are in number of elements, not bytes.
+    #[skip_masked]
+    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::Index);
 
-    /// Transforms a mutable slice of element values into a mutable slice of vectors, with
-    /// alignment and length checks. A prefix and/or suffix slice may be returned if the slice is
-    /// not aligned or if the length is not a multiple of the number of lanes in the vector.
-    #[inline(always)]
-    pub fn from_slice_mut(values: &mut [R::Element]) -> (&mut [R::Element], &mut [Self], &mut [R::Element]) {
-        // SAFETY: This transmutes the slice to Self if and only if it was the correct length and alignment,
-        // which is really all that's needed to consider it a slice of registers.
-        unsafe { values.align_to_mut::<Self>() }
-    }
+    /// Scatter elements from the given vector into memory at the specified indices,
+    /// but only if the corresponding lane of the mask is true.
+    ///
+    /// The provided indices are in the number of elements, not bytes.
+    #[skip_masked]
+    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::Index);
+    */
 
-    /// Transform a slice of element values into an unaligned iterator of vectors,
-    /// returning any remaining elements as a suffix slice.
-    #[inline(always)]
-    pub fn from_slice_unaligned<'a>(values: &'a [R::Element]) -> (unaligned::Unaligned<'a, R>, &'a [R::Element]) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = num_vectors * Self::LANES;
+    /// Broadcast the value of a single lane across all lanes of the vector.
+    #[conditional] fn broadcast<const I: usize>(self) -> Self;
 
-        let head = &values[..offset];
-        let tail = &values[offset..];
-
-        (unaligned::Unaligned(head), tail)
-    }
-
-    /// Transform a mutable slice of element values into an unaligned iterator of vectors,
-    /// returning any remaining elements as a suffix slice.
-    #[inline(always)]
-    pub fn from_slice_unaligned_mut<'a>(
-        values: &'a mut [R::Element],
-    ) -> (unaligned::UnalignedMut<'a, R>, &'a mut [R::Element]) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = num_vectors * Self::LANES;
-
-        let (head, tail) = values.split_at_mut(offset);
-
-        (unaligned::UnalignedMut(head), tail)
-    }
-
-    /// Like [`Vector::from_slice_unaligned`], but returns the remaining elements as a prefix slice.
-    #[inline(always)]
-    pub fn from_rslice_unaligned<'a>(values: &'a [R::Element]) -> (&'a [R::Element], unaligned::Unaligned<'a, R>) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = values.len() - num_vectors * Self::LANES;
-
-        let head = &values[..offset];
-        let tail = &values[offset..];
-
-        (head, unaligned::Unaligned(tail))
-    }
-
-    /// Like [`Vector::from_slice_unaligned_mut`], but returns the remaining elements as a prefix slice.
-    #[inline(always)]
-    pub fn from_rslice_unaligned_mut<'a>(
-        values: &'a mut [R::Element],
-    ) -> (&'a mut [R::Element], unaligned::UnalignedMut<'a, R>) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = values.len() - num_vectors * Self::LANES;
-
-        let (head, tail) = values.split_at_mut(offset);
-
-        (head, unaligned::UnalignedMut(tail))
-    }
-
-    /// Iterate over a slice of element values as Vectors using non-temporal (streaming) loads.
+    /// Broadcast the value of a single lane across all lanes of the vector.
     ///
     /// # Panics
+    /// If `idx` is out of bounds for the vector's lanes.
+    #[conditional] fn broadcastv(self, idx: usize) -> Self;
+
+    /// Extract a single element from the vector at the given index.
+    fn extract<const I: usize>(self) -> Self::Element;
+
+    fn extractv(self, idx: usize) -> Self::Element;
+
+    /// Replace a single element in the vector at the given index with a new value.
+    fn insert<const I: usize>(self, value: Self::Element) -> Self;
+
+    fn insertv(self, idx: usize, value: Self::Element) -> Self;
+
+    /// Reverse the order of the elements in the vector.
+    #[conditional] fn reverse(self) -> Self;
+
+    /// Swap the byte order of each element in the vector. i.e., converts between little-endian and big-endian.
+    #[conditional] fn swap_bytes(self) -> Self;
+
+    /// (Zero If False) Zero elements if the corresponding mask lane is false; otherwise, leave unchanged.
     ///
-    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
-    pub fn stream_slice<'a>(values: &'a [R::Element]) -> impl Iterator<Item = streaming::StreamingVector<'a, R>> {
-        let (&[], values, &[]) = (unsafe { values.align_to::<R::Storage>() }) else {
-            panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
-        };
+    /// Similar to a `mask & self` operation.
+    fn z(self, mask: Self::Mask) -> Self;
 
-        values.iter().map(|v| streaming::StreamingVector(v))
-    }
-
-    /// Iterate over a mutable slice of element values as Vectors using non-temporal (streaming) loads and stores.
+    /// (Zero If True) Zero elements if the corresponding mask lane is true; otherwise, leave unchanged.
     ///
-    /// # Panics
+    /// Similar to a `!mask & self` operation.
+    fn nz(self, mask: Self::Mask) -> Self;
+
+    /// Unpack and interleave elements from two vectors.
     ///
-    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
-    pub fn stream_slice_mut<'a>(
-        values: &'a mut [R::Element],
-    ) -> impl Iterator<Item = streaming::StreamingVectorMut<'a, R>> {
-        let (&mut [], values, &mut []) = (unsafe { values.align_to_mut::<R::Storage>() }) else {
-            panic!("Slice is not aligned to the register type of the vector, or has remaining elements");
-        };
+    /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, a1, a2, a3]` and `b = [b0, b1, b2, b3]`, the result will be
+    /// `([a0, b0, a1, b1], [a2, b2, a3, b3])`.
+    ///
+    /// # Note
+    ///
+    /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
+    /// this will preserve the order of all elements, not just 128-bit chunks.
+    fn interleave(self, other: Self) -> (Self, Self);
 
-        values.iter_mut().map(|v| streaming::StreamingVectorMut(v))
+    /// Pack and deinterleave elements from two vectors. This is the inverse operation of `interleave`.
+    ///
+    /// The resulting vector contains the deinterleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, b0, a1, b1]` and `b = [a2, b2, a3, b3]`, the result will be
+    /// `[a0, a1, a2, a3]` and `[b0, b1, b2, b3]`.
+    fn deinterleave(self, other: Self) -> (Self, Self);
+
+    /// Apply a function to each element in the vector, returning a new vector with the results.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
+    fn map<F>(self, f: F) -> Self
+    where
+        F: Fn(Self::Element) -> Self::Element;
+
+    /// Fold the elements of the vector using the provided function and initial value.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
+    fn fold<F>(self, init: Self::Element, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element;
+
+    /// Reduce the elements of the vector using the provided function.
+    ///
+    /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
+    fn reduce<F>(self, f: F) -> Self::Element
+    where
+        F: Fn(Self::Element, Self::Element) -> Self::Element;
+
+    #[inline(always)] fn cast<INTO>(self) -> INTO
+    where
+        INTO: CastVector<Self>,
+    {
+        INTO::cast_from(self)
     }
 
-    /// Create a new vector from an array of elements.
-    #[inline(always)]
-    pub fn from_array(values: impl Into<GenericArray<R::Element, R::Lanes>>) -> Self {
-        Self(R::new(values.into()))
+    #[inline(always)] fn fast_cast<INTO>(self) -> INTO
+    where
+        INTO: CastVector<Self>,
+    {
+        INTO::fast_cast_from(self)
     }
 
-    /// A vector without specified values. This memory is not undefined in a safety sense,
-    /// but it is unspecified in a logical sense. The values are not guaranteed to be zero or any other value,
-    /// although in practice they are almost certainly zero.
-    pub const EMPTY: Self = Self(R::EMPTY);
-
-    /// Create a new vector without specified values. This memory is not undefined in a safety sense,
-    /// but it is unspecified in a logical sense. The values are not guaranteed to be zero or any other value,
-    /// although in practice they are almost certainly zero.
-    #[inline(always)]
-    pub const fn empty() -> Self {
-        Self::EMPTY
-    }
-
-    /// Returns a reference to the vector's elements as an array.
-    #[inline(always)]
-    pub fn as_array(&self) -> &GenericArray<R::Element, R::Lanes> {
-        R::as_array(&self.0)
-    }
-
-    /// Returns a mutable reference to the vector's elements as an array.
-    #[inline(always)]
-    pub fn as_array_mut(&mut self) -> &mut GenericArray<R::Element, R::Lanes> {
-        R::as_array_mut(&mut self.0)
-    }
-
-    /// Returns a slice of the vector's elements.
-    #[inline(always)]
-    pub fn as_slice(&self) -> &[R::Element] {
-        R::as_array(&self.0).as_slice()
-    }
-
-    /// Returns a mutable slice of the vector's elements.
-    #[inline(always)]
-    pub fn as_mut_slice(&mut self) -> &mut [R::Element] {
-        R::as_array_mut(&mut self.0).as_mut_slice()
-    }
-
-    /// Convert the vector to an array of elements.
-    #[inline(always)]
-    pub fn to_array(self) -> GenericArray<R::Element, R::Lanes> {
-        R::as_array(&self.0).clone()
+    #[inline(always)] fn into_bits<INTO>(self) -> INTO
+    where
+        INTO: BitCastVector<Self>,
+    {
+        INTO::from_bits(self)
     }
 }
 
-impl<R: Register> Vector<R> {
-    /// Cast the vector to a different type, converting the elements.
-    ///
-    /// This is not a bitwise cast, but a conversion of the elements to the new type,
-    /// and therefore may lose precision or change the representation of the data.
-    #[inline(always)]
-    pub fn cast<INTO: Register + CastRegister<R>>(self) -> Vector<INTO> {
-        Vector(INTO::cast_from(self.0))
-    }
-
-    /// Like [`Vector::cast`], but potentially uses faster
-    /// conversion methods if available, at the cost of
-    /// potentially losing precision or only working with a subset of the
-    /// values possible in the original type. If outside of that,
-    /// junk may be returned.
-    ///
-    /// If you know your value is within the range of the target type,
-    /// this is a good way to convert it without the overhead of
-    /// fully conforming to the type's range.
-    #[inline(always)]
-    pub fn fast_cast<INTO: Register + CastRegister<R>>(self) -> Vector<INTO> {
-        Vector(INTO::fast_cast_from(self.0))
-    }
-
-    /// Cast the input vector to a different type, converting the elements
-    /// as necessary.
-    #[inline(always)]
-    pub fn from<FROM: Register>(value: Vector<FROM>) -> Vector<R>
-    where
-        R: CastRegister<FROM>,
-    {
-        Vector(R::cast_from(value.0))
-    }
-
-    /// Like [`Vector::from`], but potentially uses faster
-    /// conversion methods if available, at the cost of
-    /// potentially losing precision or only working with a subset of the
-    /// values possible in the original type. If outside of that,
-    /// junk may be returned.
-    ///
-    /// If you know your value is within the range of the target type,
-    /// this is a good way to convert it without the overhead of
-    /// fully conforming to the type's range.
-    #[inline(always)]
-    pub fn fast_from<FROM: Register>(value: Vector<FROM>) -> Vector<R>
-    where
-        R: CastRegister<FROM>,
-    {
-        Vector(R::fast_cast_from(value.0))
-    }
-
-    /// Convert the vector to a different type, without changing the representation of the data.
-    ///
-    /// This is a bitwise cast, and therefore may not be safe if the types are not compatible.
-    #[inline(always)]
-    pub fn into_bits<INTO: Register + BitCastRegister<R>>(self) -> Vector<INTO> {
-        Vector(INTO::from_bits(self.0))
-    }
-
-    /// Convert the vector to a different type, without changing the representation of the data.
-    #[inline(always)]
-    pub fn from_bits<FROM: Register>(value: Vector<FROM>) -> Vector<R>
-    where
-        R: BitCastRegister<FROM>,
-    {
-        Vector(R::from_bits(value.0))
-    }
-}
-
-impl<R: PartialOrdRegister> PartialEq for Vector<R> {
-    /// Compare two vectors for equality, returning true only if all elements are equal.
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        Mask::<R>(R::eq(self.0, other.0)).all()
-    }
-
-    /// Compare two vectors for inequality, returning true if any element is not equal.
-    #[allow(clippy::partialeq_ne_impl)] // sometimes might have better underlying implementation
-    #[inline(always)]
-    fn ne(&self, other: &Self) -> bool {
-        Mask::<R>(R::ne(self.0, other.0)).any()
-    }
-}
-
-impl<R: NumericRegister> Num for Vector<R>
-where
-    R::Element: Num,
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait BitwiseVector:
+    GenericVector
+    + ops::BitAndMasked<Self::Mask, Self, Output = Self>
+    + ops::BitAndAssignMasked<Self::Mask, Self>
+    + ops::BitAndNotMasked<Self::Mask, Self, Output = Self>
+    + ops::BitAndNotAssignMasked<Self::Mask, Self>
+    + ops::BitOrMasked<Self::Mask, Self, Output = Self>
+    + ops::BitOrAssignMasked<Self::Mask, Self>
+    + ops::BitXorMasked<Self::Mask, Self, Output = Self>
+    + ops::BitXorAssignMasked<Self::Mask, Self>
+    + ops::NotMasked<Self::Mask, Output = Self>
 {
-    type FromStrRadixErr = <R::Element as Num>::FromStrRadixErr;
+    /// Computes an arbitrary bitwise boolean function of three inputs (`a`, `b`, `c`)
+    /// based on the truth table specified by `IMM`.
+    ///
+    /// This function is a "programmable logic gate". It applies the logic defined in `IMM`
+    /// to every bit of the inputs in parallel.
+    ///
+    /// # How to Calculate `IMM`
+    /// The easiest way to find the correct `IMM` value is to perform your desired boolean
+    /// logic on these three specific "Magic Constants":
+    ///
+    /// * **A** = `0xF0` (Binary `11110000`)
+    /// * **B** = `0xCC` (Binary `11001100`)
+    /// * **C** = `0xAA` (Binary `10101010`)
+    ///
+    /// ## Example: `(A OR B) XOR C`
+    /// 1. `A | B` = `0xF0 | 0xCC` = `0xFC`
+    /// 2. `Result ^ C` = `0xFC ^ 0xAA` = `0x56`
+    /// 3. Therefore, `IMM = 0x56`.
+    ///
+    /// You can also use the [`ternlog_imm!`](crate::ternlog_imm) macro to compute
+    /// this at compile time.
+    ///
+    /// # Visualization using Disjunction Normal Form (DNF)
+    /// The constants `0xF0`, `0xCC`, and `0xAA` simply form a parallel truth table
+    /// for all 8 possible combinations of 3 bits:
+    ///
+    /// |  A  |  B  |  C  |  Bit Index  |  Term Logic (Minterm) |
+    /// |:---:|:---:|:---:|:-----------:|:---------------------:|
+    /// |  0  |  0  |  0  |      0      | ~A & ~B & ~C          |
+    /// |  0  |  0  |  1  |      1      | ~A & ~B &  C          |
+    /// |  0  |  1  |  0  |      2      | ~A &  B & ~C          |
+    /// |  0  |  1  |  1  |      3      | ~A &  B &  C          |
+    /// |  1  |  0  |  0  |      4      |  A & ~B & ~C          |
+    /// |  1  |  0  |  1  |      5      |  A & ~B &  C          |
+    /// |  1  |  1  |  0  |      6      |  A &  B & ~C          |
+    /// |  1  |  1  |  1  |      7      |  A &  B &  C          |
+    ///
+    /// If `IMM = 0x88` (Bit 3 and 7 set), the logic is:
+    /// - Bit 3 (0, 1, 1): `~A & B & C`
+    /// - Bit 7 (1, 1, 1): `A & B & C`
+    ///
+    /// As raw DNF, this becomes: `(~A & B & C) | (A & B & C)`.\
+    /// `~A` and `A` cancel out, simplifying to `B & C`.
+    ///
+    /// For each bit set in IMM, we effectively bitwise-OR each corresponding minterm.
+    ///
+    /// # Common Immediate Values
+    /// | Logic | Immediate | Description |
+    /// | :--- | :--- | :--- |
+    /// | `A ^ B ^ C` | `0x96` | **3-Way XOR** (Parity) |
+    /// | `(A & B) OR (~A & C)` | `0xCA` | **Bitwise Select** (If A=1 use B, else use C) |
+    /// | `(A & B) OR (A & C) OR (B & C)` | `0xE8` | **Majority** (True if 2+ inputs are 1) |
+    /// | `A OR B OR C` | `0xFE` | **3-Way OR** |
+    /// | `A ? B : 0` | `0xA0` | **Mask** (A & B) |
+    ///
+    /// # Performance Note
+    /// Since `IMM` is a compile-time constant, the compiler will optimize this function
+    /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
+    /// for your specific architecture. If using AVX512, there actually exists a single
+    /// instruction for this.
+    #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 
-    #[inline(always)]
-    fn from_str_radix(s: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        Ok(Self(R::splat(Num::from_str_radix(s, radix)?)))
-    }
+    #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self;
 }
 
-impl<R: UnsignedIntegerRegister> num_traits::Unsigned for Vector<R> {}
-
-impl<R: SignedRegister> Signed for Vector<R>
-where
-    R::Element: Signed,
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait BitshiftVector:
+    BitwiseVector
+    + ops::ShrMasked<Self::Mask, Self::Unsigned, Output = Self>
+    + ops::ShrAssignMasked<Self::Mask, Self::Unsigned>
+    + ops::ShlMasked<Self::Mask, Self::Unsigned, Output = Self>
+    + ops::ShlAssignMasked<Self::Mask, Self::Unsigned>
+    + ops::ShrMasked<Self::Mask, u32, Output = Self>
+    + ops::ShrAssignMasked<Self::Mask, u32>
+    + ops::ShlMasked<Self::Mask, u32, Output = Self>
+    + ops::ShlAssignMasked<Self::Mask, u32>
 {
+    const HAS_TRUE_SHIFTV: bool;
+    const HAS_WIDE_BYTE_SHIFTS: bool;
+
+    /// Treats the entire vector as a single large integer and shifts left by the immediate value
+    /// number of BYTES. Not bits, bytes.
+    #[conditional] fn bshli<const I: i32>(self) -> Self;
+
+    /// Treats the entire vector as a single large integer and shifts right by the immediate value
+    /// number of BYTES. Not bits, bytes.
+    #[conditional] fn bshri<const I: i32>(self) -> Self;
+
+    /// For each lane in the vector, shift left by the immediate value.
+    #[conditional] fn shli<const I: i32>(self) -> Self;
+
+    /// For each lane in the vector, shift right by the immediate value.
+    #[conditional] fn shri<const I: i32>(self) -> Self;
+
+    /// For each lane in the vector, shift left by the given value.
+    #[conditional] fn shlv(self, counts: Self::Unsigned) -> Self;
+
+    /// For each lane in the vector, shift right by the given value.
+    #[conditional] fn shrv(self, counts: Self::Unsigned) -> Self;
+
+    /// For each element in the vector, rotate the bits to the left by the given
+    /// number of bits.
+    #[conditional] fn rol(self, shift: u32) -> Self;
+    /// For each element in the vector, rotate the bits to the right by the given
+    /// number of bits.
+    #[conditional] fn ror(self, shift: u32) -> Self;
+    /// For each element in the vector, rotate the bits to the left by the immediate
+    /// value number of bits.
+    #[conditional] fn roli<const I: i32>(self) -> Self;
+    /// For each element in the vector, rotate the bits to the right by the immediate
+    /// value number of bits.
+    #[conditional] fn rori<const I: i32>(self) -> Self;
+
+    /// For each element in the vector, rotate the bits to the left by the given
+    /// number of bits in the corresponding lane of `counts`.
+    #[conditional] fn rolv(self, counts: Self::Unsigned) -> Self;
+
+    /// For each element in the vector, rotate the bits to the right by the given
+    /// number of bits in the corresponding lane of `counts`.
+    #[conditional] fn rorv(self, counts: Self::Unsigned) -> Self;
+
+    /// For each element in the vector, reverse the bits of that element.
+    #[conditional] fn reverse_bits(self) -> Self;
+}
+
+pub trait CastVector<FROM: Sized>: Sized {
+    fn cast_from(from: FROM) -> Self;
+    fn cast_into(self) -> FROM;
+
     #[inline(always)]
-    fn abs(&self) -> Self {
-        Self(R::abs(self.0))
+    fn fast_cast_from(from: FROM) -> Self {
+        Self::cast_from(from)
     }
 
     #[inline(always)]
-    fn abs_sub(&self, other: &Self) -> Self {
-        Self(R::sub(R::max(self.0, other.0), other.0))
-    }
-
-    #[inline(always)]
-    fn signum(&self) -> Self {
-        Self(R::signum(self.0))
-    }
-
-    /// Returns true if any element in the vector is negative.
-    #[inline(always)]
-    fn is_negative(&self) -> bool {
-        // true if any element is negative
-        Mask::<R>(R::is_negative(self.0)).any()
-    }
-
-    /// Returns true if all elements in the vector are positive.
-    #[inline(always)]
-    fn is_positive(&self) -> bool {
-        // true if all elements are positive
-        Mask::<R>(R::is_positive(self.0)).all()
+    fn fast_cast_into(self) -> FROM {
+        Self::cast_into(self)
     }
 }
 
-impl<R: NumericRegister> ConstZero for Vector<R> {
-    const ZERO: Self = Self(R::ZERO);
+pub trait BitCastVector<FROM: Sized>: Sized {
+    fn from_bits(bits: FROM) -> Self;
 }
 
-impl<R: NumericRegister> ConstOne for Vector<R> {
-    const ONE: Self = Self(R::ONE);
+pub trait PartialOrdVector: GenericVector + PartialEq {
+    fn cmp_lt(self, other: Self) -> Self::Mask;
+    fn cmp_le(self, other: Self) -> Self::Mask;
+    fn cmp_gt(self, other: Self) -> Self::Mask;
+    fn cmp_ge(self, other: Self) -> Self::Mask;
+    fn cmp_eq(self, other: Self) -> Self::Mask;
+    fn cmp_ne(self, other: Self) -> Self::Mask;
 }
 
-#[rustfmt::skip]
-impl<R: FloatRegister> num_traits::FloatConst for Vector<R> {
-    #[inline(always)] fn E() -> Self                { const { Self::splat_const(FloatConsts::E) } }
-    #[inline(always)] fn FRAC_1_PI() -> Self        { const { Self::splat_const(FloatConsts::FRAC_1_PI) } }
-    #[inline(always)] fn FRAC_1_SQRT_2() -> Self    { const { Self::splat_const(FloatConsts::FRAC_1_SQRT_2) } }
-    #[inline(always)] fn FRAC_2_PI() -> Self        { const { Self::splat_const(FloatConsts::FRAC_2_PI) } }
-    #[inline(always)] fn FRAC_2_SQRT_PI() -> Self   { const { Self::splat_const(FloatConsts::FRAC_2_SQRT_PI) } }
-    #[inline(always)] fn FRAC_PI_2() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_2) } }
-    #[inline(always)] fn FRAC_PI_3() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_3) } }
-    #[inline(always)] fn FRAC_PI_4() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_4) } }
-    #[inline(always)] fn FRAC_PI_6() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_6) } }
-    #[inline(always)] fn FRAC_PI_8() -> Self        { const { Self::splat_const(FloatConsts::FRAC_PI_8) } }
-    #[inline(always)] fn LN_10() -> Self            { const { Self::splat_const(FloatConsts::LN_10) } }
-    #[inline(always)] fn LN_2() -> Self             { const { Self::splat_const(FloatConsts::LN_2) } }
-    #[inline(always)] fn LOG10_E() -> Self          { const { Self::splat_const(FloatConsts::LOG10_E) } }
-    #[inline(always)] fn LOG2_E() -> Self           { const { Self::splat_const(FloatConsts::LOG2_E) } }
-    #[inline(always)] fn PI() -> Self               { const { Self::splat_const(FloatConsts::PI) } }
-    #[inline(always)] fn SQRT_2() -> Self           { const { Self::splat_const(FloatConsts::SQRT_2) } }
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait NumericVector:
+    PartialOrdVector<Element: num_traits::NumOps>
+    + ops::AddMasked<Self::Mask, Self, Output = Self>
+    + ops::AddAssignMasked<Self::Mask, Self>
+    + ops::SubMasked<Self::Mask, Self, Output = Self>
+    + ops::SubAssignMasked<Self::Mask, Self>
+    + ops::MulMasked<Self::Mask, Self, Output = Self>
+    + ops::MulAssignMasked<Self::Mask, Self>
+    + ops::DivMasked<Self::Mask, Self, Output = Self>
+    + ops::DivAssignMasked<Self::Mask, Self>
+    + ops::RemMasked<Self::Mask, Self, Output = Self>
+    + ops::RemAssignMasked<Self::Mask, Self>
+    + ops::SquareMasked<Self::Mask, Output = Self>
+    + num_traits::NumOps<Self>
+    + num_traits::NumAssignOps<Self>
+    + core::iter::Sum
+    + core::iter::Product
+{
+    /// A vector of the value "0" in the element type.
+    const ZERO: Self;
+    /// A vector of the value "1" in the element type.
+    const ONE: Self;
+    /// A vector of the value "2" in the element type.
+    const TWO: Self;
 
-    // the bounds on these three are dumb
-    #[inline(always)]
-    fn TAU() -> Self where Self: Sized + Add<Self, Output = Self> { const { Self::splat_const(FloatConsts::TAU) } }
+    /// A vector of the minimum value the element type of this vector can represent.
+    const MIN: Self;
+    /// A vector of the maximum value the element type of this vector can represent.
+    const MAX: Self;
 
-    #[inline(always)]
-    fn LOG10_2() -> Self where Self: Sized + Div<Self, Output = Self> { const { Self::splat_const(FloatConsts::LOG10_2) } }
+    /// For each element in the vector, return a mask indicating whether that element is zero.
+    fn is_zero(self) -> Self::Mask;
 
-    #[inline(always)]
-    fn LOG2_10() -> Self where Self: Sized + Div<Self, Output = Self> { const { Self::splat_const(FloatConsts::LOG2_10) } }
+    /// Return the minimum of two vectors, element-wise.
+    #[conditional] fn min(self, other: Self) -> Self;
+
+    /// Return the maximum of two vectors, element-wise.
+    #[conditional] fn max(self, other: Self) -> Self;
+
+    /// Clamps the elements of the vector between the given minimum and maximum values.
+    fn clamp(self, min: Self, max: Self) -> Self;
+
+    /// Returns the minimum value in the vector.
+    ///
+    /// This operation has an `O(log2 n)` complexity to reduce.
+    fn min_element(self) -> Self::Element;
+    /// Returns the maximum value in the vector.
+    ///
+    /// This operation has an `O(log2 n)` complexity to reduce.
+    fn max_element(self) -> Self::Element;
+
+    /// Returns the sum of all elements in the vector.
+    ///
+    /// This operation has an `O(log2 n)` complexity to reduce.
+    fn sum_elements(self) -> Self::Element;
+
+    /// Returns the product of all elements in the vector.
+    ///
+    /// This operation has an `O(log2 n)` complexity to reduce.
+    fn prod_elements(self) -> Self::Element;
+
+    /// Effectively returns `Self::splat(Self::LANES as Self::Element)`.
+    fn offset() -> Self;
+
+    /// Returns a vector where each element is the index of the lane as that element type.
+    ///
+    /// `[0, 1, 2, 3]`, etc.
+    fn indexed() -> Self;
 }
 
-// impl<R: ShuffleRegister> Vector<R> {
-//     /// Shuffle vectors according to the mask in IMM8. Note that this
-//     /// instruction does not work like expected.
-//     ///
-//     /// For each 128-bit subvector, it interleaves A and B, selecting
-//     /// from A for imm8 bits 0:1 and 2:3, then from B using bits 4:5 and 6:7
-//     ///
-//     /// If the inputs are larger than 128 bits, it repeats this for each 128 bits
-//     /// **_using the same imm8 indices_**.
-//     #[inline(always)]
-//     pub fn interleave<const IMM8: i32>(self, other: Self) -> Self {
-//         Self(R::shuffle::<IMM8>(self.0, other.0))
-//     }
-// }
+// TODO: Add back in some kind of `Signed` trait requirement for Element?
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self> {
+    /// A vector of the value "-1" in the element type.
+    const NEG_ONE: Self;
 
-impl<R: Register> Index<usize> for Vector<R> {
-    type Output = R::Element;
+    /// A vector of the smallest positive (non-zero) value in the element type.
+    const MIN_POSITIVE: Self;
 
-    #[inline(always)]
-    fn index(&self, index: usize) -> &Self::Output {
-        &R::as_array(&self.0)[index]
-    }
+    /// Take the absolute value of the vector, element-wise.
+    #[conditional] fn abs(self) -> Self;
+
+    /// For each element in the vector, return a new vector
+    /// where each element is either -1 or +1 depending
+    /// on the sign of the element.
+    fn signum(self) -> Self;
+
+    /// For each element in the vector, set the sign of that
+    /// element to the sign of the corresponding element in the other vector.
+    #[conditional] fn copysign(self, sign: Self) -> Self;
+
+    /// For each element in the vector, return a mask indicating
+    /// whether that element is negative.
+    fn is_positive(self) -> Self::Mask;
+
+    /// For each element in the vector, return a mask indicating
+    /// whether that element is positive.
+    fn is_negative(self) -> Self::Mask;
+
+    /// Based on if self is negative, select between `if_neg` and `if_pos`.
+    fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
 }
 
-impl<R: Register> IndexMut<usize> for Vector<R> {
-    #[inline(always)]
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut R::as_array_mut(&mut self.0)[index]
-    }
-}
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait IntegerVector:
+    NumericVector<Element: Denominator>
+    + BitshiftVector
+    + ops::DivMasked<Self::Mask, Self::Divider, Output = Self>
+    + ops::DivMasked<Self::Mask, Self::BranchfreeDivider, Output = Self>
+    // TODO: Some of these might interfere with the methods of this trait,
+    // adding ambiguity. See what we can do about that.
+    + num_traits::Saturating + num_traits::SaturatingAdd
+    + num_traits::SaturatingSub + num_traits::WrappingMul
+    + num_traits::WrappingAdd + num_traits::WrappingSub
+{
+    type Divider: Copy;
+    type BranchfreeDivider: Copy;
+    type VectorizedDivider: Copy;
 
-impl<R: NumericRegister> Zero for Vector<R> {
-    /// Returns true if **all** elements in the vector are zero.
-    #[inline(always)]
-    fn is_zero(&self) -> bool {
-        Mask::<R>(R::eq(self.0, R::ZERO)).all()
-    }
+    /// Multiply two vectors, returning the high half of each product.
+    #[conditional] fn mulhi(self, other: Self) -> Self;
 
-    #[inline(always)]
-    fn set_zero(&mut self) {
-        self.0 = R::ZERO;
-    }
+    /// Multiply two vectors, returning the low half of each product.
+    ///
+    /// This is usually the same as regular multiplication, but some architectures
+    /// have specialized instructions for this operation.
+    #[conditional] fn mullo(self, other: Self) -> Self;
 
-    #[inline(always)]
-    fn zero() -> Self {
-        Self::ZERO
-    }
-}
+    // fn wrapping_add(self, other: Self) -> Self;
+    // fn wrapping_sub(self, other: Self) -> Self;
+    // fn wrapping_mul(self, other: Self) -> Self;
 
-impl<R: NumericRegister> One for Vector<R> {
-    /// Returns true if **all** elements in the vector are one.
-    #[inline(always)]
-    fn is_one(&self) -> bool {
-        Mask::<R>(R::eq(self.0, R::ONE)).all()
-    }
+    /// Perform saturating addition for each element of the vectors.
+    #[conditional] fn saturating_add(self, other: Self) -> Self;
 
-    #[inline(always)]
-    fn set_one(&mut self) {
-        self.0 = R::ONE;
-    }
+    /// Perform saturating subtraction for each element of the vectors.
+    #[conditional] fn saturating_sub(self, other: Self) -> Self;
 
-    #[inline(always)]
-    fn one() -> Self {
-        Self::ONE
-    }
-}
+    #[conditional] fn wrapping_sum(self) -> Self::Element;
+    #[conditional] fn wrapping_prod(self) -> Self::Element;
 
-impl<R: IntegerRegister> SaturatingAdd for Vector<R> {
-    #[inline(always)]
-    fn saturating_add(&self, v: &Self) -> Self {
-        Self(R::saturating_add(self.0, v.0))
-    }
-}
+    fn create_divider(d: Self::Element) -> Self::Divider;
+    fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
 
-impl<R: IntegerRegister> SaturatingSub for Vector<R> {
-    #[inline(always)]
-    fn saturating_sub(&self, v: &Self) -> Self {
-        Self(R::saturating_sub(self.0, v.0))
-    }
-}
-
-impl<R: IntegerRegister> Saturating for Vector<R> {
-    #[inline(always)]
-    fn saturating_add(self, v: Self) -> Self {
-        Self(R::saturating_add(self.0, v.0))
-    }
-
-    #[inline(always)]
-    fn saturating_sub(self, v: Self) -> Self {
-        Self(R::saturating_sub(self.0, v.0))
-    }
-}
-
-impl<R: IntegerRegister> WrappingAdd for Vector<R> {
-    #[inline(always)]
-    fn wrapping_add(&self, v: &Self) -> Self {
-        Self(R::add(self.0, v.0))
-    }
-}
-
-impl<R: IntegerRegister> WrappingSub for Vector<R> {
-    #[inline(always)]
-    fn wrapping_sub(&self, v: &Self) -> Self {
-        Self(R::sub(self.0, v.0))
-    }
-}
-
-impl<R: IntegerRegister> WrappingMul for Vector<R> {
-    #[inline(always)]
-    fn wrapping_mul(&self, v: &Self) -> Self {
-        Self(R::mul(self.0, v.0))
-    }
-}
-
-impl<R: IntegerRegister> Vector<R> {
-    /// Wrapping addition for each element of the vectors.
-    #[inline(always)]
-    pub fn wrapping_add(self, rhs: Self) -> Self {
-        Self(R::add(self.0, rhs.0))
-    }
-
-    /// Wrapping subtraction for each element of the vectors.
-    #[inline(always)]
-    pub fn wrapping_sub(self, rhs: Self) -> Self {
-        Self(R::sub(self.0, rhs.0))
-    }
-
-    /// Wrapping multiplication for each element of the vectors.
-    #[inline(always)]
-    pub fn wrapping_mul(self, rhs: Self) -> Self {
-        Self(R::mul(self.0, rhs.0))
-    }
-
-    /// Try to use this vector as the denominators for a vectorized division operation.
+    /// Use this vector as the denominators for a vectorized division operation.
     ///
     /// This creates a `VectorDivider` which can then be used to perform
-    /// vectorized integer division with the `Div` trait. If any of the
-    /// denominators are unsupported (such as `1` for unsigned integers),
-    /// an error is returned.
+    /// vectorized integer division with the `Div` trait. Note that for unsigned
+    /// integer types, `1` is not a valid denominator and will cause a panic.
     ///
     /// This operation itself is NOT vectorized and is `O(n)` in the number of lanes.
     /// It is designed to be calculated once and then reused for multiple division operations.
-    #[inline(always)]
-    pub fn try_to_divider(self) -> Result<VectorDivider<R>, UnsupportedDivisor>
-    where
-        R::Element: Denominator,
-    {
-        VectorDivider::try_new(self)
-    }
+    ///
+    /// # Panics
+    ///
+    /// If unsigned, integer values of `1` present in the vector
+    /// denominators will cause a panic.
+    fn to_divider(self) -> Self::VectorizedDivider;
+
+    /// For each element in the vector, count the number of bits that are set to 1.
+    #[conditional] fn count_ones(self) -> Self;
+    /// For each element in the vector, count the number of bits that are set to 0.
+    #[conditional] fn count_zeros(self) -> Self;
+    /// For each element in the vector, count the number of leading ones.
+    #[conditional] fn leading_ones(self) -> Self;
+    /// For each element in the vector, count the number of leading zeros.
+    #[conditional] fn leading_zeros(self) -> Self;
 }
 
-#[rustfmt::skip]
-macro_rules! impl_swizzle4 {
-    (@ x) => { 0 };
-    (@ y) => { 1 };
-    (@ z) => { 2 };
-    (@ w) => { 3 };
-
-    (IMPL $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
-        #[inline(always)]
-        fn [<$a $b $c $d>](self) -> Self {
-            const IMM8: i32 = MM_SHUFFLE!(
-                impl_swizzle4!(@ $d),
-                impl_swizzle4!(@ $c),
-                impl_swizzle4!(@ $b),
-                impl_swizzle4!(@ $a)
-            );
-
-            Self(R::permute::<IMM8>(self.0))
-        }
-    }};
-
-    (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
-        #[allow(missing_docs)]
-        $(#[$meta])* fn [<$a $b $c $d>](self) -> Self;
-    }};
-
-    ($( $(#[$meta:meta])* [$a:ident $b:ident $c:ident $d:ident]),*) => {
-        /// Only available for 4-lane vectors, this allows human-readable swizzle/permutations
-        /// of the vector.
-        pub trait Swizzle4 { $(impl_swizzle4!(DECL $(#[$meta])* $a $b $c $d);)* }
-
-        /// Implements 4-lane swizzling for vectors.
-        impl<R: PermuteRegister<Lanes = generic_array::typenum::consts::U4>> Swizzle4 for Vector<R> {
-            $(impl_swizzle4!(IMPL $a $b $c $d);)*
-        }
-    }
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::element::SignedIntegerElement> {
+    /// For each lane in the vector, right shift in sign bits by the immediate value.
+    #[conditional] fn srai<const I: i32>(self) -> Self;
+    /// For each lane in the vector, right shift in sign bits by the given value.
+    #[conditional] fn sra(self, count: u32) -> Self;
+    /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
+    #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
 }
 
-#[rustfmt::skip]
-macro_rules! impl_swizzle3 {
-    (IMPL $a:ident $b:ident $c:ident) => {paste::paste! {
-        #[inline(always)]
-        fn [<$a $b $c>](self) -> Self {
-            const IMM8: i32 = MM_SHUFFLE!(
-                3, // 4th lane is unchanged
-                impl_swizzle4!(@ $c),
-                impl_swizzle4!(@ $b),
-                impl_swizzle4!(@ $a)
-            );
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::UnsignedIntegerElement> {
+    /// Determines if each unsigned integer element in the vector is a
+    /// power of two, returning a mask indicating whether or not it is.
+    fn is_power_of_two(self) -> Self::Mask;
 
-            Self(R::permute::<IMM8>(self.0))
-        }
-    }};
+    /// Returns the next power of two minus one for each unsigned integer
+    /// element in the vector.
+    #[conditional] fn next_power_of_two_m1(self) -> Self;
+    /// Computes log2(x) + 1 for each unsigned integer element in the vector.
+    #[conditional] fn ilog2p1(self) -> Self;
 
-    (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident) => {paste::paste! {
-        #[allow(missing_docs)]
-        $(#[$meta])* fn [<$a $b $c>](self) -> Self;
-    }};
-
-    ($( $(#[$meta:meta])* [$a:ident $b:ident $c:ident]),*) => {
-        /// Only available for "3-lane" (ignoring 4th lane) [`LinAlg3Register`] vectors,
-        /// this allows human-readable swizzle/permutations of the vector. Permutations
-        /// will ignore the 4th lane of the register, leaving it unchanged.
-        pub trait Swizzle3 { $(impl_swizzle3!(DECL $(#[$meta])* $a $b $c);)* }
-
-        /// Implements 3-lane swizzling for vectors support 3-lane linear algebra operations.
-        impl<R: LinAlg3Register + PermuteRegister> Swizzle3 for Vector<R> {
-            $(impl_swizzle3!(IMPL $a $b $c);)*
-        }
-    }
+    /// Compute the parity of each unsigned integer lane in the vector.
+    #[conditional] fn parity(self) -> Self;
 }
 
-impl_swizzle3! {
-    /// Identity
-    [x y z],
-    [x x x],
-    [x x y],
-    [x x z],
-    [x y x],
-    [x y y],
-    [x z x],
-    [x z y],
-    [x z z],
-    [y x x],
-    [y x y],
-    [y x z],
-    [y y x],
-    [y y y],
-    [y y z],
-    [y z x],
-    [y z y],
-    [y z z],
-    [z x x],
-    [z x y],
-    [z x z],
-    [z y x],
-    [z y y],
-    [z y z],
-    [z z x],
-    [z z y],
-    [z z z]
+/// Float vector types which have an associated hardware register type.
+pub trait FloatVectorWithRegister: FloatVectorWithBits<Mask = crate::Mask<Self::Register>> {
+    type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-impl_swizzle4! {
-    /// Identity
-    [x y z w],
-    [x x x x],
-    [x x x y],
-    [x x x z],
-    [x x x w],
-    [x x y x],
-    [x x y y],
-    [x x y z],
-    [x x y w],
-    [x x z x],
-    [x x z y],
-    [x x z z],
-    [x x z w],
-    [x x w x],
-    [x x w y],
-    [x x w z],
-    [x x w w],
-    [x y x x],
-    [x y x y],
-    [x y x z],
-    [x y x w],
-    [x y y x],
-    [x y y y],
-    [x y y z],
-    [x y y w],
-    [x y z x],
-    [x y z y],
-    [x y z z],
-    [x y w x],
-    [x y w y],
-    [x y w z],
-    [x y w w],
-    [x z x x],
-    [x z x y],
-    [x z x z],
-    [x z x w],
-    [x z y x],
-    [x z y y],
-    [x z y z],
-    [x z y w],
-    [x z z x],
-    [x z z y],
-    [x z z z],
-    [x z z w],
-    [x z w x],
-    [x z w y],
-    [x z w z],
-    [x z w w],
-    [x w x x],
-    [x w x y],
-    [x w x z],
-    [x w x w],
-    [x w y x],
-    [x w y y],
-    [x w y z],
-    [x w y w],
-    [x w z x],
-    [x w z y],
-    [x w z z],
-    [x w z w],
-    [x w w x],
-    [x w w y],
-    [x w w z],
-    [x w w w],
-    [y x x x],
-    [y x x y],
-    [y x x z],
-    [y x x w],
-    [y x y x],
-    [y x y y],
-    [y x y z],
-    [y x y w],
-    [y x z x],
-    [y x z y],
-    [y x z z],
-    [y x z w],
-    [y x w x],
-    [y x w y],
-    [y x w z],
-    [y x w w],
-    [y y x x],
-    [y y x y],
-    [y y x z],
-    [y y x w],
-    [y y y x],
-    [y y y y],
-    [y y y z],
-    [y y y w],
-    [y y z x],
-    [y y z y],
-    [y y z z],
-    [y y z w],
-    [y y w x],
-    [y y w y],
-    [y y w z],
-    [y y w w],
-    [y z x x],
-    [y z x y],
-    [y z x z],
-    [y z x w],
-    [y z y x],
-    [y z y y],
-    [y z y z],
-    [y z y w],
-    [y z z x],
-    [y z z y],
-    [y z z z],
-    [y z z w],
-    [y z w x],
-    [y z w y],
-    [y z w z],
-    [y z w w],
-    [y w x x],
-    [y w x y],
-    [y w x z],
-    [y w x w],
-    [y w y x],
-    [y w y y],
-    [y w y z],
-    [y w y w],
-    [y w z x],
-    [y w z y],
-    [y w z z],
-    [y w z w],
-    [y w w x],
-    [y w w y],
-    [y w w z],
-    [y w w w],
-    [z x x x],
-    [z x x y],
-    [z x x z],
-    [z x x w],
-    [z x y x],
-    [z x y y],
-    [z x y z],
-    [z x y w],
-    [z x z x],
-    [z x z y],
-    [z x z z],
-    [z x z w],
-    [z x w x],
-    [z x w y],
-    [z x w z],
-    [z x w w],
-    [z y x x],
-    [z y x y],
-    [z y x z],
-    [z y x w],
-    [z y y x],
-    [z y y y],
-    [z y y z],
-    [z y y w],
-    [z y z x],
-    [z y z y],
-    [z y z z],
-    [z y z w],
-    [z y w x],
-    [z y w y],
-    [z y w z],
-    [z y w w],
-    [z z x x],
-    [z z x y],
-    [z z x z],
-    [z z x w],
-    [z z y x],
-    [z z y y],
-    [z z y z],
-    [z z y w],
-    [z z z x],
-    [z z z y],
-    [z z z z],
-    [z z z w],
-    [z z w x],
-    [z z w y],
-    [z z w z],
-    [z z w w],
-    [z w x x],
-    [z w x y],
-    [z w x z],
-    [z w x w],
-    [z w y x],
-    [z w y y],
-    [z w y z],
-    [z w y w],
-    [z w z x],
-    [z w z y],
-    [z w z z],
-    [z w z w],
-    [z w w x],
-    [z w w y],
-    [z w w z],
-    [z w w w],
-    [w x x x],
-    [w x x y],
-    [w x x z],
-    [w x x w],
-    [w x y x],
-    [w x y y],
-    [w x y z],
-    [w x y w],
-    [w x z x],
-    [w x z y],
-    [w x z z],
-    [w x z w],
-    [w x w x],
-    [w x w y],
-    [w x w z],
-    [w x w w],
-    [w y x x],
-    [w y x y],
-    [w y x z],
-    [w y x w],
-    [w y y x],
-    [w y y y],
-    [w y y z],
-    [w y y w],
-    [w y z x],
-    [w y z y],
-    [w y z z],
-    [w y z w],
-    [w y w x],
-    [w y w y],
-    [w y w z],
-    [w y w w],
-    [w z x x],
-    [w z x y],
-    [w z x z],
-    [w z x w],
-    [w z y x],
-    [w z y y],
-    [w z y z],
-    [w z y w],
-    [w z z x],
-    [w z z y],
-    [w z z z],
-    [w z z w],
-    [w z w x],
-    [w z w y],
-    [w z w z],
-    [w z w w],
-    [w w x x],
-    [w w x y],
-    [w w x z],
-    [w w x w],
-    [w w y x],
-    [w w y y],
-    [w w y z],
-    [w w y w],
-    [w w z x],
-    [w w z y],
-    [w w z z],
-    [w w z w],
-    [w w w x],
-    [w w w y],
-    [w w w z],
-    [w w w w]
+/// SignedBits integer vector types which have an associated hardware register type.
+pub trait SignedIntegerVectorWithRegister: SignedIntegerVector<Mask = crate::Mask<Self::Register>> {
+    type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
-/// Implements conversion from `Vector<R>` to primitive types by extracting
-/// the first lane and converting that. Other lanes are ignored.
-#[rustfmt::skip]
-impl<R: Register> num_traits::ToPrimitive for Vector<R>
-where
-    R::Element: num_traits::ToPrimitive,
+/// Unsigned integer vector types which have an associated hardware register type.
+pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector<Mask = crate::Mask<Self::Register>> {
+    type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
+}
+
+#[rustfmt::skip] #[thermite_macros::vector_trait]
+pub trait FloatVector: SignedVector<Element: FloatElement>
+    + FloatConsts
+    + CastVector<Self::ExtendedPrecision>
+    + ops::MulAddExtMasked<Self::Mask, Self, Self, Output = Self>
+    + ops::MulAddAssignExtMasked<Self::Mask, Self, Self>
 {
-    #[inline(always)] fn to_isize(&self) -> Option<isize> { self.extract::<0>().to_isize() }
-    #[inline(always)] fn to_i8(&self) -> Option<i8> { self.extract::<0>().to_i8() }
-    #[inline(always)] fn to_i16(&self) -> Option<i16> { self.extract::<0>().to_i16() }
-    #[inline(always)] fn to_i32(&self) -> Option<i32> { self.extract::<0>().to_i32() }
-    #[inline(always)] fn to_i128(&self) -> Option<i128> { self.extract::<0>().to_i128() }
-    #[inline(always)] fn to_usize(&self) -> Option<usize> { self.extract::<0>().to_usize() }
-    #[inline(always)] fn to_u8(&self) -> Option<u8> { self.extract::<0>().to_u8() }
-    #[inline(always)] fn to_u16(&self) -> Option<u16> { self.extract::<0>().to_u16() }
-    #[inline(always)] fn to_u32(&self) -> Option<u32> { self.extract::<0>().to_u32() }
-    #[inline(always)] fn to_u128(&self) -> Option<u128> { self.extract::<0>().to_u128() }
-    #[inline(always)] fn to_f32(&self) -> Option<f32> { self.extract::<0>().to_f32() }
-    #[inline(always)] fn to_f64(&self) -> Option<f64> { self.extract::<0>().to_f64() }
-    #[inline(always)] fn to_i64(&self) -> Option<i64> { self.extract::<0>().to_i64() }
-    #[inline(always)] fn to_u64(&self) -> Option<u64> { self.extract::<0>().to_u64() }
+    /// The value `0.5` represented in this vector type.
+    const HALF: Self;
+    /// The value `-0.0` represented in this vector type.
+    const NEG_ZERO: Self;
+    /// The value `infinity` represented in this vector type.
+    const INFINITY: Self;
+    /// The value `-infinity` represented in this vector type.
+    const NEG_INFINITY: Self;
+    /// The value `NaN` represented in this vector type.
+    const NAN: Self;
+    /// Hardware epsilon value in this vector type.
+    const EPSILON: Self;
+
+    /// If available, an extended precision floating point vector type
+    /// corresponding to this vector type. E.g., for `f32` vectors, this
+    /// would be an `f64` vector type.
+    ///
+    /// If no such type exists, this will be the same as `Self`.
+    type ExtendedPrecision: FloatVector<Lanes = Self::Lanes> + CastVector<Self>;
+
+    /// Check if each element in the vector is infinite, returning a mask.
+    fn is_infinite(self) -> Self::Mask;
+
+    /// Check if each element in the vector is finite, returning a mask.
+    fn is_finite(self) -> Self::Mask;
+
+    /// Check if each element in the vector is NaN, returning a mask.
+    fn is_nan(self) -> Self::Mask;
+
+    /// Check if each element in the vector is zero or subnormal, returning a mask.
+    fn is_zero_or_subnormal(self) -> Self::Mask;
+
+    /// Check if each element in the vector is normal, returning a mask.
+    fn is_normal(self) -> Self::Mask;
+
+    /// Check if each element in the vector is subnormal, returning a mask.
+    fn is_subnormal(self) -> Self::Mask;
+
+    const HAS_APPROX_RCP: bool;
+    const HAS_APPROX_RSQRT: bool;
+
+    /// Square root
+    #[conditional] fn sqrt(self) -> Self;
+
+    /// Approximate reciprocal square root, hardware dependent accuracy.
+    #[conditional] fn rsqrt(self) -> Self;
+
+    /// Approximate reciprocal, hardware dependent accuracy.
+    #[conditional] fn rcp(self) -> Self;
+
+    #[conditional] fn floor(self) -> Self;
+    #[conditional] fn ceil(self) -> Self;
+
+    /// Round to nearest
+    #[conditional] fn round(self) -> Self;
+    /// Truncate to int
+    #[conditional] fn trunc(self) -> Self;
+    /// Fractional part
+    #[conditional] fn fract(self) -> Self;
+
+    /// Effectively `self * sign.signum()`, multiplying the sign bits.
+    #[conditional] fn mul_sign(self, sign: Self) -> Self;
+
+    /// Returns zero with the sign of `self`, i.e.: only the sign bit is set.
+    #[conditional] fn signed_zero(self) -> Self;
+
+    /// Returns the next representable value greater than the current value, towards positive infinity.
+    #[conditional] fn next_up(self) -> Self;
+
+    /// Returns the next representable value less than the current value, towards negative infinity.
+    #[conditional] fn next_down(self) -> Self;
+
+    unsafe fn block_autovectorization(&mut self);
+
+    /// Attempt to upcast this FloatVector to a FloatVectorWithBits,
+    /// using the provided kernel. If not possible, returns None.
+    fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
+        values: [Self; N],
+        kernel: K,
+    ) -> Option<<K as AsFloatVectorWithBitsKernel<Self, N>>::Output> {
+        None // Default implementation returns None
+    }
 }
 
-impl<R: Register> num_traits::NumCast for Vector<R>
-where
-    R::Element: num_traits::NumCast,
+#[macro_export]
+macro_rules! with_bits {
+    // (($first_value:expr $(, $value:expr)+): $ty:ty as fn($first_decl:ident: $first_alias:ident $(,$decl:ident: $alias:ident)* ) -> $ret:ty $(where $($c:ty: $constraint:ident),*)? { $($body:tt)* }) => {{
+    //     $crate::with_bits!(($first_value): $ty as fn($first_decl: $first_alias) -> impl $ret $(where $($c: $constraint),*)? {
+    //         $crate::with_bits!(($($value),+): $ty as fn($($decl: $alias),*) -> $ret $(where $($c: $constraint),*)? {
+    //             $($body)*
+    //         })
+    //     })
+    // }};
+
+    ([$($values:expr),+]: [$ty:ty; $len:literal] as fn($decl:ident: [$alias:ident; _]) -> $ret:ty $(where $($c:ty: $constraint:ident),*)? { $($body:tt)* }) => {{
+        struct AnonymousAsFloatVectorWithBitsKernel<V>(core::marker::PhantomData<V>);
+
+        impl<V: FloatVector> $crate::vector::AsFloatVectorWithBitsKernel<V, $len> for AnonymousAsFloatVectorWithBitsKernel<V>
+            $(where $($c: $constraint),*)?
+        {
+            type Output = $ret;
+
+            fn with_bits<
+                $alias: FloatVectorWithBits<
+                        Element = V::Element,
+                        Lanes = V::Lanes,
+                        Mask = V::Mask,
+                        Signed = V::Signed,
+                        Unsigned = V::Unsigned,
+                        ExtendedPrecision = V::ExtendedPrecision,
+                    > + CastVector<V>,
+            >(
+                self,
+                $decl: [$alias; $len],
+            ) -> Self::Output {
+                $($body)*
+            }
+        }
+
+        <V as FloatVector>::with_bits(
+            [$($values),+],
+            AnonymousAsFloatVectorWithBitsKernel::<V>(core::marker::PhantomData),
+        )
+    }};
+}
+
+/// Some algorithms may benefit from being able to access the bitwise
+/// representation of floating point vectors. However, not all vectors
+/// support this functionality, and those that do may be passed as generic
+/// FloatVector. Therefore, this is a way of upcasting a FloatVector
+/// to a FloatVectorWithBits, if possible. If not possible, returns None.
+pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
+    type Output;
+
+    fn with_bits<
+        V: FloatVectorWithBits<
+                Element = O::Element,
+                Lanes = O::Lanes,
+                Mask = O::Mask,
+                Signed = O::Signed,
+                Unsigned = O::Unsigned,
+                ExtendedPrecision = O::ExtendedPrecision,
+            > + CastVector<O>,
+    >(
+        self,
+        v: [V; N],
+    ) -> Self::Output;
+}
+
+// These do not have masked variants
+pub trait FloatVectorWithBits:
+    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::Bits, Self::SignedBits>
 {
+    type SignedBits: SignedIntegerVector<
+            Lanes = Self::Lanes,
+            Divider = Divider<<Self::Element as FloatElementWithBits>::SignedBits>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::SignedBits>,
+            Element = <Self::Element as FloatElementWithBits>::SignedBits,
+        > + FullyInteroperable<Self, Self::Bits>;
+
+    type Bits: UnsignedIntegerVector<
+            Lanes = Self::Lanes,
+            Divider = Divider<<Self::Element as FloatElementWithBits>::Bits>,
+            BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Bits>,
+            Element = <Self::Element as FloatElementWithBits>::Bits,
+        > + FullyInteroperable<Self, Self::SignedBits>;
+
+    const NATIVE_CAP: NativeCapability;
+
+    unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self;
+    unsafe fn native_frexp(self) -> (Self, Self::SignedBits);
+    unsafe fn native_sin_cos(self) -> (Self, Self);
+    unsafe fn native_sin(self) -> Self;
+    unsafe fn native_cos(self) -> Self;
+    unsafe fn native_tan(self) -> Self;
+    unsafe fn native_exp2(self) -> Self;
+    unsafe fn native_log2(self) -> Self;
+    unsafe fn native_exp(self) -> Self;
+    unsafe fn native_ln(self) -> Self;
+    unsafe fn native_powf(self, exp: Self) -> Self;
+
+    /// Return a signed integer vector that is capable of encapsulating
+    /// the "total order" of the floating point values in this vector,
+    /// such that when compared as integers, the ordering is the same
+    /// as the floating point ordering, including NaNs, in the following order:
+    ///
+    /// - negative quiet NaN
+    /// - negative signaling NaN
+    /// - negative infinity
+    /// - negative numbers
+    /// - negative subnormal numbers
+    /// - negative zero
+    /// - positive zero
+    /// - positive subnormal numbers
+    /// - positive numbers
+    /// - positive infinity
+    /// - positive signaling NaN
+    /// - positive quiet NaN.
+    ///
+    /// This is useful for sorting floating point numbers in a way that
+    /// is consistent and well-defined. However, it may differ from
+    /// the default floating point comparison behavior of the platform.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use thermite::backend::scalar::prelude::*;
+    /// let x = f32x4::NAN;
+    /// let y = f32x4::ONE;
+    /// let total_lt = x.total_order().cmp_lt(y.total_order());
+    /// assert!(total_lt.none()); // NaN is not less than 1.0 in total order
+    /// ```
+    fn total_order(self) -> Self::SignedBits;
+}
+
+/// Vector suitable for 3D linear algebra operations.
+///
+/// The length of this vector must be either 3 or 4 lanes.
+pub trait LinAlg3Vector: FloatVector {
+    /// Scalar Product using only the first three lanes of the register as a 3D vector.
+    ///
+    /// This is more efficient than a raw scalar product, as there is no need to
+    /// zero out the last lane of the register.
+    fn dot3(self, other: Self) -> Self::Element;
+
+    /// Cross Product using only the first three lanes of the register as a 3D vector.
+    ///
+    /// This is more efficient than a raw cross product, as there is no need to
+    /// zero out the last lane of the register.
+    ///
+    /// The `DOP` generic parameter indicates whether to use the
+    /// "Difference of Products" method for computing the cross product,
+    /// which can be more accurate in some cases, but _requires_
+    /// hardware fused multiply-add instructions to be efficient.
+    ///
+    /// If you want the best performance, set `DOP` to `false`.\
+    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
+    fn cross3<const DOP: bool>(self, other: Self) -> Self;
+
+    /// Efficiently set the 4th (last) lane of the register to 0.0.
+    ///
+    /// Useful for sanitizing 3D Homogeneous vectors.
+    ///
+    /// See [`LinAlg3Vector::one4`] for similar functionality for 3D points.
+    fn zero4(self) -> Self;
+
+    /// Efficiently set the 4th (last) lane of the register to 1.0.
+    ///
+    /// Useful for sanitizing 3D Homogeneous points.
+    ///
+    /// See [`LinAlg3Vector::zero4`] for similar functionality for 3D vectors.
+    fn one4(self) -> Self;
+
+    /// Returns the minimum value in the first three lanes of the register.
+    fn min_element3(self) -> Self::Element;
+
+    /// Returns the maximum value in the first three lanes of the register.
+    fn max_element3(self) -> Self::Element;
+
+    /// Returns the sum of the first three elements of the register.
+    fn sum_elements3(self) -> Self::Element;
+
+    /// Returns the product of the first three elements of the register.
+    fn prod_elements3(self) -> Self::Element;
+}
+
+/// Vector suitable for 4D linear algebra operations.
+///
+/// Must have exactly 4 lanes.
+pub trait LinAlg4Vector: LinAlg3Vector {
+    /// Scalar Product using all four lanes of the register as a 4D vector.
+    fn dot4(self, other: Self) -> Self::Element;
+
+    /// Quaternion multiplication.
+    ///
+    /// Method:
+    /// ```text
+    /// T1 = (lhs.w * rhs)
+    /// T2 = (lhs.x * rhs.wzyx) * {+,-,+,-}
+    /// T3 = (lhs.y * rhs.zwxy) * {+,+,-,-}
+    /// T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
+    /// T1 + T2 + T3 + T4
+    /// ```
+    fn quat4_product(self, other: Self) -> Self;
+
+    /// Quaternion-vector multiplication.
+    ///
+    /// This is optimized to work best on various SIMD architectures. On
+    /// architectures with permute/shuffle instructions, it uses the
+    /// Double-Cross (Giesen) method. On architectures without such instructions,
+    /// it falls back to the standard method of two dot products
+    /// and a single cross product. This is because cross products require
+    /// several shuffles/permutations to compute efficiently with SIMD.
+    ///
+    /// The `DOP` generic parameter indicates whether to use the
+    /// "Difference of Products" method for computing the cross product(s),
+    /// which can be more accurate in some cases, but _requires_
+    /// hardware fused multiply-add instructions to be efficient.
+    ///
+    /// If you want the best performance, set `DOP` to `false`.\
+    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
+    fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self;
+
+    /// 4x4 Matrix Transpose.
+    fn mat4_transpose(m: &[Self; 4]) -> [Self; 4];
+
+    /// 4x4 Matrix-Vector multiplication, assuming `self` as the vector.
+    ///
+    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrix
+    /// is stored in column-major order (`true`) or row-major order (`false`).
+    ///
+    /// If the matrix is **NOT** in column-major order, it will need to be
+    /// transposed before the actual multiplication, which will incur a performance penalty.
+    ///
+    /// NOTE: If you want to multiply 4 vectors by the same **column-major** matrix, consider using
+    /// [`LinAlg4Vector::mat4_product`] instead. It is conceptually the same as multiplying each
+    /// vector individually, but can take advantage of SIMD optimizations better.
+    fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
+
+    /// 4x4 Matrix-Matrix multiplication.
+    ///
+    /// If `COLUMN_MAJOR` is `false`, the matrices are assumed to be in row-major order,
+    /// and the order of the multiplication will become `rhs * lhs` to account for that.
+    /// This is mathematically equivalent to transposing both matrices, performing
+    /// the multiplication, and then transposing the result, but is obviously more efficient.
+    ///
+    /// NOTE: When operating in column-major mode (`COLUMN_MAJOR = true`), the multiplication
+    /// is effectively:
+    /// ```text
+    /// C0 = mat4_vec4_product(lhs, R0)
+    /// C1 = mat4_vec4_product(lhs, R1)
+    /// C2 = mat4_vec4_product(lhs, R2)
+    /// C3 = mat4_vec4_product(lhs, R3)
+    /// ```
+    ///
+    /// and is therefore, in **column-major order**, useful for transforming 4 vectors
+    /// by the same matrix, but capable of being optimized better than doing
+    /// 4 individual matrix-vector multiplications.
+    fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4];
+
+    /// In-place 4x4 Matrix inversion.
+    ///
+    /// Returns `true` if the matrix was successfully inverted,
+    /// or `false` if the matrix is singular and could not be inverted.
+    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> bool;
+
+    /// 4x4 Matrix inversion.
+    ///
+    /// Returns `Some(inverted_matrix)` if the matrix was successfully inverted,
+    /// or `None` if the matrix is singular and could not be inverted.
+    ///
+    /// Consider using [`Vector::mat4_inverse_inplace`] if you want to avoid
+    /// an extra copy.
     #[inline(always)]
-    fn from<T: num_traits::ToPrimitive>(n: T) -> Option<Self> {
-        Some(Self::splat(num_traits::NumCast::from(n)?))
-    }
-}
-
-#[cfg(feature = "partial-ord")]
-impl<R: PartialOrdRegister> PartialOrd for Vector<R> {
-    /// Partial comparison between two vectors, returning `None` if
-    /// the vectors are not fully ordered. Only returns `Some(Ordering)` if
-    /// all lanes are less than, greater than, or equal.
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        let is_less = R::all(R::lt(self.0, other.0));
-        let is_greater = R::all(R::gt(self.0, other.0));
-        let is_equal = R::all(R::eq(self.0, other.0));
-
-        match (is_less, is_greater, is_equal) {
-            (true, false, false) => Some(core::cmp::Ordering::Less),
-            (false, true, false) => Some(core::cmp::Ordering::Greater),
-            (false, false, true) => Some(core::cmp::Ordering::Equal),
-            _ => None,
+    fn mat4_inverse(m: &[Self; 4]) -> Option<[Self; 4]> {
+        let mut mat = *m;
+        if Self::mat4_inverse_inplace(&mut mat) {
+            Some(mat)
+        } else {
+            None
         }
     }
 }
-
-macro_rules! impl_unsigned_pow {
-    ($($t:ty),* $(,)?) => {$(
-        impl<R: NumericRegister> num_traits::Pow<$t> for Vector<R> {
-            type Output = Self;
-
-            #[inline(always)]
-            fn pow(self, mut e: $t) -> Self::Output {
-                let mut res = Self::ONE;
-                let mut x = self;
-
-                while e != 0 {
-                    if e & 1 != 0 {
-                        res *= x;
-                    }
-
-                    x *= x;
-                    e >>= 1;
-                }
-
-                res
-            }
-        })*
-    };
-}
-
-impl_unsigned_pow!(u8, u16, u32, u64, usize);
-
-#[cfg(feature = "rand")]
-const _: () = {
-    use generic_array::sequence::GenericSequence;
-    use rand::{Fill, distr::Distribution};
-
-    impl<R: Register> Distribution<Vector<R>> for rand::distr::Uniform<R::Element>
-    where
-        rand::distr::Uniform<R::Element>: Distribution<R::Element>,
-        R::Element: rand::distr::uniform::SampleUniform,
-    {
-        #[inline(always)]
-        fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
-            Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
-        }
-    }
-
-    macro_rules! impl_distr {
-        ($($distr:ident),* $(,)?) => {$(
-            impl<R: Register> Distribution<Vector<R>> for rand::distr::$distr
-            where
-                rand::distr::$distr: Distribution<R::Element>,
-            {
-                #[inline(always)]
-                fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
-                    Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
-                }
-            }
-        )*};
-    }
-
-    impl_distr!(Open01, OpenClosed01, StandardUniform);
-
-    impl<R: Register> Fill for Vector<R>
-    where
-        [R::Element]: Fill,
-    {
-        #[inline(always)]
-        fn fill<Rng: rand::Rng + ?Sized>(&mut self, rng: &mut Rng) {
-            Fill::fill(self.as_mut_slice(), rng);
-        }
-    }
-};

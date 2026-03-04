@@ -126,7 +126,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x_small = x.cmp_lt(V::ONE);
 
         // if any are small, use a polynomial approximation
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } && (P::POLICY.avoid_branching || x_small.any()) {
             let x2 = x * x;
 
             let y1 = x2
@@ -159,7 +159,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         // if any are small, use a polynomial approximation
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } && (P::POLICY.avoid_branching || x_small.any()) {
             let x2 = x * x;
 
             let y1 = x2
@@ -206,15 +206,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         // if any are small
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } && (P::POLICY.avoid_branching || x_small.any()) {
             let x2 = x * x;
 
             let y1 = x2.poly_p::<P, _>(&[
-                -3.33332819422E-1,
-                1.33314422036E-1,
-                -5.37397155531E-2,
-                2.06390887954E-2,
-                -5.70498872745E-3,
+                -3.33332819422E-1, 1.33314422036E-1, -5.37397155531E-2, 2.06390887954E-2, -5.70498872745E-3,
             ]).mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);

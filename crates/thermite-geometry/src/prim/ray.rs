@@ -1,9 +1,9 @@
 use thermite::{
-    generic::FloatVector,
     math::{
         SpatialMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
+    vector::FloatVector,
 };
 
 use super::{Bounds, Point, Vector};

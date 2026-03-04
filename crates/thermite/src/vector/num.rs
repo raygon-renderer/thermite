@@ -2,15 +2,9 @@
 
 use core::ops::Deref;
 
-use crate::{
-    generic::{
-        BitshiftVector, BitwiseVector, CastMask, FloatVector, GenericMask, GenericSelectable, GenericVector,
-        NumVector as NumVectorTrait, NumericVector, PartialOrdVector, SignedVector,
-    },
-    math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath},
-    register::{FloatElement, FloatRegister},
-    vector::Vector,
-};
+use super::{BitshiftVector, BitwiseVector, FloatVector, GenericVector, NumericVector, PartialOrdVector, SignedVector};
+use crate::mask::{CastMask, GenericMask, GenericSelectable};
+use crate::math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath};
 
 /// Wraps a generic vector to provide implementations of `num_traits` traits.
 ///

@@ -2,11 +2,11 @@
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
-    generic::FloatVector,
     math::{
         FloatConsts, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
     },
+    vector::FloatVector,
 };
 
 pub mod specialized;

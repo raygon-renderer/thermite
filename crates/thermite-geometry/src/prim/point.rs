@@ -1,6 +1,6 @@
 use core::ops::{Add, Index, IndexMut, Sub};
 
-use thermite::generic::FloatVector;
+use thermite::vector::FloatVector;
 
 use super::Vector;
 
@@ -112,7 +112,7 @@ impl<V: FloatVector, const N: usize> From<Vector<V, N>> for Point<V, N> {
     }
 }
 
-impl<V: FloatVector, const N: usize> thermite::generic::GenericSelectable for Point<V, N> {
+impl<V: FloatVector, const N: usize> thermite::mask::GenericSelectable for Point<V, N> {
     type SelectableMask = V::Mask;
 
     #[inline(always)]
