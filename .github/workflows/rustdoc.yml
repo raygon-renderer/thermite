@@ -31,8 +31,14 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Generate timestamp HTML snippet
+        run: |
+          echo "<div style='text-align: center; margin-top: 2rem; padding: 10px; font-size: 0.8em; color: #888;'>Last built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')</div>" > doc-footer.html
+
       - name: Build workspace documentation
         run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "${{ env.RUSTDOCFLAGS }} --html-after-content doc-footer.html"
 
       - run: |
           echo "<meta http-equiv=refresh content=0;url=`echo $GITHUB_REPOSITORY | cut -d '/' -f 2 | tr '[:upper:]' '[:lower:]'`/index.html>" > target/doc/index.html
