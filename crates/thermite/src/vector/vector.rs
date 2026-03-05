@@ -43,34 +43,6 @@ use generic_array::{GenericArray, typenum::Unsigned};
 #[repr(transparent)]
 pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
-#[doc(hidden)]
-pub trait IRegisterOf {
-    type Register: Register;
-}
-
-impl<R: Register> IRegisterOf for Vector<R> {
-    type Register = R;
-}
-
-impl<R: Register> IRegisterOf for Mask<R> {
-    type Register = R;
-}
-
-/// The mask type corresponding to a given vector type.
-///
-/// # Example
-/// ```
-/// # use thermite::vector::{Vector, MaskOf};
-/// # use thermite::backend::scalar::prelude::*;
-/// fn example(x: f32x4) -> MaskOf<f32x4> {
-///     x.is_negative()
-/// }
-/// ```
-pub type MaskOf<V> = Mask<<V as IRegisterOf>::Register>;
-
-/// The register type corresponding to a given vector or mask type.
-pub type RegisterOf<V> = <V as IRegisterOf>::Register;
-
 impl<R: Register> Clone for Vector<R> {
     #[inline(always)]
     fn clone(&self) -> Self {

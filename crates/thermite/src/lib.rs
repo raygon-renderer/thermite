@@ -147,7 +147,7 @@ pub use isa::InstructionSet;
 pub use mask::Mask;
 pub use simd::HasIsa;
 pub use swizzle::Swizzle;
-pub use vector::{MaskOf, Vector};
+pub use vector::Vector;
 
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
 #[inline]

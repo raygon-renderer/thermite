@@ -21,17 +21,17 @@ use crate::{
 
 mod num;
 mod splat;
-mod streaming;
-mod unaligned;
 
 #[allow(clippy::module_inception)]
 mod vector;
 
 pub mod ops;
+pub mod streaming;
+pub mod unaligned;
 
 pub use self::num::NumVector;
 pub use self::splat::{SplatConst, SplatVector, SplatVectorValue, splat};
-pub use self::vector::{MaskOf, RegisterOf, Vector};
+pub use self::vector::Vector;
 
 /// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///
