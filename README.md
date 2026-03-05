@@ -2,6 +2,7 @@ Thermite SIMD: Melt Your CPU
 ============================
 
 [![Thermite FFI Build](https://github.com/raygon-renderer/thermite/actions/workflows/ffi_artifacts.yaml/badge.svg)](https://github.com/raygon-renderer/thermite/actions/workflows/ffi_artifacts.yaml)
+[![Docs](https://github.com/raygon-renderer/thermite/actions/workflows/rustdoc.yml/badge.svg)](https://github.com/raygon-renderer/thermite/actions/workflows/rustdoc.yml)
 
 Thermite SIMD is a library for high-performance portable SIMD (Single Instruction, Multiple Data) programming, primarily via SoA (Structure of Arrays) data structures and algorithms. It provides low-level and high-level abstractions for SIMD programming, allowing developers to write efficient code that can run on various hardware architectures without sacrificing performance.
 
