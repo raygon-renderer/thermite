@@ -21,6 +21,8 @@ use crate::{
 
 mod num;
 mod splat;
+mod streaming;
+mod unaligned;
 
 #[allow(clippy::module_inception)]
 mod vector;
@@ -159,7 +161,11 @@ trait GenericVectorExt: GenericVector {
     #[inline(always)]
     fn len_to_indices<I: VectorIndices<Self>>(len: usize) -> I {
         let Ok(len) = <<I as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
+            #[cfg(feature = "std")]
             panic!("Length {} exceeds maximum supported index for this vector type", len);
+
+            #[cfg(not(feature = "std"))]
+            panic!("Length exceeds maximum supported index for this vector type");
         };
 
         I::splat(len)
@@ -414,6 +420,55 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         unsafe { self.store_unaligned(slice.as_mut_ptr()) }
     }
 
+    /// Transform a slice of element values into an unaligned iterator of vectors,
+    /// returning any remaining elements as a suffix slice.
+    fn iter_unaligned<'a>(values: &'a [Self::Element]) -> (unaligned::Unaligned<'a, Self>, &'a [Self::Element]) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = num_vectors * Self::LANES;
+
+        let head = &values[..offset];
+        let tail = &values[offset..];
+
+        (unaligned::Unaligned(head), tail)
+    }
+
+    /// Transform a mutable slice of element values into an unaligned iterator of vectors,
+    /// returning any remaining elements as a suffix slice.
+    fn iter_mut_unaligned<'a>(values: &'a mut [Self::Element]) -> (unaligned::UnalignedMut<'a, Self>, &'a mut [Self::Element]) {
+        let num_vectors = values.len() / Self::LANES;
+        let offset = num_vectors * Self::LANES;
+
+        let (head, tail) = values.split_at_mut(offset);
+
+        (unaligned::UnalignedMut(head), tail)
+    }
+
+    /// Iterate over a slice of element values as Vectors using non-temporal (streaming) loads.
+    ///
+    /// # Panics
+    ///
+    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
+    fn stream_aligned_slice<'a>(values: &'a [Self::Element]) -> impl DoubleEndedIterator<Item = streaming::StreamingVector<'a, Self>> {
+        let (&[], values, &[]) = Self::align_slice(values) else {
+            panic!("Slice is not aligned to the vector type, or has remaining elements");
+        };
+
+        values.iter().map(|v| streaming::StreamingVector(v))
+    }
+
+    /// Iterate over a mutable slice of element values as Vectors using non-temporal (streaming) loads and stores.
+    ///
+    /// # Panics
+    ///
+    /// If the slice is not aligned to the register type of the vector, or has remaining elements.
+    fn stream_aligned_slice_mut<'a>(values: &'a mut [Self::Element]) -> impl DoubleEndedIterator<Item = streaming::StreamingVectorMut<'a, Self>> {
+        let (&mut [], values, &mut []) = Self::align_slice_mut(values) else {
+            panic!("Slice is not aligned to the vector type, or has remaining elements");
+        };
+
+        values.iter_mut().map(|v| streaming::StreamingVectorMut(v))
+    }
+
     /// Gather elements from memory at the specified indices and return a new vector with those elements.
     ///
     /// The provided indices are in number of elements, not bytes.
@@ -425,7 +480,11 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         if indices.cmp_lt(Self::len_to_indices::<I>(slice.len())).all() {
             unsafe { I::gather_ptr(slice.as_ptr(), indices) }
         } else {
+            #[cfg(feature = "std")]
             panic!("One or more indices are out of bounds for the slice length {}", slice.len());
+
+            #[cfg(not(feature = "std"))] // avoid fmt
+            panic!("One or more indices are out of bounds for the slice length");
         }
     }
 

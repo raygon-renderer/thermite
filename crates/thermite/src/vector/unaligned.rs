@@ -7,40 +7,40 @@ use core::{
 
 use generic_array::typenum::Unsigned;
 
-use crate::{Vector, register::Register};
+use super::GenericVector;
 
 /// A view over a slice of elements that allows unaligned vector loads.
 ///
 /// This can be constructed via [`Vector::from_slice_unaligned`].
 #[repr(transparent)]
-pub struct Unaligned<'a, R: Register>(pub(crate) &'a [R::Element]);
+pub struct Unaligned<'a, V: GenericVector>(pub(crate) &'a [V::Element]);
 
-impl<'a, R: Register> Clone for Unaligned<'a, R> {
+impl<'a, V: GenericVector> Clone for Unaligned<'a, V> {
     #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, R: Register> Copy for Unaligned<'a, R> {}
+impl<'a, V: GenericVector> Copy for Unaligned<'a, V> {}
 
-impl<'a, R: Register> Unaligned<'a, R> {
+impl<'a, V: GenericVector> Unaligned<'a, V> {
     /// Read a vector at the given index. Returns `None` if the index is out of bounds.
     #[inline(always)]
-    pub fn read(&self, idx: usize) -> Option<Vector<R>> {
-        let idx = idx * <R::Lanes as Unsigned>::USIZE;
+    pub fn read(&self, idx: usize) -> Option<V> {
+        let idx = idx * <V::Lanes as Unsigned>::USIZE;
 
         if crate::unlikely(idx >= self.0.len()) {
             return None;
         }
 
         // SAFETY: Length was assured to be a multiple of vector lanes at construction.
-        unsafe { Some(crate::Vector::load_unaligned(self.0.as_ptr().add(idx))) }
+        unsafe { Some(V::load_unaligned(self.0.as_ptr().add(idx))) }
     }
 
     /// Get the underlying slice.
     #[inline(always)]
-    pub const fn as_slice(&self) -> &'a [R::Element] {
+    pub const fn as_slice(&self) -> &'a [V::Element] {
         self.0
     }
 
@@ -51,11 +51,11 @@ impl<'a, R: Register> Unaligned<'a, R> {
     /// This is provided for cases where `Unaligned` was constructed from
     /// a slice that is actually aligned, allowing for more efficient processing.
     #[inline(always)]
-    pub fn try_aligned(&self) -> Option<&'a [Vector<R>]> {
-        if self.0.as_ptr().align_offset(core::mem::align_of::<Vector<R>>()) == 0 {
-            let len = self.0.len() / <R::Lanes as Unsigned>::USIZE;
+    pub fn try_aligned(&self) -> Option<&'a [V]> {
+        if self.0.as_ptr().align_offset(core::mem::align_of::<V>()) == 0 {
+            let len = self.0.len() / <V::Lanes as Unsigned>::USIZE;
             // SAFETY: Alignment was checked.
-            Some(unsafe { core::slice::from_raw_parts(self.0.as_ptr() as *const Vector<R>, len) })
+            Some(unsafe { core::slice::from_raw_parts(self.0.as_ptr() as *const V, len) })
         } else {
             None
         }
@@ -66,13 +66,13 @@ impl<'a, R: Register> Unaligned<'a, R> {
 ///
 /// This can be constructed via [`Vector::from_slice_unaligned_mut`].
 #[repr(transparent)]
-pub struct UnalignedMut<'a, R: Register>(pub(crate) &'a mut [R::Element]);
+pub struct UnalignedMut<'a, V: GenericVector>(pub(crate) &'a mut [V::Element]);
 
-impl<'a, R: Register> UnalignedMut<'a, R> {
+impl<'a, V: GenericVector> UnalignedMut<'a, V> {
     /// Write a vector at the given index. Returns `false` if the index is out of bounds.
     #[inline(always)]
-    pub fn write(&mut self, idx: usize, value: Vector<R>) -> bool {
-        let idx = idx * <R::Lanes as Unsigned>::USIZE;
+    pub fn write(&mut self, idx: usize, value: V) -> bool {
+        let idx = idx * <V::Lanes as Unsigned>::USIZE;
 
         if crate::unlikely(idx >= self.0.len()) {
             return false;
@@ -86,7 +86,7 @@ impl<'a, R: Register> UnalignedMut<'a, R> {
 
     /// Get the underlying mutable slice.
     #[inline(always)]
-    pub const fn as_mut_slice<'b>(&'a mut self) -> &'b mut [R::Element]
+    pub const fn as_mut_slice<'b>(&'a mut self) -> &'b mut [V::Element]
     where
         'a: 'b,
     {
@@ -100,19 +100,19 @@ impl<'a, R: Register> UnalignedMut<'a, R> {
     /// This is provided for cases where `UnalignedMut` was constructed from
     /// a slice that is actually aligned, allowing for more efficient processing.
     #[inline(always)]
-    pub fn try_aligned_mut(mut self) -> Result<&'a mut [Vector<R>], Self> {
-        if self.0.as_ptr().align_offset(core::mem::align_of::<Vector<R>>()) == 0 {
-            let len = self.0.len() / <R::Lanes as Unsigned>::USIZE;
+    pub fn try_aligned_mut(mut self) -> Result<&'a mut [V], Self> {
+        if self.0.as_ptr().align_offset(core::mem::align_of::<V>()) == 0 {
+            let len = self.0.len() / <V::Lanes as Unsigned>::USIZE;
             // SAFETY: Alignment was checked.
-            Ok(unsafe { core::slice::from_raw_parts_mut(self.0.as_mut_ptr() as *mut Vector<R>, len) })
+            Ok(unsafe { core::slice::from_raw_parts_mut(self.0.as_mut_ptr() as *mut V, len) })
         } else {
             Err(self)
         }
     }
 }
 
-impl<'a, R: Register> Deref for UnalignedMut<'a, R> {
-    type Target = Unaligned<'a, R>;
+impl<'a, V: GenericVector> Deref for UnalignedMut<'a, V> {
+    type Target = Unaligned<'a, V>;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
@@ -121,8 +121,8 @@ impl<'a, R: Register> Deref for UnalignedMut<'a, R> {
     }
 }
 
-impl<'a, R: Register> Iterator for Unaligned<'a, R> {
-    type Item = Vector<R>;
+impl<'a, V: GenericVector> Iterator for Unaligned<'a, V> {
+    type Item = V;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
@@ -132,9 +132,9 @@ impl<'a, R: Register> Iterator for Unaligned<'a, R> {
 
         // SAFETY: Length was assured to be a multiple of vector lanes at construction.
         unsafe {
-            let v = crate::Vector::load_unaligned(self.0.as_ptr());
+            let v = V::load_unaligned(self.0.as_ptr());
 
-            self.0 = self.0.get_unchecked(<R::Lanes as Unsigned>::USIZE..); // offset slice
+            self.0 = self.0.get_unchecked(<V::Lanes as Unsigned>::USIZE..); // offset slice
 
             Some(v)
         }
@@ -147,11 +147,11 @@ impl<'a, R: Register> Iterator for Unaligned<'a, R> {
         F: FnMut(B, Self::Item) -> B,
     {
         let mut i = 0;
-        let chunk_size = <R::Lanes as Unsigned>::USIZE;
+        let chunk_size = <V::Lanes as Unsigned>::USIZE;
 
         while i + chunk_size <= self.0.len() {
             // SAFETY: Caller ensured sufficient length.
-            let v = unsafe { crate::Vector::load_unaligned(self.0.as_ptr().add(i)) };
+            let v = unsafe { V::load_unaligned(self.0.as_ptr().add(i)) };
             init = f(init, v);
             i += chunk_size;
         }
@@ -182,7 +182,7 @@ impl<'a, R: Register> Iterator for Unaligned<'a, R> {
     }
 }
 
-impl<'a, R: Register> DoubleEndedIterator for Unaligned<'a, R> {
+impl<'a, V: GenericVector> DoubleEndedIterator for Unaligned<'a, V> {
     #[inline(always)]
     fn next_back(&mut self) -> Option<Self::Item> {
         if crate::unlikely(self.0.is_empty()) {
@@ -191,11 +191,11 @@ impl<'a, R: Register> DoubleEndedIterator for Unaligned<'a, R> {
 
         // SAFETY: Length was assured to be a multiple of vector lanes at construction.
         unsafe {
-            let offset = self.0.len() - <R::Lanes as Unsigned>::USIZE;
+            let offset = self.0.len() - <V::Lanes as Unsigned>::USIZE;
 
-            let v = crate::Vector::load_unaligned(self.0.as_ptr().add(offset));
+            let v = V::load_unaligned(self.0.as_ptr().add(offset));
 
-            self.0 = self.0.get_unchecked(..self.0.len() - <R::Lanes as Unsigned>::USIZE); // offset slice
+            self.0 = self.0.get_unchecked(..self.0.len() - <V::Lanes as Unsigned>::USIZE); // offset slice
 
             Some(v)
         }
@@ -207,12 +207,12 @@ impl<'a, R: Register> DoubleEndedIterator for Unaligned<'a, R> {
         F: FnMut(B, Self::Item) -> B,
     {
         let mut i = self.0.len();
-        let chunk_size = <R::Lanes as Unsigned>::USIZE;
+        let chunk_size = <V::Lanes as Unsigned>::USIZE;
 
         while i >= chunk_size {
             i -= chunk_size;
             // SAFETY: Caller ensured sufficient length.
-            let v = unsafe { crate::Vector::load_unaligned(self.0.as_ptr().add(i)) };
+            let v = unsafe { V::load_unaligned(self.0.as_ptr().add(i)) };
             init = f(init, v);
         }
 
@@ -220,9 +220,9 @@ impl<'a, R: Register> DoubleEndedIterator for Unaligned<'a, R> {
     }
 }
 
-impl<'a, R: Register> ExactSizeIterator for Unaligned<'a, R> {
+impl<'a, V: GenericVector> ExactSizeIterator for Unaligned<'a, V> {
     #[inline(always)]
     fn len(&self) -> usize {
-        self.0.len() / <R::Lanes as Unsigned>::USIZE
+        self.0.len() / <V::Lanes as Unsigned>::USIZE
     }
 }

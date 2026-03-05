@@ -21,7 +21,7 @@ disable_fast_fma = []
 disable_dispatch = []
 
 document_registers = []
-std = ["num-traits/std"] # required for decent scalar support
+std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 neon = []
 
