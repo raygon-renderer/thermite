@@ -17,6 +17,12 @@ high_precision = []   # Enable high-precision policy
 # Disable dispatch in thermite for maximum performance, but massive code bloat
 disable_dispatch = ["thermite/disable_dispatch", "thermite-special/disable_dispatch"]
 
+# Make no attempts to handle denormal values in Thermite. This assumes
+# that either the hardware can reasonably handle denormal values or
+# denormals have been disabled (flush to zero, etc.) manually before
+# computation.
+preserve_denormals = ["thermite/preserve_denormals"]
+
 [dependencies]
 paste = "1"
 thermite = { path = "../thermite", default-features = false }

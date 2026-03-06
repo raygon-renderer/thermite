@@ -40,6 +40,17 @@ impl NativeIsa for X86V2 {
     type Native64Width = generic_array::typenum::U2;
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
+
+    #[inline(always)]
+    unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
+        unsafe { Ok(arch::disable_denormals()) }
+    }
+
+    #[inline(always)]
+    #[allow(clippy::unit_arg)]
+    unsafe fn enable_denormals() -> Result<(), crate::simd::UnsupportedError> {
+        unsafe { Ok(arch::enable_denormals()) }
+    }
 }
 
 impl NativeSimd for X86V2 {

@@ -80,6 +80,54 @@ pub mod sse2 {
         _mm_unpackhi_pd, _mm_unpacklo_epi16, _mm_unpacklo_epi32, _mm_unpacklo_epi64, _mm_unpacklo_epi8, _mm_unpacklo_pd,
         _mm_xor_pd, _mm_xor_si128
     }
+
+    const DAZ: u32 = 0x0040;
+    const FTZ: u32 = 0x8000;
+
+    const DAZ_FTZ: u32 = DAZ | FTZ;
+
+    #[rustfmt::skip] #[inline(always)] #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn disable_denormals() -> bool {
+        let mut mxcsr: u32 = 0;
+
+        unsafe { core::arch::asm!(
+            "stmxcsr [{ptr}]",
+            ptr = in(reg) &mut mxcsr,
+            options(nostack, preserves_flags)
+        ) };
+
+        let was_enabled = (mxcsr & DAZ_FTZ) == 0; // if the flags were not present before
+
+        mxcsr |= DAZ_FTZ;
+
+        unsafe { core::arch::asm!(
+            "ldmxcsr [{ptr}]",
+            ptr = in(reg) &mxcsr,
+            options(nostack, readonly, preserves_flags)
+        ) };
+
+        was_enabled
+    }
+
+    #[rustfmt::skip] #[inline(always)] #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn enable_denormals() {
+
+        let mut mxcsr: u32 = 0;
+
+        unsafe { core::arch::asm!(
+            "stmxcsr [{ptr}]",
+            ptr = in(reg) &mut mxcsr,
+            options(nostack, preserves_flags)
+        ) };
+
+        mxcsr &= !DAZ_FTZ;
+
+        unsafe { core::arch::asm!(
+            "ldmxcsr [{ptr}]",
+            ptr = in(reg) &mxcsr,
+            options(nostack, readonly, preserves_flags)
+        ) };
+    }
 }
 
 pub mod sse3 {

@@ -31,6 +31,19 @@ impl NativeIsa for Scalar {
     type Native64Width = generic_array::typenum::U1;
 
     type NativeAlignment = ();
+
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
+    #[inline(always)]
+    unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
+        unsafe { Ok(crate::backend::x86::sse2::disable_denormals()) }
+    }
+
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
+    #[inline(always)]
+    #[allow(clippy::unit_arg)]
+    unsafe fn enable_denormals() -> Result<(), crate::simd::UnsupportedError> {
+        unsafe { Ok(crate::backend::x86::sse2::enable_denormals()) }
+    }
 }
 
 impl NativeSimd for Scalar {

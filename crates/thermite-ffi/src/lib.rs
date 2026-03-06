@@ -45,6 +45,7 @@ use core::ffi::c_char;
 use thermite::{
     math::{CoreMathWithPolicy, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy},
     prelude::Policy,
+    simd::NativeIsa,
 };
 use thermite_special::SpecialMathWithPolicy;
 
@@ -160,6 +161,18 @@ pub enum ThermitePrecisionPolicy {
     HighPrecision = 1,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum ThermiteDenormalResult {
+    /// Setting the denormal behavior is not supported.
+    NotSupported = 0,
+    /// Setting the denormal behavior was a success
+    Success = 1,
+    /// Setting the denormal behavior was a success,
+    /// and denormals were previously enabled.
+    SuccessWasEnabled = 2,
+}
+
 macro_rules! c_str {
     ($($s:expr),*) => { concat!($($s),*, "\0").as_ptr() as *const c_char };
 }
@@ -179,6 +192,21 @@ type Int = i64;
 type Floatf = f32;
 /// cbindgen:ignore
 type Float = f64;
+
+unsafe extern "C" fn disable_denormals_template<S: NativeIsa>() -> ThermiteDenormalResult {
+    match unsafe { S::disable_denormals() } {
+        Ok(true) => ThermiteDenormalResult::SuccessWasEnabled,
+        Ok(false) => ThermiteDenormalResult::Success,
+        Err(_) => ThermiteDenormalResult::NotSupported,
+    }
+}
+
+unsafe extern "C" fn enable_denormals_template<S: NativeIsa>() -> ThermiteDenormalResult {
+    match unsafe { S::enable_denormals() } {
+        Ok(_) => ThermiteDenormalResult::Success,
+        Err(_) => ThermiteDenormalResult::NotSupported,
+    }
+}
 
 macro_rules! decl_methods {
     (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal]
@@ -203,6 +231,8 @@ macro_rules! decl_methods {
             })*)+
 
             Self {
+                disable_denormals: disable_denormals_template::<thermite::backend::$path::$isa>,
+                enable_denormals: enable_denormals_template::<thermite::backend::$path::$isa>,
                 name: c_str!(stringify!($isa), "/", stringify!($policy)),
                 alignment: align_of::<<thermite::backend::$path::$isa as thermite::simd::NativeIsa>::NativeAlignment>(),
                 $($([<$mapping f_ $suffix>], [<$mapping _ $suffix>],)*)+
@@ -231,6 +261,8 @@ macro_rules! decl_methods {
             })*)+
 
             Self {
+                disable_denormals: disable_denormals_template::<thermite::backend::scalar::Scalar>,
+                enable_denormals: enable_denormals_template::<thermite::backend::scalar::Scalar>,
                 name: c_str!("Scalar/", stringify!($policy)),
                 alignment: align_of::<f32>(),
                 $($([<$mapping f_ $suffix>], [<$mapping _ $suffix>],)*)+
@@ -292,6 +324,9 @@ macro_rules! decl_methods {
     ) => {paste::paste! {
         #[repr(C)]
         pub struct VTable {
+            pub disable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
+            pub enable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
+
             $($(
                 $(#[$meta])*
                 ///
@@ -417,6 +452,20 @@ pub extern "C" fn thermite_backend_name() -> *const c_char {
     // the string it points to will still be valid.
     // #[allow(static_mut_refs)]
     unsafe { THERMITE_VTABLE.name }
+}
+
+/// Attempt to disable denormal handling on the current thread.
+#[inline(never)]
+#[unsafe(no_mangle)]
+pub extern "C" fn thermite_disable_denormals() -> ThermiteDenormalResult {
+    unsafe { (THERMITE_VTABLE.disable_denormals)() }
+}
+
+/// Attempt to enable denormal handling on the current thread.
+#[inline(never)]
+#[unsafe(no_mangle)]
+pub extern "C" fn thermite_enable_denormals() -> ThermiteDenormalResult {
+    unsafe { (THERMITE_VTABLE.enable_denormals)() }
 }
 
 decl_methods! {

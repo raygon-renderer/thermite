@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use core::hash::Hash;
+use core::{hash::Hash, marker::PhantomData};
 
 use generic_array::{
     ArrayLength,
@@ -63,6 +63,74 @@ pub trait NativeIsa: HasIsa + Clone + Copy + PartialEq + Eq + Hash {
     /// You may also want `#[repr(C)]` to ensure the order of the fields is preserved. Note that only the first field
     /// is guaranteed to have the correct alignment, so the SIMD fields should be placed first in the struct, before any other fields.
     type NativeAlignment: Sized + Default + Copy + Ord + Hash + Send + Sync + Unpin + core::panic::UnwindSafe + core::panic::RefUnwindSafe + core::fmt::Debug + 'static;
+
+    /// Attempt to disable slow subnormal/denormal fallback handling on the current ISA.
+    /// This will try to set the behavior such that denormal values are flushed to zero,
+    /// both as input and as output.
+    ///
+    /// This will return `Err` if disabling denormals isn't supported in software, and
+    /// upon success will return `Ok(was_enabled)`, indicating if denormals
+    /// were previously enabled.
+    ///
+    /// NOTE: x86 has two flags for this, but this method will treat them as one.
+    ///
+    /// # Safety
+    ///
+    /// This may modify low-level CPU registers that control the behavior of the entire
+    /// thread. Use with caution.
+    unsafe fn disable_denormals() -> Result<bool, UnsupportedError> { Err(UnsupportedError) }
+
+    /// Attempt to enable subnormal/denormal handling on the current ISA. This will
+    /// try to set the behavior such that denormal values are correctly handled,
+    /// even at massive performance costs.
+    ///
+    /// This will return `Err` if enabling denormals isn't supported in software.
+    ///
+    /// NOTE: x86 has two flags for this, but this method will treat them as one.
+    ///
+    /// # Safety
+    ///
+    /// This may modify low-level CPU registers that control the behavior of the
+    /// entire thread. Use with caution.
+    unsafe fn enable_denormals() -> Result<(), UnsupportedError> { Err(UnsupportedError) }
+}
+
+pub struct UnsupportedError;
+
+/// RAII guard for temporarily disabling denormals at the CPU level. Upon Drop this will
+/// restore the previous behavior.
+pub struct DisableDenormals<S: NativeIsa>(Result<bool, UnsupportedError>, PhantomData<S>);
+
+impl<S: NativeIsa> DisableDenormals<S> {
+    /// # Safety
+    ///
+    /// See [`NativeIsa::disable_denormals`]
+    #[inline(always)]
+    #[allow(clippy::self_named_constructors)]
+    pub unsafe fn disable_denormals() -> Self {
+        unsafe { Self(S::disable_denormals(), PhantomData) }
+    }
+
+    /// Returns true if denormals were previously enabled before disabling them.
+    #[inline(always)]
+    pub fn was_enabled(&self) -> bool {
+        matches!(self.0, Ok(true))
+    }
+
+    /// Returns true if denormals are currently disabled. (i.e. if the disabling was successful)
+    #[inline(always)]
+    pub fn is_disabled(&self) -> bool {
+        self.0.is_ok()
+    }
+}
+
+impl<S: NativeIsa> Drop for DisableDenormals<S> {
+    #[inline(always)]
+    fn drop(&mut self) {
+        if let Ok(true) = self.0 {
+            unsafe { _ = S::enable_denormals() };
+        }
+    }
 }
 
 /// Native-width SIMD types supported directly by the target architecture.
