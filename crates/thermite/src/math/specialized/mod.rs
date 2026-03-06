@@ -138,20 +138,25 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
             return (denormal_trick - (denormal_trick - self));
         }
 
-        let abs_bits = Self::Bits::from_bits(self.abs());
+        let abs_bits = Self::SignedBits::from_bits(self.abs());
 
         let max_subnormal: Self::Bits = crate::generic_splat!(
             <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_SUBNORMAL
         );
 
+        let max_subnormal_signed: Self::SignedBits = Self::SignedBits::from_bits(max_subnormal);
+
         // zero self if subnormal (when cmp_gt is false)
-        let mut res = Self::from_bits(self.z(abs_bits.cmp_gt(max_subnormal).cast()));
+        //
+        // NOTE: Use a Signed comparison here, since that's faster than unsigned comparisons on most archs,
+        // and we know that abs_bits is considered positive as an integer since the msb is zero.
+        let mut res = Self::from_bits(self.z(abs_bits.cmp_gt(max_subnormal_signed).cast()));
 
         // we should preserve -0.0 for greater precision policies
         if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             // get the sign by xor-ing the non-sign bits, leaving only the sign
-            let sign = Self::Bits::from_bits(self) ^ abs_bits;
+            let sign = Self::SignedBits::from_bits(self) ^ abs_bits;
 
             res |= Self::from_bits(sign); // add back sign
         }
