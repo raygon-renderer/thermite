@@ -29,6 +29,22 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     fn erfinv<P: Policy>(self) -> Self;
 
+    #[inline(always)]
+    fn sigmoid<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            let is_pos = self.is_positive();
+            let x = self.neg_c(is_pos); // conditionally negate if positive
+            let e = x.exp_p::<P>();
+
+            let n = is_pos.select(Self::ONE, e);
+            let d = Self::ONE + e;
+
+            return n / d;
+        }
+
+        (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<ExtraPrecision<P>>()
+    }
+
     fn tgamma<P: Policy>(x: Self) -> Self;
     fn lgamma_r<P: Policy>(x: Self) -> (Self, Self);
 

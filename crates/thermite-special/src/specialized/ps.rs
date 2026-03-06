@@ -205,7 +205,49 @@ where
     }
 
     #[inline(always)]
-    fn tgamma<P: Policy>(mut z: Self) -> Self {
+    fn sigmoid<P: Policy>(self) -> Self {
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            let is_pos = self.is_positive();
+            let x = self.neg_c(is_pos); // conditionally negate if positive
+            let e = x.exp_p::<P>();
+
+            let n = is_pos.select(Self::ONE, e);
+            let d = Self::ONE + e;
+
+            return n / d;
+        }
+
+        // exp at Medium is the same, exp at Worst is much faster and still accurate enough,
+        // so use the faster one for HighPerformance policy.
+        (Self::ONE + (-self).exp_p::<LessPrecision<P>>()).reciprocal_p::<ExtraPrecision<P>>()
+    }
+
+    // This ended up being a bust, but I'll keep it around anyway.
+    // #[inline(always)]
+    // fn sigmoid<P: Policy>(self) -> Self {
+    //     if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+    //         Self::ONE / (Self::ONE + (-self).exp_p::<P>())
+    //     } else {
+    //         let (r, d) = const {
+    //             match P::POLICY.precision {
+    //                 PrecisionPolicy::Worst => (8, -1.0 / (1 << 8) as f32),
+    //                 PrecisionPolicy::Medium => (12, -1.0 / (1 << 12) as f32),
+    //                 _ => (0, 0.0), // not used since Average and above use the other method
+    //             }
+    //         };
+
+    //         let mut base = self.mul_adde(Self::splat(d), Self::ONE);
+
+    //         for _ in 0..(r - 1) {
+    //             base *= base;
+    //         }
+
+    //         base.mul_adde(base, Self::ONE).reciprocal_p::<P>()
+    //     }
+    // }
+
+    #[inline(always)]
+    fn tgamma<P: Policy>(z: Self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             // We have a good lgamma approximation, so use it for tgamma on lower precisions.
             let (lgamma, sign) = z.lgamma_r_p::<P>();

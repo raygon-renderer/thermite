@@ -619,6 +619,8 @@ decl_methods! {
         (x)tgamma v tgamma(y),
         (x)lgamma v lgamma(y),
         (x, y)beta v beta(z),
+        /// Computes the sigmoid function, defined as 1 / (1 + exp(-x)), which maps any real-valued number into the range (0, 1).
+        (x)sigmoid v sigmoid(y)
     ],
     MAPPING: RealMathWithPolicyFfi [
         /// 3rd-order smoothstep interpolation function

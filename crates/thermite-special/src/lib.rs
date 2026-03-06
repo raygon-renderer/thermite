@@ -79,6 +79,13 @@ decl_math! {
     /// Computes the inverse error function.
     fn erfinv[][](self: Self) -> Self;
 
+    /// Computes the sigmoid function, defined as `1 / (1 + exp(-x))`.
+    ///
+    /// Notably, this still has good precision for the `Worst` precision policy,
+    /// and for the `Best` precision policy handles very large positive and negative
+    /// inputs without overflow or underflow issues.
+    fn sigmoid[][](self: Self) -> Self;
+
     /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
     ///
     /// This implementation uses a few different behaviors to ensure the greatest precision where possible.
