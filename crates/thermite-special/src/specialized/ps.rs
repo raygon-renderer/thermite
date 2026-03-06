@@ -26,7 +26,7 @@ where
             return V::ONE - x0.erfc_p::<P>();
         }
 
-        let mut x = x0.abs();
+        let mut x = x0.abs().flush_denormals_p::<P>();
 
         if P::POLICY.check_overflow {
             x = V::ONE - (V::ONE - x); // crush denormals
@@ -122,7 +122,7 @@ where
             return V::ONE - x0.erf_p::<P>();
         }
 
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals_p::<P>();
         let x2 = x0 * x0;
 
         let a0 = V::splat(0.56418958354775629);
@@ -163,7 +163,9 @@ where
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         // (-1, 1) range
-        let x = self.clamp(V::splat(-0.99999), V::splat(0.99999));
+        let x = self
+            .flush_denormals_p::<P>()
+            .clamp(V::splat(-0.99999), V::splat(0.99999));
 
         let w = -x.nmul_adde(x, V::ONE).ln_p::<P>();
 
@@ -212,6 +214,8 @@ where
             // but not more than average.
             return lgamma.exp_p::<ExtraPrecision<P>>() * sign;
         }
+
+        let mut z = z.flush_denormals_p::<P>();
 
         let orig_z = z;
 
@@ -334,7 +338,8 @@ where
     }
 
     #[inline(always)]
-    fn lgamma_r<P: Policy>(mut z: Self) -> (Self, Self) {
+    fn lgamma_r<P: Policy>(z: Self) -> (Self, Self) {
+        let mut z = z.flush_denormals_p::<P>();
         let mut signum = Self::ONE;
 
         let reflect = z.is_negative();
@@ -431,6 +436,8 @@ where
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
+        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
+
         let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
 
         if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {

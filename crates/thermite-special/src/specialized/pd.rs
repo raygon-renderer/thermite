@@ -19,7 +19,8 @@ where
 {
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
-        let x = self;
+        let x = self.flush_denormals_p::<P>();
+
         let x2 = x * x;
         let res = x * x2.poly_rational_p::<P, _, _>(
             &[
@@ -51,7 +52,7 @@ where
 
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
-        let y = self;
+        let y = self.flush_denormals_p::<P>();
         let a = y.abs();
 
         let w = -a.nmul_adde(a, V::ONE).ln_p::<P>();
@@ -119,6 +120,8 @@ where
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
+        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
+
         let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
 
         if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {

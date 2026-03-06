@@ -120,6 +120,9 @@ decl_math! {
         /// The crate feature `preserve_denormals` will disable this for default policies,
         /// which may be useful when targeting hardware or applications where the processor
         /// will handle denormals automatically.
+        ///
+        /// See [`DenormalBehavior`](policy::DenormalBehavior) for more options for how to control
+        /// this function, as it is used extensively internally.
         fn flush_denormals[][](self: Self) -> Self;
     }
 }

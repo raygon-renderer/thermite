@@ -14,7 +14,7 @@ use crate::{
 };
 
 // use super::MathWithPolicy;
-use super::policy::{Policy, PrecisionPolicy};
+use super::policy::{DenormalBehavior, Policy, PrecisionPolicy};
 
 mod generic;
 
@@ -123,8 +123,19 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
     #[inline(always)]
     fn flush_denormals<P: Policy>(self) -> Self {
-        if const { P::POLICY.preserve_denormals } {
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
             return self;
+        }
+
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Crush) } {
+            let denormal_trick: Self::Bits = crate::generic_splat!(
+                <Self> = <S: FloatVectorWithBits>
+                <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::DENORMAL_TRICK
+            );
+
+            let denormal_trick = Self::from_bits(denormal_trick);
+
+            return (denormal_trick - (denormal_trick - self));
         }
 
         let abs_bits = Self::Bits::from_bits(self.abs());
@@ -149,7 +160,16 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
     }
 }
 
-struct FlushDenormals<P: Policy>(PhantomData<P>);
+/// `AsFloatVectorWithBitsKernel` that calls `flush_denormals` on each input with the given policy.
+pub struct FlushDenormals<P: Policy>(PhantomData<P>);
+
+impl<P: Policy> FlushDenormals<P> {
+    #[inline(always)]
+    pub fn flush_denormals<V: FloatVector, const N: usize>(values: [V; N]) -> Option<[V; N]> {
+        V::with_bits(values, FlushDenormals::<P>(PhantomData))
+    }
+}
+
 impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N> for FlushDenormals<P> {
     type Output = [V; N];
 
@@ -518,7 +538,7 @@ where
     V: SpecializedSpatialMath<E>,
     P: Policy,
 {
-    if let Some(new_values) = V::with_bits(values, FlushDenormals::<P>(PhantomData)) {
+    if let Some(new_values) = FlushDenormals::<P>::flush_denormals(values) {
         values = new_values;
     }
 
@@ -727,7 +747,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
 
-        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+        if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
 
@@ -768,7 +788,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut t = self;
         let mut dt_dx = Self::ONE;
 
-        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+        if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
 
@@ -815,7 +835,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut bar = Self::ONE;
         let mut bar_a = Self::ONE; // (b - a) * a
 
-        if let Some(new_y) = Self::with_bits([y], FlushDenormals::<P>(PhantomData)) {
+        if let Some(new_y) = FlushDenormals::<P>::flush_denormals([y]) {
             y = new_y[0];
         }
 
@@ -909,7 +929,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smooth_interpolator<P: Policy>(x: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
         let mut t = x;
 
-        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+        if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
 

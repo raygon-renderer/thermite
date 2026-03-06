@@ -839,8 +839,6 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
 #[inline(always)]
 fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
-    let xx = xx.flush_denormals::<P>();
-
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Max error about 0.00092, avg error about 0.00053
         // https://stackoverflow.com/a/28050328/2083075
@@ -862,6 +860,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
             x.mul_adde(x.abs().mul_sube(p, p), x)
         }
 
+        let xx = xx.flush_denormals::<P>();
         let quarter = crate::generic_splat!(f32: 0.25);
 
         // scaling factor
@@ -887,7 +886,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
         };
     }
 
-    let mut xa = xx.abs();
+    let mut xa = xx.abs().flush_denormals::<P>();
 
     let y = if PI {
         xa + xa // 2x for sinpi/cospi

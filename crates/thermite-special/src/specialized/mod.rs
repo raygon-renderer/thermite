@@ -8,6 +8,7 @@ use thermite::{
             Policy, PrecisionPolicy,
             policies::{ExtraPrecision, LessPrecision},
         },
+        specialized::FlushDenormals,
     },
     register::{Element, FloatElement},
     vector::{NumericVector, PartialOrdVector},
@@ -37,7 +38,11 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn hermite<P: Policy, const N: usize>(x: Self) -> Self {
+    fn hermite<P: Policy, const N: usize>(mut x: Self) -> Self {
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
         let one = Self::ONE;
         let mut p0 = one;
 
@@ -65,7 +70,11 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn hermitev<P: Policy>(x: Self, n: Self::Unsigned) -> Self {
+    fn hermitev<P: Policy>(mut x: Self, n: Self::Unsigned) -> Self {
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
         let i1 = Self::Unsigned::ONE;
         let n_is_zero = n.cmp_eq(Self::Unsigned::ZERO);
 
@@ -99,9 +108,15 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn jacobi<P: Policy>(x: Self, mut alpha: Self, mut beta: Self, mut n: u32, m: u32) -> Self {
+    fn jacobi<P: Policy>(mut x: Self, mut alpha: Self, mut beta: Self, mut n: u32, m: u32) -> Self {
         if thermite::unlikely(m > n) {
             return Self::ZERO;
+        }
+
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha, beta]) {
+            x = new[0];
+            alpha = new[1];
+            beta = new[2];
         }
 
         let mut scale = Self::ONE;
@@ -171,7 +186,11 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn gaussian<P: Policy>(x: Self, a: Self, c: Self) -> Self {
+    fn gaussian<P: Policy>(mut x: Self, a: Self, c: Self) -> Self {
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
         let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
             x * c.reciprocal_p::<P>()
         } else {
@@ -268,7 +287,11 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn legendre<P: Policy>(x: Self, n: u32, m: u32) -> Self {
+    fn legendre<P: Policy>(mut x: Self, n: u32, m: u32) -> Self {
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
         match (n, m) {
             (0, 0) => return Self::ONE,
             (n, 0) if n < 14 => return Self::legendre0::<P, 0>(x, n),
