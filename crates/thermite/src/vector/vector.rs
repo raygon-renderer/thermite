@@ -16,8 +16,8 @@ use crate::{
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
-        SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -175,7 +175,7 @@ where
     where
         Mask<R>: CastMask<M>,
     {
-        Mask::mask_from(mask).select(t, f)
+        Vector(R::blendv(Mask::mask_from(mask).0, f.0, t.0))
     }
 }
 
