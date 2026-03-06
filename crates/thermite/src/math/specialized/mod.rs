@@ -123,7 +123,10 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
     #[inline(always)]
     fn flush_denormals<P: Policy>(self) -> Self {
-        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+        if const {
+            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+                || !<Self::Element as FloatElement>::HAS_SUBNORMALS
+        } {
             return self;
         }
 
@@ -133,9 +136,9 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
                 <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::DENORMAL_TRICK
             );
 
-            let denormal_trick = Self::from_bits(denormal_trick);
+            let dt = Self::from_bits(denormal_trick);
 
-            return (denormal_trick - (denormal_trick - self));
+            return (dt - (dt - self));
         }
 
         let abs_bits = Self::SignedBits::from_bits(self.abs());
@@ -154,7 +157,8 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
         let mut res = Self::from_bits(self.z(abs_bits.cmp_gt(max_subnormal_signed).cast()));
 
         // we should preserve -0.0 for greater precision policies
-        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && <Self::Element as FloatElement>::HAS_SIGNED_ZERO }
+        {
             // get the sign by xor-ing the non-sign bits, leaving only the sign
             let sign = Self::SignedBits::from_bits(self) ^ abs_bits;
 
