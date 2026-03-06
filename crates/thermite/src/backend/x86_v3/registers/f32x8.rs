@@ -477,12 +477,12 @@ impl NumericRegister for F32x8V3 {
 
     #[masked]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_min_ps(lhs, rhs) }
+        arch::fix_min::<Self>(lhs, rhs, unsafe { arch::_mm256_min_ps(lhs, rhs) })
     }
 
     #[masked]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_max_ps(lhs, rhs) }
+        arch::fix_max::<Self>(lhs, rhs, unsafe { arch::_mm256_max_ps(lhs, rhs) })
     }
 }
 
@@ -580,16 +580,24 @@ impl FloatRegister for F32x8V3 {
 
     #[masked]
     fn rsqrt(value: Storage<Self>) -> Storage<Self> {
+        if const { cfg!(feature = "strict_ieee754") } {
+            return Self::rcp(Self::sqrt(value));
+        }
+
         unsafe { arch::_mm256_rsqrt_ps(value) }
     }
 
     #[masked]
     fn rcp(value: Storage<Self>) -> Storage<Self> {
+        if const { cfg!(feature = "strict_ieee754") } {
+            return Self::div(Self::ONE, value);
+        }
+
         unsafe { arch::_mm256_rcp_ps(value) }
     }
 
-    const HAS_APPROX_RSQRT: bool = true;
-    const HAS_APPROX_RCP: bool = true;
+    const HAS_APPROX_RSQRT: bool = cfg!(not(feature = "strict_ieee754"));
+    const HAS_APPROX_RCP: bool = cfg!(not(feature = "strict_ieee754"));
 
     #[masked]
     fn floor(value: Storage<Self>) -> Storage<Self> {
