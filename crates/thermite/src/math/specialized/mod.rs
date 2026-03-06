@@ -120,6 +120,55 @@ pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
 
         (Self::from_bits(fraction), exp)
     }
+
+    #[inline(always)]
+    fn flush_denormals<P: Policy>(self) -> Self {
+        if const { P::POLICY.preserve_denormals } {
+            return self;
+        }
+
+        let abs_bits = Self::Bits::from_bits(self.abs());
+
+        let max_subnormal: Self::Bits = crate::generic_splat!(
+            <Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_SUBNORMAL
+        );
+
+        // zero self if subnormal (when cmp_gt is false)
+        let mut res = Self::from_bits(self.z(abs_bits.cmp_gt(max_subnormal).cast()));
+
+        // we should preserve -0.0 for greater precision policies
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            // get the sign by xor-ing the non-sign bits, leaving only the sign
+            let sign = Self::Bits::from_bits(self) ^ abs_bits;
+
+            res |= Self::from_bits(sign); // add back sign
+        }
+
+        res
+    }
+}
+
+struct FlushDenormals<P: Policy>(PhantomData<P>);
+impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N> for FlushDenormals<P> {
+    type Output = [V; N];
+
+    #[inline(always)]
+    fn with_bits<
+        W: FloatVectorWithBits<
+                Element = <V>::Element,
+                Lanes = <V>::Lanes,
+                Mask = <V>::Mask,
+                Signed = <V>::Signed,
+                Unsigned = <V>::Unsigned,
+                ExtendedPrecision = <V as FloatVector>::ExtendedPrecision,
+            > + CastVector<V>,
+    >(
+        self,
+        v: [W; N],
+    ) -> Self::Output {
+        v.map(|v| W::cast_into(v.flush_denormals::<P>()))
+    }
 }
 
 pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
@@ -469,6 +518,10 @@ where
     V: SpecializedSpatialMath<E>,
     P: Policy,
 {
+    if let Some(new_values) = V::with_bits(values, FlushDenormals::<P>(PhantomData)) {
+        values = new_values;
+    }
+
     if N == 0 {
         if INV {
             return V::INFINITY; // 1/0 == infinity
@@ -674,6 +727,10 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
 
+        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+            t = new_t[0];
+        }
+
         if let Some((a, b)) = edges {
             let xa = t - a;
             let ba = b - a;
@@ -710,6 +767,10 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smoothstep_derivative<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
         let mut dt_dx = Self::ONE;
+
+        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+            t = new_t[0];
+        }
 
         if let Some((a, b)) = edges {
             let xa = t - a;
@@ -749,10 +810,14 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
-    fn inverse_smoothstep<P: Policy, const N: usize>(y: Self, edges: Option<(Self, Self)>) -> Self {
+    fn inverse_smoothstep<P: Policy, const N: usize>(mut y: Self, edges: Option<(Self, Self)>) -> Self {
         let mut ba = Self::ONE;
         let mut bar = Self::ONE;
         let mut bar_a = Self::ONE; // (b - a) * a
+
+        if let Some(new_y) = Self::with_bits([y], FlushDenormals::<P>(PhantomData)) {
+            y = new_y[0];
+        }
 
         //                             // Initial guess: y - 2y * (1 - y) * (y - 0.5)
         // While we have a good initial guess for the inverse, S-curves are most stable at the
@@ -843,6 +908,10 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     #[inline(always)]
     fn smooth_interpolator<P: Policy>(x: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
         let mut t = x;
+
+        if let Some(new_t) = Self::with_bits([t], FlushDenormals::<P>(PhantomData)) {
+            t = new_t[0];
+        }
 
         if let Some((a, b)) = edges {
             // rescale t to [0, 1]

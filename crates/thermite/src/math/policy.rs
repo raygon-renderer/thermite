@@ -58,6 +58,8 @@ impl PrecisionPolicy {
     }
 }
 
+const DEFAULT_PRESERVE_DENORMALS: bool = cfg!(feature = "preserve_denormals");
+
 /// Customizable Policy Parameters
 pub struct PolicyParameters {
     /// If true, methods will check for infinity/NaN/invalid domain issues and give a well-formed standard result.
@@ -90,6 +92,14 @@ pub struct PolicyParameters {
     /// This attribute will change depending on the precision policy selected, and selecting
     /// a new precision policy may overwrite this value. Apply combinators carefully.
     pub use_compensation: bool,
+
+    /// If true, don't do anything to manually flush denormals to zero in functions.
+    ///
+    /// While often a bad idea unless you have a good reason,
+    /// if the entire program/thread sets the CPU float policy
+    /// to do this for us, manually flushing to zero is
+    /// wasted performance.
+    pub preserve_denormals: bool,
 }
 
 impl PolicyParameters {
@@ -114,6 +124,7 @@ impl Policy for MyPolicy {
         avoid_branching: true,
         max_iterations: 10000,
         use_compensation: true,
+        preserve_denormals: false,
     };
 }
 
@@ -123,7 +134,7 @@ let y = x.cbrt_p::<MyPolicy>();
 pub mod policies {
     use core::marker::PhantomData;
 
-    use super::{Policy, PolicyParameters, PrecisionPolicy};
+    use super::{DEFAULT_PRESERVE_DENORMALS, Policy, PolicyParameters, PrecisionPolicy};
 
     /// Policy adapter that increases the precision requires by one level,
     /// e.g.: `Worst` -> `Medium`, `Medium` -> `Average`, `Average` -> `Best`, `Best` -> `Reference`
@@ -149,6 +160,10 @@ pub mod policies {
     /// Policy adapter that modifies the base policy to change branching behavior.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AvoidBranching<P: Policy, const AVOID_BRANCHING: bool>(PhantomData<P>);
+
+    /// Policy adapter that modifies the base policy to change denormal preserving behavior.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct PreserveDenormals<P: Policy, const PRESERVE_DENORMALS: bool>(PhantomData<P>);
 
     /// Policy adapter that modifies the base policy to change the maximum number of iterations for numerical methods.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -242,6 +257,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: P::POLICY.precision.ge(PrecisionPolicy::Average),
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -253,6 +269,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: P::POLICY.precision.gt(PrecisionPolicy::Average),
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -264,6 +281,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: USE_COMPENSATION,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -275,6 +293,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: P::POLICY.use_compensation,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -286,6 +305,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: P::POLICY.use_compensation,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -297,6 +317,19 @@ pub mod policies {
             avoid_branching: AVOID_BRANCHING,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: P::POLICY.use_compensation,
+            preserve_denormals: P::POLICY.preserve_denormals,
+        };
+    }
+
+    impl<P: Policy, const PRESERVE_DENORMALS: bool> Policy for PreserveDenormals<P, PRESERVE_DENORMALS> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.use_compensation,
+            preserve_denormals: PRESERVE_DENORMALS,
         };
     }
 
@@ -308,6 +341,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: MAX_ITERATIONS,
             use_compensation: P::POLICY.use_compensation,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -319,6 +353,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: false,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -330,6 +365,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: false,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -341,6 +377,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: false,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -352,6 +389,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: true,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -363,6 +401,7 @@ pub mod policies {
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
             use_compensation: true,
+            preserve_denormals: P::POLICY.preserve_denormals,
         };
     }
 
@@ -378,6 +417,7 @@ pub mod policies {
             avoid_branching: A::POLICY.avoid_branching,
             max_iterations: A::POLICY.max_iterations,
             use_compensation: A::POLICY.use_compensation && B::POLICY.use_compensation,
+            preserve_denormals: A::POLICY.preserve_denormals || B::POLICY.preserve_denormals,
         };
     }
 
@@ -389,6 +429,7 @@ pub mod policies {
             avoid_branching: true,
             max_iterations: 1000,
             use_compensation: false,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 
@@ -400,6 +441,7 @@ pub mod policies {
             avoid_branching: false,
             max_iterations: 10000,
             use_compensation: false,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 
@@ -411,6 +453,7 @@ pub mod policies {
             avoid_branching: false,
             max_iterations: 10000,
             use_compensation: false,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 
@@ -422,6 +465,7 @@ pub mod policies {
             avoid_branching: false,
             max_iterations: 50000,
             use_compensation: true,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 
@@ -436,6 +480,7 @@ pub mod policies {
             avoid_branching: false,
             max_iterations: 10000,
             use_compensation: false,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 
@@ -447,6 +492,7 @@ pub mod policies {
             avoid_branching: false,
             max_iterations: 100000,
             use_compensation: true,
+            preserve_denormals: DEFAULT_PRESERVE_DENORMALS,
         };
     }
 }

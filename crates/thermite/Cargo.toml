@@ -20,6 +20,11 @@ disable_fast_fma = []
 # Only enable this feature if you know what you're doing.
 disable_dispatch = []
 
+# Ignore denormal values by default. There is a very slight overhead in checking and fixing them,
+# but it's usually much less than the penalty of executing operations on denormal values. Only
+# enable if you know your data is well-formed or the target arch automatically flushes to zero.
+preserve_denormals = []
+
 document_registers = []
 std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order

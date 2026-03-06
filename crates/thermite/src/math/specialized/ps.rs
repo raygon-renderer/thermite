@@ -116,7 +116,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
         let qy = V::splat(0.25) / y;
 
@@ -142,7 +142,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_lt(V::ONE);
 
@@ -184,7 +184,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x0 = self;
         let one = V::ONE;
 
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
         let x_small = x.cmp_lt(V::splat(0.625));
 
         let mut y2 = V::EMPTY;
@@ -232,7 +232,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn atan<P: Policy>(self) -> Self {
         let x = self;
-        let t = x.abs();
+        let t = x.abs().flush_denormals::<P>();
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             /* http://mathforum.org/library/drmath/view/62672.html
@@ -247,7 +247,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
             let mut s = gt1.select(a.reciprocal_p::<ExtraPrecision<P>>(), a);
 
-            s = V::ONE - (V::ONE - s); // crush denormals
+            s = s.flush_denormals::<P>();
 
             let t = s * s;
 
@@ -285,8 +285,9 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
-        let x2 = x0 * x0;
+
+        let x = x0.abs().flush_denormals::<P>();
+        let x2 = x * x;
 
         let x_small = x.cmp_le(V::splat(0.51));
 
@@ -321,7 +322,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn acosh<P: Policy>(self) -> Self {
-        let x0 = self;
+        let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
         let x_small = x1.cmp_lt(V::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
@@ -369,7 +370,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn atanh<P: Policy>(self) -> Self {
-        let x = self.abs();
+        let x = self.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_lt(V::splat(0.5));
 
@@ -441,6 +442,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         let x0 = self;
+        let y = y.flush_denormals::<P>();
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             // the "Worst" log2 precision is _terrible_, so just use medium
@@ -458,7 +460,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let one = V::ONE;
         let half = V::HALF;
 
-        let x1 = x0.abs();
+        let x1 = x0.abs().flush_denormals::<P>();
 
         let mut x = fraction2::<V>(x1);
 
@@ -593,8 +595,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             yzero.select(
                 one,
                 yneg.select(
-                    yodd & z,               // 0.0 with the sign of z from above
-                    x0.abs() | (x0 & yodd), // get sign of x0 only if y is odd integer
+                    yodd & z,         // 0.0 with the sign of z from above
+                    x1 | (x0 & yodd), // get sign of x0 only if y is odd integer
                 ),
             ),
         );
@@ -606,7 +608,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn cbrt<P: Policy>(self) -> Self {
-        let x = self;
+        let x = self.flush_denormals::<P>();
 
         let b1: V::Bits = crate::generic_splat!(u32: 709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
         let b2: V::Bits = crate::generic_splat!(u32: 642849266); // B2 = (127-127.0/3-24/3-0.03306235651)*2**23
@@ -701,6 +703,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x = self;
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let x = x.flush_denormals::<P>();
+
             // determined empirically
             const X1: f32 = 9.1;
             const X2: f32 = 16.3;
@@ -760,8 +764,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         let neg_one = V::NEG_ONE;
         let zero = V::ZERO;
 
-        let x1 = x.abs();
-        let y1 = y.abs();
+        let x1 = x.abs().flush_denormals::<P>();
+        let y1 = y.abs().flush_denormals::<P>();
 
         let swap_xy = y1.cmp_gt(x1);
 
@@ -781,7 +785,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
                 k = b_eq_zero.select(V::ZERO, k);
             }
 
-            let s = V::ONE - (V::ONE - k); // crush denormals
+            let s = k.flush_denormals::<P>();
 
             let t = s * s;
 
@@ -826,22 +830,17 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
             .mul_adde(z2 * z, z + s);
 
         re = swap_xy.select(V::FRAC_PI_2 - re, re);
-        re = (x | y).cmp_eq(zero).select(zero, re); // atan2(0,+0) = 0 by convention
+        re = (x | y).is_zero().select(zero, re); // atan2(0,+0) = 0 by convention
         re = x.select_negative(V::PI - re, re); // also for x = -0.
 
         re
     }
 }
 
-// impl<V> SpecializedMath<f32> for V
-// where
-//     V: FloatVector<Element = f32>,
-// {
-
-// }
-
 #[inline(always)]
 fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
+    let xx = xx.flush_denormals::<P>();
+
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Max error about 0.00092, avg error about 0.00053
         // https://stackoverflow.com/a/28050328/2083075
@@ -962,7 +961,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
 
 #[inline(always)]
 fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS: bool>(x: V) -> V {
-    let xa = x.abs();
+    let xa = x.abs().flush_denormals::<P>();
 
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         /* Based on http://www.pouet.net/topic.php?which=9132&page=2
@@ -973,10 +972,6 @@ fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS:
          *   15.2007108 avg ULP diff, 4492 max ULP, 4.51803e-05 max error // with "denormal crush"
          */
         let mut m = xa.min(V::ONE); // clamp
-
-        if P::POLICY.check_overflow {
-            m = V::ONE - (V::ONE - m); // crush denormals
-        }
 
         let a0 = (V::ONE - m).sqrt();
         let a1 = m.poly_p::<P, _>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
@@ -1045,6 +1040,8 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             return unsafe { x0.native_exp2() };
         }
     }
+
+    let x0 = x0.flush_denormals::<P>();
 
     let mut x = x0;
     let mut r;
@@ -1245,6 +1242,8 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
         return r;
     }
+
+    let x0 = x0.flush_denormals::<P>();
 
     let ln2f_hi = V::splat(0.693359375);
     let ln2f_lo = V::splat(-2.12194440E-4);

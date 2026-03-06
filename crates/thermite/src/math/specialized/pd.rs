@@ -53,7 +53,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
         let qy = V::splat(0.25) / y;
 
@@ -91,7 +91,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_le(V::ONE);
 
@@ -141,7 +141,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn tanh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_le(V::splat(0.625));
 
@@ -202,7 +202,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
         let x2 = x * x;
 
         let x_small = x.cmp_le(V::splat(0.533));
@@ -249,7 +249,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn acosh<P: Policy>(self) -> Self {
-        let x0 = self;
+        let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
         let x_small = x1.cmp_le(V::splat(0.49));
@@ -310,7 +310,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn atanh<P: Policy>(self) -> Self {
         let x0 = self;
-        let x = x0.abs();
+        let x = x0.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_le(V::HALF);
 
@@ -391,7 +391,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let ln2d_hi = crate::generic_splat!(f64: 0.693145751953125); // log(2) in extra precision, high bits
         let ln2d_lo = crate::generic_splat!(f64: 1.42860682030941723212E-6); // low bits of log(2)
 
-        let x1 = x0.abs();
+        let x1 = x0.abs().flush_denormals::<P>();
 
         let mut x = fraction2(x1);
 
@@ -548,8 +548,8 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             yzero.select(
                 V::ONE,
                 yneg.select(
-                    yodd & z,               // 0.0 with the sign of z from above
-                    x0.abs() | (x0 & yodd), // get sign of x0 only if y is odd integer
+                    yodd & z,         // 0.0 with the sign of z from above
+                    x1 | (x0 & yodd), // get sign of x0 only if y is odd integer
                 ),
             ),
         );
@@ -561,7 +561,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn cbrt<P: Policy>(self) -> Self {
-        let x = self;
+        let x = self.flush_denormals::<P>();
 
         let b1 = crate::generic_splat!(u64: 715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
         let b2 = crate::generic_splat!(u64: 696219795); // B2 = (1023-1023/3-54/3-0.03306235651)*2**20
@@ -748,8 +748,8 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     let mut swapxy = GenericMask::FALSY;
 
     let t = if ATAN2 {
-        let x1 = x.abs();
-        let y1 = y.abs();
+        let x1 = x.abs().flush_denormals::<P>();
+        let y1 = y.abs().flush_denormals::<P>();
 
         swapxy = y1.cmp_gt(x1);
 
@@ -770,6 +770,8 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     } else {
         y.abs()
     };
+
+    let t = t.flush_denormals::<P>();
 
     let not_big = t.cmp_le(t3po8);
     let not_small = t.cmp_ge(V::splat(0.66));
@@ -816,7 +818,7 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
 
 #[inline(always)]
 fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: bool>(x: V) -> V {
-    let xa = x.abs();
+    let xa = x.abs().flush_denormals::<P>();
 
     let is_big = xa.cmp_ge(V::splat(0.625));
 
@@ -899,7 +901,7 @@ fn pow2n_d<V: FloatVectorWithBits<Element = f64>>(n: V) -> V {
 
 #[inline(always)]
 fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: u8>(x0: V) -> V {
-    let mut x = x0;
+    let mut x = x0.flush_denormals::<P>();
     let mut r;
 
     let max_x;
@@ -908,7 +910,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         EXP_MODE_POW2 => {
             max_x = 1022.0;
 
-            r = x0.round();
+            r = x.round();
 
             x -= r;
             x *= V::LN_2;
@@ -919,7 +921,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
             let log10_2_hi = V::splat(-0.30102999554947019); // log10(2) in two parts
             let log10_2_lo = V::splat(-1.1451100899212592E-10);
 
-            r = (x0 * V::splat(LN_10 * LOG2_E)).round();
+            r = (x * V::splat(LN_10 * LOG2_E)).round();
 
             x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
             x = r.mul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
@@ -931,7 +933,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
             let ln2d_hi = V::splat(-0.693145751953125);
             let ln2d_lo = V::splat(-1.42860682030941723212E-6);
 
-            r = (x0 * V::splat(LOG2_E)).round();
+            r = (x * V::splat(LOG2_E)).round();
 
             x = r.mul_adde(ln2d_hi, x); // x -= r * ln2_hi;
             x = r.mul_adde(ln2d_lo, x); // x -= r * ln2_lo;
@@ -987,7 +989,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
 
 #[inline(always)]
 fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(xx: V) -> (V, V) {
-    let mut xa = xx.abs();
+    let mut xa = xx.abs().flush_denormals::<P>();
 
     let y = if PI {
         xa + xa // 2x for sinpi/cospi

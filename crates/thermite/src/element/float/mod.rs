@@ -83,6 +83,9 @@ pub trait FloatElementWithBits: FloatElement {
     /// Used for clamping overflow.
     const MAX_FINITE_PATTERN: Self::Bits;
 
+    /// Largest positive subnormal value
+    const MAX_SUBNORMAL: Self::Bits;
+
     // /// Is there an implicit leading bit (1.xxx)?
     // /// Almost always TRUE.
     // /// Exception: x87 80-bit float (FALSE).
@@ -273,6 +276,8 @@ impl_float_element!(f32: f => u32, i32 {
     // Max Finite: Sign=0, Exp=254 (0xFE), Mantissa=All 1s
     MAX_FINITE_PATTERN: u32 = 0x7F7F_FFFF;
 
+    MAX_SUBNORMAL: u32 = 0x007F_FFFF;
+
     // IMPLICIT_LEAD_BIT: bool = true;
 });
 
@@ -293,6 +298,8 @@ impl_float_element!(f64 => u64, i64 {
 
     // Max Finite: Sign=0, Exp=2046 (0x7FE), Mantissa=All 1s
     MAX_FINITE_PATTERN: u64 = 0x7FEF_FFFF_FFFF_FFFF;
+
+    MAX_SUBNORMAL: u64 = 0x000F_FFFF_FFFF_FFFF;
 
     // IMPLICIT_LEAD_BIT: bool = true;
 });

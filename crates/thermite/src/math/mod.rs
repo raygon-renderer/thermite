@@ -110,6 +110,17 @@ decl_math! {
 
         /// Decomposes `self` into its normalized fraction and an integral power of two.
         fn frexp[][](self: Self) -> (Self, Self::SignedBits);
+
+        /// Removes denormal/subnormal values, flushing them to zero.
+        ///
+        /// If the precision policy is less than [`Best`](policy::PrecisionPolicy::Best),
+        /// this will NOT preserve -0.0. However, at higher precision policies the
+        /// negative zero will be correctly preserved.
+        ///
+        /// The crate feature `preserve_denormals` will disable this for default policies,
+        /// which may be useful when targeting hardware or applications where the processor
+        /// will handle denormals automatically.
+        fn flush_denormals[][](self: Self) -> Self;
     }
 }
 
