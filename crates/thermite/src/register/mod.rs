@@ -1236,6 +1236,8 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
     }
 }
 
+use num_traits::{WrappingAdd, WrappingMul};
+
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {
     #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
