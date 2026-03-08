@@ -10,6 +10,7 @@ macro_rules! s {
     };
 }
 
+pub mod array;
 pub mod dp;
 pub mod linalg;
 pub mod reduced;
@@ -1234,8 +1235,6 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
         Self::blendv(Self::msb_to_mask(value), on_pos, on_neg)
     }
 }
-
-use num_traits::{WrappingAdd, WrappingMul};
 
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {

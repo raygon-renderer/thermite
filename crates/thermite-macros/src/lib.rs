@@ -240,6 +240,130 @@ pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn array_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut impl_block = parse_macro_input!(item as ItemImpl);
+    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
+        Some(ty) => ty,
+        None => {
+            return syn::Error::new_spanned(&impl_block.self_ty, "Expected ArrayRegister<R, N>")
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    let mut new_items = Vec::new();
+
+    for item in &mut impl_block.items {
+        let ImplItem::Fn(method) = item else { continue };
+
+        let (skip, with_conditional) = skip_or_conditional_impl(method);
+
+        let name = &method.sig.ident;
+        let unsafety = method.sig.unsafety.as_ref();
+        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
+        let turbo = ty_gen.as_turbofish();
+
+        // always mark as #[inline(always)], even if there is a custom body
+        method.attrs.push(parse_quote!(#[inline(always)]));
+
+        let make_body = |sig: &syn::Signature, target_name: &Ident| -> proc_macro2::TokenStream {
+            let num_inputs = sig.inputs.len();
+            let mut arrays = Vec::with_capacity(num_inputs);
+            let mut closure_params = Vec::with_capacity(num_inputs);
+            let mut call_args = Vec::with_capacity(num_inputs);
+
+            for input in &sig.inputs {
+                if let FnArg::Typed(pt) = input {
+                    let Pat::Ident(pi) = &*pt.pat else { continue };
+                    let arg_name = &pi.ident;
+
+                    if is_splittable(&pt.ty) {
+                        arrays.push(quote!(#arg_name.0));
+                        let reg_name = format_ident!("{}_reg", arg_name);
+                        closure_params.push(reg_name.clone());
+                        call_args.push(reg_name.to_token_stream());
+                    } else {
+                        call_args.push(arg_name.to_token_stream());
+                    }
+                }
+            }
+
+            let call = quote!(#unsafety { #reg_ty::#target_name #turbo(#(#call_args),*) });
+
+            match arrays.len() {
+                0 => quote!({ ArrayRegister(#call) }),
+
+                1 => {
+                    let a0 = &arrays[0];
+                    let p0 = &closure_params[0];
+                    quote!({ ArrayRegister(#a0.map(#[inline(always)] |#p0| #call)) })
+                }
+
+                n => {
+                    let array_zip = format_ident!("array_zip{n}");
+
+                    quote!({
+                       ArrayRegister(#array_zip(#(#arrays),*, #[inline(always)] |#(#closure_params),*| #call))
+                    })
+                }
+            }
+        };
+
+        // 1. Generate base body if empty
+        if method.block.stmts.is_empty() {
+            let body = make_body(&method.sig, name);
+            method.block = parse_quote!( #body );
+        }
+
+        if !skip {
+            let doc = get_doc_attrs(&method.attrs);
+
+            if with_conditional {
+                // --- Generate _c ---
+                let mut sig_c = method.sig.clone();
+                sig_c.ident = format_ident!("{}_c", name);
+                sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+
+                let c_name = &sig_c.ident;
+                let body = make_body(&sig_c, c_name);
+
+                new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
+                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c #body
+                }));
+            }
+
+            // --- Generate _m ---
+            let mut sig_m = method.sig.clone();
+            sig_m.ident = format_ident!("{}_m", name);
+            sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+            sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
+
+            let m_name = &sig_m.ident;
+            let body = make_body(&sig_m, m_name);
+
+            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m #body
+            }));
+
+            // --- Generate _z ---
+            let mut sig_z = method.sig.clone();
+            sig_z.ident = format_ident!("{}_z", name);
+            sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+
+            let z_name = &sig_z.ident;
+            let body = make_body(&sig_z, z_name);
+
+            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
+                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z #body
+            }));
+        }
+    }
+
+    impl_block.items.extend(new_items);
+    impl_block.into_token_stream().into()
+}
+
+#[proc_macro_attribute]
 pub fn reduced_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut impl_block = parse_macro_input!(item as ItemImpl);
     let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
