@@ -375,12 +375,55 @@ where
         value
     }
 
+    #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        todo!()
+        let mut lo = [R::EMPTY; N];
+        let mut hi = [R::EMPTY; N];
+
+        for i in 0..N {
+            // Generate the two sequential sub-registers for this chunk
+            let (r_lo, r_hi) = R::interleave(a.0[i], b.0[i]);
+
+            let idx1 = 2 * i;
+            let idx2 = 2 * i + 1;
+
+            // LLVM will unroll this loop and statically eliminate these branches
+            if idx1 < N {
+                lo[idx1] = r_lo;
+            } else {
+                hi[idx1 - N] = r_lo;
+            }
+
+            if idx2 < N {
+                lo[idx2] = r_hi;
+            } else {
+                hi[idx2 - N] = r_hi;
+            }
+        }
+
+        (Self(lo), Self(hi))
     }
 
+    #[inline(always)]
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        todo!()
+        let mut out_a = [R::EMPTY; N];
+        let mut out_b = [R::EMPTY; N];
+
+        for i in 0..N {
+            let idx1 = 2 * i;
+            let idx2 = 2 * i + 1;
+
+            // Treat `a` and `b` as a contiguous 2N slice
+            let chunk1 = if idx1 < N { a.0[idx1] } else { b.0[idx1 - N] };
+            let chunk2 = if idx2 < N { a.0[idx2] } else { b.0[idx2 - N] };
+
+            let (de_a, de_b) = R::deinterleave(chunk1, chunk2);
+
+            out_a[i] = de_a;
+            out_b[i] = de_b;
+        }
+
+        (Self(out_a), Self(out_b))
     }
 
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self> {}
