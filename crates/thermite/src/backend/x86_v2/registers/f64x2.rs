@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
+        array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -499,10 +499,10 @@ impl FloatRegister for F64x2V2 {
     const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
-impl CastRegister<DoublePumpRegister<F64x2V2>> for super::F32x4V2 {
+impl CastRegister<ArrayRegister<F64x2V2, 2>> for super::F32x4V2 {
     #[inline(always)]
-    fn cast_from(value: Storage<DoublePumpRegister<F64x2V2>>) -> Storage<Self> {
-        let (lo, hi) = <DoublePumpRegister<F64x2V2> as ConcatRegister<F64x2V2>>::split(value);
+    fn cast_from(value: Storage<ArrayRegister<F64x2V2, 2>>) -> Storage<Self> {
+        let (lo, hi) = <ArrayRegister<F64x2V2, 2> as ConcatRegister<F64x2V2>>::split(value);
 
         unsafe {
             let lo = arch::_mm_cvtpd_ps(lo);

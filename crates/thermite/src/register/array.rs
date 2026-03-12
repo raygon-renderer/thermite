@@ -1313,20 +1313,20 @@ impl_casts!(CastRegister::cast_from, fast_cast_from);
 macro_rules! impl_indexable {
     ($a:literal $b:literal $c:literal) => {paste::paste! {
         const _: () = {
-            impl<IDX, R: Register> IndexableRegister<ArrayRegister<IDX, $a>> for ArrayRegister<R, $b>
+            impl<IDX: UnsignedIntegerRegister, R: Register> IndexableRegister<ArrayRegister<IDX, $b>> for ArrayRegister<R, $c>
             where
-                IDX: UnsignedIntegerRegister<Lanes = <ArrayRegister<R, $a> as CoreRegister>::Lanes>,
-                ArrayRegister<R, $a>: IndexableRegister<IDX, Element = R::Element>,
-                typenum::[<U $a>]: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>
-                    + Mul<<ArrayRegister<R, $a> as CoreRegister>::Lanes, Output: Lanes>,
+                ArrayRegister<IDX, $a>: UnsignedIntegerRegister<Lanes = <ArrayRegister<R, $b> as CoreRegister>::Lanes>,
+                ArrayRegister<R, $b>: IndexableRegister<ArrayRegister<IDX, $a>, Element = R::Element>,
                 typenum::[<U $b>]: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>
-                    + Mul<<ArrayRegister<R, $a> as CoreRegister>::Lanes, Output: Lanes>
-                    + Mul<R::Lanes, Output = <ArrayRegister<IDX, $a> as CoreRegister>::Lanes>,
+                    + Mul<<ArrayRegister<R, $b> as CoreRegister>::Lanes, Output: Lanes>,
+                typenum::[<U $c>]: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>
+                    + Mul<<ArrayRegister<R, $b> as CoreRegister>::Lanes, Output: Lanes>
+                    + Mul<R::Lanes, Output = <ArrayRegister<IDX, $b> as CoreRegister>::Lanes>,
             {
-                unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, $a>>) -> Storage<Self> {
+                unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, $b>>) -> Storage<Self> {
                     let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
-                    let lo_val = unsafe { <ArrayRegister<R, $a> as IndexableRegister<IDX>>::gather(ptr, lo_idx) };
-                    let hi_val = unsafe { <ArrayRegister<R, $a> as IndexableRegister<IDX>>::gather(ptr, hi_idx) };
+                    let lo_val = unsafe { <ArrayRegister<R, $b> as IndexableRegister<ArrayRegister<IDX, $a>>>::gather(ptr, lo_idx) };
+                    let hi_val = unsafe { <ArrayRegister<R, $b> as IndexableRegister<ArrayRegister<IDX, $a>>>::gather(ptr, hi_idx) };
                     ArrayRegister(unsafe { generic_array::const_transmute([lo_val, hi_val]) })
                 }
             }
@@ -1351,6 +1351,24 @@ macro_rules! impl_indexable {
 
     () => {
         // base case
+        impl<IDX, R: Register> IndexableRegister<ArrayRegister<IDX, 2>> for ArrayRegister<R, 4>
+        where
+            IDX: UnsignedIntegerRegister<Lanes = <ArrayRegister<R, 2> as CoreRegister>::Lanes>,
+            ArrayRegister<R, 2>: IndexableRegister<IDX, Element = R::Element>,
+            typenum::U2: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>
+                + Mul<<ArrayRegister<R, 2> as CoreRegister>::Lanes, Output: Lanes>,
+            typenum::U4: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>
+                + Mul<<ArrayRegister<R, 2> as CoreRegister>::Lanes, Output: Lanes>
+                + Mul<R::Lanes, Output = <ArrayRegister<IDX, 2> as CoreRegister>::Lanes>,
+        {
+            unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, 2>>) -> Storage<Self> {
+                let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
+                let lo_val = unsafe { <ArrayRegister<R, 2> as IndexableRegister<IDX>>::gather(ptr, lo_idx) };
+                let hi_val = unsafe { <ArrayRegister<R, 2> as IndexableRegister<IDX>>::gather(ptr, hi_idx) };
+                ArrayRegister(unsafe { generic_array::const_transmute([lo_val, hi_val]) })
+            }
+        }
+
         impl<IDX: UnsignedIntegerRegister, R: Register> IndexableRegister<ArrayRegister<IDX, 4>> for ArrayRegister<R, 2>
         where
             ArrayRegister<IDX, 2>: UnsignedIntegerRegister<Lanes = R::Lanes>,
@@ -1370,10 +1388,8 @@ macro_rules! impl_indexable {
         impl_indexable!(2 4 8);
         impl_indexable!(4 8 16);
         impl_indexable!(8 16 32);
-        impl_indexable!(16 32 64);
+        // impl_indexable!(16 32 64);
     }
 }
 
 impl_indexable!();
-
-

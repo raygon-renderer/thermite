@@ -11,7 +11,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
         Element, ExtendRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister,
         NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+        SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -448,7 +448,7 @@ impl FloatRegister for F32x4V2 {
 
     type Bits = super::U32x4V2;
     type SignedBits = super::I32x4V2;
-    type ExtendedPrecision = DoublePumpRegister<super::F64x2V2>;
+    type ExtendedPrecision = ArrayRegister<super::F64x2V2, 2>;
 
     const HALF: Storage<Self> = reg::<Self, 4>([0.5; 4]);
     const NEG_ZERO: Storage<Self> = reg::<Self, 4>([-0.0; 4]);
@@ -592,14 +592,14 @@ impl LinAlg3Register for F32x4V2 {
     }
 }
 
-impl CastRegister<F32x4V2> for super::F64x4V2 {
+impl CastRegister<F32x4V2> for ArrayRegister<super::F64x2V2, 2> {
     #[inline(always)]
     fn cast_from(value: Storage<F32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtps_pd(value);
             let hi = arch::_mm_cvtps_pd(arch::_mm_movehl_ps(value, value));
 
-            super::F64x4V2::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 }

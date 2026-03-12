@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
-        ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg, reg_splat,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };
@@ -560,10 +560,10 @@ impl SignedIntegerRegister for I64x2V2 {
     }
 }
 
-impl CastRegister<super::I64x4V2> for super::I32x4V2 {
+impl CastRegister<ArrayRegister<super::I64x2V2, 2>> for super::I32x4V2 {
     #[inline(always)]
-    fn cast_from(value: Storage<super::I64x4V2>) -> Storage<Self> {
-        let (lo, hi) = super::I64x4V2::split(value);
+    fn cast_from(value: Storage<ArrayRegister<super::I64x2V2, 2>>) -> Storage<Self> {
+        let (lo, hi) = <ArrayRegister<super::I64x2V2, 2> as ConcatRegister<super::I64x2V2>>::split(value);
         unsafe { arch::_mm_cvtepi64_epi32x_v2(lo, hi) }
     }
 }

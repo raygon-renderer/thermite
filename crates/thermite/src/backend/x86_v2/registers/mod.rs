@@ -22,7 +22,7 @@ use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{IndexableRegister, Storage, array::ArrayRegister, dp::DoublePumpRegister, reduced::HalfRegister2},
+    register::{IndexableRegister, Storage, array::ArrayRegister, reduced::HalfRegister2},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
@@ -63,10 +63,6 @@ impl NativeSimd for X86V2 {
     type u64xN = U64x2V2;
 }
 
-type F64x4V2 = DoublePumpRegister<F64x2V2>;
-type I64x4V2 = DoublePumpRegister<I64x2V2>;
-type U64x4V2 = DoublePumpRegister<U64x2V2>;
-
 // Scatter/Gather is not available in x86v2, so we must use fallback impls
 macro_rules! impl_indexable {
     ($idx:ty => $($ty:ty),* $(,)?) => {$( impl IndexableRegister<$idx> for $ty {} )*};
@@ -74,8 +70,8 @@ macro_rules! impl_indexable {
 
 impl_indexable!(<X86V2 as Simd>::u32x2 => F64x2V2, I64x2V2, U64x2V2);
 impl_indexable!(<X86V2 as Simd>::u64x2 => F64x2V2, I64x2V2, U64x2V2);
-impl_indexable!(<X86V2 as Simd>::u32x4 => <X86V2 as Simd>::f32x4, <X86V2 as Simd>::i32x4, <X86V2 as Simd>::u32x4, <X86V2 as Simd>::u64x4, <X86V2 as Simd>::i64x4, <X86V2 as Simd>::f64x4);
-impl_indexable!(<X86V2 as Simd>::u64x4 => <X86V2 as Simd>::f32x4, <X86V2 as Simd>::i32x4, <X86V2 as Simd>::u32x4);
+impl_indexable!(<X86V2 as Simd>::u32x4 => F32x4V2, I32x4V2, U32x4V2, <X86V2 as Simd>::u64x4, <X86V2 as Simd>::i64x4, <X86V2 as Simd>::f64x4);
+impl_indexable!(<X86V2 as Simd>::u64x4 => F32x4V2, I32x4V2, U32x4V2);
 
 impl Simd for X86V2 {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
@@ -99,21 +95,21 @@ impl Simd for X86V2 {
     type i32x8 = ArrayRegister<I32x4V2, 2>;
     type u32x8 = ArrayRegister<U32x4V2, 2>;
 
-    type f64x4 = F64x4V2;
-    type i64x4 = I64x4V2;
-    type u64x4 = U64x4V2;
+    type f64x4 = ArrayRegister<F64x2V2, 2>;
+    type i64x4 = ArrayRegister<I64x2V2, 2>;
+    type u64x4 = ArrayRegister<U64x2V2, 2>;
 
-    type f64x8 = ArrayRegister<F64x4V2, 2>;
-    type i64x8 = ArrayRegister<I64x4V2, 2>;
-    type u64x8 = ArrayRegister<U64x4V2, 2>;
+    type f64x8 = ArrayRegister<F64x2V2, 4>;
+    type i64x8 = ArrayRegister<I64x2V2, 4>;
+    type u64x8 = ArrayRegister<U64x2V2, 4>;
 
     type f32x16 = ArrayRegister<F32x4V2, 4>;
     type i32x16 = ArrayRegister<I32x4V2, 4>;
     type u32x16 = ArrayRegister<U32x4V2, 4>;
 
-    type f64x16 = ArrayRegister<F64x4V2, 4>;
-    type i64x16 = ArrayRegister<I64x4V2, 4>;
-    type u64x16 = ArrayRegister<U64x4V2, 4>;
+    type f64x16 = ArrayRegister<F64x2V2, 8>;
+    type i64x16 = ArrayRegister<I64x2V2, 8>;
+    type u64x16 = ArrayRegister<U64x2V2, 8>;
 }
 
 impl_concat_bool_register2!(f32, half::F32x2V2);

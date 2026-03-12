@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        dp::DoublePumpRegister, empty_reg, reg, reg_splat,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, empty_reg, reg,
+        reg_splat, array::ArrayRegister,
     },
     simd::Simd,
 };
@@ -544,13 +544,13 @@ impl SignedIntegerRegister for I32x4V2 {
     }
 }
 
-impl CastRegister<I32x4V2> for DoublePumpRegister<super::I64x2V2> {
+impl CastRegister<I32x4V2> for ArrayRegister<super::I64x2V2, 2> {
     fn cast_from(value: Storage<I32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtepi32_epi64(value);
             let hi = arch::_mm_cvtepi32_epi64(arch::_mm_unpackhi_epi32(value, value));
 
-            Self::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 }
