@@ -10,7 +10,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element,
         ExtendRegister, IndexableRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, dp::DoublePumpRegister, empty_reg, reg,
+        UnsignedIntegerRegister, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -285,7 +285,7 @@ where
     }
 }
 
-impl IndexableRegister<super::U32x8V3> for DoublePumpRegister<U64x4V3> {
+impl IndexableRegister<super::U32x8V3> for ArrayRegister<U64x4V3, 2> {
     #[inline(always)]
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U32x8V3>) -> Storage<Self> {
         let (lo, hi) = <super::U32x8V3>::split(indices);
@@ -294,7 +294,7 @@ impl IndexableRegister<super::U32x8V3> for DoublePumpRegister<U64x4V3> {
             let lo = arch::_mm256_i32gather_epi64::<8>(ptr as *const _, lo);
             let hi = arch::_mm256_i32gather_epi64::<8>(ptr as *const _, hi);
 
-            Self::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 
@@ -308,10 +308,10 @@ impl IndexableRegister<super::U32x8V3> for DoublePumpRegister<U64x4V3> {
         let (lo, hi) = <super::U32x8V3>::split(indices);
 
         unsafe {
-            let lo = arch::_mm256_mask_i32gather_epi64::<8>(src.0, ptr as *const _, lo, mask.0);
-            let hi = arch::_mm256_mask_i32gather_epi64::<8>(src.1, ptr as *const _, hi, mask.1);
+            let lo = arch::_mm256_mask_i32gather_epi64::<8>(src.0[0], ptr as *const _, lo, mask.0[0]);
+            let hi = arch::_mm256_mask_i32gather_epi64::<8>(src.0[1], ptr as *const _, hi, mask.0[1]);
 
-            Self::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 }
@@ -514,10 +514,10 @@ impl IntegerRegister for U64x4V3 {
 
 impl UnsignedIntegerRegister for U64x4V3 {}
 
-impl CastRegister<DoublePumpRegister<U64x4V3>> for super::U32x8V3 {
+impl CastRegister<ArrayRegister<U64x4V3, 2>> for super::U32x8V3 {
     #[inline(always)]
-    fn cast_from(value: Storage<DoublePumpRegister<U64x4V3>>) -> Storage<Self> {
-        let (lo, hi) = DoublePumpRegister::<U64x4V3>::split(value);
+    fn cast_from(value: Storage<ArrayRegister<U64x4V3, 2>>) -> Storage<Self> {
+        let (lo, hi) = <ArrayRegister<U64x4V3, 2> as ConcatRegister<U64x4V3>>::split(value);
 
         unsafe {
             let lo = arch::_mm256_cvtepi64_epi32_v3(lo);

@@ -6,7 +6,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+        ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -304,10 +304,10 @@ impl IndexableRegister<super::U32x8V3> for F32x8V3 {
     }
 }
 
-impl IndexableRegister<DoublePumpRegister<super::U64x4V3>> for F32x8V3 {
+impl IndexableRegister<ArrayRegister<super::U64x4V3, 2>> for F32x8V3 {
     #[inline(always)]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<DoublePumpRegister<super::U64x4V3>>) -> Storage<Self> {
-        let (lo_idx, hi_idx) = DoublePumpRegister::split(indices);
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<super::U64x4V3, 2>>) -> Storage<Self> {
+        let (lo_idx, hi_idx) = <ArrayRegister<super::U64x4V3, 2> as ConcatRegister<super::U64x4V3>>::split(indices);
 
         unsafe {
             Self::concat(
@@ -322,11 +322,11 @@ impl IndexableRegister<DoublePumpRegister<super::U64x4V3>> for F32x8V3 {
         src: Storage<Self>,
         mask: Storage<Self::Mask>,
         ptr: *const Self::Element,
-        indices: Storage<DoublePumpRegister<super::U64x4V3>>,
+        indices: Storage<ArrayRegister<super::U64x4V3, 2>>,
     ) -> Storage<Self> {
         let (lo_src, hi_src) = Self::split(src);
         let (lo_mask, hi_mask) = Self::split(mask);
-        let (lo_idx, hi_idx) = DoublePumpRegister::split(indices);
+        let (lo_idx, hi_idx) = <ArrayRegister<super::U64x4V3, 2> as ConcatRegister<super::U64x4V3>>::split(indices);
 
         unsafe {
             Self::concat(
@@ -522,7 +522,7 @@ impl FloatRegister for F32x8V3 {
 
     type Bits = super::U32x8V3;
     type SignedBits = super::I32x8V3;
-    type ExtendedPrecision = DoublePumpRegister<super::F64x4V3>;
+    type ExtendedPrecision = ArrayRegister<super::F64x4V3, 2>;
 
     const HALF: Storage<Self> = reg::<Self, 8>([0.5; 8]);
     const NEG_ZERO: Storage<Self> = reg::<Self, 8>([-0.0; 8]);
@@ -632,7 +632,7 @@ impl FloatRegister for F32x8V3 {
     const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
-impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {
+impl CastRegister<F32x8V3> for ArrayRegister<super::F64x4V3, 2> {
     #[inline(always)]
     fn cast_from(value: Storage<F32x8V3>) -> Storage<Self> {
         let (lo, hi) = F32x8V3::split(value);
@@ -641,7 +641,7 @@ impl CastRegister<F32x8V3> for DoublePumpRegister<super::F64x4V3> {
             let lo = arch::_mm256_cvtps_pd(lo);
             let hi = arch::_mm256_cvtps_pd(hi);
 
-            DoublePumpRegister::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 }

@@ -93,6 +93,15 @@ pub trait NativeIsa: HasIsa + Clone + Copy + PartialEq + Eq + Hash {
     /// This may modify low-level CPU registers that control the behavior of the
     /// entire thread. Use with caution.
     unsafe fn enable_denormals() -> Result<(), UnsupportedError> { Err(UnsupportedError) }
+
+    /// If supported, zero out the upper parts of all SIMD registers. Not all architectures
+    /// support this, and will return `false` if not, otherwise `true` if it succeeded.
+    ///
+    /// # Safety
+    ///
+    /// This is a hardware intrinsic that will intentionally destroy parts of all SIMD
+    /// registers. Generally don't use this unless you know exactly what you're doing.
+    unsafe fn zeroupper() -> bool { false }
 }
 
 pub struct UnsupportedError;

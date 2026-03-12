@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        WideRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+        WideRegister, ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -545,7 +545,7 @@ impl FloatRegister for F64x2V3 {
 impl CastRegister<<Scalar as Simd>::f32x2> for F64x2V3 {
     #[inline(always)]
     fn cast_from(value: Storage<<Scalar as Simd>::f32x2>) -> Storage<Self> {
-        unsafe { arch::_mm_cvtps_pd(arch::_mm_setr_ps(value.0, value.1, 0.0, 0.0)) }
+        unsafe { arch::_mm_cvtps_pd(arch::_mm_setr_ps(value.0[0], value.0[1], 0.0, 0.0)) }
     }
 }
 
@@ -555,10 +555,10 @@ impl CastRegister<F64x2V3> for <Scalar as Simd>::f32x2 {
         unsafe {
             let ps = arch::_mm_cvtpd_ps(value);
 
-            DoublePumpRegister::concat(
+            ArrayRegister([
                 arch::_mm_cvtss_f32(ps),
                 f32::from_bits(arch::_mm_extract_ps::<1>(ps) as u32),
-            )
+            ])
         }
     }
 }

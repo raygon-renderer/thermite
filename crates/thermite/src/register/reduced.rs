@@ -34,6 +34,12 @@ impl<R: CoreRegister, N> Clone for ReducedRegister<R, N> {
 
 impl<R: CoreRegister, N> Copy for ReducedRegister<R, N> {}
 
+impl<R: CoreRegister, N> core::fmt::Debug for ReducedRegister<R, N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        todo!()
+    }
+}
+
 /// Defines a Reducible superset of `CoreRegister`'s
 pub trait CoreReducible<N: Unsigned>: CoreRegister<Lanes: Sub<N, Output: Lanes>> {}
 

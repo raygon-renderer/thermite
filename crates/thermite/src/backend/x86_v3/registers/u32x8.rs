@@ -10,7 +10,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IndexableRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-        dp::DoublePumpRegister, empty_reg, reg,
+        array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
     },
 };
 
@@ -537,7 +537,7 @@ impl IntegerRegister for U32x8V3 {
 
 impl UnsignedIntegerRegister for U32x8V3 {}
 
-impl CastRegister<U32x8V3> for DoublePumpRegister<super::U64x4V3> {
+impl CastRegister<U32x8V3> for ArrayRegister<super::U64x4V3, 2> {
     fn cast_from(value: Storage<U32x8V3>) -> Storage<Self> {
         let (lo, hi) = U32x8V3::split(value);
 
@@ -545,7 +545,7 @@ impl CastRegister<U32x8V3> for DoublePumpRegister<super::U64x4V3> {
             let lo = arch::_mm256_cvtepu32_epi64(lo);
             let hi = arch::_mm256_cvtepu32_epi64(hi);
 
-            Self::concat(lo, hi)
+            ArrayRegister([lo, hi])
         }
     }
 }

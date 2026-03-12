@@ -1324,6 +1324,10 @@ pub trait FloatVectorWithBits:
     /// assert!(total_lt.none()); // NaN is not less than 1.0 in total order
     /// ```
     fn total_order(self) -> Self::SignedBits;
+
+    /// Similar to [`total_order`](FloatVectorWithBits::total_order), but positive zero and negative zero are
+    /// the same value. This can be used for calculating ULP differences by simply subtracing one from another.
+    fn linear_order(self) -> Self::SignedBits;
 }
 
 /// Vector suitable for 3D linear algebra operations.

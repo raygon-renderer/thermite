@@ -22,7 +22,7 @@ use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{IndexableRegister, Storage, dp::DoublePumpRegister, reduced::HalfRegister2},
+    register::{IndexableRegister, Storage, array::ArrayRegister, dp::DoublePumpRegister, reduced::HalfRegister2},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
@@ -95,26 +95,34 @@ impl Simd for X86V2 {
     type i64x2 = I64x2V2;
     type u64x2 = U64x2V2;
 
-    type f32x8 = DoublePumpRegister<Self::f32x4>;
-    type i32x8 = DoublePumpRegister<Self::i32x4>;
-    type u32x8 = DoublePumpRegister<Self::u32x4>;
+    type f32x8 = ArrayRegister<F32x4V2, 2>;
+    type i32x8 = ArrayRegister<I32x4V2, 2>;
+    type u32x8 = ArrayRegister<U32x4V2, 2>;
 
     type f64x4 = F64x4V2;
     type i64x4 = I64x4V2;
     type u64x4 = U64x4V2;
 
-    type f64x8 = DoublePumpRegister<Self::f64x4>;
-    type i64x8 = DoublePumpRegister<Self::i64x4>;
-    type u64x8 = DoublePumpRegister<Self::u64x4>;
+    type f64x8 = ArrayRegister<F64x4V2, 2>;
+    type i64x8 = ArrayRegister<I64x4V2, 2>;
+    type u64x8 = ArrayRegister<U64x4V2, 2>;
 
-    type f32x16 = DoublePumpRegister<Self::f32x8>;
-    type i32x16 = DoublePumpRegister<Self::i32x8>;
-    type u32x16 = DoublePumpRegister<Self::u32x8>;
+    type f32x16 = ArrayRegister<F32x4V2, 4>;
+    type i32x16 = ArrayRegister<I32x4V2, 4>;
+    type u32x16 = ArrayRegister<U32x4V2, 4>;
 
-    type f64x16 = DoublePumpRegister<Self::f64x8>;
-    type i64x16 = DoublePumpRegister<Self::i64x8>;
-    type u64x16 = DoublePumpRegister<Self::u64x8>;
+    type f64x16 = ArrayRegister<F64x4V2, 4>;
+    type i64x16 = ArrayRegister<I64x4V2, 4>;
+    type u64x16 = ArrayRegister<U64x4V2, 4>;
 }
+
+impl_concat_bool_register2!(f32, half::F32x2V2);
+impl_concat_bool_register2!(u32, half::U32x2V2);
+impl_concat_bool_register2!(i32, half::I32x2V2);
+
+impl_concat_bool_register2!(f64, F64x2V2);
+impl_concat_bool_register2!(u64, U64x2V2);
+impl_concat_bool_register2!(i64, I64x2V2);
 
 impl_bit_casts! {
     F64x2V2 as I64x2V2 => _mm_castpd_si128, // f64x2 -> i64x2

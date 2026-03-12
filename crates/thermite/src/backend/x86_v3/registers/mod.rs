@@ -39,7 +39,7 @@ use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{Storage, dp::DoublePumpRegister},
+    register::{Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
@@ -67,6 +67,13 @@ impl NativeIsa for X86V3 {
     #[allow(clippy::unit_arg)]
     unsafe fn enable_denormals() -> Result<(), crate::simd::UnsupportedError> {
         unsafe { Ok(arch::enable_denormals()) }
+    }
+
+    #[inline(always)]
+    unsafe fn zeroupper() -> bool {
+        unsafe { arch::_mm256_zeroupper() };
+
+        true
     }
 }
 
@@ -106,18 +113,26 @@ impl Simd for X86V3 {
     type i64x4 = I64x4V3;
     type u64x4 = U64x4V3;
 
-    type f64x8 = DoublePumpRegister<Self::f64x4>;
-    type i64x8 = DoublePumpRegister<Self::i64x4>;
-    type u64x8 = DoublePumpRegister<Self::u64x4>;
+    type f64x8 = ArrayRegister<F64x4V3, 2>;
+    type i64x8 = ArrayRegister<I64x4V3, 2>;
+    type u64x8 = ArrayRegister<U64x4V3, 2>;
 
-    type f32x16 = DoublePumpRegister<Self::f32x8>;
-    type i32x16 = DoublePumpRegister<Self::i32x8>;
-    type u32x16 = DoublePumpRegister<Self::u32x8>;
+    type f32x16 = ArrayRegister<F32x8V3, 2>;
+    type i32x16 = ArrayRegister<I32x8V3, 2>;
+    type u32x16 = ArrayRegister<U32x8V3, 2>;
 
-    type f64x16 = DoublePumpRegister<Self::f64x8>;
-    type i64x16 = DoublePumpRegister<Self::i64x8>;
-    type u64x16 = DoublePumpRegister<Self::u64x8>;
+    type f64x16 = ArrayRegister<F64x4V3, 4>;
+    type i64x16 = ArrayRegister<I64x4V3, 4>;
+    type u64x16 = ArrayRegister<U64x4V3, 4>;
 }
+
+impl_concat_bool_register2!(f32, F32x2V3);
+impl_concat_bool_register2!(u32, U32x2V3);
+impl_concat_bool_register2!(i32, I32x2V3);
+
+impl_concat_bool_register2!(f64, F64x2V3);
+impl_concat_bool_register2!(u64, U64x2V3);
+impl_concat_bool_register2!(i64, I64x2V3);
 
 const fn shuffle_to_m256i(bitmask: i32) -> arch::__m256i {
     let mut masks = [0i32; 8];

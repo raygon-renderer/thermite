@@ -2,9 +2,12 @@ use generic_array::typenum::U32;
 
 use super::arch;
 
-use crate::register::{
-    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, Storage,
-    reduced::{HalfRegister2, ReducedRegister},
+use crate::{
+    element::MaskElement,
+    register::{
+        CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, Storage,
+        reduced::{HalfRegister2, ReducedRegister},
+    },
 };
 
 pub type F32x2V2 = HalfRegister2<super::F32x4V2>;
@@ -118,6 +121,32 @@ impl ExtendRegister<u32> for U32x2V2 {
         unsafe { arch::_mm_cvtsi128_si32(value.0) as u32 }
     }
 }
+
+// impl ConcatRegister<bool> for U32x2V2 {
+//     #[inline(always)]
+//     fn concat(lo: Storage<bool>, hi: Storage<bool>) -> Storage<Self> {
+//         ReducedRegister::new(unsafe { arch::_mm_setr_epu32x(u32::from_bool(lo), u32::from_bool(hi), 0, 0) })
+//     }
+
+//     #[inline(always)]
+//     fn split(value: Storage<Self>) -> (Storage<bool>, Storage<bool>) {
+//         let mut arr = [0i32; 4];
+//         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value.0) };
+//         (arr[0].to_bool(), arr[1].to_bool())
+//     }
+// }
+
+// impl ExtendRegister<bool> for U32x2V2 {
+//     #[inline(always)]
+//     fn extend(value: Storage<bool>) -> Storage<Self> {
+//         ReducedRegister::new(unsafe { arch::_mm_setr_epu32x(u32::from_bool(value), 0, 0, 0) })
+//     }
+
+//     #[inline(always)]
+//     fn narrow(value: Storage<Self>) -> Storage<bool> {
+//         unsafe { arch::_mm_cvtsi128_si32(value.0).to_bool() }
+//     }
+// }
 
 impl ConcatRegister<U32x2V2> for super::U32x4V2 {
     #[inline(always)]

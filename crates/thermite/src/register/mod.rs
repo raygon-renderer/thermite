@@ -132,6 +132,8 @@ pub trait Lanes:
     type BitmaskLength: ArrayLength;
 
     type BitmaskStorage: bitvec::view::BitViewSized<Store = u32>;
+
+    const IS_POWER_OF_TWO: bool;
 }
 
 impl<T> Lanes for T
@@ -143,6 +145,11 @@ where
 {
     type BitmaskLength = MaskWordCount<T>;
     type BitmaskStorage = GenericArray<u32, Self::BitmaskLength>;
+
+    const IS_POWER_OF_TWO: bool = {
+        let lanes = <T as Unsigned>::USIZE;
+        lanes != 0 && (lanes & (lanes - 1)) == 0
+    };
 }
 
 pub type Storage<R> = <R as CoreRegister>::Storage;
@@ -163,7 +170,7 @@ impl<R: CoreRegister> ZeroUpper for OwnLanes<R> {
 /// without any intertwining trait bounds.
 pub trait CoreRegister: 'static + Sized {
     type Lanes: Lanes;
-    type Storage: Sized + Copy;
+    type Storage: Sized + Copy + core::fmt::Debug;
     type Mask: MaskRegister<Lanes = Self::Lanes>;
 
     /// Indicates if the register is emulated in software.
@@ -781,6 +788,10 @@ const fn is_power_of_2(n: u32) -> bool {
     (n & (n - 1)) == 0
 }
 
+pub trait SwizzleIndices<N: ArrayLength> {
+    const INDICES: GenericArray<u32, N>;
+}
+
 #[thermite_macros::register_trait]
 pub trait SwizzleRegister: Register {
     const HAS_PERMUTEV: bool;
@@ -811,6 +822,10 @@ pub trait SwizzleRegister: Register {
     #[masked]
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         Self::scalar_permutev(value, idxs)
+    }
+
+    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+        Self::permutev(value, I::INDICES)
     }
 
     fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
@@ -874,6 +889,10 @@ pub trait SwizzleRegister: Register {
         let tmp_b = Self::permutev(b, b_idxs);
 
         Self::blendv(blend_mask, tmp_a, tmp_b)
+    }
+
+    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::swizzle(a, b, I::INDICES)
     }
 }
 
@@ -1246,11 +1265,11 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
     #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
-    #[conditional] fn wrapping_sum(value: Storage<Self>) -> Self::Element {
+    fn wrapping_sum(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_add(&b))
     }
 
-    #[conditional] fn wrapping_product(value: Storage<Self>) -> Self::Element {
+    fn wrapping_product(value: Storage<Self>) -> Self::Element {
         Self::reduce(value, |a, b| a.wrapping_mul(&b))
     }
 
@@ -1564,6 +1583,15 @@ pub trait FloatRegister:
         let mask = <Self::SignedBits as BitshiftRegister>::shri::<1>(is_negative);
 
         Self::SignedBits::bitxor(signed_bits, mask)
+    }
+
+    fn linear_order(value: Storage<Self>) -> Storage<Self::SignedBits> {
+        let shift = const { size_of::<Self::Element>() as u32 * 8 - 1 };
+        let signed_bits = <Self::SignedBits as BitCastRegister<Self>>::from_bits(value);
+        let is_negative = <Self::SignedBits as SignedIntegerRegister>::sra(signed_bits, shift);
+        let mask = <Self::SignedBits as BitshiftRegister>::shri::<1>(is_negative);
+
+        Self::SignedBits::sub(Self::SignedBits::bitxor(signed_bits, mask), is_negative)
     }
 
     fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {

@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
-        ZeroUpper, dp::DoublePumpRegister, empty_reg, reg, reg_splat,
+        ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };
@@ -571,7 +571,7 @@ impl CastRegister<super::I64x4V2> for super::I32x4V2 {
 impl CastRegister<<Scalar as Simd>::i32x2> for I64x2V2 {
     #[inline(always)]
     fn cast_from(value: Storage<<Scalar as Simd>::i32x2>) -> Storage<Self> {
-        unsafe { arch::_mm_cvtepi32_epi64(arch::_mm_setr_epi32(value.0, value.1, 0, 0)) }
+        unsafe { arch::_mm_cvtepi32_epi64(arch::_mm_setr_epi32(value.0[0], value.0[1], 0, 0)) }
     }
 }
 
@@ -579,10 +579,10 @@ impl CastRegister<I64x2V2> for <Scalar as Simd>::i32x2 {
     #[inline(always)]
     fn cast_from(value: Storage<I64x2V2>) -> Storage<<Scalar as Simd>::i32x2> {
         unsafe {
-            DoublePumpRegister(
+            ArrayRegister([
                 arch::_mm_cvtsi128_si32(value),      // lowest 32 bits
                 arch::_mm_extract_epi32::<2>(value), // next 32 bits after 64 bits
-            )
+            ])
         }
     }
 }

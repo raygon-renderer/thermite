@@ -1,5 +1,7 @@
 #![allow(clippy::useless_transmute, unnecessary_transmutes)]
 
+pub mod mask;
+
 pub mod float;
 pub mod signed;
 pub mod unsigned;
@@ -7,7 +9,7 @@ pub mod unsigned;
 use crate::{
     element::USize,
     isa::InstructionSet,
-    register::{Element, ExtendRegister, MaskElement, Storage, dp::DoublePumpRegister},
+    register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
 
@@ -57,42 +59,42 @@ impl NativeSimd for Scalar {
 }
 
 impl Simd for Scalar {
-    type usizex2 = DoublePumpRegister<USize>;
-    type usizex4 = DoublePumpRegister<Self::usizex2>;
-    type usizex8 = DoublePumpRegister<Self::usizex4>;
-    type usizex16 = DoublePumpRegister<Self::usizex8>;
+    type usizex2 = ArrayRegister<USize, 2>;
+    type usizex4 = ArrayRegister<USize, 4>;
+    type usizex8 = ArrayRegister<USize, 8>;
+    type usizex16 = ArrayRegister<USize, 16>;
 
-    type f32x2 = DoublePumpRegister<f32>;
-    type i32x2 = DoublePumpRegister<i32>;
-    type u32x2 = DoublePumpRegister<u32>;
+    type f32x2 = ArrayRegister<f32, 2>;
+    type i32x2 = ArrayRegister<i32, 2>;
+    type u32x2 = ArrayRegister<u32, 2>;
 
-    type f32x4 = DoublePumpRegister<Self::f32x2>;
-    type i32x4 = DoublePumpRegister<Self::i32x2>;
-    type u32x4 = DoublePumpRegister<Self::u32x2>;
+    type f32x4 = ArrayRegister<f32, 4>;
+    type i32x4 = ArrayRegister<i32, 4>;
+    type u32x4 = ArrayRegister<u32, 4>;
 
-    type f32x8 = DoublePumpRegister<Self::f32x4>;
-    type i32x8 = DoublePumpRegister<Self::i32x4>;
-    type u32x8 = DoublePumpRegister<Self::u32x4>;
+    type f32x8 = ArrayRegister<f32, 8>;
+    type i32x8 = ArrayRegister<i32, 8>;
+    type u32x8 = ArrayRegister<u32, 8>;
 
-    type f64x2 = DoublePumpRegister<f64>;
-    type i64x2 = DoublePumpRegister<i64>;
-    type u64x2 = DoublePumpRegister<u64>;
+    type f64x2 = ArrayRegister<f64, 2>;
+    type i64x2 = ArrayRegister<i64, 2>;
+    type u64x2 = ArrayRegister<u64, 2>;
 
-    type f64x4 = DoublePumpRegister<Self::f64x2>;
-    type i64x4 = DoublePumpRegister<Self::i64x2>;
-    type u64x4 = DoublePumpRegister<Self::u64x2>;
+    type f64x4 = ArrayRegister<f64, 4>;
+    type i64x4 = ArrayRegister<i64, 4>;
+    type u64x4 = ArrayRegister<u64, 4>;
 
-    type f64x8 = DoublePumpRegister<Self::f64x4>;
-    type i64x8 = DoublePumpRegister<Self::i64x4>;
-    type u64x8 = DoublePumpRegister<Self::u64x4>;
+    type f64x8 = ArrayRegister<f64, 8>;
+    type i64x8 = ArrayRegister<i64, 8>;
+    type u64x8 = ArrayRegister<u64, 8>;
 
-    type f32x16 = DoublePumpRegister<Self::f32x8>;
-    type i32x16 = DoublePumpRegister<Self::i32x8>;
-    type u32x16 = DoublePumpRegister<Self::u32x8>;
+    type f32x16 = ArrayRegister<f32, 16>;
+    type i32x16 = ArrayRegister<i32, 16>;
+    type u32x16 = ArrayRegister<u32, 16>;
 
-    type f64x16 = DoublePumpRegister<Self::f64x8>;
-    type i64x16 = DoublePumpRegister<Self::i64x8>;
-    type u64x16 = DoublePumpRegister<Self::u64x8>;
+    type f64x16 = ArrayRegister<f64, 16>;
+    type i64x16 = ArrayRegister<i64, 16>;
+    type u64x16 = ArrayRegister<u64, 16>;
 }
 
 decl_aliases!(Scalar);

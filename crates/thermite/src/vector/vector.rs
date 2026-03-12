@@ -646,6 +646,7 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
     #[inline(always)] unsafe fn native_powf(self, exp: Self) -> Self { unsafe { Vector(R::native_powf(self.0, exp.0)) } }
 
     #[inline(always)] fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
+    #[inline(always)] fn linear_order(self) -> Self::SignedBits { Vector(R::linear_order(self.0)) }
 }
 
 #[rustfmt::skip]

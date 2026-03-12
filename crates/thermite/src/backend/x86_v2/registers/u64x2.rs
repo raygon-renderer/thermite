@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, dp::DoublePumpRegister,
-        empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister,
+        dp::DoublePumpRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -492,7 +492,7 @@ impl CastRegister<<Scalar as Simd>::u32x2> for U64x2V2 {
     #[inline(always)]
     fn cast_from(value: Storage<<Scalar as Simd>::u32x2>) -> Storage<Self> {
         // zero-extend lower two u32 lanes to u64 lanes
-        unsafe { arch::_mm_setr_epi32(0, value.0 as i32, 0, value.1 as i32) }
+        unsafe { arch::_mm_setr_epi32(0, value.0[0] as i32, 0, value.0[1] as i32) }
     }
 }
 
@@ -500,10 +500,10 @@ impl CastRegister<U64x2V2> for <Scalar as Simd>::u32x2 {
     #[inline(always)]
     fn cast_from(value: Storage<U64x2V2>) -> Storage<<Scalar as Simd>::u32x2> {
         unsafe {
-            DoublePumpRegister(
+            ArrayRegister([
                 arch::_mm_cvtsi128_si32(value) as u32,      // lowest 32 bits
                 arch::_mm_extract_epi32::<2>(value) as u32, // next 32 bits after 64 bits
-            )
+            ])
         }
     }
 }

@@ -37,6 +37,15 @@ impl<R: CoreRegister> Clone for DoublePumpRegister<R> {
 
 impl<R: CoreRegister> Copy for DoublePumpRegister<R> {}
 
+impl<R: CoreRegister> core::fmt::Debug for DoublePumpRegister<R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("DoublePumpRegister")
+            .field(&self.0)
+            .field(&self.1)
+            .finish()
+    }
+}
+
 impl<R: CoreRegister> DoublePumpRegister<R>
 where
     typenum::Double<R::Lanes>: Lanes,
@@ -754,13 +763,13 @@ where
             return Self::scalar_permutev(value, idxs);
         }
 
-        // mask out all indices to be within the range of R
-        idxs.iter_mut().for_each(|idx| *idx &= <R::Lanes as Unsigned>::U32 - 1);
+        idxs.iter_mut()
+            .for_each(|idx| *idx &= <Self::Lanes as Unsigned>::U32 - 1);
 
         let mut blends = <Self::Mask as MaskRegister>::FALSY; // mask register
 
         for (i, &idx) in idxs.iter().enumerate() {
-            if idx > <R::Lanes as Unsigned>::U32 - 1 {
+            if idx >= <R::Lanes as Unsigned>::U32 {
                 // TODO: Optimize?
                 blends = <Self::Mask as MaskRegister>::set(blends, i, true);
             }

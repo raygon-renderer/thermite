@@ -18,25 +18,23 @@ macro_rules! decl_unsigned_scalar { ($i:ty: $ei:ty => $width:literal) => {paste:
 impl CoreRegister for [<u $width>] {
     type Lanes = typenum::U1;
     type Storage = $i;
-    type Mask = Self;
+    type Mask = bool;
 
     const IS_EMULATED: bool = false;
-
     const ISA: InstructionSet = InstructionSet::Scalar;
-
     const EMPTY: Storage<Self> = 0;
 
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        core::hint::select_unpredictable(mask != 0, rhs, lhs)
+        core::hint::select_unpredictable(mask, rhs, lhs)
     }
 
     #[inline(always)] fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        core::hint::select_unpredictable(mask != 0, value, 0)
+        core::hint::select_unpredictable(mask, value, 0)
     }
 
     #[inline(always)] fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        core::hint::select_unpredictable(mask == 0, value, 0)
+        core::hint::select_unpredictable(mask, 0, value)
     }
 
     #[inline(always)] fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
@@ -51,53 +49,18 @@ impl BitwiseRegister for [<u $width>] {
     #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> { !value }
 }
 
-impl MaskRegister for [<u $width>] {
-    const TRUTHY: Storage<Self> = MaskElement::TRUTHY;
-    const FALSY: Storage<Self> = MaskElement::FALSY;
-
-    #[inline(always)]
-    fn set(mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        if value { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
-    }
-
-    #[inline(always)]
-    fn test(mask: Storage<Self::Mask>, lane: usize) -> bool { mask.to_bool() }
-
-    #[inline(always)]
-    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        if value[0] { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
-    }
-
-    #[inline(always)] fn all(value: Storage<Self>) -> bool { value.to_bool() }
-    #[inline(always)] fn any(value: Storage<Self>) -> bool { value.to_bool() }
-    #[inline(always)] fn none(value: Storage<Self>) -> bool { value == 0 }
-
-    #[inline(always)]
-    fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some((value & 1) as u64)
-    }
-
-    #[inline(always)]
-    fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        view.set(0, value.to_bool());
-    }
-}
-
 impl Register for [<u $width>] {
     type Element = $i;
 
     type Signed = [<i $width>];
     type Unsigned = [<u $width>];
 
-    const HAS_EQUAL_SIZE_MASK: bool = true;
+    const HAS_EQUAL_SIZE_MASK: bool = false;
 
-    #[inline(always)] fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> { value }
-    #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { mask }
-    #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self> {
-        if value.to_bool() { <Self as MaskRegister>::TRUTHY } else { <Self as MaskRegister>::FALSY }
-    }
+    #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
+    #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { value.to_bool() }
     #[inline(always)] fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
-        ((value as [<i $width>]) >> (core::mem::size_of::<$i>() * 8 - 1)) as _ // arithmetic shift to propagate sign bit
+        Self::into_mask(value & (core::mem::size_of::<$i>() as Self * 8 - 1))
     }
 
     #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
@@ -178,12 +141,12 @@ impl SwizzleRegister for [<u $width>] {
 }
 
 impl PartialOrdRegister for [<u $width>] {
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs > rhs) }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs == rhs) }
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs >= rhs) }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs < rhs) }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs <= rhs) }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { MaskElement::from_bool(lhs != rhs) }
+    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs > rhs }
+    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs == rhs }
+    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs >= rhs }
+    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs < rhs }
+    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs <= rhs }
+    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs != rhs }
 }
 
 impl NumericRegister for [<u $width>] {
@@ -266,12 +229,12 @@ impl UnsignedIntegerRegister for [<u $width>] {
 
     #[inline(always)]
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {
-        MaskElement::from_bool(value.is_power_of_two())
+        value.is_power_of_two()
     }
 
     #[inline(always)]
     fn parity(value: Storage<Self>) -> Storage<Self> {
-        MaskElement::from_bool(value.count_ones() % 2 == 1)
+        value.count_ones() as Self & 1
     }
 }
 

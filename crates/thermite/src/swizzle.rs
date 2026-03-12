@@ -5,6 +5,9 @@ use crate::{
     register::{Register, SwizzleRegister},
 };
 
+#[doc(hidden)]
+pub use crate::register::SwizzleIndices;
+
 /*
 /// Generates the imm8 constants for shuffling together two vectors
 pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32) {
@@ -47,12 +50,22 @@ pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32
 */
 
 /// Trait for swizzling and permuting vector types. Use the [`swizzle!`](crate::swizzle!) macro for convenient usage.
-pub trait Swizzle<N: ArrayLength> {
+pub trait Swizzle<N: ArrayLength>: Sized {
     /// Swizzle lanes from two vectors according to the given indices.
     fn swizzle(self, other: Self, indices: GenericArray<u32, N>) -> Self;
 
+    #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<N>>(self, other: Self) -> Self {
+        Self::swizzle(self, other, I::INDICES)
+    }
+
     /// Permute lanes from a single vector according to the given indices.
     fn permute(self, indices: GenericArray<u32, N>) -> Self;
+
+    #[inline(always)]
+    fn permute_const<I: SwizzleIndices<N>>(self) -> Self {
+        Self::permute(self, I::INDICES)
+    }
 }
 
 impl<R: Register> Swizzle<R::Lanes> for Vector<R>
@@ -65,8 +78,18 @@ where
     }
 
     #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<R::Lanes>>(self, other: Self) -> Self {
+        Vector(R::swizzle_const::<I>(self.0, other.0))
+    }
+
+    #[inline(always)]
     fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self {
         Vector(R::permutev(self.0, indices))
+    }
+
+    #[inline(always)]
+    fn permute_const<I: SwizzleIndices<R::Lanes>>(self) -> Self {
+        Vector(R::permutev_const::<I>(self.0))
     }
 }
 
@@ -81,29 +104,43 @@ where
 /// a `GenericArray<u32, R::Lanes>` for dynamic shuffling.
 #[macro_export]
 macro_rules! swizzle {
-    ($a:expr, $b:expr, [$($i:literal),* $(,)?]) => {{
+    ($a:expr, $b:expr, [$($i:expr),* $(,)?]) => {{
         #[inline(always)]
         fn __do_swizzle2<N: $crate::generic_array::ArrayLength, S: $crate::swizzle::Swizzle<N>>(a: S, b: S) -> S {
-            use $crate::{swizzle::Swizzle, generic_array::typenum::Unsigned};
-            a.swizzle(b, const {
-                let idxs = [$($i),*];
-                assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
-                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, N>>(idxs) }
-            })
+            use $crate::{swizzle::{Swizzle, SwizzleIndices}, generic_array::{GenericArray, typenum::Unsigned}};
+
+            struct Indices<N: $crate::generic_array::ArrayLength>(core::marker::PhantomData<N>);
+
+            impl<N: $crate::generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
+                const INDICES: GenericArray<u32, N> = {
+                    let idxs = [$($i),*];
+                    assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
+                    unsafe { $crate::generic_array::const_transmute::<_, GenericArray<u32, N>>(idxs) }
+                };
+            }
+
+            a.swizzle_const::<Indices::<N>>(b)
         }
 
         __do_swizzle2($a, $b)
     }};
 
-    ($a:expr, [$($i:literal),* $(,)?]) => {{
+    ($a:expr, [$($i:expr),* $(,)?]) => {{
         #[inline(always)]
         fn __do_swizzle1<N: $crate::generic_array::ArrayLength, S: $crate::swizzle::Swizzle<N>>(a: S) -> S {
-            use $crate::{swizzle::Swizzle, generic_array::typenum::Unsigned};
-            a.permute(const {
-                let idxs = [$($i),*];
-                assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
-                unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, N>>(idxs) }
-            })
+            use $crate::{swizzle::{Swizzle, SwizzleIndices}, generic_array::{GenericArray, typenum::Unsigned}};
+
+            struct Indices<N: $crate::generic_array::ArrayLength>(core::marker::PhantomData<N>);
+
+            impl<N: $crate::generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
+                const INDICES: GenericArray<u32, N> = const {
+                    let idxs = [$($i),*];
+                    assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length of the vector");
+                    unsafe { $crate::generic_array::const_transmute::<_, $crate::generic_array::GenericArray<u32, N>>(idxs) }
+                };
+            }
+
+            a.permute_const::<Indices::<N>>()
         }
 
         __do_swizzle1($a)

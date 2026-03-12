@@ -43,3 +43,36 @@ macro_rules! impl_mask_casts {
         )*};
     };
 }
+
+macro_rules! impl_concat_bool_register2 {
+    ($e:ty, $r:ty) => {
+        const _: () = {
+            use $crate::element::MaskElement;
+
+            impl $crate::register::ConcatRegister<bool> for $r {
+                #[inline(always)]
+                fn concat(lo: Storage<bool>, hi: Storage<bool>) -> Storage<Self> {
+                    <Self as $crate::register::ConcatRegister<$e>>::concat(<$e>::from_bool(lo), <$e>::from_bool(hi))
+                }
+
+                #[inline(always)]
+                fn split(value: Storage<Self>) -> (Storage<bool>, Storage<bool>) {
+                    let (lo, hi) = <Self as $crate::register::ConcatRegister<$e>>::split(value);
+                    (lo.to_bool(), hi.to_bool())
+                }
+            }
+
+            impl $crate::register::ExtendRegister<bool> for $r {
+                #[inline(always)]
+                fn extend(value: Storage<bool>) -> Storage<Self> {
+                    <Self as $crate::register::ExtendRegister<$e>>::extend(<$e>::from_bool(value))
+                }
+
+                #[inline(always)]
+                fn narrow(value: Storage<Self>) -> Storage<bool> {
+                    <Self as $crate::register::ExtendRegister<$e>>::narrow(value).to_bool()
+                }
+            }
+        };
+    };
+}
