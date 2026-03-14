@@ -1,0 +1,13 @@
+[package]
+name = "docgen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thermite = { path = "../../crates/thermite" }
+thermite-special = { path = "../../crates/thermite-special" }
+rand = "0.10"
+rayon = "1.11.0"
+paste = "1"
+libm = "0.2"
+indicatif = "0.18.4"

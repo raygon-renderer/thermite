@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["bin/*", "crates/*"]
 resolver = "3"
 
 [profile.dev]
