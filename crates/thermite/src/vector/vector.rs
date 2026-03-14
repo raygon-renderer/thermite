@@ -134,22 +134,22 @@ where
 {
     #[inline(always)]
     fn cast_from(from: Vector<FROM>) -> Self {
-        Vector(INTO::cast_from(from.0))
+        Vector(<INTO as CastRegister<FROM>>::cast_from(from.0))
     }
 
     #[inline(always)]
     fn cast_into(self) -> Vector<FROM> {
-        Vector(FROM::cast_from(self.0))
+        Vector(<FROM as CastRegister<INTO>>::cast_from(self.0))
     }
 
     #[inline(always)]
     fn fast_cast_from(from: Vector<FROM>) -> Self {
-        Vector(INTO::fast_cast_from(from.0))
+        Vector(<INTO as CastRegister<FROM>>::fast_cast_from(from.0))
     }
 
     #[inline(always)]
     fn fast_cast_into(self) -> Vector<FROM> {
-        Vector(FROM::fast_cast_from(self.0))
+        Vector(<FROM as CastRegister<INTO>>::fast_cast_from(self.0))
     }
 }
 
@@ -160,7 +160,7 @@ where
 {
     #[inline(always)]
     fn from_bits(bits: Vector<FROM>) -> Self {
-        Vector(INTO::from_bits(bits.0))
+        Vector(<INTO as BitCastRegister<FROM>>::from_bits(bits.0))
     }
 }
 
@@ -230,6 +230,10 @@ impl<R: Register> GenericVector for Vector<R> {
     fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
         R::as_array_mut(&mut self.0)[idx] = value;
         self
+    }
+
+    unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self {
+        unsafe { Self(R::lookup(values, indices.0)) }
     }
 
     #[conditional] fn reverse(self) -> Self {}

@@ -14,6 +14,7 @@ pub mod policy;
 
 pub use consts::FloatConsts;
 
+use crate::element::{FloatElement, FloatElementWithBits};
 use crate::vector::{FloatVector, FloatVectorWithBits};
 
 pub mod algorithms;
@@ -38,7 +39,7 @@ pub mod prelude {
 macro_rules! decl_math {
     (
         $(#[$trait_meta:meta])*
-        trait $trait:ident $(: $($bound:ident)&+ )? { $(
+        trait $trait:ident<$element:ident> $(: $($bound:ident)&+ )? { $(
             $(#[$meta:meta])*
             fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
                 $(where [ $($where_clause:tt)* ])?;
@@ -86,7 +87,7 @@ macro_rules! decl_math {
 
         // Note: The FloatVector<Element = E> bound is necessary to ensure E is bounded.
         #[thermite_dispatch::dispatch(Self, thermite = "crate")]
-        impl<E, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
+        impl<E: $element, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
             where V: specialized::[<Specialized $trait Math>]<E>
         {$(
             #[cfg(not(feature = "disable_dispatch"))]
@@ -104,7 +105,7 @@ macro_rules! decl_math {
 
 decl_math! {
     /// Float-specific mathematical functions like `ldexp` and `frexp`.
-    trait Float: FloatVectorWithBits {
+    trait Float<FloatElementWithBits>: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
         fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;
 
@@ -129,7 +130,7 @@ decl_math! {
 
 decl_math! {
     /// This is the core set of mathematical operations that form the basis for more advanced functions.
-    trait Core: FloatVector {
+    trait Core<FloatElement>: FloatVector {
         /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
@@ -175,7 +176,7 @@ decl_math! {
 
 decl_math! {
     /// Transcendental mathematical functions like trigonometric, exponential, and logarithmic functions.
-    trait Transcendental: CoreMathWithPolicy {
+    trait Transcendental<FloatElement>: CoreMathWithPolicy {
         /// Trigonometric sine and cosine, together. This will be more efficient than calling `sin` and `cos` separately.
         fn sin_cos[][](self: Self) -> (Self, Self);
         /// Trigonometric sine
@@ -284,7 +285,7 @@ decl_math! {
     /// Spatial mathematical functions like norms and distances.
     ///
     /// These functions are primarily useful in dimensions higher than one.
-    trait Spatial: CoreMathWithPolicy {
+    trait Spatial<FloatElement>: CoreMathWithPolicy {
         /// Computes the Euclidean norm (hypotenuse) of `self` and `other`, i.e., `sqrt(self^2 + other^2)`.
         ///
         /// This is not higher performance than the naive implementation, but is more resistant to overflow and underflow.
@@ -326,7 +327,7 @@ decl_math! {
 
 decl_math! {
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
-    trait Real: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
+    trait Real<FloatElement>: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
         /// default tolerance to use for numerical methods.
         #[skip_dispatch] fn tolerance[][]() -> Self;

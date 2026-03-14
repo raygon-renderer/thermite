@@ -837,6 +837,81 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
     }
 }
 
+#[thermite_dispatch::dispatch(V, thermite = "crate")]
+fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &V) -> (V, V::Bits) {
+    let xa_bits: V::Bits = xa.into_bits();
+
+    // Extract unbiased exponent and significand
+    let exp = (V::SignedBits::from_bits(xa_bits.shri::<23>()) & V::SignedBits::splat(0xFF)) - V::SignedBits::splat(127);
+    let exp_u: V::Unsigned = V::Bits::from_bits(exp.max(V::SignedBits::ZERO)).cast();
+
+    // 24-bit significand with implicit hidden bit restored
+    let sig = (xa_bits & V::Bits::splat(0x007FFFFF)) | V::Bits::splat(0x00800000);
+
+    // Padded 2/pi table: one zero word prepended to absorb the -26 offset.
+    // Index with (exp + 6) instead of (exp - 26) to avoid unsigned underflow.
+    const INVPI_TABLE: [u32; 7] = [
+        0x00000000, // padding
+        0xA2F9836E, 0x4E441529, 0xFC2757D1, 0xF534DDC0, 0xDB629599, 0x3C439041,
+    ];
+
+    let biased = exp_u + V::Unsigned::splat(6); // always ≥ 6, never underflows
+    let idx: V::Unsigned = biased.shri::<5>();
+    let shift = biased & V::Unsigned::splat(31);
+    let inv_shift = (V::Unsigned::splat(32) - shift) & V::Unsigned::splat(31);
+
+    let c0 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx) };
+    let c1 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx + V::Unsigned::ONE) };
+    let c2 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx + V::Unsigned::TWO) };
+
+    // Shift chunks to align binary point
+    // Mask shifts by 31 to prevent UB on shift == 32 in some ISAs
+    let mask = shift.cmp_ne(V::Unsigned::ZERO);
+    let aligned_hi = c0.shlv(shift) | c1.shrv(inv_shift).z(mask);
+    let aligned_lo = c1.shlv(shift) | c2.shrv(inv_shift).z(mask);
+
+    let aligned_hi: V::Bits = aligned_hi.cast();
+    let aligned_lo: V::Bits = aligned_lo.cast();
+
+    // Multiply significand by aligned chunks
+    // Because of the exact bit index we chose (-25), the 88-bit product `sig * W`
+    // has its binary point situated perfectly so that:
+    // - Bits 62:61 of the full product represent the Quadrant (0..3)
+    // - Bits 60:32 of the full product represent the Fraction
+    // This entire 31-bit structure fits inside the middle 32 bits!
+    let prod_hi = sig.mullo(aligned_hi); // H_lo
+    let prod_lo = sig.mulhi(aligned_lo); // L_hi
+    let mid_bits = prod_hi + prod_lo; // middle 32 bits of the 88-bit product
+
+    // Extract quadrant and fraction
+    // The quadrant is at bits 30:29 of mid_bits.
+    let mut q_ph: V::Bits = (mid_bits.shri::<29>()) & V::Bits::splat(3);
+
+    // The fraction is at bits 28:0. Mask them out.
+    let fraction_int = mid_bits & V::Bits::splat(0x1FFFFFFF);
+
+    // Reconstruct float using High/Low split to avoid FPU cancellation
+    // It represents `fraction_int * 2^-29`.
+    let frac_hi_bits = fraction_int.shri::<6>() | V::Bits::splat(0x3F800000);
+    let frac_hi = V::from_bits(frac_hi_bits) - V::ONE;
+
+    // Isolate bottom 6 bits and multiply by 2^-29 natively
+    let frac_lo_int: V::SignedBits = (fraction_int & V::Bits::splat(0x3F)).cast();
+    let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: 1.8626451e-09);
+
+    let mut frac_f32 = frac_hi + frac_lo;
+
+    // Center the fraction from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round()
+    let needs_round = frac_f32.cmp_ge(V::splat(0.5));
+    frac_f32 = needs_round.select(frac_f32 - V::ONE, frac_f32);
+    q_ph = needs_round.select(q_ph + V::Bits::ONE, q_ph);
+
+    // Scale back by pi/2
+    let x_ph = frac_f32 * V::FRAC_PI_2;
+
+    (x_ph, q_ph)
+}
+
 #[inline(always)]
 fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
@@ -888,10 +963,10 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
 
     let mut xa = xx.abs().flush_denormals::<P>();
 
-    let y = if PI {
+    let y0 = if PI {
         xa + xa // 2x for sinpi/cospi
     } else {
-        if const { P::POLICY.check_overflow } {
+        if const { P::POLICY.check_overflow && P::POLICY.precision.le(PrecisionPolicy::Average) } {
             let limit: V = crate::generic_splat!(<V> = <V: FloatVector> f32: {
                 match V::HAS_TRUE_FMA {
                     true => 1e7,
@@ -906,9 +981,9 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
         xa * V::FRAC_2_PI
     };
 
-    let y = y.round();
+    let y = y0.round();
 
-    let q: V::Bits = V::SignedBits::fast_cast_from(y).into_bits();
+    let mut q: V::Bits = V::SignedBits::fast_cast_from(y).into_bits();
 
     // pi/2 split into three parts for extended precision modular arithmetic
     let dp1f = crate::generic_splat!(f32: 0.78515625 * 2.0);
@@ -919,7 +994,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
     // or if calculating sinpi/cospi:
     // x = pi * (xa - y * 0.5)
-    let x = if PI {
+    let mut x = if PI {
         y.nmul_adde(V::HALF, xa) * V::PI
     } else if const { V::HAS_TRUE_FMA } {
         // if true FMA is available, we only have to do two FMAs
@@ -927,6 +1002,15 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     } else {
         ((xa - y * dp1f) - y * dp2f) - y * dp3f
     };
+
+    let limit = crate::generic_splat!(f32: 1e5);
+    let is_large = xa.cmp_gt(limit);
+
+    if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
+        && (P::POLICY.avoid_branching || is_large.any())
+    {
+        (x, q) = payne_hanek_reduction::<P, V>(&xa);
+    }
 
     // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
     let x2 = x * x;

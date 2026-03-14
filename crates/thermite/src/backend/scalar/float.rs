@@ -8,7 +8,7 @@ use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
     IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-    UnsignedIntegerRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+    UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
 };
 
 use crate::isa::InstructionSet;

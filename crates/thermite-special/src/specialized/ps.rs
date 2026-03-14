@@ -2,7 +2,7 @@ use thermite::{
     math::{
         TranscendentalMathWithPolicy,
         policy::{
-            PrecisionPolicy,
+            DenormalBehavior, PrecisionPolicy,
             policies::{AveragePrecision, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision},
         },
         specialized::SpecializedTranscendentalMath,
@@ -248,7 +248,7 @@ where
 
     #[inline(always)]
     fn tgamma<P: Policy>(z: Self) -> Self {
-        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             // We have a good lgamma approximation, so use it for tgamma on lower precisions.
             let (lgamma, sign) = z.lgamma_r_p::<P>();
 
@@ -266,77 +266,51 @@ where
 
         let mut res = Self::ONE;
 
-        #[allow(clippy::never_loop)]
-        'goto_positive: while is_negative.any() {
-            reflected = z.cmp_le(Self::splat(-20.0));
-
-            let mut refl_res = Self::EMPTY;
-
-            if P::POLICY.avoid_precision_branches() || thermite::unlikely(reflected.any()) {
-                refl_res = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
-
-                // If not branching, all negative values are reflected
-                if const { P::POLICY.avoid_precision_branches() } {
-                    reflected = is_negative;
-
-                    res = reflected.select(refl_res, res);
-                    z = z.abs();
-
-                    break 'goto_positive;
-                }
-
-                if reflected.all() {
-                    res = refl_res;
-                    z = -z;
-
-                    break 'goto_positive;
-                }
-            }
-
-            let mut mod_z = z;
-            let mut is_neg = is_negative;
-
-            while is_neg.any() {
-                res = is_neg.select(res / mod_z, res);
-                mod_z.add_assign_c(is_neg, Self::ONE);
-                is_neg = mod_z.is_negative();
-            }
-
-            z = reflected.select(-z, mod_z);
+        // Reflect ALL negative values via Γ(z) = -π / (z·sin(πz)·Γ(|z|))
+        // This avoids the repeated-division recurrence which accumulates rounding error.
+        if P::POLICY.avoid_branching || is_negative.any() {
+            reflected = is_negative;
+            let refl_res = z * z.sin_pi_p::<P>(); // z · sin(πz)
             res = reflected.select(refl_res, res);
-
-            break 'goto_positive;
+            z = z.abs();
         }
 
-        // Integers
+        // Negative integer poles and ±0
+        let is_neg_int = is_negative & orig_z.cmp_eq(orig_z.floor()) & orig_z.cmp_ne(Self::ZERO);
+        let is_zero = orig_z.cmp_eq(Self::ZERO);
+
+        // Shift z ∈ (SQRT_EPSILON, 1) up by 1 via Γ(z) = Γ(z+1)/z.
+        // The Lanczos polynomial is fit for z >= 1; evaluating below that is the
+        // primary source of error in the (0, 1) range.
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let needs_shift = z.cmp_lt(Self::ONE) & z.cmp_ge(Self::SQRT_EPSILON);
+            res = needs_shift.select(res / z, res);
+            z = needs_shift.select(z + Self::ONE, z);
+        }
+
+        // Integers (positive, after reflection)
 
         let mut is_int = GenericMask::FALSY;
         let mut int_res = Self::ONE;
 
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             let zf = z.floor();
-            is_int = zf.cmp_eq(z);
+            // Cap at 36 — Γ overflows f32 beyond that, and this bounds the loop.
+            is_int = zf.cmp_eq(z) & zf.cmp_lt(Self::splat(36.0)) & !is_neg_int & !is_zero;
 
             if thermite::unlikely(is_int.any()) {
                 let mut j = Self::ONE;
-                let mut k = j.cmp_lt(zf);
+                // Mask with is_int so non-integer lanes with large zf can't keep the loop alive.
+                let mut k = j.cmp_lt(zf) & is_int;
 
                 while k.any() {
                     int_res = k.select(int_res * j, int_res);
                     j += Self::ONE;
-                    k = j.cmp_lt(zf);
+                    k = j.cmp_lt(zf) & is_int;
                 }
 
-                // Γ(-int) = NaN for poles
-                int_res = is_negative.select(Self::NAN, int_res);
-
-                // approaching zero from either side results in +/- infinity
-                int_res = orig_z
-                    .cmp_eq(Self::ZERO)
-                    .select(is_negative.select(Self::NEG_INFINITY, Self::INFINITY), int_res);
-
                 if thermite::unlikely(is_int.all()) {
-                    return int_res; // can skip full gamma calculation if all inputs are integers
+                    return int_res;
                 }
             }
         }
@@ -376,7 +350,23 @@ where
             res *= normal_res;
         }
 
-        reflected.select(-Self::PI / res, is_int.select(int_res, res))
+        // Edge cases: Γ(-int) = NaN, Γ(±0) = ±∞
+        let zero_res = is_negative.select(Self::NEG_INFINITY, Self::INFINITY);
+        let result = reflected.select(-Self::PI / res, is_int.select(int_res, res));
+        let mut result = is_neg_int.select(Self::NAN, result);
+
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                && matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
+            let is_subnormal = z.is_subnormal();
+
+            if thermite::unlikely(is_subnormal.any()) {
+                result = is_subnormal.select(Self::ONE / orig_z, result);
+            }
+        }
+
+        is_zero.select(zero_res, result)
     }
 
     #[inline(always)]

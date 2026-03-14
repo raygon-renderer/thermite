@@ -100,6 +100,14 @@ where
 {
 }
 
+impl<T, A, B> MaskInteroperable<A, B> for T
+where
+    T: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>,
+    A: GenericVector<Lanes = T::Lanes, Mask: CastMask<T::Mask> + CastMask<B::Mask>>,
+    B: GenericVector<Lanes = T::Lanes, Mask: CastMask<T::Mask> + CastMask<A::Mask>>,
+{
+}
+
 pub trait PartiallyInteroperable<A, B>:
     GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
     // casts
@@ -159,7 +167,7 @@ where
 /// Internal helpers for generic vectors.
 trait GenericVectorExt: GenericVector {
     #[inline(always)]
-    fn len_to_indices<I: VectorIndices<Self>>(len: usize) -> I {
+    fn len_to_indices<I: UnsignedIntegerVector>(len: usize) -> I {
         let Ok(len) = <<I as GenericVector>::Element as TryFrom<usize>>::try_from(len) else {
             #[cfg(feature = "std")]
             panic!("Length {} exceeds maximum supported index for this vector type", len);
@@ -285,6 +293,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + SplatVector<Self::Element>
     + GenericSelectable<SelectableMask = Self::Mask>
     + crate::simd::HasIsa
+    + CastVector<Self>
 {
     /// Scalar element type of the vector.
     type Element: Element;
@@ -606,30 +615,22 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// that is at least `Self::Lanes` elements long.
     unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
-    /*
-    /// Gather elements from memory at the specified indices and return a new vector with those elements.
-    /// The provided indices are in number of elements, not bytes.
-    ///
-    /// For the masked variants, memory locations are never read from if the mask is false.
+    /// Assemble a vector from a slice of elements and a vector of indices
+    /// into that slice. If an index is outside the bounds of the given slice,
+    /// the resulting lane will be the first element of the input slice.
+    fn lookup(values: &[Self::Element], indices: Self::Unsigned) -> Self {
+        let in_bounds = indices.cmp_lt(Self::len_to_indices::<Self::Unsigned>(values.len()));
+
+        unsafe { Self::lookup_unchecked(values, indices.z(in_bounds)) }
+    }
+
+    /// Assemble a vector from a slice of elements and a vector of indices
+    /// into that slice. The indices are NOT checked to be within bounds.
     ///
     /// # Safety
-    /// The caller must ensure the given memory locations given by `ptr + (size_of(Element) * index)`
-    /// are valid for reading for all indices where the mask is true.
-    unsafe fn gather_ptr(ptr: *const Self::Element, indices: Self::Index) -> Self;
-
-    /// Scatter elements from the given vector into memory at the specified indices.
-    ///
-    /// The provided indices are in number of elements, not bytes.
-    #[skip_masked]
-    unsafe fn scatter_ptr(self, ptr: *mut Self::Element, indices: Self::Index);
-
-    /// Scatter elements from the given vector into memory at the specified indices,
-    /// but only if the corresponding lane of the mask is true.
-    ///
-    /// The provided indices are in the number of elements, not bytes.
-    #[skip_masked]
-    unsafe fn scatter_ptr_masked(self, mask: Self::Mask, ptr: *mut Self::Element, indices: Self::Index);
-    */
+    /// The caller must ensure that the indices are within bounds for the given values slice,
+    /// otherwise this may panic or result in undefined behavior.
+    unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self;
 
     /// Broadcast the value of a single lane across all lanes of the vector.
     #[conditional] fn broadcast<const I: usize>(self) -> Self;
@@ -1263,21 +1264,30 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
 
 // These do not have masked variants
 pub trait FloatVectorWithBits:
-    BitwiseVector + FloatVector<Element: FloatElementWithBits> + FullyInteroperable<Self::Bits, Self::SignedBits>
+    BitwiseVector
+    + FloatVector<Element: FloatElementWithBits, Signed: CastVector<Self::SignedBits>, Unsigned: CastVector<Self::Bits>>
+    + GenericVector<
+        Signed: GenericVector<Mask: CastMask<<Self::SignedBits as GenericVector>::Mask>>,
+        Unsigned: GenericVector<Mask: CastMask<<Self::Unsigned as GenericVector>::Mask>>,
+    > + FullyInteroperable<Self::Bits, Self::SignedBits>
 {
     type SignedBits: SignedIntegerVector<
+            Mask: CastMask<<Self::Signed as GenericVector>::Mask>,
             Lanes = Self::Lanes,
             Divider = Divider<<Self::Element as FloatElementWithBits>::SignedBits>,
             BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::SignedBits>,
             Element = <Self::Element as FloatElementWithBits>::SignedBits,
-        > + FullyInteroperable<Self, Self::Bits>;
+        > + FullyInteroperable<Self, Self::Bits>
+        + CastVector<Self::Signed>;
 
     type Bits: UnsignedIntegerVector<
+            Mask: CastMask<<Self::Unsigned as GenericVector>::Mask>,
             Lanes = Self::Lanes,
             Divider = Divider<<Self::Element as FloatElementWithBits>::Bits>,
             BranchfreeDivider = BranchfreeDivider<<Self::Element as FloatElementWithBits>::Bits>,
             Element = <Self::Element as FloatElementWithBits>::Bits,
-        > + FullyInteroperable<Self, Self::SignedBits>;
+        > + FullyInteroperable<Self, Self::SignedBits>
+        + CastVector<Self::Unsigned>;
 
     const NATIVE_CAP: NativeCapability;
 
@@ -1326,7 +1336,7 @@ pub trait FloatVectorWithBits:
     fn total_order(self) -> Self::SignedBits;
 
     /// Similar to [`total_order`](FloatVectorWithBits::total_order), but positive zero and negative zero are
-    /// the same value. This can be used for calculating ULP differences by simply subtracing one from another.
+    /// the same value. This can be used for calculating ULP differences by simply subtracting one from another.
     fn linear_order(self) -> Self::SignedBits;
 }
 

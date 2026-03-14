@@ -10,8 +10,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister,
         NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg,
-        reg,
+        SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 

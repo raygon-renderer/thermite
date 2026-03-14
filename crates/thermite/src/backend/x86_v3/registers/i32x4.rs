@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, IndexableRegister, IntegerRegister, MaskElement,
         MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper,
-        dp::DoublePumpRegister, empty_reg, reg, reg_splat,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, empty_reg, reg,
+        reg_splat,
     },
     simd::Simd,
 };
@@ -217,6 +217,23 @@ impl Register for I32x4V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        if values.len() <= 8 {
+            let mut padded = [0i32; 8];
+            padded[..values.len()].copy_from_slice(values);
+
+            unsafe {
+                let table = arch::_mm256_loadu_si256(padded.as_ptr() as *const _);
+                let idx = arch::_mm256_castsi128_si256(indices); // upper 128 bits undefined, don't care
+                let result = arch::_mm256_permutevar8x32_epi32(table, idx);
+                arch::_mm256_castsi256_si128(result)
+            }
+        } else {
+            unsafe { <Self as IndexableRegister<Self::Unsigned>>::gather(values.as_ptr(), indices) }
+        }
     }
 
     #[inline(always)]

@@ -339,6 +339,16 @@ where
         }
     }
 
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        let mut res = [R::EMPTY; N];
+
+        for (i, r) in res.iter_mut().enumerate() {
+            *r = unsafe { R::lookup(values, indices.0[i]) };
+        }
+
+        Self(res)
+    }
+
     fn reverse(mut value: Storage<Self>) -> Storage<Self> {
         value.0.reverse();
         for r in &mut value.0 {

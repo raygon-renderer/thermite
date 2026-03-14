@@ -25,7 +25,7 @@ where
 {
 }
 
-pub trait SpecializedFloatMath<E>: FloatVectorWithBits<Element = E> {
+pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Element = E> {
     #[inline(always)]
     fn ldexp<P: Policy>(self, exp: Self::SignedBits) -> Self {
         if const { Self::NATIVE_CAP.has(NativeCapability::LDEXP) } {

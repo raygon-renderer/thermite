@@ -1,7 +1,7 @@
 use super::*;
 
 #[inline(always)]
-pub fn inverse_sqrt_internal<V, E, P>(x: V) -> V
+pub fn inverse_sqrt_internal<V, E: FloatElement, P>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,
@@ -20,7 +20,7 @@ where
 }
 
 #[inline(always)]
-pub fn sinc_internal<V, E, P>(x: V) -> V
+pub fn sinc_internal<V, E: FloatElement, P>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,
@@ -65,7 +65,7 @@ where
 }
 
 #[inline(always)]
-pub fn sinc_pi_internal<V, E, P>(x: V) -> V
+pub fn sinc_pi_internal<V, E: FloatElement, P>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,
@@ -117,7 +117,7 @@ where
 }
 
 #[inline(always)]
-pub fn log_n_internal<V, E, P, const N: usize>(x: V) -> V
+pub fn log_n_internal<V, E: FloatElement, P, const N: usize>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,

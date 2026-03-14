@@ -8,8 +8,7 @@ use crate::isa::InstructionSet;
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IndexableRegister,
     IntegerRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister,
-    Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, dp::DoublePumpRegister,
-    empty_reg, reg,
+    Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
 };
 
 #[rustfmt::skip]

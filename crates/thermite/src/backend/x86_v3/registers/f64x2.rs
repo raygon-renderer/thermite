@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        WideRegister, ZeroUpper, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
+        WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };

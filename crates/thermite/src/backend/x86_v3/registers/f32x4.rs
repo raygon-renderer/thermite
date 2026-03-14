@@ -11,7 +11,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, ConcatRegister, CoreRegister, Element,
         FloatRegister, IndexableRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister,
         NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, dp::DoublePumpRegister, empty_reg, reg,
+        SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -223,6 +223,23 @@ impl Register for F32x4V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_ps(ptr, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        if values.len() <= 8 {
+            let mut padded = [0f32; 8];
+            padded[..values.len()].copy_from_slice(values);
+
+            unsafe {
+                let table = arch::_mm256_loadu_ps(padded.as_ptr());
+                let idx = arch::_mm256_castsi128_si256(indices);
+                let result = arch::_mm256_permutevar8x32_ps(table, idx);
+                arch::_mm256_castps256_ps128(result)
+            }
+        } else {
+            unsafe { <Self as IndexableRegister<Self::Unsigned>>::gather(values.as_ptr(), indices) }
+        }
     }
 
     #[inline(always)]

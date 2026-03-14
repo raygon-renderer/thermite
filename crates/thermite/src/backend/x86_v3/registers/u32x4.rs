@@ -10,7 +10,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, Element, IndexableRegister, IntegerRegister,
         MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        Storage, SwizzleRegister, UnsignedIntegerRegister, WideRegister, dp::DoublePumpRegister, empty_reg, reg,
+        Storage, SwizzleRegister, UnsignedIntegerRegister, WideRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -210,6 +210,11 @@ impl Register for U32x4V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { <Self::Signed as Register>::lookup(core::mem::transmute(values), indices) }
     }
 
     #[inline(always)]
@@ -470,7 +475,7 @@ impl IntegerRegister for U32x4V3 {
 
     #[inline(always)]
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        todo!("arch::_mm_mullo_epu32x_v1(lhs, rhs)")
+        unsafe { arch::_mm_mullo_epi32(lhs, rhs) }
     }
 
     #[inline(always)]

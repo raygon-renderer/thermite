@@ -10,7 +10,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element,
         ExtendRegister, IndexableRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, array::ArrayRegister, dp::DoublePumpRegister, empty_reg, reg,
+        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -232,6 +232,11 @@ impl Register for U64x4V3 {
     #[inline(always)]
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm256_stream_si256(ptr as _, value) }
+    }
+
+    #[inline(always)]
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { <Self::Signed as Register>::lookup(core::mem::transmute(values), indices) }
     }
 
     #[inline(always)]

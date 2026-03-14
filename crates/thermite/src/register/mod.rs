@@ -11,7 +11,7 @@ macro_rules! s {
 }
 
 pub mod array;
-pub mod dp;
+// pub mod dp;
 pub mod linalg;
 pub mod reduced;
 pub mod well_formed;
@@ -77,6 +77,21 @@ where
 {
     // SAFETY: Initialized memory but unset
     unsafe { core::mem::zeroed() }
+}
+
+pub trait MaskInteroperable<
+    A: CoreRegister<Lanes = Self::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<B::Mask>>,
+    B: CoreRegister<Lanes = Self::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<A::Mask>>,
+>: CoreRegister<Mask: CastMaskRegister<A::Mask> + CastMaskRegister<B::Mask>>
+{
+}
+
+impl<R, A, B> MaskInteroperable<A, B> for R
+where
+    R: CoreRegister<Mask: CastMaskRegister<A::Mask> + CastMaskRegister<B::Mask>>,
+    A: CoreRegister<Lanes = R::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<B::Mask>>,
+    B: CoreRegister<Lanes = R::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<A::Mask>>,
+{
 }
 
 pub trait FullyInteroperable<
@@ -318,10 +333,8 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> {
 /// SIMD Register trait where each Element implements the [`Element`] trait.
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait Register:
-    BitwiseRegister<
-    Mask: CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>
-              + CastMaskRegister<<Self::Signed as CoreRegister>::Mask>,
->
+    BitwiseRegister +
+    CastRegister<Self> + BitCastRegister<Self> + MaskInteroperable<Self::Signed, Self::Unsigned>
 {
     type Element: Element;
 
@@ -351,9 +364,9 @@ pub trait Register:
             Unsigned = Self::Unsigned,
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::Unsigned,
-            Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<<Self::Signed as CoreRegister>::Mask>,
         > + CastRegister<Self::Signed>
-        + BitCastRegister<Self::Signed>;
+        + BitCastRegister<Self::Signed>
+        + MaskInteroperable<Self, Self::Signed>;
 
     /// SignedBits integer register type with the same number of lanes.
     type Signed: SignedIntegerRegister<
@@ -361,9 +374,9 @@ pub trait Register:
             Signed = Self::Signed,
             Lanes = Self::Lanes,
             Element = <Self::Element as Element>::Signed,
-            Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>,
         > + CastRegister<Self::Unsigned>
-        + BitCastRegister<Self::Unsigned>;
+        + BitCastRegister<Self::Unsigned>
+        + MaskInteroperable<Self, Self::Unsigned>;
 
     #[masked]
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self>;
@@ -501,6 +514,21 @@ pub trait Register:
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         // Default to regular store if streaming stores are not supported.
         unsafe { Self::store(ptr, value) }
+    }
+
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        let indices = <Self::Unsigned as Register>::as_array(&indices);
+
+        let mut res = Self::EMPTY;
+        let mut resa = Self::as_array_mut(&mut res);
+
+        for i in 0..Self::Lanes::USIZE {
+            let idx: usize = indices[i].try_into().unwrap_or_else(#[cold] |_| panic!("Invalid index given for lookup"));
+
+            resa[i] = values[idx];
+        }
+
+        res
     }
 
     fn as_array(storage: &Storage<Self>) -> &GenericArray<Self::Element, Self::Lanes> {
@@ -1435,14 +1463,19 @@ impl NativeCapability {
 
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait FloatRegister:
-    SignedRegister<Element: FloatElementWithBits>
+    SignedRegister<
+        Element: FloatElementWithBits,
+
+        Signed: CastRegister<Self::SignedBits> + MaskInteroperable<Self::SignedBits, Self::Bits>,
+        Unsigned: CastRegister<Self::Bits> + MaskInteroperable<Self::SignedBits, Self::Bits>,
+    >
     + FullyInteroperable<Self::Bits, Self::SignedBits>
     + CastRegister<Self::ExtendedPrecision>
 {
     type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Bits>
-        + FullyInteroperable<Self, Self::SignedBits>;
+        + FullyInteroperable<Self, Self::SignedBits> + CastRegister<Self::Unsigned> + MaskInteroperable<Self::Signed, Self::Unsigned>;
     type SignedBits: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::SignedBits>
-        + FullyInteroperable<Self, Self::Bits>;
+        + FullyInteroperable<Self, Self::Bits> + CastRegister<Self::Signed> + MaskInteroperable<Self::Signed, Self::Unsigned>;
 
     /// Some algorithms may benefit from using a higher-precision float type for intermediate calculations,
     /// and this associated type provides that capability. If no higher-precision type is available,

@@ -106,8 +106,8 @@ const _: () = {
             let mut t = f.debug_tuple("Mask");
 
             // TODO: Check if this needs to be reversed?
-            for v in self.bitmask() {
-                t.field(&v);
+            for v in self.bitmask()[..R::Lanes::USIZE].iter() {
+                t.field(&*v);
             }
 
             t.finish()
