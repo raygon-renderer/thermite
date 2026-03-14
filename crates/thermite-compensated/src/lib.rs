@@ -988,6 +988,10 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         todo!()
     }
 
+    unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self {
+        todo!()
+    }
+
     #[inline(always)]
     fn broadcast<const I: usize>(self) -> Self {
         Self {
