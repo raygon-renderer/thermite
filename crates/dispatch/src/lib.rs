@@ -19,7 +19,12 @@ mod late_bound;
 const SKIP_DISPATCH: &'static str = "skip_dispatch";
 
 #[cfg(not(any(feature = "neon", feature = "wasm")))]
-static BACKENDS: &[(&str, &str)] = &[("Scalar", ""), ("X86V1", "sse2"), ("X86V2", "sse4.2"), ("X86V3", "avx2,fma")];
+static BACKENDS: &[(&str, &str)] = &[
+    ("Scalar", ""),
+    ("X86V1", "sse2"),
+    ("X86V2", "sse4.2"),
+    ("X86V3", "avx2,fma"),
+];
 
 #[cfg(feature = "neon")]
 static BACKENDS: &[(&str, &str)] = &[("NEON", "neon")];
@@ -96,7 +101,7 @@ impl VisitMut for TypeVisitor {
             && first.ident == "Self"
         {
             let mut path = Punctuated::new();
-            let old_path = std::mem::replace(&mut p.path.segments, Punctuated::new());
+            let old_path = std::mem::take(&mut p.path.segments);
             for segment in old_path.into_iter().skip(1) {
                 path.push(segment);
             }
@@ -361,8 +366,6 @@ fn gen_impl_block(attr: &DispatchAttributes, item_impl: &mut ItemImpl) {
 
             let tf = quote! { ::<#(#forward_tys),*> };
 
-
-
             let branch_impls = BACKENDS.iter().map(|(backend, instrset)| {
                 let dispatch_ident = format_backend(backend);
 
@@ -425,8 +428,8 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
 
     let sig = &f.sig;
     let asyncness = &sig.asyncness;
-    // let unsafety = &sig.unsafety;
-    // let abi = &sig.abi;
+    let unsafety = &sig.unsafety;
+    let abi = &sig.abi;
     let ident = &sig.ident;
     let generics = &sig.generics;
     let inputs = &sig.inputs;
@@ -437,12 +440,12 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
     let forward_args = forward_args(inputs.iter(), false);
     let forward_tys = forward_tys(generics.params.iter(), inputs.iter(), generics.where_clause.as_ref());
 
-    // let original_block = &f.block;
+    let original_block = &f.block;
 
-    // let inner = quote! {
-    //     #[inline(always)]
-    //     #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #original_block
-    // };
+    let inner = quote! {
+        #[inline(always)]
+        #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #original_block
+    };
 
     let tf = quote! { ::<#(#forward_tys),*> };
 
@@ -471,6 +474,8 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
     }
 
     *f.block = syn::parse_quote! {{
+        #inner
+
         match <#simd as #thermite::HasIsa>::ISA {
             #(#branches,)*
             _ => unsafe { ::core::hint::unreachable_unchecked() }
