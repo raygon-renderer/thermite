@@ -1211,6 +1211,10 @@ pub trait NumericRegister:
     const MIN: Storage<Self>;
     const MAX: Storage<Self>;
 
+    fn is_all_zero(value: Storage<Self>) -> bool {
+        <Self::Mask as MaskRegister>::all(Self::eq(value, Self::ZERO))
+    }
+
     #[conditional] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
@@ -1461,6 +1465,12 @@ impl NativeCapability {
     pub const POWF: u64 = 1 << 9;
 }
 
+/// A trait for floating-point registers, which notably define associated types for their bitwise integer counterparts.
+/// The `Bits` and `SignedBits` associated types allow for efficient bitwise manipulation of floating-point values by treating them as integers,
+/// and are notably potentially different from the `Signed` and `Unsigned` associated types from `Register`. Consider a BigFloat register,
+/// which may have `Signed` and `Unsigned` associated types be simple non-BigNum integer registers for shifts and whatnot,
+/// bit `Bits` and `SignedBits` types would be BigInt registers of the same size as the BigFloat register,
+/// allowing for efficient bitwise manipulation of the BigFloat values. This distinction is important.
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait FloatRegister:
     SignedRegister<
@@ -1472,8 +1482,13 @@ pub trait FloatRegister:
     + FullyInteroperable<Self::Bits, Self::SignedBits>
     + CastRegister<Self::ExtendedPrecision>
 {
+    /// Bitwise-compatible unsigned integer register type, with the same lane count and element size as `Self`,
+    /// where each lane's bits can be manipulated as an integer.
     type Bits: UnsignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::Bits>
         + FullyInteroperable<Self, Self::SignedBits> + CastRegister<Self::Unsigned> + MaskInteroperable<Self::Signed, Self::Unsigned>;
+
+    /// Bitwise-compatible signed integer register type, with the same lane count and element size as `Self`,
+    /// where each lane's bits can be manipulated as an integer.
     type SignedBits: SignedIntegerRegister<Lanes = Self::Lanes, Element = <Self::Element as FloatElementWithBits>::SignedBits>
         + FullyInteroperable<Self, Self::Bits> + CastRegister<Self::Signed> + MaskInteroperable<Self::Signed, Self::Unsigned>;
 

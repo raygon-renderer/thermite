@@ -106,7 +106,7 @@ fwd_ops!(UNARY: SignedVector => Neg::neg);
 impl<V: NumericVector> num_traits::Zero for NumVector<V> {
     #[inline(always)] fn zero() -> Self { Self(V::ZERO) }
     /// Returns true if **all** lanes are zero, false otherwise.
-    #[inline(always)] fn is_zero(&self) -> bool { self.0.is_zero().all() }
+    #[inline(always)] fn is_zero(&self) -> bool { self.0.is_all_zero() }
 }
 
 #[rustfmt::skip]
@@ -232,7 +232,7 @@ impl<V: FloatVector> num_traits::float::FloatCore for NumVector<V>
             core::num::FpCategory::Nan
         } else if x.is_infinite().any() {
             core::num::FpCategory::Infinite
-        } else if x.is_zero().all() {
+        } else if x.is_all_zero() {
             core::num::FpCategory::Zero
         } else if x.is_subnormal().any() {
             core::num::FpCategory::Subnormal

@@ -347,6 +347,8 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
 
     fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
 
+    fn is_all_zero(self) -> bool { R::is_all_zero(self.0) }
+
     #[conditional] fn min(self, other: Self) -> Self {}
     #[conditional] fn max(self, other: Self) -> Self {}
 

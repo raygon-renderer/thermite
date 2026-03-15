@@ -464,6 +464,11 @@ where
     const MIN: Storage<Self> = Self([R::MIN; N]);
     const MAX: Storage<Self> = Self([R::MAX; N]);
 
+    fn is_all_zero(mut value: Storage<Self>) -> bool {
+        crate::math::algorithms::reduce_in_place(&mut value.0, R::bitor);
+        R::is_all_zero(value.0[0])
+    }
+
     #[conditional] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::add)) }
     #[conditional] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::sub)) }
     #[conditional] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::mul)) }

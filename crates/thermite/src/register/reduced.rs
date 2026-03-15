@@ -578,6 +578,10 @@ impl<R: NumericRegister, N: Unsigned> NumericRegister for ReducedRegister<R, N> 
     const MIN: Storage<Self> = Self(R::MIN, PhantomData);
     const MAX: Storage<Self> = Self(R::MAX, PhantomData);
 
+    fn is_all_zero(value: Storage<Self>) -> bool {
+        R::is_all_zero(Self::zeroupper(value).0)
+    }
+
     #[conditional] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}

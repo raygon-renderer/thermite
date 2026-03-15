@@ -391,7 +391,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
             e >>= 1;
 
-            if e.is_zero().all() {
+            if e.is_all_zero() {
                 return res;
             }
 
