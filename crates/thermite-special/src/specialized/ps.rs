@@ -295,7 +295,7 @@ where
 
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             let zf = z.floor();
-            // Cap at 36 — Γ overflows f32 beyond that, and this bounds the loop.
+            // Cap at 36 - Γ overflows f32 beyond that, and this bounds the loop.
             is_int = zf.cmp_eq(z) & zf.cmp_lt(Self::splat(36.0)) & !is_neg_int & !is_zero;
 
             if thermite::unlikely(is_int.any()) {

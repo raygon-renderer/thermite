@@ -1,4 +1,4 @@
-use crate::{divider::Divider, math::policy::policies::MediumPrecision};
+use crate::{divider::Divider, math::policy::policies::MediumPrecision, vector::ops::AddMasked as _};
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -635,6 +635,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut t = V::from_bits(ui);
 
+        // using extended precision is slower but perfectly accurate, but the single-precision
+        // branch is only remotely accurate with fused multiply-adds.
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
             let mut td: Self::ExtendedPrecision = t.cast();
             let xd: Self::ExtendedPrecision = x.cast();
@@ -650,12 +652,18 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         } else {
             let two = V::TWO;
 
-            // couple iterations of Newton's method
+            // couple iterations of Halley's method
             // This isn't perfect, as it's only limited to single-precision,
             // but the fused multiply-adds helps
             for _ in 0..2 {
                 let t3 = t * t * t;
                 t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+            }
+
+            // FMA residual correction - compute t³ - x precisely, then one Newton step
+            if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+                let t2 = t * t;
+                t -= t2.mul_sub(t, x) / (V::splat(3.0) * t2); // t³ - x, exact to FMA precision
             }
         }
 
@@ -881,7 +889,13 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     // This entire 31-bit structure fits inside the middle 32 bits!
     let prod_hi = sig.mullo(aligned_hi); // H_lo
     let prod_lo = sig.mulhi(aligned_lo); // L_hi
-    let mid_bits = prod_hi + prod_lo; // middle 32 bits of the 88-bit product
+    let mut mid_bits = prod_hi + prod_lo; // middle 32 bits of the 88-bit product
+
+    // extra half-bit of accuracy with correct rounding using the MSB of the low product
+    if const { P::POLICY.precision.gt(PrecisionPolicy::Best) } {
+        let prod_lo_lo = sig.mullo(aligned_lo);
+        mid_bits += prod_lo_lo.shri::<31>();
+    }
 
     // Extract quadrant and fraction
     // The quadrant is at bits 30:29 of mid_bits.
@@ -897,14 +911,15 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
 
     // Isolate bottom 6 bits and multiply by 2^-29 natively
     let frac_lo_int: V::SignedBits = (fraction_int & V::Bits::splat(0x3F)).cast();
-    let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: 1.8626451e-09);
+    let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: f32::from_bits(0x31000000)); // 2^-29
 
     let mut frac_f32 = frac_hi + frac_lo;
 
     // Center the fraction from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round()
-    let needs_round = frac_f32.cmp_ge(V::splat(0.5));
-    frac_f32 = needs_round.select(frac_f32 - V::ONE, frac_f32);
-    q_ph = needs_round.select(q_ph + V::Bits::ONE, q_ph);
+    let needs_round = frac_f32.cmp_ge(V::HALF);
+
+    frac_f32 = frac_f32.sub_c(needs_round, V::ONE); // conditional subtract 1.0, only if needs_round is true
+    q_ph = q_ph.add_c(needs_round.cast(), V::Bits::ONE); // conditional add 1 to quadrant, only if needs_round is true
 
     // Scale back by pi/2
     let x_ph = frac_f32 * V::FRAC_PI_2;
@@ -1009,7 +1024,10 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
         && (P::POLICY.avoid_branching || is_large.any())
     {
-        (x, q) = payne_hanek_reduction::<P, V>(&xa);
+        let (x_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
+
+        x = is_large.select(x_ph, x);
+        q = is_large.select(q_ph, q);
     }
 
     // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
@@ -1112,6 +1130,15 @@ fn pow2n_f<V: FloatVectorWithBits<Element = f32>>(n: V) -> V {
     V::from_bits(V::Bits::from_bits(n + (bias + pow2_23)).shli::<23>())
 }
 
+/// Split 2^r into two multiplications so neither one leaves normal range
+#[inline(always)]
+fn pow2n_f_safe<V: FloatVectorWithBits<Element = f32>>(n: V) -> (V, V) {
+    // Split n into two halves, each in [-126, 127]
+    let half = (n * V::HALF).floor();
+    let other = n - half;
+    (pow2n_f(half), pow2n_f(other))
+}
+
 #[inline(always)]
 fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: u8>(x0: V) -> V {
     if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
@@ -1128,16 +1155,6 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 
     let mut x = x0;
     let mut r;
-
-    let max_x = const {
-        match MODE {
-            EXP_MODE_EXP => 87.3,
-            EXP_MODE_POW2 => 126.0,
-            EXP_MODE_POW10 => 37.9,
-            EXP_MODE_EXPH | EXP_MODE_EXPM1 => 89.0,
-            _ => panic!("Invalid MODE for exp_f_internal"), // unreachable!() isn't const apparently
-        }
-    };
 
     let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
         // https://stackoverflow.com/a/10792321 with a better 2^f fit
@@ -1209,18 +1226,54 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
             .mul_adde(x * x, x);
 
-        let n2 = pow2n_f::<V>(r);
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            let n2 = pow2n_f::<V>(r);
 
-        match MODE {
-            EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - V::ONE),
-            _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
+            match MODE {
+                EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - V::ONE),
+                _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
+            }
+        } else {
+            let (n2a, n2b) = pow2n_f_safe::<V>(r);
+
+            match MODE {
+                EXP_MODE_EXPM1 => z.mul_adde(n2a, n2a - V::ONE).mul_adde(n2b, n2b - V::ONE),
+                _ => z.mul_adde(n2a, n2a) * n2b, // (z + 1) * n2a * n2b
+            }
         }
     };
 
     if const { P::POLICY.check_overflow } {
-        let in_range = x0.abs().cmp_lt(V::splat(max_x)) & x0.is_finite();
+        let mut in_range = x0.is_finite();
 
-        if crate::likely(in_range.all()) {
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            #[rustfmt::skip]
+            let (min_x, max_x) = const { match MODE {
+                EXP_MODE_EXP => (-103.97, 88.72),  // (ln(2^-150), ln(FLT_MAX))
+                EXP_MODE_EXPM1 => (-87.0, 88.72),  // ln(FLT_MAX)
+                EXP_MODE_EXPH => (-103.97, 89.42), // ln(2 * FLT_MAX)
+                EXP_MODE_POW2 => (-150.0, 128.0),  // (2^-150 rounds to 0, log2(FLT_MAX))
+                EXP_MODE_POW10 => (-45.15, 38.53), // (log10(2^-150), log10(FLT_MAX))
+
+                _ => panic!("Invalid MODE for exp_f_internal"), // unreachable!() isn't const apparently
+            }};
+
+            in_range &= x0.cmp_ge(V::splat(min_x)) & x0.cmp_le(V::splat(max_x));
+        } else {
+            #[rustfmt::skip]
+            let max_x = const { match MODE {
+                EXP_MODE_EXP => 87.3,
+                EXP_MODE_POW2 => 126.0,
+                EXP_MODE_POW10 => 37.9,
+                EXP_MODE_EXPH | EXP_MODE_EXPM1 => 89.0,
+
+                _ => panic!("Invalid MODE for exp_f_internal"),
+            }};
+
+            in_range &= x0.abs().cmp_le(V::splat(max_x)); // symmetric limits for lesser precisions
+        }
+
+        if !P::POLICY.avoid_branching && crate::likely(in_range.all()) {
             return z;
         }
 
