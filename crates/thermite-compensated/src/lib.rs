@@ -1267,6 +1267,13 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
     }
 
     #[inline(always)]
+    fn is_all_zero(self) -> bool {
+        // if value+error is nonzero, then one of the components must be nonzero,
+        // and this allows for faster vertical reduction versus two calls to is_all_zero()
+        self.value().is_all_zero()
+    }
+
+    #[inline(always)]
     fn min(self, other: Self) -> Self {
         self.cmp_lt(other).select(self, other)
     }
