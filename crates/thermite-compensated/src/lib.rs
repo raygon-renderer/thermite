@@ -981,40 +981,127 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         Self::new(V::single(value.value))
     }
 
+    #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Self {
-        todo!()
+        let ptr = ptr as *const V::Element;
+        let a = unsafe { V::load(ptr) };
+        let b = unsafe { V::load(ptr.add(V::LANES)) };
+        let (value, error) = a.deinterleave(b);
+        Self { value, error }
     }
 
-    unsafe fn load_m(src:Self,mask:Self::Mask,ptr: *const Self::Element) -> Self {
-        todo!()
+    #[inline(always)]
+    unsafe fn load_m(src: Self, mask: Self::Mask, ptr: *const Self::Element) -> Self {
+        let ptr = ptr as *const V::Element;
+        // Expand mask to cover the interleaved (value, error) pairs in memory:
+        // lane i of mask -> positions 2i and 2i+1 in the interleaved layout.
+        let (a_mask, b_mask) = mask.interleave(mask);
+        let (src_a, src_b) = src.value.interleave(src.error);
+        let a = unsafe { V::load_m(src_a, a_mask, ptr) };
+        let b = unsafe { V::load_m(src_b, b_mask, ptr.add(V::LANES)) };
+        let (value, error) = a.deinterleave(b);
+        Self { value, error }
     }
 
-    unsafe fn load_z(mask:Self::Mask,ptr: *const Self::Element) -> Self {
-        todo!()
+    #[inline(always)]
+    unsafe fn load_z(mask: Self::Mask, ptr: *const Self::Element) -> Self {
+        let ptr = ptr as *const V::Element;
+        // Expand mask to cover the interleaved (value, error) pairs in memory.
+        let (a_mask, b_mask) = mask.interleave(mask);
+        let a = unsafe { V::load_z(a_mask, ptr) };
+        let b = unsafe { V::load_z(b_mask, ptr.add(V::LANES)) };
+        let (value, error) = a.deinterleave(b);
+        Self { value, error }
     }
 
+    #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Self {
-        todo!()
+        let ptr = ptr as *const V::Element;
+        let a = unsafe { V::load_unaligned(ptr) };
+        let b = unsafe { V::load_unaligned(ptr.add(V::LANES)) };
+        let (value, error) = a.deinterleave(b);
+        Self { value, error }
     }
 
+    #[inline(always)]
     unsafe fn load_streaming(ptr: *const Self::Element) -> Self {
-        todo!()
+        let ptr = ptr as *const V::Element;
+        let a = unsafe { V::load_streaming(ptr) };
+        let b = unsafe { V::load_streaming(ptr.add(V::LANES)) };
+        let (value, error) = a.deinterleave(b);
+        Self { value, error }
     }
 
+    #[inline(always)]
     unsafe fn store(self, ptr: *mut Self::Element) {
-        todo!()
+        let ptr = ptr as *mut V::Element;
+        let (a, b) = self.value.interleave(self.error);
+        unsafe {
+            a.store(ptr);
+            b.store(ptr.add(V::LANES));
+        }
     }
 
+    #[inline(always)]
+    unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element) {
+        let ptr = ptr as *mut V::Element;
+        // Expand mask to cover the interleaved (value, error) pairs in memory.
+        let (a_mask, b_mask) = mask.interleave(mask);
+        let (a, b) = self.value.interleave(self.error);
+        unsafe {
+            a.store_masked(a_mask, ptr);
+            b.store_masked(b_mask, ptr.add(V::LANES));
+        }
+    }
+
+    #[inline(always)]
     unsafe fn store_unaligned(self, ptr: *mut Self::Element) {
-        todo!()
+        let ptr = ptr as *mut V::Element;
+        let (a, b) = self.value.interleave(self.error);
+        unsafe {
+            a.store_unaligned(ptr);
+            b.store_unaligned(ptr.add(V::LANES));
+        }
     }
 
+    #[inline(always)]
     unsafe fn store_streaming(self, ptr: *mut Self::Element) {
-        todo!()
+        let ptr = ptr as *mut V::Element;
+        let (a, b) = self.value.interleave(self.error);
+        unsafe {
+            a.store_streaming(ptr);
+            b.store_streaming(ptr.add(V::LANES));
+        }
     }
 
+    #[inline(always)]
     unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self {
-        todo!()
+        if values.len() > Self::LANES * 2 {
+            // for large lookup tables just fallback to scalar
+            let mut res = Self::EMPTY;
+
+            for i in 0..Self::LANES {
+                let Ok(idx) = indices.extractv(i).try_into() else {
+                    panic!("Index out of bounds for usize");
+                };
+
+                res = res.insertv(i, values[idx]);
+            }
+
+            return res;
+        }
+
+        let values = unsafe  {
+            core::slice::from_raw_parts(values.as_ptr() as *const V::Element, values.len() * 2)
+        };
+
+        let value_idx = indices << 1;
+        let error_idx = value_idx + Self::Unsigned::ONE;
+
+        let value = unsafe { V::lookup_unchecked(values, value_idx) };
+        let error = unsafe { V::lookup_unchecked(values, error_idx) };
+
+        Self { value, error }
     }
 
     #[inline(always)]
