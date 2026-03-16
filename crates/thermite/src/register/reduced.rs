@@ -2,7 +2,9 @@
 
 use core::{marker::PhantomData, ops::Sub};
 
-use crate::{BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet};
+use crate::{
+    BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet, register::InterleaveRegister,
+};
 
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
@@ -194,6 +196,21 @@ impl<R: MaskRegister, N: Unsigned> MaskRegister for ReducedRegister<R, N> where 
     }
 }
 
+impl<R: InterleaveRegister, N: Unsigned> InterleaveRegister for ReducedRegister<R, N>
+where
+    R: CoreReducible<N>,
+{
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        todo!()
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        todo!()
+    }
+}
+
 #[rustfmt::skip]
 impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reducible<N> {
     type Element = R::Element;
@@ -322,16 +339,6 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         for i in 0..<Self::Lanes as Unsigned>::USIZE {
             unsafe { ptr.add(i).write_unaligned(Self::as_array(&value)[i]) };
         }
-    }
-
-    #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        todo!()
-    }
-
-    #[inline(always)]
-    fn deinterleave(a:Storage<Self> ,b:Storage<Self>) -> (Storage<Self> ,Storage<Self>) {
-        todo!()
     }
 
     #[inline(always)] fn swap_bytes(value: Storage<Self>) -> Storage<Self> { Self(R::swap_bytes(value.0), PhantomData) }

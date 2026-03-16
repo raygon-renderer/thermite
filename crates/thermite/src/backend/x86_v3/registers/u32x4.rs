@@ -9,8 +9,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, Element, IndexableRegister, IntegerRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        Storage, SwizzleRegister, UnsignedIntegerRegister, WideRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, WideRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -223,6 +223,13 @@ impl Register for U32x4V3 {
     }
 
     #[inline(always)]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bswap_epi32x_v2(value) }
+    }
+}
+
+impl InterleaveRegister for U32x4V3 {
+    #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         super::I32x4V3::interleave(a, b) // reuse signed implementation
     }
@@ -230,11 +237,6 @@ impl Register for U32x4V3 {
     #[inline(always)]
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         super::I32x4V3::deinterleave(a, b) // reuse signed implementation
-    }
-
-    #[inline(always)]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_bswap_epi32x_v2(value) }
     }
 }
 

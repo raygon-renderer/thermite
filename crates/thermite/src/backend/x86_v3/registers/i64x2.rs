@@ -9,9 +9,10 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-        SwizzleRegister, WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        FloatRegister, IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
+        SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        reg_splat,
     },
     simd::Simd,
 };
@@ -251,16 +252,6 @@ impl Register for I64x2V3 {
     }
 
     #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
-    }
-
-    #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_epi64x_v2(value) }
     }
@@ -273,6 +264,18 @@ impl Register for I64x2V3 {
         let arr = Self::as_array(&value);
 
         f(arr[0], arr[1])
+    }
+}
+
+impl InterleaveRegister for I64x2V3 {
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
     }
 }
 

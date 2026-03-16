@@ -93,6 +93,16 @@ impl MaskRegister for U16x8V3 {
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
         view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
+
+    #[inline(always)]
+    fn interleave_mask(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        Self::interleave(a, b)
+    }
+
+    #[inline(always)]
+    fn deinterleave_mask(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        Self::deinterleave(a, b)
+    }
 }
 
 #[thermite_macros::bitand_z]

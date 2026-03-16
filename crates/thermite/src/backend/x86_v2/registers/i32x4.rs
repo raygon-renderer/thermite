@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg, reg, reg_splat,
+        IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
+        PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };
@@ -56,6 +56,25 @@ impl CoreRegister for I32x4V2 {
             unsafe { arch::_mm_move_epi64(value) }
         } else {
             unsafe { arch::_mm_and_si128(value, arch::_mm_zeroupper_mask_epi32::<Z>()) }
+        }
+    }
+}
+
+impl InterleaveRegister for I32x4V2 {
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            let a = arch::_mm_castsi128_ps(a);
+            let b = arch::_mm_castsi128_ps(b);
+            let res_a = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0x88));
+            let res_b = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0xDD));
+
+            (res_a, res_b)
         }
     }
 }
@@ -219,23 +238,6 @@ impl Register for I32x4V2 {
     #[inline(always)]
     fn reverse(mut value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
-    }
-
-    #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi32(a, b), arch::_mm_unpackhi_epi32(a, b)) }
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe {
-            let a = arch::_mm_castsi128_ps(a);
-            let b = arch::_mm_castsi128_ps(b);
-            let res_a = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0x88));
-            let res_b = arch::_mm_castps_si128(arch::_mm_shuffle_ps(a, b, 0xDD));
-
-            (res_a, res_b)
-        }
     }
 
     #[inline(always)]

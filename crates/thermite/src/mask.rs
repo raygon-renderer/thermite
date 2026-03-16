@@ -1,4 +1,4 @@
-#![warn(missing_docs, clippy::missing_safety_doc)]
+// #![warn(missing_docs, clippy::missing_safety_doc)]
 
 //! SIMD Mask Vector Type and Operations.
 //!
@@ -8,7 +8,10 @@
 
 use crate::{
     Vector,
-    register::{BitwiseRegister, CastMaskRegister, Lanes, MaskRegister, NumericRegister, Register, Storage},
+    register::{
+        BitwiseRegister, CastMaskRegister, InterleaveRegister, Lanes, MaskRegister, NumericRegister, Register, Storage,
+    },
+    vector::Interleave,
 };
 
 pub trait CastMask<FROM>: Sized {
@@ -32,6 +35,7 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     + BitOr<Self, Output = Self> + BitOrAssign<Self>
     + BitXor<Self, Output = Self> + BitXorAssign<Self>
     + Not<Output = Self>
+    + Interleave
 {
     const TRUTHY: Self;
     const FALSY: Self;
@@ -136,6 +140,20 @@ where
     #[inline(always)]
     fn mask_from(from: Mask<FROM>) -> Self {
         Mask(<INTO::Mask as CastMaskRegister<FROM::Mask>>::mask_from(from.0))
+    }
+}
+
+impl<R: Register> Interleave for Mask<R> {
+    #[inline(always)]
+    fn interleave(self, other: Self) -> (Self, Self) {
+        let (a, b) = <R::Mask as InterleaveRegister>::interleave(self.0, other.0);
+        (Mask(a), Mask(b))
+    }
+
+    #[inline(always)]
+    fn deinterleave(self, other: Self) -> (Self, Self) {
+        let (a, b) = <R::Mask as InterleaveRegister>::deinterleave(self.0, other.0);
+        (Mask(a), Mask(b))
     }
 }
 

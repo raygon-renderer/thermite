@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IntegerRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
-        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        FloatRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
+        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };
@@ -159,6 +159,18 @@ impl ExtendRegister<i64> for I64x2V2 {
     }
 }
 
+impl InterleaveRegister for I64x2V2 {
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+    }
+}
+
 impl Register for I64x2V2 {
     type Element = i64;
 
@@ -235,16 +247,6 @@ impl Register for I64x2V2 {
     #[inline(always)]
     fn reverse(mut value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE_R!(2, 3, 0, 1) }>(value) }
-    }
-
-    #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
     }
 
     #[inline(always)]

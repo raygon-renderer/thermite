@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
-        Element, ExtendRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister,
-        NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        Element, ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
+        MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -143,6 +143,23 @@ impl ExtendRegister<f32> for F32x4V2 {
     }
 }
 
+impl InterleaveRegister for F32x4V2 {
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe {
+            let a = arch::_mm_shuffle_ps(a, b, 0x88);
+            let b = arch::_mm_shuffle_ps(a, b, 0xDD);
+
+            (a, b)
+        }
+    }
+}
+
 impl Register for F32x4V2 {
     type Element = f32;
 
@@ -225,21 +242,6 @@ impl Register for F32x4V2 {
     #[inline(always)]
     fn reverse(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_ps(value, value, 0b11_01_10_00) }
-    }
-
-    #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe {
-            let a = arch::_mm_shuffle_ps(a, b, 0x88);
-            let b = arch::_mm_shuffle_ps(a, b, 0xDD);
-
-            (a, b)
-        }
     }
 
     #[inline(always)]

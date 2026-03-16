@@ -268,6 +268,11 @@ pub trait BitwiseRegister: CoreRegister {
     }
 }
 
+pub trait InterleaveRegister: CoreRegister {
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
+}
+
 /// Mask registers, which operate on boolean values, though not necessarily
 /// with `bool` storage.
 ///
@@ -276,7 +281,7 @@ pub trait BitwiseRegister: CoreRegister {
 /// use 16-bit integers as storage, while AVX2 uses full SIMD registers with
 /// all `0` and `1` bits to represent `false` and `true`, respectively.
 #[thermite_macros::register_trait]
-pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> {
+pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + InterleaveRegister {
     const TRUTHY: Storage<Self>;
     const FALSY: Storage<Self>;
 
@@ -333,7 +338,7 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> {
 /// SIMD Register trait where each Element implements the [`Element`] trait.
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait Register:
-    BitwiseRegister +
+    BitwiseRegister + InterleaveRegister +
     CastRegister<Self> + BitCastRegister<Self> + MaskInteroperable<Self::Signed, Self::Unsigned>
 {
     type Element: Element;
@@ -634,9 +639,6 @@ pub trait Register:
         Self::as_array_mut(&mut value).reverse();
         value
     }
-
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
 
     /// Swap the byte order of each element in the register.
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self>;

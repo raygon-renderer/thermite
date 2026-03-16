@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, ConcatRegister, CoreRegister, Element,
-        FloatRegister, IndexableRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister,
-        NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, empty_reg, reg,
+        FloatRegister, IndexableRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
+        MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -248,6 +248,13 @@ impl Register for F32x4V3 {
     }
 
     #[inline(always)]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bswap_psx_v2(value) }
+    }
+}
+
+impl InterleaveRegister for F32x4V3 {
+    #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe { (arch::_mm_unpacklo_ps(a, b), arch::_mm_unpackhi_ps(a, b)) }
     }
@@ -260,11 +267,6 @@ impl Register for F32x4V3 {
 
             (a, b)
         }
-    }
-
-    #[inline(always)]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_bswap_psx_v2(value) }
     }
 }
 

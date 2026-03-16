@@ -4,9 +4,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        FloatRegister, IndexableRegister, InterleaveRegister, MaskElement, MaskRegister, NativeCapability,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -266,6 +266,13 @@ impl Register for F32x8V3 {
     }
 
     #[inline(always)]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_bswap_psx_v3(value) }
+    }
+}
+
+impl InterleaveRegister for F32x8V3 {
+    #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
             // 1. In-lane interleaves
@@ -291,11 +298,6 @@ impl Register for F32x8V3 {
 
             (a, b)
         }
-    }
-
-    #[inline(always)]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_bswap_psx_v3(value) }
     }
 }
 

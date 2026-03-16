@@ -194,6 +194,20 @@ impl<R: Register> SplatVector<R::Element> for Vector<R> {
     type Splat<T: SplatConst<R::Element>> = Self;
 }
 
+impl<R: Register> Interleave for Vector<R> {
+    #[inline(always)]
+    fn interleave(self, other: Self) -> (Self, Self) {
+        let (a, b) = R::interleave(self.0, other.0);
+        (Vector(a), Vector(b))
+    }
+
+    #[inline(always)]
+    fn deinterleave(self, other: Self) -> (Self, Self) {
+        let (a, b) = R::deinterleave(self.0, other.0);
+        (Vector(a), Vector(b))
+    }
+}
+
 #[rustfmt::skip] #[thermite_macros::vector_impl]
 impl<R: Register> GenericVector for Vector<R> {
     type Element = R::Element;
@@ -243,16 +257,6 @@ impl<R: Register> GenericVector for Vector<R> {
     fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
     fn nz(self, mask: Self::Mask) -> Self { Vector(R::nz(mask.0, self.0)) }
 
-    fn interleave(self, other: Self) -> (Self, Self) {
-        let (lo, hi) = R::interleave(self.0, other.0);
-        (Vector(lo), Vector(hi))
-    }
-
-    fn deinterleave(self, other: Self) -> (Self, Self) {
-        let (lo, hi) = R::deinterleave(self.0, other.0);
-        (Vector(lo), Vector(hi))
-    }
-
     fn map<F>(self, f: F) -> Self where F: Fn(Self::Element) -> Self::Element { Vector(R::map(self.0, f)) }
     fn fold<F>(self, init: Self::Element, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::fold(init, self.0, f) }
     fn reduce<F>(self, f: F) -> Self::Element where F: Fn(Self::Element, Self::Element) -> Self::Element { R::reduce(self.0, f) }
@@ -263,6 +267,7 @@ impl<R: Register> GenericVector for Vector<R> {
     unsafe fn load_streaming(ptr: *const Self::Element) -> Self { unsafe { Vector(R::load_stream(ptr)) } }
 
     unsafe fn store(self, ptr: *mut Self::Element) { unsafe { R::store(ptr, self.0) } }
+    unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element) { unsafe { R::store_masked(ptr, mask.0, self.0) } }
     unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
     unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
 }

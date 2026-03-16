@@ -9,9 +9,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, MaskElement, MaskRegister, NativeCapability, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        FloatRegister, IndexableRegister, InterleaveRegister, MaskElement, MaskRegister, NativeCapability,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -259,16 +259,6 @@ impl Register for F64x2V3 {
     }
 
     #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
-    }
-
-    #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_pdx_v2(value) }
     }
@@ -281,6 +271,18 @@ impl Register for F64x2V3 {
         let arr = Self::as_array(&value);
 
         f(arr[0], arr[1])
+    }
+}
+
+impl InterleaveRegister for F64x2V3 {
+    #[inline(always)]
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
+    }
+
+    #[inline(always)]
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        unsafe { (arch::_mm_unpacklo_pd(a, b), arch::_mm_unpackhi_pd(a, b)) }
     }
 }
 

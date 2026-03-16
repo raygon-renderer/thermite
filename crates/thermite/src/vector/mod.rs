@@ -284,6 +284,27 @@ where
 pub trait SwizzleVector: GenericVector + crate::swizzle::Swizzle<Self::Lanes> {}
 impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::Lanes> {}
 
+pub trait Interleave: Sized {
+    /// Unpack and interleave elements from two vectors.
+    ///
+    /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, a1, a2, a3]` and `b = [b0, b1, b2, b3]`, the result will be
+    /// `([a0, b0, a1, b1], [a2, b2, a3, b3])`.
+    ///
+    /// # Note
+    ///
+    /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
+    /// this will preserve the order of all elements, not just 128-bit chunks.
+    fn interleave(self, other: Self) -> (Self, Self);
+
+    /// Pack and deinterleave elements from two vectors. This is the inverse operation of `interleave`.
+    ///
+    /// The resulting vector contains the deinterleaved elements from the input vectors. e.g.,
+    /// for vectors `a = [a0, b0, a1, b1]` and `b = [a2, b2, a3, b3]`, the result will be
+    /// `[a0, a1, a2, a3]` and `[b0, b1, b2, b3]`.
+    fn deinterleave(self, other: Self) -> (Self, Self);
+}
+
 /// Core trait for generic vector types.
 ///
 /// Provides the basis for further specialized vector traits.
@@ -294,6 +315,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + GenericSelectable<SelectableMask = Self::Mask>
     + crate::simd::HasIsa
     + CastVector<Self>
+    + Interleave
 {
     /// Scalar element type of the vector.
     type Element: Element;
@@ -596,6 +618,14 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// that is at least `Self::Lanes` elements long.
     unsafe fn store(self, ptr: *mut Self::Element);
 
+    /// Store the vector to an **aligned** pointer to its elements, but only for lanes where the corresponding mask lane is `true`.
+    /// For lanes where the mask is `false`, the store is suppressed without panicking.
+    ///
+    /// # SAFETY
+    /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
+    /// that is at least `Self::Lanes` elements long (or at least as long as the number of `true` lanes in the mask).
+    unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element);
+
     /// Store the vector to an **unaligned** pointer to its elements.
     ///
     /// # SAFETY
@@ -666,25 +696,6 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     ///
     /// Similar to a `!mask & self` operation.
     fn nz(self, mask: Self::Mask) -> Self;
-
-    /// Unpack and interleave elements from two vectors.
-    ///
-    /// The resulting two vectors contain the interleaved elements from the input vectors. e.g.,
-    /// for vectors `a = [a0, a1, a2, a3]` and `b = [b0, b1, b2, b3]`, the result will be
-    /// `([a0, b0, a1, b1], [a2, b2, a3, b3])`.
-    ///
-    /// # Note
-    ///
-    /// Unlike the native unpacklo/unpackhi instructions, at higher register widths
-    /// this will preserve the order of all elements, not just 128-bit chunks.
-    fn interleave(self, other: Self) -> (Self, Self);
-
-    /// Pack and deinterleave elements from two vectors. This is the inverse operation of `interleave`.
-    ///
-    /// The resulting vector contains the deinterleaved elements from the input vectors. e.g.,
-    /// for vectors `a = [a0, b0, a1, b1]` and `b = [a2, b2, a3, b3]`, the result will be
-    /// `[a0, a1, a2, a3]` and `[b0, b1, b2, b3]`.
-    fn deinterleave(self, other: Self) -> (Self, Self);
 
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///

@@ -6,9 +6,9 @@ use generic_array::{
 
 use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
-    IndexableRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability, NumericRegister,
-    PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-    UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
+    IndexableRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability,
+    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+    SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
 };
 
 use crate::isa::InstructionSet;
@@ -61,6 +61,12 @@ impl BitwiseRegister for [<f $width>] {
     }
 }
 
+#[rustfmt::skip]
+impl InterleaveRegister for [<f $width>] {
+    #[inline(always)] fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
+    #[inline(always)] fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
+}
+
 impl Register for [<f $width>] {
     type Element = [<f $width>];
 
@@ -84,16 +90,6 @@ impl Register for [<f $width>] {
     #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
     #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
     #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
-
-    #[inline(always)]
-    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        (a, b) // no-op for scalar
-    }
-
-    #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        (a, b) // no-op for scalar
-    }
 
     #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {

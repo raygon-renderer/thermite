@@ -923,6 +923,31 @@ impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatVec
 }
 
 #[rustfmt::skip]
+impl<V: CompensatedFloatVector> Interleave for Compensated<V> {
+    #[inline(always)]
+    fn interleave(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.interleave(other.value);
+        let (error_lo, error_hi) = self.error.interleave(other.error);
+
+        (
+            Self { value: value_lo, error: error_lo },
+            Self { value: value_hi, error: error_hi },
+        )
+    }
+
+    #[inline(always)]
+    fn deinterleave(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.deinterleave(other.value);
+        let (error_lo, error_hi) = self.error.deinterleave(other.error);
+
+        (
+            Self { value: value_lo, error: error_lo },
+            Self { value: value_hi, error: error_hi },
+        )
+    }
+}
+
+#[rustfmt::skip]
 impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     type Element = Compensated<V::Element>;
 
@@ -1076,27 +1101,6 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
-    #[inline(always)]
-    fn interleave(self, other: Self) -> (Self, Self) {
-        let (value_lo, value_hi) = self.value.interleave(other.value);
-        let (error_lo, error_hi) = self.error.interleave(other.error);
-
-        (
-            Self { value: value_lo, error: error_lo },
-            Self { value: value_hi, error: error_hi },
-        )
-    }
-
-    #[inline(always)]
-    fn deinterleave(self, other: Self) -> (Self, Self) {
-        let (value_lo, value_hi) = self.value.deinterleave(other.value);
-        let (error_lo, error_hi) = self.error.deinterleave(other.error);
-
-        (
-            Self { value: value_lo, error: error_lo },
-            Self { value: value_hi, error: error_hi },
-        )
-    }
 
     fn map<F>(mut self, f: F) -> Self
     where

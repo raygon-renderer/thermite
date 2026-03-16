@@ -1,4 +1,4 @@
-use crate::register::{BitwiseRegister, CastMaskRegister, CoreRegister, MaskRegister, Storage};
+use crate::register::{BitwiseRegister, CastMaskRegister, CoreRegister, InterleaveRegister, MaskRegister, Storage};
 
 use generic_array::GenericArray;
 
@@ -52,6 +52,12 @@ impl MaskRegister for bool {
 
     #[inline(always)] fn native_bitmask(value: Storage<Self>) -> Option<u64> { Some(value as u64) }
     #[inline(always)] fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) { view.set(0, value); }
+}
+
+#[rustfmt::skip]
+impl InterleaveRegister for bool {
+    #[inline(always)] fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
+    #[inline(always)] fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
 }
 
 #[rustfmt::skip]
