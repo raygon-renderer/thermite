@@ -144,8 +144,9 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         }
 
         // extract sign and mantissa, then give it the correct exponent
-        let sign_mantissa = bits & sign_mantissa_mask;
-        let mut fraction = sign_mantissa | half_exp_bits;
+        // let mut fraction = (bits & sign_mantissa_mask) | half_exp_bits;
+        let mut fraction =
+            Self::Bits::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(bits, sign_mantissa_mask, half_exp_bits);
 
         if const { P::POLICY.check_overflow } {
             let is_finite = self.is_finite() & biased_exp.cmp_ne(Self::SignedBits::ZERO).cast();

@@ -595,8 +595,9 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             yzero.select(
                 one,
                 yneg.select(
-                    yodd & z,         // 0.0 with the sign of z from above
-                    x1 | (x0 & yodd), // get sign of x0 only if y is odd integer
+                    yodd & z, // 0.0 with the sign of z from above
+                    // x1 | (x0 & yodd), // get sign of x0 only if y is odd integer
+                    V::ternlog::<{ crate::ternlog_imm!(A | (B & C)) }>(x1, x0, yodd),
                 ),
             ),
         );
@@ -1308,7 +1309,11 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 #[inline(always)]
 fn fraction2<V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     // set exponent to 0 + bias
-    (x & V::splat(f32::from_bits(0x007FFFFF))) | V::splat(f32::from_bits(0x3F000000))
+    let b = V::splat(f32::from_bits(0x007FFFFF));
+    let c = V::splat(f32::from_bits(0x3F000000));
+
+    //(x & b) | c
+    V::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(x, b, c)
 }
 
 #[inline(always)]
