@@ -193,6 +193,7 @@ type Floatf = f32;
 /// cbindgen:ignore
 type Float = f64;
 
+#[inline(never)]
 unsafe extern "C" fn disable_denormals_template<S: NativeIsa>() -> ThermiteDenormalResult {
     match unsafe { S::disable_denormals() } {
         Ok(true) => ThermiteDenormalResult::SuccessWasEnabled,
@@ -201,6 +202,7 @@ unsafe extern "C" fn disable_denormals_template<S: NativeIsa>() -> ThermiteDenor
     }
 }
 
+#[inline(never)]
 unsafe extern "C" fn enable_denormals_template<S: NativeIsa>() -> ThermiteDenormalResult {
     match unsafe { S::enable_denormals() } {
         Ok(_) => ThermiteDenormalResult::Success,

@@ -23,6 +23,10 @@ disable_dispatch = []
 # Ignore denormal values by default. There is a very slight overhead in checking and fixing them,
 # but it's usually much less than the penalty of executing operations on denormal values. Only
 # enable if you know your data is well-formed or the target arch automatically flushes to zero.
+ignore_denormals = []
+
+# Preserve denormal values, which can be very slow to operate on, but are required for strict IEEE-754 compliance.
+# Only enable if you need to handle denormal values correctly, and are okay with the performance implications.
 preserve_denormals = []
 
 # Try to follow IEEE-754 exactly, even at the cost of performance.
@@ -59,6 +63,7 @@ generic-array = { git = "https://github.com/fizyk20/generic-array", features = [
 bitvec = { version = "1.0.1", default-features = false }
 const-default = { version = "1.0.0", default-features = false }
 paste = "1.0.15"
+hexf = "0.2.1"
 num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
 

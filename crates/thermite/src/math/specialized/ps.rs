@@ -767,6 +767,21 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
 impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
     #[inline(always)]
+    fn wrap_angle<P: Policy>(self) -> Self {
+        let x = self;
+        let n = ((x + Self::PI) * (Self::FRAC_1_PI * Self::HALF)).floor();
+
+        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            return n.nmul_adde(Self::TAU, x);
+        }
+
+        // Cody-Waite: split TAU so n * tau_hi is exact
+        let tau_hi: V = crate::generic_splat!(f32: hexf::hexf32!("0x1.921fb60000000p+2"));
+        let tau_lo: V = crate::generic_splat!(f32: hexf::hexf32!("-0x1.777a5c0000000p-23"));
+        (x - n * tau_hi) - n * tau_lo
+    }
+
+    #[inline(always)]
     fn atan2<P: Policy>(self, x: Self) -> Self {
         let y = self;
         let neg_one = V::NEG_ONE;

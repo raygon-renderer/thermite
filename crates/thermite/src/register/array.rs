@@ -500,7 +500,7 @@ where
 
     fn offset() -> Storage<Self> {
         let mut offset = R::offset();
-        for _ in 0..N {
+        for _ in 1..N {
             offset = R::add(offset, R::offset());
         }
         Self([offset; N])
@@ -512,7 +512,7 @@ where
         result[0] = indexed;
 
         for i in 1..N {
-            result[i] = R::add(result[i - 1], indexed);
+            result[i] = R::add(result[i - 1], R::offset());
         }
 
         Self(result)
@@ -843,7 +843,7 @@ where
 
         result[..min].copy_from_slice(&lo.0[..min]);
         if min < M {
-            result[..(M - min)].copy_from_slice(&hi.0[..(M - min)]);
+            result[min..M].copy_from_slice(&hi.0[..(M - min)]);
         }
 
         Self(result)
@@ -857,7 +857,7 @@ where
 
         lo.copy_from_slice(&value.0[..min]);
         if min < M {
-            hi.copy_from_slice(&value.0[..(M - min)]);
+            hi.copy_from_slice(&value.0[min..M]);
         }
 
         (ArrayRegister(lo), ArrayRegister(hi))

@@ -242,7 +242,7 @@ impl<R: BitwiseRegister + Register> BitAndNot<Self> for Vector<R> {
 
     #[inline(always)]
     fn bitandnot(self, rhs: Self) -> Self::Output {
-        Vector(R::bitandnot(self.0, rhs.0))
+        Vector(R::bitandnot(rhs.0, self.0))
     }
 }
 

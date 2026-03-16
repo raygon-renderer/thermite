@@ -63,14 +63,22 @@ impl PrecisionPolicy {
 /// with very small numbers, rather than immediately going to zero on underflow.
 ///
 /// However, due to how some processors handle this, even simple operations on
-/// denormal numbers can be over 100x slower.
+/// denormal numbers can be over 100x slower. They do this because subnormal values
+/// are valid IEEE754 values, and sometimes you want them to exist.
 ///
 /// Most PrecisionPolicy's will default to `FlushToZero`, while the high performance oriented
 /// policies will default to `Crush` for the faster happy path.
 ///
-/// However, if the `preserve_denormal` crate feature is enabled, all will default to `Preserve`.
+/// However, there are two crate features that influence the default behavior. `ignore_denormals`
+/// will cause all policies to default to `Ignore`, and the `preserve_denormal` will
+/// cause all policies to default to `Preserve`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DenormalBehavior {
+    /// Do nothing to remove or specially handle denormal values. This is good if the application
+    /// being targeted will have denormals disabled on the hardware level, removing the
+    /// performance penalty.
+    Ignore,
+
     /// Use exact bitwise operations to flush denormals to zero. This has a non-zero performance
     /// cost, but is a good default since the cost is constant.
     FlushToZero,
@@ -80,9 +88,8 @@ pub enum DenormalBehavior {
     /// but will incur a heavy cost if the number is denormal.
     Crush,
 
-    /// Do nothing to remove denormal values. This is useful when the processor handles it for you,
-    /// so we can completely skip over trying to flush them manually. However, unless you know
-    /// that's the case, it's typically a bad idea to preserve them.
+    /// Actively try to preserve and handle denormal values. This has a non-zero performance cost,
+    /// but is necessary if the application being targeted needs to handle denormal values correctly.
     Preserve,
 }
 
@@ -95,10 +102,16 @@ impl DenormalBehavior {
     }
 
     const fn select_default(crush: bool) -> Self {
-        match (cfg!(feature = "preserve_denormals"), crush) {
-            (true, _) => DenormalBehavior::Preserve,
-            (false, true) => DenormalBehavior::Crush,
-            (false, false) => DenormalBehavior::FlushToZero,
+        #[cfg(feature = "preserve_denormals")]
+        return DenormalBehavior::Preserve;
+
+        #[cfg(feature = "ignore_denormals")]
+        return DenormalBehavior::Ignore;
+
+        if crush {
+            DenormalBehavior::Crush
+        } else {
+            DenormalBehavior::FlushToZero
         }
     }
 }
@@ -138,6 +151,10 @@ pub struct PolicyParameters {
 
     /// Specifies how denormals are handled. See [`DenormalBehavior`] for more info.
     pub denormal_behavior: DenormalBehavior,
+    // /// If NaN was an input or a result of internal computations, if true this will always return the same bit pattern of NaN
+    // /// regardless of the input or intermediate NaN value. This is useful for testing and debugging, since it allows
+    // /// for consistent NaN values that can be compared against.
+    // pub strict_nan: bool,
 }
 
 impl PolicyParameters {

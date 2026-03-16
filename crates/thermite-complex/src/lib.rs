@@ -330,7 +330,8 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     pub fn sinh(self) -> Self {
         // formula: sinh(a + bi) = sinh(a)cos(b) + i*cosh(a)sin(b)
         let (s, c) = self.im.sin_cos_p::<P>();
-        Self::new(self.re.sinh_p::<P>() * c, self.re.cosh_p::<P>() * s)
+        let (sh, ch) = self.re.sinh_cosh_p::<P>();
+        Self::new(sh * c, ch * s)
     }
 
     /// Computes the hyperbolic cosine of `self`.
@@ -338,7 +339,8 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     pub fn cosh(self) -> Self {
         // formula: cosh(a + bi) = cosh(a)cos(b) + i*sinh(a)sin(b)
         let (s, c) = self.im.sin_cos_p::<P>();
-        Self::new(self.re.cosh_p::<P>() * c, self.re.sinh_p::<P>() * s)
+        let (sh, ch) = self.re.sinh_cosh_p::<P>();
+        Self::new(ch * c, sh * s)
     }
 
     /// Computes the hyperbolic tangent of `self`.
@@ -347,7 +349,8 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
         // formula: tanh(a + bi) = (sinh(2a) + i*sin(2b))/(cosh(2a) + cos(2b))
         let (two_re, two_im) = (self.re + self.re, self.im + self.im);
         let (s, c) = two_im.sin_cos_p::<P>();
-        Self::new(two_re.sinh_p::<P>(), s).unscale(two_re.cosh_p::<P>() + c)
+        let (sh, ch) = two_re.sinh_cosh_p::<P>();
+        Self::new(sh + s, ch + c).unscale(ch + c)
     }
 
     /// Computes the principal value of inverse hyperbolic sine of `self`.
@@ -449,7 +452,7 @@ impl<V: MathVector, P: Policy> core::ops::Mul for Complex<V, P> {
     #[inline(always)]
     fn mul(self, rhs: Self) -> Self::Output {
         Self::new(
-            self.re.mul_sub(rhs.re, self.im * rhs.im),
+            self.re.mul_sube(rhs.re, self.im * rhs.im),
             self.re.mul_adde(rhs.im, self.im * rhs.re),
         )
     }

@@ -68,8 +68,8 @@ pub trait FloatElement:
 }
 
 pub trait FloatElementWithBits: FloatElement {
-    type Bits: UnsignedIntegerElement<Unsigned = Self::Bits>;
-    type SignedBits: SignedIntegerElement<Signed = Self::SignedBits>;
+    type Bits: UnsignedIntegerElement<Unsigned = Self::Bits> + TryFrom<u32>;
+    type SignedBits: SignedIntegerElement<Signed = Self::SignedBits> + TryFrom<u32>;
 
     const EXP_BITS: u32;
     const MANTISSA_BITS: u32;

@@ -1100,7 +1100,14 @@ pub fn generate_important_range_svg(name: &str, ir: &ImportantRangeStats) -> Opt
     // Stepped contour path with non-uniform bin widths in symlog space.
     let mut step_path = String::with_capacity(NUM_IMPORTANT_BINS * 24 + 64);
     let first_y = chart.y_of(lly(bin_avgs[0]), max_log);
-    write!(step_path, "M {:.1},{:.1} V {:.1}", x_of_val(bin_val(0, 0.0)), baseline_y, first_y).unwrap();
+    write!(
+        step_path,
+        "M {:.1},{:.1} V {:.1}",
+        x_of_val(bin_val(0, 0.0)),
+        baseline_y,
+        first_y
+    )
+    .unwrap();
     let mut cur_y = first_y;
     for b in 0..NUM_IMPORTANT_BINS {
         let next_y = if b + 1 < NUM_IMPORTANT_BINS {
@@ -1117,10 +1124,7 @@ pub fn generate_important_range_svg(name: &str, ir: &ImportantRangeStats) -> Opt
 
     let mut doc = chart.new_document(".xlm{font-size:10px;fill:#6b7280;font-family:monospace;text-anchor:middle}");
 
-    chart.title(
-        &mut doc,
-        &format!("{} - ULP Error in [{}, {}]", name, ir.lo, ir.hi),
-    );
+    chart.title(&mut doc, &format!("{} - ULP Error in [{}, {}]", name, ir.lo, ir.hi));
 
     // Summary annotation
     doc.text(
@@ -1220,7 +1224,7 @@ fn percent_encode_svg(svg: &str) -> String {
             b'%' => out.push_str("%25"),
             b'#' => out.push_str("%23"),
             b'"' => out.push_str("%22"),
-            b'\n' | b'\r' => {}  // strip
+            b'\n' | b'\r' => {} // strip
             0x80.. => write!(out, "%{:02X}", b).unwrap(),
             _ => out.push(b as char),
         }
@@ -1284,7 +1288,8 @@ pub fn generate_doc_markdown(
             writeln!(
                 md,
                 r#"<img src="data:image/svg+xml,{}" alt="{} ULP error in important range" />"#,
-                percent_encode_svg(range_svg_str), name,
+                percent_encode_svg(range_svg_str),
+                name,
             )
             .unwrap();
             writeln!(md).unwrap();
@@ -1324,7 +1329,8 @@ pub fn generate_doc_markdown(
             writeln!(
                 md,
                 r#"<img src="data:image/svg+xml,{}" alt="{} ULP error in reasonable range" />"#,
-                percent_encode_svg(reasonable_svg_str), name,
+                percent_encode_svg(reasonable_svg_str),
+                name,
             )
             .unwrap();
             writeln!(md).unwrap();
@@ -1336,7 +1342,8 @@ pub fn generate_doc_markdown(
     writeln!(
         md,
         r#"<img src="data:image/svg+xml,{}" alt="{} ULP error chart (full range)" />"#,
-        percent_encode_svg(&full_svg), name,
+        percent_encode_svg(&full_svg),
+        name,
     )
     .unwrap();
 
@@ -1402,8 +1409,7 @@ fn main() {
                             }
                         }
 
-                        let recording =
-                            analyze_f32::<X86V3, _>(&[<$func:camel Kernel>], $lo, $hi, Some(&pb));
+                        let recording = analyze_f32::<X86V3, _>(&[<$func:camel Kernel>], $lo, $hi, Some(&pb));
                         tx.send(($name, recording)).expect("Failed to send recording");
                     });
                 }
@@ -1430,7 +1436,7 @@ fn main() {
         spawn_analysis!(asinh vs asinh, "asinh", 500f32, 500f32);
         spawn_analysis!(acosh vs acosh, "acosh", 0.45f32, 100f32);
         spawn_analysis!(atanh vs atanh, "atanh", -2f32, 2f32);
-        spawn_analysis!(cbrt vs cbrt, "cbrt");
+        spawn_analysis!(cbrt vs cbrt, "cbrt", -100f32, 100f32);
         spawn_analysis!(tgamma vs tgamma, "tgamma", -20f32, 20f32);
         spawn_analysis!(lgamma vs lgamma, "lgamma", -100f32, 100f32);
         spawn_analysis!(erf vs erf, "erf", -100f32, 100f32);

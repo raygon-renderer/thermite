@@ -1,4 +1,4 @@
-#![allow(clippy::excessive_precision)]
+#![allow(clippy::excessive_precision, clippy::approx_constant)]
 
 use core::marker::PhantomData;
 
@@ -10,7 +10,7 @@ use crate::{
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
-    vector::*,
+    vector::{ops::BitAndNot as _, *},
 };
 
 // use super::MathWithPolicy;
@@ -32,30 +32,48 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             return unsafe { Self::native_ldexp(self, exp) };
         }
 
+        // constants
+        let mantissa_bits = <Self::Element as FloatElementWithBits>::MANTISSA_BITS;
+        let exp_lsb_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK);
+        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK);
+        let max_biased_exp: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP);
+        let exp_bias: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
+
+        // special handling for denormals when we want to preserve them, since the normal path would flush them to zero
+        if const {
+            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
+        } {
+            // Two-multiply approach: split the exponent in half so each
+            // intermediate value stays representable, and let IEEE gradual
+            // underflow produce subnormals naturally.
+            let exp1 = exp.srai::<1>();
+            let exp2 = exp - exp1;
+
+            let pow2_1 = (exp1 + exp_bias).max(Self::SignedBits::ONE).min(exp_bias + exp_bias) << mantissa_bits;
+            let pow2_2 = (exp2 + exp_bias).max(Self::SignedBits::ONE).min(exp_bias + exp_bias) << mantissa_bits;
+
+            let mut result = self * Self::from_bits(pow2_1) * Self::from_bits(pow2_2);
+
+            if const { P::POLICY.check_overflow } {
+                result = self.is_nan().select(self, result);
+            }
+
+            return result;
+        }
+
         let bits: Self::Bits = self.into_bits();
 
-        let exp_lsb_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK
-        );
-
-        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK
-        );
-
-        let biased_exp = Self::SignedBits::from_bits(
-            (bits >> <Self::Element as FloatElementWithBits>::MANTISSA_BITS) & exp_lsb_mask,
-        );
+        let biased_exp = Self::SignedBits::from_bits((bits >> mantissa_bits) & exp_lsb_mask);
 
         let mut exp = biased_exp + exp;
 
         if const { P::POLICY.check_overflow } {
             // clamp exponent between 0 and max biased exponent
-            exp = exp.max(Self::SignedBits::ZERO).min(crate::generic_splat!(
-                <Self> = <S: FloatVectorWithBits>
-                <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP
-            ));
+            exp = exp.max(Self::SignedBits::ZERO).min(max_biased_exp);
         }
 
         let sign_mantissa = Self::SignedBits::from_bits(bits & sign_mantissa_mask);
@@ -78,27 +96,40 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             return unsafe { Self::native_frexp(self) };
         }
 
-        let bits: Self::Bits = self.into_bits();
+        let exp_lsb_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK);
+        let frexp_bias_offset: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET);
+        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK);
+        let half_exp_bits: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::HALF_EXP_BITS);
 
-        let exp_lsb_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK
-        );
+        let mut bits: Self::Bits = self.into_bits();
+        let orig_bits = bits;
 
-        let frexp_bias_offset: Self::SignedBits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET
-        );
+        // if preserving denormals, we need to shift subnormals up to the normal range so that the exponent extraction works correctly
+        let subnormal_correction = if const {
+            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
+        } {
+            let is_subnormal = self.is_subnormal();
 
-        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK
-        );
+            let exp_bias: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+                <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
 
-        let half_exp_bits: Self::Bits = crate::generic_splat!(
-            <Self> = <S: FloatVectorWithBits>
-            <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::HALF_EXP_BITS
-        );
+            let shift_amount = Self::SignedBits::splat(unsafe {
+                <E as FloatElementWithBits>::SignedBits::try_from(E::MANTISSA_BITS + 1).unwrap_unchecked()
+            });
+
+            let normalizer = Self::from_bits((exp_bias + shift_amount) << E::MANTISSA_BITS);
+
+            // conditional multiplication to normalize subnormal
+            bits = self.mul_c(is_subnormal, normalizer).into_bits();
+
+            shift_amount.z(is_subnormal.cast()) // zero if not subnormal
+        } else {
+            Self::SignedBits::ZERO
+        };
 
         // (bits >> mantissa) & mask
         let biased_exp = Self::SignedBits::from_bits((bits >> E::MANTISSA_BITS) & exp_lsb_mask);
@@ -106,16 +137,21 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         // subtract bias to get actual exponent
         let mut exp: Self::SignedBits = biased_exp - frexp_bias_offset;
 
+        if const {
+            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
+        } {
+            exp -= subnormal_correction; // subtract additional amount if we had to normalize a subnormal
+        }
+
         // extract sign and mantissa, then give it the correct exponent
         let sign_mantissa = bits & sign_mantissa_mask;
         let mut fraction = sign_mantissa | half_exp_bits;
 
         if const { P::POLICY.check_overflow } {
-            // if input was zero or subnormal, set fraction to zero and exponent to zero
-            let is_normal = biased_exp.cmp_ne(Self::SignedBits::ZERO);
+            let is_finite = self.is_finite() & biased_exp.cmp_ne(Self::SignedBits::ZERO).cast();
 
-            exp = exp.nz(is_normal); // zero exponent if input was NOT normal
-            fraction = fraction.nz(is_normal.cast()); // zero fraction if input was NOT normal
+            exp = exp.z(is_finite.cast());
+            fraction = is_finite.select(fraction, orig_bits);
         }
 
         (Self::from_bits(fraction), exp)
@@ -124,8 +160,10 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
     #[inline(always)]
     fn flush_denormals<P: Policy>(self) -> Self {
         if const {
-            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
-                || !<Self::Element as FloatElement>::HAS_SUBNORMALS
+            matches!(
+                P::POLICY.denormal_behavior,
+                DenormalBehavior::Preserve | DenormalBehavior::Ignore
+            ) || !<Self::Element as FloatElement>::HAS_SUBNORMALS
         } {
             return self;
         }

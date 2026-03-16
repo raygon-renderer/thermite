@@ -932,9 +932,7 @@ pub trait NumericVector:
     /// Returns `true` if all elements in the vector are zero, `false` otherwise.
     ///
     /// This can often be more performant than naive comparisons or even `is_zero().all()`
-    fn is_all_zero(self) -> bool {
-        self.is_zero().all()
-    }
+    fn is_all_zero(self) -> bool;
 
     /// Return the minimum of two vectors, element-wise.
     #[conditional] fn min(self, other: Self) -> Self;

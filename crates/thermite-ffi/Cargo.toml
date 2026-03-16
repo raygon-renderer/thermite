@@ -21,6 +21,10 @@ disable_dispatch = ["thermite/disable_dispatch", "thermite-special/disable_dispa
 # that either the hardware can reasonably handle denormal values or
 # denormals have been disabled (flush to zero, etc.) manually before
 # computation.
+ignore_denormals = ["thermite/ignore_denormals"]
+
+# Preserve and handle denormals correctly in Thermite, even though they can be very slow to operate on.
+# Only enable this if you need to handle denormal values correctly, and are okay with the performance implications.
 preserve_denormals = ["thermite/preserve_denormals"]
 
 [dependencies]

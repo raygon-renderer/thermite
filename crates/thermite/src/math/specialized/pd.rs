@@ -15,6 +15,21 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
     fn atan2<P: Policy>(self, x: Self) -> Self {
         atan_internal::<Self, P, true>(self, x)
     }
+
+    #[inline(always)]
+    fn wrap_angle<P: Policy>(self) -> Self {
+        let x = self;
+        let n = ((x + Self::PI) * (Self::FRAC_1_PI * Self::HALF)).floor();
+
+        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            return n.nmul_adde(Self::TAU, x);
+        }
+
+        // Cody-Waite: split TAU so n * tau_hi is exact
+        let tau_hi: V = crate::generic_splat!(f64: hexf::hexf64!("0x1.921fb54442d18p+2"));
+        let tau_lo: V = crate::generic_splat!(f64: hexf::hexf64!("0x1.1a62633145c07p-52"));
+        (x - n * tau_hi) - n * tau_lo
+    }
 }
 
 #[rustfmt::skip]
