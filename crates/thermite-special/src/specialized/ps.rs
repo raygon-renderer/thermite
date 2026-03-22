@@ -80,7 +80,7 @@ where
 
         // W₀ branch: -1 + series, W₋₁ branch: -1 - series
         let w0_branch = puiseux + Self::NEG_ONE;
-        let wm1_branch = -puiseux + Self::NEG_ONE;
+        let wm1_branch = Self::NEG_ONE - puiseux;
 
         // W₀ middle region: ex/(2+ex)
         let ex = x * Self::E;
@@ -141,20 +141,24 @@ where
 
         // --- Edge cases ---
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            // At x = -1/e, both W₀ and W₋₁ = -1
             w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
             w0 = w0.nz(x.is_zero());
 
             wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
+            wm1 = x.is_zero().select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {
             let in_domain = x.cmp_ge(neg_inv_e);
 
+            // W₀ is undefined for x < -1/e, +inf -> +inf
             w0 = in_domain.select(w0, Self::NAN);
             w0 = x.cmp_eq(Self::INFINITY).select(Self::INFINITY, w0);
 
+            // W₋₁ is only defined for -1/e <= x < 0
             wm1 = in_domain.select(wm1, Self::NAN);
-            wm1 = x.cmp_ge(Self::ZERO).select(Self::NAN, wm1);
+            wm1 = x.cmp_gt(Self::ZERO).select(Self::NAN, wm1);
         }
 
         (w0, wm1)

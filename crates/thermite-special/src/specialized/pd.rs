@@ -70,7 +70,7 @@ where
 
         // W₀ branch: -1 + series, W₋₁ branch: -1 - series
         let w0_branch = puiseux + Self::NEG_ONE;
-        let wm1_branch = -puiseux + Self::NEG_ONE;
+        let wm1_branch = Self::NEG_ONE - puiseux;
 
         // W₀ middle region: ex/(2+ex), exact at x = -1/e and x = 0.
         let ex = x * Self::E;
@@ -135,6 +135,7 @@ where
             w0 = w0.nz(x.is_zero()); // W₀(0) = 0
 
             wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
+            wm1 = x.is_zero().select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {
@@ -146,7 +147,7 @@ where
 
             // W₋₁ is only defined for -1/e <= x < 0
             wm1 = in_domain.select(wm1, Self::NAN);
-            wm1 = x.cmp_ge(Self::ZERO).select(Self::NAN, wm1);
+            wm1 = x.cmp_gt(Self::ZERO).select(Self::NAN, wm1);
         }
 
         (w0, wm1)
