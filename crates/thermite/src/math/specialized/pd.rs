@@ -70,7 +70,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
-        let qy = V::splat(0.25) / y;
+        let qy = V::FRAC_1_4 / y;
 
         let mut sinh = y - qy;
         let cosh = y + qy;
@@ -114,7 +114,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         if P::POLICY.avoid_branching || !x_small.all() {
             y2 = x.exph_p::<P>();
-            y2 -= V::splat(0.25) / y2;
+            y2 -= V::FRAC_1_4 / y2;
 
             // if we don't care about small x, we can skip the next branch
             if const { P::POLICY.avoid_precision_branches() } {
@@ -150,7 +150,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     #[inline(always)]
     fn cosh<P: Policy>(self) -> Self {
         let y = self.abs().exph_p::<P>();
-        y + V::splat(0.25) / y
+        y + V::FRAC_1_4 / y
     }
 
     #[inline(always)]

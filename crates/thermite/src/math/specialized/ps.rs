@@ -171,7 +171,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
-        let qy = V::splat(0.25) / y;
+        let qy = V::FRAC_1_4 / y;
 
         let mut sinh = y - qy;
         let cosh = y + qy;
@@ -204,7 +204,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // if not all are small, use exponential functions
         if P::POLICY.avoid_branching || !x_small.all() {
             y2 = x.exph_p::<P>();
-            y2 -= V::splat(0.25) / y2;
+            y2 -= V::FRAC_1_4 / y2;
 
             if const { P::POLICY.avoid_precision_branches() } {
                 return y2.mul_sign(x0);
@@ -228,7 +228,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn cosh<P: Policy>(self) -> Self {
         let y = self.abs().exph_p::<P>();
-        y + V::splat(0.25) / y
+        y + V::FRAC_1_4 / y
     }
 
     #[inline(always)]
@@ -1092,7 +1092,6 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
         }
 
         let xx = xx.flush_denormals::<P>();
-        let quarter = crate::generic_splat!(f32: 0.25);
 
         // scaling factor
         let m = if PI {
@@ -1105,14 +1104,14 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
             // if FMA is available, we can improve ILP by doing product with m in parallel
             (
                 inner::<V>(xx.mul_sub(m, V::HALF) - (xx * m).floor()), // sine
-                inner::<V>(xx.mul_sub(m, quarter) - xx.mul_add(m, quarter).floor()), // cosine
+                inner::<V>(xx.mul_sub(m, V::FRAC_1_4) - xx.mul_add(m, V::FRAC_1_4).floor()), // cosine
             )
         } else {
             let x = m * xx;
 
             (
-                inner::<V>((x - V::HALF) - x.floor()),             // sine
-                inner::<V>((x - quarter) - (x + quarter).floor()), // cosine
+                inner::<V>((x - V::HALF) - x.floor()),                     // sine
+                inner::<V>((x - V::FRAC_1_4) - (x + V::FRAC_1_4).floor()), // cosine
             )
         };
     }

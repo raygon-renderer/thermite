@@ -184,7 +184,7 @@ where
 
 impl<V: CompensatedFloatVector> SpecializedSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: TranscendentalMathWithPolicy,
+    V: SpecialMathWithPolicy,
 {
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
@@ -344,6 +344,57 @@ where
     }
 
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
-        todo!()
+        // Seed from the standard-precision lambert_w on the value field,
+        // then refine each branch with a single compensated Halley iteration.
+        //
+        // Halley's iteration for w·eʷ = x:
+        //   ew = exp(w), f = w·ew - x, wp1 = w + 1
+        //   d = 2·wp1²·ew - (w+2)·f
+        //   w' = w - 2·wp1·f / d
+
+        let x = self;
+        let (w0_seed, wm1_seed) = x.value.lambert_w_p::<P>();
+
+        let mut w0 = Self::new(w0_seed);
+        let mut wm1 = Self::new(wm1_seed);
+
+        // One compensated Halley step per branch
+        #[inline(always)]
+        fn halley_refine<P: Policy, W>(w: Compensated<W>, x: Compensated<W>) -> Compensated<W>
+        where
+            W: CompensatedFloatVector + TranscendentalMathWithPolicy,
+        {
+            let ew = w.exp_p::<P>();
+            let f = w.mul_sube(ew, x);
+            let wp1 = w + W::ONE;
+            let wp2 = wp1 + wp1;
+            let d = (wp1 + W::ONE).nmul_adde(f, wp2 * wp1 * ew);
+            wp2.nmul_adde(f / d, w)
+        }
+
+        w0 = halley_refine::<P, V>(w0, x);
+        wm1 = halley_refine::<P, V>(wm1, x);
+
+        // Edge cases
+        let x_val = x.value();
+        let at_branch = x_val.cmp_eq(FloatConsts::FRAC_NEG_1_E);
+        let at_zero = x_val.is_zero();
+
+        w0 = at_branch.select(Self::NEG_ONE, w0);
+        w0 = at_zero.select(Self::ZERO, w0);
+        wm1 = at_branch.select(Self::NEG_ONE, wm1);
+        wm1 = at_zero.select(Self::new(V::NEG_INFINITY), wm1);
+
+        if const { P::POLICY.check_overflow } {
+            let in_domain = x_val.cmp_ge(FloatConsts::FRAC_NEG_1_E);
+
+            w0 = in_domain.select(w0, Self::NAN);
+            w0 = x_val.cmp_eq(V::INFINITY).select(Self::INFINITY, w0);
+
+            wm1 = in_domain.select(wm1, Self::NAN);
+            wm1 = x_val.cmp_gt(V::ZERO).select(Self::NAN, wm1);
+        }
+
+        (w0, wm1)
     }
 }

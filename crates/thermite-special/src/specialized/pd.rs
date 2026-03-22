@@ -43,9 +43,6 @@ where
 
         let x = self;
 
-        let neg_inv_e: Self =
-            thermite::generic_splat!(f64: -0.367879441171442321595523770161460867445811131031767834507836801);
-
         // --- Initial approximation (piecewise) ---
         //
         // Branch-point region (x near -1/e): damped Puiseux series.
@@ -132,15 +129,15 @@ where
             let x_is_zero = x.is_zero();
 
             // At x = -1/e, both W₀ and W₋₁ = -1
-            w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
+            w0 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, w0);
             w0 = w0.nz(x_is_zero); // W₀(0) = 0
 
-            wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
+            wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
             wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {
-            let in_domain = x.cmp_ge(neg_inv_e);
+            let in_domain = x.cmp_ge(Self::FRAC_NEG_1_E);
 
             // W₀ is undefined for x < -1/e, +inf -> +inf
             w0 = in_domain.select(w0, Self::NAN);

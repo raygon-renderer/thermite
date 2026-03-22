@@ -42,8 +42,6 @@ where
 
         let x = self;
 
-        let neg_inv_e: V = thermite::generic_splat!(f32: -0.36787944117144232);
-
         // --- Initial approximation (piecewise) ---
         //
         // Branch-point region (x near -1/e): damped Puiseux series.
@@ -148,17 +146,17 @@ where
             let x_is_zero = x.is_zero();
 
             // At x = -1/e, both W₀ and W₋₁ = -1
-            w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
+            w0 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, w0);
             // Honestly the approximation handles W₀(0) = 0 pretty well,
             // but just in case, explicitly set it to the correct value.
             w0 = w0.nz(x_is_zero); // W₀(0) = 0
 
-            wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
+            wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
             wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {
-            let in_domain = x.cmp_ge(neg_inv_e);
+            let in_domain = x.cmp_ge(Self::FRAC_NEG_1_E);
 
             // W₀ is undefined for x < -1/e, +inf -> +inf
             w0 = in_domain.select(w0, Self::NAN);
@@ -499,7 +497,7 @@ where
         // Tiny
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             let is_tiny = z.cmp_lt(Self::SQRT_EPSILON);
-            let tiny_res = z.reciprocal_p::<P>() - Self::EGAMMA;
+            let tiny_res = z.reciprocal_p::<P>() - Self::EULER_GAMMA;
             res *= is_tiny.select(tiny_res, normal_res);
         } else {
             res *= normal_res;
@@ -605,7 +603,7 @@ where
             let is_not_tiny = z.cmp_ge(Self::SQRT_EPSILON);
 
             // shove the tiny result into the log down below
-            lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - Self::EGAMMA);
+            lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - Self::EULER_GAMMA);
 
             // force multiplier to zero for tiny case, allowing the modified
             // lanczos sum and ln(t) to be combined for cheap
