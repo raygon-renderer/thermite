@@ -151,6 +151,12 @@ decl_math! {
     ///
     /// Internally, this is computed with [`jacobi`](SpecialMath::jacobi) when m > 0.
     fn legendre[][](self: Self, n: u32, m: u32) -> Self;
+
+    /// Computes both branches of the Lambert W function simultaneously: (W₀(x), W₋₁(x)).
+    ///
+    /// The W₀ result is valid for x >= -1/e; the W₋₁ result is valid for -1/e <= x < 0.
+    /// Outside these domains, the respective result is NaN (when overflow checking is enabled).
+    fn lambert_w[][](self: Self) -> (Self, Self);
 }
 
 /*

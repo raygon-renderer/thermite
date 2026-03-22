@@ -344,4 +344,6 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             -jacobi * Self::powi::<P>(x12, m as i32).sqrt()
         }
     }
+
+    fn lambert_w<P: Policy>(self) -> (Self, Self);
 }

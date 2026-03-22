@@ -3,7 +3,10 @@ use thermite::{
         TranscendentalMathWithPolicy,
         policy::{
             DenormalBehavior, PrecisionPolicy,
-            policies::{AveragePrecision, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision},
+            policies::{
+                AveragePrecision, CheckOverflow, CmpLessPrecision, ExtraPrecision, LessPrecision, MediumPrecision,
+                ReferencePrecision, WorstPrecision,
+            },
         },
         specialized::SpecializedTranscendentalMath,
     },
@@ -17,6 +20,146 @@ where
     V: TranscendentalMathWithPolicy<Element = f32>,
     V: SpecializedTranscendentalMath<f32>,
 {
+    #[inline(always)]
+    fn lambert_w<P: Policy>(self) -> (Self, Self) {
+        // Computes both W₀(x) and W₋₁(x) simultaneously.
+        //
+        // Lambert W₀(x): principal branch, defined for x >= -1/e, returns values >= -1.
+        // Lambert W₋₁(x): secondary real branch, defined for -1/e <= x < 0, returns values <= -1.
+        // Both satisfy w·eʷ = x.
+        //
+        // Uses Halley's method with piecewise initial approximations, interleaving
+        // iterations for both branches to maximize instruction-level parallelism.
+        //
+        // Halley's iteration for w·exp(w) = x:
+        //   ew = exp(w), f = w·ew - x, wp1 = w + 1
+        //   Denominator rewritten to avoid an extra division:
+        //     d = 2·wp1²·ew - (w+2)·f
+        //   w' = w - 2·wp1·f / d
+
+        // For initial guess and first Halley iterations, use fast and loose precision
+        type Approx<P> = WorstPrecision<CheckOverflow<P, false>>;
+
+        let x = self;
+
+        let neg_inv_e: V = thermite::generic_splat!(f32: -0.36787944117144232);
+
+        // --- Initial approximation (piecewise) ---
+        //
+        // Branch-point region (x near -1/e): damped Puiseux series.
+        //
+        // W has a square-root singularity at x = -1/e (double root of w·eʷ - x at w = -1),
+        // so Halley degenerates to linear convergence without a sqrt-based initial guess.
+        //
+        // The raw Puiseux series is W ≈ -1 ± (p - p²/3 + 11p³/72) where p = sqrt(2(ex+1)),
+        // with + for W₀ and - for W₋₁. This converges well near -1/e but diverges further
+        // out. We damp it with a denominator that grows with distance from -1/e:
+        //
+        //   w_branch = -1 ± p·(1 + p·(-1/3 + p·11/72)) / (1 + K·p₀·p)
+        //
+        // where p₀ = ex+1, and K = 1/(C · e^(3/2) · √2) with C ≈ 1.2144578338 found by
+        // minimizing the integrated backward error |w·eʷ - x| over [-1/e, 0] in Desmos.
+        // The denominator arises from (x + 1/e)^1.5 / C = (p₀/e)^1.5 / C = p₀·p / (C·e^(3/2)·√2).
+
+        let p0 = x.mul_adde(Self::E, Self::ONE); // ex + 1
+        let p = (p0 + p0).sqrt(); // sqrt(2(ex+1))
+
+        // p·(1 + p·(-1/3 + p·11/72))
+        let puiseux_numer = p * p.mul_adde(
+            p.mul_adde(
+                thermite::generic_splat!(f32: 11.0 / 72.0),
+                thermite::generic_splat!(f32: -1.0 / 3.0),
+            ),
+            Self::ONE,
+        );
+
+        // 1 + K·p₀·p
+        let puiseux_denom = p0.mul_adde(p * thermite::generic_splat!(f32: 0.12991546098765432), Self::ONE);
+
+        let puiseux = puiseux_numer / puiseux_denom;
+
+        // W₀ branch: -1 + series, W₋₁ branch: -1 - series
+        let w0_branch = puiseux + Self::NEG_ONE;
+        let wm1_branch = -puiseux + Self::NEG_ONE;
+
+        // W₀ middle region: ex/(2+ex)
+        let ex = x * Self::E;
+        let w0_mid = ex / (Self::TWO + ex);
+
+        // Shared ln for asymptotic regions
+        let lnx = x.abs().ln_p::<Approx<P>>();
+
+        // W₀ asymptotic (x > e): L₁ - L₂ + L₂/L₁ where L₁ = ln(x), L₂ = ln(L₁).
+        // The L₂/L₁ correction is 0 at x = e (since L₂ = ln(1) = 0), so it doesn't
+        // overshoot near the transition, but closes the gap at large x.
+        let l2 = lnx.ln_p::<Approx<P>>();
+        let l2_corr = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            l2 * lnx.reciprocal_p::<Approx<P>>()
+        } else {
+            l2 / lnx
+        };
+        let w0_asymptotic = lnx - l2 + l2_corr;
+
+        // W₋₁ asymptotic (x near 0⁻): L₁ - L₂ where L₁ = ln(-x), L₂ = ln(-L₁)
+        // lnx = ln(|x|) = ln(-x) since x < 0; this is negative for small |x|.
+        // -lnx is positive, so (-lnx).ln() = ln(-ln(-x)) = L₂.
+        let wm1_asymptotic = lnx - (-lnx).ln_p::<Approx<P>>();
+
+        // Select initial guesses
+        let near_branch = x.cmp_lt(V::splat(-0.1));
+        let large = x.cmp_gt(Self::E);
+
+        let mut w0 = near_branch.select(w0_branch, large.select(w0_asymptotic, w0_mid));
+
+        let near_branch_m1 = x.cmp_lt(V::splat(-0.25));
+        let mut wm1 = near_branch_m1.select(wm1_branch, wm1_asymptotic);
+
+        // --- Interleaved Halley iterations ---
+        #[inline(always)]
+        fn halley_step<P: Policy, W>(w: W, x: W) -> W
+        where
+            W: FloatVectorWithBits<Element = f32> + SpecializedTranscendentalMath<f32>,
+        {
+            let ew = w.exp_p::<P>();
+            let f = w.mul_sube(ew, x);
+            let wp1 = w + W::ONE;
+            let wp2 = wp1 + wp1;
+            let d = (wp1 + W::ONE).nmul_adde(f, wp2 * wp1 * ew);
+            wp2.nmul_adde(f / d, w)
+        }
+
+        #[rustfmt::skip]
+        let num_iters = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } { 2 } else { 1 };
+
+        for _ in 0..num_iters {
+            w0 = halley_step::<Approx<P>, Self>(w0, x);
+            wm1 = halley_step::<Approx<P>, Self>(wm1, x);
+        }
+
+        w0 = halley_step::<P, Self>(w0, x);
+        wm1 = halley_step::<P, Self>(wm1, x);
+
+        // --- Edge cases ---
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
+            w0 = w0.nz(x.is_zero());
+
+            wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
+        }
+
+        if const { P::POLICY.check_overflow } {
+            let in_domain = x.cmp_ge(neg_inv_e);
+
+            w0 = in_domain.select(w0, Self::NAN);
+            w0 = x.cmp_eq(Self::INFINITY).select(Self::INFINITY, w0);
+
+            wm1 = in_domain.select(wm1, Self::NAN);
+            wm1 = x.cmp_ge(Self::ZERO).select(Self::NAN, wm1);
+        }
+
+        (w0, wm1)
+    }
+
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
         let x0 = self;
