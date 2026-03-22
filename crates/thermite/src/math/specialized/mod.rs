@@ -357,6 +357,10 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn reciprocal<P: Policy>(self) -> Self {
+        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            return Self::ONE / self;
+        }
+
         let mut y = self.rcp();
 
         // if we have approximate reciprocal and want better precision
@@ -370,6 +374,10 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
 
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(self, a: Self) -> Self {
+        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            return Self::ONE / self + a;
+        }
+
         let mut y = self.rcp();
 
         if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {

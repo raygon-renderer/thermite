@@ -1,4 +1,8 @@
-use crate::{divider::Divider, math::policy::policies::MediumPrecision, vector::ops::AddMasked as _};
+use crate::{
+    divider::Divider,
+    math::policy::policies::MediumPrecision,
+    vector::ops::{AddMasked as _, MulAddExt as _},
+};
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -69,8 +73,57 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             return unsafe { self.native_tan() };
         }
 
-        let (s, c) = self.sin_cos::<P>();
-        s / c
+        let d = self;
+
+        // Instead of computing sin(x)/cos(x) (which suffers from catastrophic cancellation near pi/2),
+        // this uses a direct polynomial approximation for tan on [-pi/4, pi/4] and handles odd
+        // quadrants via negation + reciprocal (i.e. -cot(x) = -1/tan(x)).
+
+        let xa = d.abs().flush_denormals::<P>();
+
+        let (mut x, mut x_lo, q) = trig_range_reduction::<P, V, false>(xa);
+
+        // For odd quadrants (q & 1 == 1), negate x before the polynomial.
+        // Combined with reciprocal at the end, this gives -cot(x) = -1/tan(x).
+        let odd_sign = V::from_bits(q.shli::<31>());
+        x ^= odd_sign;
+        x_lo ^= odd_sign;
+
+        // Polynomial: tan(x) ≈ x + x^3 * P(x^2)
+        // Minimax coefficients for (tan(x)/x - 1) / x^2 on [-pi/4, pi/4]
+        let x2 = x * x;
+        let mut x0 = x;
+
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            x0 += x_lo;
+        }
+
+        #[rustfmt::skip]
+        let mut r = x2.poly_p::<P, _>(&[
+            3.33331568548E-1,   //  x^2 : ~1/3
+            1.33387994085E-1,   //  x^4 : ~2/15
+            5.34112807005E-2,   //  x^6 : ~17/315
+            2.44301354525E-2,   //  x^8
+            3.11992232697E-3,   // x^10
+            9.38540185543E-3,   // x^12
+        ]).mul_adde(x2 * x, x0);
+
+        // For odd quadrants, take reciprocal: 1/tan(-x) = -1/tan(x) = -cot(x)
+        let odd = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
+
+        if P::POLICY.avoid_branching || odd.any() {
+            r = odd.select(r.reciprocal_p::<P>(), r);
+        }
+
+        // Apply sign of original input (tan is an odd function)
+        r = r.mul_sign(d);
+
+        if const { P::POLICY.check_overflow } {
+            // tan(±inf) = NaN, tan(NaN) = NaN
+            r = d.is_finite().select(r, V::NAN);
+        }
+
+        r
     }
 
     #[inline(always)]
@@ -245,9 +298,9 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
             let gt1 = a.cmp_gt(V::ONE);
 
-            let mut s = gt1.select(a.reciprocal_p::<ExtraPrecision<P>>(), a);
-
-            s = s.flush_denormals::<P>();
+            let s = gt1
+                .select(a.reciprocal_p::<ExtraPrecision<P>>(), a)
+                .flush_denormals::<P>();
 
             let t = s * s;
 
@@ -862,7 +915,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 }
 
 #[thermite_dispatch::dispatch(V, thermite = "crate")]
-fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &V) -> (V, V::Bits) {
+fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &V) -> (V, V, V::Bits) {
     let xa_bits: V::Bits = xa.into_bits();
 
     // Extract unbiased exponent and significand
@@ -897,50 +950,122 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     let aligned_hi: V::Bits = aligned_hi.cast();
     let aligned_lo: V::Bits = aligned_lo.cast();
 
-    // Multiply significand by aligned chunks
-    // Because of the exact bit index we chose (-25), the 88-bit product `sig * W`
-    // has its binary point situated perfectly so that:
-    // - Bits 62:61 of the full product represent the Quadrant (0..3)
-    // - Bits 60:32 of the full product represent the Fraction
-    // This entire 31-bit structure fits inside the middle 32 bits!
-    let prod_hi = sig.mullo(aligned_hi); // H_lo
-    let prod_lo = sig.mulhi(aligned_lo); // L_hi
-    let mut mid_bits = prod_hi + prod_lo; // middle 32 bits of the 88-bit product
+    // Multiply significand by aligned chunks.
+    // 88-bit product: sig(24) × aligned(64).
+    // Binary point at bit 62: bits 62:61 = quadrant, bits 60:0 = fraction.
+    let prod_hi = sig.mullo(aligned_hi); // bits 63:32 (low half of sig × hi)
+    let prod_lo = sig.mulhi(aligned_lo); // bits 55:32 (high half of sig × lo)
+    let mid_bits = prod_hi + prod_lo; // bits 63:32 of the 88-bit product
+    let prod_lo_lo = sig.mullo(aligned_lo); // bits 31:0
 
-    // extra half-bit of accuracy with correct rounding using the MSB of the low product
-    if const { P::POLICY.precision.gt(PrecisionPolicy::Best) } {
-        let prod_lo_lo = sig.mullo(aligned_lo);
-        mid_bits += prod_lo_lo.shri::<31>();
-    }
-
-    // Extract quadrant and fraction
-    // The quadrant is at bits 30:29 of mid_bits.
+    // Extract quadrant from bits 30:29 of mid_bits.
     let mut q_ph: V::Bits = (mid_bits.shri::<29>()) & V::Bits::splat(3);
 
-    // The fraction is at bits 28:0. Mask them out.
-    let fraction_int = mid_bits & V::Bits::splat(0x1FFFFFFF);
+    // 61-bit fraction: 29 bits from mid_bits (bits 28:0) + 32 bits from prod_lo_lo.
+    let fraction_hi_int = mid_bits & V::Bits::splat(0x1FFFFFFF);
 
-    // Reconstruct float using High/Low split to avoid FPU cancellation
-    // It represents `fraction_int * 2^-29`.
-    let frac_hi_bits = fraction_int.shri::<6>() | V::Bits::splat(0x3F800000);
+    // Reconstruct as double-float (two non-overlapping f32 values).
+    //
+    // frac_hi: top 23 bits of fraction_hi_int, injected as f32 mantissa (exact).
+    // Represents (fraction_hi_int >> 6) * 2^-23.
+    let frac_hi_bits = fraction_hi_int.shri::<6>() | V::Bits::splat(0x3F800000);
     let frac_hi = V::from_bits(frac_hi_bits) - V::ONE;
 
-    // Isolate bottom 6 bits and multiply by 2^-29 natively
-    let frac_lo_int: V::SignedBits = (fraction_int & V::Bits::splat(0x3F)).cast();
-    let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: f32::from_bits(0x31000000)); // 2^-29
+    // frac_lo: bottom 6 bits of fraction_hi_int | top 18 bits of prod_lo_lo = 24 bits.
+    // Represents residual * 2^-47. Exact since residual ≤ 2^24 - 1.
+    let residual = (fraction_hi_int & V::Bits::splat(0x3F)).shli::<18>() | prod_lo_lo.shri::<14>();
+    let frac_lo_int: V::SignedBits = residual.cast();
+    let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: f32::from_bits(0x28000000)); // 2^-47
 
-    let mut frac_f32 = frac_hi + frac_lo;
+    // Center from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round().
+    // Only frac_hi needs adjustment; frac_lo is unchanged since
+    // (frac_hi - 1) + frac_lo = old_total - 1.
+    let needs_round = frac_hi.cmp_ge(V::HALF);
+    let frac_hi = frac_hi.sub_c(needs_round, V::ONE);
+    q_ph = q_ph.add_c(needs_round.cast(), V::Bits::ONE);
 
-    // Center the fraction from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round()
-    let needs_round = frac_f32.cmp_ge(V::HALF);
+    // Multiply by π/2 as double-float.
+    // π/2 = pi2_hi + pi2_lo where pi2_hi = f32(π/2) and pi2_lo = π/2 - f32(π/2).
+    let pi2_hi = V::FRAC_PI_2;
+    let pi2_lo = crate::generic_splat!(f32: -4.37113882867379288655e-08);
 
-    frac_f32 = frac_f32.sub_c(needs_round, V::ONE); // conditional subtract 1.0, only if needs_round is true
-    q_ph = q_ph.add_c(needs_round.cast(), V::Bits::ONE); // conditional add 1 to quadrant, only if needs_round is true
+    let x_hi = frac_hi * pi2_hi;
 
-    // Scale back by pi/2
-    let x_ph = frac_f32 * V::FRAC_PI_2;
+    // Recover rounding error via exact FMA, then add cross terms.
+    // frac_lo * pi2_lo is O(2^-71), negligible.
+    //
+    // Note that if hardware FMA is not available, this will be much slower
+    // but that's just the cost of accuracy.
+    let x_lo = frac_hi.mul_add(pi2_hi, -x_hi) + frac_hi * pi2_lo + frac_lo * pi2_hi;
 
-    (x_ph, q_ph)
+    (x_hi, x_lo, q_ph)
+}
+
+/// Shared Cody-Waite range reduction for single-precision trig functions.
+///
+/// Reduces `xa` (absolute value, flushed) modulo pi/2, returning (x_hi, x_lo, quadrant_bits).
+/// `x_lo` is nonzero only when Payne-Hanek is used (large args, Best+ precision).
+/// When `PI` is true, performs sinpi/cospi reduction instead (no CW, no Payne-Hanek).
+#[inline(always)]
+fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(
+    mut xa: V,
+) -> (V, V, V::Bits) {
+    let mut is_large = V::Mask::FALSY;
+
+    let y0 = if PI {
+        xa + xa // 2x for sinpi/cospi
+    } else {
+        is_large = xa.cmp_gt(crate::generic_splat!(<V> = <V: FloatVector> f32: {
+            match V::HAS_TRUE_FMA {
+                true => 1e7,
+                false => 1e5,
+            }
+        }));
+
+        if const { P::POLICY.check_overflow && P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            xa = xa.nz(is_large); // set to zero if too large
+        }
+
+        xa * V::FRAC_2_PI
+    };
+
+    let y = y0.round();
+    let mut q: V::Bits = V::SignedBits::fast_cast_from(y).into_bits();
+
+    // pi/2 split into four parts for extended precision modular arithmetic.
+    // dp1 (7 sig bits) + dp2 (10 sig bits) + dp3 (10 sig bits) + dp4 (10 sig bits) = pi/4.
+    // All constants are doubled since we reduce by pi/2, not pi/4.
+    let mut x = if PI {
+        // sinpi/cospi: x = pi * (xa - y * 0.5)
+        y.nmul_adde(V::HALF, xa) * V::PI
+    } else {
+        let dp1f = crate::generic_splat!(f32: 0.78515625 * 2.0);
+        let dp2f = crate::generic_splat!(f32: 2.4187564849853515625E-4 * 2.0);
+        let dp3f = crate::generic_splat!(f32: 3.77476681023836135864E-8 * 2.0);
+        let dp4f = crate::generic_splat!(f32: 1.28164145962728071027E-12 * 2.0);
+
+        if const { V::HAS_TRUE_FMA } {
+            // dp1f + dp2f is exact in f32; three chained FMAs
+            y.nmul_add(dp4f, y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa)))
+        } else {
+            (((xa - y * dp1f) - y * dp2f) - y * dp3f) - y * dp4f
+        }
+    };
+
+    let mut x_lo = V::ZERO;
+
+    // Payne-Hanek fallback for large arguments (non-PI only, Best+ precision)
+    if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
+        && (P::POLICY.avoid_branching || is_large.any())
+    {
+        let (x_ph, x_lo_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
+
+        x = is_large.select(x_ph, x);
+        x_lo = x_lo_ph.z(is_large); // zero out x_lo when not using Payne-Hanek
+        q = is_large.select(q_ph, q);
+    }
+
+    (x, x_lo, q)
 }
 
 #[inline(always)]
@@ -992,78 +1117,37 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
         };
     }
 
-    let mut xa = xx.abs().flush_denormals::<P>();
+    let xa = xx.abs().flush_denormals::<P>();
 
-    let y0 = if PI {
-        xa + xa // 2x for sinpi/cospi
-    } else {
-        if const { P::POLICY.check_overflow && P::POLICY.precision.le(PrecisionPolicy::Average) } {
-            let limit: V = crate::generic_splat!(<V> = <V: FloatVector> f32: {
-                match V::HAS_TRUE_FMA {
-                    true => 1e7,
-                    false => 1e5,
-                }
-            });
-
-            // xa &= xa.cmp_le(limit)
-            xa = xa.z(xa.cmp_le(limit)); // set to zero if too large
-        }
-
-        xa * V::FRAC_2_PI
-    };
-
-    let y = y0.round();
-
-    let mut q: V::Bits = V::SignedBits::fast_cast_from(y).into_bits();
-
-    // pi/2 split into three parts for extended precision modular arithmetic
-    let dp1f = crate::generic_splat!(f32: 0.78515625 * 2.0);
-    let dp2f = crate::generic_splat!(f32: 2.4187564849853515625E-4 * 2.0);
-    let dp3f = crate::generic_splat!(f32: 3.77489497744594108E-8 * 2.0);
-
-    // Reduce by extended precision modular arithmetic
-    // x = ((xa - y * DP1F) - y * DP2F) - y * DP3F;
-    // or if calculating sinpi/cospi:
-    // x = pi * (xa - y * 0.5)
-    let mut x = if PI {
-        y.nmul_adde(V::HALF, xa) * V::PI
-    } else if const { V::HAS_TRUE_FMA } {
-        // if true FMA is available, we only have to do two FMAs
-        y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa))
-    } else {
-        ((xa - y * dp1f) - y * dp2f) - y * dp3f
-    };
-
-    let limit = crate::generic_splat!(f32: 1e5);
-    let is_large = xa.cmp_gt(limit);
-
-    if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
-        && (P::POLICY.avoid_branching || is_large.any())
-    {
-        let (x_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
-
-        x = is_large.select(x_ph, x);
-        q = is_large.select(q_ph, q);
-    }
+    let (x, x_lo, q) = trig_range_reduction::<P, V, PI>(xa);
 
     // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
     let x2 = x * x;
+    let mut x0 = x;
+
+    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        x0 += x_lo;
+    }
 
     #[rustfmt::skip]
-    let s = x2.poly_p::<P, _>(&[
+    let mut s = x2.poly_p::<P, _>(&[
         -1.6666654611E-1,
         8.3321608736E-3,
         -1.9515295891E-4,
     ])
-    .mul_adde(x2 * x, x);
+    .mul_adde(x2 * x, x0);
 
     #[rustfmt::skip]
-    let c = x2.poly_p::<P, _>(&[
+    let mut c = x2.poly_p::<P, _>(&[
         4.166664568298827E-2,
         -1.388731625493765E-3,
         2.443315711809948E-5,
     ])
     .mul_adde(x2 * x2, x2.nmul_adde(V::HALF, V::ONE));
+
+    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        c = x.nmul_adde(x_lo, c);
+    }
 
     let swap = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
 
@@ -1289,14 +1373,16 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             in_range &= x0.abs().cmp_le(V::splat(max_x)); // symmetric limits for lesser precisions
         }
 
-        if !P::POLICY.avoid_branching && crate::likely(in_range.all()) {
-            return z;
-        }
+        // TODO: Investigate performance of this branch
+        // if !P::POLICY.avoid_branching && crate::likely(in_range.all()) {
+        //     return z;
+        // }
 
-        let underflow_value = match MODE {
+        #[rustfmt::skip]
+        let underflow_value = const { match MODE {
             EXP_MODE_EXPM1 => V::NEG_ONE,
             _ => V::ZERO,
-        };
+        } };
 
         r = x0.select_negative(underflow_value, V::INFINITY);
         z = in_range.select(z, r);
