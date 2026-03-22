@@ -342,4 +342,8 @@ where
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
         todo!()
     }
+
+    fn lambert_w<P: Policy>(self) -> (Self, Self) {
+        todo!()
+    }
 }
