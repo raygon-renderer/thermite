@@ -99,10 +99,7 @@ where
         let mut wm1 = near_branch_m1.select(wm1_branch, wm1_asymptotic);
 
         // --- Interleaved Halley iterations ---
-        // Use cheap exp for early iterations, full-precision exp for the final one.
-        // f64 needs more warmup iterations: Halley has cubic convergence,
-        // so 2 cheap + 1 full ≈ 3^3 = 27 bits per cheap step, covering 52+ bits.
-        // Best/Reference: 3 cheap + 1 full for last-bit accuracy.
+        // Use cheap exp for warmup iteration, full-precision exp for the final ones.
 
         #[inline(always)]
         fn halley_step<P: Policy, W>(w: W, x: W) -> W
@@ -120,22 +117,26 @@ where
         #[rustfmt::skip]
         let num_iters = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } { 3 } else { 2 };
 
-        for _ in 0..num_iters {
-            w0 = halley_step::<Approx<P>, Self>(w0, x);
-            wm1 = halley_step::<Approx<P>, Self>(wm1, x);
-        }
+        // warmup iteration with the looser precision to get close enough
+        // for the main iterations to converge in the target precision
+        w0 = halley_step::<Approx<P>, Self>(w0, x);
+        wm1 = halley_step::<Approx<P>, Self>(wm1, x);
 
-        w0 = halley_step::<P, Self>(w0, x);
-        wm1 = halley_step::<P, Self>(wm1, x);
+        for _ in 0..num_iters {
+            w0 = halley_step::<CheckOverflow<P, false>, Self>(w0, x);
+            wm1 = halley_step::<CheckOverflow<P, false>, Self>(wm1, x);
+        }
 
         // --- Edge cases ---
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            let x_is_zero = x.is_zero();
+
             // At x = -1/e, both W₀ and W₋₁ = -1
             w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
-            w0 = w0.nz(x.is_zero()); // W₀(0) = 0
+            w0 = w0.nz(x_is_zero); // W₀(0) = 0
 
             wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
-            wm1 = x.is_zero().select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {

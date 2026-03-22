@@ -131,22 +131,30 @@ where
         #[rustfmt::skip]
         let num_iters = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } { 2 } else { 1 };
 
-        for _ in 0..num_iters {
-            w0 = halley_step::<Approx<P>, Self>(w0, x);
-            wm1 = halley_step::<Approx<P>, Self>(wm1, x);
-        }
+        // warmup iteration with the looser precision to get close enough
+        // for the main iterations to converge in the target precision
+        w0 = halley_step::<Approx<P>, Self>(w0, x);
+        wm1 = halley_step::<Approx<P>, Self>(wm1, x);
 
-        w0 = halley_step::<P, Self>(w0, x);
-        wm1 = halley_step::<P, Self>(wm1, x);
+        for _ in 0..num_iters {
+            // don't need to check overflow within these since it should be well-defined for
+            // all intermediate values, and the final check will catch any issues.
+            w0 = halley_step::<CheckOverflow<P, false>, Self>(w0, x);
+            wm1 = halley_step::<CheckOverflow<P, false>, Self>(wm1, x);
+        }
 
         // --- Edge cases ---
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            let x_is_zero = x.is_zero();
+
             // At x = -1/e, both W₀ and W₋₁ = -1
             w0 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, w0);
-            w0 = w0.nz(x.is_zero());
+            // Honestly the approximation handles W₀(0) = 0 pretty well,
+            // but just in case, explicitly set it to the correct value.
+            w0 = w0.nz(x_is_zero); // W₀(0) = 0
 
             wm1 = x.cmp_eq(neg_inv_e).select(Self::NEG_ONE, wm1);
-            wm1 = x.is_zero().select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
         }
 
         if const { P::POLICY.check_overflow } {
