@@ -91,12 +91,12 @@ where
         // The L₂/L₁ correction is 0 at x = e (since L₂ = ln(1) = 0), so it doesn't
         // overshoot near the transition, but closes the gap at large x.
         let l2 = lnx.ln_p::<Approx<P>>();
-        let l2_corr = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
-            l2 * lnx.reciprocal_p::<Approx<P>>()
+
+        let w0_asymptotic = if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::HAS_APPROX_RCP } {
+            l2.mul_adde(lnx.reciprocal_p::<Approx<P>>(), lnx - l2)
         } else {
-            l2 / lnx
+            (lnx - l2) + (l2 / lnx)
         };
-        let w0_asymptotic = lnx - l2 + l2_corr;
 
         // W₋₁ asymptotic (x near 0⁻): L₁ - L₂ where L₁ = ln(-x), L₂ = ln(-L₁)
         // lnx = ln(|x|) = ln(-x) since x < 0; this is negative for small |x|.
@@ -118,12 +118,17 @@ where
         where
             W: FloatVectorWithBits<Element = f32> + SpecializedTranscendentalMath<f32>,
         {
-            let ew = w.exp_p::<P>();
-            let f = w.mul_sube(ew, x);
+            // Use exp(-w) to avoid overflow/underflow in e^w for extreme w.
+            // g = w - x·e^{-w} = f·e^{-w}, d = (w²+2w+2) + (w+2)·x·e^{-w}
+            // g and d are both single FMAs off enw, independent of each other.
+            let enw = (-w).exp_p::<P>();
+
             let wp1 = w + W::ONE;
-            let wp2 = wp1 + wp1;
-            let d = (wp1 + W::ONE).nmul_adde(f, wp2 * wp1 * ew);
-            wp2.nmul_adde(f / d, w)
+            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)² + 1 = w² + 2w + 2
+            let wp2h_x = wp1.mul_adde(x, x); // (w+2)·x - no exp dependency
+            let g = x.nmul_adde(enw, w); // w - x·e^{-w}
+            let d = wp2h_x.mul_adde(enw, q); // (w+2)·x·e^{-w} + (w²+2w+2)
+            (wp1 + wp1).nmul_adde(g / d, w)
         }
 
         #[rustfmt::skip]
@@ -153,6 +158,17 @@ where
 
             wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
             wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+        }
+
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            // for subnormal inputs, W₀(x) ≈ x
+            w0 = x.is_subnormal().select(x, w0);
+
+            // NOTE: Somehow wm1 handles denormals fine on its own,
+            // at least to the accuracy of the reference crate,
+            // so we don't actually need this.
+            //
+            // wm1 = is_subnormal.select(wm1_asymptotic, wm1);
         }
 
         if const { P::POLICY.check_overflow } {

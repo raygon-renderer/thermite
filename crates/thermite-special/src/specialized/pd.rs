@@ -2,7 +2,7 @@ use thermite::{
     math::{
         TranscendentalMathWithPolicy,
         policy::{
-            PrecisionPolicy,
+            DenormalBehavior, PrecisionPolicy,
             policies::{
                 AveragePrecision, CheckOverflow, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision,
                 WorstPrecision,
@@ -80,7 +80,7 @@ where
         // The L₂/L₁ correction is 0 at x = e (since L₂ = ln(1) = 0), so it doesn't
         // overshoot near the transition, but closes the gap at large x.
         let l2 = lnx.ln_p::<Approx<P>>();
-        let w0_asymptotic = lnx - l2 + l2 / lnx;
+        let w0_asymptotic = (lnx - l2) + (l2 / lnx);
 
         // W₋₁ asymptotic (x near 0⁻): L₁ - L₂ where L₁ = ln(-x), L₂ = ln(-L₁)
         // lnx = ln(|x|) = ln(-x) since x < 0; this is negative for small |x|.
@@ -103,12 +103,17 @@ where
         where
             W: FloatVectorWithBits<Element = f64> + SpecializedTranscendentalMath<f64>,
         {
-            let ew = w.exp_p::<P>();
-            let f = w.mul_sube(ew, x); // w*ew - x
+            // Use exp(-w) to avoid overflow/underflow in e^w for extreme w.
+            // g = w - x·e^{-w} = f·e^{-w}, d = (w²+2w+2) + (w+2)·x·e^{-w}
+            // g and d are both single FMAs off enw, independent of each other.
+            let enw = (-w).exp_p::<P>();
+
             let wp1 = w + W::ONE;
-            let wp2 = wp1 + wp1;
-            let d = (wp1 + W::ONE).nmul_adde(f, wp2 * wp1 * ew); // 2*wp1²*ew - (w+2)*f
-            wp2.nmul_adde(f / d, w) // w - 2*wp1*f / d
+            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)² + 1 = w² + 2w + 2
+            let wp2h_x = wp1.mul_adde(x, x); // (w+2)·x — no exp dependency
+            let g = x.nmul_adde(enw, w); // w - x·e^{-w}
+            let d = wp2h_x.mul_adde(enw, q); // (w+2)·x·e^{-w} + (w²+2w+2)
+            (wp1 + wp1).nmul_adde(g / d, w)
         }
 
         #[rustfmt::skip]
@@ -134,6 +139,11 @@ where
 
             wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
             wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+        }
+
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            // for subnormal inputs, W₀(x) ≈ x
+            w0 = x.is_subnormal().select(x, w0);
         }
 
         if const { P::POLICY.check_overflow } {
