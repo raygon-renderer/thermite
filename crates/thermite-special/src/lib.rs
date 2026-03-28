@@ -157,6 +157,8 @@ decl_math! {
     /// The W₀ result is valid for x >= -1/e; the W₋₁ result is valid for -1/e <= x < 0.
     /// Outside these domains, the respective result is NaN (when overflow checking is enabled).
     fn lambert_w[][](self: Self) -> (Self, Self);
+    /// Computes the generalized exponential integral `E_n(x)` for integer order `n`.
+    fn expint[const N: usize][N](self: Self) -> Self;
 }
 
 /*

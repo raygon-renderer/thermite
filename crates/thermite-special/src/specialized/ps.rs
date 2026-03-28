@@ -668,6 +668,11 @@ where
 
         result
     }
+
+    #[inline(always)]
+    fn expint<P: Policy, const N: usize>(self) -> Self {
+        generic::expint::expint_generic::<P, f32, Self, N>(self)
+    }
 }
 
 const LANCZOS_G: f32 = 1.428456135094165802001953125;

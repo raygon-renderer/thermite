@@ -16,6 +16,10 @@ use thermite::{
 
 use super::SpecialMathWithPolicy as _;
 
+mod generic {
+    pub mod expint;
+}
+
 mod pd;
 mod ps;
 
@@ -28,6 +32,168 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     fn erfinv<P: Policy>(self) -> Self;
+    /// Computes the exponential integral `E_n(x)` for integer order `N`.
+    ///
+    /// Uses the power series for x < 1 and the Stieltjes continued fraction for x >= 1,
+    /// computed in parallel across SIMD lanes and blended at the end.
+    /// For N > 1, applies the recurrence `E_{n+1}(x) = (e^{-x} - x·E_n(x)) / n`.
+    #[inline(always)]
+    fn expint<P: Policy, const N: usize>(self) -> Self {
+        let x = self;
+
+        // E_n(x) is only defined for x > 0 (and x >= 0 for n > 1).
+        // Compute E_1(x) first, then apply recurrence for higher orders.
+
+        // === Interleaved power series (x < 1) and continued fraction (x >= 1) ===
+        //
+        // Power series: E_1(x) = -γ - ln(x) - Σ_{k=1}^∞ (-x)^k / (k·k!)
+        //   Recurrence on terms: A_{k+1} = A_k · (-x · k) / (k+1)²
+        //   Starting with A_1 = -x, sum = A_1.
+        //
+        // Continued fraction (Stieltjes): E_1(x)·eˣ = 1/(x+1 - 1²/(x+3 - 2²/(x+5 - 3²/(x+7 - ...))))
+        //   In standard Lentz form: b₀=0, a₁=1, b₁=x+1; then aⱼ=-(j-1)², bⱼ=x+2j-1 for j≥2.
+        //   Bootstrap j=1 outside the loop, iterate j≥2 inside.
+        //   Result: E_1(x) = f · e^{-x}
+
+        let use_series = x.cmp_lt(Self::ONE);
+
+        // --- Power series state ---
+        let neg_x = -x;
+        let mut s_term = neg_x; // A_1 = -x
+        let mut s_sum = s_term; // running sum starts at A_1
+
+        // --- Continued fraction state (modified Lentz's method) ---
+        //
+        // E_1(x)·eˣ = 1/(x+1 - 1²/(x+3 - 2²/(x+5 - 3²/(x+7 - ...))))
+        //
+        // In standard Lentz form b₀ + a₁/(b₁ + a₂/(b₂ + ...)):
+        //   b₀ = 0
+        //   j=1: a₁ = 1,       b₁ = x+1
+        //   j≥2: aⱼ = -(j-1)², bⱼ = x + 2j - 1
+        //
+        let tiny = Self::MIN_POSITIVE;
+
+        // b₀ = 0, so f₀ = tiny, C₀ = tiny, D₀ = 0
+        let mut cf_f = tiny;
+        let mut cf_c = tiny;
+        let mut cf_d = Self::ZERO;
+
+        // Bootstrap j=1 step: a₁ = 1, b₁ = x+1
+        {
+            let b1 = x + Self::ONE;
+            // D₁ = 1/(b₁ + a₁·D₀) = 1/(x+1)
+            cf_d = b1.reciprocal_p::<P>();
+            // C₁ = b₁ + a₁/C₀ = (x+1) + 1/tiny ≈ 1/tiny
+            cf_c = b1 + cf_c.reciprocal_p::<P>();
+            let delta = cf_c * cf_d;
+            cf_f *= delta; // tiny · (1/tiny)/(x+1) ≈ 1/(x+1)
+        }
+
+        // Convergence tolerance
+        let eps = Self::splat(E::EPSILON);
+
+        let mut series_done = !use_series; // lanes not using series are "done" immediately
+        let mut cf_done = use_series; // lanes not using CF are "done" immediately
+
+        for k in 1..P::POLICY.max_iterations {
+            let kf = Self::splat(E::from_i64(k as i64));
+            let kp1 = Self::splat(E::from_i64(k as i64 + 1));
+
+            // --- Power series step ---
+            // A_{k+1} = A_k · (-x · k) / (k+1)²
+            if !series_done.all() {
+                s_term *= (neg_x * kf) / (kp1 * kp1);
+                s_sum = series_done.select(s_sum, s_sum + s_term);
+
+                let term_small = s_term.abs().cmp_lt(s_sum.abs() * eps);
+
+                // series_done | (use_series & term_small)
+                series_done = GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (B & C)) }>(
+                    series_done,
+                    use_series,
+                    term_small,
+                );
+            }
+
+            // --- Continued fraction step (j = k+1, so j ≥ 2) ---
+            // aⱼ = -(j-1)² = -k², bⱼ = x + 2j - 1 = x + 2k + 1
+            if !cf_done.all() {
+                let neg_a_k = kf * kf; // |aⱼ| = k²
+                let b_k = (x + kf) + (kf + Self::ONE); // x + 2k + 1
+
+                // D = 1 / (b - |a|·D_prev)  [note: subtraction because a is negative]
+                let d_denom = neg_a_k.nmul_adde(cf_d, b_k); // b - |a|·D
+                let new_d = d_denom.cmp_eq(Self::ZERO).select(tiny, d_denom).reciprocal_p::<P>();
+
+                // C = b - |a|/C_prev  [same sign flip]
+                let new_c = b_k - neg_a_k / cf_c;
+                let new_c = new_c.cmp_eq(Self::ZERO).select(tiny, new_c);
+
+                let delta = new_c * new_d;
+
+                cf_d = new_d;
+                cf_c = new_c;
+                cf_f = cf_done.select(cf_f, cf_f * delta);
+
+                let cf_converged = (delta - Self::ONE).abs().cmp_lt(eps);
+
+                cf_done =
+                    GenericMask::ternlog::<{ thermite::ternlog_imm!(A | (!B & C)) }>(cf_done, use_series, cf_converged);
+            }
+
+            if (series_done & cf_done).all() {
+                break;
+            }
+        }
+
+        // --- Assemble E_1(x) from both methods ---
+
+        // Series: E_1(x) = -γ - ln(x) - sum
+        let mut series_result = Self::EMPTY;
+
+        // CF: E_1(x) = cf_f · e^{-x}  (cf_f approximates E_1(x)·eˣ)
+        let mut cf_result = Self::EMPTY;
+
+        if use_series.any() {
+            series_result = (-Self::EULER_GAMMA - s_sum) - x.ln_p::<P>();
+        }
+
+        if !use_series.all() {
+            cf_result = cf_f * (-x).exp_p::<P>();
+        }
+
+        let mut e_n = use_series.select(series_result, cf_result);
+
+        // --- Apply recurrence for N > 1 ---
+        // E_{n+1}(x) = (e^{-x} - x · E_n(x)) / n
+        if const { N > 1 } {
+            let exp_neg_x = (-x).exp_p::<P>();
+
+            for n in 1..N as u32 {
+                let nf = Self::splat(E::from_i64(n as i64));
+                e_n = x.nmul_adde(e_n, exp_neg_x) / nf;
+            }
+        }
+
+        // --- Edge cases ---
+        if const { P::POLICY.check_overflow } {
+            // E_1(0) = +inf, E_n(0) = 1/(n-1) for n > 1
+            let x_is_zero = x.is_zero();
+            if const { N == 1 } {
+                e_n = x_is_zero.select(Self::INFINITY, e_n);
+            } else if const { N > 1 } {
+                e_n = x_is_zero.select(Self::splat(E::from_ratio(1, N as i64 - 1)), e_n);
+            }
+
+            // Negative x: NaN
+            e_n = x.cmp_lt(Self::ZERO).select(Self::NAN, e_n);
+
+            // NaN in, NaN out
+            e_n = x.is_nan().select(Self::NAN, e_n);
+        }
+
+        e_n
+    }
 
     #[inline(always)]
     fn sigmoid<P: Policy>(self) -> Self {
