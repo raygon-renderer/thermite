@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
