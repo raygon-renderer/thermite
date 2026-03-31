@@ -2,7 +2,7 @@ use thermite::{
     element::FloatElementWithBits,
     mask::GenericMask,
     math::{
-        CoreMathWithPolicy, FloatConsts, TranscendentalMathWithPolicy as _,
+        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{
             Policy, PrecisionPolicy,
             policies::{ExtraPrecision, LessPrecision},
@@ -14,7 +14,7 @@ use thermite::{
 };
 
 #[inline(always)]
-pub fn expint_generic<P: Policy, E, V, const N: usize>(x: V) -> V
+pub fn expint_double<P: Policy, E, V, const N: usize>(x: V) -> V
 where
     E: FloatElementWithBits,
     V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
@@ -56,32 +56,34 @@ where
     ]);
 
     // Coefficients from Boost.Math expint_1_rational<double> (John Maddock, BSL-1.0)
-    let large_e1 = inv_x.poly_p::<P, _>(&[
-        E::from_f64(-0.121013190657725568138e-18),
-        E::from_f64(-0.999999999999998811143),
-        E::from_f64(-43.3058660811817946037),
-        E::from_f64(-724.581482791462469795),
-        E::from_f64(-6046.8250112711035463),
-        E::from_f64(-27182.6254466733970467),
-        E::from_f64(-66598.2652345418633509),
-        E::from_f64(-86273.1567711649528784),
-        E::from_f64(-54844.4587226402067411),
-        E::from_f64(-14751.4895786128450662),
-        E::from_f64(-1185.45720315201027667),
-    ]) / inv_x.poly_p::<P, _>(&[
-        E::from_f64(1.0),
-        E::from_f64(45.3058660811801465927),
-        E::from_f64(809.193214954550328455),
-        E::from_f64(7417.37624454689546708),
-        E::from_f64(38129.5594484818471461),
-        E::from_f64(113057.05869159631492),
-        E::from_f64(192104.047790227984431),
-        E::from_f64(180329.498380501819718),
-        E::from_f64(86722.3403467334749201),
-        E::from_f64(18455.4124737722049515),
-        E::from_f64(1229.20784182403048905),
-        E::from_f64(-0.776491285282330997549),
-    ]);
+    let large_e1 = inv_x
+        .poly_p::<P, _>(&[
+            E::from_f64(-0.121013190657725568138e-18),
+            E::from_f64(-0.999999999999998811143),
+            E::from_f64(-43.3058660811817946037),
+            E::from_f64(-724.581482791462469795),
+            E::from_f64(-6046.8250112711035463),
+            E::from_f64(-27182.6254466733970467),
+            E::from_f64(-66598.2652345418633509),
+            E::from_f64(-86273.1567711649528784),
+            E::from_f64(-54844.4587226402067411),
+            E::from_f64(-14751.4895786128450662),
+            E::from_f64(-1185.45720315201027667),
+        ])
+        .approx_div_p::<P>(inv_x.poly_p::<P, _>(&[
+            E::from_f64(1.0),
+            E::from_f64(45.3058660811801465927),
+            E::from_f64(809.193214954550328455),
+            E::from_f64(7417.37624454689546708),
+            E::from_f64(38129.5594484818471461),
+            E::from_f64(113057.05869159631492),
+            E::from_f64(192104.047790227984431),
+            E::from_f64(180329.498380501819718),
+            E::from_f64(86722.3403467334749201),
+            E::from_f64(18455.4124737722049515),
+            E::from_f64(1229.20784182403048905),
+            E::from_f64(-0.776491285282330997549),
+        ]));
 
     // Equation and constant from Boost.Math expint_1_rational<double> (John Maddock, BSL-1.0)
     e_n += x - x.ln_p::<P>() - V::splat(E::from_f64(0.66373538970947265625));

@@ -161,6 +161,13 @@ decl_math! {
         /// at the cost of accuracy.
         fn reciprocal[][](self: Self) -> Self;
 
+        /// Returns the result of dividing `self` by `divisor`, i.e., `self / divisor`.
+        ///
+        /// Depending on the precision policy and available features, this may be
+        /// optimized to use approximate reciprocal and multiplication for better
+        /// performance, at the cost of accuracy.
+        fn approx_div[][](self: Self, divisor: Self) -> Self;
+
         /// Returns the inverse square root of `self`, which is `1 / sqrt(self)`.
         ///
         /// If using the policy version, you may select lower precision policies for extra performance,
@@ -388,11 +395,30 @@ decl_math! {
         /// Derivative of the `smoothstep` function of order `2N-1`, at the given point.
         fn smoothstep_derivative[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
 
-        /// Smoothly interpolates between the given edges, which default to 0 and 1 if not provided, with infinite differentiability.
+        /// C∞-smooth interpolation factor between the given edges (defaulting to 0 and 1).
         ///
-        /// This is a more advanced version of `smoothstep` that provides a mathematically smoother transition, C-infinitely differentiable.
+        /// Constructs a smooth transition function using:
+        ///
+        /// ```text
+        /// f(x) = e^(-1 / (k * x))
+        /// g(x) = f(x) / (f(x) + f(1 - x))
+        /// ```
+        ///
+        /// The result is C∞-differentiable (infinitely smooth), with all derivatives vanishing
+        /// at both endpoints - making it strictly superior to polynomial smoothstep for
+        /// applications requiring flatness at the edges.
+        ///
+        /// The `k` parameter controls the shape of the transition:
+        /// - `k < 1`: sharpens the curve, concentrating the transition near the midpoint.
+        /// - `k = 1`: the standard balanced sigmoid-like transition.
+        /// - `k > 1`: stretches the transition region, making the curve more gradual.
+        /// - `k ≈ 2/√3` (~1.1547): the function becomes bimodal - use with caution above this value.
         fn smooth_interpolator[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
+        /// Inverse of [`smooth_interpolator`](SpatialMath::smooth_interpolator).
+        ///
+        /// Given an output value `y` in `[0, 1]`, recovers the input `x` such that
+        /// `smooth_interpolator(x, edges, k) ≈ y`.
         fn smooth_interpolator_inverse[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
         /// Returns 1 if `self` is greater than or equal to `edge`, otherwise returns 0.

@@ -47,7 +47,7 @@ use thermite::{
     prelude::Policy,
     simd::NativeIsa,
 };
-use thermite_special::SpecialMathWithPolicy;
+use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
 trait IntoArray<T, const N: usize> {
     fn into_array(self) -> [T; N];
@@ -62,7 +62,7 @@ const _: () = {
 /// Forms of RealMath methods with explicit generic parameters,
 /// such as order, dimensions, edges, etc.
 #[rustfmt::skip]
-pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
+pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealSpecialMathWithPolicy {
     #[inline(always)] fn add_v_p<P: Policy>(self, other: Self) -> Self { self + other }
     #[inline(always)] fn sub_v_p<P: Policy>(self, other: Self) -> Self { self - other }
     #[inline(always)] fn mul_v_p<P: Policy>(self, other: Self) -> Self { self * other }
@@ -141,7 +141,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + SpecialMathWithPolicy {
     }
 }
 
-impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy + SpecialMathWithPolicy {}
+impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy + RealSpecialMathWithPolicy {}
 
 use thermite::math::policy::{
     DefaultPolicy,
@@ -616,13 +616,18 @@ decl_methods! {
         (x)erf v erf(y),
         /// Computes the complementary error function, which may vary in accuracy and performance based on the chosen precision policy.
         (x)erfc v erfc(y),
-        /// Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
-        (y)erfinv v erfinv(x),
+
         (x)tgamma v tgamma(y),
         (x)lgamma v lgamma(y),
         (x, y)beta v beta(z),
-        /// Computes the sigmoid function, defined as 1 / (1 + exp(-x)), which maps any real-valued number into the range (0, 1).
-        (x)sigmoid v sigmoid(y)
+
+        /// Computes the Logistic sigmoid function, defined as 1 / (1 + exp(-x)), which maps any real-valued number into the range (0, 1).
+        (x)logistic_sigmoid v logistic_sigmoid(y)
+
+    ],
+    MAPPING: RealSpecialMathWithPolicy [
+        /// Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
+        (y)erfinv v erfinv(x),
     ],
     MAPPING: RealMathWithPolicyFfi [
         /// 3rd-order smoothstep interpolation function

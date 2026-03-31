@@ -3,7 +3,7 @@
 use thermite::{
     mask::GenericMask,
     math::{
-        CoreMathWithPolicy, FloatConsts, TranscendentalMathWithPolicy as _,
+        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{
             Policy, PrecisionPolicy,
             policies::{ExtraPrecision, LessPrecision},
@@ -31,7 +31,6 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         Self::ONE - self.erf_p::<P>()
     }
 
-    fn erfinv<P: Policy>(self) -> Self;
     /// Computes the exponential integral `E_n(x)` for integer order `N`.
     ///
     /// Uses the power series for x < 1 and the Stieltjes continued fraction for x >= 1,
@@ -196,7 +195,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn sigmoid<P: Policy>(self) -> Self {
+    fn logistic_sigmoid<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             let is_pos = self.is_positive();
             let x = self.neg_c(is_pos); // conditionally negate if positive
@@ -211,13 +210,13 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<ExtraPrecision<P>>()
     }
 
-    fn tgamma<P: Policy>(x: Self) -> Self;
-    fn lgamma_r<P: Policy>(x: Self) -> (Self, Self);
-
     #[inline(always)]
-    fn lgamma<P: Policy>(x: Self) -> Self {
-        Self::lgamma_r::<P>(x).0
+    fn softplus<P: Policy>(self) -> Self {
+        (Self::ONE + self.exp_p::<P>()).ln_p::<ExtraPrecision<P>>()
     }
+
+    fn tgamma<P: Policy>(self) -> Self;
+    fn lgamma<P: Policy>(self) -> Self;
 
     #[inline(always)]
     fn hermite<P: Policy, const N: usize>(mut x: Self) -> Self {
@@ -384,22 +383,6 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     fn beta<P: Policy>(a: Self, b: Self) -> Self;
 
-    #[inline(always)]
-    fn gaussian_integral<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self {
-        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
-        let common = Self::SQRT_FRAC_PI_2 * a * c;
-        let denom = Self::SQRT_2 * c;
-
-        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            let d = denom.reciprocal_p::<P>();
-            (x1 * d, x0 * d)
-        } else {
-            (x1 / denom, x0 / denom)
-        };
-
-        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
-    }
-
     #[rustfmt::skip]
     #[inline(always)]
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
@@ -512,4 +495,71 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     fn lambert_w<P: Policy>(self) -> (Self, Self);
+
+    fn bessel_j<P: Policy, const N: usize>(self) -> Self;
+}
+
+/// Specialized implementation trait for real-only special math functions.
+///
+/// Extends [`SpecializedSpecialMath`] with functions that have no meaningful
+/// complex analogue (e.g. functions using the real absolute value, or functions
+/// that are inverses of real-domain-only operations).
+pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
+    fn erfinv<P: Policy>(self) -> Self;
+    fn probit<P: Policy>(self) -> Self;
+
+    fn lgamma_r<P: Policy>(self) -> (Self, Self);
+
+    #[inline(always)]
+    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> Self {
+        if const { N == 0 } {
+            return self; // identity function
+        }
+
+        let mut denom = Self::ONE + self.abs().powi_p::<P>(N as i32);
+
+        denom = match N {
+            1 => denom.sqrt(),
+            2 => denom.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => denom.sqrt().sqrt(),
+            _ => {
+                // copied from `nth_root`, but without negative handling since we know the input is always ≥ 1
+                let x = denom;
+
+                // initial guess using reduced precision
+                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as i64)));
+
+                // One iteration of Halley's method for nth root
+                let y_n = y.powi_p::<P>(N as i32);
+
+                let np1 = Self::splat(E::from_i64((N + 1) as i64));
+                let nm1 = Self::splat(E::from_i64((N - 1) as i64));
+
+                let n = y * (x - y_n); // half of numerator
+                let d = y_n.mul_adde(np1, x * nm1);
+
+                y += (n + n) / d;
+
+                y
+            }
+        };
+
+        self / denom
+    }
+
+    #[inline(always)]
+    fn gaussian_integral<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self {
+        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
+        let common = Self::SQRT_FRAC_PI_2 * a * c;
+        let denom = Self::SQRT_2 * c;
+
+        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let d = denom.reciprocal_p::<P>();
+            (x1 * d, x0 * d)
+        } else {
+            (x1 / denom, x0 / denom)
+        };
+
+        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
+    }
 }

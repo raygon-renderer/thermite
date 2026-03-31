@@ -26,7 +26,14 @@ where
     P: Policy,
 {
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-        return V::sin::<P>(x) * V::reciprocal::<P>(x);
+        let mut y = V::sin::<P>(x).approx_div_p::<P>(x);
+
+        if const { P::POLICY.check_overflow } {
+            y = x.is_zero().select(V::ONE, y);
+            y = x.is_infinite().select(V::ZERO, y);
+        }
+
+        return y;
     }
 
     let is_tiny = x.abs().cmp_le(V::FOURTH_ROOT_EPSILON);
@@ -53,7 +60,7 @@ where
     let den = is_tiny.select(V::splat(FloatElement::from_i64(120)), x);
 
     // combined division, since division is expensive
-    let mut y = num / den;
+    let mut y = num.approx_div_p::<P>(den);
 
     y = is_tiny.select(x2.mul_adde(y - V::FRAC_1_6, V::ONE), y);
 

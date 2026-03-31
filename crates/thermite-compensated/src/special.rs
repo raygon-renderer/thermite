@@ -4,7 +4,7 @@ use thermite::math::TranscendentalMathWithPolicy;
 use thermite::prelude::*;
 
 use thermite_special::SpecialMathWithPolicy;
-use thermite_special::specialized::SpecializedSpecialMath;
+use thermite_special::specialized::{SpecializedRealSpecialMath, SpecializedSpecialMath};
 
 impl<V: CompensatedFloatVector> Compensated<V>
 where
@@ -182,20 +182,10 @@ where
     }
 }
 
-impl<V: CompensatedFloatVector> SpecializedSpecialMath<Compensated<V::Element>> for Compensated<V>
+impl<V: CompensatedFloatVector> SpecializedRealSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
     V: SpecialMathWithPolicy,
 {
-    #[inline(always)]
-    fn erf<P: Policy>(self) -> Self {
-        Self::erf_internal_p::<P>(self).0
-    }
-
-    #[inline(always)]
-    fn erfc<P: Policy>(self) -> Self {
-        Self::erf_internal_p::<P>(self).1
-    }
-
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         // High-performance erfinv using Halley's Method seeded by Winitzki's approximation.
@@ -331,11 +321,30 @@ where
         x.normalize()
     }
 
-    fn tgamma<P: Policy>(x: Self) -> Self {
+    fn probit<P: Policy>(self) -> Self {
         todo!()
     }
 
-    fn lgamma_r<P: Policy>(x: Self) -> (Self, Self) {
+    fn lgamma_r<P: Policy>(self) -> (Self, Self) {
+        todo!()
+    }
+}
+
+impl<V: CompensatedFloatVector> SpecializedSpecialMath<Compensated<V::Element>> for Compensated<V>
+where
+    V: SpecialMathWithPolicy,
+{
+    #[inline(always)]
+    fn erf<P: Policy>(self) -> Self {
+        Self::erf_internal_p::<P>(self).0
+    }
+
+    #[inline(always)]
+    fn erfc<P: Policy>(self) -> Self {
+        Self::erf_internal_p::<P>(self).1
+    }
+
+    fn tgamma<P: Policy>(self) -> Self {
         todo!()
     }
 
@@ -396,5 +405,13 @@ where
         }
 
         (w0, wm1)
+    }
+
+    fn lgamma<P: Policy>(self) -> Self {
+        Self::lgamma_r::<P>(self).0
+    }
+
+    fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+        todo!()
     }
 }

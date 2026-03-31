@@ -293,7 +293,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
             let n = Self::poly::<P, N>(x, numerator);
             let d = Self::poly::<P, D>(x, denominator);
 
-            return n / d;
+            return n.approx_div_p::<P>(d);
         }
 
         let invert = x.cmp_gt(Self::ONE);
@@ -319,7 +319,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         let n = invert.select(n1, n0);
         let d = invert.select(d1, d0);
 
-        let res = n / d;
+        let res = n.approx_div_p::<P>(d);
 
         // no correction needed if same degree
         if const { N == D } {
@@ -370,6 +370,15 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         }
 
         y
+    }
+
+    #[inline(always)]
+    fn approx_div<P: Policy>(self, rhs: Self) -> Self {
+        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+            return self / rhs;
+        }
+
+        self * rhs.rcp()
     }
 
     #[inline(always)]
@@ -484,7 +493,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     #[inline(always)]
     fn tan_pi<P: Policy>(self) -> Self {
         let (s, c) = Self::sincos_pi::<P>(self);
-        s / c
+        s.approx_div_p::<P>(c)
     }
 
     fn sinc<P: Policy>(self) -> Self;
@@ -534,6 +543,10 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
             1 => x,
             2 => x.sqrt(),
             3 => x.cbrt_p::<P>(),
+
+            // 4th root is just two square roots, and for regular precision policies this is usually faster than a dedicated 4th root method
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => x.sqrt().sqrt(),
+
             _ => {
                 let mut is_neg = GenericMask::FALSY;
 

@@ -20,6 +20,10 @@ where
     V: TranscendentalMathWithPolicy<Element = f64>,
     V: SpecializedTranscendentalMath<f64>,
 {
+    fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+        todo!()
+    }
+
     #[inline(always)]
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
         // Computes both W₀(x) and W₋₁(x) simultaneously.
@@ -163,37 +167,135 @@ where
 
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
-        let x = self.flush_denormals_p::<P>();
-
-        let x2 = x * x;
-        let res = x * x2.poly_rational_p::<P, _, _>(
-            &[
-                5.55923013010394962768e4,
-                7.00332514112805075473e3,
-                2.23200534594684319226e3,
-                9.00260197203842689217e1,
-                9.60497373987051638749e0,
-                0.0,
-            ],
-            &[
-                4.92673942608635921086e4,
-                2.26290000613890934246e4,
-                4.59432382970980127987e3,
-                5.21357949780152679795e2,
-                3.35617141647503099647e1,
-                1.00000000000000000000e0,
-            ],
-        );
-
-        if P::POLICY.check_overflow {
-            // x^2 highest point in the polynomial, use x2 to avoid needing absolute value
-            // TODO: Find more exact value?
-            x2.cmp_gt(V::splat(8.135455562428929)).select(x.signum(), res)
-        } else {
-            res
-        }
+        erf_d_internal::<Self, P, false>(self)
     }
 
+    #[inline(always)]
+    fn erfc<P: Policy>(self) -> Self {
+        erf_d_internal::<Self, P, true>(self)
+    }
+
+    #[inline(always)]
+    fn softplus<P: Policy>(self) -> Self {
+        // x + ln(1 + e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
+        self + self.abs().neg().exp_p::<P>().ln_1p_p::<P>()
+    }
+
+    #[inline(always)]
+    fn lgamma<P: Policy>(self) -> Self {
+        Self::lgamma_r::<P>(self).0
+    }
+
+    #[inline(always)]
+    fn tgamma<P: Policy>(self) -> Self {
+        todo!()
+    }
+
+    #[inline(always)]
+    fn beta<P: Policy>(a: Self, b: Self) -> Self {
+        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
+
+        let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
+
+        if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {
+            return Self::NAN;
+        }
+
+        let c = a + b;
+
+        // if a < b then swap
+        let (a, b) = (a.max(b), a.min(b));
+
+        let mut result = a.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
+            * (b.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
+                / c.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q));
+
+        let gh = Self::splat(LANCZOS_G - 0.5);
+
+        let agh = a + gh;
+        let bgh = b + gh;
+        let cgh = c + gh;
+
+        let agh_d_cgh = agh / cgh;
+        let bgh_d_cgh = bgh / cgh;
+        let agh_p_bgh = agh * bgh;
+        let cgh_p_cgh = cgh * cgh;
+
+        let base = cgh
+            .cmp_gt(Self::splat(1e10))
+            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
+
+        // encourage instruction-level parallelism
+        result *= agh_d_cgh.powf_p::<P>(a - Self::HALF - b) * base.powf_p::<P>(b) * (Self::SQRT_E / bgh.sqrt());
+
+        if P::POLICY.check_overflow {
+            result = is_valid.select(result, Self::NAN);
+        }
+
+        result
+    }
+
+    #[inline(always)]
+    fn expint<P: Policy, const N: usize>(self) -> Self {
+        generic::expint::expint_double::<P, f64, Self, N>(self)
+    }
+}
+
+const LANCZOS_G: f64 = 6.024680040776729583740234375;
+
+const LANCZOS_P: [f64; 13] = [
+    23531376880.41075968857200767445163675473,
+    42919803642.64909876895789904700198885093,
+    35711959237.35566804944018545154716670596,
+    17921034426.03720969991975575445893111267,
+    6039542586.352028005064291644307297921070,
+    1439720407.311721673663223072794912393972,
+    248874557.8620541565114603864132294232163,
+    31426415.58540019438061423162831820536287,
+    2876370.628935372441225409051620849613599,
+    186056.2653952234950402949897160456992822,
+    8071.672002365816210638002902272250613822,
+    210.8242777515793458725097339207133627117,
+    2.506628274631000270164908177133837338626,
+];
+
+const LANCZOS_Q: [f64; 13] = [
+    0.0,
+    39916800.0,
+    120543840.0,
+    150917976.0,
+    105258076.0,
+    45995730.0,
+    13339535.0,
+    2637558.0,
+    357423.0,
+    32670.0,
+    1925.0,
+    66.0,
+    1.0,
+];
+
+const LANCZOS_P_EXPG_SCALED: [f64; 13] = [
+    56906521.91347156388090791033559122686859,
+    103794043.1163445451906271053616070238554,
+    86363131.28813859145546927288977868422342,
+    43338889.32467613834773723740590533316085,
+    14605578.08768506808414169982791359218571,
+    3481712.15498064590882071018964774556468,
+    601859.6171681098786670226533699352302507,
+    75999.29304014542649875303443598909137092,
+    6955.999602515376140356310115515198987526,
+    449.9445569063168119446858607650988409623,
+    19.51992788247617482847860966235652136208,
+    0.5098416655656676188125178644804694509993,
+    0.006061842346248906525783753964555936883222,
+];
+
+impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealSpecialMath<f64> for V
+where
+    V: TranscendentalMathWithPolicy<Element = f64>,
+    V: SpecializedTranscendentalMath<f64>,
+{
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         let y = self.flush_denormals_p::<P>();
@@ -253,111 +355,71 @@ where
     }
 
     #[inline(always)]
-    fn tgamma<P: Policy>(x: Self) -> Self {
+    fn lgamma_r<P: Policy>(self) -> (Self, Self) {
         todo!()
     }
 
     #[inline(always)]
-    fn lgamma_r<P: Policy>(x: Self) -> (Self, Self) {
+    fn probit<P: Policy>(self) -> Self {
         todo!()
-    }
-
-    #[inline(always)]
-    fn beta<P: Policy>(a: Self, b: Self) -> Self {
-        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
-
-        let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
-
-        if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {
-            return Self::NAN;
-        }
-
-        let c = a + b;
-
-        // if a < b then swap
-        let (a, b) = (a.max(b), a.min(b));
-
-        let mut result = a.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-            * (b.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-                / c.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q));
-
-        let gh = Self::splat(LANCZOS_G - 0.5);
-
-        let agh = a + gh;
-        let bgh = b + gh;
-        let cgh = c + gh;
-
-        let agh_d_cgh = agh / cgh;
-        let bgh_d_cgh = bgh / cgh;
-        let agh_p_bgh = agh * bgh;
-        let cgh_p_cgh = cgh * cgh;
-
-        let base = cgh
-            .cmp_gt(Self::splat(1e10))
-            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
-
-        // encourage instruction-level parallelism
-        result *= agh_d_cgh.powf_p::<P>(a - Self::HALF - b) * base.powf_p::<P>(b) * (Self::SQRT_E / bgh.sqrt());
-
-        if P::POLICY.check_overflow {
-            result = is_valid.select(result, Self::NAN);
-        }
-
-        result
-    }
-
-    #[inline(always)]
-    fn expint<P: Policy, const N: usize>(self) -> Self {
-        generic::expint::expint_generic::<P, f64, Self, N>(self)
     }
 }
 
-const LANCZOS_G: f64 = 6.024680040776729583740234375;
+#[inline(always)]
+fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: bool>(x0: V) -> V {
+    // Extract the sign bit once. abs(x0) = x0 ^ sign, and sign is reused
+    // for the final operation in every branch, avoiding a redundant bitand.
+    let sign = x0.signed_zero();
+    let mut x = (x0 ^ sign).flush_denormals_p::<P>();
 
-const LANCZOS_P: [f64; 13] = [
-    23531376880.41075968857200767445163675473,
-    42919803642.64909876895789904700198885093,
-    35711959237.35566804944018545154716670596,
-    17921034426.03720969991975575445893111267,
-    6039542586.352028005064291644307297921070,
-    1439720407.311721673663223072794912393972,
-    248874557.8620541565114603864132294232163,
-    31426415.58540019438061423162831820536287,
-    2876370.628935372441225409051620849613599,
-    186056.2653952234950402949897160456992822,
-    8071.672002365816210638002902272250613822,
-    210.8242777515793458725097339207133627117,
-    2.506628274631000270164908177133837338626,
-];
+    // if ignoring denormals, just multiple x0 by itself to save like one cycle,
+    // instead of waiting on abs(), otherwise use the denormal-flushed x value
+    let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) } {
+        x0 * x0
+    } else {
+        x * x
+    };
 
-const LANCZOS_Q: [f64; 13] = [
-    0.0,
-    39916800.0,
-    120543840.0,
-    150917976.0,
-    105258076.0,
-    45995730.0,
-    13339535.0,
-    2637558.0,
-    357423.0,
-    32670.0,
-    1925.0,
-    66.0,
-    1.0,
-];
+    // LLVM will still start on exp and interleave it with the below operations.
+    let e = (-x2).exp_p::<P>();
 
-const LANCZOS_P_EXPG_SCALED: [f64; 13] = [
-    56906521.91347156388090791033559122686859,
-    103794043.1163445451906271053616070238554,
-    86363131.28813859145546927288977868422342,
-    43338889.32467613834773723740590533316085,
-    14605578.08768506808414169982791359218571,
-    3481712.15498064590882071018964774556468,
-    601859.6171681098786670226533699352302507,
-    75999.29304014542649875303443598909137092,
-    6955.999602515376140356310115515198987526,
-    449.9445569063168119446858607650988409623,
-    19.51992788247617482847860966235652136208,
-    0.5098416655656676188125178644804694509993,
-    0.006061842346248906525783753964555936883222,
-];
+    let a0 = V::splat(0.56418958354775629);
+    let a1 = x + V::splat(2.06955023132914151);
+
+    let b0 = x2 + x.mul_adde(V::splat(2.71078540045147805), V::splat(5.80755613130301624));
+    let b1 = x2 + x.mul_adde(V::splat(3.47954057099518960), V::splat(12.06166887286239555));
+
+    let c0 = x2 + x.mul_adde(V::splat(3.47469513777439592), V::splat(12.07402036406381411));
+    let c1 = x2 + x.mul_adde(V::splat(3.72068443960225092), V::splat(8.44319781003968454));
+
+    let d0 = x2 + x.mul_adde(V::splat(4.00561509202259545), V::splat(9.30596659485887898));
+    let d1 = x2 + x.mul_adde(V::splat(3.90225704029924078), V::splat(6.36161630953880464));
+
+    let e0 = x2 + x.mul_adde(V::splat(5.16722705817812584), V::splat(9.12661617673673262));
+    let e1 = x2 + x.mul_adde(V::splat(4.03296893109262491), V::splat(5.13578530585681539));
+
+    let f0 = x2 + x.mul_adde(V::splat(5.95908795446633271), V::splat(9.19435612886969243));
+    let f1 = x2 + x.mul_adde(V::splat(4.11240942957450885), V::splat(4.48640329523408675));
+
+    let m = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        // independent divisions yield slightly improved accuracy,
+        // but divisions are slow, so only use for the best precision policies
+        (a0 / a1) * (b0 / b1) * (c0 / c1) * (d0 / d1) * (e0 / e1) * (f0 / f1)
+    } else {
+        // otherwise use a single division
+        let n = (a0 * b0) * (c0 * d0) * (e0 * f0);
+        let d = (a1 * b1) * (c1 * d1) * (e1 * f1);
+        n / d
+    };
+
+    if !C {
+        e.nmul_adde(m, V::ONE) ^ sign
+    } else if const { V::HAS_TRUE_FMA } {
+        // exploit instruction-level parallelism if FMA is available
+        x0.select_negative(m.nmul_add(e, V::TWO), m * e)
+    } else {
+        let y = m * e;
+
+        x0.select_negative(V::TWO - y, y)
+    }
+}
