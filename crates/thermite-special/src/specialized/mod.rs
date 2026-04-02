@@ -6,7 +6,7 @@ use thermite::{
         CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{
             Policy, PrecisionPolicy,
-            policies::{ExtraPrecision, LessPrecision},
+            policies::{CheckOverflow, ExtraPrecision, LessPrecision},
         },
         specialized::FlushDenormals,
     },
@@ -211,8 +211,18 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self) -> Self {
-        (Self::ONE + self.exp_p::<P>()).ln_p::<ExtraPrecision<P>>()
+    fn softplus<P: Policy>(self, k: Option<Self>) -> (Self, Self) {
+        let mut x = self;
+
+        if let Some(k) = k {
+            x *= k;
+        }
+
+        let e = x.exp_p::<P>();
+        let y = (Self::ONE + e).ln_p::<ExtraPrecision<P>>();
+        let dy = e / (Self::ONE + e);
+
+        (y, dy)
     }
 
     fn tgamma<P: Policy>(self) -> Self;
@@ -508,26 +518,47 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn erfinv<P: Policy>(self) -> Self;
     fn probit<P: Policy>(self) -> Self;
 
+    #[inline(always)]
+    fn gelu<P: Policy>(self, alpha: Self) -> (Self, Self) {
+        let alpha_x = alpha * self;
+
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        let erf = (alpha_x * Self::FRAC_1_SQRT_2).erf_p::<P>();
+
+        let y = if Self::HAS_TRUE_FMA {
+            // if we have true FMA, we can maintain precision while avoiding extra work.
+            let half_x = Self::HALF * self;
+            half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
+        } else {
+            Self::HALF * self * (Self::ONE + erf)
+        };
+
+        let dy = Self::FRAC_1_SQRT_TAU * (alpha_x * alpha_x * -Self::HALF).exp_p::<P>();
+
+        (y, dy.mul_adde(alpha_x, y))
+    }
+
     fn lgamma_r<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
-    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> Self {
+    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> (Self, Self) {
         if const { N == 0 } {
-            return self; // identity function
+            return (self, Self::ONE); // identity function
         }
 
-        let mut denom = Self::ONE + self.abs().powi_p::<P>(N as i32);
+        let pre_root = Self::ONE + self.abs().powi_p::<P>(N as i32); // = 1 + |x|^N
 
-        denom = match N {
-            1 => denom.sqrt(),
-            2 => denom.cbrt_p::<P>(),
-            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => denom.sqrt().sqrt(),
+        let mut denom = match N {
+            1 => pre_root,
+            2 => pre_root.sqrt(),
+            3 => pre_root.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => pre_root.sqrt().sqrt(),
             _ => {
                 // copied from `nth_root`, but without negative handling since we know the input is always ≥ 1
-                let x = denom;
+                let x = pre_root;
 
                 // initial guess using reduced precision
-                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as i64)));
+                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(E::from_ratio(1, N as i64)));
 
                 // One iteration of Halley's method for nth root
                 let y_n = y.powi_p::<P>(N as i32);
@@ -544,7 +575,21 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
             }
         };
 
-        self / denom
+        // denom now equals (1 + |x|^N)^(1/N)
+        // f'(x) = (1 + |x|^N)^(-(N+1)/N) = 1 / (pre_root * denom)
+        // because pre_root * denom = (1+|x|^N) * (1+|x|^N)^(1/N) = (1+|x|^N)^((N+1)/N)
+
+        let mut y = self / denom;
+        let mut dy = (pre_root * denom).reciprocal_p::<P>();
+
+        if const { P::POLICY.check_overflow } {
+            let is_infinite = pre_root.is_infinite();
+
+            y = is_infinite.select(self.signum(), y);
+            dy = dy.nz(is_infinite); // zero if is_infinite
+        }
+
+        (y, dy)
     }
 
     #[inline(always)]

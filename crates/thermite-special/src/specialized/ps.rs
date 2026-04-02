@@ -115,12 +115,12 @@ where
         let wm1_asymptotic = lnx - (-lnx).ln_p::<Approx<P>>();
 
         // Select initial guesses
-        let near_branch = x.cmp_lt(V::splat(-0.1));
+        let near_branch = x.cmp_lt(thermite::generic_splat!(f32: -0.1));
         let large = x.cmp_gt(Self::E);
 
         let mut w0 = near_branch.select(w0_branch, large.select(w0_asymptotic, w0_mid));
 
-        let near_branch_m1 = x.cmp_lt(V::splat(-0.25));
+        let near_branch_m1 = x.cmp_lt(thermite::generic_splat!(f32: -0.25));
         let mut wm1 = near_branch_m1.select(wm1_branch, wm1_asymptotic);
 
         // --- Interleaved Halley iterations ---
@@ -198,13 +198,15 @@ where
     }
 
     #[inline(always)]
+    #[allow(const_item_mutation)]
     fn erf<P: Policy>(self) -> Self {
-        erf_f_internal::<Self, P, false>(self)
+        erf_f_internal::<Self, P, false, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
+    #[allow(const_item_mutation)]
     fn erfc<P: Policy>(self) -> Self {
-        erf_f_internal::<Self, P, true>(self)
+        erf_f_internal::<Self, P, true, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
@@ -250,9 +252,31 @@ where
     // }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self) -> Self {
-        // x + ln(1 + e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
-        self + self.abs().neg().exp_p::<P>().ln_1p_p::<P>()
+    fn softplus<P: Policy>(self, k: Option<Self>) -> (Self, Self) {
+        let mut kx = self;
+
+        if let Some(k) = k {
+            kx *= k;
+        }
+
+        let e = kx.abs().neg().exp_p::<P>();
+        let mut l = e.ln_1p_p::<P>();
+
+        // sigmoid from already-computed e = exp(-|kx|)
+        // kx >= 0: σ = 1/(1+e)
+        // kx <  0: σ = e/(1+e)
+        let rcp = (e + Self::ONE).reciprocal_p::<P>();
+        let mut dy = kx.select_negative(e * rcp, rcp);
+
+        if let Some(k) = k {
+            l = l.approx_div_p::<P>(k);
+            dy *= k;
+        }
+
+        // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
+        let y = self.max(Self::ZERO) + l;
+
+        (y, dy)
     }
 
     #[inline(always)]
@@ -760,15 +784,16 @@ where
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         // (-1, 1) range
-        let x = self
-            .flush_denormals_p::<P>()
-            .clamp(V::splat(-0.99999), V::splat(0.99999));
+        let x = self.flush_denormals_p::<P>().clamp(
+            thermite::generic_splat!(f32: -0.99999),
+            thermite::generic_splat!(f32: 0.99999),
+        );
 
         let w = -x.nmul_adde(x, V::ONE).ln_p::<P>();
 
-        let ge5 = w.cmp_ge(V::splat(5.0));
+        let ge5 = w.cmp_ge(thermite::generic_splat!(f32: 5.0));
 
-        let w0 = w - V::splat(2.5);
+        let w0 = w - thermite::generic_splat!(f32: 2.5);
         let mut p0 = w0.poly_p::<P, _>(&[
             1.50140941,
             0.246640727,
@@ -782,7 +807,7 @@ where
         ]);
 
         if P::POLICY.avoid_branching || thermite::unlikely(ge5.any()) {
-            let w1 = w.sqrt() - V::splat(3.0);
+            let w1 = w.sqrt() - thermite::generic_splat!(f32: 3.0);
             let p1 = w1.poly_p::<P, _>(&[
                 2.83297682,
                 1.00167406,
@@ -840,7 +865,7 @@ where
         ];
 
         let p = self.min(V::ONE - self); // reflect to (0, 0.5]
-        let is_tail = p.cmp_lt(V::splat(0.02425)); // lower tail if p < 0.02425, upper tail if p > 0.97575
+        let is_tail = p.cmp_lt(thermite::generic_splat!(f32: 0.02425)); // lower tail if p < 0.02425, upper tail if p > 0.97575
 
         let q = p - V::HALF;
         let mut y = q * (q * q).poly_rational_p::<P, _, _>(&A, &B);
@@ -951,23 +976,58 @@ where
 
         (y, signum)
     }
+
+    #[inline(always)]
+    fn gelu<P: Policy>(self, alpha: Self) -> (Self, Self) {
+        let x = self;
+
+        let alpha_x = alpha * x;
+
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        let mut exp_neg_ax2 = Self::EMPTY;
+        let erf = erf_f_internal::<V, P, false, true>(alpha_x * Self::FRAC_1_SQRT_2, &mut exp_neg_ax2);
+
+        let y;
+        let dy;
+
+        let half_erf = erf.mul_adde(Self::HALF, Self::HALF);
+
+        if V::HAS_TRUE_FMA {
+            let half_x = x * Self::HALF;
+            y = half_x.mul_add(erf, half_x); // fma(0.5x, erf, 0.5x), one rounding
+            dy = (alpha_x * Self::FRAC_1_SQRT_TAU).mul_add(exp_neg_ax2, half_erf);
+        } else {
+            y = half_erf * x;
+            dy = half_erf + alpha_x * Self::FRAC_1_SQRT_TAU * exp_neg_ax2;
+        }
+
+        (y, dy)
+    }
 }
 
 #[allow(clippy::approx_constant)]
 #[inline(always)]
-fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: bool>(x0: V) -> V {
+fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: bool, const O: bool>(
+    x0: V,
+    out_exp_neg_x2: &mut V,
+) -> V {
     // Extract the sign bit once. abs(x0) = x0 ^ sign, and sign is reused
     // for the final operation in every branch, avoiding a redundant bitand.
     let sign = x0.signed_zero();
-    let mut x = (x0 ^ sign).flush_denormals_p::<P>();
+    let x = (x0 ^ sign).flush_denormals_p::<P>();
 
     match P::POLICY.precision {
         // NOTE: For GPUs, exp is usually free, so these approximations are actually more expensive
         // than just using exp, but for CPUs they can be much faster, and the precision is still decent for many use cases.
         PrecisionPolicy::Worst | PrecisionPolicy::Medium if !V::NATIVE_CAP.has(NativeCapability::EXP) => {
+            // the polynomials below are sensitive to large inputs, so we need to clamp x to avoid exploding into inf/nan,
+            // and erf(x) is saturating to 1.0 around x=3.81, so 4.5 is a safe clamping point that won't cause significant precision
+            // loss for large inputs, but will prevent overflow in the polynomial evaluation.
+            let x = x.min(thermite::generic_splat!(f32: 4.5));
+
             // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
             // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
-            let tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
+            let mut tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
                 let t = x.poly_p::<P, _>(&[1.0, 0.278393, 0.230389, 0.000972, 0.078108]);
 
                 t.powi_p::<P>(4)
@@ -984,6 +1044,12 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
 
                 t.powi_p::<P>(16)
             };
+
+            if O {
+                // We need a relatively accurate exp(-x^2) for GELU derivative, so opt for medium precision even in worst case,
+                // which is still much cheaper than a full exp.
+                *out_exp_neg_x2 = (-x * x).exp_p::<MediumPrecision<CheckOverflow<P, false>>>();
+            }
 
             match (C, V::HAS_APPROX_RCP) {
                 (false, true) => {
@@ -1010,6 +1076,8 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         }
         // higher precision policies or GPU with native exp support.
         _ => {
+            // NOTE: x does not need to be clamped here, everything behaves well even for large inputs.
+
             // if ignoring denormals, just multiple x0 by itself to save like one cycle,
             // instead of waiting on abs(), otherwise use the denormal-flushed x value
             let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) } {
@@ -1017,6 +1085,8 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
             } else {
                 x * x
             };
+
+            let exp_neg_x2 = (-x2).exp_p::<P>();
 
             // Improved A&S method from Wikipedia, max error ~2e-9
             let p1: V = thermite::generic_splat!(f32: 0.406742016006509);
@@ -1034,7 +1104,9 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                 0.0382613542530727,
             ]);
 
-            let exp_neg_x2 = (-x2).exp_p::<P>();
+            if O {
+                *out_exp_neg_x2 = exp_neg_x2;
+            }
 
             // NOTE: We multiple e by t here, instead of
             // t * t.poly, as this noticeably
@@ -1085,14 +1157,18 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                             ix.into_bits()
                         };
 
-                        let a = (-z * z - V::splat(0.5625)).exp_p::<CheckOverflow<P, false>>();
+                        let a = (-z * z - thermite::generic_splat!(f32: 0.5625)).exp_p::<CheckOverflow<P, false>>();
                         let b = ((z - x) * (z + x) + r / b).exp_p::<CheckOverflow<P, false>>() / x;
 
                         a * b
                     } else {
                         // fast minimax approximation with a 68 ULP max difference, avg 0.282 ULP
                         exp_neg_x2
-                            * s.mul_adde(V::splat(9.0 / 4.0), V::splat(-5.0 / 4.0)).poly_p::<P, _>(&[
+                            * s.mul_adde(
+                                thermite::generic_splat!(f32: 9.0 / 4.0),
+                                thermite::generic_splat!(f32: -5.0 / 4.0),
+                            )
+                            .poly_p::<P, _>(&[
                                 0.278560101985931396484375,
                                 0.18081049621105194091796875,
                                 -3.5686969757080078125e-2,
@@ -1149,18 +1225,6 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                     };
 
                     y = x.cmp_lt(V::ONE).select(small, y);
-
-                    // if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
-                    //     let is_very_small = x.cmp_lt(V::splat(f32::from_bits(0x31800000)));
-
-                    //     let very_small_y = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-                    //         V::splat(0.125) * x.mul_adde(V::splat(8.0), x * V::splat(1.0270333290e+00))
-                    //     } else {
-                    //         x * V::FRAC_2_SQRT_PI
-                    //     };
-
-                    //     y = is_very_small.select(very_small_y, y);
-                    // }
                 }
 
                 y | sign

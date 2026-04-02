@@ -166,19 +166,43 @@ where
     }
 
     #[inline(always)]
+    #[allow(const_item_mutation)]
     fn erf<P: Policy>(self) -> Self {
-        erf_d_internal::<Self, P, false>(self)
+        erf_d_internal::<Self, P, false, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
+    #[allow(const_item_mutation)]
     fn erfc<P: Policy>(self) -> Self {
-        erf_d_internal::<Self, P, true>(self)
+        erf_d_internal::<Self, P, true, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self) -> Self {
-        // x + ln(1 + e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
-        self + self.abs().neg().exp_p::<P>().ln_1p_p::<P>()
+    fn softplus<P: Policy>(self, k: Option<Self>) -> (Self, Self) {
+        let mut kx = self;
+
+        if let Some(k) = k {
+            kx *= k;
+        }
+
+        let e = kx.abs().neg().exp_p::<P>();
+        let mut l = e.ln_1p_p::<P>();
+
+        // sigmoid from already-computed e = exp(-|kx|)
+        // kx >= 0: σ = 1/(1+e)
+        // kx <  0: σ = e/(1+e)
+        let rcp = (e + Self::ONE).reciprocal_p::<P>();
+        let mut dy = kx.select_negative(e * rcp, rcp);
+
+        if let Some(k) = k {
+            l = l.approx_div_p::<P>(k);
+            dy *= k;
+        }
+
+        // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
+        let y = self.max(Self::ZERO) + l;
+
+        (y, dy)
     }
 
     #[inline(always)]
@@ -304,7 +328,7 @@ where
         let w = -a.nmul_adde(a, V::ONE).ln_p::<P>();
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - V::splat(2.5)).poly_p::<P, _>(&[
+        let mut p0 = (w - thermite::generic_splat!(f64: 2.5)).poly_p::<P, _>(&[
             1.501409350414994,
             0.2466402709383954,
             -0.0041773392840529855,
@@ -321,10 +345,10 @@ where
             -3.605158594283844e-12,
         ]);
 
-        let w_big = w.cmp_ge(V::splat(5.0)); // at around |x| > 0.99662533231, so unlikely
+        let w_big = w.cmp_ge(thermite::generic_splat!(f64: 5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if P::POLICY.avoid_branching || thermite::unlikely(w_big.any()) {
-            let mut p1 = (w.sqrt() - V::splat(3.0)).poly_p::<P, _>(&[
+            let mut p1 = (w.sqrt() - thermite::generic_splat!(f64: 3.0)).poly_p::<P, _>(&[
                 2.914513093490991,
                 1.5466942804733321,
                 1.5950004257395263,
@@ -363,10 +387,39 @@ where
     fn probit<P: Policy>(self) -> Self {
         todo!()
     }
+
+    // same form as f32
+    #[inline(always)]
+    fn gelu<P: Policy>(self, alpha: Self) -> (Self, Self) {
+        let x = self;
+
+        let alpha_x = alpha * x;
+
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        let mut exp_neg_ax2 = Self::EMPTY;
+        let erf = erf_d_internal::<V, P, false, true>(alpha_x * Self::FRAC_1_SQRT_2, &mut exp_neg_ax2);
+
+        let y;
+        let dy;
+
+        let half_erf = erf.mul_adde(Self::HALF, Self::HALF);
+
+        if V::HAS_TRUE_FMA {
+            let half_x = x * Self::HALF;
+            y = half_x.mul_add(erf, half_x); // fma(0.5x, erf, 0.5x), one rounding
+            dy = (alpha_x * Self::FRAC_1_SQRT_TAU).mul_add(exp_neg_ax2, half_erf);
+        } else {
+            y = half_erf * x;
+            dy = half_erf + alpha_x * Self::FRAC_1_SQRT_TAU * exp_neg_ax2;
+        }
+
+        (y, dy)
+    }
 }
 
+#[rustfmt::skip]
 #[inline(always)]
-fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: bool>(x0: V) -> V {
+fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: bool, const O: bool>(x0: V, out_exp_neg_x2: &mut V) -> V {
     // Extract the sign bit once. abs(x0) = x0 ^ sign, and sign is reused
     // for the final operation in every branch, avoiding a redundant bitand.
     let sign = x0.signed_zero();
@@ -383,23 +436,23 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
     // LLVM will still start on exp and interleave it with the below operations.
     let e = (-x2).exp_p::<P>();
 
-    let a0 = V::splat(0.56418958354775629);
-    let a1 = x + V::splat(2.06955023132914151);
+    let a0: V = thermite::generic_splat!(f64: 0.56418958354775629);
+    let a1 = x + thermite::generic_splat!(f64: 2.06955023132914151);
 
-    let b0 = x2 + x.mul_adde(V::splat(2.71078540045147805), V::splat(5.80755613130301624));
-    let b1 = x2 + x.mul_adde(V::splat(3.47954057099518960), V::splat(12.06166887286239555));
+    let b0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 2.71078540045147805), thermite::generic_splat!(f64: 5.80755613130301624));
+    let b1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.47954057099518960), thermite::generic_splat!(f64: 12.06166887286239555));
 
-    let c0 = x2 + x.mul_adde(V::splat(3.47469513777439592), V::splat(12.07402036406381411));
-    let c1 = x2 + x.mul_adde(V::splat(3.72068443960225092), V::splat(8.44319781003968454));
+    let c0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.47469513777439592), thermite::generic_splat!(f64: 12.07402036406381411));
+    let c1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.72068443960225092), thermite::generic_splat!(f64: 8.44319781003968454));
 
-    let d0 = x2 + x.mul_adde(V::splat(4.00561509202259545), V::splat(9.30596659485887898));
-    let d1 = x2 + x.mul_adde(V::splat(3.90225704029924078), V::splat(6.36161630953880464));
+    let d0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.00561509202259545), thermite::generic_splat!(f64: 9.30596659485887898));
+    let d1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.90225704029924078), thermite::generic_splat!(f64: 6.36161630953880464));
 
-    let e0 = x2 + x.mul_adde(V::splat(5.16722705817812584), V::splat(9.12661617673673262));
-    let e1 = x2 + x.mul_adde(V::splat(4.03296893109262491), V::splat(5.13578530585681539));
+    let e0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 5.16722705817812584), thermite::generic_splat!(f64: 9.12661617673673262));
+    let e1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.03296893109262491), thermite::generic_splat!(f64: 5.13578530585681539));
 
-    let f0 = x2 + x.mul_adde(V::splat(5.95908795446633271), V::splat(9.19435612886969243));
-    let f1 = x2 + x.mul_adde(V::splat(4.11240942957450885), V::splat(4.48640329523408675));
+    let f0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 5.95908795446633271), thermite::generic_splat!(f64: 9.19435612886969243));
+    let f1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.11240942957450885), thermite::generic_splat!(f64: 4.48640329523408675));
 
     let m = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
         // independent divisions yield slightly improved accuracy,
@@ -411,6 +464,11 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
         let d = (a1 * b1) * (c1 * d1) * (e1 * f1);
         n / d
     };
+
+    if O {
+        // write this right before we use e normally, so LLVM can interleave exp with the above
+        *out_exp_neg_x2 = e;
+    }
 
     if !C {
         e.nmul_adde(m, V::ONE) ^ sign

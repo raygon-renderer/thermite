@@ -1,4 +1,4 @@
-#![no_std]
+// #![no_std]
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
@@ -67,22 +67,44 @@ decl_math! {
     /// Special math functions that are valid for both real and complex floating-point vectors.
     trait Special: TranscendentalMathWithPolicy {
         /// Computes the error function.
+        ///
+        /// For f32 vectors, this is still decently accurate even with the `Medium` and `Worst` precision policies,
+        /// thanks to good approximations that don't rely on the precision of `exp`. Subsequently, performance
+        /// of the lower precision policies is excellent. Furthermore, if using on a GPU with native `exp` support,
+        /// all precision policies will have good performance and accuracy.
         fn erf[][](self: Self) -> Self;
+
         /// Computes the complementary error function.
         fn erfc[][](self: Self) -> Self;
 
         /// Computes the Logistic sigmoid function, defined as `1 / (1 + exp(-x))`.
         ///
-        /// Notably, for `f32` and `f64` this still has good precision for the `Worst` precision policy,
-        /// and for the `Best` precision policy handles very large positive and negative
+        /// It's worth mentioning that the derivative of the logistic sigmoid can be computed very cheaply
+        /// from the output of the logistic sigmoid itself, in the form of:
+        ///
+        /// ```rust,ignore
+        /// let s = x.logistic_sigmoid();
+        /// let derivative = s * (1.0 - s); // or s.nmul_adde(s, s), which may be slightly faster
+        /// ```
+        ///
+        /// Notably, for `f32` and `f64` this implementation still has good precision for the `Worst`
+        /// precision policy, and for the `Best` precision policies handles very large positive and negative
         /// inputs without overflow or underflow issues.
         fn logistic_sigmoid[][](self: Self) -> Self;
 
-        /// Computes the softplus function, defined as `ln(1 + exp(x))`.
+        /// Computes the softplus function, defined as `ln(1 + exp(k * x))`,
+        /// as well as its derivative with respect to `x`.
         ///
         /// This is a smooth approximation to the ReLU function
         /// that is more numerically stable for large inputs.
-        fn softplus[][](self: Self) -> Self;
+        ///
+        /// The parameter `k` controls the steepness of the curve, with larger values approaching ReLU more closely.
+        /// However, computing softplus with a steepness value is a non-zero extra cost, and therefore passing `None`
+        /// will be considered `k=1` and skip extra work.
+        ///
+        /// If the `Some`-ness of `k` is known at compile time, LLVM may optimize away the
+        /// conditionals and extra computations when `k` is `None`.
+        fn softplus[][](self: Self, k: Option<Self>) -> (Self, Self);
 
         /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
         ///
@@ -167,15 +189,29 @@ decl_math! {
         /// of the standard normal distribution.
         fn probit[][](self: Self) -> Self;
 
+        /// GELU activation function, defined as `0.5 * x * (1 + erf((alpha * x) / sqrt(2)))`,
+        /// where `alpha` helps control the shape of the curve. The standard GELU function
+        /// is recovered when `alpha` is 1.
+        ///
+        /// Returns both the GELU value and its derivative with respect to `x` simultaneously,
+        /// as they share much of the same computation.
+        ///
+        /// For f32 vectors, this remains decently accurate even with the `Medium` and `Worst` precision policies,
+        /// thanks to good `erf` implementations at the various precision levels. See `erf` for more details. Furthermore,
+        /// on `Average` and above precision policies, or on GPUs with native `exp` support, the derivative
+        /// is essentially free.
+        fn gelu[][](self: Self, alpha: Self) -> (Self, Self);
+
         /// Computes the algebraic sigmoid function, defined as `x / (1 + |x|^N)^(1/N)`, where
-        /// `N` is a positive integer parameter that controls the steepness of the curve.
+        /// `N` is a positive integer parameter that controls the steepness of the curve. It also
+        /// returns the derivative with respect to `x` simultaneously, as it shares much of the same computation.
         ///
         /// This also has the unique behavior where for `N=0`, the function is just the identity function,
         /// and for `N=1` it is the [softsign function](https://en.wikipedia.org/wiki/Activation_function#Softsign).
         ///
         /// **Note**: This function uses `|x|^N` (the real absolute value), making it non-holomorphic
         /// and therefore only meaningful for real-valued inputs.
-        fn algebraic_sigmoid[const N: usize][N](self: Self) -> Self;
+        fn algebraic_sigmoid[const N: usize][N](self: Self) -> (Self, Self);
 
         /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector,
         /// and returns the sign of the Gamma function from before the absolute value was taken.
