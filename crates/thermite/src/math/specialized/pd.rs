@@ -158,7 +158,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
 
-        let x_small = x.cmp_le(V::splat(0.625));
+        let x_small = x.cmp_le(crate::generic_splat!(f64: 0.625));
 
         let mut y2 = V::EMPTY;
 
@@ -167,7 +167,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             y2 = (y2 - V::ONE) / (y2 + V::ONE); // originally (1 - 2/(y2 + 1))
 
             if P::POLICY.check_overflow {
-                y2 = x.cmp_gt(V::splat(350.0)).select(V::ONE, y2);
+                y2 = x.cmp_gt(crate::generic_splat!(f64: 350.0)).select(V::ONE, y2);
             }
 
             if const { P::POLICY.avoid_precision_branches() } {
@@ -220,7 +220,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let x = x0.abs().flush_denormals::<P>();
         let x2 = x * x;
 
-        let x_small = x.cmp_le(V::splat(0.533));
+        let x_small = x.cmp_le(crate::generic_splat!(f64: 0.533));
 
         let mut y2 = V::EMPTY;
 
@@ -228,7 +228,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             y2 = ((x2 + V::ONE).sqrt() + x).ln_p::<P>();
 
             if const { P::POLICY.check_overflow || !P::POLICY.avoid_precision_branches() } {
-                let x_huge = x.cmp_gt(V::splat(1e20));
+                let x_huge = x.cmp_gt(crate::generic_splat!(f64: 1e20));
 
                 if crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x.ln_p::<P>() + V::LN_2, y2);
@@ -267,7 +267,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
-        let x_small = x1.cmp_le(V::splat(0.49));
+        let x_small = x1.cmp_le(crate::generic_splat!(f64: 0.49));
 
         let mut y2 = V::EMPTY;
 
@@ -275,7 +275,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             y2 = (x0.mul_sube(x0, V::ONE).sqrt() + x0).ln_p::<P>();
 
             if const { P::POLICY.check_overflow && !P::POLICY.avoid_precision_branches() } {
-                let x_huge = x1.cmp_gt(V::splat(1e20));
+                let x_huge = x1.cmp_gt(crate::generic_splat!(f64: 1e20));
 
                 if crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x0.ln_p::<P>() + V::LN_2, y2);
@@ -410,7 +410,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         let mut x = fraction2(x1);
 
-        let blend = x.cmp_gt(V::splat(SQRT_2 / 2.0));
+        let blend = x.cmp_gt(crate::generic_splat!(f64: SQRT_2 / 2.0));
 
         x.add_assign_c(!blend, x); // conditional assign, only if blend is false
         x -= V::ONE;
@@ -507,8 +507,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(V::SignedBits::splat(0x07FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(3000.0));
-        let underflow = ej.cmp_le(V::SignedBits::splat(0x0000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-3000.0));
+        let overflow =
+            ej.cmp_ge(V::SignedBits::splat(0x07FF)).cast::<V::Mask>() | ee.cmp_gt(crate::generic_splat!(f64: 3000.0));
+        let underflow =
+            ej.cmp_le(V::SignedBits::splat(0x0000)).cast::<V::Mask>() | ee.cmp_lt(crate::generic_splat!(f64: -3000.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -670,7 +672,8 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 #[inline(always)]
 fn fraction2<V: FloatVectorWithBits<Element = f64>>(x: V) -> V {
     // set exponent to 0 + bias
-    (x & V::splat(f64::from_bits(0x000FFFFFFFFFFFFF))) | V::splat(f64::from_bits(0x3FE0000000000000))
+    (x & crate::generic_splat!(f64: f64::from_bits(0x000FFFFFFFFFFFFF)))
+        | crate::generic_splat!(f64: f64::from_bits(0x3FE0000000000000))
 }
 
 #[inline(always)]
@@ -696,7 +699,7 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
     let mut x = fraction2::<V>(x1);
     let mut fe = V::cast_from(exponent::<V>(x1));
 
-    let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
+    let blend = x.cmp_gt(crate::generic_splat!(f64: SQRT_2 * 0.5));
 
     x = blend.select(x, x + x); // x = x.conditional_add(x, !blend);
     fe = blend.select(fe + V::ONE, fe); // fe = fe.conditional_add(V::ONE, blend);
@@ -740,7 +743,7 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
     }
 
     let overflow = !x1.is_finite();
-    let underflow = x1.cmp_lt(V::splat(2.2250738585072014E-308));
+    let underflow = x1.cmp_lt(crate::generic_splat!(f64: 2.2250738585072014E-308));
 
     if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
         return res;
@@ -756,9 +759,9 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
 
 #[inline(always)]
 fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: bool>(y: V, x: V) -> V {
-    let morebits = V::splat(6.123233995736765886130E-17);
-    let morebitso2 = V::splat(6.123233995736765886130E-17 * 0.5);
-    let t3po8 = V::splat(SQRT_2 + 1.0);
+    let morebits: V = crate::generic_splat!(f64: 6.123233995736765886130E-17);
+    let morebitso2: V = crate::generic_splat!(f64: 6.123233995736765886130E-17 * 0.5);
+    let t3po8: V = crate::generic_splat!(f64: SQRT_2 + 1.0);
 
     let mut swapxy = GenericMask::FALSY;
 
@@ -789,7 +792,7 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     let t = t.flush_denormals::<P>();
 
     let not_big = t.cmp_le(t3po8);
-    let not_small = t.cmp_ge(V::splat(0.66));
+    let not_small = t.cmp_ge(crate::generic_splat!(f64: 0.66));
 
     let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2);
     let fac = not_big.select(morebitso2, morebits);
@@ -835,7 +838,7 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
 fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: bool>(x: V) -> V {
     let xa = x.abs().flush_denormals::<P>();
 
-    let is_big = xa.cmp_ge(V::splat(0.625));
+    let is_big = xa.cmp_ge(crate::generic_splat!(f64: 0.625));
 
     let x1 = is_big.select(V::ONE - xa, xa * xa);
 
@@ -933,10 +936,10 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         EXP_MODE_POW10 => {
             max_x = 307.65;
 
-            let log10_2_hi = V::splat(-0.30102999554947019); // log10(2) in two parts
-            let log10_2_lo = V::splat(-1.1451100899212592E-10);
+            let log10_2_hi: V = crate::generic_splat!(f64: -0.30102999554947019); // log10(2) in two parts
+            let log10_2_lo: V = crate::generic_splat!(f64: -1.1451100899212592E-10);
 
-            r = (x * V::splat(LN_10 * LOG2_E)).round();
+            r = (x * crate::generic_splat!(f64: LN_10 * LOG2_E)).round();
 
             x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
             x = r.mul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
@@ -945,10 +948,10 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         _ => {
             max_x = const { if MODE == EXP_MODE_EXP { 708.39 } else { 709.7 } };
 
-            let ln2d_hi = V::splat(-0.693145751953125);
-            let ln2d_lo = V::splat(-1.42860682030941723212E-6);
+            let ln2d_hi: V = crate::generic_splat!(f64: -0.693145751953125);
+            let ln2d_lo: V = crate::generic_splat!(f64: -1.42860682030941723212E-6);
 
-            r = (x * V::splat(LOG2_E)).round();
+            r = (x * crate::generic_splat!(f64: LOG2_E)).round();
 
             x = r.mul_adde(ln2d_hi, x); // x -= r * ln2_hi;
             x = r.mul_adde(ln2d_lo, x); // x -= r * ln2_lo;
@@ -1074,7 +1077,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
     let swap = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
 
     if P::POLICY.check_overflow {
-        let overflow = y.cmp_gt(V::splat((1u64 << 52) as f64 - 1.0)) & xa.is_finite();
+        let overflow = y.cmp_gt(crate::generic_splat!(f64: (1u64 << 52) as f64 - 1.0)) & xa.is_finite();
 
         s = overflow.select(V::ZERO, s);
         c = overflow.select(V::ONE, c);

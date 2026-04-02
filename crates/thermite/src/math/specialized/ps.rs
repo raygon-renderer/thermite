@@ -238,7 +238,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let one = V::ONE;
 
         let x = x0.abs().flush_denormals::<P>();
-        let x_small = x.cmp_lt(V::splat(0.625));
+        let x_small = x.cmp_lt(crate::generic_splat!(f32: 0.625));
 
         let mut y2 = V::EMPTY;
 
@@ -250,7 +250,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             y2 = (y2 - one) / (y2 + one);
 
             if P::POLICY.check_overflow {
-                y2 = x.cmp_gt(V::splat(44.4)).select(one, y2);
+                y2 = x.cmp_gt(crate::generic_splat!(f32: 44.4)).select(one, y2);
             }
 
             if P::POLICY.avoid_precision_branches() {
@@ -305,17 +305,20 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let t = s * s;
 
             // place the s * 0.43157974 in the FMA to encourage instruction-level parallelism
-            let r = t.mul_adde(s * V::splat(0.43157974), V::ONE)
-                / t.mul_adde(V::splat(0.05831938), V::splat(0.76443945))
-                    .mul_adde(t, V::ONE);
+            let r = t.mul_adde(s * crate::generic_splat!(f32: 0.43157974), V::ONE)
+                / t.mul_adde(
+                    crate::generic_splat!(f32: 0.05831938),
+                    crate::generic_splat!(f32: 0.76443945),
+                )
+                .mul_adde(t, V::ONE);
 
             let r = gt1.select(V::FRAC_PI_2 - r, r);
 
             return r.copysign(x);
         }
 
-        let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0)); // t >= tan  pi/8
-        let not_big = t.cmp_le(V::splat(SQRT_2 + 1.0)); // t <= tan 3pi/8
+        let not_small = t.cmp_ge(crate::generic_splat!(f32: SQRT_2 - 1.0)); // t >= tan  pi/8
+        let not_big = t.cmp_le(crate::generic_splat!(f32: SQRT_2 + 1.0)); // t <= tan 3pi/8
 
         let s = not_big.select(V::FRAC_PI_4, V::FRAC_PI_2);
 
@@ -342,7 +345,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x = x0.abs().flush_denormals::<P>();
         let x2 = x * x;
 
-        let x_small = x.cmp_le(V::splat(0.51));
+        let x_small = x.cmp_le(crate::generic_splat!(f32: 0.51));
 
         let mut y2 = V::EMPTY;
 
@@ -350,7 +353,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             y2 = ((x2 + V::ONE).sqrt() + x).ln_p::<P>();
 
             if P::POLICY.check_overflow {
-                let x_huge = x.cmp_gt(V::splat(1e10));
+                let x_huge = x.cmp_gt(crate::generic_splat!(f32: 1e10));
 
                 if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x.ln_p::<P>() + V::LN_2, y2);
@@ -378,7 +381,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
-        let x_small = x1.cmp_lt(V::splat(0.49)); // use Pade approximation if abs(x-1) < 0.5
+        let x_small = x1.cmp_lt(crate::generic_splat!(f32: 0.49)); // use Pade approximation if abs(x-1) < 0.5
 
         let mut y2 = V::EMPTY;
 
@@ -387,7 +390,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             y2 = (x0.mul_sube(x0, V::ONE).sqrt() + x0).ln_p::<P>();
 
             if P::POLICY.check_overflow {
-                let x_huge = x1.cmp_gt(V::splat(1e10));
+                let x_huge = x1.cmp_gt(crate::generic_splat!(f32: 1e10));
 
                 if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x0.ln_p::<P>() + V::LN_2, y2);
@@ -425,14 +428,14 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     fn atanh<P: Policy>(self) -> Self {
         let x = self.abs().flush_denormals::<P>();
 
-        let x_small = x.cmp_lt(V::splat(0.5));
+        let x_small = x.cmp_lt(V::HALF);
 
         let mut y2 = V::EMPTY;
 
         if P::POLICY.avoid_branching || !x_small.all() {
             let one = V::ONE;
 
-            y2 = ((one + x) / (one - x)).ln_p::<P>() * V::splat(0.5);
+            y2 = ((one + x) / (one - x)).ln_p::<P>() * V::HALF;
 
             if P::POLICY.check_overflow {
                 let y3 = x.cmp_eq(one).select(V::INFINITY, V::NAN);
@@ -504,8 +507,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         // define constants
-        let ln2f_hi = V::splat(0.693359375); // log(2), split in two for extended precision
-        let ln2f_lo = V::splat(-2.12194440e-4);
+        let ln2f_hi: V = crate::generic_splat!(f32: 0.693359375); // log(2), split in two for extended precision
+        let ln2f_lo: V = crate::generic_splat!(f32: -2.12194440e-4);
         let log2e = V::LOG2_E;
         let ln2 = V::LN_2;
 
@@ -517,7 +520,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut x = fraction2::<V>(x1);
 
-        let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
+        let blend = x.cmp_gt(crate::generic_splat!(f32: SQRT_2 * 0.5));
 
         // reduce range of x = +/- sqrt(2)/2
         x.add_assign_c(!blend, x); // conditional assign, only if blend is false
@@ -595,8 +598,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         // check exponent for overflow and underflow
-        let overflow = ej.cmp_ge(V::SignedBits::splat(0x0FF)).cast::<V::Mask>() | ee.cmp_gt(V::splat(300.0));
-        let underflow = ej.cmp_le(V::SignedBits::splat(0x000)).cast::<V::Mask>() | ee.cmp_lt(V::splat(-300.0));
+        let overflow =
+            ej.cmp_ge(V::SignedBits::splat(0x0FF)).cast::<V::Mask>() | ee.cmp_gt(crate::generic_splat!(f32: 300.0));
+        let underflow =
+            ej.cmp_le(V::SignedBits::splat(0x000)).cast::<V::Mask>() | ee.cmp_lt(crate::generic_splat!(f32: -300.0));
 
         // check for special cases
         let xfinite = x0.is_finite();
@@ -717,7 +722,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             // FMA residual correction - compute t³ - x precisely, then one Newton step
             if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
                 let t2 = t * t;
-                t -= t2.mul_sub(t, x) / (V::splat(3.0) * t2); // t³ - x, exact to FMA precision
+                t -= t2.mul_sub(t, x) / (t2 * crate::generic_splat!(f32: 3.0)); // t³ - x, exact to FMA precision
             }
         }
 
@@ -776,7 +781,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
             // combined into fma
             //let u1 = (x - V::splat(x1)) * V::splat(1.0 / (x2 - x1));
-            let u1 = x.mul_sube(V::splat(B), V::splat(AB));
+            let u1 = x.mul_sube(crate::generic_splat!(f32: B), crate::generic_splat!(f32: AB));
 
             // clamp
             let mut u1 = u1.min(V::ONE).max(V::ZERO);
@@ -866,9 +871,12 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
             let t = s * s;
 
-            let mut r = t.mul_adde(s * V::splat(0.43157974), V::ONE)
-                / t.mul_adde(V::splat(0.05831938), V::splat(0.76443945))
-                    .mul_adde(t, V::ONE);
+            let mut r = t.mul_adde(s * crate::generic_splat!(f32: 0.43157974), V::ONE)
+                / t.mul_adde(
+                    crate::generic_splat!(f32: 0.05831938),
+                    crate::generic_splat!(f32: 0.76443945),
+                )
+                .mul_adde(t, V::ONE);
 
             r = swap_xy.select(V::FRAC_PI_2 - r, r);
             r = x.select_negative(V::PI - r, r);
@@ -892,7 +900,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
         // small:  z = t / 1.0;
         // medium: z = (t-1.0) / (t+1.0);
-        let not_small = t.cmp_ge(V::splat(SQRT_2 - 1.0));
+        let not_small = t.cmp_ge(crate::generic_splat!(f32: SQRT_2 - 1.0));
 
         let a = t + neg_one.z(not_small);
         let b = V::ONE + t.z(not_small);
@@ -1296,18 +1304,18 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
                 x *= V::LN_2;
             }
             EXP_MODE_POW10 => {
-                let log10_2_hi = V::splat(-0.301025391); // log10(2) in two parts
-                let log10_2_lo = V::splat(-4.60503907E-6);
+                let log10_2_hi: V = crate::generic_splat!(f32: -0.301025391); // log10(2) in two parts
+                let log10_2_lo: V = crate::generic_splat!(f32: -4.60503907E-6);
 
-                r = (x0 * V::splat(LN_10 * LOG2_E)).round();
+                r = (x0 * crate::generic_splat!(f32: LN_10 * LOG2_E)).round();
 
                 x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
                 x = r.mul_adde(log10_2_lo, x); // x -= r * log10_2_lo;
                 x *= V::LN_10;
             }
             EXP_MODE_EXP | EXP_MODE_EXPM1 | EXP_MODE_EXPH => {
-                let ln2f_hi = V::splat(-0.693359375);
-                let ln2f_lo = V::splat(2.12194440e-4);
+                let ln2f_hi: V = crate::generic_splat!(f32: -0.693359375);
+                let ln2f_lo: V = crate::generic_splat!(f32: 2.12194440e-4);
 
                 r = (x0 * V::LOG2_E).round();
 
@@ -1394,8 +1402,8 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 #[inline(always)]
 fn fraction2<V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     // set exponent to 0 + bias
-    let b = V::splat(f32::from_bits(0x007FFFFF));
-    let c = V::splat(f32::from_bits(0x3F000000));
+    let b = crate::generic_splat!(f32: f32::from_bits(0x007FFFFF));
+    let c = crate::generic_splat!(f32: f32::from_bits(0x3F000000));
 
     //(x & b) | c
     V::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(x, b, c)
@@ -1420,8 +1428,10 @@ fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L384
         // between 1e-4 and 1000, avg error: 0.00536, max error 0.0573 at 31.999878
-        return V::cast_from(V::SignedBits::from_bits(x))
-            .mul_sube(V::splat(1.1920928955078125e-7), V::splat(126.94269504));
+        return V::cast_from(V::SignedBits::from_bits(x)).mul_sube(
+            crate::generic_splat!(f32: 1.1920928955078125e-7),
+            crate::generic_splat!(f32: 126.94269504),
+        );
     }
 
     ln_f_internal::<P, V, false>(x) * V::LOG2_E
@@ -1436,8 +1446,10 @@ fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
         // ln(x) * LOG10_E
         // between 1e-4 and 1000, avg error: 0.00212, max error 0.0173 at 31.999878
-        return V::cast_from(V::SignedBits::from_bits(x))
-            .mul_sube(V::splat(3.5885571887588505e-8), V::splat(38.213558906));
+        return V::cast_from(V::SignedBits::from_bits(x)).mul_sube(
+            crate::generic_splat!(f32: 3.5885571887588505e-8),
+            crate::generic_splat!(f32: 38.213558906),
+        );
     }
 
     ln_f_internal::<P, V, false>(x) * V::LOG10_E
@@ -1455,8 +1467,10 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
         // https://github.com/romeric/fastapprox/blob/ccc534400ec3e0f67de4eafb53377334962d9db6/fastapprox/src/fastonebigheader.h#L393
         // between 1e-4 and 1000, avg error: 0.00536, max error 0.0397 at 3.9999847
-        return V::cast_from(V::SignedBits::from_bits(x1))
-            .mul_sube(V::splat(8.2629582881927490e-8), V::splat(87.989971088));
+        return V::cast_from(V::SignedBits::from_bits(x1)).mul_sube(
+            crate::generic_splat!(f32: 8.2629582881927490e-8),
+            crate::generic_splat!(f32: 87.989971088),
+        );
     }
 
     if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
@@ -1465,7 +1479,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
         let a = V::SignedBits::from_bits(x0);
         let e = (a - V::SignedBits::splat(0x3f2aaaab)) & V::SignedBits::splat(0xff800000u32 as i32);
-        let i = V::cast_from(e) * V::splat(1.19209290e-7);
+        let i = V::cast_from(e) * crate::generic_splat!(f32: 1.19209290e-7);
         let mut f = V::from_bits(a - e);
 
         if !P1 {
@@ -1475,26 +1489,32 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
         let s = f * f;
 
         /* Compute log1p(f) for f in [-1/3, 1/3] */
-        let r = f.mul_adde(V::splat(0.230836749), V::splat(-0.279208571)); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
-        let t = f.mul_adde(V::splat(0.331826031), V::splat(-0.498910338)); // 0x1.53ca34p-2, -0x1.fee25ap-2
+        let r = f.mul_adde(
+            crate::generic_splat!(f32: 0.230836749),
+            crate::generic_splat!(f32: -0.279208571),
+        ); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
+        let t = f.mul_adde(
+            crate::generic_splat!(f32: 0.331826031),
+            crate::generic_splat!(f32: -0.498910338),
+        ); // 0x1.53ca34p-2, -0x1.fee25ap-2
         let r = r.mul_adde(s, t);
         let r = r.mul_adde(s, f);
-        let r = i.mul_adde(V::splat(0.693147182), r); // 0x1.62e430p-1 // log(2)
+        let r = i.mul_adde(crate::generic_splat!(f32: 0.693147182), r); // 0x1.62e430p-1 // log(2)
 
         return r;
     }
 
     let x0 = x0.flush_denormals::<P>();
 
-    let ln2f_hi = V::splat(0.693359375);
-    let ln2f_lo = V::splat(-2.12194440E-4);
+    let ln2f_hi = crate::generic_splat!(f32: 0.693359375);
+    let ln2f_lo = crate::generic_splat!(f32: -2.12194440E-4);
 
     let x1 = if P1 { x0 + V::ONE } else { x0 };
 
     let mut x = fraction2::<V>(x1);
     let mut e = exponent::<V>(x1);
 
-    let blend = x.cmp_gt(V::splat(SQRT_2 * 0.5));
+    let blend = x.cmp_gt(crate::generic_splat!(f32: SQRT_2 * 0.5));
 
     x = blend.select(x, x + x); // x.conditional_add(x, !blend)
     e = blend.select(e + V::SignedBits::ONE, e); // e.conditional_add(V::SignedBits::ONE, blend)
@@ -1532,7 +1552,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
     }
 
     let overflow = !x1.is_finite();
-    let underflow = x1.cmp_lt(V::splat(1.17549435e-38));
+    let underflow = x1.cmp_lt(crate::generic_splat!(f32: 1.17549435e-38));
 
     if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
         return res;
