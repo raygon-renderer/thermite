@@ -1263,10 +1263,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
     let mut x = x0;
     let mut r;
 
-    let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-        // https://stackoverflow.com/a/10792321 with a better 2^f fit
-        // max. rel. error <= 1.73e-3 on [-87,88]
-
+    let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Compute t such that b^x = 2^t
         let t = match MODE {
             EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x * V::LOG2_E,
@@ -1281,8 +1278,28 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         // if the exponent exceeds this method's limitations, then it's far outside of the valid range for exp
         let i: V::SignedBits = fi.fast_cast();
 
-        // polynomial approximation of 2^f
-        let cf = f.poly_p::<P, _>(&[1.0, 0.695556856, 0.226173572, 0.0781455737]);
+        // polynomial approximation of 2^f in [0, 1) either using a degree-7 or degree-3 polynomial
+        // these are noteworthy because degree-7 is _barely_ more expensive than degree-3 if using Estrin's scheme
+        // and instruction-level parallelism is a thing.
+        let cf = if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+            // max. rel. error <= ~7.55e-11 on [0,1) via Sollya,
+            // which is perfect for f32, but Medium precision
+            // has worse range reduction
+            f.poly_p::<P, _>(&[
+                1.0,                     // c0 — exact
+                0.693147182464599609375, // c1 — 0x3f317218 (≈ ln2)
+                0.240226432681083679199, // c2 — 0x3e75fdeb
+                0.055504892021417617798, // c3 — 0x3d635919
+                0.009614554233849048615, // c4 — 0x3c1d865d
+                0.001341646537184715271, // c5 — 0x3aafda30
+                0.000143863057019189000, // c6 — 0x3916d9f2
+                0.000021428975742310286, // c7 — 0x37b3c260
+            ])
+        } else {
+            // https://stackoverflow.com/a/10792321 with a better 2^f fit
+            // max. rel. error <= 1.73e-3 on [-87,88]
+            f.poly_p::<P, _>(&[1.0, 0.695556856, 0.226173572, 0.0781455737])
+        };
 
         // scale 2^f by 2^i
         let ci = V::SignedBits::from_bits(cf) + (i << 23);

@@ -222,9 +222,7 @@ where
             return n / d;
         }
 
-        // exp at Medium is the same, exp at Worst is much faster and still accurate enough,
-        // so use the faster one for HighPerformance policy.
-        (Self::ONE + (-self).exp_p::<LessPrecision<P>>()).reciprocal_p::<ExtraPrecision<P>>()
+        (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<ExtraPrecision<P>>()
     }
 
     // This ended up being a bust, but I'll keep it around anyway.
