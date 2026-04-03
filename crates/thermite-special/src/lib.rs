@@ -202,6 +202,14 @@ decl_math! {
         /// is essentially free.
         fn gelu[][](self: Self, alpha: Self) -> (Self, Self);
 
+        /// Swish activation function, defined as `x * sigmoid(beta * x) = x / (1 + exp(-beta * x))`,
+        /// where `beta` controls the sharpness of the gate. The standard Swish/SiLU function
+        /// is recovered when `beta` is 1. As `beta -> 0`, the output approaches `x/2` (half-identity);
+        /// as `beta -> inf`, Swish approaches ReLU.
+        ///
+        /// Returns both the Swish value and its derivative with respect to `x` simultaneously.
+        fn swish[][](self: Self, beta: Self) -> (Self, Self);
+
         /// Computes the algebraic sigmoid function, defined as `x / (1 + |x|^N)^(1/N)`, where
         /// `N` is a positive integer parameter that controls the steepness of the curve. It also
         /// returns the derivative with respect to `x` simultaneously, as it shares much of the same computation.

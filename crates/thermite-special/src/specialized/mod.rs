@@ -538,6 +538,24 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         (y, dy.mul_adde(alpha_x, y))
     }
 
+    #[inline(always)]
+    fn swish<P: Policy>(self, beta: Self) -> (Self, Self) {
+        let x = self;
+        let beta_x = beta * x;
+
+        // sigmoid(beta * x) = 1 / (1 + exp(-beta * x))
+        let e = (-beta_x).exp_p::<P>();
+        let s = (Self::ONE + e).reciprocal_p::<P>();
+
+        let y = x * s;
+
+        // dy/dx = s + beta * y * (1 - s)
+        // 1 - s = e * s (numerically stable: avoids cancellation near s approx 1)
+        let dy = (beta * y).mul_adde(e * s, s);
+
+        (y, dy)
+    }
+
     fn lgamma_r<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
