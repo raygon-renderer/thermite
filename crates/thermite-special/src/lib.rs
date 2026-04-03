@@ -92,19 +92,18 @@ decl_math! {
         /// inputs without overflow or underflow issues.
         fn logistic_sigmoid[][](self: Self) -> Self;
 
-        /// Computes the softplus function, defined as `ln(1 + exp(k * x))`,
+        /// Computes the softplus function, defined as `(1/k) * ln(1 + exp(k * x))`,
         /// as well as its derivative with respect to `x`.
         ///
         /// This is a smooth approximation to the ReLU function
         /// that is more numerically stable for large inputs.
         ///
         /// The parameter `k` controls the steepness of the curve, with larger values approaching ReLU more closely.
-        /// However, computing softplus with a steepness value is a non-zero extra cost, and therefore passing `None`
-        /// will be considered `k=1` and skip extra work.
+        /// Pass `k = 1` and `rcp_k = 1` for the standard softplus with no steepness scaling.
         ///
-        /// If the `Some`-ness of `k` is known at compile time, LLVM may optimize away the
-        /// conditionals and extra computations when `k` is `None`.
-        fn softplus[][](self: Self, k: Option<Self>) -> (Self, Self);
+        /// `rcp_k` must equal `1/k`. It is passed explicitly so callers that invoke softplus repeatedly
+        /// with the same `k` can pre-compute the reciprocal once rather than recomputing it per call.
+        fn softplus[][](self: Self, k: Self, rcp_k: Self) -> (Self, Self);
 
         /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
         ///

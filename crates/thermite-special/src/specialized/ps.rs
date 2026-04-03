@@ -252,34 +252,6 @@ where
     // }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self, k: Option<Self>) -> (Self, Self) {
-        let mut kx = self;
-
-        if let Some(k) = k {
-            kx *= k;
-        }
-
-        let e = kx.abs().neg().exp_p::<P>();
-        let mut l = e.ln_1p_p::<P>();
-
-        // sigmoid from already-computed e = exp(-|kx|)
-        // kx >= 0: σ = 1/(1+e)
-        // kx <  0: σ = e/(1+e)
-        let rcp = (e + Self::ONE).reciprocal_p::<P>();
-        let mut dy = kx.select_negative(e * rcp, rcp);
-
-        if let Some(k) = k {
-            l = l.approx_div_p::<P>(k);
-            dy *= k;
-        }
-
-        // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
-        let y = self.max(Self::ZERO) + l;
-
-        (y, dy)
-    }
-
-    #[inline(always)]
     fn lgamma<P: Policy>(self) -> Self {
         Self::lgamma_r::<P>(self).0
     }

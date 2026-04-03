@@ -211,16 +211,38 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self, k: Option<Self>) -> (Self, Self) {
-        let mut x = self;
+    fn softplus<P: Policy>(self, k: Self, rcp_k: Self) -> (Self, Self) {
+        // For low precision, we can get better performance by computing in base-2 instead of base-e,
+        // at the cost of some accuracy.
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            // adjust to be in base-2
+            let k = k * Self::LOG2_E;
+            let rcp_k = rcp_k * Self::LN_2;
 
-        if let Some(k) = k {
-            x *= k;
+            let kx = self * k;
+
+            // e needs overflow checks to outright incorrect results here
+            let e = kx.abs().neg().exp2_p::<CheckOverflow<P, true>>();
+            let y = (Self::ONE + e).log2_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
+
+            let rcp = (Self::ONE + e).reciprocal_p::<P>();
+            let dy = kx.select_negative(e * rcp, rcp);
+
+            return (y, dy);
         }
 
-        let e = x.exp_p::<P>();
-        let y = (Self::ONE + e).ln_p::<ExtraPrecision<P>>();
-        let dy = e / (Self::ONE + e);
+        let kx = self * k;
+
+        let e = kx.abs().neg().exp_p::<P>();
+
+        // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
+        let y = e.ln_1p_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
+
+        // sigmoid from already-computed e = exp(-|kx|)
+        // kx >= 0: σ = 1/(1+e)
+        // kx <  0: σ = e/(1+e)
+        let rcp = (e + Self::ONE).reciprocal_p::<P>();
+        let dy = kx.select_negative(e * rcp, rcp);
 
         (y, dy)
     }
