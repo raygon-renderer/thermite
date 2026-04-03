@@ -1615,7 +1615,7 @@ pub trait FloatRegister:
         // IEEE 754 totalOrder defines the NaN values also to follow the
         // bitwise order. This leads to order explained in the doc comment.
         // However, the representation of magnitude is the same for negative
-        // and positive numbers – only the sign bit is different.
+        // and positive numbers - only the sign bit is different.
         // To easily compare the floats as signed integers, we need to
         // flip the exponent and mantissa bits in case of negative numbers.
         // We effectively convert the numbers to "two's complement" form.

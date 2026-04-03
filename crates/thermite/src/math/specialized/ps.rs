@@ -89,7 +89,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         x ^= odd_sign;
         x_lo ^= odd_sign;
 
-        // Polynomial: tan(x) ≈ x + x^3 * P(x^2)
+        // Polynomial: tan(x) ~= x + x^3 * P(x^2)
         // Minimax coefficients for (tan(x)/x - 1) / x^2 on [-pi/4, pi/4]
         let x2 = x * x;
         let mut x0 = x;
@@ -719,10 +719,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
                 t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
             }
 
-            // FMA residual correction - compute t³ - x precisely, then one Newton step
+            // FMA residual correction - compute t^3 - x precisely, then one Newton step
             if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
                 let t2 = t * t;
-                t -= t2.mul_sub(t, x) / (t2 * crate::generic_splat!(f32: 3.0)); // t³ - x, exact to FMA precision
+                t -= t2.mul_sub(t, x) / (t2 * crate::generic_splat!(f32: 3.0)); // t^3 - x, exact to FMA precision
             }
         }
 
@@ -940,7 +940,7 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
         0xA2F9836E, 0x4E441529, 0xFC2757D1, 0xF534DDC0, 0xDB629599, 0x3C439041,
     ];
 
-    let biased = exp_u + V::Unsigned::splat(6); // always ≥ 6, never underflows
+    let biased = exp_u + V::Unsigned::splat(6); // always >= 6, never underflows
     let idx: V::Unsigned = biased.shri::<5>();
     let shift = biased & V::Unsigned::splat(31);
     let inv_shift = (V::Unsigned::splat(32) - shift) & V::Unsigned::splat(31);
@@ -959,10 +959,10 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     let aligned_lo: V::Bits = aligned_lo.cast();
 
     // Multiply significand by aligned chunks.
-    // 88-bit product: sig(24) × aligned(64).
+    // 88-bit product: sig(24) * aligned(64).
     // Binary point at bit 62: bits 62:61 = quadrant, bits 60:0 = fraction.
-    let prod_hi = sig.mullo(aligned_hi); // bits 63:32 (low half of sig × hi)
-    let prod_lo = sig.mulhi(aligned_lo); // bits 55:32 (high half of sig × lo)
+    let prod_hi = sig.mullo(aligned_hi); // bits 63:32 (low half of sig * hi)
+    let prod_lo = sig.mulhi(aligned_lo); // bits 55:32 (high half of sig * lo)
     let mid_bits = prod_hi + prod_lo; // bits 63:32 of the 88-bit product
     let prod_lo_lo = sig.mullo(aligned_lo); // bits 31:0
 
@@ -980,7 +980,7 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     let frac_hi = V::from_bits(frac_hi_bits) - V::ONE;
 
     // frac_lo: bottom 6 bits of fraction_hi_int | top 18 bits of prod_lo_lo = 24 bits.
-    // Represents residual * 2^-47. Exact since residual ≤ 2^24 - 1.
+    // Represents residual * 2^-47. Exact since residual <= 2^24 - 1.
     let residual = (fraction_hi_int & V::Bits::splat(0x3F)).shli::<18>() | prod_lo_lo.shri::<14>();
     let frac_lo_int: V::SignedBits = residual.cast();
     let frac_lo = V::cast_from(frac_lo_int) * crate::generic_splat!(f32: f32::from_bits(0x28000000)); // 2^-47

@@ -281,7 +281,7 @@ pub mod avx2 {
 /// AVX-512 Foundation (F)
 ///
 /// The baseline instruction set for AVX-512. This module provides intrinsics for
-/// the fundamental 512-bit ZMM registers, opmask registers (`k0`–`k7`), and EVEX
+/// the fundamental 512-bit ZMM registers, opmask registers (`k0`-`k7`), and EVEX
 /// encoding support.
 #[rustfmt::skip]
 pub mod avx512f {
