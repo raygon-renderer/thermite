@@ -1,18 +1,43 @@
 use super::*;
 
-/// Useful swizzle indices for 3D linear algebra operations, such as cross products,
-/// for both 3-lane and 4-lane registers.4
+// Concrete SwizzleIndices types for the two 3D cross-product permutations,
+// defined for both supported lane counts (U3 and U4).
+
+/// [z, x, y, w] permutation for 4-lane registers.
+pub struct Zxyw4;
+impl SwizzleIndices<typenum::U4> for Zxyw4 {
+    const INDICES: GenericArray<u32, typenum::U4> = GenericArray::from_array([2, 0, 1, 3]);
+}
+
+/// [y, z, x, w] permutation for 4-lane registers.
+pub struct Yzxw4;
+impl SwizzleIndices<typenum::U4> for Yzxw4 {
+    const INDICES: GenericArray<u32, typenum::U4> = GenericArray::from_array([1, 2, 0, 3]);
+}
+
+/// [z, x, y] permutation for 3-lane registers.
+pub struct Zxyw3;
+impl SwizzleIndices<typenum::U3> for Zxyw3 {
+    const INDICES: GenericArray<u32, typenum::U3> = GenericArray::from_array([2, 0, 1]);
+}
+
+/// [y, z, x] permutation for 3-lane registers.
+pub struct Yzxw3;
+impl SwizzleIndices<typenum::U3> for Yzxw3 {
+    const INDICES: GenericArray<u32, typenum::U3> = GenericArray::from_array([1, 2, 0]);
+}
+
 pub trait ValidLinAlg3Length<R: FloatRegister<Lanes = Self>>: Lanes {
-    const ZXYW: GenericArray<u32, R::Lanes>;
-    const YZXW: GenericArray<u32, R::Lanes>;
+    type ZXYW: SwizzleIndices<Self>;
+    type YZXW: SwizzleIndices<Self>;
 }
 
 impl<R> ValidLinAlg3Length<R> for typenum::U4
 where
     R: FloatRegister<Lanes = Self>,
 {
-    const ZXYW: GenericArray<u32, R::Lanes> = GenericArray::from_array([2, 0, 1, 3]);
-    const YZXW: GenericArray<u32, R::Lanes> = GenericArray::from_array([1, 2, 0, 3]);
+    type ZXYW = Zxyw4;
+    type YZXW = Yzxw4;
 }
 
 // Certain GPU vectors may actually have 3-lane registers, but this will probably
@@ -21,8 +46,8 @@ impl<R> ValidLinAlg3Length<R> for typenum::U3
 where
     R: FloatRegister<Lanes = Self>,
 {
-    const ZXYW: GenericArray<u32, R::Lanes> = GenericArray::from_array([2, 0, 1]);
-    const YZXW: GenericArray<u32, R::Lanes> = GenericArray::from_array([1, 2, 0]);
+    type ZXYW = Zxyw3;
+    type YZXW = Yzxw3;
 }
 
 /// Extensions to the `FloatRegister` trait for the most common 3D linear algebra operations.
@@ -34,15 +59,19 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
         Self::sum_elements3(Self::mul(lhs, rhs))
     }
 
+    #[allow(clippy::upper_case_acronyms)]
     #[inline(always)]
     fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        type ZXYW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::ZXYW;
+        type YZXW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::YZXW;
+
         if DOP {
             // More accurate cross product using the "accurate difference of sums" method, but
             // requires fused multiply-add/subtract operations for best accuracy.
-            let a = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
-            let b = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
-            let c = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW); // [z, x, y]
-            let d = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::YZXW); // [y, z, x]
+            let a = Self::permutev_const::<YZXW<Self>>(lhs); // [y, z, x]
+            let b = Self::permutev_const::<ZXYW<Self>>(rhs); // [z, x, y]
+            let c = Self::permutev_const::<ZXYW<Self>>(lhs); // [z, x, y]
+            let d = Self::permutev_const::<YZXW<Self>>(rhs); // [y, z, x]
 
             let cd = Self::mul(c, d);
 
@@ -51,15 +80,15 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
 
             Self::add(dop, err)
         } else {
-            let lhszxy = Self::permutev(lhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
-            let rhszxy = Self::permutev(rhs, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW);
+            let lhszxy = Self::permutev_const::<ZXYW<Self>>(lhs);
+            let rhszxy = Self::permutev_const::<ZXYW<Self>>(rhs);
 
             let lhszxy_rhs = Self::mul(lhszxy, rhs);
             let rhszxy_lhs = Self::mul(rhszxy, lhs);
 
             let sub = Self::sub(lhszxy_rhs, rhszxy_lhs);
 
-            Self::permutev(sub, <Self::Lanes as ValidLinAlg3Length<Self>>::ZXYW)
+            Self::permutev_const::<ZXYW<Self>>(sub)
         }
     }
 

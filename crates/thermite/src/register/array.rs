@@ -5,7 +5,7 @@ use generic_array::ArrayLength;
 use generic_array::functional::FunctionalSequence;
 use generic_array::typenum::{self, Const, Prod, ToUInt, Unsigned};
 
-use crate::Vector;
+use crate::{Vector, math::policy::Policy};
 
 use super::*;
 
@@ -96,6 +96,7 @@ where
     const ISA: InstructionSet = R::ISA;
 
     const EMPTY: Storage<Self> = Self([R::EMPTY; N]);
+    const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {}
     fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
@@ -175,6 +176,7 @@ where
         }
     }
 
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         for i in 0..N {
             R::fill_bitmask(value.0[i], &mut view[i * R::Lanes::USIZE..(i + 1) * R::Lanes::USIZE]);
@@ -246,8 +248,6 @@ where
     type Element = R::Element;
     type Signed = ArrayRegister<R::Signed, N>;
     type Unsigned = ArrayRegister<R::Unsigned, N>;
-
-    const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {}
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {}
@@ -692,20 +692,20 @@ where
         (Self(v), ArrayRegister(e))
     }
 
-    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let (s, c) = array_unzip2(value.0, |v| unsafe { R::native_sin_cos(v) });
+    unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, c) = array_unzip2(value.0, |v| unsafe { R::native_sin_cos::<P>(v) });
 
         (Self(s), Self(c))
     }
 
-    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {}
-    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_sin<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_cos<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_exp<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_exp2<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_ln<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_log2<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_powf<P: Policy>(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {}
+    unsafe fn native_tan<P: Policy>(value: Storage<Self>) -> Storage<Self> {}
 
     fn total_order(value: Storage<Self>) -> Storage<Self::SignedBits> {}
     fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {}

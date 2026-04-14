@@ -16,7 +16,9 @@ where
         let abs_x = x.abs();
 
         // threshold can be tuned
-        let use_series: V::Mask = abs_x.value().cmp_lt(V::splat(FloatElement::from_i64(3)));
+        let use_series: V::Mask = abs_x
+            .value()
+            .cmp_lt(V::splat(<V::Element as FloatElement>::ConstInt::<3>::VALUE));
 
         let use_only_series = use_series.all();
         let use_only_cf = use_series.none();
@@ -58,8 +60,8 @@ where
                     let k2_p1 = (2 * k + 1) as i64;
                     let k2_m1 = (2 * k - 1) as i64;
 
-                    let num = FloatElement::from_i64(k2_m1);
-                    let den = FloatElement::from_i64(k_f * k2_p1);
+                    let num = FloatElement::from_int(k2_m1);
+                    let den = FloatElement::from_int(k_f * k2_p1);
 
                     term_s *= x2 * Self::from_fraction(V::splat(num), V::splat(den));
 
@@ -81,7 +83,7 @@ where
                     // --- CF Update ---
                     // Lentz coefficients: a_k = (k-1)/2
                     if k > 1 {
-                        a = Self::splat(FloatElement::from_i64((k - 1) as i64)) * Self::HALF;
+                        a = Self::splat(FloatElement::from_int((k - 1) as i64)) * Self::HALF;
                     }
 
                     // Lentz steps: D = b + a*D, C = b + a/C
@@ -112,8 +114,8 @@ where
                     let k2_p1 = (2 * k + 1) as i64;
                     let k2_m1 = (2 * k - 1) as i64;
 
-                    let num = FloatElement::from_i64(k2_m1);
-                    let den = FloatElement::from_i64(k_f * k2_p1);
+                    let num = FloatElement::from_int(k2_m1);
+                    let den = FloatElement::from_int(k_f * k2_p1);
 
                     term_s *= x2 * Self::from_fraction(V::splat(num), V::splat(den));
 
@@ -125,7 +127,7 @@ where
                     // --- CF Update ---
                     // Lentz coefficients: a_k = (k-1)/2
                     if k > 1 {
-                        a = Self::splat(FloatElement::from_i64((k - 1) as i64)) * Self::HALF;
+                        a = Self::splat(FloatElement::from_int((k - 1) as i64)) * Self::HALF;
                     }
 
                     // Lentz steps: D = b + a*D, C = b + a/C
@@ -236,7 +238,7 @@ where
                     let m_i = m as i64;
                     let den_i = (m_i + 1) * (2 * m_i + 1);
 
-                    c_k.accumulate_unnormalized(num / <V::Element as FloatElement>::from_i64(den_i));
+                    c_k.accumulate_unnormalized(num / <V::Element as FloatElement>::from_int(den_i));
                 }
 
                 coeffs[k] = c_k.normalize();
@@ -246,7 +248,7 @@ where
 
                 let k_term_den = (2 * k + 1) as i64;
 
-                sum.accumulate_unnormalized(Self::splat(c_k) * w_pow / V::splat(FloatElement::from_i64(k_term_den)));
+                sum.accumulate_unnormalized(Self::splat(c_k) * w_pow / V::splat(FloatElement::from_int(k_term_den)));
 
                 // Check for convergence
                 if prev.cmp_eq(sum).all() {

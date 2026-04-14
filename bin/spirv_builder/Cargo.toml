@@ -1,0 +1,22 @@
+[package]
+name = "spirv_builder"
+version = "0.1.0"
+edition = "2024"
+
+# NOTE: This crate compiles rustc_codegen_spirv (the rust-gpu compiler backend) as part of its
+# build. That requires the toolchain to match rust-gpu's pinned nightly (see rust-toolchain.toml
+# at the workspace root) and the `rustc-dev` + `llvm-tools` components to be installed.
+#
+# Build with:    cargo run -p spirv_builder
+# Then run with: cargo run -p spirv_runner -- <path printed above>
+
+[[bin]]
+name = "spirv_builder"
+path = "src/main.rs"
+
+[dependencies]
+# Path dep into the local rust-gpu checkout. The `use-compiled-tools` default feature bundles
+# spirv-tools; `use-installed-tools` uses the Vulkan SDK instead (faster first build if SDK
+# is installed). The `rustc_codegen_spirv` feature is pulled in transitively by both.
+spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder" }
+rspirv = "0.12"

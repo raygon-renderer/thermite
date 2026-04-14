@@ -6,6 +6,7 @@ use core::{
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not},
 };
 
+#[cfg(feature = "bitvec")]
 use bitvec::{array::BitArray, view::BitViewSized};
 use generic_array::{GenericArray, typenum};
 
@@ -15,7 +16,7 @@ use crate::{
     element::{FloatElementWithBits, UnsignedIntegerElement},
     isa::InstructionSet,
     mask::{CastMask, GenericMask, GenericSelectable},
-    math::FloatConsts,
+    math::{FloatConsts, policy::Policy},
     register::{Element, FloatElement, Lanes, NativeCapability},
 };
 
@@ -35,7 +36,7 @@ pub use self::vector::Vector;
 
 /// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///
-/// There are three forms of this macro:
+/// There are five forms of this macro:
 /// ```ignore
 /// // 1. Generic type parameters with bounds
 /// // used when the type depends on generic parameters, and especially `Self`
@@ -51,6 +52,15 @@ pub use self::vector::Vector;
 /// // 3. Associated const value
 /// // used when the value is an associated constant of a type
 /// let infinity: Vector<f32x4> = crate::generic_splat!(<f32>::INFINITY);
+///
+/// // 4. Compile-time integer constant cast to a generic float element type E
+/// // Produces a const-folded OpConstantComposite in SPIR-V (no runtime OpCompositeConstruct).
+/// // E must implement FloatElement.
+/// let n_vec: V = crate::generic_splat!(int <E>: 7i64);
+///
+/// // 5. Compile-time rational constant (N/D) cast to a generic float element type E
+/// // E must implement FloatElement.
+/// let inv3: V = crate::generic_splat!(ratio <E>: 1i64, 3i64);
 /// ```
 #[macro_export]
 macro_rules! generic_splat {
@@ -91,6 +101,20 @@ macro_rules! generic_splat {
         }
         const { $crate::vector::splat::<_, __ConstSplatValue>() }
     }};
+
+    // Compile-time integer constant cast to a generic float element E.
+    // N must be a const expression of type i64.
+    // Requires E: FloatElement (provides E::IntSplat<N> implementing SplatConst<E>).
+    (int <$E:ty>: $n:expr) => {
+        const { $crate::vector::splat::<_, <$E as $crate::register::FloatElement>::IntSplat<{$n}>>() }
+    };
+
+    // Compile-time rational constant N/D cast to a generic float element E.
+    // N and D must be const expressions of type i64.
+    // Requires E: FloatElement (provides E::RatioSplat<N, D> implementing SplatConst<E>).
+    (ratio <$E:ty>: $n:expr, $d:expr) => {
+        const { $crate::vector::splat::<_, <$E as $crate::register::FloatElement>::RatioSplat<{$n}, {$d}>>() }
+    };
 }
 
 pub trait MaskInteroperable<A, B>: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
@@ -963,6 +987,12 @@ pub trait NumericVector:
     /// This operation has an `O(log2 n)` complexity to reduce.
     fn max_element(self) -> Self::Element;
 
+    /// Scales each element in the vector by the given factor.
+    ///
+    /// While semantically equivalent to `self * Self::splat(factor)`, this method may be optimized
+    /// better on certain architectures, such as GPUs.
+    #[conditional] fn scale(self, factor: Self::Element) -> Self;
+
     /// Returns the sum of all elements in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
@@ -1107,18 +1137,29 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
     #[conditional] fn parity(self) -> Self;
 }
 
+pub trait VectorWithRegister<R: crate::register::Register>: GenericVector {
+    fn into_register(self) -> crate::register::Storage<R>;
+    fn from_register(reg: crate::register::Storage<R>) -> Self;
+}
+
 /// Float vector types which have an associated hardware register type.
-pub trait FloatVectorWithRegister: FloatVectorWithBits<Mask = crate::Mask<Self::Register>> {
+pub trait FloatVectorWithRegister:
+    FloatVectorWithBits<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
+{
     type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
 /// SignedBits integer vector types which have an associated hardware register type.
-pub trait SignedIntegerVectorWithRegister: SignedIntegerVector<Mask = crate::Mask<Self::Register>> {
+pub trait SignedIntegerVectorWithRegister:
+    SignedIntegerVector<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
+{
     type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
 /// Unsigned integer vector types which have an associated hardware register type.
-pub trait UnsignedIntegerVectorWithRegister: UnsignedIntegerVector<Mask = crate::Mask<Self::Register>> {
+pub trait UnsignedIntegerVectorWithRegister:
+    UnsignedIntegerVector<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
+{
     type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
@@ -1200,6 +1241,12 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
 
     /// Returns the next representable value less than the current value, towards negative infinity.
     #[conditional] fn next_down(self) -> Self;
+
+    /// Linearly interpolates between `a` and `b` by `self`, where `self` is typically in the range `[0, 1]`.
+    ///
+    /// Follows the formula: `a * (1 - self) + b * self`, but the underlying implementation
+    /// may optimize into certain other formulations.
+    fn mix(self, a: Self, b: Self) -> Self;
 
     unsafe fn block_autovectorization(&mut self);
 
@@ -1309,15 +1356,16 @@ pub trait FloatVectorWithBits:
 
     unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self;
     unsafe fn native_frexp(self) -> (Self, Self::SignedBits);
-    unsafe fn native_sin_cos(self) -> (Self, Self);
-    unsafe fn native_sin(self) -> Self;
-    unsafe fn native_cos(self) -> Self;
-    unsafe fn native_tan(self) -> Self;
-    unsafe fn native_exp2(self) -> Self;
-    unsafe fn native_log2(self) -> Self;
-    unsafe fn native_exp(self) -> Self;
-    unsafe fn native_ln(self) -> Self;
-    unsafe fn native_powf(self, exp: Self) -> Self;
+
+    unsafe fn native_sin_cos<P: Policy>(self) -> (Self, Self);
+    unsafe fn native_sin<P: Policy>(self) -> Self;
+    unsafe fn native_cos<P: Policy>(self) -> Self;
+    unsafe fn native_tan<P: Policy>(self) -> Self;
+    unsafe fn native_exp2<P: Policy>(self) -> Self;
+    unsafe fn native_log2<P: Policy>(self) -> Self;
+    unsafe fn native_exp<P: Policy>(self) -> Self;
+    unsafe fn native_ln<P: Policy>(self) -> Self;
+    unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self;
 
     /// Return a signed integer vector that is capable of encapsulating
     /// the "total order" of the floating point values in this vector,

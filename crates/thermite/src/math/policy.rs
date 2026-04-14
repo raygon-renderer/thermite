@@ -14,7 +14,7 @@ point errors will not be very precise, and it's often better to fallback to anot
 does not accrue such errors, at the cost of performance.
 */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(u8)]
+#[repr(u32)]
 pub enum PrecisionPolicy {
     /// Precision is not important, so prefer simpler or faster algorithms.
     Worst = 0,
@@ -30,24 +30,24 @@ pub enum PrecisionPolicy {
 
 impl PrecisionPolicy {
     pub const fn eq(self, other: PrecisionPolicy) -> bool {
-        (self as u8) == (other as u8)
+        (self as u32) == (other as u32)
     }
     pub const fn gt(self, other: PrecisionPolicy) -> bool {
-        (self as u8) > (other as u8)
+        (self as u32) > (other as u32)
     }
     pub const fn ge(self, other: PrecisionPolicy) -> bool {
-        (self as u8) >= (other as u8)
+        (self as u32) >= (other as u32)
     }
     pub const fn lt(self, other: PrecisionPolicy) -> bool {
-        (self as u8) < (other as u8)
+        (self as u32) < (other as u32)
     }
     pub const fn le(self, other: PrecisionPolicy) -> bool {
-        (self as u8) <= (other as u8)
+        (self as u32) <= (other as u32)
     }
 
     /// Returns the multiple of `EPSILON` to use as the tolerance for this precision policy.
     #[inline(always)]
-    pub const fn tolerance(self) -> i64 {
+    pub const fn tolerance(self) -> crate::LargeInt {
         match self {
             PrecisionPolicy::Worst => 100_000,
             PrecisionPolicy::Medium => 10_000,
@@ -542,8 +542,28 @@ pub mod policies {
 
 use policies::*;
 
-#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub type DefaultPolicy = Size;
+#[cfg(all(feature = "spirv", target_arch = "spirv"))]
+pub struct GpuDefault;
 
-#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
-pub type DefaultPolicy = Performance;
+#[cfg(all(feature = "spirv", target_arch = "spirv"))]
+impl Policy for GpuDefault {
+    const POLICY: PolicyParameters = PolicyParameters {
+        check_overflow: true,
+        unroll_loops: true,
+        precision: PrecisionPolicy::Average,
+        avoid_branching: true,
+        max_iterations: 10000,
+        use_compensation: false,
+        denormal_behavior: DenormalBehavior::select_default(true),
+    };
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "wasm", target_arch = "wasm32"))] {
+        pub type DefaultPolicy = Size;
+    } else if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+        pub type DefaultPolicy = GpuDefault;
+    } else {
+        pub type DefaultPolicy = Performance;
+    }
+}

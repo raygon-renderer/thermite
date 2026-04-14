@@ -10,6 +10,7 @@ impl CoreRegister for bool {
     const IS_EMULATED: bool = false;
     const ISA: crate::InstructionSet = crate::InstructionSet::Scalar;
     const EMPTY: Storage<Self> = false;
+    const HAS_EQUAL_SIZE_MASK: bool = true;
 
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {
@@ -51,6 +52,7 @@ impl MaskRegister for bool {
     #[inline(always)] fn any(value: Storage<Self>) -> bool { value }
 
     #[inline(always)] fn native_bitmask(value: Storage<Self>) -> Option<u64> { Some(value as u64) }
+    #[cfg(feature = "bitvec")]
     #[inline(always)] fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) { view.set(0, value); }
 }
 

@@ -74,7 +74,7 @@ where
                 // k will be at most around 20, so div_c and div_s will be at most
                 // around 1600 or so before converging. This is well within the range of
                 // even f32 integer representation.
-                let (Some(div_c), Some(div_s)) = (FloatElement::try_from_i64(div_c), FloatElement::try_from_i64(div_s))
+                let (Some(div_c), Some(div_s)) = (FloatElement::try_from_int(div_c), FloatElement::try_from_int(div_s))
                 else {
                     #[cold]
                     fn this_branch_is_unlikely() {}
@@ -159,7 +159,7 @@ where
         // S_k = k_rem * (2 - |k_rem|)
 
         let k_div4 = (k * V::splat(FloatElement::from_ratio(1, 4))).round();
-        let k_rem = k_div4.nmul_adde(V::splat(FloatElement::from_i64(4)), k);
+        let k_rem = k_div4.nmul_adde(V::splat(<V::Element as FloatElement>::ConstInt::<4>::VALUE), k);
         let k_rem_abs = k_rem.abs();
 
         let c_k = V::ONE - k_rem_abs;
@@ -193,13 +193,16 @@ where
 
         // if branching, use Taylor series for tiny x without calling sine.
         if !P::POLICY.avoid_branching && is_tiny.all() {
-            let res = x2 / V::splat(FloatElement::from_i64(120));
+            let res = x2 / V::splat(<V::Element as FloatElement>::ConstInt::<120>::VALUE);
             return x2.mul_add(res - Self::FRAC_1_6, Self::ONE);
         }
 
         // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
         let num = is_tiny.select(x2, self.sin_p::<P>());
-        let den = is_tiny.select(Self::splat_value(FloatElement::from_i64(120)), self);
+        let den = is_tiny.select(
+            Self::splat_value(<V::Element as FloatElement>::ConstInt::<120>::VALUE),
+            self,
+        );
 
         // combined division, since division is expensive
         let mut y = num / den;
@@ -326,7 +329,7 @@ where
                 term *= z2;
 
                 // NOTE: Doesn't need explicit normalization later, due to sum being used
-                sum.accumulate_unnormalized(term / V::splat(FloatElement::from_i64(div as i64)));
+                sum.accumulate_unnormalized(term / V::splat(FloatElement::from_int(div as i64)));
             }
 
             if prev.cmp_eq(sum).all() {
@@ -535,7 +538,7 @@ where
                 // Use precomputed 1/ln(n) table for small integer bases
                 self.ln_p::<P>() * <V as crate::consts::CompensatedLogTable<V>>::LOG_TABLE[n - 3]
             }
-            _ => self.ln_p::<P>() / V::splat(FloatElement::from_i64(N as i64)).ln_p::<P>(),
+            _ => self.ln_p::<P>() / V::splat(FloatElement::from_int(N as i64)).ln_p::<P>(),
         }
     }
 
@@ -646,7 +649,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
             let prev_sum = sum;
 
             for k in i..next_i {
-                let n = V::splat(FloatElement::from_i64(k as i64));
+                let n = V::splat(FloatElement::from_int(k as i64));
 
                 if const { P::POLICY.precision.gt(MAX_PRECISION_HI_ONLY) } {
                     term *= x / n;
@@ -819,7 +822,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
 
         // crude range-reduction, assumes x is not larger than 2^N,
         // which is reasonable for exp inputs.
-        let scale = V::splat(FloatElement::from_i64(1 << n));
+        let scale = V::splat(FloatElement::from_int(1 << n));
         let mut r = x / scale;
 
         let overflows = r.value.cmp_gt(V::ONE);

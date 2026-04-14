@@ -25,6 +25,7 @@ impl CoreRegister for [<f $width>] {
     const IS_EMULATED: bool = false;
     const ISA: InstructionSet = InstructionSet::Scalar;
     const EMPTY: Storage<Self> = 0.0;
+    const HAS_EQUAL_SIZE_MASK: bool = false;
 
     #[inline(always)] fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, rhs, lhs)
@@ -72,8 +73,6 @@ impl Register for [<f $width>] {
 
     type Signed = [<i $width>];
     type Unsigned = [<u $width>];
-
-    const HAS_EQUAL_SIZE_MASK: bool = false;
 
     #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
 
@@ -190,7 +189,10 @@ impl FloatRegister for [<f $width>] {
     type ExtendedPrecision = f64;
 
     // best guess we can do
-    const HAS_TRUE_FMA: bool = cfg!(all(feature = "std", any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma")));
+    const HAS_TRUE_FMA: bool = cfg!(any(
+        all(feature = "spirv", target_arch = "spirv"),
+        all(feature = "std", any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"))
+    ));
 
     const HALF: Storage<Self> = 0.5;
     const NEG_ZERO: Storage<Self> = -0.0;
@@ -244,5 +246,9 @@ impl FloatRegister for [<f $width>] {
 
 }}} // end macro
 
+// On SPIRV targets the spirv backend provides its own CoreRegister/FloatRegister
+// impls for f32 and f64 via backend::spirv::scalar — avoid conflicting impls.
+#[cfg(not(target_arch = "spirv"))]
 decl_float_scalar!(f32 => 32);
+#[cfg(not(target_arch = "spirv"))]
 decl_float_scalar!(f64 => 64);

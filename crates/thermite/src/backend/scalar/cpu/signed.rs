@@ -26,6 +26,8 @@ impl CoreRegister for [<i $width>] {
 
     const EMPTY: Storage<Self> = 0;
 
+    const HAS_EQUAL_SIZE_MASK: bool = false;
+
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, rhs, lhs)
@@ -62,8 +64,6 @@ impl Register for [<i $width>] {
 
     type Signed = [<i $width>];
     type Unsigned = [<u $width>];
-
-    const HAS_EQUAL_SIZE_MASK: bool = false;
 
     #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
     #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { value.to_bool() }
@@ -252,5 +252,7 @@ impl SignedIntegerRegister for [<i $width>] {
 
 decl_signed_scalar!(i8: u8: i16 => 8);
 decl_signed_scalar!(i16: u16: i32 => 16);
+#[cfg(not(target_arch = "spirv"))]
 decl_signed_scalar!(i32: u32: i64 => 32);
+#[cfg(not(target_arch = "spirv"))]
 decl_signed_scalar!(i64: u64: i128 => 64);

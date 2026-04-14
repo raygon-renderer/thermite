@@ -8,10 +8,13 @@ edition = "2024"
 proc-macro = true
 
 [dependencies]
+cfg-if = "1"
 quote = "1"
 proc-macro2 = "1"
 syn = { version = "2", features = ["full", "extra-traits", "visit", "visit-mut"] }
 
 [features]
+x86 = []
 neon = []
 wasm = []
+spirv = []

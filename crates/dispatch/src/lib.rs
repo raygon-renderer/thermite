@@ -18,19 +18,24 @@ mod late_bound;
 
 const SKIP_DISPATCH: &'static str = "skip_dispatch";
 
-#[cfg(not(any(feature = "neon", feature = "wasm")))]
-static BACKENDS: &[(&str, &str)] = &[
-    ("Scalar", ""),
-    ("X86V1", "sse2"),
-    ("X86V2", "sse4.2"),
-    ("X86V3", "avx2,fma"),
-];
-
-#[cfg(feature = "neon")]
-static BACKENDS: &[(&str, &str)] = &[("NEON", "neon")];
-
-#[cfg(feature = "wasm")]
-static BACKENDS: &[(&str, &str)] = &[("WASM32", "simd128")];
+cfg_if::cfg_if! {
+    if #[cfg(feature = "x86")] {
+        static BACKENDS: &[(&str, &str)] = &[
+            ("Scalar", ""),
+            ("X86V1", "sse2"),
+            ("X86V2", "sse4.2"),
+            ("X86V3", "avx2,fma"),
+        ];
+    } else if #[cfg(feature = "neon")] {
+        static BACKENDS: &[(&str, &str)] = &[("Scalar", ""), ("NEON", "neon")];
+    } else if #[cfg(feature = "wasm")] {
+        static BACKENDS: &[(&str, &str)] = &[("Scalar", ""), ("WASM32", "simd128")];
+    } else if #[cfg(feature = "spirv")] {
+        static BACKENDS: &[(&str, &str)] = &[("SPIRV", "")];
+    } else {
+        static BACKENDS: &[(&str, &str)] = &[("Scalar", "")];
+    }
+}
 
 /// Holds the directly parsed attributes (no intermediate Punctuated tree).
 struct DispatchAttributes {

@@ -26,10 +26,9 @@ impl CoreRegister for U64x4V3 {
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
-
     const ISA: InstructionSet = InstructionSet::X86V3;
-
     const EMPTY: Storage<Self> = empty_reg::<Self>();
+    const HAS_EQUAL_SIZE_MASK: bool = true;
 
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {
@@ -93,6 +92,7 @@ impl MaskRegister for U64x4V3 {
     }
 
     #[inline(always)]
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let mask = unsafe { arch::_mm256_movemask_pd(arch::_mm256_castsi256_pd(value)) as u32 };
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
@@ -155,8 +155,6 @@ impl Register for U64x4V3 {
 
     type Signed = super::I64x4V3;
     type Unsigned = super::U64x4V3;
-
-    const HAS_EQUAL_SIZE_MASK: bool = true;
 
     #[inline(always)]
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {

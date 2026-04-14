@@ -244,7 +244,45 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     fn poly<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 
-        if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        if const {
+            !P::POLICY.unroll_loops
+                || P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::ISA.has_instruction_level_parallelism()
+        } {
+            // SPIR-V is terrible at unrolling loops like this,
+            // so we'll just do it ourselves.
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            {
+                use crunchy::unroll;
+
+                let mut res = Self::splat(coeffs[N - 1]);
+
+                macro_rules! unroll_poly {
+                    ($($len:tt),*) => {
+                        $(if const { N == $len } {
+                            unroll! {
+                                for i in 1..$len {
+                                    res = res.mul_adde(x, Self::splat(coeffs[
+                                        const { if $len > i + 1 { $len - 1 - i } else { 0 } }
+                                    ]));
+                                }
+                            }
+                        } else )* {
+                            let mut i = const { N - 1 };
+                            while i > 0 {
+                                i -= 1;
+                                unsafe { core::hint::assert_unchecked(i < N) };
+                                res = res.mul_adde(x, Self::splat(coeffs[i]));
+                            }
+                        }
+                    };
+                }
+
+                unroll_poly!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+
+                return res;
+            }
+
             // basic Horner's method that's both compact and accurate, even without FMA
             let mut res = Self::splat(coeffs[N - 1]);
             for &c in coeffs.iter().rev().skip(1) {
@@ -265,7 +303,41 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
     fn poly_rev<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 
-        if const { !P::POLICY.unroll_loops || P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        if const {
+            !P::POLICY.unroll_loops
+                || P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::ISA.has_instruction_level_parallelism()
+        } {
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            {
+                use crunchy::unroll;
+
+                let mut res = Self::splat(coeffs[0]);
+
+                macro_rules! unroll_poly {
+                    ($($len:tt),*) => {
+                        $(if const { N == $len } {
+                            unroll! {
+                                for i in 1..$len {
+                                    res = res.mul_adde(x, Self::splat(coeffs[i]));
+                                }
+                            }
+                        } else )* {
+                            let mut i = 1usize;
+                            while i < N {
+                                unsafe { core::hint::assert_unchecked(i < N) };
+                                res = res.mul_adde(x, Self::splat(coeffs[i]));
+                                i += 1;
+                            }
+                        }
+                    };
+                }
+
+                unroll_poly!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+
+                return res;
+            }
+
             // basic Horner's method that's both compact and accurate, even without FMA
             let mut res = Self::splat(coeffs[0]);
             for &c in coeffs.iter().skip(1) {
@@ -303,14 +375,14 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
         let mut d0 = Self::EMPTY;
         let mut d1 = Self::EMPTY;
 
-        if P::POLICY.avoid_branching || !invert.all() {
+        if const { P::POLICY.avoid_branching } || !invert.all() {
             n0 = Self::poly::<P, N>(x, numerator);
             d0 = Self::poly::<P, D>(x, denominator);
         }
 
         let mut z = Self::EMPTY;
 
-        if P::POLICY.avoid_branching || invert.any() {
+        if const { P::POLICY.avoid_branching } || invert.any() {
             z = Self::reciprocal::<P>(x);
             n1 = Self::poly_rev::<P, N>(z, numerator);
             d1 = Self::poly_rev::<P, D>(z, denominator);
@@ -326,7 +398,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
             return res;
         }
 
-        if P::POLICY.avoid_branching || invert.any() {
+        if const { P::POLICY.avoid_branching } || invert.any() {
             // when the degree of the numerator and denominator are different, we need to correct
             // the result by shifting over the difference in degrees
             let (mut u, mut e) = if N < D { (z, D - N) } else { (x, N - D) };
@@ -557,13 +629,13 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
                 }
 
                 // initial guess using reduced precision
-                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as i64)));
+                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as crate::LargeInt)));
 
                 // One iteration of Halley's method for nth root
                 let y_n = y.powi_p::<P>(N as i32);
 
-                let np1 = Self::splat(E::from_i64((N + 1) as i64));
-                let nm1 = Self::splat(E::from_i64((N - 1) as i64));
+                let np1 = Self::splat(E::from_int((N + 1) as crate::LargeInt));
+                let nm1 = Self::splat(E::from_int((N - 1) as crate::LargeInt));
 
                 let n = y * (x - y_n); // half of numerator
                 let d = y_n.mul_adde(np1, x * nm1);
@@ -607,11 +679,12 @@ where
     V: SpecializedSpatialMath<E>,
     P: Policy,
 {
+    #[cfg(not(target_arch = "spirv"))]
     if let Some(new_values) = FlushDenormals::<P>::flush_denormals(values) {
         values = new_values;
     }
 
-    if N == 0 {
+    if const { N == 0 } {
         if INV {
             return V::INFINITY; // 1/0 == infinity
         }
@@ -619,7 +692,7 @@ where
         return V::ZERO;
     }
 
-    if N == 1 {
+    if const { N == 1 } {
         let mut res = values[0].abs(); // sqrt(x^2) == abs(x)
 
         if INV {
@@ -630,7 +703,7 @@ where
     }
 
     // special case N=2 which saves a couple instructions
-    if N == 2 {
+    if const { N == 2 } {
         let x = values[0];
         let y = values[1];
 
@@ -653,13 +726,13 @@ where
             if INV {
                 res = res.inverse_sqrt_p::<P>();
 
-                if P::POLICY.check_overflow {
+                if const { P::POLICY.check_overflow } {
                     res = max.is_infinite().select(V::ZERO, res);
                 }
             } else {
                 res = res.sqrt();
 
-                if P::POLICY.check_overflow {
+                if const { P::POLICY.check_overflow } {
                     res = max.is_infinite().select(max, res);
                 }
             }
@@ -754,7 +827,7 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
 pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> {
     #[inline(always)]
     fn tolerance<P: Policy>() -> Self {
-        Self::splat(Self::Element::from_i64(P::POLICY.precision.tolerance()) * Self::Element::EPSILON)
+        Self::splat(Self::Element::from_int(P::POLICY.precision.tolerance()) * Self::Element::EPSILON)
     }
 
     #[inline(always)]
@@ -788,13 +861,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
     #[inline(always)]
     fn lerp<P: Policy>(self, a: Self, b: Self) -> Self {
-        let t = self;
-
-        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
-            t.mul_add(b - a, a) // Fast and accurate, if available
-        } else {
-            (Self::ONE - t) * a + t * b // Accurate but slower than FMA
-        }
+        self.mix(a, b)
     }
 
     #[inline(always)]
@@ -816,6 +883,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
 
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
@@ -831,7 +899,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             };
         }
 
-        if P::POLICY.check_overflow {
+        if const { P::POLICY.check_overflow } {
             t = t.clamp(Self::ZERO, Self::ONE);
         }
 
@@ -841,10 +909,16 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             1 => t, // linear
             _ => {
                 let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
-                let mut y = Self::splat(E::from_i64(coeffs[0]));
+                let mut y = Self::splat(E::from_int(coeffs[0]));
 
-                for &c in &coeffs[1..] {
-                    y = y.mul_adde(t, Self::splat(E::from_i64(c)));
+                let mut i = 1usize;
+                while i < N {
+                    #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+                    let c = coeffs[i];
+                    #[cfg(not(all(feature = "spirv", target_arch = "spirv")))]
+                    let c = unsafe { *coeffs.get_unchecked(i) };
+                    y = y.mul_adde(t, Self::splat(E::from_int(c)));
+                    i += 1;
                 }
 
                 y * t.powi_p::<P>(N as i32)
@@ -857,6 +931,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut t = self;
         let mut dt_dx = Self::ONE;
 
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
@@ -879,17 +954,21 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             0 => t.cmp_eq(Self::HALF).select(Self::INFINITY, Self::ZERO),
             1 => dt_dx,
             _ => {
-                if P::POLICY.check_overflow {
+                if const { P::POLICY.check_overflow } {
                     t = t.clamp(Self::ZERO, Self::ONE);
                 }
 
                 let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
-                let mut y = Self::splat(E::from_i64(coeffs[0] * (2 * N - 1) as i64));
-                let mut k = 1;
+                let mut y = Self::splat(E::from_int(coeffs[0] * (2 * N - 1) as crate::LargeInt));
+                let mut k = 1usize;
 
-                for &c in &coeffs[1..] {
+                while k < N {
+                    #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+                    let c = coeffs[k];
+                    #[cfg(not(all(feature = "spirv", target_arch = "spirv")))]
+                    let c = unsafe { *coeffs.get_unchecked(k) };
                     // order - k for derivative coefficient
-                    y = y.mul_adde(t, Self::splat(E::from_i64(c * (2 * N - k - 1) as i64)));
+                    y = y.mul_adde(t, Self::splat(E::from_int(c * (2 * N - k - 1) as crate::LargeInt)));
                     k += 1;
                 }
 
@@ -904,6 +983,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut bar = Self::ONE;
         let mut bar_a = Self::ONE; // (b - a) * a
 
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_y) = FlushDenormals::<P>::flush_denormals([y]) {
             y = new_y[0];
         }
@@ -945,7 +1025,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                     t *= Self::splat(E::from_ratio(1, 3)); // multiply by 1/3 for medium precision
                 } else {
                     // exact division for higher precisions
-                    t /= Self::splat(E::from_i64(3));
+                    t /= Self::splat(E::from_int(3));
                 }
 
                 t = Self::HALF - t.sin_p::<P>();
@@ -976,14 +1056,19 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
             let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
 
-            let mut fx = Self::splat(E::from_i64(coeffs[0]));
-            let mut fpx = Self::splat(E::from_i64(coeffs[0] * (2 * N - 1) as i64));
+            let mut fx = Self::splat(E::from_int(coeffs[0]));
+            let mut fpx = Self::splat(E::from_int(coeffs[0] * (2 * N - 1) as crate::LargeInt));
 
-            let mut k = 1;
+            let mut k = 1usize;
 
-            for &c in &coeffs[1..] {
-                fx = fx.mul_adde(t, Self::splat(E::from_i64(c)));
-                fpx = fpx.mul_adde(t, Self::splat(E::from_i64(c * (2 * N - k - 1) as i64)));
+            while k < N {
+                #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+                let c = coeffs[k];
+                #[cfg(not(all(feature = "spirv", target_arch = "spirv")))]
+                let c = unsafe { *coeffs.get_unchecked(k) };
+
+                fx = fx.mul_adde(t, Self::splat(E::from_int(c)));
+                fpx = fpx.mul_adde(t, Self::splat(E::from_int(c * (2 * N - k - 1) as crate::LargeInt)));
 
                 k += 1;
             }
@@ -998,6 +1083,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     fn smooth_interpolator<P: Policy>(x: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
         let mut t = x;
 
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_t) = FlushDenormals::<P>::flush_denormals([t]) {
             t = new_t[0];
         }
@@ -1023,7 +1109,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         // If the denominator is small enough, it could cause overflow,
         // however that only really happens when t is very close to 0 or 1,
         // or when k is very small. So approximate it with a step function.
-        if P::POLICY.avoid_branching || crate::unlikely(overflow.any()) {
+        if const { P::POLICY.avoid_branching } || crate::unlikely(overflow.any()) {
             res = overflow.select(t.step_p::<P>(Self::HALF), res);
         }
 
@@ -1042,7 +1128,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
         // ((l + 2) - sqrt(l^2 + 4)) / 2l
         let a = l + Self::TWO;
-        let b = l.mul_adde(l, Self::splat(E::from_i64(4))).sqrt();
+        let b = l.mul_adde(l, Self::splat(E::from_int(4))).sqrt();
         let mut t = (a - b) / (Self::TWO * l);
 
         // handle out-of-bounds inputs
@@ -1092,17 +1178,17 @@ const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
 const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
 const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
 
-const fn binomial(a: i32, b: i32) -> i64 {
+const fn binomial(a: i32, b: i32) -> crate::LargeInt {
     if b <= 0 {
         return 1;
     }
 
-    let mut res: i64 = 1;
+    let mut res: crate::LargeInt = 1;
     let mut i = 0;
 
     while i < b {
-        let n: i64 = res * (a - i) as i64;
-        res = n / (i + 1) as i64;
+        let n: crate::LargeInt = res * (a - i) as crate::LargeInt;
+        res = n / (i + 1) as crate::LargeInt;
 
         i += 1;
     }
@@ -1147,11 +1233,11 @@ const fn binomial(a: i32, b: i32) -> i64 {
 //     (n, d)
 // }
 
-pub struct Smoothstep<const N: usize>(PhantomData<[i64; N]>);
+pub struct Smoothstep<const N: usize>(PhantomData<[crate::LargeInt; N]>);
 
 impl<const N: usize> Smoothstep<N> {
     // ensure these coefficients are generated at compile time
-    pub const COEFFICIENTS: [i64; N] = const {
+    pub const COEFFICIENTS: [crate::LargeInt; N] = const {
         let mut coeffs = [0; N];
         let n = (N - 1) as i32;
 

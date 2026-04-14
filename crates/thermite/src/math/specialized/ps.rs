@@ -43,34 +43,34 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             P::POLICY.precision.le(PrecisionPolicy::Average)
                 && Self::NATIVE_CAP.has(NativeCapability::SIN | NativeCapability::COS)
         } {
-            return unsafe { self.native_sin_cos() };
+            return unsafe { self.native_sin_cos::<P>() };
         }
 
-        sin_cos_f_internal::<P, V, false>(self)
+        sin_cos_f_internal::<P, V, false, false>(self)
     }
 
     #[inline(always)]
     fn sin<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::SIN) } {
-            return unsafe { self.native_sin() };
+            return unsafe { self.native_sin::<P>() };
         }
 
-        self.sin_cos::<P>().0
+        sin_cos_f_internal::<P, V, false, true>(self).0
     }
 
     #[inline(always)]
     fn cos<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::COS) } {
-            return unsafe { self.native_cos() };
+            return unsafe { self.native_cos::<P>() };
         }
 
-        self.sin_cos::<P>().1
+        sin_cos_f_internal::<P, V, false, true>(self).1
     }
 
     #[inline(always)]
     fn tan<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::TAN) } {
-            return unsafe { self.native_tan() };
+            return unsafe { self.native_tan::<P>() };
         }
 
         let d = self;
@@ -99,19 +99,19 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         }
 
         #[rustfmt::skip]
-        let mut r = x2.poly_p::<P, _>(&[
-            3.33331568548E-1,   //  x^2 : ~1/3
-            1.33387994085E-1,   //  x^4 : ~2/15
-            5.34112807005E-2,   //  x^6 : ~17/315
-            2.44301354525E-2,   //  x^8
-            3.11992232697E-3,   // x^10
+        let mut r = x2.poly_rev_p::<P, _>(&[
             9.38540185543E-3,   // x^12
+            3.11992232697E-3,   // x^10
+            2.44301354525E-2,   //  x^8
+            5.34112807005E-2,   //  x^6 : ~17/315
+            1.33387994085E-1,   //  x^4 : ~2/15
+            3.33331568548E-1,   //  x^2 : ~1/3
         ]).mul_adde(x2 * x, x0);
 
         // For odd quadrants, take reciprocal: 1/tan(-x) = -1/tan(x) = -cot(x)
         let odd = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
 
-        if P::POLICY.avoid_branching || odd.any() {
+        if const { P::POLICY.avoid_branching } || odd.any() {
             r = odd.select(r.reciprocal_p::<P>(), r);
         }
 
@@ -132,34 +132,34 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             P::POLICY.precision.le(PrecisionPolicy::Average)
                 && Self::NATIVE_CAP.has(NativeCapability::SIN | NativeCapability::COS)
         } {
-            return unsafe { (self * Self::PI).native_sin_cos() };
+            return unsafe { (self * Self::PI).native_sin_cos::<P>() };
         }
 
-        sin_cos_f_internal::<P, V, true>(self)
+        sin_cos_f_internal::<P, V, true, false>(self)
     }
 
     #[inline(always)]
     fn sin_pi<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::SIN) } {
-            return unsafe { (self * Self::PI).native_sin() };
+            return unsafe { (self * Self::PI).native_sin::<P>() };
         }
 
-        self.sincos_pi::<P>().0
+        sin_cos_f_internal::<P, V, true, true>(self).0
     }
 
     #[inline(always)]
     fn cos_pi<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::COS) } {
-            return unsafe { (self * Self::PI).native_cos() };
+            return unsafe { (self * Self::PI).native_cos::<P>() };
         }
 
-        self.sincos_pi::<P>().1
+        sin_cos_f_internal::<P, V, true, true>(self).1
     }
 
     #[inline(always)]
     fn tan_pi<P: Policy>(self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::TAN) } {
-            return unsafe { (self * Self::PI).native_tan() };
+            return unsafe { (self * Self::PI).native_tan::<P>() };
         }
 
         let (s, c) = self.sincos_pi::<P>();
@@ -183,7 +183,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let x2 = x * x;
 
             let y1 = x2
-                .poly_p::<P, _>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
+                .poly_rev_p::<P, _>(&[2.03721912945E-4, 8.33028376239E-3, 1.66667160211E-1])
                 .mul_adde(x2 * x, x);
 
             sinh = x_small.select(y1, sinh);
@@ -202,7 +202,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut y2 = V::EMPTY;
 
         // if not all are small, use exponential functions
-        if P::POLICY.avoid_branching || !x_small.all() {
+        if const { P::POLICY.avoid_branching } || !x_small.all() {
             y2 = x.exph_p::<P>();
             y2 -= V::FRAC_1_4 / y2;
 
@@ -216,7 +216,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let x2 = x * x;
 
             let y1 = x2
-                .poly_p::<P, _>(&[1.66667160211E-1, 8.33028376239E-3, 2.03721912945E-4])
+                .poly_rev_p::<P, _>(&[2.03721912945E-4, 8.33028376239E-3, 1.66667160211E-1])
                 .mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
@@ -243,17 +243,17 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut y2 = V::EMPTY;
 
         // if not all are small
-        if P::POLICY.avoid_branching || !x_small.all() {
+        if const { P::POLICY.avoid_branching } || !x_small.all() {
             y2 = (x + x).exp_p::<P>();
             // originally (1 - 2/(y2 + 1)), but doing it this way avoids
             // loading 2.0 and encourages slight instruction-level parallelism
             y2 = (y2 - one) / (y2 + one);
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 y2 = x.cmp_gt(crate::generic_splat!(f32: 44.4)).select(one, y2);
             }
 
-            if P::POLICY.avoid_precision_branches() {
+            if const { P::POLICY.avoid_precision_branches() } {
                 return y2.mul_sign(x0);
             }
         }
@@ -262,8 +262,12 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } && (P::POLICY.avoid_branching || x_small.any()) {
             let x2 = x * x;
 
-            let y1 = x2.poly_p::<P, _>(&[
-                -3.33332819422E-1, 1.33314422036E-1, -5.37397155531E-2, 2.06390887954E-2, -5.70498872745E-3,
+            let y1 = x2.poly_rev_p::<P, _>(&[
+                -5.70498872745E-3,
+                2.06390887954E-2,
+                -5.37397155531E-2,
+                1.33314422036E-1,
+                -3.33332819422E-1,
             ]).mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
@@ -298,9 +302,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
             let gt1 = a.cmp_gt(V::ONE);
 
-            let s = gt1
-                .select(a.reciprocal_p::<ExtraPrecision<P>>(), a)
-                .flush_denormals::<P>();
+            let s = gt1.select(a.reciprocal_p::<ExtraPrecision<P>>().flush_denormals::<P>(), a);
 
             let t = s * s;
 
@@ -333,7 +335,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let z = a / b;
         let z2 = z * z;
 
-        z2.poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+        z2.poly_rev_p::<P, _>(&[8.05374449538E-2, -1.38776856032E-1, 1.99777106478E-1, -3.33329491539E-1])
             .mul_adde(z2 * z, z.add_c(not_small, s)) // z += select(not_small, s, 0.0);
             .mul_sign(x)
     }
@@ -349,25 +351,25 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut y2 = V::EMPTY;
 
-        if P::POLICY.avoid_branching || !x_small.all() {
+        if const { P::POLICY.avoid_branching } || !x_small.all() {
             y2 = ((x2 + V::ONE).sqrt() + x).ln_p::<P>();
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 let x_huge = x.cmp_gt(crate::generic_splat!(f32: 1e10));
 
-                if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
+                if const { P::POLICY.avoid_precision_branches() } || crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x.ln_p::<P>() + V::LN_2, y2);
                 }
             }
 
-            if P::POLICY.avoid_precision_branches() {
+            if const { P::POLICY.avoid_precision_branches() } {
                 return y2.mul_sign(x0);
             }
         }
 
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.avoid_branching } || x_small.any() {
             let y1 = x2
-                .poly_p::<P, _>(&[-1.6666288134E-1, 7.4847586088E-2, -4.2699340972E-2, 2.0122003309E-2])
+                .poly_rev_p::<P, _>(&[2.0122003309E-2, -4.2699340972E-2, 7.4847586088E-2, -1.6666288134E-1])
                 .mul_adde(x2 * x, x);
 
             y2 = x_small.select(y1, y2);
@@ -386,34 +388,34 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut y2 = V::EMPTY;
 
         // if not all are small
-        if P::POLICY.avoid_branching || !x_small.all() {
+        if const { P::POLICY.avoid_branching } || !x_small.all() {
             y2 = (x0.mul_sube(x0, V::ONE).sqrt() + x0).ln_p::<P>();
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 let x_huge = x1.cmp_gt(crate::generic_splat!(f32: 1e10));
 
-                if P::POLICY.avoid_precision_branches() || crate::unlikely(x_huge.any()) {
+                if const { P::POLICY.avoid_precision_branches() } || crate::unlikely(x_huge.any()) {
                     y2 = x_huge.select(x0.ln_p::<P>() + V::LN_2, y2);
                 }
             }
 
-            if P::POLICY.avoid_precision_branches() {
+            if const { P::POLICY.avoid_precision_branches() } {
                 return y2;
             }
         }
 
         // if any are small
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.avoid_branching } || x_small.any() {
             #[rustfmt::skip]
-            let mut y1 = x1.sqrt() * x1.poly_p::<P, _>(&[
-                1.4142135263E0,
-                -1.1784741703E-1,
-                2.6454905019E-2,
-                -7.5272886713E-3,
+            let mut y1 = x1.sqrt() * x1.poly_rev_p::<P, _>(&[
                 1.7596881071E-3,
+                -7.5272886713E-3,
+                2.6454905019E-2,
+                -1.1784741703E-1,
+                1.4142135263E0,
             ]);
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 // result is NaN if less-than 1
                 y1 = x0.cmp_lt(V::ONE).select(V::NAN, y1);
             }
@@ -432,31 +434,31 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut y2 = V::EMPTY;
 
-        if P::POLICY.avoid_branching || !x_small.all() {
+        if const { P::POLICY.avoid_branching } || !x_small.all() {
             let one = V::ONE;
 
-            y2 = ((one + x) / (one - x)).ln_p::<P>() * V::HALF;
+            y2 = ((one + x) / (one - x)).ln_p::<P>().scale(0.5);
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 let y3 = x.cmp_eq(one).select(V::INFINITY, V::NAN);
                 y2 = x.cmp_ge(one).select(y3, y2);
             }
 
-            if P::POLICY.avoid_precision_branches() {
+            if const { P::POLICY.avoid_precision_branches() } {
                 return y2.mul_sign(self);
             }
         }
 
-        if P::POLICY.avoid_branching || x_small.any() {
+        if const { P::POLICY.avoid_branching } || x_small.any() {
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_p::<P, _>(&[
-                3.33337300303E-1,
-                1.99782164500E-1,
-                1.46691431730E-1,
-                8.24370301058E-2,
+            let y1 = x2.poly_rev_p::<P, _>(&[
                 1.81740078349E-1,
+                8.24370301058E-2,
+                1.46691431730E-1,
+                1.99782164500E-1,
+                3.33337300303E-1,
             ])
             .mul_adde(x2 * x, x);
 
@@ -494,7 +496,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::POWF) } {
-            return unsafe { self.native_powf(y) };
+            return unsafe { self.native_powf::<P>(y) };
         }
 
         let x0 = self;
@@ -530,16 +532,16 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let x2 = x * x;
 
         // logarithm expansion
-        let mut lg1 = x.poly_p::<P, _>(&[
-            3.3333331174E-1,
-            -2.4999993993E-1,
-            2.0000714765E-1,
-            -1.6668057665E-1,
-            1.4249322787E-1,
-            -1.2420140846E-1,
-            1.1676998740E-1,
-            -1.1514610310E-1,
+        let mut lg1 = x.poly_rev_p::<P, _>(&[
             7.0376836292E-2,
+            -1.1514610310E-1,
+            1.1676998740E-1,
+            -1.2420140846E-1,
+            1.4249322787E-1,
+            -1.6668057665E-1,
+            2.0000714765E-1,
+            -2.4999993993E-1,
+            3.3333331174E-1,
         ]);
 
         lg1 *= x2 * x;
@@ -580,7 +582,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // Taylor expansion of exp
         let z = x
-            .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .poly_rev_p::<P, _>(&[1.0 / 5040.0, 1.0 / 720.0, 1.0 / 120.0, 1.0 / 24.0, 1.0 / 6.0, 1.0 / 2.0])
             .mul_adde(x2, x + one);
 
         // contributions to exponent
@@ -593,7 +595,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // add exponent by signed integer addition
         let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 23));
 
-        if !P::POLICY.check_overflow {
+        if const { !P::POLICY.check_overflow } {
             return z;
         }
 
@@ -726,7 +728,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             }
         }
 
-        if !P::POLICY.check_overflow {
+        if const { !P::POLICY.check_overflow } {
             return x.cmp_eq(V::ZERO).select(x, t);
         }
 
@@ -812,7 +814,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             // bring to zero on the tail
             let mut res = u1.lerp_p::<P>(lnx - c, V::ZERO);
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 res = res.cmp_lt(V::ZERO).select(V::NAN, res);
                 res = res.cmp_eq(V::ZERO).select(V::NEG_INFINITY, res);
             }
@@ -859,7 +861,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
             let mut k = n / d;
 
-            if P::POLICY.check_overflow {
+            if const { P::POLICY.check_overflow } {
                 let b_eq_zero = b.cmp_eq(V::ZERO);
                 let ab_eq = a.cmp_eq(b);
 
@@ -887,7 +889,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         let mut x2 = swap_xy.select(y1, x1);
         let mut y2 = swap_xy.select(x1, y1);
 
-        if P::POLICY.check_overflow {
+        if const { P::POLICY.check_overflow } {
             let both_infinite = x.is_infinite() & y.is_infinite();
 
             //if crate::unlikely(both_infinite.any())
@@ -911,7 +913,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         let z2 = z * z;
 
         let mut re = z2
-            .poly_p::<P, _>(&[-3.33329491539E-1, 1.99777106478E-1, -1.38776856032E-1, 8.05374449538E-2])
+            .poly_rev_p::<P, _>(&[8.05374449538E-2, -1.38776856032E-1, 1.99777106478E-1, -3.33329491539E-1])
             .mul_adde(z2 * z, z + s);
 
         re = swap_xy.select(V::FRAC_PI_2 - re, re);
@@ -1034,7 +1036,7 @@ fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const 
             xa = xa.nz(is_large); // set to zero if too large
         }
 
-        xa * V::FRAC_2_PI
+        xa.scale(FloatConsts::FRAC_2_PI)
     };
 
     let y = y0.round();
@@ -1045,7 +1047,11 @@ fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const 
     // All constants are doubled since we reduce by pi/2, not pi/4.
     let mut x = if PI {
         // sinpi/cospi: x = pi * (xa - y * 0.5)
-        y.nmul_adde(V::HALF, xa) * V::PI
+        y.nmul_adde(V::HALF, xa).scale(FloatConsts::PI)
+    } else if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        // Single-step reduction: xa - y * (pi/2). One FMA, no extended precision.
+        // Loses ~7 bits relative to the full Cody-Waite, acceptable at Medium.
+        y.nmul_adde(V::FRAC_PI_2, xa)
     } else {
         let dp1f = crate::generic_splat!(f32: 0.78515625 * 2.0);
         let dp2f = crate::generic_splat!(f32: 2.4187564849853515625E-4 * 2.0);
@@ -1077,8 +1083,10 @@ fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const 
 }
 
 #[inline(always)]
-fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(xx: V) -> (V, V) {
-    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool, const SINGLE: bool>(
+    xx: V,
+) -> (V, V) {
+    if const { SINGLE && P::POLICY.precision.le(PrecisionPolicy::Worst) } {
         // Max error about 0.00092, avg error about 0.00053
         // https://stackoverflow.com/a/28050328/2083075
         // the actual instruction count isn't that much better,
@@ -1108,7 +1116,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
             crate::generic_splat!(f32: FRAC_1_PI / 2.0)
         };
 
-        return if const { V::HAS_TRUE_FMA } {
+        return if const { V::HAS_TRUE_FMA && V::ISA.has_instruction_level_parallelism() } {
             // if FMA is available, we can improve ILP by doing product with m in parallel
             (
                 inner::<V>(xx.mul_sub(m, V::HALF) - (xx * m).floor()), // sine
@@ -1137,18 +1145,18 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     }
 
     #[rustfmt::skip]
-    let mut s = x2.poly_p::<P, _>(&[
-        -1.6666654611E-1,
-        8.3321608736E-3,
+    let mut s = x2.poly_rev_p::<P, _>(&[
         -1.9515295891E-4,
+        8.3321608736E-3,
+        -1.6666654611E-1,
     ])
     .mul_adde(x2 * x, x0);
 
     #[rustfmt::skip]
-    let mut c = x2.poly_p::<P, _>(&[
-        4.166664568298827E-2,
-        -1.388731625493765E-3,
+    let mut c = x2.poly_rev_p::<P, _>(&[
         2.443315711809948E-5,
+        -1.388731625493765E-3,
+        4.166664568298827E-2,
     ])
     .mul_adde(x2 * x2, x2.nmul_adde(V::HALF, V::ONE));
 
@@ -1182,10 +1190,10 @@ fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS:
         let mut m = xa.min(V::ONE); // clamp
 
         let a0 = (V::ONE - m).sqrt();
-        let a1 = m.poly_p::<P, _>(&[FRAC_PI_2, -0.213300989, 0.077980478, -0.02164095]);
+        let a1 = m.poly_rev_p::<P, _>(&[-0.02164095, 0.077980478, -0.213300989, FRAC_PI_2]);
 
         if ACOS {
-            if V::HAS_TRUE_FMA {
+            if const { V::HAS_TRUE_FMA && V::ISA.has_instruction_level_parallelism() } {
                 // if FMA is available we can at least exploit instruction-level parallelism
                 return x.select_negative(a0.nmul_add(a1, V::PI), a0 * a1);
             }
@@ -1206,12 +1214,12 @@ fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS:
     let x4 = is_big.select(x1.sqrt(), xa);
 
     #[rustfmt::skip]
-    let z = x3.poly_p::<P, _>(&[
-        1.6666752422E-1,
-        7.4953002686E-2,
-        4.5470025998E-2,
-        2.4181311049E-2,
+    let z = x3.poly_rev_p::<P, _>(&[
         4.2163199048E-2,
+        2.4181311049E-2,
+        4.5470025998E-2,
+        7.4953002686E-2,
+        1.6666752422E-1,
     ])
     .mul_adde(x3 * x4, x4);
 
@@ -1241,7 +1249,7 @@ fn pow2n_f<V: FloatVectorWithBits<Element = f32>>(n: V) -> V {
 #[inline(always)]
 fn pow2n_f_safe<V: FloatVectorWithBits<Element = f32>>(n: V) -> (V, V) {
     // Split n into two halves, each in [-126, 127]
-    let half = (n * V::HALF).floor();
+    let half = n.scale(0.5).floor();
     let other = n - half;
     (pow2n_f(half), pow2n_f(other))
 }
@@ -1250,11 +1258,11 @@ fn pow2n_f_safe<V: FloatVectorWithBits<Element = f32>>(n: V) -> (V, V) {
 fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: u8>(x0: V) -> V {
     if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
         if const { V::NATIVE_CAP.has(NativeCapability::EXP) && MODE == EXP_MODE_EXP } {
-            return unsafe { x0.native_exp() };
+            return unsafe { x0.native_exp::<P>() };
         }
 
         if const { V::NATIVE_CAP.has(NativeCapability::EXP2) && MODE == EXP_MODE_POW2 } {
-            return unsafe { x0.native_exp2() };
+            return unsafe { x0.native_exp2::<P>() };
         }
     }
 
@@ -1266,8 +1274,8 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
     let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Compute t such that b^x = 2^t
         let t = match MODE {
-            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x * V::LOG2_E,
-            EXP_MODE_POW10 => x * V::LOG10_2,
+            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x.scale(FloatConsts::LOG2_E),
+            EXP_MODE_POW10 => x.scale(FloatConsts::LOG10_2),
             EXP_MODE_POW2 => x,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         };
@@ -1285,20 +1293,20 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             // max. rel. error <= ~7.55e-11 on [0,1) via Sollya,
             // which is perfect for f32, but Medium precision
             // has worse range reduction
-            f.poly_p::<P, _>(&[
-                1.0,                     // c0 — exact
-                0.693147182464599609375, // c1 — 0x3f317218 (≈ ln2)
-                0.240226432681083679199, // c2 — 0x3e75fdeb
-                0.055504892021417617798, // c3 — 0x3d635919
-                0.009614554233849048615, // c4 — 0x3c1d865d
-                0.001341646537184715271, // c5 — 0x3aafda30
-                0.000143863057019189000, // c6 — 0x3916d9f2
-                0.000021428975742310286, // c7 — 0x37b3c260
+            f.poly_rev_p::<P, _>(&[
+                0.000021428975742310286, // c7 - 0x37b3c260
+                0.000143863057019189000, // c6 - 0x3916d9f2
+                0.001341646537184715271, // c5 - 0x3aafda30
+                0.009614554233849048615, // c4 - 0x3c1d865d
+                0.055504892021417617798, // c3 - 0x3d635919
+                0.240226432681083679199, // c2 - 0x3e75fdeb
+                0.693147182464599609375, // c1 - 0x3f317218 (≈ ln2)
+                1.0,                     // c0 - exact
             ])
         } else {
             // https://stackoverflow.com/a/10792321 with a better 2^f fit
             // max. rel. error <= 1.73e-3 on [-87,88]
-            f.poly_p::<P, _>(&[1.0, 0.695556856, 0.226173572, 0.0781455737])
+            f.poly_rev_p::<P, _>(&[0.0781455737, 0.226173572, 0.695556856, 1.0])
         };
 
         // scale 2^f by 2^i
@@ -1307,7 +1315,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         let z = V::from_bits(ci);
 
         match MODE {
-            EXP_MODE_EXPH => z * V::HALF,
+            EXP_MODE_EXPH => z.scale(0.5),
             EXP_MODE_EXPM1 => z - V::ONE,
             EXP_MODE_EXP | EXP_MODE_POW2 | EXP_MODE_POW10 => z,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
@@ -1324,6 +1332,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
                 let log10_2_hi: V = crate::generic_splat!(f32: -0.301025391); // log10(2) in two parts
                 let log10_2_lo: V = crate::generic_splat!(f32: -4.60503907E-6);
 
+                // TODO: Combine these constants and use .scale()
                 r = (x0 * crate::generic_splat!(f32: LN_10 * LOG2_E)).round();
 
                 x = r.mul_adde(log10_2_hi, x); // x -= r * log10_2_hi;
@@ -1334,7 +1343,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
                 let ln2f_hi: V = crate::generic_splat!(f32: -0.693359375);
                 let ln2f_lo: V = crate::generic_splat!(f32: 2.12194440e-4);
 
-                r = (x0 * V::LOG2_E).round();
+                r = x0.scale(FloatConsts::LOG2_E).round();
 
                 x = r.mul_adde(ln2f_hi, x); // x -= r * ln2f_hi;
                 x = r.mul_adde(ln2f_lo, x); // x -= r * ln2f_lo;
@@ -1347,7 +1356,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         }
 
         let z = x
-            .poly_p::<P, _>(&[1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0, 1.0 / 5040.0])
+            .poly_rev_p::<P, _>(&[1.0 / 5040.0, 1.0 / 720.0, 1.0 / 120.0, 1.0 / 24.0, 1.0 / 6.0, 1.0 / 2.0])
             .mul_adde(x * x, x);
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
@@ -1435,7 +1444,7 @@ fn exponent<V: FloatVectorWithBits<Element = f32>>(x: V) -> V::SignedBits {
 #[inline(always)]
 fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LOG2) } {
-        return unsafe { x.native_log2() };
+        return unsafe { x.native_log2::<P>() };
     }
 
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
@@ -1451,13 +1460,13 @@ fn ln_2_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
         );
     }
 
-    ln_f_internal::<P, V, false>(x) * V::LOG2_E
+    ln_f_internal::<P, V, false>(x).scale(FloatConsts::LOG2_E)
 }
 
 #[inline(always)]
 fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
     if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LOG2) } {
-        return unsafe { x.native_log2() * V::LOG10_2 };
+        return unsafe { x.native_log2::<P>().scale(FloatConsts::LOG10_2) };
     }
 
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
@@ -1469,14 +1478,14 @@ fn ln_10_internal<P: Policy, V: FloatVectorWithBits<Element = f32>>(x: V) -> V {
         );
     }
 
-    ln_f_internal::<P, V, false>(x) * V::LOG10_E
+    ln_f_internal::<P, V, false>(x).scale(FloatConsts::LOG10_E)
 }
 
 #[inline(always)]
 fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: bool>(x0: V) -> V {
     // TODO: How to handle P1?
     if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::NATIVE_CAP.has(NativeCapability::LN) && !P1 } {
-        return unsafe { x0.native_ln() };
+        return unsafe { x0.native_ln::<P>() };
     }
 
     if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
@@ -1514,8 +1523,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
             crate::generic_splat!(f32: 0.331826031),
             crate::generic_splat!(f32: -0.498910338),
         ); // 0x1.53ca34p-2, -0x1.fee25ap-2
-        let r = r.mul_adde(s, t);
-        let r = r.mul_adde(s, f);
+        let r = r.mul_adde(s, t).mul_adde(s, f);
         let r = i.mul_adde(crate::generic_splat!(f32: 0.693147182), r); // 0x1.62e430p-1 // log(2)
 
         return r;
@@ -1548,17 +1556,17 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
     };
 
     let x2 = x * x;
-    let mut res = x.poly_p::<P, _>(&[
-        0.0, // multiply all by x
-        3.3333331174E-1,
-        -2.4999993993E-1,
-        2.0000714765E-1,
-        -1.6668057665E-1,
-        1.4249322787E-1,
-        -1.2420140846E-1,
-        1.1676998740E-1,
-        -1.1514610310E-1,
+    let mut res = x.poly_rev_p::<P, _>(&[
         7.0376836292E-2,
+        -1.1514610310E-1,
+        1.1676998740E-1,
+        -1.2420140846E-1,
+        1.4249322787E-1,
+        -1.6668057665E-1,
+        2.0000714765E-1,
+        -2.4999993993E-1,
+        3.3333331174E-1,
+        0.0, // multiply all by x
     ]);
 
     res = fe.mul_adde(ln2f_lo, res.mul_adde(x2, x2.nmul_adde(V::HALF, x)));
@@ -1571,7 +1579,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
     let overflow = !x1.is_finite();
     let underflow = x1.cmp_lt(crate::generic_splat!(f32: 1.17549435e-38));
 
-    if !P::POLICY.avoid_branching && crate::likely((overflow | underflow).none()) {
+    if const { !P::POLICY.avoid_branching } && crate::likely((overflow | underflow).none()) {
         return res;
     }
 

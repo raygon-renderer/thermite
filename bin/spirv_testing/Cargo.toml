@@ -1,0 +1,16 @@
+[package]
+name = "spirv_testing"
+version = "0.1.0"
+edition = "2024"
+
+# No [lib] crate-type — spirv-builder overrides it to `dylib` when compiling for SPIR-V.
+# Explicitly setting crate-type = ["lib"] here can interfere with that.
+
+[dependencies]
+const-default = { version = "1", default-features = false, features = ["derive"] }
+spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros" }
+thermite = { path = "../../crates/thermite", default-features = false, features = ["spirv", "ignore_denormals"] }
+thermite-special = { path = "../../crates/thermite-special", default-features = false }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))'] }

@@ -33,6 +33,8 @@ impl CoreRegister for I32x4V2 {
 
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 
+    const HAS_EQUAL_SIZE_MASK: bool = true;
+
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_blendv_epi8(lhs, rhs, mask) }
@@ -120,6 +122,7 @@ impl MaskRegister for I32x4V2 {
     }
 
     #[inline(always)]
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let mask = unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u32 };
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
@@ -167,8 +170,6 @@ impl Register for I32x4V2 {
 
     type Signed = super::I32x4V2;
     type Unsigned = super::U32x4V2;
-
-    const HAS_EQUAL_SIZE_MASK: bool = true;
 
     #[inline(always)]
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {

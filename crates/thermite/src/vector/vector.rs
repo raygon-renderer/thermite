@@ -12,7 +12,7 @@ use super::*;
 use crate::{
     divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
     mask::{CastMask, GenericSelectable, Mask},
-    math::FloatConsts,
+    math::{FloatConsts, policy::Policy},
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
@@ -362,6 +362,8 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     fn min_element(self) -> Self::Element { R::min_element(self.0) }
     fn max_element(self) -> Self::Element { R::max_element(self.0) }
 
+    #[conditional] fn scale(self, factor: Self::Element) -> Self {}
+
     fn sum_elements(self) -> Self::Element { R::sum_elements(self.0) }
     fn prod_elements(self) -> Self::Element { R::prod_elements(self.0) }
 
@@ -614,6 +616,8 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     #[conditional] fn next_up(self) -> Self {}
     #[conditional] fn next_down(self) -> Self {}
 
+    fn mix(self, a: Self, b: Self) -> Self { Vector(R::mix(a.0, b.0, self.0)) }
+
     unsafe fn block_autovectorization(&mut self) {
         unsafe { R::block_autovectorization(&mut self.0) };
     }
@@ -642,19 +646,19 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
         (Vector(mantissa), Vector(exp))
     }
 
-    #[inline(always)] unsafe fn native_sin_cos(self) -> (Self, Self) {
-        let (sin, cos) = unsafe { R::native_sin_cos(self.0) };
+    #[inline(always)] unsafe fn native_sin_cos<P: Policy>(self) -> (Self, Self) {
+        let (sin, cos) = unsafe { R::native_sin_cos::<P>(self.0) };
         (Vector(sin), Vector(cos))
     }
 
-    #[inline(always)] unsafe fn native_sin(self) -> Self { unsafe { Vector(R::native_sin(self.0)) } }
-    #[inline(always)] unsafe fn native_cos(self) -> Self { unsafe { Vector(R::native_cos(self.0)) } }
-    #[inline(always)] unsafe fn native_tan(self) -> Self { unsafe { Vector(R::native_tan(self.0)) } }
-    #[inline(always)] unsafe fn native_exp2(self) -> Self { unsafe { Vector(R::native_exp2(self.0)) } }
-    #[inline(always)] unsafe fn native_log2(self) -> Self { unsafe { Vector(R::native_log2(self.0)) } }
-    #[inline(always)] unsafe fn native_exp(self) -> Self { unsafe { Vector(R::native_exp(self.0)) } }
-    #[inline(always)] unsafe fn native_ln(self) -> Self { unsafe { Vector(R::native_ln(self.0)) } }
-    #[inline(always)] unsafe fn native_powf(self, exp: Self) -> Self { unsafe { Vector(R::native_powf(self.0, exp.0)) } }
+    #[inline(always)] unsafe fn native_sin<P: Policy>(self) -> Self { unsafe { Vector(R::native_sin::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_cos<P: Policy>(self) -> Self { unsafe { Vector(R::native_cos::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_tan<P: Policy>(self) -> Self { unsafe { Vector(R::native_tan::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_exp2<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp2::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_log2<P: Policy>(self) -> Self { unsafe { Vector(R::native_log2::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_exp<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_ln<P: Policy>(self) -> Self { unsafe { Vector(R::native_ln::<P>(self.0)) } }
+    #[inline(always)] unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self { unsafe { Vector(R::native_powf::<P>(self.0, exp.0)) } }
 
     #[inline(always)] fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
     #[inline(always)] fn linear_order(self) -> Self::SignedBits { Vector(R::linear_order(self.0)) }
@@ -724,6 +728,18 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
         R::mat4_inverse(unsafe { core::mem::transmute(m) })
+    }
+}
+
+impl<R: Register> VectorWithRegister<R> for Vector<R> {
+    #[inline(always)]
+    fn into_register(self) -> Storage<R> {
+        self.0
+    }
+
+    #[inline(always)]
+    fn from_register(reg: Storage<R>) -> Self {
+        Vector(reg)
     }
 }
 

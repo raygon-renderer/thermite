@@ -1,13 +1,43 @@
 //! Low-level SIMD Register interface
 
 macro_rules! s {
-    ($ty:ty: $a:expr, [$($idx:literal),* $(,)?]) => {
-        <$ty as SwizzleRegister>::permutev($a, generic_array::arr![$($idx),*])
-    };
+    ($ty:ty: $a:expr, [$($idx:literal),* $(,)?]) => {{
+        #[inline(always)]
+        fn __do_permutev<R: SwizzleRegister>(a: Storage<R>) -> Storage<R> {
+            struct Indices<N: generic_array::ArrayLength>(core::marker::PhantomData<N>);
 
-    ($ty:ty: $a:expr, $b:expr, [$($idx:literal),* $(,)?]) => {
-        <$ty as SwizzleRegister>::swizzle($a, $b, generic_array::arr![$($idx),*])
-    };
+            impl<N: generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
+                const INDICES: generic_array::GenericArray<u32, N> = const {
+                    let idxs = [$($idx),*];
+                    assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length as the register");
+                    unsafe { generic_array::const_transmute::<_, generic_array::GenericArray<u32, N>>(idxs) }
+                };
+            }
+
+            R::permutev_const::<Indices<R::Lanes>>(a)
+        }
+
+        __do_permutev::<$ty>($a)
+    }};
+
+    ($ty:ty: $a:expr, $b:expr, [$($idx:literal),* $(,)?]) => {{
+        #[inline(always)]
+        fn __do_swizzle<R: SwizzleRegister>(a: Storage<R>, b: Storage<R>) -> Storage<R> {
+            struct Indices<N: generic_array::ArrayLength>(core::marker::PhantomData<N>);
+
+            impl<N: generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
+                const INDICES: generic_array::GenericArray<u32, N> = const {
+                    let idxs = [$($idx),*];
+                    assert!(N::USIZE == idxs.len(), "Swizzle mask must be the same length as the register");
+                    unsafe { generic_array::const_transmute::<_, generic_array::GenericArray<u32, N>>(idxs) }
+                };
+            }
+
+            R::swizzle_const::<Indices<R::Lanes>>(a, b)
+        }
+
+        __do_swizzle::<$ty>($a, $b)
+    }};
 }
 
 pub mod array;
@@ -30,6 +60,7 @@ use crate::{
     divider::{BranchfreeDivider, Divider, vector::VectorDivider},
     element::{FloatElementWithBits, IntegerElement},
     isa::InstructionSet,
+    math::policy::Policy,
     vector::ops::MulAddExt,
 };
 
@@ -146,9 +177,23 @@ pub trait Lanes:
     /// Used in [`Mask::bitmask()`](crate::Mask::bitmask).
     type BitmaskLength: ArrayLength;
 
+    #[cfg(feature = "bitvec")]
     type BitmaskStorage: bitvec::view::BitViewSized<Store = u32>;
 
     const IS_POWER_OF_TWO: bool;
+}
+
+#[cfg(feature = "bitvec")]
+use bitvec::view::BitViewSized;
+
+#[cfg(not(feature = "bitvec"))]
+trait BitViewSized {
+    type Store;
+}
+
+#[cfg(not(feature = "bitvec"))]
+impl<N: ArrayLength> BitViewSized for GenericArray<u32, N> {
+    type Store = u32;
 }
 
 impl<T> Lanes for T
@@ -156,9 +201,11 @@ where
     T: ArrayLength + core::ops::Shl<typenum::B1> + core::ops::Add<RoundUpConst> + core::ops::Shr<typenum::B1>,
     typenum::Sum<T, RoundUpConst>: core::ops::Div<BitsPerWord>,
     MaskWordCount<T>: ArrayLength,
-    GenericArray<u32, MaskWordCount<T>>: bitvec::view::BitViewSized<Store = u32>,
+    GenericArray<u32, MaskWordCount<T>>: BitViewSized<Store = u32>,
 {
     type BitmaskLength = MaskWordCount<T>;
+
+    #[cfg(feature = "bitvec")]
     type BitmaskStorage = GenericArray<u32, Self::BitmaskLength>;
 
     const IS_POWER_OF_TWO: bool = {
@@ -193,15 +240,27 @@ pub trait CoreRegister: 'static + Sized {
 
     const ISA: InstructionSet;
 
+    const HAS_EQUAL_SIZE_MASK: bool;
+
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self>;
 
     /// Selects elements from `value` where `mask` is true, and zeroes elsewhere.
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self>;
+    #[inline(always)]
+    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self::blendv(mask, Self::EMPTY, value)
+    }
 
     /// Selects elements from `value` where `mask` is false, and zeroes elsewhere.
     #[inline(always)]
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        Self::z(<Self::Mask as BitwiseRegister>::not(mask), value)
+        if const { Self::HAS_EQUAL_SIZE_MASK } {
+            // If the mask has the same size as the register, we can assume the
+            // default behavior is `z` doing a bitwise AND, and we should NOT the mask.
+            Self::z(<Self::Mask as BitwiseRegister>::not(mask), value)
+        } else {
+            // Otherwise, we need to blend with zero.
+            Self::blendv(mask, value, Self::EMPTY)
+        }
     }
 
     fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self>;
@@ -316,8 +375,10 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
 
     fn native_bitmask(value: Storage<Self>) -> Option<u64>;
 
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>);
 
+    #[cfg(feature = "bitvec")]
     fn bitmask(value: Storage<Self>) -> bitvec::array::BitArray<<Self::Lanes as Lanes>::BitmaskStorage> {
         let mut bitmask = bitvec::array::BitArray::ZERO;
 
@@ -342,8 +403,6 @@ pub trait Register:
     CastRegister<Self> + BitCastRegister<Self> + MaskInteroperable<Self::Signed, Self::Unsigned>
 {
     type Element: Element;
-
-    const HAS_EQUAL_SIZE_MASK: bool;
 
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self>;
 
@@ -1226,6 +1285,10 @@ pub trait NumericRegister:
         Self::mul(lhs, lhs)
     }
 
+    #[conditional] fn scale(value: Storage<Self>, scalar: Self::Element) -> Storage<Self> {
+        Self::mul(value, Self::splat(scalar))
+    }
+
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
@@ -1538,63 +1601,63 @@ pub trait FloatRegister:
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unreachable!("native_sin_cos is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_sin<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_sin is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_cos<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_cos is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_tan<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_tan is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_exp2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp2 is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_log2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_ln2 is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_exp<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_ln<P: Policy>(value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_log is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_powf<P: Policy>(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
         unreachable!("native_powf is not implemented for this FloatRegister");
     }
 
@@ -1899,21 +1962,12 @@ pub trait FloatRegister:
         <Self as BitCastRegister<Self::Bits>>::from_bits(Self::Bits::blendv(unchanged, next_bits, bits))
     }
 
-    // fn abs_ulp_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self::Bits> {
-    //     let a_nan = Self::is_nan(a);
-    //     let b_nan = Self::is_nan(b);
-    //     let nan = Self::Mask::bitor(a_nan, b_nan);
-
-    //     let a = <Self::SignedBits as BitCastRegister<Self>>::from_bits(a);
-    //     let b = <Self::SignedBits as BitCastRegister<Self>>::from_bits(b);
-
-    //     let sign_bit = <Self::SignedBits as NumericRegister>::MIN;
-
-    //     let a_sign = <Self::SignedBits as SignedRegister>::is_negative(a);
-    //     let b_sign = <Self::SignedBits as SignedRegister>::is_negative(b);
-
-    //     let a_mapped = <Self::SignedBits as CoreRegister>::blendv(a_sign, on_false, on_true);
-
-    //     todo!()
-    // }
+    fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {
+        if Self::HAS_TRUE_FMA {
+            Self::mul_add(Self::sub(b, a), t, a) // a + (b - a) * t
+        } else {
+            let t0 = Self::sub(Self::ONE, t); // 1 - t
+            Self::add(Self::mul(a, t0), Self::mul(b, t)) // a * (1 - t) + b * t
+        }
+    }
 }

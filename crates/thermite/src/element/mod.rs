@@ -164,4 +164,4 @@ impl<U> UnsignedIntegerElement for U where
 }
 
 pub mod float;
-pub use float::{FloatElement, FloatElementWithBits};
+pub use float::{FloatElement, FloatElementWithBits, IntConst, RatioConst};

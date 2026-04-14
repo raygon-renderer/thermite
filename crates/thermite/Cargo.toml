@@ -9,7 +9,8 @@ features = ["const-default", "document_registers", "std"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["document_registers"]
+default = ["document_registers", "bitvec"]
+bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
 
@@ -54,32 +55,51 @@ avx512-tier2 = ["avx512-tier1"] # Common AVX512 CPUs
 avx512-tier3 = ["avx512-tier2"] # Modern AVX512 CPUs
 avx512-tier4 = ["avx512-tier3"] # Cutting-edge AVX512 CPUs
 
+spirv = ["nightly"] # Uses SPIR-V backend, only available on nightly
+
 # Nightly features
 nightly = []
 std_simd = ["nightly", "std"]
 
 [dependencies]
+cfg-if = "1"
+crunchy = "0.2"
 thermite-macros = { path = "../thermite-macros" }
-thermite-dispatch = { path = "../dispatch" }
-libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 fast_polynomial = { version = "0.4", default-features = false }
-generic-array = { git = "https://github.com/fizyk20/generic-array", features = ["bitvec"] }
-bitvec = { version = "1.0.1", default-features = false }
+generic-array = { git = "https://github.com/fizyk20/generic-array" }
+bitvec = { version = "1.0.1", default-features = false, optional = true }
 const-default = { version = "1.0.0", default-features = false }
 paste = "1.0.15"
 hexf = "0.2.1"
 num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
-
-# Implements Register traits on Glam vectors
-glam = { version = "0.32", optional = true }
+libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 rand = { version = "0.10", optional = true, default-features = false }
+thermite-dispatch = { path = "../dispatch", default-features = false }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 core_detect = "1"
+thermite-dispatch = { path = "../dispatch", features = ["x86"] }
+
+[target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
+thermite-dispatch = { path = "../dispatch", features = ["neon"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+thermite-dispatch = { path = "../dispatch", features = ["wasm"] }
+
+[target.'cfg(target_arch = "wasm64")'.dependencies]
+thermite-dispatch = { path = "../dispatch", features = ["wasm"] }
+
+[target.'cfg(target_arch = "spirv")'.dependencies]
+thermite-dispatch = { path = "../dispatch", features = ["spirv"] }
+spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros" }
 
 [dev-dependencies]
 glam = "0.32"
 rand = "0.10"
 num-traits = { version = "0.2.19", default-features = true }
 criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "nm"
+harness = false

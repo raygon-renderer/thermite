@@ -11,7 +11,7 @@ use thermite::{
         specialized::FlushDenormals,
     },
     register::{Element, FloatElement},
-    vector::{NumericVector, PartialOrdVector},
+    vector::{NumericVector, PartialOrdVector, SplatConst},
 };
 
 use super::SpecialMathWithPolicy as _;
@@ -94,9 +94,10 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let mut series_done = !use_series; // lanes not using series are "done" immediately
         let mut cf_done = use_series; // lanes not using CF are "done" immediately
 
-        for k in 1..P::POLICY.max_iterations {
-            let kf = Self::splat(E::from_i64(k as i64));
-            let kp1 = Self::splat(E::from_i64(k as i64 + 1));
+        let mut k = 1usize;
+        while k < const { P::POLICY.max_iterations } {
+            let kf = Self::splat(E::from_int(k as thermite::LargeInt));
+            let kp1 = Self::splat(E::from_int(k as thermite::LargeInt + 1));
 
             // --- Power series step ---
             // A_{k+1} = A_k · (-x · k) / (k+1)²
@@ -143,6 +144,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             if (series_done & cf_done).all() {
                 break;
             }
+
+            k += 1;
         }
 
         // --- Assemble E_1(x) from both methods ---
@@ -168,9 +171,11 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         if const { N > 1 } {
             let exp_neg_x = (-x).exp_p::<P>();
 
-            for n in 1..N as u32 {
-                let nf = Self::splat(E::from_i64(n as i64));
+            let mut n = 1u32;
+            while n < N as u32 {
+                let nf = Self::splat(E::from_int(n as thermite::LargeInt));
                 e_n = x.nmul_adde(e_n, exp_neg_x) / nf;
+                n += 1;
             }
         }
 
@@ -181,7 +186,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             if const { N == 1 } {
                 e_n = x_is_zero.select(Self::INFINITY, e_n);
             } else if const { N > 1 } {
-                e_n = x_is_zero.select(Self::splat(E::from_ratio(1, N as i64 - 1)), e_n);
+                e_n = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 1)), e_n);
             }
 
             // Negative x: NaN
@@ -216,8 +221,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         // at the cost of some accuracy.
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             // adjust to be in base-2
-            let k = k * Self::LOG2_E;
-            let rcp_k = rcp_k * Self::LN_2;
+            let k = k.scale(FloatConsts::LOG2_E);
+            let rcp_k = rcp_k.scale(FloatConsts::LN_2);
 
             let kx = self * k;
 
@@ -252,31 +257,65 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     #[inline(always)]
     fn hermite<P: Policy, const N: usize>(mut x: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
         }
 
-        let one = Self::ONE;
-        let mut p0 = one;
+        let mut p0 = Self::ONE;
 
-        if N == 0 {
+        if const { N == 0 } {
             return p0;
         }
 
         let mut p1 = x + x; // 2 * x
 
-        let mut c = 1;
-        let mut cf = one;
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "spirv")] {
+                use crunchy::unroll;
 
-        while c < N {
-            (p0, p1) = (p1, p0); // swap p0, p1
+                macro_rules! unroll_poly {
+                    ($($len:tt),*) => {
+                        $( if const { N == $len } {
+                            unroll! { for n in 0..$len {
+                                (p0, p1) = (p1, p0); // swap p0, p1
 
-            let next0 = x.mul_sube(p0, cf * p1);
+                                const cf: thermite::LargeInt = (1 + n) as thermite::LargeInt;
+                                let next0 = x.mul_sube(p0, p1.scale(E::ConstInt::<{cf}>::VALUE));
+                                p1 = next0 + next0; // 2 * next0
+                            }}
+                        } else )* {
+                            let mut c = 1;
+                            let mut cf = E::ONE;
 
-            p1 = next0 + next0; // 2 * next0
+                            while c < N {
+                                (p0, p1) = (p1, p0); // swap p0, p1
 
-            c += 1;
-            cf += one;
+                                let next0 = x.mul_sube(p0, p1.scale(cf));
+                                p1 = next0 + next0; // 2 * next0
+
+                                c += 1;
+                                cf = cf + E::ONE;
+                            }
+                        }
+                    };
+                }
+
+                unroll_poly!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16); // up to N=16
+            } else {
+                let mut c = 1;
+                let mut cf = Self::ONE;
+
+                while c < N {
+                    (p0, p1) = (p1, p0); // swap p0, p1
+
+                    let next0 = x.mul_sube(p0, cf * p1);
+                    p1 = next0 + next0; // 2 * next0
+
+                    c += 1;
+                    cf += Self::ONE;
+                }
+            }
         }
 
         p1
@@ -284,6 +323,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     #[inline(always)]
     fn hermitev<P: Policy>(mut x: Self, n: Self::Unsigned) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
         }
@@ -326,6 +366,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             return Self::ZERO;
         }
 
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha, beta]) {
             x = new[0];
             alpha = new[1];
@@ -336,16 +377,18 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
         if m > 0 {
             let mut jf = Self::ONE;
-            let nf = Self::splat(E::from_i64(n as i64));
+            let nf = Self::splat(E::from_int(n as thermite::LargeInt));
 
             let t0 = Self::HALF * (nf + alpha + beta);
 
-            for _ in 0..m {
+            let mut _iter = 0;
+            while _iter < m {
+                _iter += 1;
                 scale *= Self::HALF.mul_adde(jf, t0);
                 jf += Self::ONE;
             }
 
-            let mf = Self::splat(E::from_i64(m as i64));
+            let mf = Self::splat(E::from_int(m as thermite::LargeInt));
 
             alpha += mf;
             beta += mf;
@@ -369,9 +412,9 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let mut y1 = Self::HALF * (x.mul_adde(alpha, alpha) + x.mul_sube(beta, beta) + x + x);
 
         let mut yk = y1;
-        let mut k = E::from_i64(2);
+        let mut k = E::ConstInt::<2>::VALUE;
 
-        let k_max = E::from_i64(n as i64) * (<E as Element>::ONE + E::EPSILON);
+        let k_max = E::from_int(n as thermite::LargeInt) * (<E as Element>::ONE + E::EPSILON);
 
         while k < k_max {
             let kf = Self::splat(k);
@@ -400,6 +443,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     #[inline(always)]
     fn gaussian<P: Policy>(mut x: Self, a: Self, c: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
         }
@@ -418,7 +462,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     #[rustfmt::skip]
     #[inline(always)]
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
-        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(E::from_i64($n) / E::from_i64($d)) }; }
+        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(E::from_int($n) / E::from_int($d)) }; }
 
         let x2 = x.square();
         let x4 = x2.square();
@@ -485,6 +529,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     #[inline(always)]
     fn legendre<P: Policy>(mut x: Self, n: u32, m: u32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
         }
@@ -500,7 +545,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
                 let mut p1 = Self::legendre0::<P, 13>(x, 13); // n = k - 1
 
                 while k <= n {
-                    let nf = Self::splat(E::from_i64(k as i64));
+                    let nf = Self::splat(E::from_int(k as thermite::LargeInt));
 
                     let tmp = p1;
                     p1 = x.mul_sube((nf + nf).mul_sube(p1, p1), nf.mul_sube(p0, p0)) / nf;
@@ -545,17 +590,20 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let alpha_x = alpha * self;
 
         // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
-        let erf = (alpha_x * Self::FRAC_1_SQRT_2).erf_p::<P>();
+        let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
 
         let y = if Self::HAS_TRUE_FMA {
             // if we have true FMA, we can maintain precision while avoiding extra work.
-            let half_x = Self::HALF * self;
+            let half_x = self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE);
             half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
         } else {
-            Self::HALF * self * (Self::ONE + erf)
+            self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE) * (Self::ONE + erf)
         };
 
-        let dy = Self::FRAC_1_SQRT_TAU * (alpha_x * alpha_x * -Self::HALF).exp_p::<P>();
+        let dy = (alpha_x * alpha_x)
+            .scale(E::ConstRatio::<{ -1 }, { 2 }>::VALUE)
+            .exp_p::<P>()
+            .scale(FloatConsts::FRAC_1_SQRT_TAU);
 
         (y, dy.mul_adde(alpha_x, y))
     }
@@ -598,13 +646,15 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
                 let x = pre_root;
 
                 // initial guess using reduced precision
-                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(E::from_ratio(1, N as i64)));
+                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(
+                    E::ONE / E::from_int(N as thermite::LargeInt),
+                ));
 
                 // One iteration of Halley's method for nth root
                 let y_n = y.powi_p::<P>(N as i32);
 
-                let np1 = Self::splat(E::from_i64((N + 1) as i64));
-                let nm1 = Self::splat(E::from_i64((N - 1) as i64));
+                let np1 = Self::splat(E::from_int((N + 1) as thermite::LargeInt));
+                let nm1 = Self::splat(E::from_int((N - 1) as thermite::LargeInt));
 
                 let n = y * (x - y_n); // half of numerator
                 let d = y_n.mul_adde(np1, x * nm1);
@@ -619,8 +669,19 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         // f'(x) = (1 + |x|^N)^(-(N+1)/N) = 1 / (pre_root * denom)
         // because pre_root * denom = (1+|x|^N) * (1+|x|^N)^(1/N) = (1+|x|^N)^((N+1)/N)
 
-        let mut y = self / denom;
-        let mut dy = (pre_root * denom).reciprocal_p::<P>();
+        let mut y;
+        let mut dy;
+
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            // this is the same number of operations as the more precise version, but
+            // with better accuracy on large pre_root when using approximate rpc.
+            let inv_denom = denom.reciprocal_p::<P>();
+            y = self * inv_denom;
+            dy = inv_denom / pre_root;
+        } else {
+            y = self / denom;
+            dy = (pre_root * denom).reciprocal_p::<P>();
+        }
 
         if const { P::POLICY.check_overflow } {
             let is_infinite = pre_root.is_infinite();

@@ -9,8 +9,8 @@ where
     let mut y = x.rsqrt();
 
     if const { V::HAS_APPROX_RSQRT && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-        let nx2 = x * V::splat(E::from_f64(-0.5));
-        let threehalfs = V::splat(E::from_f64(1.5));
+        let nx2 = x.scale(const { E::ConstRatio::<{-1}, {2}>::VALUE }); // -0.5*x
+        let threehalfs = V::splat(const { E::ConstRatio::<{3}, {2}>::VALUE }); // 1.5
 
         // one iteration of Newton's method
         y = y * y.square().mul_adde(nx2, threehalfs);
@@ -41,7 +41,7 @@ where
     let x2 = x.square();
 
     // if branching, use Taylor series for tiny x without calling sine.
-    if !P::POLICY.avoid_branching && crate::unlikely(is_tiny.all()) {
+    if const { !P::POLICY.avoid_branching } && crate::unlikely(is_tiny.all()) {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             // use fma instead of division then subtraction, for improved performance
             // at the cost of a tiny bit of precision with the 120 denominator
@@ -51,28 +51,46 @@ where
             );
         }
 
-        let res = x2 / V::splat(FloatElement::from_i64(120));
+        let res = x2 / V::splat(const { E::ConstInt::<{120}>::VALUE });
         return x2.mul_add(res - V::FRAC_1_6, V::ONE);
     }
 
     // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
     let num = is_tiny.select(x2, V::sin::<P>(x));
-    let den = is_tiny.select(V::splat(FloatElement::from_i64(120)), x);
+    let den = is_tiny.select(V::splat(const { E::ConstInt::<{120}>::VALUE }), x);
 
     // combined division, since division is expensive
     let mut y = num.approx_div_p::<P>(den);
 
     y = is_tiny.select(x2.mul_adde(y - V::FRAC_1_6, V::ONE), y);
 
-    if P::POLICY.check_overflow {
+    if const { P::POLICY.check_overflow } {
         y = x.is_infinite().select(V::ZERO, y);
     }
 
     y
 }
 
+pub trait SincPiConsts: FloatConsts {
+    const FRAC_PI_SQR_OVER_6: Self;
+    const FRAC_120_OVER_PI_SQR: Self;
+    const FRAC_PI_4_OVER_120: Self;
+}
+
+impl SincPiConsts for f32 {
+    const FRAC_PI_SQR_OVER_6: Self = 1.6449340668482264364724151666460251892189499012068; // pi^2/6
+    const FRAC_120_OVER_PI_SQR: Self = 1.2319178705621202226983339920542432970193362224366; // 120/pi^2
+    const FRAC_PI_4_OVER_120: Self = 0.81174242528335364363700277240587592708106321393905; // pi^4/120
+}
+
+impl SincPiConsts for f64 {
+    const FRAC_PI_SQR_OVER_6: Self = 1.6449340668482264364724151666460251892189499012068; // pi^2/6
+    const FRAC_120_OVER_PI_SQR: Self = 1.2319178705621202226983339920542432970193362224366; // 120/pi^2
+    const FRAC_PI_4_OVER_120: Self = 0.81174242528335364363700277240587592708106321393905; // pi^4/120
+}
+
 #[inline(always)]
-pub fn sinc_pi_internal<V, E: FloatElement, P>(x: V) -> V
+pub fn sinc_pi_internal<V, E: FloatElement + SincPiConsts, P>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,
@@ -80,26 +98,19 @@ where
     if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // forwards to the above medium-precision sinc implementation,
         // which uses sin(x) * rcp(x)
-        return V::sinc_p::<P>(x * FloatConsts::PI);
+        return V::sinc_p::<P>(x.scale(FloatConsts::PI));
     }
 
-    let pi_2_frac_6: V = V::splat(FloatElementWithBits::from_f64(
-        1.6449340668482264364724151666460251892189499012068, // pi^2/6
-    ));
-
-    let frac_120_pi_4: V = V::splat(FloatElementWithBits::from_f64(
-        1.2319178705621202226983339920542432970193362224366, // 120/pi^4, flipped for division
-    ));
+    let pi_2_frac_6: V = V::splat(E::FRAC_PI_SQR_OVER_6);
+    let frac_120_pi_4: V = V::splat(E::FRAC_120_OVER_PI_SQR);
 
     let is_tiny = x.abs().cmp_le(V::FOURTH_ROOT_EPSILON);
 
     let x2 = x.square();
 
     // if branching, use Taylor series for tiny x without calling sine.
-    if !P::POLICY.avoid_branching && crate::unlikely(is_tiny.all()) {
-        let pi_4_frac_120: V = V::splat(FloatElementWithBits::from_f64(
-            0.81174242528335364363700277240587592708106321393905,
-        ));
+    if const { !P::POLICY.avoid_branching } && crate::unlikely(is_tiny.all()) {
+        let pi_4_frac_120: V = V::splat(E::FRAC_PI_4_OVER_120);
 
         // unlike sinc, which has x^2/120 with 120 being an exact integer,
         // sinc_pi has pi^4/120, and since pi is irrational and imprecise anyway, we
@@ -109,54 +120,110 @@ where
 
     // for very small x, sinc_pi(x) ~ 1 - (pi^2/6)*x^2 + (pi^4/120)*x^4
     let num = is_tiny.select(x2, V::sin_pi::<P>(x));
-    let den = is_tiny.select(frac_120_pi_4, x * V::PI); // NOTE: first term is flipped for division
+    let den = is_tiny.select(frac_120_pi_4, x.scale(FloatConsts::PI)); // NOTE: first term is flipped for division
 
     // combined division, since division is expensive
     let mut y = num / den;
 
     y = is_tiny.select(x2.mul_adde(y - pi_2_frac_6, V::ONE), y);
 
-    if P::POLICY.check_overflow {
+    if const { P::POLICY.check_overflow } {
         y = x.is_infinite().select(V::ZERO, y);
     }
 
     y
 }
 
+pub trait LogNHelper: FloatConsts + Sized {
+    const LOG2_TABLE: [Self; 30];
+
+    fn fallback<P: Policy, const N: usize>() -> Self;
+}
+
+macro_rules! impl_log2_table {
+    ($($value:expr),* $(,)?) => {
+        impl LogNHelper for f32 {
+            const LOG2_TABLE: [Self; 30] = [$($value),*];
+
+            #[inline(always)]
+            fn fallback<P: Policy, const N: usize>() -> Self {
+                cfg_if::cfg_if! {
+                    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+                        Vector::<f32>(N as f32).log2_p::<P>().0
+                    } else {
+                        libm::log2f(N as f32)
+                    }
+                }
+            }
+        }
+
+        impl LogNHelper for f64 {
+            const LOG2_TABLE: [Self; 30] = [$($value),*];
+
+            #[inline(always)]
+            fn fallback<P: Policy, const N: usize>() -> Self {
+                cfg_if::cfg_if! {
+                    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+                        Vector::<f64>(N as f64).log2_p::<P>().0
+                    } else {
+                        libm::log2(N as f64)
+                    }
+                }
+            }
+        }
+    };
+}
+
+impl_log2_table![
+    // precomputed N[Table[1/log_2(x), {x, 3, 32}], 20]
+    0.63092975357145743710,
+    0.50000000000000000000,
+    0.43067655807339305067,
+    0.38685280723454158687,
+    0.35620718710802217651,
+    0.33333333333333333333,
+    0.31546487678572871855,
+    0.30102999566398119521,
+    0.28906482631788785927,
+    0.27894294565112984319,
+    0.27023815442731974129,
+    0.26264953503719354798,
+    0.25595802480981548939,
+    0.25000000000000000000,
+    0.24465054211822603039,
+    0.23981246656813144474,
+    0.23540891336663823645,
+    0.23137821315975917426,
+    0.22767024869695299798,
+    0.22424382421757543948,
+    0.22106472945750374615,
+    0.21810429198553155923,
+    0.21533827903669652534,
+    0.21274605355336315361,
+    0.21030991785715247903,
+    0.20801459767650945760,
+    0.20584683246043445731,
+    0.20379504709050619003,
+    0.20184908658209985072,
+    0.20000000000000000000,
+];
+
 #[inline(always)]
-pub fn log_n_internal<V, E: FloatElement, P, const N: usize>(x: V) -> V
+pub fn log_n_internal<V, E: FloatElement + LogNHelper, P, const N: usize>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,
 {
+    if const { N > 32 } {
+        return V::log2::<P>(x).approx_div_p::<P>(V::splat(E::fallback::<P, N>()));
+    }
+
     match N {
         // 0 and 1 are special cases, and these are what Wolfram Alpha returns
         0 => V::ZERO,               // log(x)/log(0) = log(x)/-infinity = 0
         1 => FloatVector::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
         2 => V::log2::<P>(x),
         10 => V::log10::<P>(x),
-        n if n <= 32 => {
-            #[rustfmt::skip] #[allow(clippy::approx_constant)]
-            const LOG_TABLE: [f64; 30] = [ // precomputed 1/Table[log(x), {x, 3, 32}]
-                1.0 / 1.0986122886681096913952452369225257046474905578227, 1.0 / 1.3862943611198906188344642429163531361510002687205,
-                1.0 / 1.6094379124341003746007593332261876395256013542685, 1.0 / 1.7917594692280550008124773583807022727229906921830,
-                1.0 / 1.9459101490553133051053527434431797296370847295819, 1.0 / 2.0794415416798359282516963643745297042265004030808,
-                1.0 / 2.1972245773362193827904904738450514092949811156455, 1.0 / 2.3025850929940456840179914546843642076011014886288,
-                1.0 / 2.3978952727983705440619435779651292998217068539374, 1.0 / 2.4849066497880003102297094798388788407984908265433,
-                1.0 / 2.5649493574615367360534874415653186048052679447602, 1.0 / 2.6390573296152586145225848649013562977125848639421,
-                1.0 / 2.7080502011022100659960045701487133441730919120913, 1.0 / 2.7725887222397812376689284858327062723020005374410,
-                1.0 / 2.8332133440562160802495346178731265355882030125857, 1.0 / 2.8903717578961646922077225953032279773704812500058,
-                1.0 / 2.9444389791664404600090274318878535372373792612991, 1.0 / 2.9957322735539909934352235761425407756766016229890,
-                1.0 / 3.0445224377234229965005979803657054342845752874046, 1.0 / 3.0910424533583158534791756994233058678972069882977,
-                1.0 / 3.1354942159291496908067528318101961184423803148404, 1.0 / 3.1780538303479456196469416012970554088739909609035,
-                1.0 / 3.2188758248682007492015186664523752790512027085370, 1.0 / 3.2580965380214820454707195630234951728807680791205,
-                1.0 / 3.2958368660043290741857357107675771139424716734682, 1.0 / 3.3322045101752039239398169863595328657880849983024,
-                1.0 / 3.3672958299864740271832720323619116054945129139227, 1.0 / 3.4011973816621553754132366916068899122485920464515,
-                1.0 / 3.4339872044851462459291643245423572104499389304806, 1.0 / 3.4657359027997265470861606072908828403775006718013,
-            ];
-
-            V::ln::<P>(x) * V::splat(E::from_f64(LOG_TABLE[n - 3]))
-        }
-        _ => V::ln::<P>(x) / V::splat(E::from_f64(libm::log(N as f64))),
+        _ => V::log2::<P>(x).scale(const { if N <= 32 { E::LOG2_TABLE[N - 3] } else { E::ZERO } }),
     }
 }

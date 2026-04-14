@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 //! Instruction Set Architecture detection and utilities
 
 /// Enum of supported instruction sets
@@ -43,6 +45,10 @@ pub enum InstructionSet {
     /// WebAssembly SIMD instruction set (64-bit)
     #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
     WASM64,
+
+    /// SPIR-V (Vulkan/OpenCL compute shader)
+    #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+    SPIRV,
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -61,6 +67,12 @@ impl InstructionSet {
     #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     pub fn get() -> InstructionSet {
         InstructionSet::WASM32
+    }
+
+    /// Detect the current instruction set at runtime. This result is cached for future calls.
+    #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+    pub fn get() -> InstructionSet {
+        InstructionSet::SPIRV
     }
 
     /// Returns an estimate of the number of SIMD registers available
@@ -87,6 +99,10 @@ impl InstructionSet {
             #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
             InstructionSet::WASM64 => 16, // TODO: Verify
 
+            // SPIR-V/SIMT: each invocation is scalar; report 1
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => 1,
+
             _ => 1,
         }
     }
@@ -103,6 +119,10 @@ impl InstructionSet {
             #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
             InstructionSet::NEON => true,
 
+            // SPIR-V supports FMA via OpFma
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => true,
+
             _ => false,
         }
     }
@@ -110,10 +130,12 @@ impl InstructionSet {
     /// Returns whether the given instruction set is a SIMD instruction set.
     #[inline(always)]
     pub const fn is_simd(&self) -> bool {
-        #![allow(clippy::match_like_matches_macro)]
-
         match self {
             InstructionSet::Scalar | InstructionSet::Unknown => false,
+
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => false, // SPIR-V is SIMT, not SIMD
+
             _ => true,
         }
     }
@@ -157,6 +179,10 @@ impl InstructionSet {
             #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
             InstructionSet::WASM64 => false,
 
+            // SPIR-V has no concept of alignment penalties
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => true,
+
             // unknown ISA
             _ => false,
         }
@@ -182,6 +208,11 @@ impl InstructionSet {
             #[cfg(all(feature = "wasm", target_arch = "wasm64"))]
             InstructionSet::WASM64 => 2,
 
+            // SPIR-V/GPU: each invocation is scalar; extra unrolling increases register
+            // pressure and hurts occupancy, so keep it minimal
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => 1,
+
             // unknown ISA
             _ => 1,
         }
@@ -191,6 +222,23 @@ impl InstructionSet {
         match self {
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             InstructionSet::X86V4 => true, // AVX-512 has masked ops
+
+            _ => false,
+        }
+    }
+
+    pub const fn has_instruction_level_parallelism(self) -> bool {
+        match self {
+            #[cfg(any(
+                target_arch = "x86",
+                target_arch = "x86_64",
+                target_arch = "arm",
+                target_arch = "aarch64"
+            ))]
+            _ => true,
+
+            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
+            InstructionSet::SPIRV => false, // SPIR-V is SIMT, not SIMD
 
             _ => false,
         }

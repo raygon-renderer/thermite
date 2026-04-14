@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 #[macro_use]
 mod macros;
 
@@ -23,3 +25,8 @@ pub mod x86_v3;
 #[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
 pub mod wasm;
 
+#[cfg(all(feature = "spirv", target_arch = "spirv"))]
+pub mod spirv;
+
+// #[cfg(feature = "std_simd")]
+// mod std_simd;

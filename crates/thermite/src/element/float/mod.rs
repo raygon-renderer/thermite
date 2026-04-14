@@ -1,8 +1,48 @@
 use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
+use crate::LargeInt;
 use crate::register::FloatRegister;
+use crate::vector::SplatConst;
 use crate::vector::ops::MulAddExt;
 
 pub mod ph;
+
+/// Marker type for a compile-time integer constant cast to a float element type.
+///
+/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
+/// [`generic_splat!`](crate::generic_splat) and [`FloatElement::IntSplat`].
+pub struct IntConst<const N: crate::LargeInt>;
+
+/// Marker type for a compile-time rational constant (N/D) cast to a float element type.
+///
+/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
+/// [`generic_splat!`](crate::generic_splat) and [`FloatElement::RatioSplat`].
+pub struct RatioConst<const N: crate::LargeInt, const D: crate::LargeInt>;
+
+impl<const N: crate::LargeInt> SplatConst<f32> for IntConst<N> {
+    const VALUE: f32 = N as f32;
+}
+
+impl<const N: crate::LargeInt> SplatConst<f64> for IntConst<N> {
+    const VALUE: f64 = N as f64;
+}
+
+impl<const N: crate::LargeInt, const D: crate::LargeInt> SplatConst<f32> for RatioConst<N, D> {
+    const VALUE: f32 = {
+        assert!(D != 0, "RatioConst: denominator must not be zero");
+        let q = N / D;
+        let r = N % D;
+        (q as f32) + (r as f32) / (D as f32)
+    };
+}
+
+impl<const N: crate::LargeInt, const D: crate::LargeInt> SplatConst<f64> for RatioConst<N, D> {
+    const VALUE: f64 = {
+        assert!(D != 0, "RatioConst: denominator must not be zero");
+        let q = N / D;
+        let r = N % D;
+        (q as f64) + (r as f64) / (D as f64)
+    };
+}
 
 /// A trait for float element types that can be used in SIMD operations.
 ///
@@ -15,28 +55,55 @@ pub trait FloatElement:
     + core::ops::Neg<Output = Self>
     + MulAddExt<Self, Self, Output = Self>
 {
-    /// Try to represent this i64 value as this float type,
+    /// Marker type for splatting a compile-time integer constant as this float type.
+    ///
+    /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
+    /// [`generic_splat!`](crate::generic_splat).
+    type ConstInt<const N: crate::LargeInt>: SplatConst<Self>;
+
+    /// Marker type for splatting a compile-time rational constant (N/D) as this float type.
+    ///
+    /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
+    /// [`generic_splat!`](crate::generic_splat).
+    type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt>: SplatConst<Self>;
+
+    /// Try to represent this LargeInt value as this float type,
     /// returning None if it cannot be represented exactly.
-    fn try_from_i64(value: i64) -> Option<Self>;
+    fn try_from_int(value: LargeInt) -> Option<Self>;
+    fn try_from_ratio(n: LargeInt, d: LargeInt) -> Option<Self>;
 
-    fn from_i64(value: i64) -> Self {
-        #[cold]
-        fn _panic_i64_overflow() -> ! {
-            panic!("i64 value exceeds maximum exact representable value for this float type")
+    cfg_if::cfg_if! {
+        if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+            #[inline(always)]
+            fn from_int(value: LargeInt) -> Self {
+                Self::try_from_int(value).unwrap_or(Self::ZERO)
+            }
+
+            #[inline(always)]
+            fn from_ratio(n: LargeInt, d: LargeInt) -> Self {
+                Self::try_from_ratio(n, d).unwrap_or(Self::ZERO)
+            }
+        } else {
+            #[inline(always)]
+            fn from_int(value: LargeInt) -> Self {
+                #[cold]
+                fn _panic_int_overflow() -> ! {
+                    panic!("LargeInt value exceeds maximum exact representable value for this float type")
+                }
+
+                Self::try_from_int(value).unwrap_or_else(|| _panic_int_overflow())
+            }
+
+            #[inline(always)]
+            fn from_ratio(n: LargeInt, d: LargeInt) -> Self {
+                #[cold]
+                fn _panic_ratio_overflow() -> ! {
+                    panic!("LargeInt ratio exceeds maximum exact representable value for this float type")
+                }
+
+                Self::try_from_ratio(n, d).unwrap_or_else(|| _panic_ratio_overflow())
+            }
         }
-
-        Self::try_from_i64(value).unwrap_or_else(|| _panic_i64_overflow())
-    }
-
-    fn try_from_ratio(n: i64, d: i64) -> Option<Self>;
-
-    fn from_ratio(n: i64, d: i64) -> Self {
-        #[cold]
-        fn _panic_ratio_overflow() -> ! {
-            panic!("i64 ratio exceeds maximum exact representable value for this float type")
-        }
-
-        Self::try_from_ratio(n, d).unwrap_or_else(|| _panic_ratio_overflow())
     }
 
     fn sqrt(value: Self) -> Self;
@@ -94,8 +161,8 @@ pub trait FloatElementWithBits: FloatElement {
     // /// Exception: x87 80-bit float (FALSE).
     // const IMPLICIT_LEAD_BIT: bool = true;
 
-    // maximum u32 that can be exactly represented in this float type without loss of precision
-    const MAX_U64: u64;
+    // maximum unsigned integer that can be exactly represented in this float type without loss of precision
+    const MAX_LARGE_UINT: crate::LargeUInt;
 
     const MAX_BIASED_EXP: Self::SignedBits;
     const EXP_LSB_MASK: Self::Bits;
@@ -111,8 +178,8 @@ pub trait FloatElementWithBits: FloatElement {
 }
 
 trait FloatElementInternal: FloatElement {
-    fn try_from_i64(value: i64) -> Option<Self>;
-    fn try_from_ratio(n: i64, d: i64) -> Option<Self>;
+    fn try_from_int(value: crate::LargeInt) -> Option<Self>;
+    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self>;
 }
 
 macro_rules! impl_float_element {
@@ -121,14 +188,14 @@ macro_rules! impl_float_element {
 
         const FREXP_BIAS_OFFSET: Self::SignedBits = Self::EXP_BIAS - 1;
         const HALF_EXP_BITS: Self::Bits = (Self::FREXP_BIAS_OFFSET << Self::MANTISSA_BITS) as _;
-        const MAX_U64: u64 = (1u64 << (Self::MANTISSA_BITS + 1));
+        const MAX_LARGE_UINT: crate::LargeUInt = ((1 as crate::LargeUInt) << (Self::MANTISSA_BITS + 1)) as _;
     }};
 
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
         impl FloatElementInternal for $t {
             #[inline(always)]
-            fn try_from_i64(value: i64) -> Option<Self> {
-                if crate::likely(value.unsigned_abs() < Self::MAX_U64) {
+            fn try_from_int(value: crate::LargeInt) -> Option<Self> {
+                if crate::likely(value.unsigned_abs() < Self::MAX_LARGE_UINT) {
                     Some(value as $t) // safe to convert directly
                 } else {
                     None
@@ -141,19 +208,19 @@ macro_rules! impl_float_element {
             // this is non-trivial, LLVM should optimize it down to a constant value when
             // the inputs are known at compile time.
             #[inline(always)]
-            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+            fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
                 if d == 0 {
                     return None;
                 }
 
                 // fast path for values that both fit in the float exactly
-                if let (Some(n), Some(d)) = (<Self as FloatElementInternal>::try_from_i64(n), <Self as FloatElementInternal>::try_from_i64(d)) {
+                if let (Some(n), Some(d)) = (<Self as FloatElementInternal>::try_from_int(n), <Self as FloatElementInternal>::try_from_int(d)) {
                     return Some(n / d);
                 }
 
                 let (q, r) = (n / d, n % d);
 
-                let mut result = FloatElementInternal::try_from_i64(q)?;
+                let mut result = FloatElementInternal::try_from_int(q)?;
 
                 // d may not be exactly representable, but this will still scale it correctly
                 result += (r as $t) / (d as $t);
@@ -162,90 +229,141 @@ macro_rules! impl_float_element {
             }
         }
 
-        #[cfg(feature = "std")]
-        impl FloatElement for $t {
-            #[inline(always)] fn sqrt(value: Self) -> Self { value.sqrt() }
-            #[inline(always)] fn floor(value: Self) -> Self { value.floor() }
-            #[inline(always)] fn ceil(value: Self) -> Self { value.ceil() }
-            #[inline(always)] fn round(value: Self) -> Self { value.round() }
-            #[inline(always)] fn trunc(value: Self) -> Self { value.trunc() }
-            #[inline(always)] fn fract(value: Self) -> Self { value.fract() }
-            #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
-            #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "std")] {
+                impl FloatElement for $t {
+                    #[inline(always)] fn sqrt(value: Self) -> Self { value.sqrt() }
+                    #[inline(always)] fn floor(value: Self) -> Self { value.floor() }
+                    #[inline(always)] fn ceil(value: Self) -> Self { value.ceil() }
+                    #[inline(always)] fn round(value: Self) -> Self { value.round() }
+                    #[inline(always)] fn trunc(value: Self) -> Self { value.trunc() }
+                    #[inline(always)] fn fract(value: Self) -> Self { value.fract() }
+                    #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
+                    #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
 
-            #[inline(always)]
-            fn try_from_i64(value: i64) -> Option<Self> {
-                FloatElementInternal::try_from_i64(value)
+                    #[inline(always)]
+                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_int(value)
+                    }
+
+                    #[inline(always)]
+                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_ratio(n, d)
+                    }
+
+                    type IntSplat<const N: crate::LargeInt> = IntConst<N>;
+                    type RatioSplat<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
+
+                    const HAS_INFINITY: bool = true;
+                    const HAS_SIGNED_ZERO: bool = true;
+                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                }
+
+                impl MulAddExt for $t {
+                    type Output = Self;
+
+                    // trust the register implementation
+                    const HAS_TRUE_FMA: bool = <$t as FloatRegister>::HAS_TRUE_FMA;
+
+                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, acc) }
+                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, -acc) }
+                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, acc) }
+                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, -acc) }
+
+                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
+                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
+                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
+                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
+                }
+            } else if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+                impl FloatElement for $t {
+                    #[inline(always)] fn sqrt(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::SQRT}, false>(value) } }
+                    #[inline(always)] fn floor(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::FLOOR}, false>(value) } }
+                    #[inline(always)] fn ceil(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::CEIL}, false>(value) } }
+                    #[inline(always)] fn round(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::ROUND}, false>(value) } }
+                    #[inline(always)] fn trunc(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::TRUNC}, false>(value) } }
+                    #[inline(always)] fn fract(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::FRACT}, false>(value) } }
+                    #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
+                    #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
+
+                    #[inline(always)]
+                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_int(value)
+                    }
+
+                    #[inline(always)]
+                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_ratio(n, d)
+                    }
+
+                    type ConstInt<const N: crate::LargeInt> = IntConst<N>;
+                    type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
+
+                    const HAS_INFINITY: bool = true;
+                    const HAS_SIGNED_ZERO: bool = true;
+                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                }
+
+                impl MulAddExt for $t {
+                    type Output = Self;
+
+                    // GPU hardware always has FMA
+                    const HAS_TRUE_FMA: bool = true;
+
+                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, rhs, acc) } }
+                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, rhs, -acc) } }
+                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, -rhs, acc) } }
+                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, -rhs, -acc) } }
+
+                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self.mul_add(rhs, acc) }
+                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self.mul_sub(rhs, acc) }
+                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { self.nmul_add(rhs, acc) }
+                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self.nmul_sub(rhs, acc) }
+                }
+            } else {
+                impl FloatElement for $t {
+                    #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
+                    #[inline(always)] fn floor(value: Self) -> Self { libm::[<floor $($f)?>](value) }
+                    #[inline(always)] fn ceil(value: Self) -> Self { libm::[<ceil $($f)?>](value) }
+                    #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
+                    #[inline(always)] fn trunc(value: Self) -> Self { libm::[<trunc $($f)?>](value) }
+                    #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
+                    #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
+
+                    #[inline(always)]
+                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_int(value)
+                    }
+
+                    #[inline(always)]
+                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
+                        FloatElementInternal::try_from_ratio(n, d)
+                    }
+
+                    type ConstInt<const N: crate::LargeInt> = IntConst<N>;
+                    type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
+
+                    const HAS_INFINITY: bool = true;
+                    const HAS_SIGNED_ZERO: bool = true;
+                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                }
+
+                impl MulAddExt for $t {
+                    type Output = Self;
+
+                    const HAS_TRUE_FMA: bool = false;
+
+                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
+                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
+                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
+                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
+
+                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
+                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
+                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
+                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc  }
+                }
             }
-
-            #[inline(always)]
-            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
-                FloatElementInternal::try_from_ratio(n, d)
-            }
-
-            const HAS_INFINITY: bool = true;
-            const HAS_SIGNED_ZERO: bool = true;
-            const HAS_SUBNORMALS: bool = true;
-        }
-
-        #[cfg(feature = "std")]
-        impl MulAddExt for $t {
-            type Output = Self;
-
-            // trust the register implementation
-            const HAS_TRUE_FMA: bool = <$t as FloatRegister>::HAS_TRUE_FMA;
-
-            #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, acc) }
-            #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, -acc) }
-            #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, acc) }
-            #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, -acc) }
-
-            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
-            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
-            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
-            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
-        }
-
-        #[cfg(not(feature = "std"))]
-        impl FloatElement for $t {
-            #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
-            #[inline(always)] fn floor(value: Self) -> Self { libm::[<floor $($f)?>](value) }
-            #[inline(always)] fn ceil(value: Self) -> Self { libm::[<ceil $($f)?>](value) }
-            #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
-            #[inline(always)] fn trunc(value: Self) -> Self { libm::[<trunc $($f)?>](value) }
-            #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
-            #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
-
-            #[inline(always)]
-            fn try_from_i64(value: i64) -> Option<Self> {
-                FloatElementInternal::try_from_i64(value)
-            }
-
-            #[inline(always)]
-            fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
-                FloatElementInternal::try_from_ratio(n, d)
-            }
-
-            const HAS_INFINITY: bool = true;
-            const HAS_SIGNED_ZERO: bool = true;
-            const HAS_SUBNORMALS: bool = true;
-        }
-
-        #[cfg(not(feature = "std"))]
-        impl MulAddExt for $t {
-            type Output = Self;
-
-            const HAS_TRUE_FMA: bool = false;
-
-            #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
-            #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
-            #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
-            #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
-
-            #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
-            #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
-            #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
-            #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc  }
         }
 
         impl FloatElementWithBits for $t {
@@ -287,7 +405,7 @@ impl_float_element!(f32: f => u32, i32 {
 
 impl_float_element!(f64 => u64, i64 {
     EXP_BITS: u32 = 11;
-    MANTISSA_BITS: u32 = 52;
+    MANTISSA_BITS: u32 = if cfg!(not(all(feature = "spirv", target_arch = "spirv", not(target_feature = "ext:Float64")))) { 52 } else { 0 };
     EXP_BIAS: i64 = 1023;
     MAX_BIASED_EXP: i64 = 2047;
 

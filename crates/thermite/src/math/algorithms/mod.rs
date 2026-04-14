@@ -26,7 +26,9 @@ pub fn newtons_method<V: FloatVector, P: Policy, F>(
 where
     F: FnMut(V) -> (V, V),
 {
-    for _i in 0..P::POLICY.max_iterations {
+    let mut _iter = 0usize;
+    while _iter < P::POLICY.max_iterations {
+        _iter += 1;
         let (y, y_prime) = f(x);
 
         // If y=0 within tolerance, we're done.
@@ -87,7 +89,9 @@ where
 
     let mut converged = false;
 
-    for _ in 0..P::POLICY.max_iterations {
+    let mut _iter = 0usize;
+    while _iter < P::POLICY.max_iterations {
+        _iter += 1;
         if n >= end {
             break;
         }
@@ -102,7 +106,7 @@ where
 
         let t = sum + delta;
 
-        if P::POLICY.use_compensation {
+        if const { P::POLICY.use_compensation } {
             // if |sum| >= |input[i]| then
             //     c += (sum - t) + input[i] // If sum is bigger, low-order digits of input[i] are lost.
             // else
@@ -117,7 +121,7 @@ where
         n += 1;
     }
 
-    if P::POLICY.use_compensation {
+    if const { P::POLICY.use_compensation } {
         sum += c; // apply any remaining compensation
     }
 
@@ -141,7 +145,9 @@ where
     let mut prod = V::ONE;
     let mut n = start;
 
-    for _ in 0..P::POLICY.max_iterations {
+    let mut _iter = 0usize;
+    while _iter < P::POLICY.max_iterations {
+        _iter += 1;
         if n >= end {
             break;
         }

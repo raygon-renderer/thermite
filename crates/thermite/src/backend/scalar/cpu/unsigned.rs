@@ -23,6 +23,7 @@ impl CoreRegister for [<u $width>] {
     const IS_EMULATED: bool = false;
     const ISA: InstructionSet = InstructionSet::Scalar;
     const EMPTY: Storage<Self> = 0;
+    const HAS_EQUAL_SIZE_MASK: bool = false;
 
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -60,8 +61,6 @@ impl Register for [<u $width>] {
 
     type Signed = [<i $width>];
     type Unsigned = [<u $width>];
-
-    const HAS_EQUAL_SIZE_MASK: bool = false;
 
     #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
     #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { value.to_bool() }
@@ -238,5 +237,7 @@ impl UnsignedIntegerRegister for [<u $width>] {
 
 decl_unsigned_scalar!(u8: u16 => 8);
 decl_unsigned_scalar!(u16: u32 => 16);
+#[cfg(not(target_arch = "spirv"))]
 decl_unsigned_scalar!(u32: u64 => 32);
+#[cfg(not(target_arch = "spirv"))]
 decl_unsigned_scalar!(u64: u128 => 64);

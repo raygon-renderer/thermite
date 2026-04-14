@@ -150,7 +150,9 @@ where
         w0 = halley_step::<Approx<P>, Self>(w0, x);
         wm1 = halley_step::<Approx<P>, Self>(wm1, x);
 
-        for _ in 0..num_iters {
+        let mut _iter = 0usize;
+        while _iter < num_iters {
+            _iter += 1;
             // don't need to check overflow within these since it should be well-defined for
             // all intermediate values, and the final check will catch any issues.
             w0 = halley_step::<CheckOverflow<P, false>, Self>(w0, x);
@@ -278,7 +280,7 @@ where
 
         // Reflect ALL negative values via Γ(z) = -π / (z·sin(πz)·Γ(|z|))
         // This avoids the repeated-division recurrence which accumulates rounding error.
-        if P::POLICY.avoid_branching || is_negative.any() {
+        if const { P::POLICY.avoid_branching } || is_negative.any() {
             reflected = is_negative;
             let refl_res = z * z.sin_pi_p::<P>(); // z · sin(πz)
             res = reflected.select(refl_res, res);
@@ -549,74 +551,74 @@ where
      */
     const QR8: [f32; 6] = [
         /* for x in [inf, 8]=1/[0,0.125] */
-        0.0000000000e+00, /* 0x00000000 */
-        7.3242187500e-02, /* 0x3d960000 */
-        1.1768206596e+01, /* 0x413c4a93 */
-        5.5767340088e+02, /* 0x440b6b19 */
-        8.8591972656e+03, /* 0x460a6cca */
         3.7014625000e+04, /* 0x471096a0 */
+        8.8591972656e+03, /* 0x460a6cca */
+        5.5767340088e+02, /* 0x440b6b19 */
+        1.1768206596e+01, /* 0x413c4a93 */
+        7.3242187500e-02, /* 0x3d960000 */
+        0.0000000000e+00, /* 0x00000000 */
     ];
     const QS8: [f32; 6] = [
-        1.6377603149e+02,  /* 0x4323c6aa */
-        8.0983447266e+03,  /* 0x45fd12c2 */
-        1.4253829688e+05,  /* 0x480b3293 */
-        8.0330925000e+05,  /* 0x49441ed4 */
-        8.4050156250e+05,  /* 0x494d3359 */
         -3.4389928125e+05, /* 0xc8a7eb69 */
+        8.4050156250e+05,  /* 0x494d3359 */
+        8.0330925000e+05,  /* 0x49441ed4 */
+        1.4253829688e+05,  /* 0x480b3293 */
+        8.0983447266e+03,  /* 0x45fd12c2 */
+        1.6377603149e+02,  /* 0x4323c6aa */
     ];
 
     const QR5: [f32; 6] = [
         /* for x in [8,4.5454]=1/[0.125,0.22001] */
-        1.8408595828e-11, /* 0x2da1ec79 */
-        7.3242180049e-02, /* 0x3d95ffff */
-        5.8356351852e+00, /* 0x40babd86 */
-        1.3511157227e+02, /* 0x43071c90 */
-        1.0272437744e+03, /* 0x448067cd */
         1.9899779053e+03, /* 0x44f8bf4b */
+        1.0272437744e+03, /* 0x448067cd */
+        1.3511157227e+02, /* 0x43071c90 */
+        5.8356351852e+00, /* 0x40babd86 */
+        7.3242180049e-02, /* 0x3d95ffff */
+        1.8408595828e-11, /* 0x2da1ec79 */
     ];
     const QS5: [f32; 6] = [
-        8.2776611328e+01,  /* 0x42a58da0 */
-        2.0778142090e+03,  /* 0x4501dd07 */
-        1.8847289062e+04,  /* 0x46933e94 */
-        5.6751113281e+04,  /* 0x475daf1d */
-        3.5976753906e+04,  /* 0x470c88c1 */
         -5.3543427734e+03, /* 0xc5a752be */
+        3.5976753906e+04,  /* 0x470c88c1 */
+        5.6751113281e+04,  /* 0x475daf1d */
+        1.8847289062e+04,  /* 0x46933e94 */
+        2.0778142090e+03,  /* 0x4501dd07 */
+        8.2776611328e+01,  /* 0x42a58da0 */
     ];
 
     const QR3: [f32; 6] = [
         /* for x in [4.547,2.8571]=1/[0.2199,0.35001] */
-        4.3774099900e-09, /* 0x3196681b */
-        7.3241114616e-02, /* 0x3d95ff70 */
-        3.3442313671e+00, /* 0x405607e3 */
-        4.2621845245e+01, /* 0x422a7cc5 */
-        1.7080809021e+02, /* 0x432acedf */
         1.6673394775e+02, /* 0x4326bbe4 */
+        1.7080809021e+02, /* 0x432acedf */
+        4.2621845245e+01, /* 0x422a7cc5 */
+        3.3442313671e+00, /* 0x405607e3 */
+        7.3241114616e-02, /* 0x3d95ff70 */
+        4.3774099900e-09, /* 0x3196681b */
     ];
     const QS3: [f32; 6] = [
-        4.8758872986e+01,  /* 0x42430916 */
-        7.0968920898e+02,  /* 0x44316c1c */
-        3.7041481934e+03,  /* 0x4567825f */
-        6.4604252930e+03,  /* 0x45c9e367 */
-        2.5163337402e+03,  /* 0x451d4557 */
         -1.4924745178e+02, /* 0xc3153f59 */
+        2.5163337402e+03,  /* 0x451d4557 */
+        6.4604252930e+03,  /* 0x45c9e367 */
+        3.7041481934e+03,  /* 0x4567825f */
+        7.0968920898e+02,  /* 0x44316c1c */
+        4.8758872986e+01,  /* 0x42430916 */
     ];
 
     const QR2: [f32; 6] = [
         /* for x in [2.8570,2]=1/[0.3499,0.5] */
-        1.5044444979e-07, /* 0x342189db */
-        7.3223426938e-02, /* 0x3d95f62a */
-        1.9981917143e+00, /* 0x3fffc4bf */
-        1.4495602608e+01, /* 0x4167edfd */
-        3.1666231155e+01, /* 0x41fd5471 */
         1.6252708435e+01, /* 0x4182058c */
+        3.1666231155e+01, /* 0x41fd5471 */
+        1.4495602608e+01, /* 0x4167edfd */
+        1.9981917143e+00, /* 0x3fffc4bf */
+        7.3223426938e-02, /* 0x3d95f62a */
+        1.5044444979e-07, /* 0x342189db */
     ];
     const QS2: [f32; 6] = [
-        3.0365585327e+01,  /* 0x41f2ecb8 */
-        2.6934811401e+02,  /* 0x4386ac8f */
-        8.4478375244e+02,  /* 0x44533229 */
-        8.8293585205e+02,  /* 0x445cbbe5 */
-        2.1266638184e+02,  /* 0x4354aa98 */
         -5.3109550476e+00, /* 0xc0a9f358 */
+        2.1266638184e+02,  /* 0x4354aa98 */
+        8.8293585205e+02,  /* 0x445cbbe5 */
+        8.4478375244e+02,  /* 0x44533229 */
+        2.6934811401e+02,  /* 0x4386ac8f */
+        3.0365585327e+01,  /* 0x41f2ecb8 */
     ];
 
     let z = x.reciprocal_p::<P>();
@@ -628,28 +630,28 @@ where
 
     // Evaluate numerators and denominators for all 4 regions independently,
     // then select before dividing once.
-    let pn8 = z2.poly_p::<P, _>(&PR8);
-    let pn5 = z2.poly_p::<P, _>(&PR5);
-    let pn3 = z2.poly_p::<P, _>(&PR3);
-    let pn2 = z2.poly_p::<P, _>(&PR2);
+    let pn8 = z2.poly_rev_p::<P, _>(&PR8);
+    let pn5 = z2.poly_rev_p::<P, _>(&PR5);
+    let pn3 = z2.poly_rev_p::<P, _>(&PR3);
+    let pn2 = z2.poly_rev_p::<P, _>(&PR2);
 
-    let pd8 = z2.poly_p::<P, _>(&PS8);
-    let pd5 = z2.poly_p::<P, _>(&PS5);
-    let pd3 = z2.poly_p::<P, _>(&PS3);
-    let pd2 = z2.poly_p::<P, _>(&PS2);
+    let pd8 = z2.poly_rev_p::<P, _>(&PS8);
+    let pd5 = z2.poly_rev_p::<P, _>(&PS5);
+    let pd3 = z2.poly_rev_p::<P, _>(&PS3);
+    let pd2 = z2.poly_rev_p::<P, _>(&PS2);
 
     let pn = m3.select(m5.select(m8.select(pn8, pn5), pn3), pn2);
     let pd = m3.select(m5.select(m8.select(pd8, pd5), pd3), pd2);
 
-    let qn8 = z2.poly_p::<P, _>(&QR8);
-    let qn5 = z2.poly_p::<P, _>(&QR5);
-    let qn3 = z2.poly_p::<P, _>(&QR3);
-    let qn2 = z2.poly_p::<P, _>(&QR2);
+    let qn8 = z2.poly_rev_p::<P, _>(&QR8);
+    let qn5 = z2.poly_rev_p::<P, _>(&QR5);
+    let qn3 = z2.poly_rev_p::<P, _>(&QR3);
+    let qn2 = z2.poly_rev_p::<P, _>(&QR2);
 
-    let qd8 = z2.poly_p::<P, _>(&QS8);
-    let qd5 = z2.poly_p::<P, _>(&QS5);
-    let qd3 = z2.poly_p::<P, _>(&QS3);
-    let qd2 = z2.poly_p::<P, _>(&QS2);
+    let qd8 = z2.poly_rev_p::<P, _>(&QS8);
+    let qd5 = z2.poly_rev_p::<P, _>(&QS5);
+    let qd3 = z2.poly_rev_p::<P, _>(&QS3);
+    let qd2 = z2.poly_rev_p::<P, _>(&QS2);
 
     let qn = m3.select(m5.select(m8.select(qn8, qn5), qn3), qn2);
     let qd = m3.select(m5.select(m8.select(qd8, qd5), qd3), qd2);
@@ -689,18 +691,18 @@ where
     let z = x * x;
 
     /* R0/S0 on [0, 2.00] */
-    let r = z * z.poly_p::<P, _>(&[
-        1.5625000000e-02,  /* 0x3c800000 */
-        -1.8997929874e-04, /* 0xb947352e */
-        1.8295404516e-06,  /* 0x35f58e88 */
+    let r = z * z.poly_rev_p::<P, _>(&[
         -4.6183270541e-09, /* 0xb19eaf3c */
+        1.8295404516e-06,  /* 0x35f58e88 */
+        -1.8997929874e-04, /* 0xb947352e */
+        1.5625000000e-02,  /* 0x3c800000 */
     ]);
 
-    let s = z.poly_p::<P, _>(&[
-        1.5619102865e-02, /* 0x3c7fe744 */
-        1.1692678527e-04, /* 0x38f53697 */
-        5.1354652442e-07, /* 0x3509daa6 */
+    let s = z.poly_rev_p::<P, _>(&[
         1.1661400734e-09, /* 0x30a045e8 */
+        5.1354652442e-07, /* 0x3509daa6 */
+        1.1692678527e-04, /* 0x38f53697 */
+        1.5619102865e-02, /* 0x3c7fe744 */
     ]);
 
     let s = s.mul_adde(z, V::ONE);
@@ -764,30 +766,30 @@ where
         let ge5 = w.cmp_ge(thermite::generic_splat!(f32: 5.0));
 
         let w0 = w - thermite::generic_splat!(f32: 2.5);
-        let mut p0 = w0.poly_p::<P, _>(&[
-            1.50140941,
-            0.246640727,
-            -0.00417768164,
-            -0.00125372503,
-            0.00021858087,
-            -4.39150654e-06,
-            -3.5233877e-06,
-            3.43273939e-07,
+        let mut p0 = w0.poly_rev_p::<P, _>(&[
             2.81022636e-08,
+            3.43273939e-07,
+            -3.5233877e-06,
+            -4.39150654e-06,
+            0.00021858087,
+            -0.00125372503,
+            -0.00417768164,
+            0.246640727,
+            1.50140941,
         ]);
 
-        if P::POLICY.avoid_branching || thermite::unlikely(ge5.any()) {
+        if const { P::POLICY.avoid_branching } || thermite::unlikely(ge5.any()) {
             let w1 = w.sqrt() - thermite::generic_splat!(f32: 3.0);
-            let p1 = w1.poly_p::<P, _>(&[
-                2.83297682,
-                1.00167406,
-                0.00943887047,
-                -0.0076224613,
-                0.00573950773,
-                -0.00367342844,
-                0.00134934322,
-                0.000100950558,
+            let p1 = w1.poly_rev_p::<P, _>(&[
                 -0.000200214257,
+                0.000100950558,
+                0.00134934322,
+                -0.00367342844,
+                0.00573950773,
+                -0.0076224613,
+                0.00943887047,
+                1.00167406,
+                2.83297682,
             ]);
 
             p0 = ge5.select(p1, p0);
@@ -893,7 +895,7 @@ where
             let mut e = x;
 
             // reflection for negative values
-            if P::POLICY.avoid_branching || thermite::unlikely(reflect.any()) {
+            if const { P::POLICY.avoid_branching } || thermite::unlikely(reflect.any()) {
                 let pix = (z * Self::PI).sin_p::<P>();
 
                 signum |= reflect.select(pix.signed_zero(), signum);
@@ -909,7 +911,7 @@ where
 
         let mut t = Self::ONE;
 
-        if P::POLICY.avoid_branching || reflect.any() {
+        if const { P::POLICY.avoid_branching } || reflect.any() {
             let pix = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
 
             signum |= reflect.select(pix.signed_zero(), signum);
@@ -962,13 +964,15 @@ where
 
         let half_erf = erf.mul_adde(Self::HALF, Self::HALF);
 
+        let alpha_x_scaled = x.scale(FloatConsts::FRAC_1_SQRT_TAU);
+
         if V::HAS_TRUE_FMA {
             let half_x = x * Self::HALF;
             y = half_x.mul_add(erf, half_x); // fma(0.5x, erf, 0.5x), one rounding
-            dy = (alpha_x * Self::FRAC_1_SQRT_TAU).mul_add(exp_neg_ax2, half_erf);
+            dy = alpha_x_scaled.mul_add(exp_neg_ax2, half_erf);
         } else {
             y = half_erf * x;
-            dy = half_erf + alpha_x * Self::FRAC_1_SQRT_TAU * exp_neg_ax2;
+            dy = half_erf + alpha_x_scaled * exp_neg_ax2;
         }
 
         (y, dy)
@@ -986,219 +990,219 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
     let sign = x0.signed_zero();
     let x = (x0 ^ sign).flush_denormals_p::<P>();
 
-    match P::POLICY.precision {
-        // NOTE: For GPUs, exp is usually free, so these approximations are actually more expensive
-        // than just using exp, but for CPUs they can be much faster, and the precision is still decent for many use cases.
-        PrecisionPolicy::Worst | PrecisionPolicy::Medium if !V::NATIVE_CAP.has(NativeCapability::EXP) => {
-            // the polynomials below are sensitive to large inputs, so we need to clamp x to avoid exploding into inf/nan,
-            // and erf(x) is saturating to 1.0 around x=3.81, so 4.5 is a safe clamping point that won't cause significant precision
-            // loss for large inputs, but will prevent overflow in the polynomial evaluation.
-            let x = x.min(thermite::generic_splat!(f32: 4.5));
+    // NOTE: For GPUs, exp is usually free, so these approximations are actually more expensive
+    // than just using exp, but for CPUs they can be much faster, and the precision is still decent for many use cases.
+    if const {
+        matches!(P::POLICY.precision, PrecisionPolicy::Worst | PrecisionPolicy::Medium if !V::NATIVE_CAP.has(NativeCapability::EXP))
+    } {
+        // the polynomials below are sensitive to large inputs, so we need to clamp x to avoid exploding into inf/nan,
+        // and erf(x) is saturating to 1.0 around x=3.81, so 4.5 is a safe clamping point that won't cause significant precision
+        // loss for large inputs, but will prevent overflow in the polynomial evaluation.
+        let x = x.min(thermite::generic_splat!(f32: 4.5));
 
-            // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
-            // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
-            let mut tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
-                let t = x.poly_p::<P, _>(&[1.0, 0.278393, 0.230389, 0.000972, 0.078108]);
+        // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
+        // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
+        let mut tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
+            let t = x.poly_rev_p::<P, _>(&[0.078108, 0.000972, 0.230389, 0.278393, 1.0]);
 
-                t.powi_p::<P>(4)
-            } else {
-                let t = x.poly_p::<P, _>(&[
-                    1.0,
-                    0.0705230784,
-                    0.0422820123,
-                    0.0092705272,
-                    0.0001520143,
-                    0.0002765672,
-                    0.0000430638,
-                ]);
-
-                t.powi_p::<P>(16)
-            };
-
-            if O {
-                // We need a relatively accurate exp(-x^2) for GELU derivative, so opt for medium precision even in worst case,
-                // which is still much cheaper than a full exp.
-                *out_exp_neg_x2 = (-x * x).exp_p::<MediumPrecision<CheckOverflow<P, false>>>();
-            }
-
-            match (C, V::HAS_APPROX_RCP) {
-                (false, true) => {
-                    let y = tn.rcp();
-                    y.nmul_adde(tn.nmul_adde(y, V::TWO), V::ONE) ^ sign
-                }
-                (false, false) => (V::ONE - tn.reciprocal_p::<ExtraPrecision<P>>()) ^ sign,
-                (true, true) => {
-                    let y = tn.rcp();
-                    let k = tn.nmul_adde(y, V::TWO);
-
-                    if V::HAS_TRUE_FMA {
-                        sign.select_negative(y.nmul_add(k, V::TWO), y * k)
-                    } else {
-                        let erfc_pos = y * k;
-                        sign.select_negative(V::TWO - erfc_pos, erfc_pos)
-                    }
-                }
-                (true, false) => {
-                    let y = tn.reciprocal_p::<ExtraPrecision<P>>();
-                    sign.select_negative(V::TWO - y, y)
-                }
-            }
-        }
-        // higher precision policies or GPU with native exp support.
-        _ => {
-            // NOTE: x does not need to be clamped here, everything behaves well even for large inputs.
-
-            // if ignoring denormals, just multiple x0 by itself to save like one cycle,
-            // instead of waiting on abs(), otherwise use the denormal-flushed x value
-            let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) } {
-                x0 * x0
-            } else {
-                x * x
-            };
-
-            let exp_neg_x2 = (-x2).exp_p::<P>();
-
-            // Improved A&S method from Wikipedia, max error ~2e-9
-            let p1: V = thermite::generic_splat!(f32: 0.406742016006509);
-            let p2: V = thermite::generic_splat!(f32: 0.0072279182302319);
-
-            let t = x.mul_adde(x.mul_adde(p2, p1), V::ONE).reciprocal_p::<P>();
-
-            let m = t.poly_p::<P, _>(&[
-                0.316879890481381, // A1
-                -0.138329314150635,
-                1.08680830347054,
-                -1.11694155120396,
-                1.20644903073232,
-                -0.393127715207728,
-                0.0382613542530727,
+            t.powi_p::<P>(4)
+        } else {
+            let t = x.poly_rev_p::<P, _>(&[
+                0.0000430638,
+                0.0002765672,
+                0.0001520143,
+                0.0092705272,
+                0.0422820123,
+                0.0705230784,
+                1.0,
             ]);
 
-            if O {
-                *out_exp_neg_x2 = exp_neg_x2;
+            t.powi_p::<P>(16)
+        };
+
+        if const { O } {
+            // We need a relatively accurate exp(-x^2) for GELU derivative, so opt for medium precision even in worst case,
+            // which is still much cheaper than a full exp.
+            *out_exp_neg_x2 = (-x * x).exp_p::<MediumPrecision<CheckOverflow<P, false>>>();
+        }
+
+        match const { (C, V::HAS_APPROX_RCP) } {
+            (false, true) => {
+                let y = tn.rcp();
+                y.nmul_adde(tn.nmul_adde(y, V::TWO), V::ONE) ^ sign
             }
+            (false, false) => (V::ONE - tn.reciprocal_p::<ExtraPrecision<P>>()) ^ sign,
+            (true, true) => {
+                let y = tn.rcp();
+                let k = tn.nmul_adde(y, V::TWO);
 
-            // NOTE: We multiple e by t here, instead of
-            // t * t.poly, as this noticeably
-            // improve precision at zero cost.
-            let e = exp_neg_x2 * t;
-
-            if C {
-                if const { V::HAS_TRUE_FMA && P::POLICY.precision.lt(PrecisionPolicy::Average) } {
-                    return sign.select_negative(e.nmul_add(m, V::TWO), e * m);
+                if V::HAS_TRUE_FMA {
+                    sign.select_negative(y.nmul_add(k, V::TWO), y * k)
+                } else {
+                    let erfc_pos = y * k;
+                    sign.select_negative(V::TWO - erfc_pos, erfc_pos)
                 }
-
-                let mut y = e * m;
-
-                let is_big = x.cmp_gt(V::ONE);
-
-                if const { P::POLICY.precision.ge(PrecisionPolicy::Average) }
-                    && (P::POLICY.avoid_branching || is_big.any())
-                {
-                    let s = x.reciprocal_p::<P>();
-
-                    let big_y = if const { P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
-                        // slow reference code from libm, matches nearly exactly to libm itself.
-                        let r = s.poly_p::<P, _>(&[
-                            -9.8649431020e-03,
-                            -7.9928326607e-01,
-                            -1.7757955551e+01,
-                            -1.6063638306e+02,
-                            -6.3756646729e+02,
-                            -1.0250950928e+03,
-                            -4.8351919556e+02,
-                        ]);
-
-                        let b = s.poly_p::<P, _>(&[
-                            1.0,
-                            3.0338060379e+01,
-                            3.2579251099e+02,
-                            1.5367296143e+03,
-                            3.1998581543e+03,
-                            2.5530502930e+03,
-                            4.7452853394e+02,
-                            -2.2440952301e+01,
-                        ]);
-
-                        let z: V = {
-                            // Bit-split: zero low 13 mantissa bits so z*z is exact in f32.
-                            let mut ix: V::Bits = x.into_bits();
-                            ix &= thermite::generic_splat!(u32: 0xffffe000);
-                            ix.into_bits()
-                        };
-
-                        let a = (-z * z - thermite::generic_splat!(f32: 0.5625)).exp_p::<CheckOverflow<P, false>>();
-                        let b = ((z - x) * (z + x) + r / b).exp_p::<CheckOverflow<P, false>>() / x;
-
-                        a * b
-                    } else {
-                        // fast minimax approximation with a 68 ULP max difference, avg 0.282 ULP
-                        exp_neg_x2
-                            * s.mul_adde(
-                                thermite::generic_splat!(f32: 9.0 / 4.0),
-                                thermite::generic_splat!(f32: -5.0 / 4.0),
-                            )
-                            .poly_p::<P, _>(&[
-                                0.278560101985931396484375,
-                                0.18081049621105194091796875,
-                                -3.5686969757080078125e-2,
-                                3.04660876281559467315673828125e-3,
-                                1.68157299049198627471923828125e-3,
-                                -1.16943917237222194671630859375e-3,
-                                4.285395261831581592559814453125e-4,
-                                -9.03195686987601220607757568359375e-5,
-                                -2.17467240872792899608612060546875e-5,
-                                4.057946716784499585628509521484375e-5,
-                                -1.5849000192247331142425537109375e-5,
-                            ])
-                    };
-
-                    y = is_big.select(big_y, y);
-                }
-
+            }
+            (true, false) => {
+                let y = tn.reciprocal_p::<ExtraPrecision<P>>();
                 sign.select_negative(V::TWO - y, y)
-            } else {
-                let mut y = e.nmul_adde(m, V::ONE);
+            }
+        }
+    }
+    // higher precision policies or GPU with native exp support.
+    else {
+        // NOTE: x does not need to be clamped here, everything behaves well even for large inputs.
 
-                if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
-                    let small = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
-                        // Taylor series for erf(x)/x, faster but slightly less accurate at points
-                        x * x2.poly_p::<P, _>(&[
-                            1.1283791670955125739,
-                            -0.37612638903183752463,
-                            0.11283791670955125739,
-                            -0.026866170645131251759,
-                            0.0052239776254421878421,
-                            -0.00085483270234508528325,
-                            0.00012055332981789664251,
-                        ])
-                    } else {
-                        // Pade approximate for (Erf(x)-x)/x
-                        let n = x2.poly_p::<P, _>(&[
-                            1.2837916613e-01,
-                            -3.2504209876e-01,
-                            -2.8481749818e-02,
-                            -5.7702702470e-03,
-                            -2.3763017452e-05,
-                        ]);
+        // if ignoring denormals, just multiple x0 by itself to save like one cycle,
+        // instead of waiting on abs(), otherwise use the denormal-flushed x value
+        let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) } {
+            x0 * x0
+        } else {
+            x * x
+        };
 
-                        let d = x2.poly_p::<P, _>(&[
-                            1.0,
-                            3.9791721106e-01,
-                            6.5022252500e-02,
-                            5.0813062117e-03,
-                            1.3249473704e-04,
-                            -3.9602282413e-06,
-                        ]);
+        let exp_neg_x2 = (-x2).exp_p::<P>();
 
-                        x.mul_adde(n / d, x)
+        // Improved A&S method from Wikipedia, max error ~2e-9
+        let p1: V = thermite::generic_splat!(f32: 0.406742016006509);
+        let p2: V = thermite::generic_splat!(f32: 0.0072279182302319);
+
+        let t = x.mul_adde(x.mul_adde(p2, p1), V::ONE).reciprocal_p::<P>();
+
+        let m = t.poly_rev_p::<P, _>(&[
+            0.0382613542530727,
+            -0.393127715207728,
+            1.20644903073232,
+            -1.11694155120396,
+            1.08680830347054,
+            -0.138329314150635,
+            0.316879890481381, // A1
+        ]);
+
+        if const { O } {
+            *out_exp_neg_x2 = exp_neg_x2;
+        }
+
+        // NOTE: We multiple e by t here, instead of
+        // t * t.poly, as this noticeably
+        // improve precision at zero cost.
+        let e = exp_neg_x2 * t;
+
+        if const { C } {
+            if const { V::HAS_TRUE_FMA && P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+                return sign.select_negative(e.nmul_add(m, V::TWO), e * m);
+            }
+
+            let mut y = e * m;
+
+            let is_big = x.cmp_gt(V::ONE);
+
+            if const { P::POLICY.precision.ge(PrecisionPolicy::Average) }
+                && (const { P::POLICY.avoid_branching } || is_big.any())
+            {
+                let s = x.reciprocal_p::<P>();
+
+                let big_y = if const { P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
+                    // slow reference code from libm, matches nearly exactly to libm itself.
+                    let r = s.poly_rev_p::<P, _>(&[
+                        -4.8351919556e+02,
+                        -1.0250950928e+03,
+                        -6.3756646729e+02,
+                        -1.6063638306e+02,
+                        -1.7757955551e+01,
+                        -7.9928326607e-01,
+                        -9.8649431020e-03,
+                    ]);
+
+                    let b = s.poly_rev_p::<P, _>(&[
+                        -2.2440952301e+01,
+                        4.7452853394e+02,
+                        2.5530502930e+03,
+                        3.1998581543e+03,
+                        1.5367296143e+03,
+                        3.2579251099e+02,
+                        3.0338060379e+01,
+                        1.0,
+                    ]);
+
+                    let z: V = {
+                        // Bit-split: zero low 13 mantissa bits so z*z is exact in f32.
+                        let mut ix: V::Bits = x.into_bits();
+                        ix &= thermite::generic_splat!(u32: 0xffffe000);
+                        ix.into_bits()
                     };
 
-                    y = x.cmp_lt(V::ONE).select(small, y);
-                }
+                    let a = (-z * z - thermite::generic_splat!(f32: 0.5625)).exp_p::<CheckOverflow<P, false>>();
+                    let b = ((z - x) * (z + x) + r / b).exp_p::<CheckOverflow<P, false>>() / x;
 
-                y | sign
+                    a * b
+                } else {
+                    // fast minimax approximation with a 68 ULP max difference, avg 0.282 ULP
+                    exp_neg_x2
+                        * s.mul_adde(
+                            thermite::generic_splat!(f32: 9.0 / 4.0),
+                            thermite::generic_splat!(f32: -5.0 / 4.0),
+                        )
+                        .poly_rev_p::<P, _>(&[
+                            -1.5849000192247331142425537109375e-5,
+                            4.057946716784499585628509521484375e-5,
+                            -2.17467240872792899608612060546875e-5,
+                            -9.03195686987601220607757568359375e-5,
+                            4.285395261831581592559814453125e-4,
+                            -1.16943917237222194671630859375e-3,
+                            1.68157299049198627471923828125e-3,
+                            3.04660876281559467315673828125e-3,
+                            -3.5686969757080078125e-2,
+                            0.18081049621105194091796875,
+                            0.278560101985931396484375,
+                        ])
+                };
+
+                y = is_big.select(big_y, y);
             }
+
+            sign.select_negative(V::TWO - y, y)
+        } else {
+            let mut y = e.nmul_adde(m, V::ONE);
+
+            if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+                let small = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+                    // Taylor series for erf(x)/x, faster but slightly less accurate at points
+                    x * x2.poly_rev_p::<P, _>(&[
+                        0.00012055332981789664251,
+                        -0.00085483270234508528325,
+                        0.0052239776254421878421,
+                        -0.026866170645131251759,
+                        0.11283791670955125739,
+                        -0.37612638903183752463,
+                        1.1283791670955125739,
+                    ])
+                } else {
+                    // Pade approximate for (Erf(x)-x)/x
+                    let n = x2.poly_rev_p::<P, _>(&[
+                        -2.3763017452e-05,
+                        -5.7702702470e-03,
+                        -2.8481749818e-02,
+                        -3.2504209876e-01,
+                        1.2837916613e-01,
+                    ]);
+
+                    let d = x2.poly_rev_p::<P, _>(&[
+                        -3.9602282413e-06,
+                        1.3249473704e-04,
+                        5.0813062117e-03,
+                        6.5022252500e-02,
+                        3.9791721106e-01,
+                        1.0,
+                    ]);
+
+                    x.mul_adde(n / d, x)
+                };
+
+                y = x.cmp_lt(V::ONE).select(small, y);
+            }
+
+            y | sign
         }
     }
 }

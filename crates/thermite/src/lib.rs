@@ -11,11 +11,16 @@
 //! extensible and modular, allowing for easy addition of new instruction
 //! sets and optimizations over time.
 
+#![allow(unexpected_cfgs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 //
 #![allow(clippy::missing_transmute_annotations, clippy::let_and_return, unused_braces, unused)]
 // used for more intelligent const splat
 #![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]
+#![cfg_attr(
+    all(feature = "nightly", feature = "spirv", target_arch = "spirv"),
+    feature(asm_experimental_arch)
+)]
 #![cfg_attr(feature = "nightly", allow(internal_features))]
 // Enable wasm64 simd on nightly
 #![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
@@ -27,6 +32,7 @@ fn nightly_check() {
     compile_error!("The `nightly` feature requires a nightly compiler.");
 }
 
+#[cfg(feature = "bitvec")]
 pub extern crate bitvec;
 pub extern crate const_default;
 pub extern crate generic_array;
@@ -148,6 +154,21 @@ pub use simd::HasIsa;
 pub use swizzle::Swizzle;
 pub use vector::Vector;
 
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "spirv", target_arch = "spirv", not(target_feature = "Int64")))] {
+        pub type LargeInt = i32;
+        pub type LargeUInt = u32;
+    } else {
+        pub type LargeInt = i64;
+        pub type LargeUInt = u64;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+        #[inline(always)] pub fn likely(b: bool) -> bool { b }
+        #[inline(always)] pub fn unlikely(b: bool) -> bool { b }
+    } else {
 // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
 #[inline]
 #[cold]
@@ -163,6 +184,8 @@ pub fn likely(b: bool) -> bool {
 #[inline(always)]
 pub fn unlikely(b: bool) -> bool {
     if b { cold() } b
+        }
+    }
 }
 
 /// Generate ternlog immediate constant via arbitrary expressions. The

@@ -3,7 +3,8 @@
 use core::{marker::PhantomData, ops::Sub};
 
 use crate::{
-    BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet, register::InterleaveRegister,
+    BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet, math::policy::Policy,
+    register::InterleaveRegister,
 };
 
 use super::{
@@ -114,6 +115,7 @@ where
 
     const ISA: InstructionSet = R::ISA;
     const EMPTY: Storage<Self> = Self(R::EMPTY, PhantomData);
+    const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
     #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {
@@ -182,6 +184,7 @@ impl<R: MaskRegister, N: Unsigned> MaskRegister for ReducedRegister<R, N> where 
         R::native_bitmask(value.0).map(|mask| mask & Self::BITMASK)
     }
 
+    #[cfg(feature = "bitvec")]
     #[inline(always)]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let Some(native) = R::native_bitmask(value.0) else {
@@ -214,8 +217,6 @@ where
 #[rustfmt::skip]
 impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reducible<N> {
     type Element = R::Element;
-
-    const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
     #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { ReducedRegister(R::from_mask(mask.0), PhantomData) }
     #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { ReducedRegister(R::into_mask(value.0), PhantomData) }
@@ -779,41 +780,41 @@ where
         (Self(val, PhantomData), ReducedRegister(exp, PhantomData))
     }
 
-    unsafe fn native_sin_cos(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let (s, c) = unsafe { R::native_sin_cos(value.0) };
+    unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, c) = unsafe { R::native_sin_cos::<P>(value.0) };
         (Self(s, PhantomData), Self(c, PhantomData))
     }
 
-    unsafe fn native_sin(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_sin(value.0) }, PhantomData)
+    unsafe fn native_sin<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_sin::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_cos(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_cos(value.0) }, PhantomData)
+    unsafe fn native_cos<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_cos::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_tan(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_tan(value.0) }, PhantomData)
+    unsafe fn native_tan<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_tan::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_exp2(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_exp2(value.0) }, PhantomData)
+    unsafe fn native_exp2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_exp2::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_log2(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_log2(value.0) }, PhantomData)
+    unsafe fn native_log2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_log2::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_exp(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_exp(value.0) }, PhantomData)
+    unsafe fn native_exp<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_exp::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_ln(value: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_ln(value.0) }, PhantomData)
+    unsafe fn native_ln<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_ln::<P>(value.0) }, PhantomData)
     }
 
-    unsafe fn native_powf(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
-        Self(unsafe { R::native_powf(base.0, exp.0) }, PhantomData)
+    unsafe fn native_powf<P: Policy>(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+        Self(unsafe { R::native_powf::<P>(base.0, exp.0) }, PhantomData)
     }
 
     fn total_order(value: Storage<Self>) -> Storage<Self::SignedBits> {}

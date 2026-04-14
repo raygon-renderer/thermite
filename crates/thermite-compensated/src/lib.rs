@@ -6,7 +6,7 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 use num_traits::{NumAssignOps, NumOps};
 use thermite::element::SignedElement;
 use thermite::vector::{SplatVector, SplatVectorValue};
-use thermite::{mask::GenericSelectable, prelude::*};
+use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
 
@@ -258,29 +258,29 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
 
     // TODO: Represent these more accurately
     #[inline(always)]
-    fn try_from_i64(value: i64) -> Option<Self> {
-        E::try_from_i64(value).map(|v| Self::new(v))
+    fn try_from_int(value: LargeInt) -> Option<Self> {
+        E::try_from_int(value).map(|v| Self::new(v))
     }
 
     #[inline(always)]
-    fn try_from_ratio(n: i64, d: i64) -> Option<Self> {
+    fn try_from_ratio(n: LargeInt, d: LargeInt) -> Option<Self> {
         if d == 0 {
             return None;
         }
 
-        let df= <E as FloatElement>::try_from_i64(d)?;
+        let df= <E as FloatElement>::try_from_int(d)?;
 
         // fast path for values that both fit in the float exactly
-        if let Some(n) = <E as FloatElement>::try_from_i64(n) {
+        if let Some(n) = <E as FloatElement>::try_from_int(n) {
             return Some(Self::from_fraction(n, df));
         }
 
         let (q, r) = (n / d, n % d);
 
-        let mut result = Self::try_from_i64(q)?;
+        let mut result = Self::try_from_int(q)?;
 
         if r != 0 {
-            let rf = <E as FloatElement>::try_from_i64(r)?;
+            let rf = <E as FloatElement>::try_from_int(r)?;
 
             result += Self::from_fraction(rf, df);
         }
@@ -291,6 +291,10 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
     const HAS_INFINITY: bool = E::HAS_INFINITY;
     const HAS_SIGNED_ZERO: bool = E::HAS_SIGNED_ZERO;
     const HAS_SUBNORMALS: bool = E::HAS_SUBNORMALS;
+
+    type ConstInt<const N: thermite::LargeInt>;
+
+    type ConstRatio<const N: thermite::LargeInt, const D: thermite::LargeInt>;
 }
 
 /// Compensated arithmetic number type.
@@ -1464,6 +1468,22 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
     }
 
     fn max_z(self, mask: Self::Mask, other: Self) -> Self {
+        todo!()
+    }
+
+    fn scale(self, factor: Self::Element) -> Self {
+        todo!()
+    }
+
+    fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self {
+        todo!()
+    }
+
+    fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self {
+        todo!()
+    }
+
+    fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self {
         todo!()
     }
 }

@@ -1,17 +1,21 @@
 #![allow(clippy::useless_transmute, unnecessary_transmutes)]
 
-pub mod mask;
-
-pub mod float;
-pub mod signed;
-pub mod unsigned;
-
 use crate::{
     element::USize,
     isa::InstructionSet,
     register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd},
 };
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+        #[path = "spirv/mod.rs"]
+        mod registers;
+    } else {
+        #[path = "cpu/mod.rs"]
+        mod registers;
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Scalar;
@@ -20,10 +24,6 @@ pub mod prelude {
     pub use super::Scalar;
     pub use super::aliases::*;
     pub use crate::prelude::*;
-}
-
-impl HasIsa for Scalar {
-    const ISA: InstructionSet = InstructionSet::Scalar;
 }
 
 impl NativeIsa for Scalar {
@@ -115,80 +115,3 @@ macro_rules! impl_extends {
 }
 
 impl_extends!(f32, i32, u32, f64, i64, u64);
-
-macro_rules! impl_easy_casts {
-    ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
-        $(
-            impl $crate::register::BitCastRegister<$from> for $to {
-                #[inline(always)]
-                fn from_bits(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { core::mem::transmute(value) }
-                }
-            }
-
-            impl $crate::register::CastRegister<$from> for $to {
-                #[inline(always)]
-                fn cast_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { value as _ } // built-in cast
-                }
-            }
-
-            impl $crate::register::CastMaskRegister<$from> for $to {
-                #[inline(always)]
-                fn mask_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { core::mem::transmute(value) }
-                }
-            }
-        )+
-    )*};
-}
-
-macro_rules! impl_nontrivial_casts {
-    ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
-        $(
-            impl $crate::register::CastRegister<$from> for $to {
-                #[inline(always)]
-                fn cast_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { value as _ } // built-in cast
-                }
-            }
-
-            impl $crate::register::CastMaskRegister<$from> for $to {
-                #[inline(always)]
-                fn mask_from(value: Storage<$from>) -> Storage<Self> {
-                    MaskElement::from_bool(value.to_bool())
-                }
-            }
-        )+
-    )*};
-}
-
-impl_easy_casts! {
-    i8  as (i8,  u8),
-    u8  as (u8,  i8),
-    i16 as (i16, u16),
-    u16 as (u16, i16),
-
-    f32 as (f32, i32, u32),
-    i32 as (f32, u32, i32),
-    u32 as (f32, i32, u32),
-
-    f64 as (f64, i64, u64),
-    i64 as (f64, u64, i64),
-    u64 as (f64, i64, u64),
-}
-
-// all different-sized casts
-impl_nontrivial_casts! {
-    //     (f32, f64, i8, i16, i32, i64, u8, u16, u32, u64)
-    i8  as (f32, f64,     i16, i32, i64,     u16, u32, u64),
-    u8  as (f32, f64,     i16, i32, i64,     u16, u32, u64),
-    u16 as (f32, f64, i8,      i32, i64, u8,      u32, u64),
-    i16 as (f32, f64, i8,      i32, i64, u8,      u32, u64),
-    f32 as (     f64, i8, i16,      i64, u8, u16,      u64),
-    i32 as (     f64, i8, i16,      i64, u8, u16,      u64),
-    u32 as (     f64, i8, i16,      i64, u8, u16,      u64),
-    f64 as (f32,      i8, i16, i32,      u8, u16, u32     ),
-    i64 as (f32,      i8, i16, i32,      u8, u16, u32     ),
-    u64 as (f32,      i8, i16, i32,      u8, u16, u32     ),
-}

@@ -46,6 +46,7 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
 
     fn native_bitmask(&self) -> Option<u64>;
 
+    #[cfg(feature = "bitvec")]
     fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>>;
 
     #[inline(always)]
@@ -109,9 +110,21 @@ const _: () = {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let mut t = f.debug_tuple("Mask");
 
-            // TODO: Check if this needs to be reversed?
+            #[cfg(feature = "bitvec")]
             for v in self.bitmask()[..R::Lanes::USIZE].iter() {
                 t.field(&*v);
+            }
+
+            #[cfg(not(feature = "bitvec"))]
+            {
+                let Some(bitmask) = self.native_bitmask() else {
+                    return t.field(&"<non-bitmaskable>").finish();
+                };
+
+                for i in 0..R::Lanes::USIZE {
+                    let bit = (bitmask >> i) & 1 != 0;
+                    t.field(&bit);
+                }
             }
 
             t.finish()
@@ -181,6 +194,7 @@ impl<R: Register> GenericMask for Mask<R> {
         <R::Mask as MaskRegister>::native_bitmask(self.0)
     }
 
+    #[cfg(feature = "bitvec")]
     #[inline(always)]
     fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>> {
         <R::Mask as MaskRegister>::bitmask(self.0)
