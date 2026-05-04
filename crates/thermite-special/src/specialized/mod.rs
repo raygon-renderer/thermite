@@ -271,7 +271,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let mut p1 = x + x; // 2 * x
 
         cfg_if::cfg_if! {
-            if #[cfg(target_arch = "spirv")] {
+            if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
                 use crunchy::unroll;
 
                 macro_rules! unroll_poly {
