@@ -37,7 +37,7 @@ pub extern crate bitvec;
 pub extern crate const_default;
 pub extern crate generic_array;
 
-pub use thermite_dispatch::dispatch;
+pub use thermite_dispatch::{dispatch, dispatch_dyn};
 
 /// Creates a shuffle mask for various instructions. Note
 /// that the order of the arguments is reversed from the
