@@ -17,6 +17,7 @@ use crate::vector::ops::MulAddExt;
 #[rustfmt::skip]
 macro_rules! decl_float_scalar { ($f:ty $(: $s:ident)? => $width:literal) => {paste::paste! {
 
+#[thermite_macros::inline_always]
 impl CoreRegister for [<f $width>] {
     type Lanes = typenum::U1;
     type Storage = [<f $width>];
@@ -27,45 +28,49 @@ impl CoreRegister for [<f $width>] {
     const EMPTY: Storage<Self> = 0.0;
     const HAS_EQUAL_SIZE_MASK: bool = false;
 
-    #[inline(always)] fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, rhs, lhs)
     }
 
-    #[inline(always)] fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, value, 0.0)
     }
 
-    #[inline(always)] fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, 0.0, value)
     }
 
-    #[inline(always)] fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
         if const { Z::N >= 1 } { value } else { Self::EMPTY } // if N == 0 zero everything
     }
+
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
 }
 
+#[thermite_macros::inline_always]
 impl BitwiseRegister for [<f $width>] {
-    #[inline(always)] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() ^ rhs.to_bits())
     }
 
-    #[inline(always)] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() & rhs.to_bits())
     }
 
-    #[inline(always)] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         $f::from_bits(lhs.to_bits() | rhs.to_bits())
     }
 
-    #[inline(always)] fn not(value: Storage<Self>) -> Storage<Self> {
+    fn not(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(!value.to_bits())
     }
 }
 
 #[rustfmt::skip]
+#[thermite_macros::inline_always]
 impl InterleaveRegister for [<f $width>] {
-    #[inline(always)] fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
-    #[inline(always)] fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
 }
 
 impl Register for [<f $width>] {
@@ -74,68 +79,67 @@ impl Register for [<f $width>] {
     type Signed = [<i $width>];
     type Unsigned = [<u $width>];
 
-    #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { Self::from_bool(mask) }
+    fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { value.to_bool() }
 
-    #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { value.to_bool() }
-
-    #[inline(always)] fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+    fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         // scalars don't use MSB for mask conversion, but we can use NEG_ZERO to extract the sign bit
         // and convert to a mask
         Self::into_mask(Self::bitand(value, Self::NEG_ZERO))
     }
 
-    #[inline(always)] fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
-    #[inline(always)] fn single(value: Self::Element) -> Storage<Self> { value }
-    #[inline(always)] fn splat(value: Self::Element) -> Storage<Self> { value }
-    #[inline(always)] fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
-    #[inline(always)] fn reverse(value: Storage<Self>) -> Storage<Self> { value }
+    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> { value[0] }
+    fn single(value: Self::Element) -> Storage<Self> { value }
+    fn splat(value: Self::Element) -> Storage<Self> { value }
+    fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> { value }
+    fn reverse(value: Storage<Self>) -> Storage<Self> { value }
 
-    #[inline(always)]
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         $f::from_bits(value.to_bits().swap_bytes())
     }
 }
 
+#[thermite_macros::inline_always]
 impl<I> IndexableRegister<I> for [<f $width>]
 where
     I: UnsignedIntegerRegister<Lanes = Self::Lanes>,
 {
 }
 
+#[thermite_macros::inline_always]
 impl ShuffleRegister for [<f $width>] {
-    #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
     }
 }
 
+#[thermite_macros::inline_always]
 impl PermuteRegister for [<f $width>] {
-    #[inline(always)] fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value }
+ fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value }
 }
 
 impl SwizzleRegister for [<f $width>] {
     const HAS_PERMUTEV: bool = false;
 
-    #[inline(always)]
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 
-    #[inline(always)]
     fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
 
+#[thermite_macros::inline_always]
 impl PartialOrdRegister for [<f $width>] {
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs > rhs }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs == rhs }
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs >= rhs }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs < rhs }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs <= rhs }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs != rhs }
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs > rhs }
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs == rhs }
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs >= rhs }
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs < rhs }
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs <= rhs }
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { lhs != rhs }
 }
 
+#[thermite_macros::inline_always]
 impl NumericRegister for [<f $width>] {
     const ZERO: Storage<Self> = 0.0;
     const ONE: Storage<Self> = 1.0;
@@ -144,45 +148,47 @@ impl NumericRegister for [<f $width>] {
     const MIN: Storage<Self> = $f::MIN;
     const MAX: Storage<Self> = $f::MAX;
 
-    #[inline(always)] fn min_element(value: Storage<Self>) -> Self::Element { value }
-    #[inline(always)] fn max_element(value: Storage<Self>) -> Self::Element { value }
-    #[inline(always)] fn sum_elements(value: Storage<Self>) -> Self::Element { value }
-    #[inline(always)] fn prod_elements(value: Storage<Self>) -> Self::Element { value }
-    #[inline(always)] fn offset() -> Storage<Self> { 1.0 }
-    #[inline(always)] fn indexed() -> Storage<Self> { 0.0 }
-    #[inline(always)] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
-    #[inline(always)] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
-    #[inline(always)] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
-    #[inline(always)] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
-    #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
-    #[inline(always)] fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
+    fn min_element(value: Storage<Self>) -> Self::Element { value }
+    fn max_element(value: Storage<Self>) -> Self::Element { value }
+    fn sum_elements(value: Storage<Self>) -> Self::Element { value }
+    fn prod_elements(value: Storage<Self>) -> Self::Element { value }
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> { lo + hi }
+    fn offset() -> Storage<Self> { 1.0 }
+    fn indexed() -> Storage<Self> { 0.0 }
+    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
+    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
+    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
+    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
+    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
+    fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
-    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, lhs, rhs) }
+    fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, lhs, rhs) }
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
-    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, rhs, lhs) }
+    fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, rhs, lhs) }
 
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-    #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { lhs } else { rhs } }
+    fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { lhs } else { rhs } }
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-    #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { rhs } else { lhs } }
+    fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { rhs } else { lhs } }
 }
 
+#[thermite_macros::inline_always]
 impl SignedRegister for [<f $width>] {
     const NEG_ONE: Storage<Self> = -1.0;
     const MIN_POSITIVE: Storage<Self> = <$f>::MIN_POSITIVE;
 
-    #[inline(always)] fn neg(value: Storage<Self>) -> Storage<Self> { -value }
-    #[inline(always)] fn abs(value: Storage<Self>) -> Storage<Self> { value.abs() }
-    #[inline(always)] fn signum(value: Storage<Self>) -> Storage<Self> { value.signum() }
-    #[inline(always)] fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.copysign(rhs) }
+    fn neg(value: Storage<Self>) -> Storage<Self> { -value }
+    fn abs(value: Storage<Self>) -> Storage<Self> { value.abs() }
+    fn signum(value: Storage<Self>) -> Storage<Self> { value.signum() }
+    fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.copysign(rhs) }
 
-    #[inline(always)]
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         if mask { -value } else { value }
     }
 }
 
+#[thermite_macros::inline_always]
 impl FloatRegister for [<f $width>] {
     type Bits = [<u $width>];
     type SignedBits = [<i $width>];
@@ -206,24 +212,24 @@ impl FloatRegister for [<f $width>] {
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
-    #[inline(always)] fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_add(lhs, rhs, acc) }
-    #[inline(always)] fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_sub(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_add(lhs, rhs, acc) }
-    #[inline(always)] fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_sub(lhs, rhs, acc) }
+    fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_add(lhs, rhs, acc) }
+    fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_sub(lhs, rhs, acc) }
+    fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_add(lhs, rhs, acc) }
+    fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_sub(lhs, rhs, acc) }
 
-    #[inline(always)] fn sqrt(value: Storage<Self>) -> Storage<Self> { FloatElement::sqrt(value) }
-    #[inline(always)] fn floor(value: Storage<Self>) -> Storage<Self> { FloatElement::floor(value) }
-    #[inline(always)] fn ceil(value: Storage<Self>) -> Storage<Self> { FloatElement::ceil(value) }
-    #[inline(always)] fn round(value: Storage<Self>) -> Storage<Self> { FloatElement::round(value) }
-    #[inline(always)] fn trunc(value: Storage<Self>) -> Storage<Self> { FloatElement::trunc(value) }
-    #[inline(always)] fn fract(value: Storage<Self>) -> Storage<Self> { FloatElement::fract(value) }
-    #[inline(always)] fn next_up(value: Storage<Self>) -> Storage<Self> { FloatElement::next_up(value) }
-    #[inline(always)] fn next_down(value: Storage<Self>) -> Storage<Self> { FloatElement::next_down(value) }
+    fn sqrt(value: Storage<Self>) -> Storage<Self> { FloatElement::sqrt(value) }
+    fn floor(value: Storage<Self>) -> Storage<Self> { FloatElement::floor(value) }
+    fn ceil(value: Storage<Self>) -> Storage<Self> { FloatElement::ceil(value) }
+    fn round(value: Storage<Self>) -> Storage<Self> { FloatElement::round(value) }
+    fn trunc(value: Storage<Self>) -> Storage<Self> { FloatElement::trunc(value) }
+    fn fract(value: Storage<Self>) -> Storage<Self> { FloatElement::fract(value) }
+    fn next_up(value: Storage<Self>) -> Storage<Self> { FloatElement::next_up(value) }
+    fn next_down(value: Storage<Self>) -> Storage<Self> { FloatElement::next_down(value) }
 
     // TODO: maybe at some point?
     const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 
-    #[inline(always)] unsafe fn block_autovectorization(value: &mut Storage<Self>) {
+    unsafe fn block_autovectorization(value: &mut Storage<Self>) {
         unsafe {
             // x86_64: Use "xmm_reg" to keep it in the float/vector registers.
             // aarch64: Use "vreg" (or "reg" often works as floats are standard).
@@ -246,9 +252,5 @@ impl FloatRegister for [<f $width>] {
 
 }}} // end macro
 
-// On SPIRV targets the spirv backend provides its own CoreRegister/FloatRegister
-// impls for f32 and f64 via backend::spirv::scalar — avoid conflicting impls.
-#[cfg(not(target_arch = "spirv"))]
 decl_float_scalar!(f32 => 32);
-#[cfg(not(target_arch = "spirv"))]
 decl_float_scalar!(f64 => 64);

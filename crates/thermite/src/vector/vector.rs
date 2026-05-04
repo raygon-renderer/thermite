@@ -364,6 +364,9 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
 
     #[conditional] fn scale(self, factor: Self::Element) -> Self {}
 
+    fn pairwise_sum(lo: Self, hi: Self) -> Self {}
+    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self {}
+
     fn sum_elements(self) -> Self::Element { R::sum_elements(self.0) }
     fn prod_elements(self) -> Self::Element { R::prod_elements(self.0) }
 
@@ -568,6 +571,8 @@ where
     #[conditional] fn srai<const I: i32>(self) -> Self {}
     #[conditional] fn sra(self, count: u32) -> Self {}
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self {}
+    #[conditional] fn avg_floor(self, other: Self) -> Self {}
+    #[conditional] fn avg_ceil(self, other: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
@@ -580,6 +585,7 @@ where
     #[conditional] fn next_power_of_two_m1(self) -> Self {}
     #[conditional] fn ilog2p1(self) -> Self {}
     #[conditional] fn parity(self) -> Self {}
+    #[conditional] fn avg(self, other: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]

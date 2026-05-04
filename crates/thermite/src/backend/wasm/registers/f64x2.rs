@@ -7,10 +7,12 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, MaskRegister, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
-        dp::DoublePumpRegister,
+        BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
+        FloatRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability,
+        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg,
     },
+    swizzle::SwizzleIndices,
 };
 
 use super::arch;
@@ -19,133 +21,104 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct F64x2Wasm;
 
-impl Register for F64x2Wasm {
+#[thermite_macros::inline_always]
+impl CoreRegister for F64x2Wasm {
     type Lanes = typenum::U2;
-
-    type Element = f64;
     type Storage = arch::v128;
-    type HalfRegister = ();
-    type DoubleRegister = DoublePumpRegister<Self>;
+    type Mask = Self;
 
     const IS_EMULATED: bool = false;
-
     const ISA: InstructionSet = arch::ISA;
-
-    type ISize = super::I64x2Wasm;
-    type USize = super::U64x2Wasm;
-
+    const HAS_EQUAL_SIZE_MASK: bool = true;
     const EMPTY: Storage<Self> = arch::f64x2(0.0, 0.0);
 
-    #[inline(always)]
-    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
-        arch::f64x2(value[0], value[1])
-    }
-
-    #[inline(always)]
-    fn single(value: Self::Element) -> Storage<Self> {
-        arch::f64x2(value, 0.0)
-    }
-
-    #[inline(always)]
-    fn splat(value: Self::Element) -> Storage<Self> {
-        arch::f64x2_splat(value)
-    }
-
-    fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
-        arch::f64x2_extract_lane::<I>(value)
-    }
-
-    #[inline(always)]
-    unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
-        unsafe { arch::v128_load(ptr as *const _) }
-    }
-
-    #[inline(always)]
-    unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
-        unsafe { arch::v128_store(ptr as *mut _, value) }
-    }
-
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_xor(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_and(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_or(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_andnot(rhs, lhs) // NOTE: arguments are reversed
-    }
-
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
-        arch::v128_not(value)
-    }
-
-    #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_laneselect(rhs, lhs, mask)
     }
 
-    const HAS_MSB_BLENDV: bool = false;
-
-    #[inline(always)]
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(value, arch::x2indices(1, 0))
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 2 } {
+            value
+        } else if const { Z::N == 1 } {
+            arch::v128_and(value, arch::u64x2(!0, 0))
+        } else {
+            Self::EMPTY
+        }
     }
 
-    #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let low = arch::i64x2_shuffle::<0, 2>(a, b);
-        let high = arch::i64x2_shuffle::<1, 3>(a, b);
-
-        (low, high)
-    }
-
-    #[inline(always)]
-    #[rustfmt::skip]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        // within each 64-bit lane, swap the bytes
-        arch::u8x16_relaxed_swizzle(value, arch::u8x16(
-            7, 6, 5, 4,3, 2, 1, 0,
-            15, 14, 13, 12, 11, 10, 9, 8,
-        ))
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+        mask
     }
 }
 
+#[thermite_macros::inline_always]
+impl BitwiseRegister for F64x2Wasm {
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_xor(lhs, rhs)
+    }
+
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_and(lhs, rhs)
+    }
+
+    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_andnot(rhs, lhs) // NOTE: WASM andnot has operands reversed vs. the trait
+    }
+
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_or(lhs, rhs)
+    }
+
+    fn not(value: Storage<Self>) -> Storage<Self> {
+        arch::v128_not(value)
+    }
+}
+
+impl InterleaveRegister for F64x2Wasm {
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let low = arch::i64x2_shuffle::<0, 2>(a, b);
+        let high = arch::i64x2_shuffle::<1, 3>(a, b);
+        (low, high)
+    }
+
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let evens = arch::i64x2_shuffle::<0, 2>(a, b);
+        let odds = arch::i64x2_shuffle::<1, 3>(a, b);
+        (evens, odds)
+    }
+}
+
+#[thermite_macros::inline_always]
 impl MaskRegister for F64x2Wasm {
     const FALSY: Storage<Self> = arch::f64x2(f64::from_bits(0), f64::from_bits(0));
     const TRUTHY: Storage<Self> = arch::f64x2(f64::from_bits(!0), f64::from_bits(!0));
 
-    #[inline(always)]
+    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        mask
+    }
+
+    fn test(mask: Storage<Self>, lane: usize) -> bool {
+        Self::as_array(&mask)[lane].to_bool()
+    }
+
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
         arch::bx2_to_i64x2x(value)
     }
 
-    #[inline(always)]
     fn all(value: Storage<Self>) -> bool {
         arch::i64x2_all_true(value)
     }
 
-    #[inline(always)]
     fn any(value: Storage<Self>) -> bool {
         arch::v128_any_true(value)
     }
 
-    #[inline(always)]
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i64x2_bitmask(value) as u64)
     }
 
-    #[inline(always)]
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let mask = arch::i64x2_bitmask(value) as u32;
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
@@ -153,39 +126,138 @@ impl MaskRegister for F64x2Wasm {
     }
 }
 
+#[thermite_macros::inline_always]
+impl Register for F64x2Wasm {
+    type Element = f64;
+    type Signed = super::I64x2Wasm;
+    type Unsigned = super::U64x2Wasm;
+
+    fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        arch::f64x2_ne(value, Self::ZERO)
+    }
+
+    fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
+        value
+    }
+
+    fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        value // float sign bit is the MSB
+    }
+
+    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
+        arch::f64x2(value[0], value[1])
+    }
+
+    fn single(value: Self::Element) -> Storage<Self> {
+        arch::f64x2(value, 0.0)
+    }
+
+    fn splat(value: Self::Element) -> Storage<Self> {
+        arch::f64x2_splat(value)
+    }
+
+    unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { arch::v128_load(ptr as *const _) }
+    }
+
+    unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
+        unsafe { arch::v128_store(ptr as *mut _, value) }
+    }
+
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(value, arch::x2indices(1, 0))
+    }
+
+    #[rustfmt::skip]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        // within each 64-bit lane, swap the bytes
+        arch::u8x16_relaxed_swizzle(value, arch::u8x16(
+            7, 6, 5, 4, 3, 2, 1, 0,
+            15, 14, 13, 12, 11, 10, 9, 8,
+        ))
+    }
+
+    fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+        arch::f64x2_extract_lane::<I>(value)
+    }
+
+    fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+        arch::f64x2_replace_lane::<I>(value, element)
+    }
+}
+
+#[thermite_macros::inline_always]
 impl ShuffleRegister for F64x2Wasm {
-    #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
+#[thermite_macros::inline_always]
 impl PermuteRegister for F64x2Wasm {
-    #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
     }
 }
 
+#[thermite_macros::inline_always]
 impl SwizzleRegister for F64x2Wasm {
     const HAS_PERMUTEV: bool = true;
 
-    #[inline(always)]
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, arch::x2indices(idxs[0] as u8, idxs[1] as u8))
     }
+
+    /// Const-index permute: emits a single `i64x2.shuffle`. Only 4 possible
+    /// index combinations for 2 lanes, so this match collapses to one arm at
+    /// monomorphization time without needing `generic_const_exprs`.
+    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+        match (I::INDICES[0], I::INDICES[1]) {
+            (0, 0) => arch::i64x2_shuffle::<0, 0>(value, value),
+            (0, 1) => arch::i64x2_shuffle::<0, 1>(value, value),
+            (1, 0) => arch::i64x2_shuffle::<1, 0>(value, value),
+            (1, 1) => arch::i64x2_shuffle::<1, 1>(value, value),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Const-index two-source swizzle: emits a single `i64x2.shuffle`.
+    /// Indices 0-1 select from `a`, 2-3 from `b`. Only 16 cases for 2-lane registers.
+    #[rustfmt::skip]
+    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        match (I::INDICES[0], I::INDICES[1]) {
+            (0, 0) => arch::i64x2_shuffle::<0, 0>(a, b),
+            (0, 1) => arch::i64x2_shuffle::<0, 1>(a, b),
+            (0, 2) => arch::i64x2_shuffle::<0, 2>(a, b),
+            (0, 3) => arch::i64x2_shuffle::<0, 3>(a, b),
+            (1, 0) => arch::i64x2_shuffle::<1, 0>(a, b),
+            (1, 1) => arch::i64x2_shuffle::<1, 1>(a, b),
+            (1, 2) => arch::i64x2_shuffle::<1, 2>(a, b),
+            (1, 3) => arch::i64x2_shuffle::<1, 3>(a, b),
+            (2, 0) => arch::i64x2_shuffle::<2, 0>(a, b),
+            (2, 1) => arch::i64x2_shuffle::<2, 1>(a, b),
+            (2, 2) => arch::i64x2_shuffle::<2, 2>(a, b),
+            (2, 3) => arch::i64x2_shuffle::<2, 3>(a, b),
+            (3, 0) => arch::i64x2_shuffle::<3, 0>(a, b),
+            (3, 1) => arch::i64x2_shuffle::<3, 1>(a, b),
+            (3, 2) => arch::i64x2_shuffle::<3, 2>(a, b),
+            (3, 3) => arch::i64x2_shuffle::<3, 3>(a, b),
+            _ => unreachable!(),
+        }
+    }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl PartialOrdRegister for F64x2Wasm {
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_ge(lhs, rhs) }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_lt(lhs, rhs) }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_le(lhs, rhs) }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_ne(lhs, rhs) }
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_gt(lhs, rhs) }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_eq(lhs, rhs) }
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_ge(lhs, rhs) }
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_lt(lhs, rhs) }
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_le(lhs, rhs) }
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_ne(lhs, rhs) }
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_gt(lhs, rhs) }
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f64x2_eq(lhs, rhs) }
 }
 
+#[thermite_macros::inline_always]
 impl NumericRegister for F64x2Wasm {
     const ZERO: Storage<Self> = arch::f64x2(0.0, 0.0);
     const ONE: Storage<Self> = arch::f64x2(1.0, 1.0);
@@ -194,109 +266,119 @@ impl NumericRegister for F64x2Wasm {
     const MIN: Storage<Self> = arch::f64x2(f64::MIN, f64::MIN);
     const MAX: Storage<Self> = arch::f64x2(f64::MAX, f64::MAX);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
-        reduce_64x2!(f value; f64x2_relaxed_min f64x2_relaxed_min)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_64x2!(f value; f64x2_pmin f64x2_pmin)
+            }
+            _ => reduce_64x2!(f value; f64x2_relaxed_min f64x2_relaxed_min),
+        }
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
-        reduce_64x2!(f value; f64x2_relaxed_max f64x2_relaxed_max)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_64x2!(f value; f64x2_pmax f64x2_pmax)
+            }
+            _ => reduce_64x2!(f value; f64x2_relaxed_max f64x2_relaxed_max),
+        }
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         reduce_64x2!(f value; f64x2_add f64x2_add)
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         reduce_64x2!(f value; f64x2_mul f64x2_mul)
     }
 
-    #[inline(always)]
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        let even = arch::i64x2_shuffle::<0, 2>(lo, hi); // [a0, b0]
+        let odd = arch::i64x2_shuffle::<1, 3>(lo, hi); // [a1, b1]
+        arch::f64x2_add(even, odd)
+    }
+
     fn offset() -> Storage<Self> {
         arch::f64x2_splat(<Self::Lanes as Unsigned>::USIZE as f64)
     }
 
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         arch::f64x2(0.0, 1.0)
     }
 
-    #[inline(always)]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f64x2_add(lhs, rhs)
     }
 
-    #[inline(always)]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f64x2_sub(lhs, rhs)
     }
 
-    #[inline(always)]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f64x2_mul(lhs, rhs)
     }
 
-    #[inline(always)]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f64x2_div(lhs, rhs)
     }
 
-    #[inline(always)]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // https://stackoverflow.com/a/26342944/2083075
         Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
     }
 
-    #[inline(always)]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_relaxed_min(lhs, rhs)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                arch::f64x2_pmin(lhs, rhs)
+            }
+            _ => arch::f64x2_relaxed_min(lhs, rhs),
+        }
     }
 
-    #[inline(always)]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_relaxed_max(lhs, rhs)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                arch::f64x2_pmax(lhs, rhs)
+            }
+            _ => arch::f64x2_relaxed_max(lhs, rhs),
+        }
     }
 }
 
+#[thermite_macros::inline_always]
 impl SignedRegister for F64x2Wasm {
     const NEG_ONE: Storage<Self> = arch::f64x2(-1.0, -1.0);
     const MIN_POSITIVE: Storage<Self> = arch::f64x2(f64::MIN_POSITIVE, f64::MIN_POSITIVE);
 
-    #[inline(always)]
     fn neg(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_neg(value)
     }
 
-    #[inline(always)]
     fn abs(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_abs(value)
     }
 
-    #[inline(always)]
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
-    #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
-    #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
+#[thermite_macros::inline_always]
 impl FloatRegister for F64x2Wasm {
     // No way to know if FMA is supported at compile time
     const HAS_TRUE_FMA: bool = false;
 
     type Bits = super::U64x2Wasm;
-    type Signed = super::I64x2Wasm;
+    type SignedBits = super::I64x2Wasm;
     type ExtendedPrecision = Self;
 
     const HALF: Storage<Self> = arch::f64x2(0.5, 0.5);
@@ -310,22 +392,18 @@ impl FloatRegister for F64x2Wasm {
 
     // These MUST use a polyfill implementation to ensure consistent behavior across platforms
 
-    #[inline(always)]
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_maddx(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_maddx(lhs, rhs, arch::f64x2_neg(acc))
     }
 
-    #[inline(always)]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_maddx(arch::f64x2_neg(lhs), rhs, acc)
     }
 
-    #[inline(always)]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_maddx(arch::f64x2_neg(lhs), rhs, arch::f64x2_neg(acc))
     }
@@ -333,27 +411,22 @@ impl FloatRegister for F64x2Wasm {
     // These, however, can use the native relaxed FMA instructions, which
     // may or may not be true FMA depending on the platform.
 
-    #[inline(always)]
     fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_relaxed_madd(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_relaxed_madd(lhs, rhs, arch::f64x2_neg(acc))
     }
 
-    #[inline(always)]
     fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_relaxed_nmadd(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f64x2_relaxed_nmadd(lhs, rhs, arch::f64x2_neg(acc))
     }
 
-    #[inline(always)]
     fn sqrt(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_sqrt(value)
     }
@@ -361,66 +434,58 @@ impl FloatRegister for F64x2Wasm {
     const HAS_APPROX_RCP: bool = false;
     const HAS_APPROX_RSQRT: bool = false;
 
-    #[inline(always)]
     fn floor(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_floor(value)
     }
 
-    #[inline(always)]
     fn ceil(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_ceil(value)
     }
 
-    #[inline(always)]
     fn round(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_nearest(value)
     }
 
-    #[inline(always)]
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         arch::f64x2_trunc(value)
     }
 
-    const HAS_NATIVE_LDEXP: bool = false;
-    const HAS_NATIVE_FREXP: bool = false;
+    const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
-impl CastRegister<DoublePumpRegister<F64x2Wasm>> for super::F32x4Wasm {
-    #[inline(always)]
-    fn cast_from(value: Storage<DoublePumpRegister<F64x2Wasm>>) -> Storage<Self> {
-        let lo_demoted = arch::f32x4_demote_f64x2_zero(value.0);
-        let hi_demoted = arch::f32x4_demote_f64x2_zero(value.1);
-
+#[thermite_macros::inline_always]
+impl CastRegister<ArrayRegister<F64x2Wasm, 2>> for super::F32x4Wasm {
+    fn cast_from(value: Storage<ArrayRegister<F64x2Wasm, 2>>) -> Storage<Self> {
+        let lo_demoted = arch::f32x4_demote_f64x2_zero(value.0[0]);
+        let hi_demoted = arch::f32x4_demote_f64x2_zero(value.0[1]);
         arch::i32x4_shuffle::<0, 1, 4, 5>(lo_demoted, hi_demoted)
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::U64x2Wasm> for F64x2Wasm {
-    #[inline(always)]
     fn cast_from(value: Storage<super::U64x2Wasm>) -> Storage<Self> {
         arch::convert_u64x2_to_f64x2(value)
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<super::U64x2Wasm>) -> Storage<Self> {
         arch::convert_epu64_pd_limited::<Self>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::I64x2Wasm> for F64x2Wasm {
-    #[inline(always)]
     fn cast_from(value: Storage<super::I64x2Wasm>) -> Storage<Self> {
         arch::convert_i64x2_to_f64x2(value)
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<super::I64x2Wasm>) -> Storage<Self> {
         arch::convert_epi64_pd_limited::<Self>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<F64x2Wasm> for super::U64x2Wasm {
-    #[inline(always)]
     fn cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::u64x2(
             arch::f64x2_extract_lane::<0>(value) as u64,
@@ -428,14 +493,13 @@ impl CastRegister<F64x2Wasm> for super::U64x2Wasm {
         )
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::convert_pd_epu64_limited::<F64x2Wasm>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<F64x2Wasm> for super::I64x2Wasm {
-    #[inline(always)]
     fn cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::i64x2(
             arch::f64x2_extract_lane::<0>(value) as i64,
@@ -443,8 +507,32 @@ impl CastRegister<F64x2Wasm> for super::I64x2Wasm {
         )
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<F64x2Wasm>) -> Storage<Self> {
         arch::convert_pd_epi64_limited::<F64x2Wasm>(value)
+    }
+}
+
+#[thermite_macros::inline_always]
+impl ConcatRegister<f64> for F64x2Wasm {
+    fn concat(lo: Storage<f64>, hi: Storage<f64>) -> Storage<Self> {
+        arch::f64x2(lo, hi)
+    }
+
+    fn split(value: Storage<Self>) -> (Storage<f64>, Storage<f64>) {
+        (
+            arch::f64x2_extract_lane::<0>(value),
+            arch::f64x2_extract_lane::<1>(value),
+        )
+    }
+}
+
+#[thermite_macros::inline_always]
+impl ExtendRegister<f64> for F64x2Wasm {
+    fn extend(value: Storage<f64>) -> Storage<Self> {
+        arch::f64x2(value, 0.0)
+    }
+
+    fn narrow(value: Storage<Self>) -> Storage<f64> {
+        arch::f64x2_extract_lane::<0>(value)
     }
 }

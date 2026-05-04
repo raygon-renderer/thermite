@@ -105,6 +105,8 @@ where
     fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
         panic!("ArrayRegister does not support zeroupper operations");
     }
+
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::array_impl]
@@ -249,7 +251,6 @@ where
     type Signed = ArrayRegister<R::Signed, N>;
     type Unsigned = ArrayRegister<R::Unsigned, N>;
 
-    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {}
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {}
     fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {}
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {}
@@ -501,6 +502,23 @@ where
     fn prod_elements(mut value: Storage<Self>) -> Self::Element {
         crate::math::algorithms::reduce_in_place(&mut value.0, R::mul);
         R::prod_elements(value.0[0])
+    }
+
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        // Pairs adjacent inner registers within lo first, then within hi.
+        // Works uniformly for 1-lane and multi-lane R.
+        Self(core::array::from_fn(|i| {
+            if i < const { N / 2 } {
+                R::pairwise_sum(lo.0[2 * i], lo.0[2 * i + 1])
+            } else {
+                let j = i - const { N / 2 };
+                R::pairwise_sum(hi.0[2 * j], hi.0[2 * j + 1])
+            }
+        }))
+    }
+
+    fn relaxed_pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        Self(array_zip2(lo.0, hi.0, |lo, hi| R::relaxed_pairwise_sum(lo, hi)))
     }
 
     fn offset() -> Storage<Self> {

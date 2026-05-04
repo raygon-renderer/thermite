@@ -16,15 +16,15 @@ impl HasIsa for super::Scalar {
 macro_rules! impl_easy_casts {
     ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
         $(
+            #[thermite_macros::inline_always]
             impl BitCastRegister<$from> for $to {
-                #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     unsafe { core::mem::transmute(value) }
                 }
             }
 
+            #[thermite_macros::inline_always]
             impl CastRegister<$from> for $to {
-                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { value as _ } // built-in cast
                 }
@@ -36,8 +36,8 @@ macro_rules! impl_easy_casts {
 macro_rules! impl_nontrivial_casts {
     ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
         $(
+            #[thermite_macros::inline_always]
             impl CastRegister<$from> for $to {
-                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { value as _ } // built-in cast
                 }

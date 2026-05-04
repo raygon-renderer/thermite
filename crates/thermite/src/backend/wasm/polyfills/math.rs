@@ -159,17 +159,17 @@ pub fn i64x2_saturating_add(a: v128, b: v128) -> v128 {
     );
     let overflow_bits = v128_and(sign_check, sign_bit);
 
-    // Create a mask of 0xFFFFFFFF where overflow occurred, 0 otherwise
-    let mask = i64x2_shr(overflow_bits, 31);
+    // Create a mask of all-ones where overflow occurred, 0 otherwise
+    let mask = i64x2_shr(overflow_bits, 63);
 
     // 3. Calculate Saturation Target
     // If a is positive (sign bit 0): Target is INT_MAX
     // If a is negative (sign bit 1): Target is INT_MIN
-    // Formula: INT_MAX ^ (a >> 31)
-    //   pos: 0x7FFFFFFF ^ 0x00000000 = 0x7FFFFFFF (MAX)
-    //   neg: 0x7FFFFFFF ^ 0xFFFFFFFF = 0x80000000 (MIN)
+    // Formula: INT_MAX ^ (a >> 63)
+    //   pos: 0x7FFFFFFFFFFFFFFF ^ 0x0000000000000000 = INT_MAX
+    //   neg: 0x7FFFFFFFFFFFFFFF ^ 0xFFFFFFFFFFFFFFFF = INT_MIN
     let max = i64x2_splat(i64::MAX);
-    let a_sign_extended = i64x2_shr(a, 31);
+    let a_sign_extended = i64x2_shr(a, 63);
     let sat_val = v128_xor(max, a_sign_extended);
 
     // 4. Select Result
@@ -193,11 +193,11 @@ pub fn i64x2_saturating_sub(a: v128, b: v128) -> v128 {
     let overflow_bits = v128_and(sign_check, sign_bit);
 
     // Create mask
-    let mask = i64x2_shr(overflow_bits, 31);
+    let mask = i64x2_shr(overflow_bits, 63);
 
     // 3. Calculate Saturation Target (Same as add)
     let max = i64x2_splat(i64::MAX);
-    let a_sign_extended = i64x2_shr(a, 31);
+    let a_sign_extended = i64x2_shr(a, 63);
     let sat_val = v128_xor(max, a_sign_extended);
 
     // 4. Select Result

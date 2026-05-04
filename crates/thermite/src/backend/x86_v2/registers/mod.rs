@@ -29,6 +29,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct X86V2;
 
+#[thermite_macros::inline_always]
 impl HasIsa for X86V2 {
     const ISA: InstructionSet = InstructionSet::X86V2;
 }
@@ -41,18 +42,17 @@ impl NativeIsa for X86V2 {
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
 
-    #[inline(always)]
     unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
         unsafe { Ok(arch::disable_denormals()) }
     }
 
-    #[inline(always)]
     #[allow(clippy::unit_arg)]
     unsafe fn enable_denormals() -> Result<(), crate::simd::UnsupportedError> {
         unsafe { Ok(arch::enable_denormals()) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl NativeSimd for X86V2 {
     type f32xN = F32x4V2;
     type i32xN = I32x4V2;
@@ -73,6 +73,7 @@ impl_indexable!(<X86V2 as Simd>::u64x2 => F64x2V2, I64x2V2, U64x2V2);
 impl_indexable!(<X86V2 as Simd>::u32x4 => F32x4V2, I32x4V2, U32x4V2, <X86V2 as Simd>::u64x4, <X86V2 as Simd>::i64x4, <X86V2 as Simd>::f64x4);
 impl_indexable!(<X86V2 as Simd>::u64x4 => F32x4V2, I32x4V2, U32x4V2);
 
+#[thermite_macros::inline_always]
 impl Simd for X86V2 {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
     type usizex4 = <() as FindUSize<(), Self::u32x4, Self::u64x4>>::Output;

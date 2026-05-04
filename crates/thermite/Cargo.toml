@@ -62,11 +62,11 @@ nightly = []
 std_simd = ["nightly", "std"]
 
 [dependencies]
-cfg-if = "1"
+cfg-if = { version = "1", default-features = false }
 crunchy = "0.2"
 thermite-macros = { path = "../thermite-macros" }
 fast_polynomial = { version = "0.4", default-features = false }
-generic-array = { git = "https://github.com/fizyk20/generic-array" }
+generic-array = { version = "1.4.0" }
 bitvec = { version = "1.0.1", default-features = false, optional = true }
 const-default = { version = "1.0.0", default-features = false }
 paste = "1.0.15"

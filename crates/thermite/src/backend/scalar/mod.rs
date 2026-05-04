@@ -26,6 +26,7 @@ pub mod prelude {
     pub use crate::prelude::*;
 }
 
+#[thermite_macros::inline_always]
 impl NativeIsa for Scalar {
     type Registers = generic_array::typenum::U16;
 
@@ -35,19 +36,18 @@ impl NativeIsa for Scalar {
     type NativeAlignment = ();
 
     #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
-    #[inline(always)]
     unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
         unsafe { Ok(crate::backend::x86::sse2::disable_denormals()) }
     }
 
     #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
-    #[inline(always)]
     #[allow(clippy::unit_arg)]
     unsafe fn enable_denormals() -> Result<(), crate::simd::UnsupportedError> {
         unsafe { Ok(crate::backend::x86::sse2::enable_denormals()) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl NativeSimd for Scalar {
     type f32xN = f32;
     type i32xN = i32;
@@ -58,6 +58,7 @@ impl NativeSimd for Scalar {
     type u64xN = u64;
 }
 
+#[thermite_macros::inline_always]
 impl Simd for Scalar {
     type usizex2 = ArrayRegister<USize, 2>;
     type usizex4 = ArrayRegister<USize, 4>;

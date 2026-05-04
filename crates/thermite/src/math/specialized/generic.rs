@@ -9,8 +9,8 @@ where
     let mut y = x.rsqrt();
 
     if const { V::HAS_APPROX_RSQRT && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-        let nx2 = x.scale(const { E::ConstRatio::<{-1}, {2}>::VALUE }); // -0.5*x
-        let threehalfs = V::splat(const { E::ConstRatio::<{3}, {2}>::VALUE }); // 1.5
+        let nx2 = x.scale(const { E::ConstRatio::<{ -1 }, { 2 }>::VALUE }); // -0.5*x
+        let threehalfs = V::splat(const { E::ConstRatio::<{ 3 }, { 2 }>::VALUE }); // 1.5
 
         // one iteration of Newton's method
         y = y * y.square().mul_adde(nx2, threehalfs);
@@ -51,13 +51,13 @@ where
             );
         }
 
-        let res = x2 / V::splat(const { E::ConstInt::<{120}>::VALUE });
+        let res = x2 / V::splat(const { E::ConstInt::<{ 120 }>::VALUE });
         return x2.mul_add(res - V::FRAC_1_6, V::ONE);
     }
 
     // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
     let num = is_tiny.select(x2, V::sin::<P>(x));
-    let den = is_tiny.select(V::splat(const { E::ConstInt::<{120}>::VALUE }), x);
+    let den = is_tiny.select(V::splat(const { E::ConstInt::<{ 120 }>::VALUE }), x);
 
     // combined division, since division is expensive
     let mut y = num.approx_div_p::<P>(den);
@@ -147,12 +147,11 @@ macro_rules! impl_log2_table {
 
             #[inline(always)]
             fn fallback<P: Policy, const N: usize>() -> Self {
-                cfg_if::cfg_if! {
-                    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+                cfg_select! {
+                    all(feature = "spirv", target_arch = "spirv") => {
                         Vector::<f32>(N as f32).log2_p::<P>().0
-                    } else {
-                        libm::log2f(N as f32)
                     }
+                    _ => libm::log2f(N as f32),
                 }
             }
         }
@@ -162,12 +161,11 @@ macro_rules! impl_log2_table {
 
             #[inline(always)]
             fn fallback<P: Policy, const N: usize>() -> Self {
-                cfg_if::cfg_if! {
-                    if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+                cfg_select! {
+                    all(feature = "spirv", target_arch = "spirv") => {
                         Vector::<f64>(N as f64).log2_p::<P>().0
-                    } else {
-                        libm::log2(N as f64)
                     }
+                    _ => libm::log2(N as f64),
                 }
             }
         }

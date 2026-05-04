@@ -993,6 +993,21 @@ pub trait NumericVector:
     /// better on certain architectures, such as GPUs.
     #[conditional] fn scale(self, factor: Self::Element) -> Self;
 
+    /// Sums adjacent lane pairs from `lo` and `hi`, returning a vector of the same width.
+    ///
+    /// Output: `[lo[0]+lo[1], lo[2]+lo[3], ..., hi[0]+hi[1], hi[2]+hi[3], ...]`
+    ///
+    /// The result is always in strict order: all pair sums from `lo` followed by all pair sums from `hi`.
+    fn pairwise_sum(lo: Self, hi: Self) -> Self;
+
+    /// Like [`pairwise_sum`](NumericVector::pairwise_sum), but may return a relaxed (implementation-defined)
+    /// lane ordering for performance. Treat this as if randomly shuffling the result of
+    /// [`pairwise_sum`](NumericVector::pairwise_sum), with better performance than `pairwise_sum`.
+    ///
+    /// Prefer this if you are simply summing any adjacent pairs from `lo` and `hi`, and don't
+    /// care about the exact ordering of the resulting sums.
+    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self;
+
     /// Returns the sum of all elements in the vector.
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
@@ -1119,6 +1134,11 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     #[conditional] fn sra(self, count: u32) -> Self;
     /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
+
+    /// Floor average: `(a + b) >> 1` rounded toward −∞, computed without overflow.
+    #[conditional] fn avg_floor(self, other: Self) -> Self;
+    /// Ceiling average: `(a + b + 1) >> 1` rounded toward +∞, computed without overflow.
+    #[conditional] fn avg_ceil(self, other: Self) -> Self;
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
@@ -1135,6 +1155,11 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
 
     /// Compute the parity of each unsigned integer lane in the vector.
     #[conditional] fn parity(self) -> Self;
+
+    /// Ceiling average: `(a + b + 1) >> 1`, computed without overflow.
+    ///
+    /// Matches x86 `PAVGB`/`PAVGW` and ARM `vrhadd` semantics.
+    #[conditional] fn avg(self, other: Self) -> Self;
 }
 
 pub trait VectorWithRegister<R: crate::register::Register>: GenericVector {

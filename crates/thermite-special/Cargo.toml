@@ -15,3 +15,4 @@ paste = "1"
 
 [dev-dependencies]
 libm = "0.2.15"
+lambert_w = "2.0.0"

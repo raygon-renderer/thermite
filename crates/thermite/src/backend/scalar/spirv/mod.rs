@@ -100,8 +100,8 @@ pub(super) unsafe fn spirv_trailing_zeros_u64(x: u64) -> u64 {
 
 macro_rules! impl_spirv_bitcast {
     ($($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::BitCastRegister<$from> for $to {
-            #[inline(always)]
             fn from_bits(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opbitcast::<$to, $from>(value) }
             }
@@ -124,8 +124,8 @@ impl_spirv_bitcast! {
 macro_rules! impl_spirv_cast {
     // float -> signed int
     (f->i: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opconvertftos::<$to, $from>(value) }
             }
@@ -133,8 +133,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // float -> unsigned int
     (f->u: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opconvertftou::<$to, $from>(value) }
             }
@@ -142,8 +142,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // signed int -> float
     (i->f: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opconvertstof::<$to, $from>(value) }
             }
@@ -151,8 +151,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // unsigned int -> float
     (u->f: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opconvertutof::<$to, $from>(value) }
             }
@@ -160,8 +160,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // float -> float (width-converting)
     (f->f: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opfconvert::<$to, $from>(value) }
             }
@@ -169,8 +169,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // signed -> signed (width-converting)
     (i->i: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opsconvert::<$to, $from>(value) }
             }
@@ -178,8 +178,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // unsigned -> unsigned (width-converting)
     (u->u: $($from:ty => $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$from> for $to {
-            #[inline(always)]
             fn cast_from(value: Storage<$from>) -> Storage<Self> {
                 unsafe { arch::op_opuconvert::<$to, $from>(value) }
             }
@@ -187,8 +187,8 @@ macro_rules! impl_spirv_cast {
     )*};
     // same type — identity
     (id: $($ty:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$ty> for $ty {
-            #[inline(always)]
             fn cast_from(value: Storage<$ty>) -> Storage<Self> { value }
         }
     )*};

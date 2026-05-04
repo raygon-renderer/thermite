@@ -29,8 +29,7 @@ impl<const N: crate::LargeInt> SplatConst<f64> for IntConst<N> {
 impl<const N: crate::LargeInt, const D: crate::LargeInt> SplatConst<f32> for RatioConst<N, D> {
     const VALUE: f32 = {
         assert!(D != 0, "RatioConst: denominator must not be zero");
-        let q = N / D;
-        let r = N % D;
+        let (q, r) = (N / D, N % D);
         (q as f32) + (r as f32) / (D as f32)
     };
 }
@@ -38,8 +37,7 @@ impl<const N: crate::LargeInt, const D: crate::LargeInt> SplatConst<f32> for Rat
 impl<const N: crate::LargeInt, const D: crate::LargeInt> SplatConst<f64> for RatioConst<N, D> {
     const VALUE: f64 = {
         assert!(D != 0, "RatioConst: denominator must not be zero");
-        let q = N / D;
-        let r = N % D;
+        let (q, r) = (N / D, N % D);
         (q as f64) + (r as f64) / (D as f64)
     };
 }
@@ -191,6 +189,25 @@ macro_rules! impl_float_element {
         const MAX_LARGE_UINT: crate::LargeUInt = ((1 as crate::LargeUInt) << (Self::MANTISSA_BITS + 1)) as _;
     }};
 
+    (COMMON) => {
+        #[inline(always)] fn try_from_int(value: crate::LargeInt) -> Option<Self> { FloatElementInternal::try_from_int(value) }
+        #[inline(always)] fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> { FloatElementInternal::try_from_ratio(n, d) }
+
+        type ConstInt<const N: crate::LargeInt> = IntConst<N>;
+        type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
+
+        const HAS_INFINITY: bool = true;
+        const HAS_SIGNED_ZERO: bool = true;
+        const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+    };
+
+    (MUL_ADDE) => {
+        #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
+        #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
+        #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
+        #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc }
+    };
+
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
         impl FloatElementInternal for $t {
             #[inline(always)]
@@ -241,22 +258,7 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
                     #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
 
-                    #[inline(always)]
-                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_int(value)
-                    }
-
-                    #[inline(always)]
-                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_ratio(n, d)
-                    }
-
-                    type IntSplat<const N: crate::LargeInt> = IntConst<N>;
-                    type RatioSplat<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
-
-                    const HAS_INFINITY: bool = true;
-                    const HAS_SIGNED_ZERO: bool = true;
-                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                    impl_float_element!(COMMON);
                 }
 
                 impl MulAddExt for $t {
@@ -286,22 +288,7 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
                     #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
 
-                    #[inline(always)]
-                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_int(value)
-                    }
-
-                    #[inline(always)]
-                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_ratio(n, d)
-                    }
-
-                    type ConstInt<const N: crate::LargeInt> = IntConst<N>;
-                    type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
-
-                    const HAS_INFINITY: bool = true;
-                    const HAS_SIGNED_ZERO: bool = true;
-                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                    impl_float_element!(COMMON);
                 }
 
                 impl MulAddExt for $t {
@@ -320,6 +307,36 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { self.nmul_add(rhs, acc) }
                     #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self.nmul_sub(rhs, acc) }
                 }
+            } else if #[cfg(all(feature = "nightly", feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))] {
+                impl FloatElement for $t {
+                    // WASM has native scalar float ops for these
+                    #[inline(always)] fn sqrt(value: Self) -> Self { crate::backend::wasm::arch::[<$t _sqrt>](value) }
+                    #[inline(always)] fn floor(value: Self) -> Self { crate::backend::wasm::arch::[<$t _floor>](value) }
+                    #[inline(always)] fn ceil(value: Self) -> Self { crate::backend::wasm::arch::[<$t _ceil>](value) }
+                    #[inline(always)] fn trunc(value: Self) -> Self { crate::backend::wasm::arch::[<$t _trunc>](value) }
+                    #[inline(always)] fn fract(value: Self) -> Self { value - crate::backend::wasm::arch::[<$t _trunc>](value) }
+                    // WASM nearest() is banker's rounding (ties-to-even), not half-away-from-zero
+                    #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
+                    // No WASM scalar nextafter; fall back to libm
+                    #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
+                    #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
+
+                    impl_float_element!(COMMON);
+                }
+
+                impl MulAddExt for $t {
+                    type Output = Self;
+
+                    // No hardware scalar FMA on WASM; use libm for exact, separate ops for estimating
+                    const HAS_TRUE_FMA: bool = false;
+
+                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
+                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
+                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
+                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
+
+                    impl_float_element!(MUL_ADDE);
+                }
             } else {
                 impl FloatElement for $t {
                     #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
@@ -330,22 +347,7 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
                     #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
 
-                    #[inline(always)]
-                    fn try_from_int(value: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_int(value)
-                    }
-
-                    #[inline(always)]
-                    fn try_from_ratio(n: crate::LargeInt, d: crate::LargeInt) -> Option<Self> {
-                        FloatElementInternal::try_from_ratio(n, d)
-                    }
-
-                    type ConstInt<const N: crate::LargeInt> = IntConst<N>;
-                    type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt> = RatioConst<N, D>;
-
-                    const HAS_INFINITY: bool = true;
-                    const HAS_SIGNED_ZERO: bool = true;
-                    const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
+                    impl_float_element!(COMMON);
                 }
 
                 impl MulAddExt for $t {
@@ -358,10 +360,7 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
                     #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
 
-                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
-                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
-                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
-                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc  }
+                    impl_float_element!(MUL_ADDE);
                 }
             }
         }

@@ -49,6 +49,19 @@ pub trait ScalarValue:
     /// Named this way to avoid conflicts. Required for the `Rem` implementation.
     fn scalar_trunc(self) -> Self;
 
+    /// Marker type for splatting a compile-time integer constant as `Compensated<Self>`.
+    ///
+    /// Each concrete impl can choose the precision strategy: `f32` uses a `f64` intermediate
+    /// to capture the rounding error in the error term; `f64` stores zero error (would need
+    /// `f128` for better); `Vector<R>` delegates to the inner element and splats via
+    /// `SplatVectorValue`.
+    type CompensatedConstInt<const N: LargeInt>: SplatConst<Compensated<Self>>;
+
+    /// Marker type for splatting a compile-time rational constant `N/D` as `Compensated<Self>`.
+    ///
+    /// Same precision strategy as `CompensatedConstInt`.
+    type CompensatedConstRatio<const N: LargeInt, const D: LargeInt>: SplatConst<Compensated<Self>>;
+
     #[inline(always)]
     fn two_sum(a: Self, b: Self) -> (Self, Self) {
         let s = a + b;
@@ -132,6 +145,9 @@ impl ScalarValue for f32 {
     fn scalar_trunc(self) -> Self {
         FloatElement::trunc(self)
     }
+
+    type CompensatedConstInt<const N: LargeInt> = F32CompensatedIntConst<N>;
+    type CompensatedConstRatio<const N: LargeInt, const D: LargeInt> = F32CompensatedRatioConst<N, D>;
 }
 
 impl ScalarValue for f64 {
@@ -144,6 +160,9 @@ impl ScalarValue for f64 {
     fn scalar_trunc(self) -> Self {
         FloatElement::trunc(self)
     }
+
+    type CompensatedConstInt<const N: LargeInt> = F64CompensatedIntConst<N>;
+    type CompensatedConstRatio<const N: LargeInt, const D: LargeInt> = F64CompensatedRatioConst<N, D>;
 }
 
 impl<R: thermite::register::FloatRegister> ScalarValue for Vector<R>
@@ -159,6 +178,12 @@ where
     fn scalar_trunc(self) -> Self {
         self.trunc()
     }
+
+    type CompensatedConstInt<const N: LargeInt> =
+        CompensatedVectorConst<<R::Element as ScalarValue>::CompensatedConstInt<N>>;
+
+    type CompensatedConstRatio<const N: LargeInt, const D: LargeInt> =
+        CompensatedVectorConst<<R::Element as ScalarValue>::CompensatedConstRatio<N, D>>;
 }
 
 // /// NOTE: Nesting Compensated is not recommended. This is only implemented
@@ -230,6 +255,114 @@ impl<E: ScalarValue + SignedElement> SignedElement for Compensated<E> {
     }
 }
 
+use core::marker::PhantomData;
+
+// EFT two_sum: returns (s, e) such that s + e = a + b exactly, s = fl(a + b).
+const fn two_sum_f64(a: f64, b: f64) -> (f64, f64) {
+    let s = a + b;
+    let v = s - a;
+    let e = (a - (s - v)) + (b - v);
+    (s, e)
+}
+
+// EFT two_product via Dekker splitting: returns (p, e) such that p + e = a * b exactly,
+// p = fl(a * b). Requires no FMA; accurate when |a|, |b| < 2^996 (no overflow in split).
+const fn two_product_f64(a: f64, b: f64) -> (f64, f64) {
+    let p = a * b;
+    let c = f64::SPLITTER * a;
+    let a_hi = c - (c - a);
+    let a_lo = a - a_hi;
+    let c = f64::SPLITTER * b;
+    let b_hi = c - (c - b);
+    let b_lo = b - b_hi;
+    let e = ((a_hi * b_hi - p) + a_hi * b_lo + a_lo * b_hi) + a_lo * b_lo;
+    (p, e)
+}
+
+// --- f32: uses f64 intermediate to capture rounding error in the error term ---
+
+pub struct F32CompensatedIntConst<const N: LargeInt>;
+pub struct F32CompensatedRatioConst<const N: LargeInt, const D: LargeInt>;
+
+impl<const N: LargeInt> SplatConst<Compensated<f32>> for F32CompensatedIntConst<N> {
+    const VALUE: Compensated<f32> = {
+        let value = N as f32;
+        let error = (N as f64 - value as f64) as f32;
+        Compensated { value, error }
+    };
+}
+
+impl<const N: LargeInt, const D: LargeInt> SplatConst<Compensated<f32>> for F32CompensatedRatioConst<N, D> {
+    const VALUE: Compensated<f32> = {
+        assert!(D != 0, "CompensatedRatioConst: denominator must not be zero");
+        let (q, r) = (N / D, N % D);
+        let hi64 = (q as f64) + (r as f64) / (D as f64);
+        let value = hi64 as f32;
+        let error = (hi64 - value as f64) as f32;
+        Compensated { value, error }
+    };
+}
+
+// --- f64: double-double EFT to capture the rounding error without needing f128 ---
+
+pub struct F64CompensatedIntConst<const N: LargeInt>;
+pub struct F64CompensatedRatioConst<const N: LargeInt, const D: LargeInt>;
+
+impl<const N: LargeInt> SplatConst<Compensated<f64>> for F64CompensatedIntConst<N> {
+    const VALUE: Compensated<f64> = {
+        // If |N| ≤ 2^53 the cast is exact, so error = 0. Otherwise the rounding error
+        // is an integer ≤ ulp(value)/2, which is always exactly representable in f64.
+        let value = N as f64;
+        let error = (N - value as LargeInt) as f64;
+        Compensated { value, error }
+    };
+}
+
+impl<const N: LargeInt, const D: LargeInt> SplatConst<Compensated<f64>> for F64CompensatedRatioConst<N, D> {
+    const VALUE: Compensated<f64> = {
+        assert!(D != 0, "CompensatedRatioConst: denominator must not be zero");
+        let (q, r) = (N / D, N % D);
+        let q_f64 = q as f64;
+        let r_f64 = r as f64;
+        let d_f64 = D as f64;
+
+        // frac = fl(r / D), with rounding error frac_err = r/D - frac.
+        let frac = r_f64 / d_f64;
+
+        // value = fl(q + frac); two_sum gives us the exact rounding error e_add.
+        // q_f64 + frac = value + e_add (exactly).
+        let (value, e_add) = two_sum_f64(q_f64, frac);
+
+        // Recover frac * D exactly via Dekker two_product, so we can compute
+        // r - frac*D = (r/D - frac)*D, the numerator of the division error.
+        let (prod, e_prod) = two_product_f64(frac, d_f64);
+
+        // r - frac*D = r_f64 - prod - e_prod. Compute (r_f64 - prod) with two_sum
+        // to avoid cancellation, then fold in e_prod.
+        let (diff, e_diff) = two_sum_f64(r_f64, -prod);
+        let frac_err = (diff + (e_diff - e_prod)) / d_f64;
+
+        // Total: value + error = q + r/D = N/D (to full double-double precision,
+        // exact when |q|, |r|, |D| each fit in 2^53).
+        let error = frac_err + e_add;
+
+        Compensated { value, error }
+    };
+}
+
+// --- Vector: lifts a scalar SplatConst<Compensated<V::Element>> to SplatConst<Compensated<V>> ---
+// Delegates to the existing SplatVectorValue impl which splats value and error independently.
+
+pub struct CompensatedVectorConst<Inner>(PhantomData<Inner>);
+
+impl<V, Inner> SplatConst<Compensated<V>> for CompensatedVectorConst<Inner>
+where
+    V: CompensatedFloatVector,
+    Inner: SplatConst<Compensated<V::Element>>,
+{
+    const VALUE: Compensated<V> = <Compensated<V> as SplatVectorValue<Inner, Compensated<V>>>::VALUE;
+}
+
 #[rustfmt::skip]
 impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
     #[inline(always)]
@@ -292,9 +425,9 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
     const HAS_SIGNED_ZERO: bool = E::HAS_SIGNED_ZERO;
     const HAS_SUBNORMALS: bool = E::HAS_SUBNORMALS;
 
-    type ConstInt<const N: thermite::LargeInt>;
+    type ConstInt<const N: thermite::LargeInt> = E::CompensatedConstInt<N>;
 
-    type ConstRatio<const N: thermite::LargeInt, const D: thermite::LargeInt>;
+    type ConstRatio<const N: thermite::LargeInt, const D: thermite::LargeInt> = E::CompensatedConstRatio<N, D>;
 }
 
 /// Compensated arithmetic number type.
@@ -1486,6 +1619,14 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
     fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self {
         todo!()
     }
+
+    fn pairwise_sum(lo: Self, hi: Self) -> Self {
+        todo!()
+    }
+
+    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self {
+        todo!()
+    }
 }
 
 impl<V: CompensatedFloatVector> thermite::vector::ops::NegMasked<V::Mask> for Compensated<V> {
@@ -1848,6 +1989,10 @@ impl<V: CompensatedFloatVector> FloatVector for Compensated<V> {
     }
 
     fn next_down_z(self, mask: Self::Mask) -> Self {
+        todo!()
+    }
+
+    fn mix(self, a: Self, b: Self) -> Self {
         todo!()
     }
 }

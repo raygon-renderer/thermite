@@ -7,9 +7,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitsRegister, BitshiftRegister, CastRegister, FloatRegister, LinAlg3Register, LinAlg4Register, MaskRegister,
+        BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, FloatRegister,
+        InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister, NativeCapability,
         NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, dp::DoublePumpRegister,
+        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg,
     },
 };
 
@@ -19,110 +20,78 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct F32x4Wasm;
 
-impl Register for F32x4Wasm {
+#[thermite_macros::inline_always]
+impl CoreRegister for F32x4Wasm {
     type Lanes = typenum::U4;
-
-    type Element = f32;
     type Storage = arch::v128;
-    type HalfRegister = ();
-    type DoubleRegister = DoublePumpRegister<Self>;
+    type Mask = Self;
 
     const IS_EMULATED: bool = false;
-
     const ISA: InstructionSet = arch::ISA;
-
-    type ISize = super::I32x4Wasm;
-    type USize = super::U32x4Wasm;
-
+    const HAS_EQUAL_SIZE_MASK: bool = true;
     const EMPTY: Storage<Self> = arch::f32x4(0.0, 0.0, 0.0, 0.0);
 
-    #[inline(always)]
-    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
-        arch::f32x4(value[0], value[1], value[2], value[3])
-    }
-
-    #[inline(always)]
-    fn single(value: Self::Element) -> Storage<Self> {
-        arch::f32x4(value, 0.0, 0.0, 0.0)
-    }
-
-    #[inline(always)]
-    fn splat(value: Self::Element) -> Storage<Self> {
-        arch::f32x4_splat(value)
-    }
-
-    fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
-        arch::f32x4_extract_lane::<I>(value)
-    }
-
-    #[inline(always)]
-    unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
-        unsafe { arch::v128_load(ptr as *const _) }
-    }
-
-    #[inline(always)]
-    unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
-        unsafe { arch::v128_store(ptr as *mut _, value) }
-    }
-
-    #[inline(always)]
-    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_xor(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_and(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_or(lhs, rhs)
-    }
-
-    #[inline(always)]
-    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_andnot(rhs, lhs) // NOTE: arguments are reversed
-    }
-
-    #[inline(always)]
-    fn not(value: Storage<Self>) -> Storage<Self> {
-        arch::v128_not(value)
-    }
-
-    #[inline(always)]
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_laneselect(rhs, lhs, mask)
     }
 
-    const HAS_MSB_BLENDV: bool = false;
-
-    #[inline(always)]
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(value, arch::x4indices(3, 2, 1, 0))
+    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+        if const { Z::N >= 4 } {
+            value
+        } else if const { Z::N == 3 } {
+            arch::v128_and(value, arch::u32x4(!0, !0, !0, 0))
+        } else if const { Z::N == 2 } {
+            arch::v128_and(value, arch::u32x4(!0, !0, 0, 0))
+        } else if const { Z::N == 1 } {
+            arch::v128_and(value, arch::u32x4(!0, 0, 0, 0))
+        } else {
+            Self::EMPTY
+        }
     }
 
-    #[inline(always)]
-    fn unpack(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        let low = arch::i32x4_shuffle::<0, 4, 1, 5>(a, b);
-        let high = arch::i32x4_shuffle::<2, 6, 3, 7>(a, b);
-
-        (low, high)
-    }
-
-    #[inline(always)]
-    #[rustfmt::skip]
-    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        // within each 32-bit lane, swap the bytes
-        arch::u8x16_relaxed_swizzle(value, arch::u8x16(
-            3, 2, 1, 0,
-            7, 6, 5, 4,
-            11, 10, 9, 8,
-            15, 14, 13, 12,
-        ))
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+        mask
     }
 }
 
+#[rustfmt::skip] #[thermite_macros::inline_always]
+impl BitwiseRegister for F32x4Wasm {
+    fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_xor(lhs, rhs)
+    }
+
+    fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_and(lhs, rhs)
+    }
+
+    fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_andnot(rhs, lhs) // NOTE: WASM andnot has operands reversed vs. the trait
+    }
+
+    fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        arch::v128_or(lhs, rhs)
+    }
+
+    fn not(value: Storage<Self>) -> Storage<Self> {
+        arch::v128_not(value)
+    }
+}
+
+impl InterleaveRegister for F32x4Wasm {
+    fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let low = arch::i32x4_shuffle::<0, 4, 1, 5>(a, b);
+        let high = arch::i32x4_shuffle::<2, 6, 3, 7>(a, b);
+        (low, high)
+    }
+
+    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let evens = arch::i32x4_shuffle::<0, 2, 4, 6>(a, b);
+        let odds = arch::i32x4_shuffle::<1, 3, 5, 7>(a, b);
+        (evens, odds)
+    }
+}
+
+#[thermite_macros::inline_always]
 impl MaskRegister for F32x4Wasm {
     const FALSY: Storage<Self> = arch::f32x4(
         f32::from_bits(0),
@@ -138,27 +107,32 @@ impl MaskRegister for F32x4Wasm {
         f32::from_bits(!0),
     );
 
-    #[inline(always)]
+    fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        mask
+    }
+
+    fn test(mask: Storage<Self>, lane: usize) -> bool {
+        Self::as_array(&mask)[lane].to_bool()
+    }
+
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
         arch::bx4_to_i32x4x(value)
     }
 
-    #[inline(always)]
     fn all(value: Storage<Self>) -> bool {
         arch::i32x4_all_true(value)
     }
 
-    #[inline(always)]
     fn any(value: Storage<Self>) -> bool {
         arch::v128_any_true(value)
     }
 
-    #[inline(always)]
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i32x4_bitmask(value) as u64)
     }
 
-    #[inline(always)]
+    #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
         let mask = arch::i32x4_bitmask(value) as u32;
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
@@ -166,24 +140,86 @@ impl MaskRegister for F32x4Wasm {
     }
 }
 
+#[thermite_macros::inline_always]
+impl Register for F32x4Wasm {
+    type Element = f32;
+    type Signed = super::I32x4Wasm;
+    type Unsigned = super::U32x4Wasm;
+
+    fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        arch::f32x4_ne(value, Self::ZERO)
+    }
+
+    fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
+        value
+    }
+
+    fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+        value // float sign bit is the MSB
+    }
+
+    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
+        arch::f32x4(value[0], value[1], value[2], value[3])
+    }
+
+    fn single(value: Self::Element) -> Storage<Self> {
+        arch::f32x4(value, 0.0, 0.0, 0.0)
+    }
+
+    fn splat(value: Self::Element) -> Storage<Self> {
+        arch::f32x4_splat(value)
+    }
+
+    unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
+        unsafe { arch::v128_load(ptr as *const _) }
+    }
+
+    unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
+        unsafe { arch::v128_store(ptr as *mut _, value) }
+    }
+
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(value, arch::x4indices(3, 2, 1, 0))
+    }
+
+    #[rustfmt::skip]
+    fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+        // within each 32-bit lane, swap the bytes
+        arch::u8x16_relaxed_swizzle(value, arch::u8x16(
+            3, 2, 1, 0,
+            7, 6, 5, 4,
+            11, 10, 9, 8,
+            15, 14, 13, 12,
+        ))
+    }
+
+    fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+        arch::f32x4_extract_lane::<I>(value)
+    }
+
+    fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+        arch::f32x4_replace_lane::<I>(value, element)
+    }
+}
+
+#[thermite_macros::inline_always]
 impl ShuffleRegister for F32x4Wasm {
-    #[inline(always)]
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::blendv(const { arch::imm8x4_to_mask::<IMM8>() }, lhs, rhs)
     }
 }
 
+#[thermite_macros::inline_always]
 impl PermuteRegister for F32x4Wasm {
-    #[inline(always)]
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x4_to_indices::<IMM8>() })
     }
 }
 
+#[thermite_macros::inline_always]
 impl SwizzleRegister for F32x4Wasm {
     const HAS_PERMUTEV: bool = true;
 
-    #[inline(always)]
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(
             value,
@@ -192,16 +228,17 @@ impl SwizzleRegister for F32x4Wasm {
     }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl PartialOrdRegister for F32x4Wasm {
-    #[inline(always)] fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_ge(lhs, rhs) }
-    #[inline(always)] fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_lt(lhs, rhs) }
-    #[inline(always)] fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_le(lhs, rhs) }
-    #[inline(always)] fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_ne(lhs, rhs) }
-    #[inline(always)] fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_gt(lhs, rhs) }
-    #[inline(always)] fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_eq(lhs, rhs) }
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_ge(lhs, rhs) }
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_lt(lhs, rhs) }
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_le(lhs, rhs) }
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_ne(lhs, rhs) }
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_gt(lhs, rhs) }
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::f32x4_eq(lhs, rhs) }
 }
 
+#[thermite_macros::inline_always]
 impl NumericRegister for F32x4Wasm {
     const ZERO: Storage<Self> = arch::f32x4(0.0, 0.0, 0.0, 0.0);
     const ONE: Storage<Self> = arch::f32x4(1.0, 1.0, 1.0, 1.0);
@@ -210,73 +247,87 @@ impl NumericRegister for F32x4Wasm {
     const MIN: Storage<Self> = arch::f32x4(f32::MIN, f32::MIN, f32::MIN, f32::MIN);
     const MAX: Storage<Self> = arch::f32x4(f32::MAX, f32::MAX, f32::MAX, f32::MAX);
 
-    #[inline(always)]
     fn min_element(value: Storage<Self>) -> Self::Element {
-        reduce_32x4!(f value; f32x4_relaxed_min f32x4_relaxed_min)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_32x4!(f value; f32x4_pmin f32x4_pmin)
+            }
+            _ => reduce_32x4!(f value; f32x4_relaxed_min f32x4_relaxed_min),
+        }
     }
 
-    #[inline(always)]
     fn max_element(value: Storage<Self>) -> Self::Element {
-        reduce_32x4!(f value; f32x4_relaxed_max f32x4_relaxed_max)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_32x4!(f value; f32x4_pmax f32x4_pmax)
+            }
+            _ => reduce_32x4!(f value; f32x4_relaxed_max f32x4_relaxed_max),
+        }
     }
 
-    #[inline(always)]
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         reduce_32x4!(f value; f32x4_add f32x4_add)
     }
 
-    #[inline(always)]
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         reduce_32x4!(f value; f32x4_mul f32x4_mul)
     }
 
-    #[inline(always)]
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        let even = arch::i32x4_shuffle::<0, 2, 4, 6>(lo, hi); // [a0,a2,b0,b2]
+        let odd = arch::i32x4_shuffle::<1, 3, 5, 7>(lo, hi); // [a1,a3,b1,b3]
+        arch::f32x4_add(even, odd)
+    }
+
     fn offset() -> Storage<Self> {
         arch::f32x4_splat(<Self::Lanes as Unsigned>::USIZE as f32)
     }
 
-    #[inline(always)]
     fn indexed() -> Storage<Self> {
         arch::f32x4(0.0, 1.0, 2.0, 3.0)
     }
 
-    #[inline(always)]
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f32x4_add(lhs, rhs)
     }
 
-    #[inline(always)]
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f32x4_sub(lhs, rhs)
     }
 
-    #[inline(always)]
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f32x4_mul(lhs, rhs)
     }
 
-    #[inline(always)]
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::f32x4_div(lhs, rhs)
     }
 
-    #[inline(always)]
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // https://stackoverflow.com/a/26342944/2083075
         Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
     }
 
-    #[inline(always)]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::f32x4_relaxed_min(lhs, rhs)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                arch::f32x4_pmin(lhs, rhs)
+            }
+            _ => arch::f32x4_relaxed_min(lhs, rhs),
+        }
     }
 
-    #[inline(always)]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::f32x4_relaxed_max(lhs, rhs)
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                arch::f32x4_pmax(lhs, rhs)
+            }
+            _ => arch::f32x4_relaxed_max(lhs, rhs),
+        }
     }
 }
 
+#[thermite_macros::inline_always]
 impl SignedRegister for F32x4Wasm {
     const NEG_ONE: Storage<Self> = arch::f32x4(-1.0, -1.0, -1.0, -1.0);
     const MIN_POSITIVE: Storage<Self> = arch::f32x4(
@@ -286,39 +337,35 @@ impl SignedRegister for F32x4Wasm {
         f32::MIN_POSITIVE,
     );
 
-    #[inline(always)]
     fn neg(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_neg(value)
     }
 
-    #[inline(always)]
     fn abs(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_abs(value)
     }
 
-    #[inline(always)]
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
-    #[inline(always)]
     fn signum(value: Storage<Self>) -> Storage<Self> {
         Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
     }
 
-    #[inline(always)]
-    fn conditional_negate(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+    fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
     }
 }
 
+#[thermite_macros::inline_always]
 impl FloatRegister for F32x4Wasm {
     // No way to know if FMA is supported at compile time
     const HAS_TRUE_FMA: bool = false;
 
     type Bits = super::U32x4Wasm;
-    type Signed = super::I32x4Wasm;
-    type ExtendedPrecision = DoublePumpRegister<super::F64x2Wasm>;
+    type SignedBits = super::I32x4Wasm;
+    type ExtendedPrecision = ArrayRegister<super::F64x2Wasm, 2>;
 
     const HALF: Storage<Self> = arch::f32x4(0.5, 0.5, 0.5, 0.5);
     const NEG_ZERO: Storage<Self> = arch::f32x4(-0.0, -0.0, -0.0, -0.0);
@@ -336,22 +383,18 @@ impl FloatRegister for F32x4Wasm {
 
     // These MUST use a polyfill implementation to ensure consistent behavior across platforms
 
-    #[inline(always)]
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_maddx(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_maddx(lhs, rhs, arch::f32x4_neg(acc))
     }
 
-    #[inline(always)]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_maddx(arch::f32x4_neg(lhs), rhs, acc)
     }
 
-    #[inline(always)]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_maddx(arch::f32x4_neg(lhs), rhs, arch::f32x4_neg(acc))
     }
@@ -359,27 +402,22 @@ impl FloatRegister for F32x4Wasm {
     // These, however, can use the native relaxed FMA instructions, which
     // may or may not be true FMA depending on the platform.
 
-    #[inline(always)]
     fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_relaxed_madd(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_relaxed_madd(lhs, rhs, arch::f32x4_neg(acc))
     }
 
-    #[inline(always)]
     fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_relaxed_nmadd(lhs, rhs, acc)
     }
 
-    #[inline(always)]
     fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         arch::f32x4_relaxed_nmadd(lhs, rhs, arch::f32x4_neg(acc))
     }
 
-    #[inline(always)]
     fn sqrt(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_sqrt(value)
     }
@@ -387,56 +425,69 @@ impl FloatRegister for F32x4Wasm {
     const HAS_APPROX_RCP: bool = false;
     const HAS_APPROX_RSQRT: bool = false;
 
-    #[inline(always)]
     fn floor(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_floor(value)
     }
 
-    #[inline(always)]
     fn ceil(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_ceil(value)
     }
 
-    #[inline(always)]
     fn round(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_nearest(value)
     }
 
-    #[inline(always)]
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         arch::f32x4_trunc(value)
     }
 
-    const HAS_NATIVE_LDEXP: bool = false;
-    const HAS_NATIVE_FREXP: bool = false;
+    const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
-impl CastRegister<F32x4Wasm> for DoublePumpRegister<super::F64x2Wasm> {
-    #[inline(always)]
+#[thermite_macros::inline_always]
+impl CastRegister<F32x4Wasm> for ArrayRegister<super::F64x2Wasm, 2> {
     fn cast_from(value: Storage<F32x4Wasm>) -> Storage<Self> {
         // promote each pair of f32 to f64
         let lo = arch::f64x2_promote_low_f32x4(value);
         let hi = arch::f64x2_promote_low_f32x4(arch::i32x4_shuffle::<2, 3, 2, 3>(value, value));
-
-        DoublePumpRegister(lo, hi)
+        ArrayRegister([lo, hi])
     }
 }
 
+#[thermite_macros::inline_always]
 impl LinAlg3Register for F32x4Wasm {
     fn min_element3(value: Storage<Self>) -> Self::Element {
-        todo!()
+        // Replace lane 3 with +∞ (identity for min) so the 4-lane reduction ignores it.
+        let v = arch::f32x4_replace_lane::<3>(value, f32::INFINITY);
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_32x4!(f v; f32x4_pmin f32x4_pmin)
+            }
+            _ => reduce_32x4!(f v; f32x4_relaxed_min f32x4_relaxed_min),
+        }
     }
 
     fn max_element3(value: Storage<Self>) -> Self::Element {
-        todo!()
+        // Replace lane 3 with -∞ (identity for max) so the 4-lane reduction ignores it.
+        let v = arch::f32x4_replace_lane::<3>(value, f32::NEG_INFINITY);
+        cfg_select! {
+            feature = "strict_ieee754" => {
+                reduce_32x4!(f v; f32x4_pmax f32x4_pmax)
+            }
+            _ => reduce_32x4!(f v; f32x4_relaxed_max f32x4_relaxed_max)
+        }
     }
 
     fn sum_elements3(value: Storage<Self>) -> Self::Element {
-        todo!()
+        // Replace lane 3 with 0 (additive identity) so the 4-lane reduction ignores it.
+        let v = arch::f32x4_replace_lane::<3>(value, 0.0);
+        reduce_32x4!(f v; f32x4_add f32x4_add)
     }
 
     fn prod_elements3(value: Storage<Self>) -> Self::Element {
-        todo!()
+        // Replace lane 3 with 1 (multiplicative identity) so the 4-lane reduction ignores it.
+        let v = arch::f32x4_replace_lane::<3>(value, 1.0);
+        reduce_32x4!(f v; f32x4_mul f32x4_mul)
     }
 }
 
@@ -449,8 +500,8 @@ macro_rules! s {
     };
 }
 
+#[thermite_macros::inline_always]
 impl LinAlg4Register for F32x4Wasm {
-    #[inline(always)]
     fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
         // dedicated WASM implementation that takes
         // advantage of `i32x4_shuffle` directly.

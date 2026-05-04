@@ -12,13 +12,12 @@ pub type F32x2V3 = HalfRegister2<super::F32x4V3>;
 pub type I32x2V3 = HalfRegister2<super::I32x4V3>;
 pub type U32x2V3 = HalfRegister2<super::U32x4V3>;
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<f32> for F32x2V3 {
-    #[inline(always)]
     fn concat(lo: Storage<f32>, hi: Storage<f32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_ps(lo, hi, 0.0, 0.0) })
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<f32>, Storage<f32>) {
         let mut arr = [0.0f32; 4];
         unsafe { arch::_mm_storeu_ps(arr.as_mut_ptr(), value.0) };
@@ -26,25 +25,23 @@ impl ConcatRegister<f32> for F32x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<f32> for F32x2V3 {
-    #[inline(always)]
     fn extend(value: Storage<f32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_ps(value, 0.0, 0.0, 0.0) })
     }
 
-    #[inline(always)]
     fn narrow(value: Storage<Self>) -> Storage<f32> {
         unsafe { arch::_mm_cvtss_f32(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<F32x2V3> for super::F32x4V3 {
-    #[inline(always)]
     fn concat(lo: Storage<F32x2V3>, hi: Storage<F32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_movelh_ps(lo.0, hi.0) }
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<F32x2V3>, Storage<F32x2V3>) {
         (
             ReducedRegister::new(value),
@@ -53,13 +50,12 @@ impl ConcatRegister<F32x2V3> for super::F32x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<i32> for I32x2V3 {
-    #[inline(always)]
     fn concat(lo: Storage<i32>, hi: Storage<i32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_epi32(lo, hi, 0, 0) })
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<i32>, Storage<i32>) {
         let mut arr = [0i32; 4];
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value.0) };
@@ -67,25 +63,23 @@ impl ConcatRegister<i32> for I32x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<i32> for I32x2V3 {
-    #[inline(always)]
     fn extend(value: Storage<i32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_epi32(value, 0, 0, 0) })
     }
 
-    #[inline(always)]
     fn narrow(value: Storage<Self>) -> Storage<i32> {
         unsafe { arch::_mm_cvtsi128_si32(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<I32x2V3> for super::I32x4V3 {
-    #[inline(always)]
     fn concat(lo: Storage<I32x2V3>, hi: Storage<I32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_unpacklo_epi64(lo.0, hi.0) }
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<I32x2V3>, Storage<I32x2V3>) {
         (
             ReducedRegister::new(value),
@@ -94,13 +88,12 @@ impl ConcatRegister<I32x2V3> for super::I32x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<u32> for U32x2V3 {
-    #[inline(always)]
     fn concat(lo: Storage<u32>, hi: Storage<u32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_epi32(lo as i32, hi as i32, 0, 0) })
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<u32>, Storage<u32>) {
         let mut arr = [0i32; 4];
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value.0) };
@@ -108,25 +101,23 @@ impl ConcatRegister<u32> for U32x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<u32> for U32x2V3 {
-    #[inline(always)]
     fn extend(value: Storage<u32>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_setr_epu32x(value, 0, 0, 0) })
     }
 
-    #[inline(always)]
     fn narrow(value: Storage<Self>) -> Storage<u32> {
         unsafe { arch::_mm_cvtsi128_si32(value.0) as u32 }
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<U32x2V3> for super::U32x4V3 {
-    #[inline(always)]
     fn concat(lo: Storage<U32x2V3>, hi: Storage<U32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_unpacklo_epi64(lo.0, hi.0) }
     }
 
-    #[inline(always)]
     fn split(value: Storage<Self>) -> (Storage<U32x2V3>, Storage<U32x2V3>) {
         (
             ReducedRegister::new(value),
@@ -135,76 +126,75 @@ impl ConcatRegister<U32x2V3> for super::U32x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<F32x2V3> for super::F64x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<F32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtps_pd(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::F64x2V3> for F32x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<super::F64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_cvtpd_ps(value) })
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::F64x2V3> for I32x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<super::F64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_cvttpd_epi32(value) })
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::F64x2V3> for U32x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<super::F64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_cvtpd_epu32x_v2(value) })
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<I32x2V3> for super::F64x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<I32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_pd(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<U32x2V3> for super::U64x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<U32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepu32_epi64(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::U64x2V3> for U32x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<super::U64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi32(value, 0b10_00_10_00) })
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<I32x2V3> for super::I64x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<I32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_epi64(value.0) }
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<super::I64x2V3> for I32x2V3 {
-    #[inline(always)]
     fn cast_from(value: Storage<super::I64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi32(value, 0b10_00_10_00) })
     }
 }
 
+#[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x2V3> for F32x2V3 {
-    #[inline(always)]
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_i64gather_ps::<4>(ptr as *const _, indices) })
     }
 
-    #[inline(always)]
     unsafe fn gather_m(
         src: Storage<Self>,
         mask: Storage<Self::Mask>,
@@ -215,13 +205,12 @@ impl IndexableRegister<super::U64x2V3> for F32x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x2V3> for U32x2V3 {
-    #[inline(always)]
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_i64gather_epi32::<4>(ptr as *const _, indices) })
     }
 
-    #[inline(always)]
     unsafe fn gather_m(
         src: Storage<Self>,
         mask: Storage<Self::Mask>,
@@ -232,13 +221,12 @@ impl IndexableRegister<super::U64x2V3> for U32x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x2V3> for I32x2V3 {
-    #[inline(always)]
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<super::U64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_i64gather_epi32::<4>(ptr as *const _, indices) })
     }
 
-    #[inline(always)]
     unsafe fn gather_m(
         src: Storage<Self>,
         mask: Storage<Self::Mask>,

@@ -240,7 +240,11 @@ pub trait CoreRegister: 'static + Sized {
 
     const ISA: InstructionSet;
 
+    /// If the associated mask type is equal in size to this register, which also implies it is
+    /// trivially convertible to this register.
     const HAS_EQUAL_SIZE_MASK: bool;
+
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self>;
 
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self>;
 
@@ -403,8 +407,6 @@ pub trait Register:
     CastRegister<Self> + BitCastRegister<Self> + MaskInteroperable<Self::Signed, Self::Unsigned>
 {
     type Element: Element;
-
-    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self>;
 
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask>;
 
@@ -1301,6 +1303,27 @@ pub trait NumericRegister:
     fn sum_elements(value: Storage<Self>) -> Self::Element;
     fn prod_elements(value: Storage<Self>) -> Self::Element;
 
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        let half = const { <Self::Lanes as Unsigned>::USIZE / 2 };
+
+        let lo = Self::as_array(&lo);
+        let hi = Self::as_array(&hi);
+
+        let mut result = Self::EMPTY;
+
+        let out = Self::as_array_mut(&mut result);
+        for i in 0..half {
+            out[i] = lo[2 * i] + lo[2 * i + 1];
+            out[i + half] = hi[2 * i] + hi[2 * i + 1];
+        }
+
+        result
+    }
+
+    fn relaxed_pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        Self::pairwise_sum(lo, hi)
+    }
+
     /// Effectively the number of lanes in the register, splatted across the lanes.
     fn offset() -> Storage<Self>;
     /// 0, 1, 2, 3, 4, ... etc.
@@ -1454,6 +1477,14 @@ pub trait UnsignedIntegerRegister:
         Self::bitand(Self::ONE, value)
     }
 
+    /// Ceiling average: `(a + b + 1) >> 1`, computed without overflow.
+    ///
+    /// Matches x86 `PAVGB`/`PAVGW` and ARM `vrhadd` semantics.
+    #[conditional]
+    fn avg(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::sub(Self::bitor(a, b), Self::shri::<1>(Self::bitxor(a, b)))
+    }
+
     // TODO: Interleave bits?
 }
 
@@ -1480,6 +1511,18 @@ pub trait SignedIntegerRegister:
         }
 
         value
+    }
+
+    /// Floor average: `(a + b) >> 1` rounded toward −∞, computed without overflow.
+    #[conditional]
+    fn avg_floor(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::add(Self::bitand(a, b), Self::srai::<1>(Self::bitxor(a, b)))
+    }
+
+    /// Ceiling average: `(a + b + 1) >> 1` rounded toward +∞, computed without overflow.
+    #[conditional]
+    fn avg_ceil(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::sub(Self::bitor(a, b), Self::srai::<1>(Self::bitxor(a, b)))
     }
 }
 

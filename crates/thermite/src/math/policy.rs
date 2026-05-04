@@ -558,12 +558,8 @@ impl Policy for GpuDefault {
     };
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(all(feature = "wasm", target_arch = "wasm32"))] {
-        pub type DefaultPolicy = Size;
-    } else if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
-        pub type DefaultPolicy = GpuDefault;
-    } else {
-        pub type DefaultPolicy = Performance;
-    }
-}
+pub type DefaultPolicy = cfg_select! {
+    all(feature = "wasm", target_arch = "wasm32") => Size,
+    all(feature = "spirv", target_arch = "spirv") => GpuDefault,
+    _ => Performance,
+};

@@ -48,6 +48,7 @@ macro_rules! decl_f32xN {
             }
         }
 
+        #[thermite_macros::inline_always]
         impl CoreRegister for $name {
             type Lanes = typenum::[<U $N>];
             type Storage = Self;
@@ -58,25 +59,27 @@ macro_rules! decl_f32xN {
             const EMPTY: Self = <Self as const_default::ConstDefault>::DEFAULT;
             const HAS_EQUAL_SIZE_MASK: bool = false;
 
-            #[inline(always)]
             fn blendv(mask: Storage<Self::Mask>, a: Storage<Self>, b: Storage<Self>) -> Self {
                 // OpSelect on full vector types: b where mask lane is true, a otherwise.
                 // Avoids per-lane OpCompositeExtract + scalar OpSelect + OpCompositeConstruct.
                 unsafe { arch::op_opselect::<Self, Storage<Self::Mask>>(mask, b, a) }
             }
 
-            #[inline(always)]
             fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
                 Self { $($f: if const { Z::N > $idx } { value.$f } else { 0.0 },)* }
             }
+
+            fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+                let truthy = Self { $($f: f32::from_bits(!0),)* };
+                unsafe { arch::op_opselect::<Self, super::[<Mx $N>]>(mask, truthy, Self::EMPTY) }
+            }
         }
 
+        #[thermite_macros::inline_always]
         impl InterleaveRegister for $name {
-            #[inline(always)]
             fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
                 unsafe { arch::[<spirv_interleave $N>](a, b) }
             }
-            #[inline(always)]
             fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
                 unsafe { arch::[<spirv_deinterleave $N>](a, b) }
             }
@@ -85,8 +88,8 @@ macro_rules! decl_f32xN {
         // SPIR-V has no bitwise ops on float types, so we round-trip through the
         // same-width uint peer. OpBitcast is a zero-cost type reinterpretation.
         // `type_u` is used only as a type source for `typeof*` in the asm block.
+        #[thermite_macros::inline_always]
         impl BitwiseRegister for $name {
-            #[inline(always)]
             fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 let type_u = <super::[<U32x $N>] as const_default::ConstDefault>::DEFAULT;
@@ -110,7 +113,6 @@ macro_rules! decl_f32xN {
                 result
             }
 
-            #[inline(always)]
             fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 let type_u = <super::[<U32x $N>] as const_default::ConstDefault>::DEFAULT;
@@ -134,7 +136,6 @@ macro_rules! decl_f32xN {
                 result
             }
 
-            #[inline(always)]
             fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 let type_u = <super::[<U32x $N>] as const_default::ConstDefault>::DEFAULT;
@@ -158,7 +159,6 @@ macro_rules! decl_f32xN {
                 result
             }
 
-            #[inline(always)]
             fn not(value: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 let type_u = <super::[<U32x $N>] as const_default::ConstDefault>::DEFAULT;
@@ -180,66 +180,54 @@ macro_rules! decl_f32xN {
             }
         }
 
+        #[thermite_macros::inline_always]
         impl Register for $name {
             type Element = f32;
             type Signed   = super::[<I32x $N>];
             type Unsigned = super::[<U32x $N>];
 
-            // Convert a bool-vector mask to a float register using bitwise convention:
-            // true  -> all-ones (f32::TRUTHY = from_bits(!0)), false -> 0.0.
-            #[inline(always)]
-            fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
-                let truthy = Self { $($f: f32::from_bits(!0u32),)* };
-                unsafe { arch::op_opselect::<Self, super::[<Mx $N>]>(mask, truthy, Self::EMPTY) }
-            }
-
             // A float register is truthy if any bit is set; use unordered != 0.0
             // so NaN lanes (all-ones) also become true.
-            #[inline(always)]
             fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfunordnotequal::<super::[<Mx $N>], Self>(value, Self::EMPTY) }
             }
 
-            #[inline(always)]
             fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
-                if const { cfg!(target_feature = "Kernel") } {
-                    unsafe { arch::op_opsignbitset::<super::[<Mx $N>], Self>(value) }
-                } else {
-                    let bits: Storage<<Self as FloatRegister>::Bits> = <<Self as FloatRegister>::Bits as BitCastRegister<Self>>::from_bits(value);
-                    <<Self as FloatRegister>::Bits as PartialOrdRegister>::lt(bits, <Self as FloatRegister>::Bits::ZERO)
+                cfg_select! {
+                    target_feature = "Kernel" => {
+                        unsafe { arch::op_opsignbitset::<super::[<Mx $N>], Self>(value) }
+                    }
+                    _ => {
+                        let bits: Storage<<Self as FloatRegister>::Bits> = <<Self as FloatRegister>::Bits as BitCastRegister<Self>>::from_bits(value);
+                        <<Self as FloatRegister>::Bits as PartialOrdRegister>::lt(bits, <Self as FloatRegister>::Bits::ZERO)
+                    }
                 }
             }
 
-            #[inline(always)]
             fn new(value: GenericArray<f32, Self::Lanes>) -> Storage<Self> {
                 Self { $($f: value[$idx],)* }
             }
 
             // Place the scalar in lane 0, zero all other lanes.
-            #[inline(always)]
             fn single(value: f32) -> Storage<Self> {
                 Self { $($f: if const { $idx == 0 } { value } else { 0.0 },)* }
             }
 
-            #[inline(always)]
             fn splat(value: f32) -> Storage<Self> {
                 Self { $($f: value,)* }
             }
 
             // Byte-swap each f32 lane: bitcast to uint, swap, bitcast back.
-            #[inline(always)]
             fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
                 let u = unsafe { arch::op_opbitcast::<super::[<U32x $N>], Self>(value) };
                 let swapped = <super::[<U32x $N>] as Register>::swap_bytes(u);
                 unsafe { arch::op_opbitcast::<Self, super::[<U32x $N>]>(swapped) }
             }
 
-            #[inline(always)]
             fn extract<const I: usize>(value: Storage<Self>) -> f32 {
                 unsafe { arch::op_opvectorextractdynamic::<f32, Self, usize>(value, I) }
             }
 
-            #[inline(always)]
             fn insert<const I: usize>(value: Storage<Self>, element: f32) -> Storage<Self> {
                 unsafe { arch::op_opvectorinsertdynamic::<Self, f32, usize>(value, element, I) }
             }
@@ -247,7 +235,6 @@ macro_rules! decl_f32xN {
             // Single OpVectorShuffle with every output lane pointing to I.
             // Each slot gets its own operand name ({i0}, {i1}, …) driven by $idx so
             // the macro repetition has a fragment to expand on; all bind to const I.
-            #[inline(always)]
             fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 unsafe {
@@ -264,25 +251,21 @@ macro_rules! decl_f32xN {
             }
 
             // Runtime-index version: extract the chosen lane, then splat.
-            #[inline(always)]
             fn broadcastv(value: Storage<Self>, idx: usize) -> Storage<Self> {
                 let elem = unsafe { arch::op_opvectorextractdynamic::<f32, Self, usize>(value, idx) };
                 Self::splat(elem)
             }
 
-            #[inline(always)]
             fn map<F>(value: Storage<Self>, mut f: F) -> Storage<Self>
             where F: FnMut(f32) -> f32 {
                 Self { $($f: f(value.$f),)* }
             }
 
-            #[inline(always)]
             fn zip<F>(lhs: Storage<Self>, rhs: Storage<Self>, f: F) -> Storage<Self>
             where F: Fn(f32, f32) -> f32 {
                 Self { $($f: f(lhs.$f, rhs.$f),)* }
             }
 
-            #[inline(always)]
             fn fold<F>(first: f32, value: Storage<Self>, f: F) -> f32
             where F: Fn(f32, f32) -> f32 {
                 let acc = first;
@@ -290,7 +273,6 @@ macro_rules! decl_f32xN {
                 acc
             }
 
-            #[inline(always)]
             fn reduce<F>(value: Storage<Self>, f: F) -> f32
             where F: Fn(f32, f32) -> f32 {
                 // Seed with lane 0; if const skips the redundant fold of lane 0.
@@ -301,7 +283,6 @@ macro_rules! decl_f32xN {
 
             // Single OpVectorShuffle with indices in descending order.
             // Each slot {r0}, {r1}, … binds to const { $N - 1 - $idx }.
-            #[inline(always)]
             fn reverse(value: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 unsafe {
@@ -318,6 +299,7 @@ macro_rules! decl_f32xN {
             }
         }
 
+        #[thermite_macros::inline_always]
         impl NumericRegister for $name {
             const ZERO: Self = Self { $($f: 0.0,)* };
             const ONE:  Self = Self { $($f: 1.0,)* };
@@ -325,124 +307,118 @@ macro_rules! decl_f32xN {
             const MIN:  Self = Self { $($f: f32::MIN,)* };
             const MAX:  Self = Self { $($f: f32::MAX,)* };
 
-            #[inline(always)] fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfadd::<Self>(lhs, rhs) }
             }
-            #[inline(always)] fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfsub::<Self>(lhs, rhs) }
             }
-            #[inline(always)] fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfmul::<Self>(lhs, rhs) }
             }
-            #[inline(always)] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfdiv::<Self>(lhs, rhs) }
             }
             // OpFRem: truncating remainder (matches Rust's %)
-            #[inline(always)] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfrem::<Self>(lhs, rhs) }
             }
 
-            #[inline(always)] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::F_MIN }, false>(lhs, rhs) }
             }
-            #[inline(always)] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+ fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::F_MAX }, false>(lhs, rhs) }
             }
 
-            #[inline(always)] fn scale(value: Storage<Self>, factor: Self::Element) -> Storage<Self> {
+ fn scale(value: Storage<Self>, factor: Self::Element) -> Storage<Self> {
                 unsafe { arch::op_opvectortimesscalar::<Storage<Self>, f32>(value, factor) }
             }
 
             // Scalar reductions via our unrolled field-level reduce/fold.
-            #[inline(always)] fn min_element(value: Storage<Self>) -> f32 {
+ fn min_element(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| if a < b { a } else { b })
             }
-            #[inline(always)] fn max_element(value: Storage<Self>) -> f32 {
+ fn max_element(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| if a > b { a } else { b })
             }
-            #[inline(always)] fn sum_elements(value: Storage<Self>) -> f32 {
+ fn sum_elements(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| a + b)
             }
-            #[inline(always)] fn prod_elements(value: Storage<Self>) -> f32 {
+ fn prod_elements(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| a * b)
+            }
+ fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+                Self::pairwise_sum_impl(lo, hi)
             }
 
             // Lane count as a splat; 0.0, 1.0, … per lane.
-            #[inline(always)] fn offset() -> Storage<Self> { Self::splat($N as f32) }
-            #[inline(always)] fn indexed() -> Storage<Self> { Self { $($f: $idx as f32,)* } }
+ fn offset() -> Storage<Self> { Self::splat($N as f32) }
+ fn indexed() -> Storage<Self> { Self { $($f: $idx as f32,)* } }
         }
 
+        #[thermite_macros::inline_always]
         impl PartialOrdRegister for $name {
-            #[inline(always)]
             fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordequal::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
-            #[inline(always)]
             fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordgreaterthan::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
-            #[inline(always)]
             fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordgreaterthanequal::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
-            #[inline(always)]
             fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordlessthan::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
-            #[inline(always)]
             fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordlessthanequal::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
-            #[inline(always)]
             fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opfordnotequal::<super::[<Mx $N>], Self>(lhs, rhs) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl CastRegister<$name> for $name {
-            #[inline(always)]
             fn cast_from(value: Storage<Self>) -> Storage<Self> { value }
         }
 
         impl BitCastRegister<$name> for $name {
-            #[inline(always)]
             fn from_bits(value: Storage<Self>) -> Storage<Self> { value }
         }
 
+        #[thermite_macros::inline_always]
         impl SwizzleRegister for $name {
             // No single SPIR-V instruction for runtime-index permute; scalar fallback is used.
             const HAS_PERMUTEV: bool = false;
 
             // Compile-time permute: single OpVectorShuffle with literal indices.
-            #[inline(always)]
             fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::[<spirv_permute $N>]::<Self, I>(value) }
             }
 
             // Compile-time two-source swizzle: single OpVectorShuffle with literal indices.
-            #[inline(always)]
             fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::[<spirv_swizzle $N>]::<Self, I>(a, b) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl SignedRegister for $name {
             const NEG_ONE:      Self = Self { $($f: -1.0,)* };
             const MIN_POSITIVE: Self = Self { $($f: f32::MIN_POSITIVE,)* };
 
-            #[inline(always)]
             fn neg(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfnegate::<Self>(value) }
             }
 
-            #[inline(always)]
             fn abs(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::F_ABS }, false>(value) }
             }
 
             // Bitwise copysign avoids the abs+blend+neg chain the default uses.
             // IEEE 754: result = (|lhs| bits) | (sign bit of rhs)
-            #[inline(always)]
             fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 let lhs_u = unsafe { arch::op_opbitcast::<super::[<U32x $N>], Self>(lhs) };
                 let rhs_u = unsafe { arch::op_opbitcast::<super::[<U32x $N>], Self>(rhs) };
@@ -454,16 +430,17 @@ macro_rules! decl_f32xN {
                 unsafe { arch::op_opbitcast::<Self, super::[<U32x $N>]>(result_u) }
             }
 
-            #[inline(always)]
             fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
-                if const { cfg!(target_feature = "Kernel") } {
-                    unsafe { arch::op_opsignbitset::<super::[<Mx $N>], Self>(value) }
-                } else {
-                    unsafe { arch::op_opfordlessthan::<super::[<Mx $N>], Self>(value, Self::ZERO) }
-                }
+                unsafe { cfg_select! {
+                    target_feature = "Kernel" => {
+                        arch::op_opsignbitset::<super::[<Mx $N>], Self>(value)
+                    }
+                    _ => arch::op_opfordlessthan::<super::[<Mx $N>], Self>(value, Self::ZERO),
+                } }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl FloatRegister for $name {
             type Bits          = super::[<U32x $N>];
             type SignedBits    = super::[<I32x $N>];
@@ -502,43 +479,35 @@ macro_rules! decl_f32xN {
             );
 
             // True FMA: lhs * rhs + acc
-            #[inline(always)]
             fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op3::<Self, Self, Self, Self, { arch::glsl::FMA }, false>(lhs, rhs, acc) }
             }
             // -(lhs * rhs) + acc = FMA(-lhs, rhs, acc)
-            #[inline(always)]
             fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op3::<Self, Self, Self, Self, { arch::glsl::FMA }, false>(Self::neg(lhs), rhs, acc) }
             }
             // lhs * rhs - acc = FMA(lhs, rhs, -acc)
-            #[inline(always)]
             fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op3::<Self, Self, Self, Self, { arch::glsl::FMA }, false>(lhs, rhs, Self::neg(acc)) }
             }
             // -(lhs * rhs) - acc = FMA(-lhs, rhs, -acc)
-            #[inline(always)]
             fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op3::<Self, Self, Self, Self, { arch::glsl::FMA }, false>(Self::neg(lhs), rhs, Self::neg(acc)) }
             }
 
-            #[inline(always)]
             fn sqrt(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::SQRT }, false>(value) }
             }
 
             // GLSL InverseSqrt: 1/sqrt(x), native GPU instruction.
-            #[inline(always)]
             fn rsqrt(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::INVERSE_SQRT }, false>(value) }
             }
 
-            #[inline(always)]
             fn floor(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::FLOOR }, false>(value) }
             }
 
-            #[inline(always)]
             fn ceil(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::CEIL }, false>(value) }
             }
@@ -546,24 +515,20 @@ macro_rules! decl_f32xN {
             // GLSLstd450 Round: nearest, tie-breaking is implementation-defined per GPU vendor.
             // Rust's f32::round() rounds ties away from zero; if strict banker's rounding is
             // ever needed, swap to arch::glsl::ROUND_EVEN (opcode 2).
-            #[inline(always)]
             fn round(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::ROUND }, false>(value) }
             }
 
-            #[inline(always)]
             fn trunc(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::TRUNC }, false>(value) }
             }
 
             // GLSL Fract is native; avoids the sub(v, trunc(v)) default chain.
-            #[inline(always)]
             fn fract(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::FRACT }, false>(value) }
             }
 
             // GLSL FMix: a + (b - a) * t, with hardware guarantees. Beats the FMA fallback.
-            #[inline(always)]
             fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op3::<Self, Self, Self, Self, { arch::glsl::F_MIX }, false>(a, b, t) }
             }
@@ -572,7 +537,6 @@ macro_rules! decl_f32xN {
             // do not let me forget about this once integer registers are complete
             // and we can test compiles.
 
-            #[inline(always)]
             unsafe fn native_sin<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::SIN }, true>(value) }
@@ -581,7 +545,6 @@ macro_rules! decl_f32xN {
                 }
             }
 
-            #[inline(always)]
             unsafe fn native_cos<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::COS }, true>(value) }
@@ -592,12 +555,10 @@ macro_rules! decl_f32xN {
 
             // Emit both with a single call each rather than sharing a combined instruction;
             // the GPU scheduler can still issue them in parallel.
-            #[inline(always)]
             unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
                 unsafe { (Self::native_sin::<P>(value), Self::native_cos::<P>(value)) }
             }
 
-            #[inline(always)]
             unsafe fn native_tan<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::TAN }, true>(value) }
@@ -606,7 +567,6 @@ macro_rules! decl_f32xN {
                 }
             }
 
-            #[inline(always)]
             unsafe fn native_exp2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::EXP2 }, true>(value) }
@@ -615,7 +575,6 @@ macro_rules! decl_f32xN {
                 }
             }
 
-            #[inline(always)]
             unsafe fn native_log2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::LOG2 }, true>(value) }
@@ -624,7 +583,6 @@ macro_rules! decl_f32xN {
                 }
             }
 
-            #[inline(always)]
             unsafe fn native_exp<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::EXP }, true>(value) }
@@ -634,7 +592,6 @@ macro_rules! decl_f32xN {
             }
 
             // GLSL LOG is the natural logarithm (ln).
-            #[inline(always)]
             unsafe fn native_ln<P: Policy>(value: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::LOG }, true>(value) }
@@ -643,7 +600,6 @@ macro_rules! decl_f32xN {
                 }
             }
 
-            #[inline(always)]
             unsafe fn native_powf<P: Policy>(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
                 if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
                     unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::POW }, true>(base, exp) }
@@ -653,34 +609,28 @@ macro_rules! decl_f32xN {
             }
 
             // GLSL Ldexp: x * 2^exp, with int exponent lanes.
-            #[inline(always)]
             unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, super::[<I32x $N>], { arch::glsl::LDEXP }, false>(value, exp) }
             }
 
             // GLSL FrexpStruct: splits x into (significand in [0.5, 1), exponent).
-            #[inline(always)]
             unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
                 unsafe { arch::glsl_frexp::<Self, super::[<I32x $N>]>(value) }
             }
 
             // Native SPIR-V classification ops; cheaper than the bitwise-trick defaults on GPU.
-            #[inline(always)]
             fn is_nan(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opisnan::<super::[<Mx $N>], Self>(value) }
             }
 
-            #[inline(always)]
             fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opisinf::<super::[<Mx $N>], Self>(value) }
             }
 
-            #[inline(always)]
             fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opisfinite::<super::[<Mx $N>], Self>(value) }
             }
 
-            #[inline(always)]
             fn is_normal(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opisnormal::<super::[<Mx $N>], Self>(value) }
             }
@@ -692,59 +642,90 @@ decl_f32xN!(F32x2 x 2 { x:0, y:1 });
 decl_f32xN!(F32x3 x 3 { x:0, y:1, z:2 });
 decl_f32xN!(F32x4 x 4 { x:0, y:1, z:2, w:3 });
 
+impl F32x2 {
+    #[inline(always)]
+    fn pairwise_sum_impl(lo: Self, hi: Self) -> Self {
+        Self {
+            x: lo.x + lo.y,
+            y: hi.x + hi.y,
+        }
+    }
+}
+impl F32x3 {
+    #[inline(always)]
+    fn pairwise_sum_impl(lo: Self, hi: Self) -> Self {
+        Self {
+            x: lo.x + lo.y,
+            y: hi.x + hi.y,
+            z: lo.z + hi.z,
+        }
+    }
+}
+impl F32x4 {
+    #[inline(always)]
+    fn pairwise_sum_impl(lo: Self, hi: Self) -> Self {
+        Self {
+            x: lo.x + lo.y,
+            y: lo.z + lo.w,
+            z: hi.x + hi.y,
+            w: hi.z + hi.w,
+        }
+    }
+}
+
 macro_rules! impl_f32_casts {
     ($f:ident <=> $i:ident, $u:ident) => {
+        #[thermite_macros::inline_always]
         impl CastRegister<$i> for $f {
-            #[inline(always)]
             fn cast_from(value: $i) -> $f {
                 unsafe { arch::op_opconvertstof::<$f, $i>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl CastRegister<$u> for $f {
-            #[inline(always)]
             fn cast_from(value: $u) -> $f {
                 unsafe { arch::op_opconvertutof::<$f, $u>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl CastRegister<$f> for $i {
-            #[inline(always)]
             fn cast_from(value: $f) -> $i {
                 unsafe { arch::op_opconvertftos::<$i, $f>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl CastRegister<$f> for $u {
-            #[inline(always)]
             fn cast_from(value: $f) -> $u {
                 unsafe { arch::op_opconvertftou::<$u, $f>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl BitCastRegister<$i> for $f {
-            #[inline(always)]
             fn from_bits(value: $i) -> $f {
                 unsafe { arch::op_opbitcast::<$f, $i>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl BitCastRegister<$u> for $f {
-            #[inline(always)]
             fn from_bits(value: $u) -> $f {
                 unsafe { arch::op_opbitcast::<$f, $u>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl BitCastRegister<$f> for $i {
-            #[inline(always)]
             fn from_bits(value: $f) -> $i {
                 unsafe { arch::op_opbitcast::<$i, $f>(value) }
             }
         }
 
+        #[thermite_macros::inline_always]
         impl BitCastRegister<$f> for $u {
-            #[inline(always)]
             fn from_bits(value: $f) -> $u {
                 unsafe { arch::op_opbitcast::<$u, $f>(value) }
             }
@@ -756,60 +737,56 @@ impl_f32_casts!(F32x2 <=> I32x2, U32x2);
 impl_f32_casts!(F32x3 <=> I32x3, U32x3);
 impl_f32_casts!(F32x4 <=> I32x4, U32x4);
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<f32> for F32x2 {
-    #[inline(always)]
     fn extend(value: f32) -> F32x2 {
         F32x2::single(value)
     }
 
-    #[inline(always)]
     fn narrow(value: F32x2) -> f32 {
         F32x2::extract::<0>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<f32> for F32x3 {
-    #[inline(always)]
     fn extend(value: f32) -> F32x3 {
         F32x3::single(value)
     }
 
-    #[inline(always)]
     fn narrow(value: F32x3) -> f32 {
         F32x3::extract::<0>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<f32> for F32x4 {
-    #[inline(always)]
     fn extend(value: f32) -> F32x4 {
         F32x4::single(value)
     }
 
-    #[inline(always)]
     fn narrow(value: F32x4) -> f32 {
         F32x4::extract::<0>(value)
     }
 }
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<f32> for F32x2 {
-    #[inline(always)]
     fn concat(lo: f32, hi: f32) -> F32x2 {
         F32x2 { x: lo, y: hi }
     }
 
-    #[inline(always)]
     fn split(value: F32x2) -> (f32, f32) {
         (value.x, value.y)
     }
 }
 
+#[thermite_macros::inline_always]
 impl WideRegister for F32x2 {
     type Wide = F32x4;
 }
 
 impl ConcatRegister<F32x2> for F32x4 {
-    #[inline(always)]
     fn concat(lo: F32x2, hi: F32x2) -> F32x4 {
         F32x4 {
             x: lo.x,
@@ -819,14 +796,13 @@ impl ConcatRegister<F32x2> for F32x4 {
         }
     }
 
-    #[inline(always)]
     fn split(value: F32x4) -> (F32x2, F32x2) {
         (F32x2 { x: value.x, y: value.y }, F32x2 { x: value.z, y: value.w })
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<F32x2> for F32x3 {
-    #[inline(always)]
     fn extend(value: F32x2) -> F32x3 {
         F32x3 {
             x: value.x,
@@ -835,14 +811,13 @@ impl ExtendRegister<F32x2> for F32x3 {
         }
     }
 
-    #[inline(always)]
     fn narrow(value: F32x3) -> F32x2 {
         F32x2 { x: value.x, y: value.y }
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<F32x2> for F32x4 {
-    #[inline(always)]
     fn extend(value: F32x2) -> F32x4 {
         F32x4 {
             x: value.x,
@@ -852,14 +827,13 @@ impl ExtendRegister<F32x2> for F32x4 {
         }
     }
 
-    #[inline(always)]
     fn narrow(value: F32x4) -> F32x2 {
         F32x2 { x: value.x, y: value.y }
     }
 }
 
+#[thermite_macros::inline_always]
 impl ExtendRegister<F32x3> for F32x4 {
-    #[inline(always)]
     fn extend(value: F32x3) -> F32x4 {
         F32x4 {
             x: value.x,
@@ -869,7 +843,6 @@ impl ExtendRegister<F32x3> for F32x4 {
         }
     }
 
-    #[inline(always)]
     fn narrow(value: F32x4) -> F32x3 {
         F32x3 {
             x: value.x,
@@ -929,10 +902,10 @@ macro_rules! impl_spirv_linalg3 {
     };
 }
 
+#[thermite_macros::inline_always]
 impl LinAlg3Register for F32x3 {
     impl_spirv_linalg3!(@reductions);
 
-    #[inline(always)]
     fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if DOP {
             F32x3 {
@@ -947,10 +920,10 @@ impl LinAlg3Register for F32x3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl LinAlg3Register for F32x4 {
     impl_spirv_linalg3!(@reductions);
 
-    #[inline(always)]
     fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         if DOP {
             F32x4 {
@@ -975,9 +948,8 @@ impl LinAlg3Register for F32x4 {
 // Matrix ops use native SPIR-V/GLSL instructions via #[spirv(matrix)] structs.
 // Quaternion ops are rewritten as scalar FMA chains — the SIMD default uses broadcasts
 // and sign-XOR shuffles that are wasteful on GPU SIMT where each lane is independent.
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl LinAlg4Register for F32x4 {
-    #[inline(always)]
     fn dot4(lhs: Storage<Self>, rhs: Storage<Self>) -> Self::Element {
         <f32 as FloatRegister>::mul_add(lhs.x, rhs.x, <f32 as FloatRegister>::mul_add(lhs.y, rhs.y, <f32 as FloatRegister>::mul_add(lhs.z, rhs.z, lhs.w * rhs.w)))
     }
@@ -990,7 +962,6 @@ impl LinAlg4Register for F32x4 {
     //   result.y = +lhs.w*rhs.y - lhs.x*rhs.z + lhs.y*rhs.w + lhs.z*rhs.x
     //   result.z = +lhs.w*rhs.z + lhs.x*rhs.y - lhs.y*rhs.x + lhs.z*rhs.w
     //   result.w = +lhs.w*rhs.w - lhs.x*rhs.x - lhs.y*rhs.y - lhs.z*rhs.z
-    #[inline(always)]
     fn quat4_product(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         use FloatRegister as FR;
         F32x4 {
@@ -1003,7 +974,6 @@ impl LinAlg4Register for F32x4 {
 
     // Giesen fast quat-vec3 rotate: v + 2w(q×v) + 2(q×(q×v)).
     // Replaces the SIMD default which broadcasts w into a full register before multiplying.
-    #[inline(always)]
     fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
         let w = q.w;
         // t = 2 * cross(q, v)
@@ -1020,7 +990,6 @@ impl LinAlg4Register for F32x4 {
     }
 
     // OpTranspose: single hardware instruction, replaces the 4-interleave default.
-    #[inline(always)]
     fn mat4_transpose(m: &[Storage<Self>; 4]) -> [Storage<Self>; 4] {
         let mat = F32x4x4 { x: m[0], y: m[1], z: m[2], w: m[3] };
         let result = unsafe { arch::op_optranspose::<F32x4x4>(mat) };
@@ -1030,7 +999,6 @@ impl LinAlg4Register for F32x4 {
     // Column-major:    OpMatrixTimesVector(M, v)  =  M * v
     // Row-major:       OpVectorTimesMatrix(v, M)  =  M * v  when M stores rows as columns,
     //                  since result[j] = dot(v, col_j(M)) = dot(v, row_j)
-    #[inline(always)]
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(
         cols: &[Storage<Self>; 4],
         vector: Storage<Self>,
@@ -1046,7 +1014,6 @@ impl LinAlg4Register for F32x4 {
     // Swap lhs/rhs for row-major: OpMatrixTimesMatrix(rhs_stored, lhs_stored)
     //   = rhs^T * lhs^T  (row-stored = transposed)  =  (lhs * rhs)^T
     // The result cols are the rows of (lhs*rhs), which is the correct row-major output.
-    #[inline(always)]
     fn mat4_product<const COLUMN_MAJOR: bool>(
         lhs: &[Storage<Self>; 4],
         rhs: &[Storage<Self>; 4],
@@ -1061,7 +1028,6 @@ impl LinAlg4Register for F32x4 {
     // GLSL Determinant + MatrixInverse in one asm block (via arch::glsl_determinant_and_inverse).
     // Returns false and leaves `m` unchanged for exactly-singular matrices (det == 0).
     // Note: GLSL MatrixInverse is undefined for ill-conditioned near-singular matrices.
-    #[inline(always)]
     fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
         let mat = F32x4x4 { x: m[0], y: m[1], z: m[2], w: m[3] };
         let (det, result): (f32, F32x4x4) = unsafe { arch::glsl_determinant_and_inverse(mat) };

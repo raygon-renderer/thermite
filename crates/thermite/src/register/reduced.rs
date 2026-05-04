@@ -142,6 +142,11 @@ where
             Self(R::zeroupper_z::<super::OwnLanes<Self>>(value.0), PhantomData)
         }
     }
+
+    #[inline(always)]
+    fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+        Self(R::from_mask(mask.0), PhantomData)
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::reduced_impl]
@@ -218,7 +223,6 @@ where
 impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reducible<N> {
     type Element = R::Element;
 
-    #[inline(always)] fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> { ReducedRegister(R::from_mask(mask.0), PhantomData) }
     #[inline(always)] fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> { ReducedRegister(R::into_mask(value.0), PhantomData) }
     #[inline(always)] fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> { ReducedRegister(R::into_mask_unchecked(value.0), PhantomData) }
     #[inline(always)] fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> { ReducedRegister(R::msb_to_mask(value.0), PhantomData) }
@@ -653,6 +657,14 @@ impl<R: NumericRegister, N: Unsigned> NumericRegister for ReducedRegister<R, N> 
         }
 
         R::prod_elements(R::blendv(Self::inv_mask(), value.0, R::ONE))
+    }
+
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        Self(R::pairwise_sum(lo.0, hi.0), PhantomData)
+    }
+
+    fn relaxed_pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+        Self(R::relaxed_pairwise_sum(lo.0, hi.0), PhantomData)
     }
 }
 

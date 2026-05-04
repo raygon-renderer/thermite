@@ -127,7 +127,11 @@ pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
         new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_z.span() =>
             #(#doc)* #[doc = #z_doc] #[inline(always)] #[allow(unused)] #sig_z {
-                #unsafety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
+                if const { <Self as CoreRegister>::HAS_EQUAL_SIZE_MASK } {
+                    Self::bitand(<Self as CoreRegister>::from_mask(mask), #unsafety { #call })
+                } else {
+                    #unsafety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
+                }
             }
         }));
     }
@@ -288,7 +292,9 @@ pub fn array_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
 
-            let call = quote!(#unsafety { #reg_ty::#target_name #turbo(#(#call_args),*) });
+            let call = quote_spanned! { target_name.span() =>
+                #unsafety { #reg_ty::#target_name #turbo(#(#call_args),*) }
+            };
 
             match arrays.len() {
                 0 => quote!({ ArrayRegister(#call) }),
@@ -455,42 +461,14 @@ pub fn reduced_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn bitand_z(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn inline_always(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let mut new_items = Vec::new();
 
     for item in &mut impl_block.items {
-        // we only care about functions
         let ImplItem::Fn(method) = item else { continue };
-
-        let (skip, _) = skip_or_conditional_impl(method);
-
         method.attrs.push(parse_quote!(#[inline(always)]));
-
-        if skip {
-            continue;
-        }
-
-        let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
-        let arg_names: Vec<_> = extract_trait_arg_names(&method.sig.inputs).collect();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-        let doc = method.attrs.iter().filter(|attr| attr.path().is_ident("doc"));
-
-        let mut sig_z = method.sig.clone();
-        sig_z.ident = format_ident!("{}_z", name);
-        sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-        let z_doc = format!("Computes [`{name}`](Self::{name}) zero-masked using bitwise AND.");
-        new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-            #(#doc)* #[doc = #z_doc]
-            #[inline(always)] #[allow(unused)]
-            #sig_z { Self::bitand(mask, #unsafety { Self::#name #turbo(#(#arg_names),*) }) }
-        }));
     }
 
-    impl_block.items.extend(new_items);
     impl_block.into_token_stream().into()
 }
 

@@ -39,6 +39,52 @@ macro_rules! _mm_reduce_epi32_v1 {
     }}};
 }
 
+/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` → `[a0+a1, a2+a3, b0+b1, b2+b3]`
+#[rustfmt::skip]
+macro_rules! _mm_pairwise_sum_ps_v1 {
+    ($lhs:expr, $rhs:expr) => {#[allow(unused_unsafe)] unsafe {
+        let evens = arch::_mm_shuffle_ps($lhs, $rhs, 0b10_00_10_00); // [a0,a2,b0,b2]
+        let odds  = arch::_mm_shuffle_ps($lhs, $rhs, 0b11_01_11_01); // [a1,a3,b1,b3]
+        arch::_mm_add_ps(evens, odds)
+    }};
+}
+
+/// `[a0,a1]` hadd `[b0,b1]` → `[a0+a1, b0+b1]`
+#[rustfmt::skip]
+macro_rules! _mm_pairwise_sum_pd_v1 {
+    ($lhs:expr, $rhs:expr) => {#[allow(unused_unsafe)] unsafe {
+        let lo = arch::_mm_shuffle_pd($lhs, $rhs, 0b00); // [a0,b0]
+        let hi = arch::_mm_shuffle_pd($lhs, $rhs, 0b11); // [a1,b1]
+        arch::_mm_add_pd(lo, hi)
+    }};
+}
+
+/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` → `[a0+a1, a2+a3, b0+b1, b2+b3]`
+/// Uses float shuffle to mix two sources (no 2-source `_mm_shuffle_epi32`).
+#[rustfmt::skip]
+macro_rules! _mm_pairwise_sum_epi32_v1 {
+    ($lhs:expr, $rhs:expr) => {{#[allow(unused_unsafe)] unsafe {
+        let lhs_ps = arch::_mm_castsi128_ps($lhs);
+        let rhs_ps = arch::_mm_castsi128_ps($rhs);
+        let lo = arch::_mm_shuffle_ps(lhs_ps, rhs_ps, 0b10_00_10_00); // [a0,a2,b0,b2]
+        let hi = arch::_mm_shuffle_ps(lhs_ps, rhs_ps, 0b11_01_11_01); // [a1,a3,b1,b3]
+        arch::_mm_add_epi32(arch::_mm_castps_si128(lo), arch::_mm_castps_si128(hi))
+    }}};
+}
+
+/// `[a0,a1]` hadd `[b0,b1]` → `[a0+a1, b0+b1]`
+/// Uses double shuffle to mix two sources (no 2-source `_mm_shuffle_epi32` for 64-bit).
+#[rustfmt::skip]
+macro_rules! _mm_pairwise_sum_epi64_v1 {
+    ($lhs:expr, $rhs:expr) => {{#[allow(unused_unsafe)] unsafe {
+        let lhs_pd = arch::_mm_castsi128_pd($lhs);
+        let rhs_pd = arch::_mm_castsi128_pd($rhs);
+        let lo = arch::_mm_shuffle_pd(lhs_pd, rhs_pd, 0b00); // [a0,b0]
+        let hi = arch::_mm_shuffle_pd(lhs_pd, rhs_pd, 0b11); // [a1,b1]
+        arch::_mm_add_epi64(arch::_mm_castpd_si128(lo), arch::_mm_castpd_si128(hi))
+    }}};
+}
+
 /// Reduces a 2-lane `i64` SIMD vector to a single `i64` value using the specified operation.
 #[rustfmt::skip]
 macro_rules! _mm_reduce_epi64_v1 {

@@ -2,9 +2,8 @@ use super::*;
 
 #[inline(always)]
 pub fn fix_min<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut min: Storage<R>) -> Storage<R> {
-    if const { cfg!(not(feature = "strict_ieee754")) } {
-        return min;
-    }
+    #[cfg(not(feature = "strict_ieee754"))]
+    return min;
 
     let is_nan = R::is_nan(b);
 
@@ -18,9 +17,8 @@ pub fn fix_min<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut min: Storage<
 
 #[inline(always)]
 pub fn fix_max<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut max: Storage<R>) -> Storage<R> {
-    if const { cfg!(not(feature = "strict_ieee754")) } {
-        return max;
-    }
+    #[cfg(not(feature = "strict_ieee754"))]
+    return max;
 
     let is_nan = R::is_nan(b);
 

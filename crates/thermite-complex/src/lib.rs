@@ -156,9 +156,9 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has one branch cut:
     ///
-    /// * `(-∞, 0]`, continuous from above.
+    /// * `(-inf, 0]`, continuous from above.
     ///
-    /// The branch satisfies `-π ≤ arg(ln(z)) ≤ π`.
+    /// The branch satisfies `-π <= arg(ln(z)) <= π`.
     #[inline]
     pub fn ln(self) -> Self {
         // formula: ln(z) = ln|z| + i*arg(z)
@@ -187,13 +187,13 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// Note that this does not match the usual result for the cube root of
     /// negative real numbers. For example, the real cube root of `-8` is `-2`,
-    /// but the principal complex cube root of `-8` is `1 + i√3`.
+    /// but the principal complex cube root of `-8` is `1 + i*sqrt(3)`.
     #[inline]
     pub fn cbrt(self) -> Self {
         // formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
         let (r, theta) = self.to_polar();
         // 1/3 isn't well-represented in float, so an exact inverse can't work with all precisions
-        Self::from_polar(r.cbrt_p::<P>(), theta / V::splat(FloatElement::from_i64(3)))
+        Self::from_polar(r.cbrt_p::<P>(), theta / V::splat(FloatElement::from_int(3)))
     }
 
     /// Raises `self` to a floating point power.
@@ -283,10 +283,10 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has two branch cuts:
     ///
-    /// * `(-∞, -1)`, continuous from above.
-    /// * `(1, ∞)`, continuous from below.
+    /// * `(-inf, -1)`, continuous from above.
+    /// * `(1, inf)`, continuous from below.
     ///
-    /// The branch satisfies `-π/2 ≤ Re(asin(z)) ≤ π/2`.
+    /// The branch satisfies `-π/2 <= Re(asin(z)) <= π/2`.
     #[inline]
     pub fn asin(self) -> Self {
         // formula: arcsin(z) = -i ln(sqrt(1-z^2) + iz)
@@ -297,10 +297,10 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has two branch cuts:
     ///
-    /// * `(-∞, -1)`, continuous from above.
-    /// * `(1, ∞)`, continuous from below.
+    /// * `(-inf, -1)`, continuous from above.
+    /// * `(1, inf)`, continuous from below.
     ///
-    /// The branch satisfies `0 ≤ Re(acos(z)) ≤ π`.
+    /// The branch satisfies `0 <= Re(acos(z)) <= π`.
     #[inline]
     pub fn acos(self) -> Self {
         // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
@@ -311,10 +311,10 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has two branch cuts:
     ///
-    /// * `(-∞i, -i]`, continuous from the left.
-    /// * `[i, ∞i)`, continuous from the right.
+    /// * `(-inf i, -i]`, continuous from the left.
+    /// * `[i, inf i)`, continuous from the right.
     ///
-    /// The branch satisfies `-π/2 ≤ Re(atan(z)) ≤ π/2`.
+    /// The branch satisfies `-π/2 <= Re(atan(z)) <= π/2`.
     #[inline]
     pub fn atan(self) -> Self {
         // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
@@ -357,10 +357,10 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has two branch cuts:
     ///
-    /// * `(-∞i, -i)`, continuous from the left.
-    /// * `(i, ∞i)`, continuous from the right.
+    /// * `(-inf i, -i)`, continuous from the left.
+    /// * `(i, inf i)`, continuous from the right.
     ///
-    /// The branch satisfies `-π/2 ≤ Im(asinh(z)) ≤ π/2`.
+    /// The branch satisfies `-π/2 <= Im(asinh(z)) <= π/2`.
     #[inline]
     pub fn asinh(self) -> Self {
         // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
@@ -372,9 +372,9 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has one branch cut:
     ///
-    /// * `(-∞, 1)`, continuous from above.
+    /// * `(-inf, 1)`, continuous from above.
     ///
-    /// The branch satisfies `-π ≤ Im(acosh(z)) ≤ π` and `0 ≤ Re(acosh(z)) < ∞`.
+    /// The branch satisfies `-π <= Im(acosh(z)) <= π` and `0 <= Re(acosh(z)) < inf`.
     #[inline]
     pub fn acosh(self) -> Self {
         // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
@@ -391,10 +391,10 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     ///
     /// This function has two branch cuts:
     ///
-    /// * `(-∞, -1]`, continuous from above.
-    /// * `[1, ∞)`, continuous from below.
+    /// * `(-inf, -1]`, continuous from above.
+    /// * `[1, inf)`, continuous from below.
     ///
-    /// The branch satisfies `-π/2 ≤ Im(atanh(z)) ≤ π/2`.
+    /// The branch satisfies `-π/2 <= Im(atanh(z)) <= π/2`.
     #[inline]
     pub fn atanh(self) -> Self {
         // formula: arctanh(z) = (ln(1+z) - ln(1-z))/2
@@ -410,7 +410,7 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Returns `1/self` using floating-point operations.
     ///
     /// This may be more accurate than the generic `self.inv()` in cases
-    /// where `self.norm_sqr()` would overflow to ∞ or underflow to 0.
+    /// where `self.norm_sqr()` would overflow to inf or underflow to 0.
     #[inline(always)]
     pub fn finv(self) -> Self {
         let norm = Self::real(self.norm());
@@ -421,7 +421,7 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Returns `self/other` using floating-point operations.
     ///
     /// This may be more accurate than the generic `Div` implementation in cases
-    /// where `other.norm_sqr()` would overflow to ∞ or underflow to 0.
+    /// where `other.norm_sqr()` would overflow to inf or underflow to 0.
     #[inline(always)]
     pub fn fdiv(self, rhs: Self) -> Self {
         self * rhs.finv()
