@@ -13,6 +13,7 @@ edition = "2024"
 [[bin]]
 name = "spirv_builder"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 # Path dep into the local rust-gpu checkout. The `use-compiled-tools` default feature bundles
