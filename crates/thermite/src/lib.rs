@@ -108,6 +108,7 @@ pub mod prelude {
             FixedWidthSimd, FloatSimd, NativeIsa, NativeSimd, NativeSimdVectors, NativeSimdVectorsWithRegisters, Simd,
             Simd3A, Simd3AVectors, Simd3AVectorsWithRegisters, SimdVectors, SimdVectorsWithRegisters, SizedSimd,
         },
+        slice::SimdSlice as _,
         swizzle::Swizzle as _,
         vector::ops::{
             AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndNot as _,
@@ -142,6 +143,7 @@ pub mod element;
 pub mod mask;
 pub mod math;
 pub mod register;
+pub mod slice;
 pub mod transform;
 
 #[doc(hidden)]
