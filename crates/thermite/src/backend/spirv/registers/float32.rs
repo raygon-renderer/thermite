@@ -1028,10 +1028,15 @@ impl LinAlg4Register for F32x4 {
     // GLSL Determinant + MatrixInverse in one asm block (via arch::glsl_determinant_and_inverse).
     // Returns false and leaves `m` unchanged for exactly-singular matrices (det == 0).
     // Note: GLSL MatrixInverse is undefined for ill-conditioned near-singular matrices.
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
         let mat = F32x4x4 { x: m[0], y: m[1], z: m[2], w: m[3] };
-        let (det, result): (f32, F32x4x4) = unsafe { arch::glsl_determinant_and_inverse(mat) };
-        if det == 0.0 {
+        if const { DET_ONLY } {
+            *det = unsafe { arch::glsl_determinant(mat) };
+            return false;
+        }
+        let (d, result): (f32, F32x4x4) = unsafe { arch::glsl_determinant_and_inverse(mat) };
+        *det = d;
+        if d == 0.0 {
             return false;
         }
         m[0] = result.x;

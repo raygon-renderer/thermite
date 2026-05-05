@@ -729,11 +729,16 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         .map(Vector)
     }
 
-    #[inline(always)]
-    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> bool {
+    fn mat4_det(m: &[Self; 4]) -> Self::Element {
+        let mut det = Self::Element::ZERO;
+        R::mat4_inverse::<true>(unsafe { core::mem::transmute(&mut m.clone()) }, &mut det);
+        det
+    }
+
+    fn mat4_inverse_inplace<const DET_ONLY: bool>(m: &mut [Self; 4], det: &mut Self::Element) -> bool {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_inverse(unsafe { core::mem::transmute(m) })
+        R::mat4_inverse::<DET_ONLY>(unsafe { core::mem::transmute(m) }, det)
     }
 }
 

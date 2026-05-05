@@ -502,9 +502,9 @@ macro_rules! s {
 
 #[thermite_macros::inline_always]
 impl LinAlg4Register for F32x4Wasm {
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
         // dedicated WASM implementation that takes
         // advantage of `i32x4_shuffle` directly.
-        impl_mat4_inverse!(m, s)
+        impl_mat4_inverse!(m, det, s, DET_ONLY)
     }
 }

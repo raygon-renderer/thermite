@@ -1,5 +1,5 @@
 macro_rules! impl_mat4_inverse {
-    ($input:ident, $swizzle:ident) => {{
+    ($input:ident, $det:ident, $swizzle:ident, $det_only:expr) => {{
         use num_traits::Zero as _;
 
         // Based on glam and https://github.com/g-truc/glm `glm_mat4_inverse`
@@ -116,7 +116,9 @@ macro_rules! impl_mat4_inverse {
 
         let dot0 = Self::dot4(x_axis, row2);
 
-        if dot0.is_zero() {
+        *$det = dot0;
+
+        if const { $det_only } || dot0.is_zero() {
             return false;
         }
 

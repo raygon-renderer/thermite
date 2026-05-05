@@ -1556,9 +1556,17 @@ pub trait LinAlg4Vector: LinAlg3Vector {
 
     /// In-place 4x4 Matrix inversion.
     ///
-    /// Returns `true` if the matrix was successfully inverted,
-    /// or `false` if the matrix is singular and could not be inverted.
-    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> bool;
+    /// Writes the determinant to `det` regardless of success. Returns `true` if the
+    /// matrix was successfully inverted, or `false` if the matrix is singular.
+    fn mat4_inverse_inplace<const DET_ONLY: bool>(m: &mut [Self; 4], det: &mut Self::Element) -> bool;
+
+    /// Compute the determinant of a 4x4 matrix without inverting it.
+    #[inline(always)]
+    fn mat4_det(m: &[Self; 4]) -> Self::Element {
+        let mut det = Self::Element::ZERO;
+        Self::mat4_inverse_inplace::<true>(&mut m.clone(), &mut det);
+        det
+    }
 
     /// 4x4 Matrix inversion.
     ///
@@ -1570,7 +1578,8 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     #[inline(always)]
     fn mat4_inverse(m: &[Self; 4]) -> Option<[Self; 4]> {
         let mut mat = *m;
-        if Self::mat4_inverse_inplace(&mut mat) {
+        let mut det = Self::Element::ZERO;
+        if Self::mat4_inverse_inplace::<false>(&mut mat, &mut det) {
             Some(mat)
         } else {
             None

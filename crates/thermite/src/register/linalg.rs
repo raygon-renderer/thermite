@@ -332,9 +332,9 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     }
 
     #[inline(always)]
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> bool {
+    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
         // standard implementation using swizzle macro that
         // invokes permutev/swizzle meta-instructions
-        impl_mat4_inverse!(m, s)
+        impl_mat4_inverse!(m, det, s, DET_ONLY)
     }
 }
