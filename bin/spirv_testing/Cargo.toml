@@ -11,7 +11,7 @@ doc = false
 
 [dependencies]
 const-default = { version = "1", default-features = false, features = ["derive"] }
-spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros" }
+spirv-std-macros.workspace = true
 thermite = { path = "../../crates/thermite", default-features = false, features = ["spirv", "ignore_denormals", "disable_dispatch"] }
 thermite-special = { path = "../../crates/thermite-special", default-features = false, features = ["disable_dispatch"] }
 

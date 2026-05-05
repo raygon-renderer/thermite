@@ -19,5 +19,5 @@ doc = false
 # Path dep into the local rust-gpu checkout. The `use-compiled-tools` default feature bundles
 # spirv-tools; `use-installed-tools` uses the Vulkan SDK instead (faster first build if SDK
 # is installed). The `rustc_codegen_spirv` feature is pulled in transitively by both.
-spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder" }
+spirv-builder.workspace = true
 rspirv = "0.12"

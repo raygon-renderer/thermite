@@ -27,3 +27,10 @@ lto = "fat"
 debug = false
 strip = true
 panic = "abort"
+
+[workspace.dependencies]
+spirv-builder = { version = "*" }
+spirv-std-macros = { version = "*" }
+
+# spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder", version = "*" }
+# spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros", version = "*" }
