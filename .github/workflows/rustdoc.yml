@@ -36,7 +36,7 @@ jobs:
           echo "<div style='position: absolute; bottom: 0; width: 100%; text-align: center; padding: 10px; font-size: 0.8em; color: #888;'>Last built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')</div>" > doc-footer.html
 
       - name: Build workspace documentation
-        run: cargo doc --workspace --no-deps --exclude "bin/*"
+        run: cargo doc --workspace --no-deps --exclude "spirv*" --exclude "docgen"
         env:
           RUSTDOCFLAGS: "${{ env.RUSTDOCFLAGS }} --html-after-content doc-footer.html"
 
