@@ -43,8 +43,8 @@ use generic_array::{GenericArray, typenum::Unsigned};
 #[repr(transparent)]
 pub struct Vector<R: Register>(#[doc(hidden)] pub Storage<R>);
 
+#[thermite_macros::inline_always]
 impl<R: Register> Clone for Vector<R> {
-    #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
@@ -72,8 +72,8 @@ impl<R: Register> const_default::ConstDefault for Vector<R> {
     const DEFAULT: Self = Self::EMPTY;
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register> Default for Vector<R> {
-    #[inline(always)]
     fn default() -> Self {
         Self::EMPTY
     }
@@ -89,88 +89,82 @@ impl<R: Register> Vector<R> {
     pub const fn splat_const(value: R::Element) -> Self {
         Vector(register::reg_splat::<R>(value))
     }
+}
 
+#[thermite_macros::inline_always]
+impl<R: Register> Vector<R> {
     /// Create a new vector from an array of elements.
-    #[inline(always)]
     pub fn from_array(values: impl Into<GenericArray<R::Element, R::Lanes>>) -> Self {
         Self(R::new(values.into()))
     }
 
     /// Returns a reference to the vector's elements as an array.
-    #[inline(always)]
     pub fn as_array(&self) -> &GenericArray<R::Element, R::Lanes> {
         R::as_array(&self.0)
     }
 
     /// Returns a mutable reference to the vector's elements as an array.
-    #[inline(always)]
     pub fn as_array_mut(&mut self) -> &mut GenericArray<R::Element, R::Lanes> {
         R::as_array_mut(&mut self.0)
     }
 
     /// Returns a slice of the vector's elements.
-    #[inline(always)]
     pub fn as_slice(&self) -> &[R::Element] {
         R::as_array(&self.0).as_slice()
     }
 
     /// Returns a mutable slice of the vector's elements.
-    #[inline(always)]
     pub fn as_mut_slice(&mut self) -> &mut [R::Element] {
         R::as_array_mut(&mut self.0).as_mut_slice()
     }
 
     /// Convert the vector to an array of elements.
-    #[inline(always)]
     pub fn to_array(self) -> GenericArray<R::Element, R::Lanes> {
         R::as_array(&self.0).clone()
     }
 }
 
+#[thermite_macros::inline_always]
 impl<FROM, INTO> CastVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register + CastRegister<INTO>,
     INTO: Register + CastRegister<FROM>,
 {
-    #[inline(always)]
     fn cast_from(from: Vector<FROM>) -> Self {
         Vector(<INTO as CastRegister<FROM>>::cast_from(from.0))
     }
 
-    #[inline(always)]
     fn cast_into(self) -> Vector<FROM> {
         Vector(<FROM as CastRegister<INTO>>::cast_from(self.0))
     }
 
-    #[inline(always)]
     fn fast_cast_from(from: Vector<FROM>) -> Self {
         Vector(<INTO as CastRegister<FROM>>::fast_cast_from(from.0))
     }
 
-    #[inline(always)]
     fn fast_cast_into(self) -> Vector<FROM> {
         Vector(<FROM as CastRegister<INTO>>::fast_cast_from(self.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<FROM, INTO> BitCastVector<Vector<FROM>> for Vector<INTO>
 where
     FROM: Register,
     INTO: Register + BitCastRegister<FROM>,
 {
-    #[inline(always)]
     fn from_bits(bits: Vector<FROM>) -> Self {
         Vector(<INTO as BitCastRegister<FROM>>::from_bits(bits.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R> GenericSelectable for Vector<R>
 where
     R: Register,
 {
     type SelectableMask = Mask<R>;
 
-    #[inline(always)]
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
         Mask<R>: CastMask<M>,
@@ -194,14 +188,13 @@ impl<R: Register> SplatVector<R::Element> for Vector<R> {
     type Splat<T: SplatConst<R::Element>> = Self;
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register> Interleave for Vector<R> {
-    #[inline(always)]
     fn interleave(self, other: Self) -> (Self, Self) {
         let (a, b) = R::interleave(self.0, other.0);
         (Vector(a), Vector(b))
     }
 
-    #[inline(always)]
     fn deinterleave(self, other: Self) -> (Self, Self) {
         let (a, b) = R::deinterleave(self.0, other.0);
         (Vector(a), Vector(b))
@@ -272,33 +265,28 @@ impl<R: Register> GenericVector for Vector<R> {
     unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl<R, I> IndexableVector<Vector<I>> for Vector<R>
 where
     R: IndexableRegister<I>,
     I: UnsignedIntegerRegister<Lanes = R::Lanes>,
 {
-    #[inline(always)]
     unsafe fn gather_ptr(ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather(ptr, indices.0)) }
     }
 
-    #[inline(always)]
     unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather_m(src.0, mask.0, ptr, indices.0)) }
     }
 
-    #[inline(always)]
     unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: Vector<I>) -> Self {
         unsafe { Vector(R::gather_z(mask.0, ptr, indices.0)) }
     }
 
-    #[inline(always)]
     unsafe fn scatter_ptr(value: Self, ptr: *mut Self::Element, indices: Vector<I>) {
         unsafe { R::scatter(value.0, ptr, indices.0) };
     }
 
-    #[inline(always)]
     unsafe fn scatter_ptr_m(value: Self, mask: Self::Mask, ptr: *mut Self::Element, indices: Vector<I>) {
         unsafe { R::scatter_m(value.0, mask.0, ptr, indices.0) };
     }
@@ -332,14 +320,14 @@ impl<R: BitshiftRegister> BitshiftVector for Vector<R> {
     #[conditional] fn reverse_bits(self) -> Self {}
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl<R: PartialOrdRegister> PartialOrdVector for Vector<R> {
-    #[inline(always)] fn cmp_lt(self, other: Self) -> Self::Mask { Mask(R::lt(self.0, other.0)) }
-    #[inline(always)] fn cmp_le(self, other: Self) -> Self::Mask { Mask(R::le(self.0, other.0)) }
-    #[inline(always)] fn cmp_gt(self, other: Self) -> Self::Mask { Mask(R::gt(self.0, other.0)) }
-    #[inline(always)] fn cmp_ge(self, other: Self) -> Self::Mask { Mask(R::ge(self.0, other.0)) }
-    #[inline(always)] fn cmp_eq(self, other: Self) -> Self::Mask { Mask(R::eq(self.0, other.0)) }
-    #[inline(always)] fn cmp_ne(self, other: Self) -> Self::Mask { Mask(R::ne(self.0, other.0)) }
+    fn cmp_lt(self, other: Self) -> Self::Mask { Mask(R::lt(self.0, other.0)) }
+    fn cmp_le(self, other: Self) -> Self::Mask { Mask(R::le(self.0, other.0)) }
+    fn cmp_gt(self, other: Self) -> Self::Mask { Mask(R::gt(self.0, other.0)) }
+    fn cmp_ge(self, other: Self) -> Self::Mask { Mask(R::ge(self.0, other.0)) }
+    fn cmp_eq(self, other: Self) -> Self::Mask { Mask(R::eq(self.0, other.0)) }
+    fn cmp_ne(self, other: Self) -> Self::Mask { Mask(R::ne(self.0, other.0)) }
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
@@ -374,53 +362,50 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     fn indexed() -> Self { Vector(R::indexed()) }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> Square for Vector<R> {
     type Output = Self;
 
-    #[inline(always)]
     fn square(self) -> Self {
         Vector(R::square(self.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> SquareMasked<Mask<R>> for Vector<R> {
-    #[inline(always)]
     fn square_c(self, mask: Mask<R>) -> Self {
         Vector(R::square_c(mask.0, self.0))
     }
 
-    #[inline(always)]
     fn square_m(self, src: Self, mask: Mask<R>) -> Self {
         Vector(R::square_m(src.0, mask.0, self.0))
     }
 
-    #[inline(always)]
     fn square_z(self, mask: Mask<R>) -> Self {
         Vector(R::square_z(mask.0, self.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> core::iter::Sum for Vector<R> {
-    #[inline(always)]
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Vector(R::ZERO), Add::add)
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> core::iter::Product for Vector<R> {
-    #[inline(always)]
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Vector(R::ONE), Mul::mul)
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
-    #[inline(always)]
     fn max_value() -> Self {
         Vector(R::MAX)
     }
 
-    #[inline(always)]
     fn min_value() -> Self {
         Vector(R::MIN)
     }
@@ -476,88 +461,82 @@ where
     #[conditional] fn leading_zeros(self) -> Self {}
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> Div<Divider<R::Element>> for Vector<R> {
     type Output = Self;
 
-    #[inline(always)]
     fn div(self, rhs: Divider<R::Element>) -> Self::Output {
         Self(R::div_branched(self.0, rhs))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> Div<BranchfreeDivider<R::Element>> for Vector<R> {
     type Output = Self;
 
-    #[inline(always)]
     fn div(self, rhs: BranchfreeDivider<R::Element>) -> Self::Output {
         Self(R::div_branchfree(self.0, rhs))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> Div<VectorDivider<R>> for Vector<R> {
     type Output = Self;
 
-    #[inline(always)]
     fn div(self, rhs: VectorDivider<R>) -> Self::Output {
         Self(R::divv_branchfree(self.0, rhs))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> DivMasked<Mask<R>, Divider<R::Element>> for Vector<R>
 where
     R::Element: Denominator,
 {
-    #[inline(always)]
     fn div_c(self, mask: Mask<R>, rhs: Divider<R::Element>) -> Self::Output {
         Vector(R::div_branched_c(mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_m(self, src: Self, mask: Mask<R>, rhs: Divider<R::Element>) -> Self::Output {
         Vector(R::div_branched_m(src.0, mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_z(self, mask: Mask<R>, rhs: Divider<R::Element>) -> Self::Output {
         Vector(R::div_branched_z(mask.0, self.0, rhs))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> DivMasked<Mask<R>, BranchfreeDivider<R::Element>> for Vector<R>
 where
     R::Element: Denominator,
 {
-    #[inline(always)]
     fn div_c(self, mask: Mask<R>, rhs: BranchfreeDivider<R::Element>) -> Self::Output {
         Vector(R::div_branchfree_c(mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_m(self, src: Self, mask: Mask<R>, rhs: BranchfreeDivider<R::Element>) -> Self::Output {
         Vector(R::div_branchfree_m(src.0, mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_z(self, mask: Mask<R>, rhs: BranchfreeDivider<R::Element>) -> Self::Output {
         Vector(R::div_branchfree_z(mask.0, self.0, rhs))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> DivMasked<Mask<R>, VectorDivider<R>> for Vector<R>
 where
     R::Element: Denominator,
 {
-    #[inline(always)]
     fn div_c(self, mask: Mask<R>, rhs: VectorDivider<R>) -> Self::Output {
         Vector(R::divv_branchfree_c(mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_m(self, src: Self, mask: Mask<R>, rhs: VectorDivider<R>) -> Self::Output {
         Vector(R::divv_branchfree_m(src.0, mask.0, self.0, rhs))
     }
 
-    #[inline(always)]
     fn div_z(self, mask: Mask<R>, rhs: VectorDivider<R>) -> Self::Output {
         Vector(R::divv_branchfree_z(mask.0, self.0, rhs))
     }
@@ -636,79 +615,72 @@ impl<R: FloatRegister> FloatVector for Vector<R> {
     }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
     type SignedBits = Vector<R::SignedBits>;
     type Bits = Vector<R::Bits>;
 
     const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 
-    #[inline(always)] unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self {
+    unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self {
         unsafe { Vector(R::native_ldexp(self.0, exp.0)) }
     }
 
-    #[inline(always)] unsafe fn native_frexp(self) -> (Self, Self::SignedBits) {
+    unsafe fn native_frexp(self) -> (Self, Self::SignedBits) {
         let (mantissa, exp) = unsafe { R::native_frexp(self.0) };
         (Vector(mantissa), Vector(exp))
     }
 
-    #[inline(always)] unsafe fn native_sin_cos<P: Policy>(self) -> (Self, Self) {
+    unsafe fn native_sin_cos<P: Policy>(self) -> (Self, Self) {
         let (sin, cos) = unsafe { R::native_sin_cos::<P>(self.0) };
         (Vector(sin), Vector(cos))
     }
 
-    #[inline(always)] unsafe fn native_sin<P: Policy>(self) -> Self { unsafe { Vector(R::native_sin::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_cos<P: Policy>(self) -> Self { unsafe { Vector(R::native_cos::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_tan<P: Policy>(self) -> Self { unsafe { Vector(R::native_tan::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_exp2<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp2::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_log2<P: Policy>(self) -> Self { unsafe { Vector(R::native_log2::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_exp<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_ln<P: Policy>(self) -> Self { unsafe { Vector(R::native_ln::<P>(self.0)) } }
-    #[inline(always)] unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self { unsafe { Vector(R::native_powf::<P>(self.0, exp.0)) } }
+    unsafe fn native_sin<P: Policy>(self) -> Self { unsafe { Vector(R::native_sin::<P>(self.0)) } }
+    unsafe fn native_cos<P: Policy>(self) -> Self { unsafe { Vector(R::native_cos::<P>(self.0)) } }
+    unsafe fn native_tan<P: Policy>(self) -> Self { unsafe { Vector(R::native_tan::<P>(self.0)) } }
+    unsafe fn native_exp2<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp2::<P>(self.0)) } }
+    unsafe fn native_log2<P: Policy>(self) -> Self { unsafe { Vector(R::native_log2::<P>(self.0)) } }
+    unsafe fn native_exp<P: Policy>(self) -> Self { unsafe { Vector(R::native_exp::<P>(self.0)) } }
+    unsafe fn native_ln<P: Policy>(self) -> Self { unsafe { Vector(R::native_ln::<P>(self.0)) } }
+    unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self { unsafe { Vector(R::native_powf::<P>(self.0, exp.0)) } }
 
-    #[inline(always)] fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
-    #[inline(always)] fn linear_order(self) -> Self::SignedBits { Vector(R::linear_order(self.0)) }
+    fn total_order(self) -> Self::SignedBits { Vector(R::total_order(self.0)) }
+    fn linear_order(self) -> Self::SignedBits { Vector(R::linear_order(self.0)) }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::inline_always]
 impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
-    #[inline(always)] fn dot3(self, other: Self) -> Self::Element { R::dot3(self.0, other.0) }
-
-    #[inline(always)]
+    fn dot3(self, other: Self) -> Self::Element { R::dot3(self.0, other.0) }
     fn cross3<const DOP: bool>(self, other: Self) -> Self { Vector(R::cross3::<DOP>(self.0, other.0)) }
-
-    #[inline(always)] fn zero4(self) -> Self { Vector(R::zero4(self.0)) }
-    #[inline(always)] fn one4(self) -> Self { Vector(R::one4(self.0)) }
-    #[inline(always)] fn min_element3(self) -> Self::Element { R::min_element3(self.0) }
-    #[inline(always)] fn max_element3(self) -> Self::Element { R::max_element3(self.0) }
-    #[inline(always)] fn sum_elements3(self) -> Self::Element { R::sum_elements3(self.0) }
-    #[inline(always)] fn prod_elements3(self) -> Self::Element { R::prod_elements3(self.0) }
+    fn zero4(self) -> Self { Vector(R::zero4(self.0)) }
+    fn one4(self) -> Self { Vector(R::one4(self.0)) }
+    fn min_element3(self) -> Self::Element { R::min_element3(self.0) }
+    fn max_element3(self) -> Self::Element { R::max_element3(self.0) }
+    fn sum_elements3(self) -> Self::Element { R::sum_elements3(self.0) }
+    fn prod_elements3(self) -> Self::Element { R::prod_elements3(self.0) }
 }
 
+#[thermite_macros::inline_always]
 impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
-    #[inline(always)]
     fn dot4(self, other: Self) -> Self::Element {
         R::dot4(self.0, other.0)
     }
 
-    #[inline(always)]
     fn quat4_product(self, other: Self) -> Self {
         Vector(R::quat4_product(self.0, other.0))
     }
 
-    #[inline(always)]
     fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self {
         Vector(R::quat4_vec3_product::<DOP>(self.0, vec.0))
     }
 
-    #[inline(always)]
     fn mat4_transpose(m: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
         R::mat4_transpose(unsafe { core::mem::transmute(m) }).map(Vector)
     }
 
-    #[inline(always)]
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
         Self(R::mat4_vec4_product::<COLUMN_MAJOR>(
             // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
@@ -718,7 +690,6 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         ))
     }
 
-    #[inline(always)]
     fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
@@ -742,13 +713,12 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register> VectorWithRegister<R> for Vector<R> {
-    #[inline(always)]
     fn into_register(self) -> Storage<R> {
         self.0
     }
 
-    #[inline(always)]
     fn from_register(reg: Storage<R>) -> Self {
         Vector(reg)
     }
@@ -775,177 +745,167 @@ where
     type Register = R;
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register, B: Register> Extend<Mask<R>> for Mask<B>
 where
     B::Mask: ExtendRegister<R::Mask>,
 {
-    #[inline(always)]
     fn extend(v: Mask<R>) -> Self {
         Mask(B::Mask::extend(v.0))
     }
 
-    #[inline(always)]
     fn narrow(self) -> Mask<R> {
         Mask(B::Mask::narrow(self.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register, B: Register> Concat<Mask<R>> for Mask<B>
 where
     B::Mask: ConcatRegister<R::Mask>,
 {
-    #[inline(always)]
     fn concat(lo: Mask<R>, hi: Mask<R>) -> Self {
         Mask(B::Mask::concat(lo.0, hi.0))
     }
 
-    #[inline(always)]
     fn split(self) -> (Mask<R>, Mask<R>) {
         let (lo, hi) = B::Mask::split(self.0);
         (Mask(lo), Mask(hi))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register, B: Register> Extend<Vector<R>> for Vector<B>
 where
     B: ExtendRegister<R>,
 {
-    #[inline(always)]
     fn extend(v: Vector<R>) -> Self {
         Vector(B::extend(v.0))
     }
 
-    #[inline(always)]
     fn narrow(self) -> Vector<R> {
         Vector(B::narrow(self.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register, B: Register> Concat<Vector<R>> for Vector<B>
 where
     B: ConcatRegister<R>,
 {
-    #[inline(always)]
     fn concat(lo: Vector<R>, hi: Vector<R>) -> Self {
         Vector(B::concat(lo.0, hi.0))
     }
 
-    #[inline(always)]
     fn split(self) -> (Vector<R>, Vector<R>) {
         let (lo, hi) = B::split(self.0);
         (Vector(lo), Vector(hi))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: PartialOrdRegister> PartialEq for Vector<R> {
     /// Compare two vectors for equality, returning true only if all elements are equal.
-    #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         Mask::<R>(R::eq(self.0, other.0)).all()
     }
 
     /// Compare two vectors for inequality, returning true if any element is not equal.
     #[allow(clippy::partialeq_ne_impl)] // sometimes might have better underlying implementation
-    #[inline(always)]
     fn ne(&self, other: &Self) -> bool {
         Mask::<R>(R::ne(self.0, other.0)).any()
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register> Index<usize> for Vector<R> {
     type Output = R::Element;
 
-    #[inline(always)]
     fn index(&self, index: usize) -> &Self::Output {
         &R::as_array(&self.0)[index]
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: Register> IndexMut<usize> for Vector<R> {
-    #[inline(always)]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut R::as_array_mut(&mut self.0)[index]
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> Zero for Vector<R> {
     /// Returns true if **all** elements in the vector are zero.
-    #[inline(always)]
     fn is_zero(&self) -> bool {
         Mask::<R>(R::eq(self.0, R::ZERO)).all()
     }
 
-    #[inline(always)]
     fn set_zero(&mut self) {
         self.0 = R::ZERO;
     }
 
-    #[inline(always)]
     fn zero() -> Self {
         Self::ZERO
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: NumericRegister> One for Vector<R> {
     /// Returns true if **all** elements in the vector are one.
-    #[inline(always)]
     fn is_one(&self) -> bool {
         Mask::<R>(R::eq(self.0, R::ONE)).all()
     }
 
-    #[inline(always)]
     fn set_one(&mut self) {
         self.0 = R::ONE;
     }
 
-    #[inline(always)]
     fn one() -> Self {
         Self::ONE
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> SaturatingAdd for Vector<R> {
-    #[inline(always)]
     fn saturating_add(&self, v: &Self) -> Self {
         Self(R::saturating_add(self.0, v.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> SaturatingSub for Vector<R> {
-    #[inline(always)]
     fn saturating_sub(&self, v: &Self) -> Self {
         Self(R::saturating_sub(self.0, v.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> Saturating for Vector<R> {
-    #[inline(always)]
     fn saturating_add(self, v: Self) -> Self {
         Self(R::saturating_add(self.0, v.0))
     }
 
-    #[inline(always)]
     fn saturating_sub(self, v: Self) -> Self {
         Self(R::saturating_sub(self.0, v.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> WrappingAdd for Vector<R> {
-    #[inline(always)]
     fn wrapping_add(&self, v: &Self) -> Self {
         Self(R::add(self.0, v.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> WrappingSub for Vector<R> {
-    #[inline(always)]
     fn wrapping_sub(&self, v: &Self) -> Self {
         Self(R::sub(self.0, v.0))
     }
 }
 
+#[thermite_macros::inline_always]
 impl<R: IntegerRegister> WrappingMul for Vector<R> {
-    #[inline(always)]
     fn wrapping_mul(&self, v: &Self) -> Self {
         Self(R::mul(self.0, v.0))
     }
