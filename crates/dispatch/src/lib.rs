@@ -74,6 +74,8 @@ const SIMD_VECTOR_TYPES: &[&str] = &[
 /// Holds the directly parsed attributes (no intermediate Punctuated tree).
 struct DispatchAttributes {
     simd: TokenStream,
+    /// `true` when the user did not explicitly specify a dispatch type — `S` is just the default.
+    simd_is_default: bool,
     thermite: TokenStream,
 }
 
@@ -131,9 +133,41 @@ struct DispatchAttributes {
 ///
 /// `impl` blocks use a private helper trait to allow the trampolines to call back into
 /// `Self` without recursion.
+///
+/// # Methods with receivers (`&self`, `&mut self`, `self`)
+///
+/// Applying `#[dispatch]` directly to a single method that has a receiver requires
+/// supplying the **concrete implementing type** as the first attribute argument.  This
+/// is necessary because the macro only sees the method, not the surrounding `impl`
+/// block, so it cannot infer `Self`.  `impl Trait for Self` is not valid inside a
+/// function body.
+///
+/// ```rust,ignore
+/// impl MyType {
+///     // OK — concrete type supplied explicitly:
+///     #[dispatch(MyType)]
+///     fn process(&self) { … }
+/// }
+/// ```
+///
+/// The supplied ident is used both as the dispatch match type
+/// (`<MyType as HasIsa>::ISA`) and as the impl target of the internal helper trait.
+///
+/// **Prefer annotating the whole `impl` block** when all (or most) methods need
+/// dispatch — it is less repetitive and avoids repeating the type name per method:
+///
+/// ```rust,ignore
+/// #[dispatch(Self)]          // `Self` is resolved correctly at the impl-block level
+/// impl MyType {
+///     fn process(&self) { … }
+///     #[skip_dispatch]       // opt individual methods out if needed
+///     fn helper(&self) { … }
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut simd = quote! { S };
+    let mut simd_is_default = true;
     let mut thermite = quote! { ::thermite };
 
     let attr_parser = syn::meta::parser(|meta| {
@@ -145,6 +179,7 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
         } else if meta.path.get_ident().is_some() {
             let path = &meta.path;
             simd = quote! { #path };
+            simd_is_default = false;
             Ok(())
         } else {
             Err(meta.error("unsupported dispatch attribute"))
@@ -155,7 +190,7 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
         return err.into_compile_error().into();
     }
 
-    let attr_data = DispatchAttributes { simd, thermite };
+    let attr_data = DispatchAttributes { simd, simd_is_default, thermite };
 
     let mut item = syn::parse_macro_input!(item as Item);
 
@@ -516,7 +551,6 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
         return;
     }
 
-    let simd = &attr.simd;
     let thermite = &attr.thermite;
 
     let sig = &f.sig;
@@ -532,6 +566,102 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
 
     let forward_args = forward_args(inputs.iter(), false);
     let forward_tys = forward_tys(generics.params.iter(), inputs.iter(), generics.where_clause.as_ref());
+    let tf = quote! { ::<#(#forward_tys),*> };
+
+    // When applied to a method inside an impl block, the function has a receiver (`&self`,
+    // `&mut self`, or `self`).  Free-function inner copies can't have receivers, so we
+    // replicate the helper-trait pattern from `gen_impl_block` here.  Unlike that path,
+    // we only see the method — not the surrounding `impl` block — so the concrete Self
+    // type is unknown.  The user must supply it via `#[dispatch(ConcreteType)]`; that
+    // ident is used both as the dispatch match type and as the impl target.
+    // `impl Trait for Self` is not valid inside a function body.
+    let has_receiver = inputs.iter().any(|arg| matches!(arg, FnArg::Receiver(_)));
+    if has_receiver {
+        if attr.simd_is_default {
+            *f.block = syn::parse_quote! {{
+                compile_error!(
+                    "#[dispatch] on a method with a receiver requires the concrete type name. \
+                    Either annotate the whole impl block (`#[dispatch(Self)] impl Type { … }`), \
+                    or supply the type to this attribute: `#[dispatch(TypeName)]`."
+                );
+            }};
+            return;
+        }
+        let simd = attr.simd.clone();
+
+        let helper_trait_name = quote::format_ident!("__DispatchHelper_{}", ident);
+
+        let mut decl_sig = sig.clone();
+        DemutSelfVisitor.visit_signature_mut(&mut decl_sig);
+
+        let branch_defs = BACKENDS.iter().map(|b| {
+            let dispatch_ident = format_backend(b.isa);
+            let decl_inputs = &decl_sig.inputs;
+            let decl_output = &decl_sig.output;
+            let decl_wc = &decl_sig.generics.where_clause;
+            quote! {
+                #asyncness unsafe #abi fn #dispatch_ident #impl_generics(#decl_inputs) #decl_output #decl_wc;
+            }
+        });
+
+        let dispatch_trait = quote! {
+            #[allow(non_camel_case_types)] #[allow(clippy::missing_safety_doc)]
+            unsafe trait #helper_trait_name {
+                #decl_sig;
+                #(#branch_defs)*
+            }
+        };
+
+        let branch_impls = BACKENDS.iter().map(|b| {
+            let dispatch_ident = format_backend(b.isa);
+            let target_feature_attr = if b.target_feature.is_empty() {
+                quote! {}
+            } else {
+                let feat = b.target_feature;
+                quote! { #[target_feature(enable = #feat)] }
+            };
+            quote! {
+                #[inline] #[allow(clippy::missing_safety_doc)]
+                #target_feature_attr
+                #asyncness unsafe #abi fn #dispatch_ident #impl_generics(#inputs) #output #where_clause {
+                    <Self as #helper_trait_name>::#ident #tf(#(#forward_args,)*)
+                }
+            }
+        });
+
+        let original_block = &f.block;
+
+        let dispatch_impl = quote! {
+            unsafe impl #helper_trait_name for #simd {
+                #[inline(always)]
+                #sig #original_block
+                #(#branch_impls)*
+            }
+        };
+
+        let branches = BACKENDS.iter().map(|b| {
+            let dispatch_ident = format_backend(b.isa);
+            let backend_ident = quote::format_ident!("{}", b.isa);
+            quote! {
+                #thermite::InstructionSet::#backend_ident => unsafe {
+                    <Self as #helper_trait_name>::#dispatch_ident #tf(#(#forward_args,)*)
+                }
+            }
+        });
+
+        *f.block = syn::parse_quote! {{
+            #dispatch_trait
+            #dispatch_impl
+            match const { <#simd as #thermite::HasIsa>::ISA } {
+                #(#branches)*
+                _ => unsafe { ::core::hint::unreachable_unchecked() }
+            }
+        }};
+
+        return;
+    }
+
+    let simd = &attr.simd;
 
     let original_block = &f.block;
 
@@ -539,8 +669,6 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
         #[inline(always)]
         #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #original_block
     };
-
-    let tf = quote! { ::<#(#forward_tys),*> };
 
     let mut branches = Vec::new();
 
