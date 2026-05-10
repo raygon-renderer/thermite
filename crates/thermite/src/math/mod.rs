@@ -369,7 +369,7 @@ decl_math! {
         /// Scales `self` from the input range `[in_min, in_max]` to the output range `[out_min, out_max]`.
         ///
         /// This operation is not clamped.
-        fn scale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
+        fn rescale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,

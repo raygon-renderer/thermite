@@ -865,7 +865,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
-    fn scale<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
+    fn rescale<P: Policy>(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self {
         let in_range = in_max - in_min;
 
         let mut t = self - in_min;
