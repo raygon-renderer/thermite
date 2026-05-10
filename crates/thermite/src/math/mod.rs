@@ -14,7 +14,7 @@ pub mod policy;
 
 pub use consts::FloatConsts;
 
-use crate::element::{FloatElement, FloatElementWithBits};
+use crate::element::{Element, ElementExt, FloatElement, FloatElementWithBits};
 use crate::vector::{FloatVector, FloatVectorWithBits};
 
 pub mod algorithms;
@@ -27,17 +27,32 @@ pub mod prelude {
 
     pub use super::FloatConsts;
     pub use super::{
-        CoreMath, CoreMathWithPolicy, RealMath, RealMathWithPolicy, SpatialMath, SpatialMathWithPolicy,
-        TranscendentalMath, TranscendentalMathWithPolicy,
+        CoreMath, CoreMathWithPolicy, RealMath, RealMathWithPolicy, ScalarMath, ScalarMathWithPolicy, SpatialMath,
+        SpatialMathWithPolicy, TranscendentalMath, TranscendentalMathWithPolicy,
     };
 }
+
+// this is an implementation detail, required to be public so other crates can use it,
+// but it's generally not for user-consumption.
+#[doc(hidden)]
+pub mod scalar;
+use scalar::Unwrap;
+
+pub trait Coefficients<T, const N: usize> {
+    const COEFFICIENTS: [T; N];
+}
+
+// #[macro_export]
+// macro_rules! poly {
+//     ()
+// }
 
 // Helper macro to declare math traits and implementations
 // for both policy and default policy versions. This reduces
 // boilerplate and ensures consistency between the two traits,
 // though it is a bit annoying to read and write.
 macro_rules! decl_math {
-    (
+    ($(
         $(#[$trait_meta:meta])*
         trait $trait:ident<$element:ident> $(: $($bound:ident)&+ )? { $(
             $(#[$meta:meta])*
@@ -45,7 +60,7 @@ macro_rules! decl_math {
                 $(where [ $($where_clause:tt)* ])?;
             )*
         }
-    ) => {paste::paste! {
+    )*) => {paste::paste! {$(
         #[doc = "" $trait " Math functions for floating-point vectors with customizable policies."]
         $(#[$trait_meta])*
         #[doc = ""]
@@ -99,8 +114,104 @@ macro_rules! decl_math {
             $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*}
+        )*})*
+
+        #[doc = "Aggregate of all scalar math traits with customizable policies."]
+        #[doc = ""]
+        #[doc = "This trait collects every method from the following trait families into a single"]
+        #[doc = "trait implemented directly on `f32` and `f64`:"]
+        #[doc = ""]
+        $(#[doc = "- [`" [<$trait MathWithPolicy>] "`]"])*
+        #[doc = ""]
+        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with the inherent methods"]
+        #[doc = "already defined on `f32`/`f64` (e.g., `f32::sin`, `f32::exp`). The policy-aware"]
+        #[doc = "versions additionally carry a `_p` suffix, following the same convention as the"]
+        #[doc = "vector math traits."]
+        #[doc = ""]
+        #[doc = "# Limitations"]
+        #[doc = ""]
+        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "wrapped in [`Vector`](crate::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
+        #[doc = "that bound. `ScalarMath` exists purely as a convenience for call-sites that already"]
+        #[doc = "hold a concrete scalar and do not need to be generic."]
+        #[doc = ""]
+        #[doc = "For convenience, a default-policy version is provided by [`ScalarMath`], which"]
+        #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`] for all operations."]
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
+             $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?;
+        )*)*}
+
+        #[doc = "Aggregate of all scalar math traits using the default policy."]
+        #[doc = ""]
+        #[doc = "This trait collects every method from the following trait families into a single"]
+        #[doc = "trait implemented directly on `f32` and `f64`, using [`DefaultPolicy`] for all operations:"]
+        #[doc = ""]
+        $(#[doc = "- [`" [<$trait Math>] "`]"])*
+        #[doc = ""]
+        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with the inherent methods"]
+        #[doc = "already defined on `f32`/`f64`. See [`ScalarMathWithPolicy`] for the policy-aware"]
+        #[doc = "variant, which additionally carries a `_p` suffix on each method."]
+        #[doc = ""]
+        #[doc = "# Limitations"]
+        #[doc = ""]
+        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "wrapped in [`Vector`](crate::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
+        #[doc = "that bound. `ScalarMath` exists purely as a convenience for call-sites that already"]
+        #[doc = "hold a concrete scalar and do not need to be generic."]
+        #[doc = ""]
+        #[doc = "All types that implement [`ScalarMathWithPolicy`] automatically implement this trait."]
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        pub trait ScalarMath: ScalarMathWithPolicy {$($(
+            $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            { ScalarMathWithPolicy::[<scalar_ $name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
+        )*)*}
+
+        impl<M> ScalarMath for M where M: ScalarMathWithPolicy {}
+
+        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        impl<E: ElementExt<Element = Self> + FloatElementWithBits> ScalarMathWithPolicy for E
+        where
+            $crate::Vector<E>: Unwrap<Unwrapped = E> +
+                FloatVectorWithBits<Element = E,
+                    Signed: Unwrap<Unwrapped = <E as Element>::Signed>,
+                    Unsigned: Unwrap<Unwrapped = <E as Element>::Unsigned>,
+                    SignedBits: Unwrap<Unwrapped = <E as FloatElementWithBits>::SignedBits>,
+                    Bits: Unwrap<Unwrapped = <E as FloatElementWithBits>::Bits>
+                >
+                $(+ specialized::[<Specialized $trait Math>]<E>)*,
+            E: $crate::register::FloatRegister<Storage = E>,
+        {$($(
+            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            {
+                let ($(decl_math!(@SELF $arg_name this),)*) = Unwrap::wrap(($($arg_name,)*));
+
+                let res = <$crate::Vector<E> as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($(decl_math!(@SELF $arg_name this)),*);
+
+                Unwrap::unwrap(res)
+            }
+        )*)*}
     }};
+
+    // rename `self` to `this`. Requires an existing ident to bind to.
+    (@SELF self $rename:ident) => { $rename };
+    (@SELF $other:ident $rename:ident) => { $other };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ScalarMath;
+
+    #[test]
+    fn test_f32_scalar_math() {
+        let x: f32 = 1.0;
+        let _ = x.scalar_sin();
+    }
 }
 
 decl_math! {
@@ -126,9 +237,7 @@ decl_math! {
         /// this function, as it is used extensively internally.
         fn flush_denormals[][](self: Self) -> Self;
     }
-}
 
-decl_math! {
     /// This is the core set of mathematical operations that form the basis for more advanced functions.
     trait Core<FloatElement>: FloatVector {
         /// Computes the polynomial with the given coefficients at `self`.
@@ -179,9 +288,7 @@ decl_math! {
         /// Returns `self` raised to the signed integer power of each element in `e`.
         fn powiv[][](self: Self, e: Self::Signed) -> Self;
     }
-}
 
-decl_math! {
     /// Transcendental mathematical functions like trigonometric, exponential, and logarithmic functions.
     trait Transcendental<FloatElement>: CoreMathWithPolicy {
         /// Trigonometric sine and cosine, together. This will be more efficient than calling `sin` and `cos` separately.
@@ -284,11 +391,10 @@ decl_math! {
         /// you may as well use this function to avoid recomputing it.
         fn ln1m_expnx_ext[][](self: Self, lnx: Self) -> Self;
     }
-}
 
-// TODO: Create an associated type `Scalar` to return for spatial functions,
-// as Complex vectors may want to return real-valued norms/distances.
-decl_math! {
+    // TODO: Create an associated type `Scalar` to return for spatial functions,
+    // as Complex vectors may want to return real-valued norms/distances.
+
     /// Spatial mathematical functions like norms and distances.
     ///
     /// These functions are primarily useful in dimensions higher than one.
@@ -330,9 +436,7 @@ decl_math! {
         /// For 1D vectors, this is equivalent to squaring the value.
         fn l2_norm_squared[][](self: Self) -> Self;
     }
-}
 
-decl_math! {
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
     trait Real<FloatElement>: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good

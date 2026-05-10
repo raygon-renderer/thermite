@@ -100,8 +100,8 @@ pub mod prelude {
         mask::{CastMask, GenericMask},
         math::{
             CoreMath as _, CoreMathWithPolicy as _, FloatMath as _, FloatMathWithPolicy as _, RealMath as _,
-            RealMathWithPolicy as _, SpatialMath as _, SpatialMathWithPolicy as _, TranscendentalMath as _,
-            TranscendentalMathWithPolicy as _,
+            RealMathWithPolicy as _, ScalarMath as _, ScalarMathWithPolicy as _, SpatialMath as _,
+            SpatialMathWithPolicy as _, TranscendentalMath as _, TranscendentalMathWithPolicy as _,
         },
         math::{FloatConsts, policy::Policy},
         simd::{

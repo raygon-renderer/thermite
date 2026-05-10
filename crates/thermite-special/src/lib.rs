@@ -2,24 +2,26 @@
 #![allow(unused, clippy::needless_arbitrary_self_type)]
 
 use thermite::{
+    element::{Element, ElementExt, FloatElementWithBits},
     math::{
         FloatConsts, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
+        scalar::Unwrap,
     },
-    vector::FloatVector,
+    vector::{FloatVector, FloatVectorWithBits},
 };
 
 pub mod specialized;
 
 macro_rules! decl_math {
-    (
+    ($(
         $(#[$trait_meta:meta])*
         trait $trait:ident $(: $($bound:ident)&+)? { $(
             $(#[$meta:meta])*
             fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
                 $(where [ $($where_clause:tt)* ])?;
         )*}
-    ) => {paste::paste! {
+    )*) => {paste::paste! {$(
         #[doc = "" $trait " Math functions for floating-point vectors with customizable policies.\n\n"]
         #[doc = "Each method has a `_p`-suffixed variant in this trait that accepts a leading `P: Policy` generic.\n\n"]
         #[doc = "All floating-point vector types that implement [`Specialized" $trait "Math`](specialized::SpecializedSpecialMath) will\n"]
@@ -59,8 +61,90 @@ macro_rules! decl_math {
             $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { V::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*}
+        )*})*
+
+        #[doc = "Aggregate of all scalar special-math traits with customizable policies."]
+        #[doc = ""]
+        #[doc = "This trait collects every method from the following trait families into a single"]
+        #[doc = "trait implemented directly on `f32` and `f64`:"]
+        #[doc = ""]
+        $(#[doc = "- [`" [<$trait MathWithPolicy>] "`]"])*
+        #[doc = ""]
+        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with inherent methods"]
+        #[doc = "on `f32`/`f64`. The policy-aware versions additionally carry a `_p` suffix."]
+        #[doc = ""]
+        #[doc = "# Limitations"]
+        #[doc = ""]
+        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "wrapped in [`Vector`](thermite::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
+        #[doc = "that bound. `ScalarSpecialMath` exists purely as a convenience for call-sites that"]
+        #[doc = "already hold a concrete scalar and do not need to be generic."]
+        #[doc = ""]
+        #[doc = "For convenience, a default-policy version is provided by [`ScalarSpecialMath`], which"]
+        #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`](thermite::math::policy::DefaultPolicy) for all operations."]
+        #[thermite_dispatch::dispatch(Self)]
+        pub trait ScalarSpecialMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
+             $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?;
+        )*)*}
+
+        #[doc = "Aggregate of all scalar special-math traits using the default policy."]
+        #[doc = ""]
+        #[doc = "This trait collects every method from the following trait families into a single"]
+        #[doc = "trait implemented directly on `f32` and `f64`, using the default policy for all operations:"]
+        #[doc = ""]
+        $(#[doc = "- [`" [<$trait Math>] "`]"])*
+        #[doc = ""]
+        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with inherent methods"]
+        #[doc = "on `f32`/`f64`. See [`ScalarSpecialMathWithPolicy`] for the policy-aware variant,"]
+        #[doc = "which additionally carries a `_p` suffix on each method."]
+        #[doc = ""]
+        #[doc = "# Limitations"]
+        #[doc = ""]
+        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "wrapped in [`Vector`](thermite::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
+        #[doc = "that bound. `ScalarSpecialMath` exists purely as a convenience for call-sites that"]
+        #[doc = "already hold a concrete scalar and do not need to be generic."]
+        #[doc = ""]
+        #[doc = "All types that implement [`ScalarSpecialMathWithPolicy`] automatically implement this trait."]
+        pub trait ScalarSpecialMath: ScalarSpecialMathWithPolicy {$($(
+            $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            { ScalarSpecialMathWithPolicy::[<scalar_ $name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
+        )*)*}
+
+        impl<M> ScalarSpecialMath for M where M: ScalarSpecialMathWithPolicy {}
+
+        #[thermite_dispatch::dispatch(Self)]
+        impl<E: ElementExt<Element = Self> + FloatElementWithBits> ScalarSpecialMathWithPolicy for E
+        where
+            thermite::Vector<E>: Unwrap<Unwrapped = E> +
+                FloatVectorWithBits<Element = E,
+                    Signed: Unwrap<Unwrapped = <E as Element>::Signed>,
+                    Unsigned: Unwrap<Unwrapped = <E as Element>::Unsigned>,
+                    SignedBits: Unwrap<Unwrapped = <E as FloatElementWithBits>::SignedBits>,
+                    Bits: Unwrap<Unwrapped = <E as FloatElementWithBits>::Bits>
+                >
+                $(+ specialized::[<Specialized $trait Math>]<E>)*,
+            E: thermite::register::FloatRegister<Storage = E>,
+        {$($(
+            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                $(where $($where_clause)*)?
+            {
+                let ($(decl_math!(@SELF $arg_name this),)*) = Unwrap::wrap(($($arg_name,)*));
+
+                let res = <thermite::Vector<E> as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($(decl_math!(@SELF $arg_name this)),*);
+
+                Unwrap::unwrap(res)
+            }
+        )*)*}
     }};
+
+    // rename `self` to `this`. Requires an existing ident to bind to.
+    (@SELF self $rename:ident) => { $rename };
+    (@SELF $other:ident $rename:ident) => { $other };
 }
 
 decl_math! {
@@ -172,9 +256,7 @@ decl_math! {
         /// Computes the generalized exponential integral `E_n(x)` for integer order `n`.
         fn expint[const N: usize][N](self: Self) -> Self;
     }
-}
 
-decl_math! {
     /// Special math functions that are only defined for real-valued floating-point vectors.
     ///
     /// These functions either rely on ordering/sign information that has no complex analogue

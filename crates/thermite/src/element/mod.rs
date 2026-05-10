@@ -33,6 +33,14 @@ pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + c
     fn from_u16(value: u16) -> Self;
 }
 
+pub trait ElementExt: Element {
+    type Element: Element<Unsigned = Self::Unsigned, Signed = Self::Signed>;
+}
+
+impl<T: Element> ElementExt for T {
+    type Element = Self;
+}
+
 pub trait MaskElement: 'static + Sized + Copy + Default + PartialEq + core::fmt::Debug {
     /// When used as a mask, represents "true"
     const TRUTHY: Self;
