@@ -589,6 +589,9 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Assemble a vector from a slice of elements and a vector of indices
     /// into that slice. If an index is outside the bounds of the given slice,
     /// the resulting lane will be the first element of the input slice.
+    ///
+    /// This is semantically equivalent to `gather`, but specialized for small lookup tables approximately
+    /// the same size as the vector itself. If the lookup table is too large, it will fall back to `gather`.
     fn lookup(values: &[Self::Element], indices: Self::Unsigned) -> Self {
         let in_bounds = indices.cmp_lt(Self::len_to_indices::<Self::Unsigned>(values.len()));
 
@@ -849,7 +852,7 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait NumericVector:
-    PartialOrdVector<Element: num_traits::NumOps>
+    PartialOrdVector<Element: num_traits::NumOps, Signed: CastVector<Self>, Unsigned: CastVector<Self>>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
     + ops::AddAssignMasked<Self::Mask, Self>
     + ops::SubMasked<Self::Mask, Self, Output = Self>
@@ -865,6 +868,8 @@ pub trait NumericVector:
     + num_traits::NumAssignOps<Self>
     + core::iter::Sum
     + core::iter::Product
+    + CastVector<Self::Unsigned>
+    + CastVector<Self::Signed>
 {
     /// A vector of the value "0" in the element type.
     const ZERO: Self;
@@ -1344,6 +1349,155 @@ pub trait FloatVectorWithBits:
     /// Similar to [`total_order`](FloatVectorWithBits::total_order), but positive zero and negative zero are
     /// the same value. This can be used for calculating ULP differences by simply subtracting one from another.
     fn linear_order(self) -> Self::SignedBits;
+}
+
+#[rustfmt::skip]
+pub trait GenericVector2: GenericVector {
+    #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
+}
+
+#[rustfmt::skip]
+pub trait GenericVector3: GenericVector {
+    #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
+    #[inline(always)] fn z(&self) -> Self::Element { self.extract::<2>() }
+}
+
+#[rustfmt::skip]
+pub trait GenericVector4: GenericVector {
+    #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
+    #[inline(always)] fn z(&self) -> Self::Element { self.extract::<2>() }
+    #[inline(always)] fn w(&self) -> Self::Element { self.extract::<3>() }
+}
+
+impl<V: GenericVector<Lanes = typenum::U2>> GenericVector2 for V {}
+impl<V: GenericVector<Lanes = typenum::U3>> GenericVector3 for V {}
+impl<V: GenericVector<Lanes = typenum::U4>> GenericVector4 for V {}
+
+#[rustfmt::skip]
+macro_rules! impl_swizzle4 {
+    (@ x) => { 0 };
+    (@ y) => { 1 };
+    (@ z) => { 2 };
+    (@ w) => { 3 };
+
+    (IMPL $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
+        #[inline(always)]
+        fn [<$a $b $c $d>](self) -> Self {
+            struct Indices;
+
+            impl crate::swizzle::SwizzleIndices<typenum::U4> for Indices {
+                const INDICES: GenericArray<u32, typenum::U4> = {
+                    unsafe { $crate::generic_array::const_transmute::<_, GenericArray<u32, typenum::U4>>([
+                        impl_swizzle4!(@ $a),
+                        impl_swizzle4!(@ $b),
+                        impl_swizzle4!(@ $c),
+                        impl_swizzle4!(@ $d)
+                    ]) }
+                };
+            }
+
+            self.permute_const::<Indices>()
+        }
+    }};
+
+    (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
+        #[allow(missing_docs)]
+        $(#[$meta])* fn [<$a $b $c $d>](self) -> Self;
+    }};
+
+    ($( $(#[$meta:meta])* [$a:ident $b:ident $c:ident $d:ident]),*) => {
+        /// Only available for 4-lane vectors, this allows human-readable swizzle/permutations
+        /// of the vector.
+        pub trait Swizzle4: SwizzleVector<Lanes = typenum::U4> { $(impl_swizzle4!(DECL $(#[$meta])* $a $b $c $d);)* }
+
+        /// Implements 4-lane swizzling for vectors.
+        impl<V: SwizzleVector<Lanes = typenum::U4>> Swizzle4 for V {
+            $(impl_swizzle4!(IMPL $a $b $c $d);)*
+        }
+    }
+}
+
+#[rustfmt::skip]
+macro_rules! impl_swizzle3 {
+    (IMPL $a:ident $b:ident $c:ident) => {paste::paste! {
+        #[inline(always)]
+        fn [<$a $b $c>](self) -> Self {
+            struct Indices;
+
+            impl crate::swizzle::SwizzleIndices<typenum::U3> for Indices {
+                const INDICES: GenericArray<u32, typenum::U3> = {
+                    unsafe { $crate::generic_array::const_transmute::<_, GenericArray<u32, typenum::U3>>([
+                        impl_swizzle4!(@ $a),
+                        impl_swizzle4!(@ $b),
+                        impl_swizzle4!(@ $c)
+                    ]) }
+                };
+            }
+
+            self.permute_const::<Indices>()
+        }
+    }};
+
+    (DECL $(#[$meta:meta])* $a:ident $b:ident $c:ident) => {paste::paste! {
+        #[allow(missing_docs)]
+        $(#[$meta])* fn [<$a $b $c>](self) -> Self;
+    }};
+
+    ($( $(#[$meta:meta])* [$a:ident $b:ident $c:ident]),*) => {
+        /// Only available for "3-lane" (ignoring 4th lane) [`LinAlg3Register`] vectors,
+        /// this allows human-readable swizzle/permutations of the vector. Permutations
+        /// will ignore the 4th lane of the register, leaving it unchanged.
+        pub trait Swizzle3: SwizzleVector<Lanes = typenum::U3> { $(impl_swizzle3!(DECL $(#[$meta])* $a $b $c);)* }
+
+        /// Implements 3-lane swizzling for vectors support 3-lane linear algebra operations.
+        impl<V: SwizzleVector<Lanes = typenum::U3>> Swizzle3 for V {
+            $(impl_swizzle3!(IMPL $a $b $c);)*
+        }
+    }
+}
+
+impl_swizzle3! {
+    [x y z], [x x x], [x x y], [x x z], [x y x], [x y y], [x z x], [x z y], [x z z],
+    [y x x], [y x y], [y x z], [y y x], [y y y], [y y z], [y z x], [y z y], [y z z],
+    [z x x], [z x y], [z x z], [z y x], [z y y], [z y z], [z z x], [z z y], [z z z]
+}
+
+impl_swizzle4! {
+    [x y z w], [x x x x], [x x x y], [x x x z], [x x x w], [x x y x], [x x y y], [x x y z],
+    [x x y w], [x x z x], [x x z y], [x x z z], [x x z w], [x x w x], [x x w y], [x x w z],
+    [x x w w], [x y x x], [x y x y], [x y x z], [x y x w], [x y y x], [x y y y], [x y y z],
+    [x y y w], [x y z x], [x y z y], [x y z z], [x y w x], [x y w y], [x y w z], [x y w w],
+    [x z x x], [x z x y], [x z x z], [x z x w], [x z y x], [x z y y], [x z y z], [x z y w],
+    [x z z x], [x z z y], [x z z z], [x z z w], [x z w x], [x z w y], [x z w z], [x z w w],
+    [x w x x], [x w x y], [x w x z], [x w x w], [x w y x], [x w y y], [x w y z], [x w y w],
+    [x w z x], [x w z y], [x w z z], [x w z w], [x w w x], [x w w y], [x w w z], [x w w w],
+    [y x x x], [y x x y], [y x x z], [y x x w], [y x y x], [y x y y], [y x y z], [y x y w],
+    [y x z x], [y x z y], [y x z z], [y x z w], [y x w x], [y x w y], [y x w z], [y x w w],
+    [y y x x], [y y x y], [y y x z], [y y x w], [y y y x], [y y y y], [y y y z], [y y y w],
+    [y y z x], [y y z y], [y y z z], [y y z w], [y y w x], [y y w y], [y y w z], [y y w w],
+    [y z x x], [y z x y], [y z x z], [y z x w], [y z y x], [y z y y], [y z y z], [y z y w],
+    [y z z x], [y z z y], [y z z z], [y z z w], [y z w x], [y z w y], [y z w z], [y z w w],
+    [y w x x], [y w x y], [y w x z], [y w x w], [y w y x], [y w y y], [y w y z], [y w y w],
+    [y w z x], [y w z y], [y w z z], [y w z w], [y w w x], [y w w y], [y w w z], [y w w w],
+    [z x x x], [z x x y], [z x x z], [z x x w], [z x y x], [z x y y], [z x y z], [z x y w],
+    [z x z x], [z x z y], [z x z z], [z x z w], [z x w x], [z x w y], [z x w z], [z x w w],
+    [z y x x], [z y x y], [z y x z], [z y x w], [z y y x], [z y y y], [z y y z], [z y y w],
+    [z y z x], [z y z y], [z y z z], [z y z w], [z y w x], [z y w y], [z y w z], [z y w w],
+    [z z x x], [z z x y], [z z x z], [z z x w], [z z y x], [z z y y], [z z y z], [z z y w],
+    [z z z x], [z z z y], [z z z z], [z z z w], [z z w x], [z z w y], [z z w z], [z z w w],
+    [z w x x], [z w x y], [z w x z], [z w x w], [z w y x], [z w y y], [z w y z], [z w y w],
+    [z w z x], [z w z y], [z w z z], [z w z w], [z w w x], [z w w y], [z w w z], [z w w w],
+    [w x x x], [w x x y], [w x x z], [w x x w], [w x y x], [w x y y], [w x y z], [w x y w],
+    [w x z x], [w x z y], [w x z z], [w x z w], [w x w x], [w x w y], [w x w z], [w x w w],
+    [w y x x], [w y x y], [w y x z], [w y x w], [w y y x], [w y y y], [w y y z], [w y y w],
+    [w y z x], [w y z y], [w y z z], [w y z w], [w y w x], [w y w y], [w y w z], [w y w w],
+    [w z x x], [w z x y], [w z x z], [w z x w], [w z y x], [w z y y], [w z y z], [w z y w],
+    [w z z x], [w z z y], [w z z z], [w z z w], [w z w x], [w z w y], [w z w z], [w z w w],
+    [w w x x], [w w x y], [w w x z], [w w x w], [w w y x], [w w y y], [w w y z], [w w y w],
+    [w w z x], [w w z y], [w w z z], [w w z w], [w w w x], [w w w y], [w w w z], [w w w w]
 }
 
 /// Vector suitable for 3D linear algebra operations.
