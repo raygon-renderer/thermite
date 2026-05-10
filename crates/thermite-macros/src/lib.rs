@@ -49,6 +49,78 @@ fn skip_or_conditional_trait(method: &mut syn::TraitItemFn) -> (bool, bool) {
     (skip, conditional)
 }
 
+/// Derives `thermite::simd::HasIsa` by forwarding the `ISA` constant from a generic parameter.
+///
+/// By default the first type parameter is used as the source. Use `#[isa = S]` to pick a
+/// different one. When the `thermite` crate is renamed, use `#[thermite = "other"]` to
+/// refer to the correct crate name instead of the default external `::thermite` path.
+///
+/// # Example
+/// ```ignore
+/// #[derive(HasIsa)]
+/// struct MyType<S: Simd, T> { ... }           // forwards from S
+///
+/// #[derive(HasIsa)]
+/// #[isa = T]
+/// struct MyType<S, T: Simd> { ... }           // forwards from T
+///
+/// // When the `thermite` crate is renamed to something else:
+/// #[derive(HasIsa)]
+/// #[thermite = "other"]
+/// struct Inner<S: Simd> { ... }
+/// ```
+#[proc_macro_derive(HasIsa, attributes(isa, thermite))]
+pub fn derive_has_isa(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as syn::DeriveInput);
+
+    let mut krate: Option<syn::Path> = None;
+    let mut explicit_param: Option<Ident> = None;
+
+    for attr in &input.attrs {
+        let path = attr.path();
+
+        if path.is_ident("thermite") {
+            if let Ok(lit) = attr.parse_args::<syn::LitStr>() {
+                krate = lit.parse().ok();
+            }
+        } else if path.is_ident("isa") {
+            explicit_param = attr.parse_args::<Ident>().ok();
+        }
+    }
+
+    let krate: syn::Path = krate.unwrap_or_else(|| syn::parse_quote!(::thermite));
+
+    // Resolve which type parameter to forward from.
+    let isa_param: Ident = match explicit_param {
+        Some(ident) => ident,
+        None => {
+            let first = input.generics.type_params().next();
+            match first {
+                Some(tp) => tp.ident.clone(),
+                None => {
+                    return syn::Error::new_spanned(
+                        &input.ident,
+                        "#[derive(HasIsa)] requires at least one type parameter, \
+                         or an explicit `#[isa = S]` attribute",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            }
+        }
+    };
+
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics #krate::simd::HasIsa for #name #ty_generics #where_clause {
+            const ISA: #krate::isa::InstructionSet = <#isa_param as #krate::simd::HasIsa>::ISA;
+        }
+    }
+    .into()
+}
+
 #[proc_macro_attribute]
 pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut trait_def = parse_macro_input!(item as ItemTrait);
@@ -464,9 +536,11 @@ pub fn reduced_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn inline_always(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut impl_block = parse_macro_input!(item as ItemImpl);
 
+    let inline_always: syn::Attribute = parse_quote!(#[inline(always)]);
+
     for item in &mut impl_block.items {
         let ImplItem::Fn(method) = item else { continue };
-        method.attrs.push(parse_quote!(#[inline(always)]));
+        method.attrs.push(inline_always.clone());
     }
 
     impl_block.into_token_stream().into()

@@ -22,8 +22,21 @@
     feature(asm_experimental_arch)
 )]
 #![cfg_attr(feature = "nightly", allow(internal_features))]
+// generic_const_exprs is too unstable — causes "overly complex generic constant" errors
+// throughout the codebase when enabled. Commented out until the feature matures.
+// #![cfg_attr(feature = "nightly", feature(generic_const_exprs))]
+// #![cfg_attr(feature = "nightly", allow(incomplete_features))]
 // Enable wasm64 simd on nightly
 #![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
+// Scalar WASM float intrinsics (f32_sqrt, f32_floor, etc.) — still unstable
+#![cfg_attr(
+    all(
+        feature = "nightly",
+        feature = "wasm",
+        any(target_arch = "wasm32", target_arch = "wasm64")
+    ),
+    feature(wasm_numeric_instr)
+)]
 #![cfg_attr(all(feature = "nightly", feature = "std_simd"), feature(portable_simd))]
 
 #[cfg(feature = "nightly")]
@@ -38,6 +51,7 @@ pub extern crate const_default;
 pub extern crate generic_array;
 
 pub use thermite_dispatch::{dispatch, dispatch_dyn};
+pub use thermite_macros::HasIsa;
 
 /// Creates a shuffle mask for various instructions. Note
 /// that the order of the arguments is reversed from the
@@ -121,9 +135,10 @@ pub mod prelude {
         },
         vector::{
             BitCastVector, BitshiftVector, BitwiseVector, CastVector, ConcatVector, ExtendVector, FloatVector,
-            FloatVectorWithBits, GenericVector, IndexableVector, IntegerVector, Interleave, LinAlg3Vector,
-            LinAlg4Vector, NumericVector, PartialOrdVector, SignedIntegerVector, SignedVector, SplatConst,
-            SwizzleVector, UnsignedIntegerVector, VectorIndices,
+            FloatVectorWithBits, GenericVector, GenericVector2 as _, GenericVector3 as _, GenericVector4 as _,
+            IndexableVector, IntegerVector, Interleave, LinAlg3Vector, LinAlg4Vector, NumericVector, PartialOrdVector,
+            SignedIntegerVector, SignedVector, SplatConst, Swizzle3 as _, Swizzle4 as _, SwizzleVector,
+            UnsignedIntegerVector, VectorIndices,
         },
     };
 }
@@ -171,21 +186,21 @@ cfg_if::cfg_if! {
         #[inline(always)] pub fn likely(b: bool) -> bool { b }
         #[inline(always)] pub fn unlikely(b: bool) -> bool { b }
     } else {
-// borrows technique from https://github.com/rust-lang/hashbrown/pull/209
-#[inline]
-#[cold]
-fn cold() {}
+        // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
+        #[inline]
+        #[cold]
+        fn cold() {}
 
-#[rustfmt::skip]
-#[inline(always)]
-pub fn likely(b: bool) -> bool {
-    if !b { cold() } b
-}
+        #[rustfmt::skip]
+        #[inline(always)]
+        pub fn likely(b: bool) -> bool {
+            if !b { cold() } b
+        }
 
-#[rustfmt::skip]
-#[inline(always)]
-pub fn unlikely(b: bool) -> bool {
-    if b { cold() } b
+        #[rustfmt::skip]
+        #[inline(always)]
+        pub fn unlikely(b: bool) -> bool {
+            if b { cold() } b
         }
     }
 }
