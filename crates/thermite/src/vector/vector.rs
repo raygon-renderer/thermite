@@ -16,7 +16,7 @@ use crate::{
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
         SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
@@ -177,15 +177,33 @@ impl<R: Register> crate::simd::HasIsa for Vector<R> {
     const ISA: InstructionSet = R::ISA;
 }
 
-impl<T, R: Register> SplatVectorValue<T, Vector<R>> for Vector<R>
+#[doc(hidden)]
+pub struct SplatVectorImpl;
+#[doc(hidden)]
+pub struct NewVectorImpl;
+
+impl<T, R: Register> VectorValue<T, Vector<R>> for SplatVectorImpl
 where
     T: SplatConst<R::Element>,
 {
     const VALUE: Vector<R> = const { Vector(register::reg_splat::<R>(T::VALUE)) };
 }
 
+impl<T, R: Register> VectorValue<T, Vector<R>> for NewVectorImpl
+where
+    T: NewConst<R::Element, R::Lanes>,
+{
+    const VALUE: Vector<R> = const {
+        Vector(<<R as NewRegister<R::Element, R::Lanes, Storage<R>>>::New<T> as VectorValue<T, Storage<R>>>::VALUE)
+    };
+}
+
 impl<R: Register> SplatVector<R::Element> for Vector<R> {
-    type Splat<T: SplatConst<R::Element>> = Self;
+    type Splat<T: SplatConst<R::Element>> = SplatVectorImpl;
+}
+
+impl<R: Register> NewVector<R::Element, R::Lanes> for Vector<R> {
+    type New<T: NewConst<R::Element, R::Lanes>> = NewVectorImpl;
 }
 
 #[thermite_macros::inline_always]

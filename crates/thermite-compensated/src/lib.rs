@@ -5,7 +5,7 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 
 use num_traits::{NumAssignOps, NumOps};
 use thermite::element::SignedElement;
-use thermite::vector::{SplatVector, SplatVectorValue};
+use thermite::vector::{NewConst, NewVector, SplatVector, VectorValue};
 use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
@@ -54,7 +54,7 @@ pub trait ScalarValue:
     /// Each concrete impl can choose the precision strategy: `f32` uses a `f64` intermediate
     /// to capture the rounding error in the error term; `f64` stores zero error (would need
     /// `f128` for better); `Vector<R>` delegates to the inner element and splats via
-    /// `SplatVectorValue`.
+    /// `VectorValue`.
     type CompensatedConstInt<const N: LargeInt>: SplatConst<Compensated<Self>>;
 
     /// Marker type for splatting a compile-time rational constant `N/D` as `Compensated<Self>`.
@@ -351,16 +351,81 @@ impl<const N: LargeInt, const D: LargeInt> SplatConst<Compensated<f64>> for F64C
 }
 
 // --- Vector: lifts a scalar SplatConst<Compensated<V::Element>> to SplatConst<Compensated<V>> ---
-// Delegates to the existing SplatVectorValue impl which splats value and error independently.
+// Delegates to the existing VectorValue impl which splats value and error independently.
 
 pub struct CompensatedVectorConst<Inner>(PhantomData<Inner>);
+
+// --- New (per-lane values) support for Compensated<V> ---
+
+pub struct CompensatedNewImpl;
+
+struct CompensatedValueConst<C, V>(PhantomData<(C, V)>);
+struct CompensatedErrorConst<C, V>(PhantomData<(C, V)>);
+
+impl<C, V: CompensatedFloatVector> NewConst<V::Element, V::Lanes> for CompensatedValueConst<C, V>
+where
+    C: NewConst<Compensated<V::Element>, V::Lanes>,
+{
+    const VALUES: thermite::generic_array::GenericArray<V::Element, V::Lanes> = const {
+        let c_vals = C::VALUES;
+        let src = c_vals.as_slice();
+        let mut out: thermite::generic_array::GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
+        let dst = out.as_mut_slice();
+        let mut i = 0;
+        while i < V::LANES {
+            dst[i] = src[i].value;
+            i += 1;
+        }
+        core::mem::forget(c_vals);
+        out
+    };
+}
+
+impl<C, V: CompensatedFloatVector> NewConst<V::Element, V::Lanes> for CompensatedErrorConst<C, V>
+where
+    C: NewConst<Compensated<V::Element>, V::Lanes>,
+{
+    const VALUES: thermite::generic_array::GenericArray<V::Element, V::Lanes> = const {
+        let c_vals = C::VALUES;
+        let src = c_vals.as_slice();
+        let mut out: thermite::generic_array::GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
+        let dst = out.as_mut_slice();
+        let mut i = 0;
+        while i < V::LANES {
+            dst[i] = src[i].error;
+            i += 1;
+        }
+        core::mem::forget(c_vals);
+        out
+    };
+}
+
+impl<T, V: CompensatedFloatVector> VectorValue<T, Compensated<V>> for CompensatedNewImpl
+where
+    T: NewConst<Compensated<V::Element>, V::Lanes>,
+{
+    const VALUE: Compensated<V> = Compensated {
+        value: <<V as NewVector<V::Element, V::Lanes>>::New<CompensatedValueConst<T, V>> as VectorValue<
+            CompensatedValueConst<T, V>,
+            V,
+        >>::VALUE,
+        error: <<V as NewVector<V::Element, V::Lanes>>::New<CompensatedErrorConst<T, V>> as VectorValue<
+            CompensatedErrorConst<T, V>,
+            V,
+        >>::VALUE,
+    };
+}
+
+impl<V: CompensatedFloatVector> NewVector<Compensated<V::Element>, V::Lanes> for Compensated<V> {
+    type New<T: NewConst<Compensated<V::Element>, V::Lanes>> = CompensatedNewImpl;
+}
 
 impl<V, Inner> SplatConst<Compensated<V>> for CompensatedVectorConst<Inner>
 where
     V: CompensatedFloatVector,
     Inner: SplatConst<Compensated<V::Element>>,
 {
-    const VALUE: Compensated<V> = <Compensated<V> as SplatVectorValue<Inner, Compensated<V>>>::VALUE;
+    const VALUE: Compensated<V> = <Compensated<V> as VectorValue<Inner, Compensated<V>>>::VALUE;
 }
 
 #[rustfmt::skip]
@@ -1039,7 +1104,7 @@ impl<V: CompensatedFloatVector> SplatVector<Compensated<V::Element>> for Compens
 }
 
 #[rustfmt::skip]
-impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatVectorValue<E, Compensated<V>> for Compensated<V> {
+impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> VectorValue<E, Compensated<V>> for Compensated<V> {
     const VALUE: Compensated<V> = const {
         struct Value<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>>(core::marker::PhantomData<(V, E)>);
         struct Error<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>>(core::marker::PhantomData<(V, E)>);
@@ -1053,8 +1118,8 @@ impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> SplatVec
         }
 
         Compensated {
-            value: thermite::vector::splat::<V, Value<V, E>>(),
-            error: thermite::vector::splat::<V, Error<V, E>>(),
+            value: thermite::vector::const_splat::<V, Value<V, E>>(),
+            error: thermite::vector::const_splat::<V, Error<V, E>>(),
         }
     };
 }
@@ -1098,11 +1163,15 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
 
     type Mask = V::Mask;
 
-    fn new<const N:usize>(value: [Self::Element; N]) -> Self
+    #[inline(always)]
+    fn new<const N: usize>(value: [Self::Element; N]) -> Self
     where
-        thermite::generic_array::typenum::Const<N> :thermite::generic_array::IntoArrayLength<ArrayLength = Self::Lanes>
+        thermite::generic_array::typenum::Const<N>: thermite::generic_array::IntoArrayLength<ArrayLength = Self::Lanes>
     {
-        todo!()
+        Compensated {
+            value: V::new(value.map(|c| c.value)),
+            error: V::new(value.map(|c| c.error)),
+        }
     }
 
     #[inline(always)]

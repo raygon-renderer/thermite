@@ -21,7 +21,9 @@ use crate::{
 };
 
 mod num;
-mod splat;
+
+#[doc(hidden)]
+pub mod splat;
 
 #[allow(clippy::module_inception)]
 mod vector;
@@ -31,7 +33,7 @@ pub mod streaming;
 pub mod unaligned;
 
 pub use self::num::NumVector;
-pub use self::splat::{SplatConst, SplatVector, SplatVectorValue, splat};
+pub use self::splat::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 pub use self::vector::Vector;
 
 pub trait MaskInteroperable<A, B>: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
@@ -252,7 +254,7 @@ pub trait Interleave: Sized {
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + const_default::ConstDefault
-    + SplatVector<Self::Element>
+    + SplatVector<Self::Element> + NewVector<Self::Element, Self::Lanes>
     + GenericSelectable<SelectableMask = Self::Mask>
     + crate::simd::HasIsa
     + CastVector<Self>

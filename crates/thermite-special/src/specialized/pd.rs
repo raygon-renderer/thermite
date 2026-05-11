@@ -58,14 +58,14 @@ where
         // p·(1 + p·(-1/3 + p·11/72))
         let puiseux_numer = p * p.mul_adde(
             p.mul_adde(
-                thermite::generic_splat!(f64: 11.0 / 72.0),
-                thermite::generic_splat!(f64: -1.0 / 3.0),
+                thermite::const_splat!(f64: 11.0 / 72.0),
+                thermite::const_splat!(f64: -1.0 / 3.0),
             ),
             Self::ONE,
         );
 
         // 1 + K·p₀·p
-        let puiseux_denom = p0.mul_adde(p * thermite::generic_splat!(f64: 0.12991546098765432), Self::ONE);
+        let puiseux_denom = p0.mul_adde(p * thermite::const_splat!(f64: 0.12991546098765432), Self::ONE);
 
         let puiseux = puiseux_numer / puiseux_denom;
 
@@ -302,7 +302,7 @@ where
         let w = -a.nmul_adde(a, V::ONE).ln_p::<P>();
 
         // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - thermite::generic_splat!(f64: 2.5)).poly_rev_p::<P, _>(&[
+        let mut p0 = (w - thermite::const_splat!(f64: 2.5)).poly_rev_p::<P, _>(&[
             -3.605158594283844e-12,
             -1.1526825105953649e-11,
             4.340759057762667e-10,
@@ -319,10 +319,10 @@ where
             1.501409350414994,
         ]);
 
-        let w_big = w.cmp_ge(thermite::generic_splat!(f64: 5.0)); // at around |x| > 0.99662533231, so unlikely
+        let w_big = w.cmp_ge(thermite::const_splat!(f64: 5.0)); // at around |x| > 0.99662533231, so unlikely
 
         if P::POLICY.avoid_branching || thermite::unlikely(w_big.any()) {
-            let mut p1 = (w.sqrt() - thermite::generic_splat!(f64: 3.0)).poly_rev_p::<P, _>(&[
+            let mut p1 = (w.sqrt() - thermite::const_splat!(f64: 3.0)).poly_rev_p::<P, _>(&[
                 -0.0000023620166848468398,
                 -0.00007449590390143766,
                 -0.0010722580888930223,
@@ -410,23 +410,23 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
     // LLVM will still start on exp and interleave it with the below operations.
     let e = (-x2).exp_p::<P>();
 
-    let a0: V = thermite::generic_splat!(f64: 0.56418958354775629);
-    let a1 = x + thermite::generic_splat!(f64: 2.06955023132914151);
+    let a0: V = thermite::const_splat!(f64: 0.56418958354775629);
+    let a1 = x + thermite::const_splat!(f64: 2.06955023132914151);
 
-    let b0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 2.71078540045147805), thermite::generic_splat!(f64: 5.80755613130301624));
-    let b1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.47954057099518960), thermite::generic_splat!(f64: 12.06166887286239555));
+    let b0 = x2 + x.mul_adde(thermite::const_splat!(f64: 2.71078540045147805), thermite::const_splat!(f64: 5.80755613130301624));
+    let b1 = x2 + x.mul_adde(thermite::const_splat!(f64: 3.47954057099518960), thermite::const_splat!(f64: 12.06166887286239555));
 
-    let c0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.47469513777439592), thermite::generic_splat!(f64: 12.07402036406381411));
-    let c1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.72068443960225092), thermite::generic_splat!(f64: 8.44319781003968454));
+    let c0 = x2 + x.mul_adde(thermite::const_splat!(f64: 3.47469513777439592), thermite::const_splat!(f64: 12.07402036406381411));
+    let c1 = x2 + x.mul_adde(thermite::const_splat!(f64: 3.72068443960225092), thermite::const_splat!(f64: 8.44319781003968454));
 
-    let d0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.00561509202259545), thermite::generic_splat!(f64: 9.30596659485887898));
-    let d1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 3.90225704029924078), thermite::generic_splat!(f64: 6.36161630953880464));
+    let d0 = x2 + x.mul_adde(thermite::const_splat!(f64: 4.00561509202259545), thermite::const_splat!(f64: 9.30596659485887898));
+    let d1 = x2 + x.mul_adde(thermite::const_splat!(f64: 3.90225704029924078), thermite::const_splat!(f64: 6.36161630953880464));
 
-    let e0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 5.16722705817812584), thermite::generic_splat!(f64: 9.12661617673673262));
-    let e1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.03296893109262491), thermite::generic_splat!(f64: 5.13578530585681539));
+    let e0 = x2 + x.mul_adde(thermite::const_splat!(f64: 5.16722705817812584), thermite::const_splat!(f64: 9.12661617673673262));
+    let e1 = x2 + x.mul_adde(thermite::const_splat!(f64: 4.03296893109262491), thermite::const_splat!(f64: 5.13578530585681539));
 
-    let f0 = x2 + x.mul_adde(thermite::generic_splat!(f64: 5.95908795446633271), thermite::generic_splat!(f64: 9.19435612886969243));
-    let f1 = x2 + x.mul_adde(thermite::generic_splat!(f64: 4.11240942957450885), thermite::generic_splat!(f64: 4.48640329523408675));
+    let f0 = x2 + x.mul_adde(thermite::const_splat!(f64: 5.95908795446633271), thermite::const_splat!(f64: 9.19435612886969243));
+    let f1 = x2 + x.mul_adde(thermite::const_splat!(f64: 4.11240942957450885), thermite::const_splat!(f64: 4.48640329523408675));
 
     let m = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
         // independent divisions yield slightly improved accuracy,

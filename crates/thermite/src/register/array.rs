@@ -242,6 +242,52 @@ where
     }
 }
 
+impl<R: Register, const N: usize> NewRegister<R::Element, Prod<typenum::U<N>, R::Lanes>, Self> for ArrayRegister<R, N>
+where
+    Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
+{
+    type New<C: NewConst<R::Element, Prod<typenum::U<N>, R::Lanes>>> = ArrayNewConst<R, C, N>;
+}
+
+#[doc(hidden)]
+pub struct ArrayNewConst<R, C, const N: usize>(PhantomData<[(R, C); N]>);
+
+impl<C, R: Register, const N: usize> crate::vector::VectorValue<C, ArrayRegister<R, N>> for ArrayNewConst<R, C, N>
+where
+    C: NewConst<R::Element, <ArrayRegister<R, N> as CoreRegister>::Lanes>,
+    Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
+{
+    const VALUE: Storage<ArrayRegister<R, N>> = {
+        let arr = C::VALUES;
+        let a = arr.as_slice();
+        let mut res = [R::EMPTY; N];
+
+        // NOTE: We can't assume much about the layout of Storage<R>,
+        // other than it'll contain at R::Lanes of elements. In practice we could
+        // just transmute the entire thing, but we should remain somewhat vigilant.
+        let mut i = 0;
+        while i < N {
+            let mut j = 0;
+
+            let ptr = &raw mut res[i] as *mut R::Element;
+
+            while j < <R::Lanes as Unsigned>::USIZE {
+                let k = i * <R::Lanes as Unsigned>::USIZE + j;
+
+                unsafe { ptr.add(j).write(a[k]) };
+
+                j += 1;
+            }
+
+            i += 1;
+        }
+
+        core::mem::forget(arr);
+
+        ArrayRegister(res)
+    };
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: Register, const N: usize> Register for ArrayRegister<R, N>
 where

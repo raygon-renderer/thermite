@@ -3,8 +3,13 @@
 use core::{marker::PhantomData, ops::Sub};
 
 use crate::{
-    BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet, math::policy::Policy,
-    register::InterleaveRegister, swizzle::SwizzleIndices,
+    BranchfreeDivider, Divider,
+    divider::vector::VectorDivider,
+    isa::InstructionSet,
+    math::policy::Policy,
+    register::{InterleaveRegister, NewRegister},
+    swizzle::SwizzleIndices,
+    vector::NewConst,
 };
 
 use super::{
@@ -226,6 +231,56 @@ where
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         todo!()
     }
+}
+
+impl<R: Register, N: Unsigned> NewRegister<R::Element, <Self as CoreRegister>::Lanes, Storage<Self>>
+    for ReducedRegister<R, N>
+where
+    R: CoreReducible<N>,
+{
+    type New<C: NewConst<R::Element, <Self as CoreRegister>::Lanes>> = ReducedNewConst<C, R, N>;
+}
+
+#[doc(hidden)]
+pub struct ReducedNewConst<C, R, N>(PhantomData<(C, R, N)>);
+
+struct ReducedPaddedConst<C, R, N>(PhantomData<(C, R, N)>);
+
+impl<C, R: Register, N: Unsigned> NewConst<R::Element, R::Lanes> for ReducedPaddedConst<C, R, N>
+where
+    R: CoreReducible<N>,
+    C: NewConst<R::Element, <ReducedRegister<R, N> as CoreRegister>::Lanes>,
+{
+    const VALUES: GenericArray<R::Element, R::Lanes> = const {
+        let mut values: GenericArray<R::Element, R::Lanes> = unsafe { core::mem::zeroed() };
+        let c_values = C::VALUES;
+        let src = c_values.as_slice();
+        let dst = values.as_mut_slice();
+
+        let mut i = 0;
+        while i < <ReducedRegister<R, N> as CoreRegister>::Lanes::USIZE {
+            dst[i] = src[i];
+            i += 1;
+        }
+
+        core::mem::forget(c_values);
+        values
+    };
+}
+
+impl<C, R: Register, N: Unsigned> crate::vector::VectorValue<C, Storage<ReducedRegister<R, N>>>
+    for ReducedNewConst<C, R, N>
+where
+    R: CoreReducible<N>,
+    C: NewConst<R::Element, <ReducedRegister<R, N> as CoreRegister>::Lanes>,
+{
+    const VALUE: Storage<ReducedRegister<R, N>> = {
+        ReducedRegister(
+            <<R as NewRegister<R::Element, R::Lanes, Storage<R>>>::New<ReducedPaddedConst<C, R, N>>
+                as crate::vector::VectorValue<ReducedPaddedConst<C, R, N>, Storage<R>>>::VALUE,
+            PhantomData,
+        )
+    };
 }
 
 #[rustfmt::skip]

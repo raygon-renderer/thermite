@@ -73,3 +73,28 @@ macro_rules! impl_concat_bool_register2 {
         };
     };
 }
+
+macro_rules! impl_newregister {
+    ($($r:ty),*) => {$(
+        impl $crate::register::NewRegister<
+            <$r as $crate::register::Register>::Element,
+            <$r as $crate::register::CoreRegister>::Lanes,
+            <$r as $crate::register::CoreRegister>::Storage
+        > for $r {
+            type New<T: $crate::vector::splat::NewConst<
+                <$r as $crate::register::Register>::Element,
+                <$r as $crate::register::CoreRegister>::Lanes>
+            > = Self;
+        }
+
+        impl<T> $crate::vector::splat::VectorValue<T, Storage<Self>> for $r
+        where
+            T: $crate::vector::splat::NewConst<
+                <$r as $crate::register::Register>::Element,
+                <$r as $crate::register::CoreRegister>::Lanes
+            >,
+        {
+            const VALUE: Storage<Self> = const { unsafe { $crate::generic_array::const_transmute(T::VALUES) } };
+        }
+    )*};
+}

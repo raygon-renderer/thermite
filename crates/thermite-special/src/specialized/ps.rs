@@ -76,14 +76,14 @@ where
         // p·(1 + p·(-1/3 + p·11/72))
         let puiseux_numer = p * p.mul_adde(
             p.mul_adde(
-                thermite::generic_splat!(f32: 11.0 / 72.0),
-                thermite::generic_splat!(f32: -1.0 / 3.0),
+                thermite::const_splat!(f32: 11.0 / 72.0),
+                thermite::const_splat!(f32: -1.0 / 3.0),
             ),
             Self::ONE,
         );
 
         // 1 + K·p₀·p
-        let puiseux_denom = p0.mul_adde(p * thermite::generic_splat!(f32: 0.12991546098765432), Self::ONE);
+        let puiseux_denom = p0.mul_adde(p * thermite::const_splat!(f32: 0.12991546098765432), Self::ONE);
 
         let puiseux = puiseux_numer / puiseux_denom;
 
@@ -115,12 +115,12 @@ where
         let wm1_asymptotic = lnx - (-lnx).ln_p::<Approx<P>>();
 
         // Select initial guesses
-        let near_branch = x.cmp_lt(thermite::generic_splat!(f32: -0.1));
+        let near_branch = x.cmp_lt(thermite::const_splat!(f32: -0.1));
         let large = x.cmp_gt(Self::E);
 
         let mut w0 = near_branch.select(w0_branch, large.select(w0_asymptotic, w0_mid));
 
-        let near_branch_m1 = x.cmp_lt(thermite::generic_splat!(f32: -0.25));
+        let near_branch_m1 = x.cmp_lt(thermite::const_splat!(f32: -0.25));
         let mut wm1 = near_branch_m1.select(wm1_branch, wm1_asymptotic);
 
         // --- Interleaved Halley iterations ---
@@ -625,9 +625,9 @@ where
     let z = x.reciprocal_p::<P>();
     let z2 = z * z;
 
-    let m8 = ix.cmp_ge(thermite::generic_splat!(u32: 0x41000000)); // |x| >= 8.0
-    let m5 = ix.cmp_ge(thermite::generic_splat!(u32: 0x409173eb)); // |x| >= 4.5454
-    let m3 = ix.cmp_ge(thermite::generic_splat!(u32: 0x4036d917)); // |x| >= 2.8571
+    let m8 = ix.cmp_ge(thermite::const_splat!(u32: 0x41000000)); // |x| >= 8.0
+    let m5 = ix.cmp_ge(thermite::const_splat!(u32: 0x409173eb)); // |x| >= 4.5454
+    let m3 = ix.cmp_ge(thermite::const_splat!(u32: 0x4036d917)); // |x| >= 2.8571
 
     // Evaluate numerators and denominators for all 4 regions independently,
     // then select before dividing once.
@@ -660,7 +660,7 @@ where
     let mut pzero = V::ONE + pn / pd.mul_adde(z2, V::ONE);
     let mut qzero = qn / qd.mul_adde(z2, V::ONE);
 
-    let neg_eighth: V = thermite::generic_splat!(f32: -0.125);
+    let neg_eighth: V = thermite::const_splat!(f32: -0.125);
 
     if const { V::HAS_TRUE_FMA } {
         // z*-1/8 can be computed earlier,
@@ -682,7 +682,7 @@ where
 {
     let ax = x.abs().flush_denormals_p::<P>();
     let ix: V::Bits = ax.into_bits();
-    let large = ix.cmp_ge(thermite::generic_splat!(u32: 0x40000000)); // |x| >= 2.0
+    let large = ix.cmp_ge(thermite::const_splat!(u32: 0x40000000)); // |x| >= 2.0
 
     // ========================================================
     // Small-x path: |x| < 2
@@ -753,7 +753,7 @@ where
         y = large.select(yl, y);
 
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let very_large = ix.cmp_ge(thermite::generic_splat!(u32: 0x7f800000));
+            let very_large = ix.cmp_ge(thermite::const_splat!(u32: 0x7f800000));
 
             y = very_large.select(ax.square().reciprocal_p::<P>(), y);
         }
@@ -771,15 +771,15 @@ where
     fn erfinv<P: Policy>(self) -> Self {
         // (-1, 1) range
         let x = self.flush_denormals_p::<P>().clamp(
-            thermite::generic_splat!(f32: -0.99999),
-            thermite::generic_splat!(f32: 0.99999),
+            thermite::const_splat!(f32: -0.99999),
+            thermite::const_splat!(f32: 0.99999),
         );
 
         let w = -x.nmul_adde(x, V::ONE).ln_p::<P>();
 
-        let ge5 = w.cmp_ge(thermite::generic_splat!(f32: 5.0));
+        let ge5 = w.cmp_ge(thermite::const_splat!(f32: 5.0));
 
-        let w0 = w - thermite::generic_splat!(f32: 2.5);
+        let w0 = w - thermite::const_splat!(f32: 2.5);
         let mut p0 = w0.poly_rev_p::<P, _>(&[
             2.81022636e-08,
             3.43273939e-07,
@@ -793,7 +793,7 @@ where
         ]);
 
         if const { P::POLICY.avoid_branching } || thermite::unlikely(ge5.any()) {
-            let w1 = w.sqrt() - thermite::generic_splat!(f32: 3.0);
+            let w1 = w.sqrt() - thermite::const_splat!(f32: 3.0);
             let p1 = w1.poly_rev_p::<P, _>(&[
                 -0.000200214257,
                 0.000100950558,
@@ -851,7 +851,7 @@ where
         ];
 
         let p = self.min(V::ONE - self); // reflect to (0, 0.5]
-        let is_tail = p.cmp_lt(thermite::generic_splat!(f32: 0.02425)); // lower tail if p < 0.02425, upper tail if p > 0.97575
+        let is_tail = p.cmp_lt(thermite::const_splat!(f32: 0.02425)); // lower tail if p < 0.02425, upper tail if p > 0.97575
 
         let q = p - V::HALF;
         let mut y = q * (q * q).poly_rational_p::<P, _, _>(&A, &B);
@@ -1012,7 +1012,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         // the polynomials below are sensitive to large inputs, so we need to clamp x to avoid exploding into inf/nan,
         // and erf(x) is saturating to 1.0 around x=3.81, so 4.5 is a safe clamping point that won't cause significant precision
         // loss for large inputs, but will prevent overflow in the polynomial evaluation.
-        let x = x.min(thermite::generic_splat!(f32: 4.5));
+        let x = x.min(thermite::const_splat!(f32: 4.5));
 
         // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
         // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
@@ -1078,8 +1078,8 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         let exp_neg_x2 = (-x2).exp_p::<P>();
 
         // Improved A&S method from Wikipedia, max error ~2e-9
-        let p1: V = thermite::generic_splat!(f32: 0.406742016006509);
-        let p2: V = thermite::generic_splat!(f32: 0.0072279182302319);
+        let p1: V = thermite::const_splat!(f32: 0.406742016006509);
+        let p2: V = thermite::const_splat!(f32: 0.0072279182302319);
 
         let t = x.mul_adde(x.mul_adde(p2, p1), V::ONE).reciprocal_p::<P>();
 
@@ -1142,11 +1142,11 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                     let z: V = {
                         // Bit-split: zero low 13 mantissa bits so z*z is exact in f32.
                         let mut ix: V::Bits = x.into_bits();
-                        ix &= thermite::generic_splat!(u32: 0xffffe000);
+                        ix &= thermite::const_splat!(u32: 0xffffe000);
                         ix.into_bits()
                     };
 
-                    let a = (-z * z - thermite::generic_splat!(f32: 0.5625)).exp_p::<CheckOverflow<P, false>>();
+                    let a = (-z * z - thermite::const_splat!(f32: 0.5625)).exp_p::<CheckOverflow<P, false>>();
                     let b = ((z - x) * (z + x) + r / b).exp_p::<CheckOverflow<P, false>>() / x;
 
                     a * b
@@ -1154,8 +1154,8 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                     // fast minimax approximation with a 68 ULP max difference, avg 0.282 ULP
                     exp_neg_x2
                         * s.mul_adde(
-                            thermite::generic_splat!(f32: 9.0 / 4.0),
-                            thermite::generic_splat!(f32: -5.0 / 4.0),
+                            thermite::const_splat!(f32: 9.0 / 4.0),
+                            thermite::const_splat!(f32: -5.0 / 4.0),
                         )
                         .poly_rev_p::<P, _>(&[
                             -1.5849000192247331142425537109375e-5,

@@ -61,7 +61,7 @@ use crate::{
     element::{FloatElementWithBits, IntegerElement},
     isa::InstructionSet,
     math::policy::Policy,
-    vector::ops::MulAddExt,
+    vector::{NewConst, ops::MulAddExt},
 };
 
 #[inline(always)]
@@ -400,10 +400,15 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
     }
 }
 
+pub trait NewRegister<E, N, S> {
+    type New<C: NewConst<E, N>>: crate::vector::VectorValue<C, S>;
+}
+
 /// SIMD Register trait where each Element implements the [`Element`] trait.
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait Register:
     BitwiseRegister + InterleaveRegister +
+    NewRegister<Self::Element, Self::Lanes, Storage<Self>> +
     CastRegister<Self> + BitCastRegister<Self> + MaskInteroperable<Self::Signed, Self::Unsigned>
 {
     type Element: Element;

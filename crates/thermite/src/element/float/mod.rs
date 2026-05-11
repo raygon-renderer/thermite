@@ -9,13 +9,13 @@ pub mod ph;
 /// Marker type for a compile-time integer constant cast to a float element type.
 ///
 /// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
-/// [`generic_splat!`](crate::generic_splat) and [`FloatElement::IntSplat`].
+/// [`const_splat!`](crate::const_splat) and [`FloatElement::IntSplat`].
 pub struct IntConst<const N: crate::LargeInt>;
 
 /// Marker type for a compile-time rational constant (N/D) cast to a float element type.
 ///
 /// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
-/// [`generic_splat!`](crate::generic_splat) and [`FloatElement::RatioSplat`].
+/// [`const_splat!`](crate::const_splat) and [`FloatElement::RatioSplat`].
 pub struct RatioConst<const N: crate::LargeInt, const D: crate::LargeInt>;
 
 impl<const N: crate::LargeInt> SplatConst<f32> for IntConst<N> {
@@ -56,13 +56,13 @@ pub trait FloatElement:
     /// Marker type for splatting a compile-time integer constant as this float type.
     ///
     /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
-    /// [`generic_splat!`](crate::generic_splat).
+    /// [`const_splat!`](crate::const_splat).
     type ConstInt<const N: crate::LargeInt>: SplatConst<Self>;
 
     /// Marker type for splatting a compile-time rational constant (N/D) as this float type.
     ///
     /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
-    /// [`generic_splat!`](crate::generic_splat).
+    /// [`const_splat!`](crate::const_splat).
     type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt>: SplatConst<Self>;
 
     /// Try to represent this LargeInt value as this float type,

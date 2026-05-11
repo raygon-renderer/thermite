@@ -34,13 +34,13 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
 
         // constants
         let mantissa_bits = <Self::Element as FloatElementWithBits>::MANTISSA_BITS;
-        let exp_lsb_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let exp_lsb_mask: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK);
-        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let sign_mantissa_mask: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK);
-        let max_biased_exp: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let max_biased_exp: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_BIASED_EXP);
-        let exp_bias: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let exp_bias: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
 
         // special handling for denormals when we want to preserve them, since the normal path would flush them to zero
@@ -96,13 +96,13 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             return unsafe { Self::native_frexp(self) };
         }
 
-        let exp_lsb_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let exp_lsb_mask: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_LSB_MASK);
-        let frexp_bias_offset: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let frexp_bias_offset: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::FREXP_BIAS_OFFSET);
-        let sign_mantissa_mask: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let sign_mantissa_mask: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::SIGN_MANTISSA_MASK);
-        let half_exp_bits: Self::Bits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+        let half_exp_bits: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::HALF_EXP_BITS);
 
         let mut bits: Self::Bits = self.into_bits();
@@ -114,7 +114,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         } {
             let is_subnormal = self.is_subnormal();
 
-            let exp_bias: Self::SignedBits = crate::generic_splat!(<Self> = <S: FloatVectorWithBits>
+            let exp_bias: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
                 <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
 
             let shift_amount = Self::SignedBits::splat(unsafe {
@@ -170,7 +170,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         }
 
         if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Crush) } {
-            let denormal_trick: Self::Bits = crate::generic_splat!(
+            let denormal_trick: Self::Bits = crate::const_splat!(
                 <Self> = <S: FloatVectorWithBits>
                 <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::DENORMAL_TRICK
             );
@@ -182,7 +182,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
 
         let abs_bits = Self::SignedBits::from_bits(self.abs());
 
-        let max_subnormal: Self::Bits = crate::generic_splat!(
+        let max_subnormal: Self::Bits = crate::const_splat!(
             <Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::MAX_SUBNORMAL
         );

@@ -18,6 +18,8 @@ pub use f64x2::F64x2V2;
 pub use i64x2::I64x2V2;
 pub use u64x2::U64x2V2;
 
+impl_newregister!(F32x4V2, I32x4V2, U32x4V2, F64x2V2, I64x2V2, U64x2V2);
+
 use crate::{
     backend::scalar::Scalar,
     element::FindUSize,

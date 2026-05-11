@@ -35,6 +35,10 @@ pub mod half;
 
 pub use half::{F32x2V3, I32x2V3, U32x2V3};
 
+impl_newregister!(
+    F32x4V3, F32x8V3, F64x2V3, F64x4V3, I32x4V3, I32x8V3, I64x2V3, I64x4V3, U32x4V3, U32x8V3, U64x2V3, U64x4V3
+);
+
 use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
