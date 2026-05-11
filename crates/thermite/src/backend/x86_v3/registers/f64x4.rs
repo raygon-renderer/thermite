@@ -393,6 +393,10 @@ impl NumericRegister for F64x4V3 {
         _mm256_reduce_pd_v3!(value; _mm_max_pd _mm_max_sd)
     }
 
+    fn min_max_element(value: Storage<Self>) -> (Self::Element, Self::Element) {
+        _mm256_reduce2_pd_v3!(value; _mm_min_pd _mm_min_sd, _mm_max_pd _mm_max_sd)
+    }
+
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_pd_v3!(value; _mm_add_pd _mm_add_sd)
     }

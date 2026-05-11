@@ -908,6 +908,14 @@ pub trait NumericVector:
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
     fn max_element(self) -> Self::Element;
+    /// Returns both the minimum and maximum values in the vector simultaneously.
+    ///
+    /// More efficient than calling [`min_element`](NumericVector::min_element) and
+    /// [`max_element`](NumericVector::max_element) separately when both are needed.
+    fn min_max_element(self) -> (Self::Element, Self::Element);
+
+    /// Returns the indices of the minimum and maximum elements in the vector, respectively.
+    fn arg_minmax(self) -> (usize, usize);
 
     /// Scales each element in the vector by the given factor.
     ///

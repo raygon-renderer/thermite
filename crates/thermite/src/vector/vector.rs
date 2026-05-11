@@ -349,6 +349,9 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
 
     fn min_element(self) -> Self::Element { R::min_element(self.0) }
     fn max_element(self) -> Self::Element { R::max_element(self.0) }
+    fn min_max_element(self) -> (Self::Element, Self::Element) { R::min_max_element(self.0) }
+
+    fn arg_minmax(self) -> (usize, usize) { R::arg_minmax(self.0) }
 
     #[conditional] fn scale(self, factor: Self::Element) -> Self {}
 

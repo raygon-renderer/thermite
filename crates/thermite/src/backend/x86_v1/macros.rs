@@ -1,3 +1,16 @@
+/// Reduces a 2-lane `f64` SIMD vector using two operations simultaneously, returning both results.
+#[rustfmt::skip]
+macro_rules! _mm_reduce2_pd_v1 {
+    ($value:expr; $op1:ident $last1:ident, $op2:ident $last2:ident) => {#[allow(unused_unsafe)] unsafe {
+        let xmm0 = $value;
+        let xmm1 = arch::_mm_unpackhi_pd(xmm0, xmm0);
+        (
+            arch::_mm_cvtsd_f64(arch::$last1(xmm0, xmm1)),
+            arch::_mm_cvtsd_f64(arch::$last2(xmm0, xmm1)),
+        )
+    }};
+}
+
 /// Reduces a 2-lane `f64` SIMD vector to a single `f64` value using the specified operation.
 #[rustfmt::skip]
 macro_rules! _mm_reduce_pd_v1 {

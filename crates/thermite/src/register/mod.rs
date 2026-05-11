@@ -1294,12 +1294,50 @@ pub trait NumericRegister:
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
+    fn arg_minmax(value: Storage<Self>) -> (usize, usize) {
+        let (min_val, max_val) = Self::min_max_element(value);
+
+        let min = Self::splat(min_val);
+        let max = Self::splat(max_val);
+
+        let min = Self::eq(min, value);
+        let max = Self::eq(max, value);
+
+        let min = match <Self::Mask as MaskRegister>::native_bitmask(min) {
+            Some(mask) => mask.trailing_zeros() as usize,
+
+            #[cfg(feature = "bitvec")]
+            None => <Self::Mask as MaskRegister>::bitmask(min).trailing_zeros(),
+
+            #[cfg(not(feature = "bitvec"))]
+            None => unreachable!(),
+        };
+
+        let max = match <Self::Mask as MaskRegister>::native_bitmask(max) {
+            Some(mask) => mask.trailing_zeros() as usize,
+
+            #[cfg(feature = "bitvec")]
+            None => <Self::Mask as MaskRegister>::bitmask(max).trailing_zeros(),
+
+            #[cfg(not(feature = "bitvec"))]
+            None => unreachable!(),
+        };
+
+        (min, max)
+    }
+
     fn sort(value: Storage<Self>) -> Storage<Self> {
         crate::backend::generic::polyfills::sort::sort_any::<Self>(value)
     }
 
     fn min_element(value: Storage<Self>) -> Self::Element;
     fn max_element(value: Storage<Self>) -> Self::Element;
+
+    #[inline(always)]
+    fn min_max_element(value: Storage<Self>) -> (Self::Element, Self::Element) {
+        (Self::min_element(value), Self::max_element(value))
+    }
+
     fn sum_elements(value: Storage<Self>) -> Self::Element;
     fn prod_elements(value: Storage<Self>) -> Self::Element;
 

@@ -402,6 +402,10 @@ impl NumericRegister for F32x8V3 {
         _mm256_reduce_ps_v3!(value; _mm_max_ps _mm_max_ss)
     }
 
+    fn min_max_element(value: Storage<Self>) -> (Self::Element, Self::Element) {
+        _mm256_reduce2_ps_v3!(value; _mm_min_ps _mm_min_ss, _mm_max_ps _mm_max_ss)
+    }
+
     fn sum_elements(value: Storage<Self>) -> Self::Element {
         _mm256_reduce_ps_v3!(value; _mm_add_ps _mm_add_ss)
     }

@@ -1,3 +1,41 @@
+/// Reduces an 8-lane `f32` SIMD vector using two operations simultaneously, returning both results.
+///
+/// Splits the YMM into two XMM halves, applies both ops across the halves independently,
+/// then delegates the 4-lane XMM reductions to `_mm_reduce_ps_v2!`.
+#[rustfmt::skip]
+macro_rules! _mm256_reduce2_ps_v3 {
+    ($value:expr; $op1:ident $last1:ident, $op2:ident $last2:ident) => {#[allow(unused_unsafe)] unsafe {
+        let ymm0 = $value;
+        let xmm0 = arch::_mm256_castps256_ps128(ymm0);
+        let xmm1 = arch::_mm256_extractf128_ps(ymm0, 1);
+        let xmm_a = arch::$op1(xmm0, xmm1);
+        let xmm_b = arch::$op2(xmm0, xmm1);
+        (
+            _mm_reduce_ps_v2!(xmm_a; $op1 $last1),
+            _mm_reduce_ps_v2!(xmm_b; $op2 $last2),
+        )
+    }};
+}
+
+/// Reduces a 4-lane `f64` SIMD vector using two operations simultaneously, returning both results.
+///
+/// Splits the YMM into two XMM halves, applies both ops across the halves independently,
+/// then delegates the 2-lane XMM reductions to `_mm_reduce_pd_v1!`.
+#[rustfmt::skip]
+macro_rules! _mm256_reduce2_pd_v3 {
+    ($value:expr; $op1:ident $last1:ident, $op2:ident $last2:ident) => {#[allow(unused_unsafe)] unsafe {
+        let ymm0 = $value;
+        let xmm0 = arch::_mm256_castpd256_pd128(ymm0);
+        let xmm1 = arch::_mm256_extractf128_pd(ymm0, 1);
+        let xmm_a = arch::$op1(xmm0, xmm1);
+        let xmm_b = arch::$op2(xmm0, xmm1);
+        (
+            _mm_reduce_pd_v1!(xmm_a; $op1 $last1),
+            _mm_reduce_pd_v1!(xmm_b; $op2 $last2),
+        )
+    }};
+}
+
 /// Reduces an 8-lane `f32` SIMD vector to a single `f32` value using the specified operation.
 #[rustfmt::skip]
 macro_rules! _mm256_reduce_ps_v3 {
