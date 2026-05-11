@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 categories = ["no_std"]
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 features = ["const-default", "document_registers", "std"]
 rustdoc-args = ["--cfg", "docsrs"]

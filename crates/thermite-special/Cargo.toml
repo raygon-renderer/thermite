@@ -3,6 +3,9 @@ name = "thermite-special"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [features]
 disable_dispatch = ["thermite/disable_dispatch"] # Disable dispatch in thermite for maximum performance, but massive code bloat
 

@@ -1580,51 +1580,59 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
         Self::new(V::indexed())
     }
 
-    fn min_c(self, mask: Self::Mask, other: Self) -> Self {
+    fn min_c(self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn min_m(self, src: Self, mask: Self::Mask, other: Self) -> Self {
+    fn min_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn min_z(self, mask: Self::Mask, other: Self) -> Self {
+    fn min_z(self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn max_c(self, mask: Self::Mask, other: Self) -> Self {
+    fn max_c(self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn max_m(self, src: Self, mask: Self::Mask, other: Self) -> Self {
+    fn max_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn max_z(self, mask: Self::Mask, other: Self) -> Self {
+    fn max_z(self, _mask: Self::Mask, _other: Self) -> Self {
         todo!()
     }
 
-    fn scale(self, factor: Self::Element) -> Self {
+    fn scale(self, _factor: Self::Element) -> Self {
         todo!()
     }
 
-    fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self {
+    fn scale_c(self, _mask: Self::Mask, _factor: Self::Element) -> Self {
         todo!()
     }
 
-    fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self {
+    fn scale_m(self, _src: Self, _mask: Self::Mask, _factor: Self::Element) -> Self {
         todo!()
     }
 
-    fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self {
+    fn scale_z(self, _mask: Self::Mask, _factor: Self::Element) -> Self {
         todo!()
     }
 
-    fn pairwise_sum(lo: Self, hi: Self) -> Self {
+    fn pairwise_sum(_lo: Self, _hi: Self) -> Self {
         todo!()
     }
 
-    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self {
+    fn relaxed_pairwise_sum(_lo: Self, _hi: Self) -> Self {
+        todo!()
+    }
+
+    fn min_max_element(self) -> (Self::Element, Self::Element) {
+        (self.min_element(), self.max_element())
+    }
+
+    fn arg_minmax(self) -> (usize, usize) {
         todo!()
     }
 }
@@ -1692,24 +1700,24 @@ impl<V: CompensatedFloatVector> SignedVector for Compensated<V> {
         self.neg_c(self_is_neg ^ sign_is_neg)
     }
 
-    fn abs_c(self, mask: Self::Mask) -> Self {
+    fn abs_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn abs_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn abs_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn abs_z(self, mask: Self::Mask) -> Self {
+    fn abs_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
-    fn copysign_c(self, mask: Self::Mask, sign: Self) -> Self {
+    fn copysign_c(self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
-    fn copysign_m(self, src: Self, mask: Self::Mask, sign: Self) -> Self {
+    fn copysign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
-    fn copysign_z(self, mask: Self::Mask, sign: Self) -> Self {
+    fn copysign_z(self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
 }
@@ -1848,147 +1856,147 @@ impl<V: CompensatedFloatVector> FloatVector for Compensated<V> {
         }
     }
 
-    fn sqrt_c(self, mask: Self::Mask) -> Self {
+    fn sqrt_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn sqrt_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn sqrt_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn sqrt_z(self, mask: Self::Mask) -> Self {
+    fn sqrt_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rsqrt_c(self, mask: Self::Mask) -> Self {
+    fn rsqrt_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rsqrt_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn rsqrt_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rsqrt_z(self, mask: Self::Mask) -> Self {
+    fn rsqrt_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rcp_c(self, mask: Self::Mask) -> Self {
+    fn rcp_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rcp_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn rcp_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn rcp_z(self, mask: Self::Mask) -> Self {
+    fn rcp_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn floor_c(self, mask: Self::Mask) -> Self {
+    fn floor_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn floor_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn floor_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn floor_z(self, mask: Self::Mask) -> Self {
+    fn floor_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn ceil_c(self, mask: Self::Mask) -> Self {
+    fn ceil_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn ceil_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn ceil_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn ceil_z(self, mask: Self::Mask) -> Self {
+    fn ceil_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn round_c(self, mask: Self::Mask) -> Self {
+    fn round_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn round_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn round_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn round_z(self, mask: Self::Mask) -> Self {
+    fn round_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn trunc_c(self, mask: Self::Mask) -> Self {
+    fn trunc_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn trunc_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn trunc_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn trunc_z(self, mask: Self::Mask) -> Self {
+    fn trunc_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn fract_c(self, mask: Self::Mask) -> Self {
+    fn fract_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn fract_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn fract_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn fract_z(self, mask: Self::Mask) -> Self {
+    fn fract_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn mul_sign_c(self, mask: Self::Mask, sign: Self) -> Self {
+    fn mul_sign_c(self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
 
-    fn mul_sign_m(self, src: Self, mask: Self::Mask, sign: Self) -> Self {
+    fn mul_sign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
 
-    fn mul_sign_z(self, mask: Self::Mask, sign: Self) -> Self {
+    fn mul_sign_z(self, _mask: Self::Mask, _sign: Self) -> Self {
         todo!()
     }
 
-    fn signed_zero_c(self, mask: Self::Mask) -> Self {
+    fn signed_zero_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn signed_zero_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn signed_zero_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn signed_zero_z(self, mask: Self::Mask) -> Self {
+    fn signed_zero_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_up_c(self, mask: Self::Mask) -> Self {
+    fn next_up_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_up_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn next_up_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_up_z(self, mask: Self::Mask) -> Self {
+    fn next_up_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_down_c(self, mask: Self::Mask) -> Self {
+    fn next_down_c(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_down_m(self, src: Self, mask: Self::Mask) -> Self {
+    fn next_down_m(self, _src: Self, _mask: Self::Mask) -> Self {
         todo!()
     }
 
-    fn next_down_z(self, mask: Self::Mask) -> Self {
+    fn next_down_z(self, _mask: Self::Mask) -> Self {
         todo!()
     }
 

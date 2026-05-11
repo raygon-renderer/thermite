@@ -852,7 +852,7 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait NumericVector:
-    PartialOrdVector<Element: num_traits::NumOps, Signed: CastVector<Self>, Unsigned: CastVector<Self>>
+    PartialOrdVector<Element: num_traits::NumOps>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
     + ops::AddAssignMasked<Self::Mask, Self>
     + ops::SubMasked<Self::Mask, Self, Output = Self>
@@ -868,8 +868,6 @@ pub trait NumericVector:
     + num_traits::NumAssignOps<Self>
     + core::iter::Sum
     + core::iter::Product
-    + CastVector<Self::Unsigned>
-    + CastVector<Self::Signed>
 {
     /// A vector of the value "0" in the element type.
     const ZERO: Self;

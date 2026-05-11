@@ -3,6 +3,9 @@ name = "spirv_testing"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
 [lib]
 doc = false
 
@@ -14,6 +17,3 @@ const-default = { version = "1", default-features = false, features = ["derive"]
 spirv-std-macros.workspace = true
 thermite = { path = "../../crates/thermite", default-features = false, features = ["spirv", "ignore_denormals", "disable_dispatch"] }
 thermite-special = { path = "../../crates/thermite-special", default-features = false, features = ["disable_dispatch"] }
-
-[lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))'] }

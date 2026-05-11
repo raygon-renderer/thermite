@@ -10,6 +10,9 @@ edition = "2024"
 # Build with:    cargo run -p spirv_builder
 # Then run with: cargo run -p spirv_runner -- <path printed above>
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "spirv_builder"
 path = "src/main.rs"
