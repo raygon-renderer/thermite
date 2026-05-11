@@ -4,7 +4,7 @@ use core::{marker::PhantomData, ops::Sub};
 
 use crate::{
     BranchfreeDivider, Divider, divider::vector::VectorDivider, isa::InstructionSet, math::policy::Policy,
-    register::InterleaveRegister,
+    register::InterleaveRegister, swizzle::SwizzleIndices,
 };
 
 use super::{
@@ -100,6 +100,15 @@ where
 
             padded
         }
+    }
+
+    /// Consider f32x3: swizzle!(a, b, [0, 1, 3]) should be equivalent to swizzle!(a as f32x4, b as f32x4, [0, 1, 4]),
+    /// since with f32x3 index 3 would be the first element of b, but with f32x4 it's still the first element of b,
+    /// but we need to offset it by the difference in length, which is always N for this design.
+    #[inline(always)]
+    fn adjust_swizzle_idxs(idxs: GenericArray<u32, <Self as CoreRegister>::Lanes>) -> GenericArray<u32, R::Lanes> {
+        let reduced_lanes = <Self as CoreRegister>::Lanes::U32;
+        Self::pad_array(idxs.map(|idx| if idx >= reduced_lanes { idx + N::U32 } else { idx }))
     }
 }
 
@@ -406,6 +415,39 @@ where
     }
 }
 
+struct AdjustedIndices<N: Lanes, M: Lanes, I: SwizzleIndices<N>>(PhantomData<(N, M, I)>);
+
+// M is always larger, so M - N is always the Reduced N, which is how much we need to shift indices that reference `b` by
+impl<N: Lanes, M: Lanes, I: SwizzleIndices<N>> SwizzleIndices<M> for AdjustedIndices<N, M, I> {
+    const INDICES: GenericArray<u32, M> = const {
+        let mut indices: GenericArray<u32, M> = unsafe { core::mem::zeroed() };
+        let old = I::INDICES;
+
+        let new_idxs = indices.as_mut_slice();
+        let old_idxs = old.as_slice();
+
+        let mut i = 0;
+
+        while i < N::USIZE {
+            let idx = old_idxs[i];
+
+            new_idxs[i] = if idx < N::U32 { idx } else { idx + (M::U32 - N::U32) };
+
+            i += 1;
+        }
+
+        // copy over padding lanes exactly
+        while i < M::USIZE {
+            new_idxs[i] = i as u32;
+            i += 1;
+        }
+
+        core::mem::forget(old);
+
+        indices
+    };
+}
+
 impl<R: SwizzleRegister, N: Unsigned> SwizzleRegister for ReducedRegister<R, N>
 where
     R: Reducible<N>,
@@ -440,8 +482,18 @@ where
     }
 
     #[inline(always)]
+    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+        Self(
+            // technically this just pads it, since the index should never be over the reduced lanes, but
+            // the adjusted indices type is just convenient to reuse.
+            R::permutev_const::<AdjustedIndices<Self::Lanes, R::Lanes, I>>(value.0),
+            PhantomData,
+        )
+    }
+
+    #[inline(always)]
     fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        Self(R::swizzle(a.0, b.0, Self::pad_array(idxs)), PhantomData)
+        Self(R::swizzle(a.0, b.0, Self::adjust_swizzle_idxs(idxs)), PhantomData)
     }
 
     #[inline(always)]
@@ -453,7 +505,7 @@ where
         idxs: GenericArray<u32, Self::Lanes>,
     ) -> Storage<Self> {
         Self(
-            R::swizzle_m(src.0, mask.0, a.0, b.0, Self::pad_array(idxs)),
+            R::swizzle_m(src.0, mask.0, a.0, b.0, Self::adjust_swizzle_idxs(idxs)),
             PhantomData,
         )
     }
@@ -465,7 +517,18 @@ where
         b: Storage<Self>,
         idxs: GenericArray<u32, Self::Lanes>,
     ) -> Storage<Self> {
-        Self(R::swizzle_z(mask.0, a.0, b.0, Self::pad_array(idxs)), PhantomData)
+        Self(
+            R::swizzle_z(mask.0, a.0, b.0, Self::adjust_swizzle_idxs(idxs)),
+            PhantomData,
+        )
+    }
+
+    #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self(
+            R::swizzle_const::<AdjustedIndices<Self::Lanes, R::Lanes, I>>(a.0, b.0),
+            PhantomData,
+        )
     }
 }
 

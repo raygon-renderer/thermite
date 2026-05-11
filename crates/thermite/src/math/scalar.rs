@@ -103,6 +103,7 @@ macro_rules! impl_identity_unwrap {
 
 macro_rules! impl_tuple_unwrap {
     ($( ($($V:ident,)*) ),* $(,)?) => {$(
+        #[allow(non_snake_case)]
         impl<$($V),*> Unwrap for ($($V,)*)
         where
             $($V: Unwrap,)*

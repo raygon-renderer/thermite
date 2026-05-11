@@ -42,7 +42,7 @@ pub trait HasIsa {
 }
 
 #[rustfmt::skip]
-pub trait NativeIsa: HasIsa + Clone + Copy + PartialEq + Eq + Hash {
+pub trait NativeIsa: HasIsa + core::fmt::Debug + Clone + Copy + PartialEq + Eq + Hash {
     type Registers: ArrayLength;
 
     /// Largest native 32-bit SIMD width
@@ -741,7 +741,7 @@ macro_rules! decl_aliases {
 
 use crate::vector::{
     CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithBits, FloatVectorWithRegister,
-    FullyInteroperable as FIV, GenericVector, IndexableVector, LinAlg4Vector, SignedIntegerVector,
+    FullyInteroperable as FIV, GenericVector, IndexableVector, LinAlg3Vector, LinAlg4Vector, SignedIntegerVector,
     SignedIntegerVectorWithRegister, SwizzleVector, UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,
 };
 
@@ -1011,6 +1011,7 @@ pub trait Simd3AVectors:
         >;
 
     type f32x3A: FloatVector<Lanes = U3, Element = f32>
+        + LinAlg3Vector
         + CastVector<<Self as Simd3AVectors>::f64x3A>
         + SwizzleVector
         + VectorIndexedBy<
@@ -1036,6 +1037,7 @@ pub trait Simd3AVectors:
         >;
 
     type f64x3A: FloatVector<Lanes = U3, Element = f64>
+        + LinAlg3Vector
         + CastVector<<Self as Simd3AVectors>::f32x3A>
         + SwizzleVector
         + VectorIndexedBy<
