@@ -597,7 +597,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     fn lookup(values: &[Self::Element], indices: Self::Unsigned) -> Self {
         let in_bounds = indices.cmp_lt(Self::len_to_indices::<Self::Unsigned>(values.len()));
 
-        unsafe { Self::lookup_unchecked(values, indices.z(in_bounds)) }
+        unsafe { Self::lookup_unchecked(values, indices.zz(in_bounds)) }
     }
 
     /// Assemble a vector from a slice of elements and a vector of indices
@@ -636,7 +636,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// (Zero If False) Zero elements if the corresponding mask lane is false; otherwise, leave unchanged.
     ///
     /// Similar to a `mask & self` operation.
-    fn z(self, mask: Self::Mask) -> Self;
+    fn zz(self, mask: Self::Mask) -> Self;
 
     /// (Zero If True) Zero elements if the corresponding mask lane is true; otherwise, leave unchanged.
     ///

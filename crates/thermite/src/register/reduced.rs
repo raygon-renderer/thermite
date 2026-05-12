@@ -137,8 +137,8 @@ where
     }
 
     #[inline(always)]
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        Self(R::z(mask.0, value.0), PhantomData)
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self(R::zz(mask.0, value.0), PhantomData)
     }
 
     #[inline(always)]

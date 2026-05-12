@@ -33,7 +33,7 @@ impl CoreRegister for [<i $width>] {
         core::hint::select_unpredictable(mask, rhs, lhs)
     }
 
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         core::hint::select_unpredictable(mask, value, 0)
     }
 

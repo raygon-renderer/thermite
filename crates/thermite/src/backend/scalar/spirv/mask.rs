@@ -24,7 +24,7 @@ impl CoreRegister for bool {
         unsafe { arch::op_opselect::<bool, bool>(mask, on_true, on_false) }
     }
 
-    fn z(mask: bool, value: bool) -> bool {
+    fn zz(mask: bool, value: bool) -> bool {
         mask & value
     }
     fn nz(mask: bool, value: bool) -> bool {

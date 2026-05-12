@@ -63,7 +63,7 @@ impl CoreRegister for F64x2V2 {
         unsafe { arch::_mm_blendv_pd(lhs, rhs, mask) }
     }
 
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_pd(value, mask) }
     }
 

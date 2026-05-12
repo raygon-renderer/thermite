@@ -265,7 +265,7 @@ impl<R: Register> GenericVector for Vector<R> {
     #[conditional] fn swap_bytes(self) -> Self {}
 
     // The arguments of these are reversed for the register
-    fn z(self, mask: Self::Mask) -> Self { Vector(R::z(mask.0, self.0)) }
+    fn zz(self, mask: Self::Mask) -> Self { Vector(R::zz(mask.0, self.0)) }
     fn nz(self, mask: Self::Mask) -> Self { Vector(R::nz(mask.0, self.0)) }
 
     fn map<F>(self, f: F) -> Self where F: Fn(Self::Element) -> Self::Element { Vector(R::map(self.0, f)) }

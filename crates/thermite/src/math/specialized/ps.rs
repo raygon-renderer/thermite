@@ -329,8 +329,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // big:    z = -1.0 / t;
 
         // lightweight select logic using zeroing and conditional adds
-        let a = V::NEG_ONE.z(not_small).add_c(not_big, t);
-        let b = V::ONE.z(not_big).add_c(not_small, t);
+        let a = V::NEG_ONE.zz(not_small).add_c(not_big, t);
+        let b = V::ONE.zz(not_big).add_c(not_small, t);
 
         let z = a / b;
         let z2 = z * z;
@@ -904,10 +904,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         // medium: z = (t-1.0) / (t+1.0);
         let not_small = t.cmp_ge(crate::const_splat!(f32: SQRT_2 - 1.0));
 
-        let a = t + neg_one.z(not_small);
-        let b = V::ONE + t.z(not_small);
+        let a = t + neg_one.zz(not_small);
+        let b = V::ONE + t.zz(not_small);
 
-        let s = V::FRAC_PI_4.z(not_small);
+        let s = V::FRAC_PI_4.zz(not_small);
 
         let z = a / b;
         let z2 = z * z;
@@ -954,8 +954,8 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     // Shift chunks to align binary point
     // Mask shifts by 31 to prevent UB on shift == 32 in some ISAs
     let mask = shift.cmp_ne(V::Unsigned::ZERO);
-    let aligned_hi = c0.shlv(shift) | c1.shrv(inv_shift).z(mask);
-    let aligned_lo = c1.shlv(shift) | c2.shrv(inv_shift).z(mask);
+    let aligned_hi = c0.shlv(shift) | c1.shrv(inv_shift).zz(mask);
+    let aligned_lo = c1.shlv(shift) | c2.shrv(inv_shift).zz(mask);
 
     let aligned_hi: V::Bits = aligned_hi.cast();
     let aligned_lo: V::Bits = aligned_lo.cast();
@@ -1075,7 +1075,7 @@ fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const 
         let (x_ph, x_lo_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
 
         x = is_large.select(x_ph, x);
-        x_lo = x_lo_ph.z(is_large); // zero out x_lo when not using Payne-Hanek
+        x_lo = x_lo_ph.zz(is_large); // zero out x_lo when not using Payne-Hanek
         q = is_large.select(q_ph, q);
     }
 

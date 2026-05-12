@@ -190,7 +190,11 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
         return err.into_compile_error().into();
     }
 
-    let attr_data = DispatchAttributes { simd, simd_is_default, thermite };
+    let attr_data = DispatchAttributes {
+        simd,
+        simd_is_default,
+        thermite,
+    };
 
     let mut item = syn::parse_macro_input!(item as Item);
 

@@ -99,7 +99,7 @@ where
     const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 
     fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {}
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
 
     fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {

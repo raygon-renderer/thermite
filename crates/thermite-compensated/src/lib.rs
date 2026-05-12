@@ -1379,10 +1379,10 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     }
 
     #[inline(always)]
-    fn z(self, mask: Self::Mask) -> Self {
+    fn zz(self, mask: Self::Mask) -> Self {
         Self {
-            value: self.value.z(mask),
-            error: self.error.z(mask),
+            value: self.value.zz(mask),
+            error: self.error.zz(mask),
         }
     }
 

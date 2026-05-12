@@ -31,7 +31,7 @@ macro_rules! decl_MxN {
                 unsafe { arch::op_opselect::<Self, Self>(mask, on_true, on_false) }
             }
 
-            fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+            fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_oplogicaland::<Self>(mask, value) }
             }
 

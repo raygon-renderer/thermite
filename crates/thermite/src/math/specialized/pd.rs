@@ -798,8 +798,8 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
     let fac = not_big.select(morebitso2, morebits);
 
     // lightweight select logic using zeroing and conditional adds
-    let a = V::NEG_ONE.z(not_small).add_c(not_big, t);
-    let b = V::ONE.z(not_big).add_c(not_small, t);
+    let a = V::NEG_ONE.zz(not_small).add_c(not_big, t);
+    let b = V::ONE.zz(not_big).add_c(not_small, t);
 
     let z = a / b;
 
@@ -1020,7 +1020,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
                 }
             });
 
-            xa = xa.z(xa.cmp_le(limit)); // set to zero if too large
+            xa = xa.zz(xa.cmp_le(limit)); // set to zero if too large
         }
 
         xa.scale(FloatConsts::FRAC_2_PI)

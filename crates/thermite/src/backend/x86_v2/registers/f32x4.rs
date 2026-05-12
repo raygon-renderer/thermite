@@ -37,7 +37,7 @@ impl CoreRegister for F32x4V2 {
         unsafe { arch::_mm_blendv_ps(lhs, rhs, mask) }
     }
 
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_ps(value, mask) }
     }
 

@@ -951,7 +951,7 @@ where
 
             // force multiplier to zero for tiny case, allowing the modified
             // lanczos sum and ln(t) to be combined for cheap
-            a = a.z(is_not_tiny);
+            a = a.zz(is_not_tiny);
         }
 
         let c = (lanczos_sum * t).ln_p::<P>();

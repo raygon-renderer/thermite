@@ -41,7 +41,7 @@ impl CoreRegister for I64x2V3 {
         unsafe { arch::_mm_blendv_epi8(on_false, on_true, mask) }
     }
 
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_and_si128(value, mask) }
     }
 

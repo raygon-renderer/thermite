@@ -250,7 +250,7 @@ pub trait CoreRegister: 'static + Sized {
 
     /// Selects elements from `value` where `mask` is true, and zeroes elsewhere.
     #[inline(always)]
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         Self::blendv(mask, Self::EMPTY, value)
     }
 
@@ -260,7 +260,7 @@ pub trait CoreRegister: 'static + Sized {
         if const { Self::HAS_EQUAL_SIZE_MASK } {
             // If the mask has the same size as the register, we can assume the
             // default behavior is `z` doing a bitwise AND, and we should NOT the mask.
-            Self::z(<Self::Mask as BitwiseRegister>::not(mask), value)
+            Self::zz(<Self::Mask as BitwiseRegister>::not(mask), value)
         } else {
             // Otherwise, we need to blend with zero.
             Self::blendv(mask, value, Self::EMPTY)
@@ -1160,7 +1160,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     fn rolv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // zero out the shifts where the mask is not set
         let mask = <<Self::Unsigned as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
-        Self::rolv(value, <Self::Unsigned as CoreRegister>::z(mask, shifts))
+        Self::rolv(value, <Self::Unsigned as CoreRegister>::zz(mask, shifts))
     }
 
     #[masked]
@@ -1176,7 +1176,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
 
     fn rorv_c(mask: Storage<Self::Mask>, value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         let mask = <<Self::Unsigned as CoreRegister>::Mask as CastMaskRegister<Self::Mask>>::mask_from(mask);
-        Self::rorv(value, <Self::Unsigned as CoreRegister>::z(mask, shifts))
+        Self::rorv(value, <Self::Unsigned as CoreRegister>::zz(mask, shifts))
     }
 
     #[conditional] fn reverse_bits(mut value: Storage<Self>) -> Storage<Self> {

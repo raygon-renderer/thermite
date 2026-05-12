@@ -84,7 +84,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             let is_underflow = exp.is_negative();
             let input_was_subnormal = biased_exp.is_zero();
 
-            result = result.z(is_underflow | input_was_subnormal); // zero result if underflow or input was subnormal
+            result = result.zz(is_underflow | input_was_subnormal); // zero result if underflow or input was subnormal
         }
 
         Self::from_bits(result)
@@ -126,7 +126,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             // conditional multiplication to normalize subnormal
             bits = self.mul_c(is_subnormal, normalizer).into_bits();
 
-            shift_amount.z(is_subnormal.cast()) // zero if not subnormal
+            shift_amount.zz(is_subnormal.cast()) // zero if not subnormal
         } else {
             Self::SignedBits::ZERO
         };
@@ -151,7 +151,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         if const { P::POLICY.check_overflow } {
             let is_finite = self.is_finite() & biased_exp.cmp_ne(Self::SignedBits::ZERO).cast();
 
-            exp = exp.z(is_finite.cast());
+            exp = exp.zz(is_finite.cast());
             fraction = is_finite.select(fraction, orig_bits);
         }
 
@@ -193,7 +193,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         //
         // NOTE: Use a Signed comparison here, since that's faster than unsigned comparisons on most archs,
         // and we know that abs_bits is considered positive as an integer since the msb is zero.
-        let mut res = Self::from_bits(self.z(abs_bits.cmp_gt(max_subnormal_signed).cast()));
+        let mut res = Self::from_bits(self.zz(abs_bits.cmp_gt(max_subnormal_signed).cast()));
 
         // we should preserve -0.0 for greater precision policies
         if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && <Self::Element as FloatElement>::HAS_SIGNED_ZERO }
@@ -856,7 +856,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     #[inline(always)]
     fn step<P: Policy>(self, t: Self) -> Self {
         // use z() masked zeroing to avoid branching or select
-        Self::ONE.z(self.cmp_ge(t))
+        Self::ONE.zz(self.cmp_ge(t))
     }
 
     #[inline(always)]

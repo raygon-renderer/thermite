@@ -17,7 +17,7 @@ impl CoreRegister for bool {
         core::hint::select_unpredictable(mask, on_true, on_false)
     }
 
-    fn z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+    fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         mask & value
     }
 
