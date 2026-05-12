@@ -1034,4 +1034,16 @@ where
     fn prod_elements3(value: Storage<Self>) -> Self::Element {
         R::prod_elements3(value.0)
     }
+
+    #[inline(always)]
+    fn mat3_transpose(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
+        // Entirely delegate to the inner register's method
+        unsafe { generic_array::const_transmute(R::mat3_transpose(core::mem::transmute(cols))) }
+    }
+
+    #[inline(always)]
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 3], vector: Storage<Self>) -> Storage<Self> {
+        // Entirely delegate to the inner register's method
+        unsafe { generic_array::const_transmute(R::mat3_vec3_product::<COLUMN_MAJOR>(core::mem::transmute(cols), vector.0)) }
+    }
 }

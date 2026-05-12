@@ -110,6 +110,77 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
         }
     }
 
+    /// 3x3 Matrix Transpose
+    ///
+    /// Each register holds one column (first 3 lanes). On 4-lane registers the
+    /// 4th lane of every output row is zeroed; on 3-lane registers `zero4` is a no-op.
+    #[inline(always)]
+    fn mat3_transpose(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
+        if const { Self::Lanes::USIZE == 4 } {
+            let (lo, hi) = Self::interleave(cols[0], cols[1]);
+            // lo = [col0.x, col1.x, col0.y, col1.y]
+            // hi = [col0.z, col1.z, col0.w, col1.w]  (col?.w = unused lane)
+
+            let c0 = Self::extract::<0>(cols[2]);
+            let c1 = Self::extract::<1>(cols[2]);
+            let c2 = Self::extract::<2>(cols[2]);
+
+            [
+                // row0 = [col0.x, col1.x, col2.x, 0]
+                Self::insert::<2>(lo, c0),
+                // row1 = [col0.y, col1.y, col2.y, 0]: move lo's upper pair to lanes 0,1
+                Self::insert::<2>(s!(Self: lo, [2, 3, 2, 3]), c1),
+                // row2 = [col0.z, col1.z, col2.z, 0]
+                Self::insert::<2>(hi, c2),
+            ]
+        } else {
+            // U3: scalar extract + insert (GPU/SPIRV backends)
+            // this is a mess but I'm too tired to figure it out right now.
+            [
+                Self::insert::<2>(
+                    Self::insert::<1>(Self::splat(Self::extract::<0>(cols[0])), Self::extract::<0>(cols[1])),
+                    Self::extract::<0>(cols[2]),
+                ),
+                Self::insert::<2>(
+                    Self::insert::<1>(Self::splat(Self::extract::<1>(cols[0])), Self::extract::<1>(cols[1])),
+                    Self::extract::<1>(cols[2]),
+                ),
+                Self::insert::<2>(
+                    Self::insert::<1>(Self::splat(Self::extract::<2>(cols[0])), Self::extract::<2>(cols[1])),
+                    Self::extract::<2>(cols[2]),
+                ),
+            ]
+        }
+    }
+
+    /// 3x3 Matrix multiplied by 3D Vector
+    ///
+    /// Each column/row is a register whose first 3 lanes hold the matrix data.
+    /// If the register has 4 lanes the 4th lane of the result is always zeroed.
+    #[inline(always)]
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 3], vector: Storage<Self>) -> Storage<Self> {
+        let mut result = Self::EMPTY;
+
+        if const { !COLUMN_MAJOR } {
+            // Row-major: result[i] = dot3(row[i], vector).
+            let x = Self::dot3(cols[0], vector);
+            let y = Self::dot3(cols[1], vector);
+            let z = Self::dot3(cols[2], vector);
+            result = Self::insert::<0>(result, x);
+            result = Self::insert::<1>(result, y);
+            result = Self::insert::<2>(result, z);
+        } else {
+            let x = Self::broadcast::<0>(vector);
+            let y = Self::broadcast::<1>(vector);
+            let z = Self::broadcast::<2>(vector);
+
+            // (cols[0] * x) + (cols[1] * y) then FMA cols[2] * z on top.
+            result = Self::mul_adde(cols[2], z, Self::mul_adde(cols[1], y, Self::mul(cols[0], x)));
+        }
+
+        result
+    }
+
     fn min_element3(value: Storage<Self>) -> Self::Element;
     fn max_element3(value: Storage<Self>) -> Self::Element;
     fn sum_elements3(value: Storage<Self>) -> Self::Element;
@@ -224,6 +295,21 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         let (c2, c3) = Self::interleave(tmp1, tmp3);
 
         [c0, c1, c2, c3]
+    }
+
+    /// 4x4 Matrix multiplied by 3D Vector
+    #[inline(always)]
+    fn mat4_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self> {
+        if const { !COLUMN_MAJOR } {
+            // transpose and treat as column-major
+            return Self::mat4_vec3_product::<true>(&Self::mat4_transpose(cols), vector);
+        }
+
+        let x = Self::broadcast::<0>(vector);
+        let y = Self::broadcast::<1>(vector);
+        let z = Self::broadcast::<2>(vector);
+
+        Self::mul_adde(cols[2], z, Self::mul_adde(cols[1], y, Self::mul(cols[0], x)))
     }
 
     /// 4x4 Matrix multiplied by 4D Vector

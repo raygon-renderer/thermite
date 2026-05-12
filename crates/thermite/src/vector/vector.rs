@@ -680,6 +680,14 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     fn max_element3(self) -> Self::Element { R::max_element3(self.0) }
     fn sum_elements3(self) -> Self::Element { R::sum_elements3(self.0) }
     fn prod_elements3(self) -> Self::Element { R::prod_elements3(self.0) }
+
+    fn mat3_transpose(m: &[Self; 3]) -> [Self; 3] {
+        R::mat3_transpose(unsafe { core::mem::transmute(m) }).map(Vector)
+    }
+
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 3]) -> Self {
+        Vector(R::mat3_vec3_product::<COLUMN_MAJOR>(unsafe { core::mem::transmute(m) }, self.0))
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -704,6 +712,15 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
 
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
         Self(R::mat4_vec4_product::<COLUMN_MAJOR>(
+            // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+            // because Vector<R> is repr(transparent) around Storage<R>
+            unsafe { core::mem::transmute(m) },
+            self.0,
+        ))
+    }
+
+    fn mat4_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
+        Self(R::mat4_vec3_product::<COLUMN_MAJOR>(
             // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
             // because Vector<R> is repr(transparent) around Storage<R>
             unsafe { core::mem::transmute(m) },

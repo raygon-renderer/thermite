@@ -1511,6 +1511,10 @@ impl_swizzle4! {
 /// Vector suitable for 3D linear algebra operations.
 ///
 /// The length of this vector must be either 3 or 4 lanes.
+///
+/// Methods in this are specifically optimized to either ignore the fourth lane (if it exists),
+/// or to use algorithms that map especially well when there are truly only three "lanes",
+/// such as on GPUs.
 pub trait LinAlg3Vector: FloatVector {
     /// Scalar Product using only the first three lanes of the register as a 3D vector.
     ///
@@ -1557,6 +1561,12 @@ pub trait LinAlg3Vector: FloatVector {
 
     /// Returns the product of the first three elements of the register.
     fn prod_elements3(self) -> Self::Element;
+
+    /// 3x3 Matrix Transpose
+    fn mat3_transpose(m: &[Self; 3]) -> [Self; 3];
+
+    /// 3x3 Matrix-Vector multiplication, assuming `self` as the vector.
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 3]) -> Self;
 }
 
 /// Vector suitable for 4D linear algebra operations.
@@ -1611,6 +1621,16 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// [`LinAlg4Vector::mat4_product`] instead. It is conceptually the same as multiplying each
     /// vector individually, but can take advantage of SIMD optimizations better.
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
+
+    /// 4x4 Matrix-Vector3 multiplication, optimized for the case where the vector is a 3D coordinate
+    /// (i.e., the 4th lane is ignored).
+    ///
+    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrix
+    /// is stored in column-major order (`true`) or row-major order (`false`).
+    ///
+    /// If the matrix is **NOT** in column-major order, it will need to be
+    /// transposed before the actual multiplication, which will incur a performance penalty.
+    fn mat4_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
 
     /// 4x4 Matrix-Matrix multiplication.
     ///
