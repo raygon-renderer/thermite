@@ -754,6 +754,19 @@ fn forward_tys<'a>(
 }
 
 fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, _inner: bool) -> Vec<TokenStream> {
+    forward_args_impl(inputs, false)
+}
+
+/// Like [`forward_args`], but for argument-typed `&T` / `&mut T` parameters, emits
+/// `&ident` / `&mut ident` instead of a bare `ident`. Used at the outermost
+/// `dispatch_dyn!` call sites so the caller can pass an owned value (e.g. `Vec<T>`
+/// where the macro signature expects `&[T]`) and have Rust apply deref coercion.
+/// Calling `foo(vec)` with `foo(&[T])` does not coerce; `foo(&vec)` does.
+fn forward_args_reborrow<'a>(inputs: impl IntoIterator<Item = &'a FnArg>) -> Vec<TokenStream> {
+    forward_args_impl(inputs, true)
+}
+
+fn forward_args_impl<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, reborrow: bool) -> Vec<TokenStream> {
     let mut forward_args = Vec::new();
 
     for input in inputs {
@@ -767,7 +780,11 @@ fn forward_args<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, _inner: bool) -
             FnArg::Typed(arg) => {
                 if let Pat::Ident(ref param) = *arg.pat {
                     let ident = &param.ident;
-                    quote! { #ident }
+                    match (reborrow, &*arg.ty) {
+                        (true, Type::Reference(r)) if r.mutability.is_some() => quote! { &mut #ident },
+                        (true, Type::Reference(_)) => quote! { &#ident },
+                        _ => quote! { #ident },
+                    }
                 } else {
                     // Bubble up a spanned compiler error instead of panicking the rustc process
                     syn::Error::new_spanned(arg, "Unsupported pattern type in arguments. Expected Ident.")
@@ -1074,6 +1091,11 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
 
     let fwd_args = forward_args(inputs.iter(), false);
+    // At the outermost call sites we receive identifiers from the macro caller's scope,
+    // whose types may differ from the declared parameter types (e.g. caller passes
+    // `Vec<f32>` while the parameter is `&[f32]`). Reborrow reference-typed parameters
+    // so Rust's deref coercion can bridge the gap.
+    let fwd_args_outer = forward_args_reborrow(inputs.iter());
 
     let extra_params = &extra_generics.params;
     let where_clause = &extra_generics.where_clause;
@@ -1110,7 +1132,7 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 unsafe fn #dispatch_ident <#extra_params> (#inputs) #output #where_clause {
                     __dispatch_dyn_inner #itf (#(#fwd_args,)*)
                 }
-                unsafe { #dispatch_ident ::<#(#extra_fwd_tys),*> (#(#fwd_args,)*) }
+                unsafe { #dispatch_ident ::<#(#extra_fwd_tys),*> (#(#fwd_args_outer,)*) }
             }
         })
     });
@@ -1127,14 +1149,16 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     quote! {{
         use #thermite::prelude::*;
 
+        // `#body` is a `syn::Block` and tokenizes as `{ stmts }`, so we use it as the
+        // function body directly — wrapping it in another `{ #body }` would produce
+        // `fn f() { { user_body } }` and trigger the `unused_braces` lint at the user's
+        // call site.
         #[inline(always)]
-        fn __dispatch_dyn_inner <#dispatch_ident: #dispatch_bound, #extra_params> (#inputs) #output #where_clause {
-            #body
-        }
+        fn __dispatch_dyn_inner <#dispatch_ident: #dispatch_bound, #extra_params> (#inputs) #output #where_clause #body
 
         match #thermite::isa::InstructionSet::get() {
             #(#branches,)*
-            _ => __dispatch_dyn_inner #fallback_tf (#(#fwd_args,)*)
+            _ => __dispatch_dyn_inner #fallback_tf (#(#fwd_args_outer,)*)
         }
     }}
     .into()
