@@ -302,6 +302,8 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     fn new<const N: usize>(value: [Self::Element; N]) -> Self
         where generic_array::typenum::Const<N>: generic_array::IntoArrayLength<ArrayLength = Self::Lanes>;
 
+    fn into_array(self) -> GenericArray<Self::Element, Self::Lanes>;
+
     /// Create a new vector from a single element by splatting it across all lanes.
     #[masked] fn splat(value: Self::Element) -> Self;
 

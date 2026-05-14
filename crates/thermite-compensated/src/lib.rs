@@ -1175,6 +1175,20 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     }
 
     #[inline(always)]
+    fn into_array(self) -> thermite::generic_array::GenericArray<Self::Element, Self::Lanes> {
+        let mut arr = thermite::generic_array::GenericArray::default();
+
+        for i in 0..Self::LANES {
+            arr[i] = Compensated {
+                value: self.value.extractv(i),
+                error: self.error.extractv(i),
+            };
+        }
+
+        arr
+    }
+
+    #[inline(always)]
     fn splat(value: Self::Element) -> Self {
         Self {
             value: V::splat(value.value),

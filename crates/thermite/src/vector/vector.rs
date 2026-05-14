@@ -240,6 +240,10 @@ impl<R: Register> GenericVector for Vector<R> {
         Self(R::new(values.into()))
     }
 
+    fn into_array(self) -> GenericArray<R::Element, R::Lanes> {
+        R::as_array(&self.0).clone()
+    }
+
     #[masked] fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
 
     fn single(value: Self::Element) -> Self { Vector(R::single(value)) }
