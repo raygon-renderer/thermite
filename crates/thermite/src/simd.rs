@@ -390,7 +390,7 @@ impl<S: Simd> Simd3A for S {
 /// This trait is **not** automatically implemented - each backend must opt in and define
 /// its own 3-lane register types.
 #[rustfmt::skip]
-pub trait Simd3: Simd<
+pub trait Simd3: Simd3A<
     usizex4: FullExtendRegister<Self::usizex3>,
     f32x4: FullExtendRegister<Self::f32x3>,
     i32x4: FullExtendRegister<Self::i32x3>,
@@ -1161,7 +1161,7 @@ pub trait Simd3AVectorsWithRegisters: SimdVectorsWithRegisters + Simd3A + Simd3A
 >{}
 
 pub trait Simd3Vectors:
-    SimdVectors<
+    Simd3AVectors<
         usizex4: ExtendVector<Self::usizex3>,
         f32x4: ExtendVector<Self::f32x3>,
         i32x4: ExtendVector<Self::i32x3>,
