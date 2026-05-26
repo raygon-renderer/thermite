@@ -68,13 +68,14 @@ const SIMD_VECTOR_TYPES: &[&str] = &[
     "f32x2", "f32x4", "f32x8", "f32x16", "i32x2", "i32x4", "i32x8", "i32x16", "u32x2", "u32x4", "u32x8", "u32x16",
     "f64x2", "f64x4", "f64x8", "f64x16", "i64x2", "i64x4", "i64x8", "i64x16", "u64x2", "u64x4", "u64x8", "u64x16",
     "usizex2", "usizex4", "usizex8", "usizex16", "f32xN", "i32xN", "u32xN", "f64xN", "i64xN", "u64xN", "usizexN",
-    "usizex3A", "f32x3A", "i32x3A", "u32x3A", "f64x3A", "i64x3A", "u64x3A",
+    "usizex3A", "f32x3A", "i32x3A", "u32x3A", "f64x3A", "i64x3A", "u64x3A", "usizex3", "f32x3", "i32x3", "u32x3",
+    "f64x3", "i64x3", "u64x3",
 ];
 
 /// Holds the directly parsed attributes (no intermediate Punctuated tree).
 struct DispatchAttributes {
     simd: TokenStream,
-    /// `true` when the user did not explicitly specify a dispatch type — `S` is just the default.
+    /// `true` when the user did not explicitly specify a dispatch type - `S` is just the default.
     simd_is_default: bool,
     thermite: TokenStream,
 }
@@ -84,7 +85,7 @@ struct DispatchAttributes {
 /// Rewrites the annotated item so that every method/function body is wrapped in an
 /// `#[inline(always)]` inner copy and then called through a per-backend
 /// `#[target_feature(enable = "…")]` trampoline, selected at compile time by matching
-/// on `<S as HasIsa>::ISA` — a const that is resolved when `S` is monomorphized.
+/// on `<S as HasIsa>::ISA` - a const that is resolved when `S` is monomorphized.
 ///
 /// # Syntax
 ///
@@ -129,7 +130,7 @@ struct DispatchAttributes {
 ///    is generated that calls `foo` under the appropriate CPU feature flags.
 /// 3. The outer body becomes a `match <S as HasIsa>::ISA { … }` that selects the
 ///    right trampoline.  Because `ISA` is a const, LLVM folds the match away at
-///    monomorphization time — there is no runtime branch.
+///    monomorphization time - there is no runtime branch.
 ///
 /// `impl` blocks use a private helper trait to allow the trampolines to call back into
 /// `Self` without recursion.
@@ -144,7 +145,7 @@ struct DispatchAttributes {
 ///
 /// ```rust,ignore
 /// impl MyType {
-///     // OK — concrete type supplied explicitly:
+///     // OK - concrete type supplied explicitly:
 ///     #[dispatch(MyType)]
 ///     fn process(&self) { … }
 /// }
@@ -154,7 +155,7 @@ struct DispatchAttributes {
 /// (`<MyType as HasIsa>::ISA`) and as the impl target of the internal helper trait.
 ///
 /// **Prefer annotating the whole `impl` block** when all (or most) methods need
-/// dispatch — it is less repetitive and avoids repeating the type name per method:
+/// dispatch - it is less repetitive and avoids repeating the type name per method:
 ///
 /// ```rust,ignore
 /// #[dispatch(Self)]          // `Self` is resolved correctly at the impl-block level
@@ -575,7 +576,7 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
     // When applied to a method inside an impl block, the function has a receiver (`&self`,
     // `&mut self`, or `self`).  Free-function inner copies can't have receivers, so we
     // replicate the helper-trait pattern from `gen_impl_block` here.  Unlike that path,
-    // we only see the method — not the surrounding `impl` block — so the concrete Self
+    // we only see the method - not the surrounding `impl` block - so the concrete Self
     // type is unknown.  The user must supply it via `#[dispatch(ConcreteType)]`; that
     // ident is used both as the dispatch match type and as the impl target.
     // `impl Trait for Self` is not valid inside a function body.
@@ -791,12 +792,12 @@ fn forward_args_impl<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, reborrow: 
                     //   - Sized inner type (e.g. `&Vec<T>`, `&mut Vec<T>`, `&T`): emit
                     //     plain `&ident` / `&mut ident`. We deliberately avoid `&*ident`
                     //     here because it would invoke `Deref{,Mut}` and overshoot to
-                    //     the target type — e.g. `&mut Vec<T>` would dereference into
+                    //     the target type - e.g. `&mut Vec<T>` would dereference into
                     //     `&mut [T]` and fail to match the parameter type.
                     //
                     // Trade-off: for a `&mut T` (sized) parameter, the caller's binding
                     // must be `mut`. A function parameter `fn foo(buf: &mut Vec<f64>)`
-                    // is *not* mut-bound by default — pass `mut buf: &mut Vec<f64>` in
+                    // is *not* mut-bound by default - pass `mut buf: &mut Vec<f64>` in
                     // the signature, or reborrow at the call site before invoking the
                     // macro (`let buf = &mut *buf;`).
                     match (reborrow, &*arg.ty) {
@@ -861,7 +862,7 @@ impl VisitMut for SimdTypeReplacer<'_> {
 
                 *ty = syn::parse_quote_spanned! { span => #thermite::Vector<#s::#ident> };
 
-                // Do not recurse — the replacement is already fully expanded.
+                // Do not recurse - the replacement is already fully expanded.
                 return;
             }
         }
@@ -921,7 +922,7 @@ impl VisitMut for SimdTypeReplacer<'_> {
 /// ```
 ///
 /// `body` may reference the `for<Ident>` binding as a generic type satisfying the stated
-/// bound (default `Simd3A`), as well as any extra generic parameters listed in
+/// bound (default `Simd3`), as well as any extra generic parameters listed in
 /// `<ExtraGenericParams>` (assumed to be in scope at the call site).
 struct DispatchDynInput {
     /// Path to the thermite crate root (defaults to `::thermite`).
@@ -930,7 +931,7 @@ struct DispatchDynInput {
     /// Defaults to `S` if the `for<…>` clause is omitted.
     dispatch_ident: Ident,
     /// Explicit trait bounds on the dispatch type parameter (from `for<S: Bound + …>`).
-    /// If empty, the generated code defaults to `Simd3A`.
+    /// If empty, the generated code defaults to `Simd3`.
     dispatch_bounds: Punctuated<TypeParamBound, Token![+]>,
     /// Zero or more extra generic parameters (`<T: Bound, const N: usize>`, etc.) that
     /// are threaded through the generated inner function and per-backend wrappers.
@@ -963,9 +964,9 @@ impl Parse for DispatchDynInput {
             thermite = quote! { #path };
         }
 
-        // Optional `for<S>` or `for<S: Bound + Bound2>` — the dispatch type binding.
+        // Optional `for<S>` or `for<S: Bound + Bound2>` - the dispatch type binding.
         // Detected unambiguously: `for` keyword followed by `<`.
-        // Defaults to the identifier `S` with no explicit bounds (→ `Simd3A` at codegen time).
+        // Defaults to the identifier `S` with no explicit bounds (→ `Simd3` at codegen time).
         let (dispatch_ident, dispatch_bounds) = if stream.peek(Token![for]) && stream.peek2(Token![<]) {
             stream.parse::<Token![for]>()?;
             stream.parse::<Token![<]>()?;
@@ -1004,7 +1005,7 @@ impl Parse for DispatchDynInput {
         // optional `-> ReturnType`
         let output: ReturnType = stream.parse()?;
 
-        // Optional `where ExtraWherePredicates` — attached to `extra_generics`.
+        // Optional `where ExtraWherePredicates` - attached to `extra_generics`.
         if stream.peek(Token![where]) {
             extra_generics.where_clause = Some(stream.parse()?);
         }
@@ -1044,7 +1045,7 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 ///
 /// The whole point of `dispatch_dyn!` is to pick the best available ISA at runtime and
 /// run the body under it, so the **outside world cannot know which backend was chosen**
-/// — and therefore cannot mention its SIMD types. Concrete vector types like
+/// - and therefore cannot mention its SIMD types. Concrete vector types like
 /// `Vector<<S as Simd>::f32x4>`, `f32xN`, etc. depend on the generic `S`, which only
 /// exists *inside* the body. The per-backend `#[target_feature]` trampolines and the
 /// outer `match` arm aren't generic over `S`; if a vector type appeared in the
@@ -1071,20 +1072,20 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 /// # Syntax
 ///
 /// ```rust,ignore
-/// // Basic form — no explicit dispatch binding. Signature uses only ISA-agnostic types.
+/// // Basic form - no explicit dispatch binding. Signature uses only ISA-agnostic types.
 /// dispatch_dyn!(|data: &[f32]| -> f32 { /* SIMD work here */ });
 ///
 /// // Explicit dispatch binding (recommended): `for<Ident>` names the backend type.
-/// // Default bound is `Simd3A`. `S` is in scope inside the body:
+/// // Default bound is `Simd3`. `S` is in scope inside the body:
 /// dispatch_dyn!(for<S> |data: &mut [f32]| {
 ///     let (head, mid, tail) = data.try_aligned_simd_iter_mut::<f32xN>();
 ///     for v in mid { *v = v.sin(); }
 ///     /* … */
 /// });
 ///
-/// // Custom bound — restrict or widen the set of usable Simd traits:
+/// // Custom bound - restrict or widen the set of usable Simd traits:
 /// dispatch_dyn!(for<S: Simd> |data: &[f32]| -> f32 { /* … */ });
-/// dispatch_dyn!(for<S: Simd3A + MyCustomTrait> |data: &[f32]| { /* … */ });
+/// dispatch_dyn!(for<S: Simd3 + MyCustomTrait> |data: &[f32]| { /* … */ });
 ///
 /// // With extra caller-provided generics and a where clause:
 /// dispatch_dyn!(for<S> <T: Clone, const N: usize> |arg: T| -> T where T: Debug { arg });
@@ -1094,8 +1095,8 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 /// ```
 ///
 /// When `for<Ident>` is present, `Ident` is in scope inside `body` as a generic type
-/// satisfying the stated bound (or `Simd3A` by default).  When omitted, no explicit
-/// dispatch binding is in scope — rely on the automatic SIMD type rewriting below.
+/// satisfying the stated bound (or `Simd3` by default).  When omitted, no explicit
+/// dispatch binding is in scope - rely on the automatic SIMD type rewriting below.
 ///
 /// Any extra generic parameters from `<…>` are assumed to be in scope at the macro call
 /// site; the macro passes them through as explicit turbofish arguments.
@@ -1124,30 +1125,30 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 ///
 /// # Argument forwarding and reborrow rules
 ///
-/// The macro captures call-site locals **by name** — each parameter must correspond
+/// The macro captures call-site locals **by name** - each parameter must correspond
 /// to an in-scope binding of the same identifier. Forwarding to the per-backend
 /// trampoline is type-driven, with different rules for slice DST parameters and
 /// sized reference parameters:
 ///
 /// | Declared parameter type | Emitted forwarding | What the caller may hold |
 /// |---|---|---|
-/// | `&[T]` / `&mut [T]` (slice DST)        | `&*ident` / `&mut *ident` | `Vec<T>`, `Box<[T]>`, `[T; N]`, `&[T]`, `&mut [T]` — any binding |
+/// | `&[T]` / `&mut [T]` (slice DST)        | `&*ident` / `&mut *ident` | `Vec<T>`, `Box<[T]>`, `[T; N]`, `&[T]`, `&mut [T]` - any binding |
 /// | `&str` / `&dyn Trait` (other DSTs)     | `&*ident` / `&mut *ident` | `String`, `Box<str>`, `Box<dyn Trait>`, `&str`, `&dyn Trait` |
 /// | `&T` (sized, e.g. `&Vec<U>`, `&f64`)    | `&ident`                | the value itself, any binding, or a reference to it (deref-coerces) |
 /// | `&mut T` (sized, e.g. `&mut Vec<U>`)   | `&mut ident`            | a `mut`-bound owned value **or** a `mut`-bound reference |
 /// | anything else (by-value)               | `ident`                 | the value itself (moved) or a `Copy` primitive |
 ///
 /// The slice-DST row uses `&*ident` rather than `&ident` so that `Vec<T>` / `Box<[T]>`
-/// can be passed where `&[T]` is expected — without that, the user would have to write
+/// can be passed where `&[T]` is expected - without that, the user would have to write
 /// `&vec[..]` at the call site. For sized reference parameters the macro emits a plain
-/// borrow because `&*ident` would invoke `Deref{,Mut}` and overshoot — e.g. `&mut *vec`
+/// borrow because `&*ident` would invoke `Deref{,Mut}` and overshoot - e.g. `&mut *vec`
 /// where `vec: Vec<f64>` produces `&mut [f64]`, which does **not** match a `&mut Vec<f64>`
 /// parameter.
 ///
 /// ## Recommendations
 ///
 /// 1. **Prefer slice / `str` parameters over wrapper types in the macro signature.**
-///    `|data: &[f32]|` is more flexible than `|data: &Vec<f32>|` — it accepts owners,
+///    `|data: &[f32]|` is more flexible than `|data: &Vec<f32>|` - it accepts owners,
 ///    boxed slices, and slice references uniformly without any binding gymnastics. Only
 ///    use `&Vec<T>` / `&mut Vec<T>` when you genuinely need wrapper-specific methods
 ///    (e.g. `.push`, `.reserve`, `.clear`).
@@ -1156,13 +1157,13 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 ///    caller is a function parameter, write `mut` in the signature:
 ///
 ///    ```rust,ignore
-///    // Won't compile — `spectrum_buf` is not a `mut` binding, so the macro's
+///    // Won't compile - `spectrum_buf` is not a `mut` binding, so the macro's
 ///    // `&mut spectrum_buf` is rejected.
 ///    fn render(spectrum_buf: &mut Vec<f64>) {
 ///        dispatch_dyn!(|spectrum_buf: &mut Vec<f64>| { spectrum_buf.push(1.0); });
 ///    }
 ///
-///    // OK — one extra `mut` makes the binding itself mutable.
+///    // OK - one extra `mut` makes the binding itself mutable.
 ///    fn render(mut spectrum_buf: &mut Vec<f64>) {
 ///        dispatch_dyn!(|spectrum_buf: &mut Vec<f64>| { spectrum_buf.push(1.0); });
 ///    }
@@ -1181,7 +1182,7 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 ///    consumes the caller's `data`. Use a slice / reference parameter if you want
 ///    the caller to retain ownership.
 ///
-/// 4. **SIMD types belong only in the body — never in the signature.** See the
+/// 4. **SIMD types belong only in the body - never in the signature.** See the
 ///    *"The dispatch boundary hides the chosen backend"* section above. The macro
 ///    cannot reasonably accept or return SIMD vector / mask types, because their
 ///    identity depends on the runtime-selected backend (`S`) which the surrounding
@@ -1220,9 +1221,9 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .visit_block_mut(&mut body);
 
     // Build the bound for the dispatch type parameter.
-    // If the user wrote `for<S: Bound>` use that; otherwise default to `Simd3A`.
+    // If the user wrote `for<S: Bound>` use that; otherwise default to `Simd3`.
     let dispatch_bound: TokenStream = if dispatch_bounds.is_empty() {
-        quote! { #thermite::simd::Simd3A }
+        quote! { #thermite::simd::Simd3 }
     } else {
         quote! { #dispatch_bounds }
     };
@@ -1253,7 +1254,7 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // wrapper that instantiates the inner function for that backend's concrete Simd type.
     let branches = BACKENDS.iter().filter_map(|b| {
         let simd_path_str = b.simd_type?;
-        // Skip the scalar backend — it will be emitted as the `_ =>` fallback arm.
+        // Skip the scalar backend - it will be emitted as the `_ =>` fallback arm.
         if b.target_feature.is_empty() {
             return None;
         }
@@ -1287,7 +1288,7 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         use #thermite::prelude::*;
 
         // `#body` is a `syn::Block` and tokenizes as `{ stmts }`, so we use it as the
-        // function body directly — wrapping it in another `{ #body }` would produce
+        // function body directly - wrapping it in another `{ #body }` would produce
         // `fn f() { { user_body } }` and trigger the `unused_braces` lint at the user's
         // call site.
         #[inline(always)]

@@ -3,8 +3,8 @@
 use crate::{
     element::USize,
     isa::InstructionSet,
-    register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd},
+    register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister, reduced::ReducedRegister},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3},
 };
 
 cfg_if::cfg_if! {
@@ -47,7 +47,6 @@ impl NativeIsa for Scalar {
     }
 }
 
-#[thermite_macros::inline_always]
 impl NativeSimd for Scalar {
     type f32xN = f32;
     type i32xN = i32;
@@ -58,7 +57,6 @@ impl NativeSimd for Scalar {
     type u64xN = u64;
 }
 
-#[thermite_macros::inline_always]
 impl Simd for Scalar {
     type usizex2 = ArrayRegister<USize, 2>;
     type usizex4 = ArrayRegister<USize, 4>;
@@ -96,6 +94,18 @@ impl Simd for Scalar {
     type f64x16 = ArrayRegister<f64, 16>;
     type i64x16 = ArrayRegister<i64, 16>;
     type u64x16 = ArrayRegister<u64, 16>;
+}
+
+impl Simd3 for Scalar {
+    type usizex3 = ArrayRegister<USize, 3>;
+
+    type f32x3 = ArrayRegister<f32, 3>;
+    type i32x3 = ArrayRegister<i32, 3>;
+    type u32x3 = ArrayRegister<u32, 3>;
+
+    type f64x3 = ArrayRegister<f64, 3>;
+    type i64x3 = ArrayRegister<i64, 3>;
+    type u64x3 = ArrayRegister<u64, 3>;
 }
 
 decl_aliases!(Scalar);

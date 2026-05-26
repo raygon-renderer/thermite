@@ -419,7 +419,7 @@ impl IntegerRegister for U64x4V3 {
     }
 
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        todo!("arch::_mm_mullo_epu64x_v2(lhs, rhs)")
+        unsafe { arch::_mm256_mullo_epi64x_v3(lhs, rhs) }
     }
 
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

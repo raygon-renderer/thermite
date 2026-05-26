@@ -27,7 +27,7 @@ use crate::vector::{
 ///   `remainder` is the trailing scalar elements that did not fill a full vector. The
 ///   [`Unaligned`] handle performs unaligned loads/stores on each iteration step.
 ///   Note: the constructor trusts the caller to have truncated the slice to a multiple
-///   of the lane count — no runtime check is performed in `next()`.
+///   of the lane count - no runtime check is performed in `next()`.
 pub trait SimdSlice {
     type Element;
 
@@ -44,7 +44,7 @@ pub trait SimdSlice {
     /// Split the slice into a leading scalar remainder, an iterator of aligned SIMD vectors,
     /// and a trailing scalar remainder.
     ///
-    /// Unlike [`aligned_simd_iter`](SimdSlice::aligned_simd_iter) this never panics — any
+    /// Unlike [`aligned_simd_iter`](SimdSlice::aligned_simd_iter) this never panics - any
     /// leading bytes needed to reach alignment become the first `&Self`, and any
     /// trailing bytes that don't fill a complete vector become the last `&Self`.
     fn try_aligned_simd_iter<V>(&self) -> (&Self, impl Iterator<Item = &'_ V>, &Self)
@@ -53,7 +53,7 @@ pub trait SimdSlice {
 
     /// Iterate over the slice as aligned SIMD vectors using non-temporal (streaming) loads.
     ///
-    /// Each item is a [`StreamingVector`] — call `.load()` for a non-temporal load or
+    /// Each item is a [`StreamingVector`] - call `.load()` for a non-temporal load or
     /// `.load_cached()` to bring data into the CPU cache.
     ///
     /// Prefer this over [`aligned_simd_iter`](SimdSlice::aligned_simd_iter) for large
@@ -95,7 +95,7 @@ pub trait SimdSlice {
 
     /// Iterate mutably over the slice as aligned SIMD vectors using non-temporal (streaming) stores.
     ///
-    /// Each item is a [`StreamingVectorMut`] — call `.store(v)` for a non-temporal store
+    /// Each item is a [`StreamingVectorMut`] - call `.store(v)` for a non-temporal store
     /// that bypasses the cache, or dereference to load via a non-temporal read.
     ///
     /// # Panics

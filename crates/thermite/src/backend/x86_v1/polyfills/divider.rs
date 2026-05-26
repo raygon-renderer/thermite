@@ -32,8 +32,12 @@ pub unsafe fn _mm_mullhi_epu64x_v1(x: __m128i, y: __m128i) -> __m128i {
 pub unsafe fn _mm_mullhi_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
     let hi_product_0_z2_z = _mm_srli_epi64(_mm_mul_epu32(a, b), 32);
     let a1_x3_x = _mm_srli_epi64(a, 32);
+    // libdivide assumes a broadcast constant `b` (b0==b1, b2==b3); for a
+    // general per-lane `b` the odd lanes must be shifted into the even slots
+    // too. Harmless for the broadcast (single-divisor) case.
+    let b1_x3_x = _mm_srli_epi64(b, 32);
     let mask = _mm_set_epi32(-1, 0, -1, 0);
-    let hi_product_z1_z3 = _mm_and_si128(_mm_mul_epu32(a1_x3_x, b), mask);
+    let hi_product_z1_z3 = _mm_and_si128(_mm_mul_epu32(a1_x3_x, b1_x3_x), mask);
     _mm_or_si128(hi_product_0_z2_z, hi_product_z1_z3)
 }
 

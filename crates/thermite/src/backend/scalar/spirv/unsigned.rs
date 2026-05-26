@@ -99,7 +99,7 @@ impl BitshiftRegister for [<u $width>] {
  fn ror (value: Self, shift: u32) -> Self { value.rotate_right(shift) }
  fn rolv(value: Self, shifts: $u) -> Self { Self::rol(value, shifts as _) }
  fn rorv(value: Self, shifts: $u) -> Self { Self::ror(value, shifts as _) }
-    // OpBitReverse: native SPIR-V instruction — override the default swap+shift chain.
+    // OpBitReverse: native SPIR-V instruction - override the default swap+shift chain.
  fn reverse_bits(value: Self) -> Self { unsafe { arch::op_opbitreverse::<Self>(value) } }
 }
 

@@ -163,8 +163,8 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let mut y2 = V::EMPTY;
 
         if const { P::POLICY.avoid_branching } || !x_small.all() {
-            y2 = (x + x).exp_p::<P>();
-            y2 = (y2 - V::ONE) / (y2 + V::ONE); // originally (1 - 2/(y2 + 1))
+            let h = (x + x).exph_p::<P>();
+            y2 = (h - V::HALF) / (h + V::HALF);
 
             if const { P::POLICY.check_overflow } {
                 y2 = x.cmp_gt(crate::const_splat!(f64: 350.0)).select(V::ONE, y2);

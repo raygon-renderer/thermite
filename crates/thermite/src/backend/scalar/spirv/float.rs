@@ -152,14 +152,14 @@ impl SignedRegister for [<f $width>] {
  fn signum(value: Self) -> Self { value.signum() }
 
     // Bitwise copysign: (|lhs| bits) | (sign bit of rhs). f32::to_bits / from_bits
-    // compile to OpBitcast on SPIRV — zero-cost type reinterpretation.
+    // compile to OpBitcast on SPIRV - zero-cost type reinterpretation.
  fn copysign(lhs: Self, rhs: Self) -> Self { lhs.copysign(rhs) }
 
  fn neg_c(mask: bool, value: Self) -> Self {
         unsafe { arch::op_opselect::<Self, bool>(mask, Self::neg(value), value) }
     }
 
-    // OpSignBitSet is the direct MSB read — cheaper than comparing to zero.
+    // OpSignBitSet is the direct MSB read - cheaper than comparing to zero.
     // Fall back to OpFOrdLessThan in non-kernel SPIRV where OpSignBitSet may not be valid.
  fn is_negative(value: Self) -> bool {
         unsafe { cfg_select! {
@@ -343,7 +343,7 @@ impl FloatRegister for [<f $width>] {
         }
     }
 
-    // No register-file constraints in SPIRV — this is a no-op.
+    // No register-file constraints in SPIRV - this is a no-op.
  unsafe fn block_autovectorization(_value: &mut Self) {}
 }
 

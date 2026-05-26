@@ -63,10 +63,11 @@ pub unsafe fn _mm_cvtps_epu32x_v2(x: __m128) -> __m128i {
     let xmm1 = _mm_set1_ps(f32::from_bits(0x4f000000));
     let xmm2 = _mm_cmplt_ps(xmm0, xmm1);
     let xmm1 = _mm_sub_ps(xmm0, xmm1);
-    let xmm1 = _mm_cvtps_epi32(xmm1);
+    // `cvtt` (truncate toward zero) to match `f32 as u32` in-range.
+    let xmm1 = _mm_cvttps_epi32(xmm1);
     let xmm3 = _mm_set1_epu32x(0x80000000);
     let xmm1 = _mm_xor_si128(xmm1, xmm3);
-    let xmm0 = _mm_cvtps_epi32(xmm0);
+    let xmm0 = _mm_cvttps_epi32(xmm0);
     let xmm0 = _mm_blendv_ps(_mm_castsi128_ps(xmm1), _mm_castsi128_ps(xmm0), xmm2);
 
     _mm_castps_si128(xmm0)

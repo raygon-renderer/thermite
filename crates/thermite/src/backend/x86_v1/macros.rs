@@ -45,8 +45,8 @@ macro_rules! _mm_reduce_epi32_v1 {
         let xmm1 = arch::_mm_shuffle_epi32(xmm0, 0b11_10_11_10);
         // first reduce
         let xmm0 = arch::$op(xmm0, xmm1);
-        // Duplicate odd-indexed elements (1, 1, 3, 3)
-        let xmm1 = arch::_mm_shuffle_epi32(xmm0, 0b00_00_11_11);
+        // Duplicate odd-indexed elements (1, 1, 3, 3).
+        let xmm1 = arch::_mm_shuffle_epi32(xmm0, 0b11_11_01_01);
         // final reduce and extract
         arch::_mm_cvtsi128_si32(arch::$last(xmm0, xmm1))
     }}};

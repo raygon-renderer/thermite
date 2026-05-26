@@ -111,10 +111,11 @@ pub unsafe fn _mm256_cvtps_epu32x_v3(x: __m256) -> __m256i {
     let xmm1 = _mm256_set1_ps(f32::from_bits(0x4f000000));
     let xmm2 = _mm256_cmp_ps(xmm0, xmm1, _CMP_LT_OQ);
     let xmm1 = _mm256_sub_ps(xmm0, xmm1);
-    let xmm1 = _mm256_cvtps_epi32(xmm1);
+    // `cvtt` (truncate toward zero) to match `f32 as u32` in-range.
+    let xmm1 = _mm256_cvttps_epi32(xmm1);
     let xmm3 = _mm256_set1_epu32x(0x80000000);
     let xmm1 = _mm256_xor_si256(xmm1, xmm3);
-    let xmm0 = _mm256_cvtps_epi32(xmm0);
+    let xmm0 = _mm256_cvttps_epi32(xmm0);
     let xmm0 = _mm256_blendv_ps(_mm256_castsi256_ps(xmm1), _mm256_castsi256_ps(xmm0), xmm2);
 
     _mm256_castps_si256(xmm0)

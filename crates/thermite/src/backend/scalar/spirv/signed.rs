@@ -102,7 +102,7 @@ impl BitshiftRegister for [<i $width>] {
  fn ror (value: Self, shift: u32) -> Self { value.rotate_right(shift) }
  fn rolv(value: Self, shifts: $u) -> Self { Self::rol(value, shifts as _) }
  fn rorv(value: Self, shifts: $u) -> Self { Self::ror(value, shifts as _) }
-    // OpBitReverse: native SPIR-V instruction — override the default swap+shift chain.
+    // OpBitReverse: native SPIR-V instruction - override the default swap+shift chain.
  fn reverse_bits(value: Self) -> Self { unsafe { arch::op_opbitreverse::<Self>(value) } }
 }
 
@@ -177,7 +177,7 @@ impl SignedRegister for [<i $width>] {
 
  fn signum(value: Self) -> Self { value.signum() }
 
-    // Branchless copysign via abs+blend — avoids branch divergence across SIMD lanes.
+    // Branchless copysign via abs+blend - avoids branch divergence across SIMD lanes.
     // Edge case: lhs = MIN -> abs overflows to MIN; behavior matches scalar.
     fn copysign(lhs: Self, rhs: Self) -> Self {
         let abs_lhs = Self::abs(lhs);
@@ -205,7 +205,7 @@ impl IntegerRegister for [<i $width>] {
 
     fn mullo(lhs: Self, rhs: Self) -> Self { lhs.wrapping_mul(rhs) }
 
-    // Bitwise overflow detection — avoids widening to i64/i128 which may be unsupported on GPU.
+    // Bitwise overflow detection - avoids widening to i64/i128 which may be unsupported on GPU.
     // Overflow when inputs have the same sign but the sum has a different sign.
     fn saturating_add(lhs: Self, rhs: Self) -> Self {
         let sum      = lhs.wrapping_add(rhs);
@@ -261,7 +261,7 @@ impl IntegerRegister for [<i $width>] {
 
 #[thermite_macros::inline_always]
 impl SignedIntegerRegister for [<i $width>] {
-    // Rust `>>` on signed integers is arithmetic shift — compiles to OpShiftRightArithmetic
+    // Rust `>>` on signed integers is arithmetic shift - compiles to OpShiftRightArithmetic
  fn srai<const IMM8: i32>(value: Self) -> Self { value >> IMM8 }
  fn sra (value: Self, shift: u32) -> Self { value >> shift }
  fn srav(value: Self, shifts: $u) -> Self { value >> shifts }

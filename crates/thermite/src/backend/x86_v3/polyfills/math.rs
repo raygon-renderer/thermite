@@ -79,7 +79,10 @@ pub unsafe fn _mm256_mullo_epi64x_v3(lhs: __m256i, rhs: __m256i) -> __m256i {
     let prodlh4 = _mm256_and_si256(prodlh3, _mm256_set1_epi64x(0x00000000FFFFFFFF));
 
     let prodll = _mm256_mul_epu32(lhs, rhs);
-    let prod = _mm256_add_epi64(prodll, prodlh4);
+    // The cross term (a_lo*b_hi + a_hi*b_lo) occupies bits 32..63, so it must
+    // be shifted left by 32 before being added to the low product. The mask
+    // above zeroes its high dword so the shift can't bleed garbage in.
+    let prod = _mm256_add_epi64(prodll, _mm256_slli_epi64(prodlh4, 32));
 
     prod
 }

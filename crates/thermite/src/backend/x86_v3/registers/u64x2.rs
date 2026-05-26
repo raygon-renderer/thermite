@@ -420,7 +420,7 @@ impl IntegerRegister for U64x2V3 {
     }
 
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        todo!("arch::_mm_mullo_epu64x_v2(lhs, rhs)")
+        unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
     }
 
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -464,11 +464,14 @@ impl IntegerRegister for U64x2V3 {
     }
 
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
-        Self::sub(Self::splat(32), Self::ilog2p1(value))
+        // 64-bit lane: lz = 64 - ilog2p1(x)  (was erroneously 32).
+        Self::sub(Self::splat(64), Self::ilog2p1(value))
     }
 
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
-        super::I64x2V3::count_ones(value)
+        // Delegate to the signed sibling (mirrors U32x4V3 → I32x4V3); the
+        // previous `count_ones(value)` was a copy-paste error.
+        super::I64x2V3::trailing_zeros(value)
     }
 
     fn leading_ones(value: Storage<Self>) -> Storage<Self> {

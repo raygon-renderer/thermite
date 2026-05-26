@@ -441,7 +441,7 @@ impl CastRegister<U32x4V2> for ArrayRegister<super::U64x2V2, 2> {
     fn cast_from(value: Storage<U32x4V2>) -> Storage<Self> {
         unsafe {
             let lo = arch::_mm_cvtepu32_epi64(value);
-            let hi = arch::_mm_cvtepu32_epi64(arch::_mm_unpackhi_epi32(value, value));
+            let hi = arch::_mm_cvtepu32_epi64(arch::_mm_srli_si128(value, 8));
 
             ArrayRegister([lo, hi])
         }

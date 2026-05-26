@@ -22,7 +22,7 @@ impl HasIsa for super::Scalar {
 // Shared SPIRV bit-manipulation helpers (pub(super) so submodules can import)
 // ----------------------------------------------------------------------------
 
-// Software byte-swap — SPIRV has no native bswap instruction.
+// Software byte-swap - SPIRV has no native bswap instruction.
 #[inline(always)]
 pub(super) fn spirv_swap_bytes_u32(x: u32) -> u32 {
     ((x & 0xFF000000u32) >> 24) | ((x & 0x00FF0000u32) >> 8) | ((x & 0x0000FF00u32) << 8) | ((x & 0x000000FFu32) << 24)
@@ -90,7 +90,7 @@ pub(super) unsafe fn spirv_trailing_zeros_u64(x: u64) -> u64 {
 }
 
 // ----------------------------------------------------------------------------
-// Bool mask — CoreRegister + MaskRegister (uses OpSelect instead of
+// Bool mask - CoreRegister + MaskRegister (uses OpSelect instead of
 // core::hint::select_unpredictable)
 // ----------------------------------------------------------------------------
 
@@ -185,7 +185,7 @@ macro_rules! impl_spirv_cast {
             }
         }
     )*};
-    // same type — identity
+    // same type - identity
     (id: $($ty:ty),* $(,)?) => {$(
         #[thermite_macros::inline_always]
         impl crate::register::CastRegister<$ty> for $ty {

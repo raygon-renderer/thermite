@@ -3,14 +3,25 @@ use super::*;
 // NOTE: Saturated add/sub use the "sign bit" as the select bit,
 // so when porting to SSE2 it'll need to use the `signbits` methods to properly select with `_mm_blendv_epi8x`
 
+// NOTE: `_mm_blendv_epi8` selects per **byte** using each byte's high bit, so
+// every value used as a select mask must be sign-broadcast across the whole
+// lane (all bytes equal) - a raw operand/result has arbitrary low-byte high
+// bits and would saturate only some bytes of a lane, producing garbage. The
+// `signbits` helpers do that broadcast; `_mm_cmpgt_*` results are already
+// lane-uniform. The boolean logic itself is unchanged.
+
 #[inline(always)]
 pub unsafe fn _mm_adds_epi64x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
     let res = _mm_add_epi64(lhs, rhs);
 
     _mm_blendv_epi8(
         res,
-        _mm_blendv_epi8(_mm_set1_epi64x(i64::MIN), _mm_set1_epi64x(i64::MAX), res),
-        _mm_xor_si128(rhs, _mm_cmpgt_epi64(lhs, res)),
+        _mm_blendv_epi8(
+            _mm_set1_epi64x(i64::MIN),
+            _mm_set1_epi64x(i64::MAX),
+            _mm_signbits_epi64x_v1(res),
+        ),
+        _mm_xor_si128(_mm_signbits_epi64x_v1(rhs), _mm_cmpgt_epi64(lhs, res)),
     )
 }
 
@@ -20,8 +31,12 @@ pub unsafe fn _mm_adds_epi32x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
 
     _mm_blendv_epi8(
         res,
-        _mm_blendv_epi8(_mm_set1_epi32(i32::MIN), _mm_set1_epi32(i32::MAX), res),
-        _mm_xor_si128(rhs, _mm_cmpgt_epi32(lhs, res)),
+        _mm_blendv_epi8(
+            _mm_set1_epi32(i32::MIN),
+            _mm_set1_epi32(i32::MAX),
+            _mm_signbits_epi32x_v1(res),
+        ),
+        _mm_xor_si128(_mm_signbits_epi32x_v1(rhs), _mm_cmpgt_epi32(lhs, res)),
     )
 }
 
@@ -31,7 +46,11 @@ pub unsafe fn _mm_subs_epi32x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
 
     _mm_blendv_epi8(
         res,
-        _mm_blendv_epi8(_mm_set1_epi32(i32::MIN), _mm_set1_epi32(i32::MAX), res),
+        _mm_blendv_epi8(
+            _mm_set1_epi32(i32::MIN),
+            _mm_set1_epi32(i32::MAX),
+            _mm_signbits_epi32x_v1(res),
+        ),
         _mm_xor_si128(_mm_cmpgt_epi32(rhs, _mm_setzero_si128()), _mm_cmpgt_epi32(lhs, res)),
     )
 }
@@ -42,7 +61,11 @@ pub unsafe fn _mm_subs_epi64x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
 
     _mm_blendv_epi8(
         res,
-        _mm_blendv_epi8(_mm_set1_epi64x(i64::MIN), _mm_set1_epi64x(i64::MAX), res),
+        _mm_blendv_epi8(
+            _mm_set1_epi64x(i64::MIN),
+            _mm_set1_epi64x(i64::MAX),
+            _mm_signbits_epi64x_v1(res),
+        ),
         _mm_xor_si128(_mm_cmpgt_epi64(rhs, _mm_setzero_si128()), _mm_cmpgt_epi64(lhs, res)),
     )
 }
@@ -71,7 +94,10 @@ pub unsafe fn _mm_mullo_epi64x_v2(lhs: __m128i, rhs: __m128i) -> __m128i {
     let prodlh4 = _mm_and_si128(prodlh3, _mm_set1_epi64x(0x00000000FFFFFFFF));
 
     let prodll = _mm_mul_epu32(lhs, rhs);
-    let prod = _mm_add_epi64(prodll, prodlh4);
+    // The cross term (a_lo*b_hi + a_hi*b_lo) occupies bits 32..63, so it must
+    // be shifted left by 32 before being added to the low product. The mask
+    // above zeroes its high dword so the shift can't bleed garbage in.
+    let prod = _mm_add_epi64(prodll, _mm_slli_epi64(prodlh4, 32));
 
     prod
 }

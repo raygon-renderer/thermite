@@ -244,10 +244,14 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // if not all are small
         if const { P::POLICY.avoid_branching } || !x_small.all() {
-            y2 = (x + x).exp_p::<P>();
-            // originally (1 - 2/(y2 + 1)), but doing it this way avoids
-            // loading 2.0 and encourages slight instruction-level parallelism
-            y2 = (y2 - one) / (y2 + one);
+            // tanh(x) = (e^2x − 1) / (e^2x + 1). `exph` returns e^t / 2 with one
+            // extra bit of exponent headroom, so with h = exph(2x) = e^2x / 2
+            // the identity folds to (h − ½) / (h + ½): same value, e^2x
+            // overflows slightly later, and no extra square is needed.
+            // (Note `exph(x)²` would be e^2x / 4, which is *not* what tanh
+            // wants - that was the bug here.)
+            let h = (x + x).exph_p::<P>();
+            y2 = (h - V::HALF) / (h + V::HALF);
 
             if const { P::POLICY.check_overflow } {
                 y2 = x.cmp_gt(crate::const_splat!(f32: 44.4)).select(one, y2);
@@ -352,7 +356,13 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut y2 = V::EMPTY;
 
         if const { P::POLICY.avoid_branching } || !x_small.all() {
-            y2 = ((x2 + V::ONE).sqrt() + x).ln_p::<P>();
+            let x21 = if const { V::HAS_TRUE_FMA } {
+                x.mul_add(x, V::ONE)
+            } else {
+                x2 + V::ONE
+            };
+
+            y2 = (x21.sqrt() + x).ln_p::<P>();
 
             if const { P::POLICY.check_overflow } {
                 let x_huge = x.cmp_gt(crate::const_splat!(f32: 1e10));

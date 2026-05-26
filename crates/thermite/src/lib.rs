@@ -22,13 +22,13 @@
     feature(asm_experimental_arch)
 )]
 #![cfg_attr(feature = "nightly", allow(internal_features))]
-// generic_const_exprs is too unstable — causes "overly complex generic constant" errors
+// generic_const_exprs is too unstable - causes "overly complex generic constant" errors
 // throughout the codebase when enabled. Commented out until the feature matures.
 // #![cfg_attr(feature = "nightly", feature(generic_const_exprs))]
 // #![cfg_attr(feature = "nightly", allow(incomplete_features))]
 // Enable wasm64 simd on nightly
 #![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
-// Scalar WASM float intrinsics (f32_sqrt, f32_floor, etc.) — still unstable
+// Scalar WASM float intrinsics (f32_sqrt, f32_floor, etc.) - still unstable
 #![cfg_attr(
     all(
         feature = "nightly",
@@ -120,7 +120,8 @@ pub mod prelude {
         math::{FloatConsts, policy::Policy},
         simd::{
             FixedWidthSimd, FloatSimd, NativeIsa, NativeSimd, NativeSimdVectors, NativeSimdVectorsWithRegisters, Simd,
-            Simd3A, Simd3AVectors, Simd3AVectorsWithRegisters, SimdVectors, SimdVectorsWithRegisters, SizedSimd,
+            Simd3, Simd3A, Simd3AVectors, Simd3AVectorsWithRegisters, Simd3Vectors, Simd3VectorsWithRegisters,
+            SimdVectors, SimdVectorsWithRegisters, SizedSimd,
         },
         slice::SimdSlice as _,
         swizzle::Swizzle as _,

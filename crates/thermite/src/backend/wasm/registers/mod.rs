@@ -23,14 +23,15 @@ pub use half::{F32x2Wasm, I32x2Wasm, U32x2Wasm};
 use crate::{
     element::FindUSize,
     isa::InstructionSet,
-    register::{BitCastRegister, IndexableRegister, Storage, array::ArrayRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd},
+    register::{BitCastRegister, IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Wasm;
 
-#[thermite_macros::inline_always]
+impl_newregister!(F32x4Wasm, I32x4Wasm, U32x4Wasm, F64x2Wasm, I64x2Wasm, U64x2Wasm);
+
 impl HasIsa for Wasm {
     const ISA: InstructionSet = arch::ISA;
 }
@@ -71,7 +72,6 @@ impl_indexable!(<Wasm as Simd>::u32x4 => F32x4Wasm, I32x4Wasm, U32x4Wasm,
     <Wasm as Simd>::f64x4, <Wasm as Simd>::i64x4, <Wasm as Simd>::u64x4);
 impl_indexable!(<Wasm as Simd>::u64x4 => F32x4Wasm, I32x4Wasm, U32x4Wasm);
 
-#[thermite_macros::inline_always]
 impl Simd for Wasm {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
     type usizex4 = <() as FindUSize<(), Self::u32x4, Self::u64x4>>::Output;
@@ -109,6 +109,18 @@ impl Simd for Wasm {
     type f64x16 = ArrayRegister<F64x2Wasm, 8>;
     type i64x16 = ArrayRegister<I64x2Wasm, 8>;
     type u64x16 = ArrayRegister<U64x2Wasm, 8>;
+}
+
+impl Simd3 for Wasm {
+    type usizex3 = <Self as Simd3A>::usizex3A;
+
+    type f32x3 = <Self as Simd3A>::f32x3A;
+    type i32x3 = <Self as Simd3A>::i32x3A;
+    type u32x3 = <Self as Simd3A>::u32x3A;
+
+    type f64x3 = <Self as Simd3A>::f64x3A;
+    type i64x3 = <Self as Simd3A>::i64x3A;
+    type u64x3 = <Self as Simd3A>::u64x3A;
 }
 
 impl_concat_bool_register2!(f32, F32x2Wasm);

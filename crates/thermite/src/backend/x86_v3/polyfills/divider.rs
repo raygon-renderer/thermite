@@ -32,8 +32,10 @@ pub unsafe fn _mm256_mullhi_epu64x_v3(x: __m256i, y: __m256i) -> __m256i {
 pub unsafe fn _mm256_mullhi_epu32x_v3(a: __m256i, b: __m256i) -> __m256i {
     let hi_product_0_z2_z = _mm256_srli_epi64(_mm256_mul_epu32(a, b), 32);
     let a1_x3_x = _mm256_srli_epi64(a, 32);
+    // See _mm_mullhi_epu32x_v1: shift `b` too for a general per-lane `b`.
+    let b1_x3_x = _mm256_srli_epi64(b, 32);
     let mask = _mm256_set_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
-    let hi_product_z1_z3 = _mm256_and_si256(_mm256_mul_epu32(a1_x3_x, b), mask);
+    let hi_product_z1_z3 = _mm256_and_si256(_mm256_mul_epu32(a1_x3_x, b1_x3_x), mask);
     _mm256_or_si256(hi_product_0_z2_z, hi_product_z1_z3)
 }
 
@@ -41,8 +43,10 @@ pub unsafe fn _mm256_mullhi_epu32x_v3(a: __m256i, b: __m256i) -> __m256i {
 pub unsafe fn _mm256_mullhi_epi32x_v3(a: __m256i, b: __m256i) -> __m256i {
     let hi_product_0_z2_z = _mm256_srli_epi64(_mm256_mul_epi32(a, b), 32);
     let a1_x3_x = _mm256_srli_epi64(a, 32);
+    // See _mm_mullhi_epi32x_v2: shift `b` too for a general per-lane `b`.
+    let b1_x3_x = _mm256_srli_epi64(b, 32);
     let mask = _mm256_set_epi32(-1, 0, -1, 0, -1, 0, -1, 0);
-    let hi_product_z1_z3 = _mm256_and_si256(_mm256_mul_epi32(a1_x3_x, b), mask);
+    let hi_product_z1_z3 = _mm256_and_si256(_mm256_mul_epi32(a1_x3_x, b1_x3_x), mask);
     _mm256_or_si256(hi_product_0_z2_z, hi_product_z1_z3)
 }
 

@@ -1,5 +1,5 @@
 #![no_std]
-#![allow(unused, clippy::needless_arbitrary_self_type)]
+#![allow(unused, clippy::needless_arbitrary_self_type, clippy::needless_range_loop)]
 
 use thermite::{
     element::{Element, ElementExt, FloatElementWithBits},
@@ -76,7 +76,7 @@ macro_rules! decl_math {
         #[doc = "# Limitations"]
         #[doc = ""]
         #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
-        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` - the scalar must be"]
         #[doc = "wrapped in [`Vector`](thermite::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
         #[doc = "that bound. `ScalarSpecialMath` exists purely as a convenience for call-sites that"]
         #[doc = "already hold a concrete scalar and do not need to be generic."]
@@ -103,12 +103,13 @@ macro_rules! decl_math {
         #[doc = "# Limitations"]
         #[doc = ""]
         #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
-        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` — the scalar must be"]
+        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` - the scalar must be"]
         #[doc = "wrapped in [`Vector`](thermite::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
         #[doc = "that bound. `ScalarSpecialMath` exists purely as a convenience for call-sites that"]
         #[doc = "already hold a concrete scalar and do not need to be generic."]
         #[doc = ""]
         #[doc = "All types that implement [`ScalarSpecialMathWithPolicy`] automatically implement this trait."]
+        #[thermite_dispatch::dispatch(Self)]
         pub trait ScalarSpecialMath: ScalarSpecialMathWithPolicy {$($(
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?

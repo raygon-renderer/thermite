@@ -43,8 +43,8 @@ use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{Storage, array::ArrayRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd},
+    register::{Storage, array::ArrayRegister, reduced::ReducedRegister},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,7 +79,6 @@ impl NativeIsa for X86V3 {
     }
 }
 
-#[thermite_macros::inline_always]
 impl NativeSimd for X86V3 {
     type f32xN = F32x8V3;
     type i32xN = I32x8V3;
@@ -90,7 +89,6 @@ impl NativeSimd for X86V3 {
     type u64xN = U64x4V3;
 }
 
-#[thermite_macros::inline_always]
 impl Simd for X86V3 {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
     type usizex4 = <() as FindUSize<(), Self::u32x4, Self::u64x4>>::Output;
@@ -128,6 +126,18 @@ impl Simd for X86V3 {
     type f64x16 = ArrayRegister<F64x4V3, 4>;
     type i64x16 = ArrayRegister<I64x4V3, 4>;
     type u64x16 = ArrayRegister<U64x4V3, 4>;
+}
+
+impl Simd3 for X86V3 {
+    type usizex3 = <Self as Simd3A>::usizex3A;
+
+    type f32x3 = <Self as Simd3A>::f32x3A;
+    type i32x3 = <Self as Simd3A>::i32x3A;
+    type u32x3 = <Self as Simd3A>::u32x3A;
+
+    type f64x3 = <Self as Simd3A>::f64x3A;
+    type i64x3 = <Self as Simd3A>::i64x3A;
+    type u64x3 = <Self as Simd3A>::u64x3A;
 }
 
 impl_concat_bool_register2!(f32, F32x2V3);
@@ -214,13 +224,15 @@ impl_type_casts! {
     U64x4V3 as U64x4V3 => identity, // u64x4 -> u64x4
 
     // f32x4 casts
-    F32x4V3 as I32x4V3 => _mm_cvtps_epi32, // f32x4 -> i32x4
+    // NOTE: `cvtt` (truncate toward zero) - `cast` is "like `as`", which
+    // truncates; plain `cvtps_epi32` rounds in the current mode.
+    F32x4V3 as I32x4V3 => _mm_cvttps_epi32, // f32x4 -> i32x4
     F32x4V3 as U32x4V3 => _mm_cvtps_epu32x_v2, // f32x4 -> u32x4
     I32x4V3 as F32x4V3 => _mm_cvtepi32_ps, // i32x4 -> f32x4
     U32x4V3 as F32x4V3 => _mm_cvtepu32_psx_v2, // u32x4 -> f32x4
 
     // f32x8 casts
-    F32x8V3 as I32x8V3 => _mm256_cvtps_epi32, // i32x8 -> f32x8
+    F32x8V3 as I32x8V3 => _mm256_cvttps_epi32, // f32x8 -> i32x8 (truncate, like `as`)
     F32x8V3 as U32x8V3 => _mm256_cvtps_epu32x_v3, // f32x8 -> u32x8
     I32x8V3 as F32x8V3 => _mm256_cvtepi32_ps, // i32x4 -> f32x4
     U32x8V3 as F32x8V3 => _mm256_cvtepu32_psx_v3, // i32x8 -> f32x8

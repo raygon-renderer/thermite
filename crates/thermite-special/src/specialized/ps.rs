@@ -726,7 +726,7 @@ where
         // -cos(2x): fresh trig call at doubled argument for Best+ precision
         // (avoids cancellation in 1-2cos²x near x ≈ kπ/4);
         // otherwise 1-2cos²x, which is exact at the cancellation point
-        // and only loses bits near — but not at — those values.
+        // and only loses bits near - but not at - those values.
         let neg_cos2x = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             -(ax + ax).cos_p::<P>()
         } else {
