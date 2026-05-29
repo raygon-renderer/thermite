@@ -1,5 +1,35 @@
 #![allow(clippy::excessive_precision, clippy::approx_constant)]
 
+//! Element-parameterized implementations behind the public math traits.
+//!
+//! The traits in this module carry the actual
+//! algorithms (polynomial approximations, range reductions, Newton iterations,
+//! etc.) for `sin`, `exp`, `ln`, and the rest. Each is generic over an element
+//! type `E`, and the corresponding public trait in [`crate::math`]
+//! ([`CoreMath`](crate::math::CoreMath),
+//! [`TranscendentalMath`](crate::math::TranscendentalMath), ...) is a thin shim
+//! that simply forwards to the specialized method for its element type.
+//!
+//! # Why the element is the unit of specialization
+//!
+//! Splitting the implementation out by *element type* - rather than by vector or
+//! backend - is what lets the math library extend to composite number systems.
+//! A vector's element is not required to be a primitive `f32`/`f64`: it can
+//! itself be a structured value, and a math implementation written against that
+//! element flows through the exact same public traits.
+//!
+//! The motivating case is compensated (double-double) arithmetic: a
+//! `Compensated` vector's "element" is itself a `Compensated` value, so
+//! implementing the specialized traits for that element gives every
+//! `Compensated` vector full transcendental support with no changes to generic
+//! callers. The same pattern is intended for [`Complex`] and dual/hyperdual
+//! numbers as those land - implement the specialized math for the new element
+//! type and the entire public math API lights up for it automatically.
+//!
+//! Most code should never name these traits directly; bound on the public
+//! `*Math` traits instead. They are documented here for implementors adding a
+//! new element type.
+
 use core::marker::PhantomData;
 
 use crate::{

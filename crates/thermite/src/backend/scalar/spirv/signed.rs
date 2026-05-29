@@ -87,23 +87,24 @@ impl BitshiftRegister for [<i $width>] {
     const HAS_WIDE_BYTE_SHIFTS: bool = false; // no whole-vector byte-lane shift on SPIRV
 
     // Logical byte-granularity shifts (cast through unsigned to avoid arithmetic shift)
- fn bshli<const IMM8: i32>(value: Self) -> Self { ((value as $u) << (8 * IMM8)) as $i }
- fn bshri<const IMM8: i32>(value: Self) -> Self { ((value as $u) >> (8 * IMM8)) as $i }
+    fn bshli<const IMM8: i32>(value: Self) -> Self { (value as $u).unbounded_shl((8 * IMM8) as u32) as $i }
+    fn bshri<const IMM8: i32>(value: Self) -> Self { (value as $u).unbounded_shr((8 * IMM8) as u32) as $i }
 
     // Logical bit shifts (cast through unsigned)
- fn shl (value: Self, shift: u32) -> Self { ((value as $u) << shift) as $i }
- fn shr (value: Self, shift: u32) -> Self { ((value as $u) >> shift) as $i }
- fn shlv(value: Self, shifts: $u) -> Self { ((value as $u) << shifts) as $i }
- fn shrv(value: Self, shifts: $u) -> Self { ((value as $u) >> shifts) as $i }
- fn shli<const IMM8: i32>(value: Self) -> Self { ((value as $u) << IMM8 as u32) as $i }
- fn shri<const IMM8: i32>(value: Self) -> Self { ((value as $u) >> IMM8 as u32) as $i }
+    fn shl (value: Self, shift: u32) -> Self { (value as $u).unbounded_shl(shift) as $i }
+    fn shr (value: Self, shift: u32) -> Self { (value as $u).unbounded_shr(shift) as $i }
+    fn shlv(value: Self, shifts: $u) -> Self { (value as $u).unbounded_shl(shifts as u32) as $i }
+    fn shrv(value: Self, shifts: $u) -> Self { (value as $u).unbounded_shr(shifts as u32) as $i }
+    fn shli<const IMM8: i32>(value: Self) -> Self { (value as $u).unbounded_shl(IMM8 as u32) as $i }
+    fn shri<const IMM8: i32>(value: Self) -> Self { (value as $u).unbounded_shr(IMM8 as u32) as $i }
 
- fn rol (value: Self, shift: u32) -> Self { value.rotate_left (shift) }
- fn ror (value: Self, shift: u32) -> Self { value.rotate_right(shift) }
- fn rolv(value: Self, shifts: $u) -> Self { Self::rol(value, shifts as _) }
- fn rorv(value: Self, shifts: $u) -> Self { Self::ror(value, shifts as _) }
+    fn rol (value: Self, shift: u32) -> Self { value.rotate_left (shift) }
+    fn ror (value: Self, shift: u32) -> Self { value.rotate_right(shift) }
+    fn rolv(value: Self, shifts: $u) -> Self { Self::rol(value, shifts as _) }
+    fn rorv(value: Self, shifts: $u) -> Self { Self::ror(value, shifts as _) }
+
     // OpBitReverse: native SPIR-V instruction - override the default swap+shift chain.
- fn reverse_bits(value: Self) -> Self { unsafe { arch::op_opbitreverse::<Self>(value) } }
+    fn reverse_bits(value: Self) -> Self { unsafe { arch::op_opbitreverse::<Self>(value) } }
 }
 
 #[thermite_macros::inline_always]
@@ -115,13 +116,13 @@ impl ShuffleRegister for [<i $width>] {
 
 #[thermite_macros::inline_always]
 impl PermuteRegister for [<i $width>] {
- fn permute<const IMM8: i32>(value: Self) -> Self { value }
+    fn permute<const IMM8: i32>(value: Self) -> Self { value }
 }
 
 impl SwizzleRegister for [<i $width>] {
     const HAS_PERMUTEV: bool = false;
- fn permutev(value: Self, _idxs: GenericArray<u32, Self::Lanes>) -> Self { value }
- fn swizzle(a: Self, b: Self, idxs: GenericArray<u32, Self::Lanes>) -> Self {
+    fn permutev(value: Self, _idxs: GenericArray<u32, Self::Lanes>) -> Self { value }
+    fn swizzle(a: Self, b: Self, idxs: GenericArray<u32, Self::Lanes>) -> Self {
         if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
@@ -129,12 +130,12 @@ impl SwizzleRegister for [<i $width>] {
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl PartialOrdRegister for [<i $width>] {
- fn gt(lhs: Self, rhs: Self) -> bool { lhs > rhs }
- fn eq(lhs: Self, rhs: Self) -> bool { lhs == rhs }
- fn ge(lhs: Self, rhs: Self) -> bool { lhs >= rhs }
- fn lt(lhs: Self, rhs: Self) -> bool { lhs < rhs }
- fn le(lhs: Self, rhs: Self) -> bool { lhs <= rhs }
- fn ne(lhs: Self, rhs: Self) -> bool { lhs != rhs }
+    fn gt(lhs: Self, rhs: Self) -> bool { lhs > rhs }
+    fn eq(lhs: Self, rhs: Self) -> bool { lhs == rhs }
+    fn ge(lhs: Self, rhs: Self) -> bool { lhs >= rhs }
+    fn lt(lhs: Self, rhs: Self) -> bool { lhs < rhs }
+    fn le(lhs: Self, rhs: Self) -> bool { lhs <= rhs }
+    fn ne(lhs: Self, rhs: Self) -> bool { lhs != rhs }
 }
 
 #[thermite_macros::inline_always]
@@ -145,21 +146,21 @@ impl NumericRegister for [<i $width>] {
     const MIN:  Self = <$i>::MIN;
     const MAX:  Self = <$i>::MAX;
 
- fn min_element (value: Self) -> Self::Element { value }
- fn max_element (value: Self) -> Self::Element { value }
- fn sum_elements(value: Self) -> Self::Element { value }
- fn prod_elements(value: Self) -> Self::Element { value }
- fn pairwise_sum(lo: Self, hi: Self) -> Self { lo.wrapping_add(hi) }
- fn offset() -> Self { 1 }
- fn indexed() -> Self { 0 }
- fn add(lhs: Self, rhs: Self) -> Self { lhs + rhs }
- fn sub(lhs: Self, rhs: Self) -> Self { lhs - rhs }
- fn mul(lhs: Self, rhs: Self) -> Self { lhs * rhs }
- fn div(lhs: Self, rhs: Self) -> Self { lhs / rhs }
- fn rem(lhs: Self, rhs: Self) -> Self { lhs % rhs }
- fn sort(value: Self) -> Self { value }
- fn min(lhs: Self, rhs: Self) -> Self { unsafe { arch::glsl_op2::<Self, Self, Self, {glsl::S_MIN}, false>(lhs, rhs) } }
- fn max(lhs: Self, rhs: Self) -> Self { unsafe { arch::glsl_op2::<Self, Self, Self, {glsl::S_MAX}, false>(lhs, rhs) } }
+    fn min_element (value: Self) -> Self::Element { value }
+    fn max_element (value: Self) -> Self::Element { value }
+    fn sum_elements(value: Self) -> Self::Element { value }
+    fn prod_elements(value: Self) -> Self::Element { value }
+    fn pairwise_sum(lo: Self, hi: Self) -> Self { lo.wrapping_add(hi) }
+    fn offset() -> Self { 1 }
+    fn indexed() -> Self { 0 }
+    fn add(lhs: Self, rhs: Self) -> Self { lhs.wrapping_add(rhs) }
+    fn sub(lhs: Self, rhs: Self) -> Self { lhs.wrapping_sub(rhs) }
+    fn mul(lhs: Self, rhs: Self) -> Self { lhs.wrapping_mul(rhs) }
+    fn div(lhs: Self, rhs: Self) -> Self { lhs.wrapping_div(rhs) }
+    fn rem(lhs: Self, rhs: Self) -> Self { lhs.wrapping_rem(rhs) }
+    fn sort(value: Self) -> Self { value }
+    fn min(lhs: Self, rhs: Self) -> Self { unsafe { arch::glsl_op2::<Self, Self, Self, {glsl::S_MIN}, false>(lhs, rhs) } }
+    fn max(lhs: Self, rhs: Self) -> Self { unsafe { arch::glsl_op2::<Self, Self, Self, {glsl::S_MAX}, false>(lhs, rhs) } }
 }
 
 #[thermite_macros::inline_always]
@@ -168,14 +169,14 @@ impl SignedRegister for [<i $width>] {
     const MIN_POSITIVE: Self =  1;
 
     // OpSNegate: canonical SPIR-V signed negation.
- fn neg(value: Self) -> Self { unsafe { arch::op_opsnegate::<Self>(value) } }
+    fn neg(value: Self) -> Self { unsafe { arch::op_opsnegate::<Self>(value) } }
 
     // GLSLstd450 SAbs: cheaper than the default abs+select approach on GPU.
- fn abs(value: Self) -> Self {
+    fn abs(value: Self) -> Self {
         unsafe { arch::glsl_op1::<Self, Self, { glsl::S_ABS }, false>(value) }
     }
 
- fn signum(value: Self) -> Self { value.signum() }
+    fn signum(value: Self) -> Self { value.signum() }
 
     // Branchless copysign via abs+blend - avoids branch divergence across SIMD lanes.
     // Edge case: lhs = MIN -> abs overflows to MIN; behavior matches scalar.
@@ -262,9 +263,9 @@ impl IntegerRegister for [<i $width>] {
 #[thermite_macros::inline_always]
 impl SignedIntegerRegister for [<i $width>] {
     // Rust `>>` on signed integers is arithmetic shift - compiles to OpShiftRightArithmetic
- fn srai<const IMM8: i32>(value: Self) -> Self { value >> IMM8 }
- fn sra (value: Self, shift: u32) -> Self { value >> shift }
- fn srav(value: Self, shifts: $u) -> Self { value >> shifts }
+    fn srai<const IMM8: i32>(value: Self) -> Self { value.unbounded_shr(IMM8 as u32) }
+    fn sra (value: Self, shift: u32) -> Self { value.unbounded_shr(shift) }
+    fn srav(value: Self, shifts: $u) -> Self { value.unbounded_shr(shifts as u32) }
 }
 
 }}} // end macro

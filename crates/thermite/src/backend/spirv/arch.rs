@@ -160,7 +160,7 @@ spirv_op!(OpSatConvertUToS[TOut, TIn](a: TIn));
 // Useful for mixed-precision / quantization workflows on both GPU and CPU (via software).
 spirv_op!(OpQuantizeToF16[T](a: T));
 
-// Matrix operations — operands must be #[spirv(matrix)]-annotated structs (OpTypeMatrix).
+// Matrix operations - operands must be #[spirv(matrix)]-annotated structs (OpTypeMatrix).
 // TV is the vector element type, TM is the square matrix type.
 spirv_op!(OpTranspose[TM](a: TM));
 spirv_op!(OpMatrixTimesVector[TV, TM](mat: TM, vec: TV));
@@ -338,7 +338,7 @@ pub unsafe fn glsl_determinant<TM: Copy, TF: Copy + ConstDefault>(mat: TM) -> TF
     result
 }
 
-/// `GLSLstd450 Determinant + MatrixInverse` — compute both in one asm block.
+/// `GLSLstd450 Determinant + MatrixInverse` - compute both in one asm block.
 /// Returns `(determinant, inverse_matrix)`. Using a single block avoids loading the matrix twice.
 /// The caller must check the determinant before trusting the inverse.
 #[inline(always)]
@@ -371,8 +371,8 @@ pub unsafe fn glsl_determinant_and_inverse<TM: Copy + ConstDefault, TF: Copy + C
 /// to use reduced-precision arithmetic. The zero-argument form (`glsl_op0`) is also supported.
 macro_rules! glsl_op {
     // Internal helper: emit the full asm! block.
-    // [$($arg)*]    — input argument identifiers
-    // [$($extra)*]  — zero or more extra SPIR-V instruction strings inserted before OpStore
+    // [$($arg)*]    - input argument identifiers
+    // [$($extra)*]  - zero or more extra SPIR-V instruction strings inserted before OpStore
     //                 (used to conditionally inject OpDecorate for relaxed precision)
     (@emit [$($arg:ident)*] [$($extra:literal)*]) => {{
         let mut result = T::DEFAULT;
@@ -397,7 +397,7 @@ macro_rules! glsl_op {
             // `RP` is a const generic bool; the compiler eliminates the dead branch during
             // monomorphization. The decoration must live in the same asm! block as the
             // OpExtInst that defines %result, so two nearly-identical expansions are
-            // unavoidable — the @emit helper keeps the shared logic in one place.
+            // unavoidable - the @emit helper keeps the shared logic in one place.
             if RP {
                 unsafe { glsl_op!(@emit [$($arg)*] ["OpDecorate %result RelaxedPrecision"]) }
             } else {
@@ -565,11 +565,11 @@ macro_rules! spirv_shuffle_impl {
     };
 }
 
-// Interleave helpers — fixed-index OpVectorShuffle pairs for 2/3/4-lane vectors.
+// Interleave helpers - fixed-index OpVectorShuffle pairs for 2/3/4-lane vectors.
 // Indices: a = 0..N, b = N..2N.
 //
 // interleave_lo: zip even lanes (a0,b0, a1,b1, ...)
-// interleave_hi: zip odd  lanes (a1,b1, a2,b2, ...) — or upper half for 4-lane
+// interleave_hi: zip odd  lanes (a1,b1, a2,b2, ...) - or upper half for 4-lane
 // deinterleave_even: extract even-indexed lanes from the interleaved pair -> a
 // deinterleave_odd:  extract odd-indexed  lanes from the interleaved pair -> b
 

@@ -946,7 +946,7 @@ impl LinAlg3Register for F32x4 {
 // LinAlg4Register for F32x4.
 //
 // Matrix ops use native SPIR-V/GLSL instructions via #[spirv(matrix)] structs.
-// Quaternion ops are rewritten as scalar FMA chains — the SIMD default uses broadcasts
+// Quaternion ops are rewritten as scalar FMA chains - the SIMD default uses broadcasts
 // and sign-XOR shuffles that are wasteful on GPU SIMT where each lane is independent.
 #[rustfmt::skip] #[thermite_macros::inline_always]
 impl LinAlg4Register for F32x4 {

@@ -1,3 +1,57 @@
+//! ISA capability traits and the SIMD type-name lattice.
+//!
+//! This module defines the trait stack that names every concrete register
+//! and vector type a backend provides, plus the `Vector<...>` type aliases
+//! that map "I want an `f32x8` on whatever backend `S` is" to the right
+//! concrete type. Most users only ever interact with the type aliases; the
+//! traits are mainly building blocks for backends and for generic library
+//! code that needs to spell out the relationships between register widths
+//! and element types.
+//!
+//! # The ISA stack
+//!
+//! ```text
+//! HasIsa            -- just announces which `InstructionSet` a backend targets
+//!   |
+//! NativeIsa         -- adds register count, native 32/64-bit widths, alignment,
+//!   |                  and the `enable_denormals` / `zeroupper` knobs
+//! NativeSimd        -- names the "native-width" register types for each
+//!   |                  supported element family (currently the
+//!   |                  `f32xN` / `i32xN` / `u32xN` group and the
+//!   |                  `f64xN` / `i64xN` / `u64xN` group)
+//! Simd              -- names every fixed-width register type from x2 to x16,
+//!   |                  for f32/i32/u32/f64/i64/u64 and usize
+//! SizedSimd<F,I,U>  -- one element family at a time (32-bit OR 64-bit), with
+//!   |                  short names: `fxN`, `ixN`, `uxN`, `fx2`, `fx4`, ...
+//! FloatSimd<F>      -- like SizedSimd, but inferred from the float type alone
+//! ```
+//!
+//! [`Simd3A`] and [`Simd3`] are extensions on top of [`Simd`] that add 3-lane
+//! register types (`f32x3A` for "alpha-padded" 3-in-4 storage, `f32x3` for
+//! true 3-lane representations on backends that have them, such as GPUs).
+//!
+//! # The Vector mirror
+//!
+//! Each `*Simd` trait above has a `*Vectors` companion that exposes the same
+//! types as `Vector<...>` rather than raw registers. The `*WithRegisters`
+//! marker companions on top of that bridge the two layers, so generic code
+//! can move between [`Vector`] and its underlying register without losing
+//! associated-type information:
+//!
+//! ```text
+//! NativeSimdVectors -> NativeSimdVectorsWithRegisters
+//! SimdVectors       -> SimdVectorsWithRegisters
+//! Simd3AVectors     -> Simd3AVectorsWithRegisters
+//! Simd3Vectors      -> Simd3VectorsWithRegisters
+//! ```
+//!
+//! # Type aliases
+//!
+//! The free `pub type f32x4<S> = Vector<<S as Simd>::f32x4>;` aliases and
+//! their friends are the recommended entry point. Pick a backend `S` (for
+//! example `X86V3`, `Scalar`, or a generic `S: Simd` parameter), then write
+//! `f32x4<S>` and you have a fully-typed vector.
+
 #![allow(non_camel_case_types)]
 
 use core::{hash::Hash, marker::PhantomData};
@@ -22,33 +76,61 @@ use crate::{
     },
 };
 
+/// Zero-sized type with a `repr(align(16))`. Used as a field marker to force
+/// a containing struct up to 16-byte alignment without occupying any bytes
+/// of its own. Picked by backends whose native vectors live in 128-bit
+/// registers (SSE, NEON).
 #[doc(hidden)]
 #[repr(align(16))]
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Align16;
 
+/// Zero-sized type with a `repr(align(32))`. Used as a field marker to force
+/// 32-byte alignment for containers of 256-bit registers (AVX/AVX2).
 #[doc(hidden)]
 #[repr(align(32))]
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Align32;
 
+/// Zero-sized type with a `repr(align(64))`. Used as a field marker to force
+/// 64-byte alignment for containers of 512-bit registers (AVX-512).
 #[doc(hidden)]
 #[repr(align(64))]
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Align64;
 
+/// Root of the ISA trait stack: every backend type advertises which
+/// [`InstructionSet`] it targets via this constant.
+///
+/// Implementors include the per-tier x86 types (`X86V1`/`X86V2`/`X86V3`),
+/// the `Scalar` fallback backend, `SPIRV`, and the WASM backend. The
+/// `dispatch!` macro reads this constant to pick the right specialization
+/// at runtime.
 pub trait HasIsa {
+    /// The instruction set this backend implements.
     const ISA: InstructionSet;
 }
 
+/// Properties of a runnable native ISA: register count, native widths,
+/// alignment marker, and the CPU-state toggles ([`disable_denormals`](Self::disable_denormals),
+/// [`enable_denormals`](Self::enable_denormals), [`zeroupper`](Self::zeroupper)).
+///
+/// Every concrete backend type that can actually execute SIMD code
+/// implements this. The `Scalar` backend implements it with `U1` widths so
+/// generic code can be written uniformly.
 #[rustfmt::skip]
 pub trait NativeIsa: HasIsa + core::fmt::Debug + Clone + Copy + PartialEq + Eq + Hash {
+    /// Number of architectural SIMD registers the ISA exposes. For example,
+    /// `U8` for legacy SSE (xmm0-xmm7), `U16` for SSE4.2/AVX2, `U32` for
+    /// AVX-512. Used by some inlining heuristics in `transform::map_inplace`.
     type Registers: ArrayLength;
 
-    /// Largest native 32-bit SIMD width
+    /// Lane count of the widest natively-supported 32-bit-element register.
+    /// `U4` on SSE (128 bits), `U8` on AVX2 (256 bits), `U16` on AVX-512.
     type Native32Width: Lanes;
 
-    /// Largest native 64-bit SIMD width
+    /// Lane count of the widest natively-supported 64-bit-element register.
+    /// `U2` on SSE, `U4` on AVX2, `U8` on AVX-512.
     type Native64Width: Lanes;
 
     /// Opaque type with the minimum required alignment for native SIMD types.
@@ -104,10 +186,25 @@ pub trait NativeIsa: HasIsa + core::fmt::Debug + Clone + Copy + PartialEq + Eq +
     unsafe fn zeroupper() -> bool { false }
 }
 
+/// Returned by [`NativeIsa::disable_denormals`] / [`NativeIsa::enable_denormals`]
+/// when the backend has no way to influence the denormal flag (for example,
+/// on the `Scalar` backend or under WASM).
 pub struct UnsupportedError;
 
-/// RAII guard for temporarily disabling denormals at the CPU level. Upon Drop this will
-/// restore the previous behavior.
+/// RAII guard for temporarily disabling denormals at the CPU level.
+///
+/// Construct one at the start of a region that is performance-sensitive to
+/// subnormal inputs, perform the work, and let it drop at the end of the
+/// scope -- on `Drop` the previous flag state is restored. If the backend
+/// did not support disabling denormals in the first place, the guard
+/// becomes a no-op (you can check with [`is_disabled`](Self::is_disabled)).
+///
+/// ```ignore
+/// // Safety: we are not relying on subnormal-aware float behavior here.
+/// let _guard = unsafe { DisableDenormals::<S>::disable_denormals() };
+/// hot_loop(data);
+/// // guard drops here, restoring the previous state
+/// ```
 pub struct DisableDenormals<S: NativeIsa>(Result<bool, UnsupportedError>, PhantomData<S>);
 
 impl<S: NativeIsa> DisableDenormals<S> {
@@ -142,32 +239,57 @@ impl<S: NativeIsa> Drop for DisableDenormals<S> {
     }
 }
 
-/// Native-width SIMD types supported directly by the target architecture.
+/// Names the "native-width" register types of an ISA.
+///
+/// The `f32xN`/`i32xN`/`u32xN` group is sized to
+/// [`NativeIsa::Native32Width`]; the `f64xN`/`i64xN`/`u64xN` group to
+/// [`NativeIsa::Native64Width`]. These are the register types where the
+/// backend's hardware is most directly expressed (256-bit on AVX2, 128-bit
+/// on SSE, 1-lane on Scalar/SPIR-V), so generic code that wants to follow
+/// the host's natural width should bind to these. Additional native
+/// element families may be added in the future without breaking existing
+/// implementors.
+///
+/// Use [`Simd`] when you need a specific width by name instead.
 #[rustfmt::skip]
 pub trait NativeSimd: NativeIsa {
-    // Largest Native 32-bit SIMD types
+    /// Native-width `f32` register. Lanes = [`Native32Width`](NativeIsa::Native32Width).
     type f32xN: FullyInteroperable<Self::i32xN, Self::u32xN, Lanes = Self::Native32Width, Element = f32, Unsigned = Self::u32xN, Signed = Self::i32xN>
         + WellFormedFloatRegister<Bits = Self::u32xN, SignedBits = Self::i32xN> + IndexableRegister<Self::u32xN> + SwizzleRegister;
+    /// Native-width signed 32-bit integer register. Same lane count as `f32xN`.
     type i32xN: FullyInteroperable<Self::f32xN, Self::u32xN, Lanes = Self::Native32Width, Element = i32, Unsigned = Self::u32xN, Signed = Self::i32xN>
         + WellFormedSignedIntegerRegister + IndexableRegister<Self::u32xN> + SwizzleRegister;
+    /// Native-width unsigned 32-bit integer register. Same lane count as `f32xN`.
     type u32xN: FullyInteroperable<Self::f32xN, Self::i32xN, Lanes = Self::Native32Width, Element = u32, Unsigned = Self::u32xN, Signed = Self::i32xN>
         + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u32xN> + SwizzleRegister;
 
-    // Largest Native 64-bit SIMD types
+    /// Native-width `f64` register. Lanes = [`Native64Width`](NativeIsa::Native64Width),
+    /// typically half of [`Native32Width`](NativeIsa::Native32Width).
     type f64xN: FullyInteroperable<Self::i64xN, Self::u64xN, Lanes = Self::Native64Width, Element = f64, Unsigned = Self::u64xN, Signed = Self::i64xN>
         + WellFormedFloatRegister<Bits = Self::u64xN, SignedBits = Self::i64xN> + IndexableRegister<Self::u64xN> + SwizzleRegister;
+    /// Native-width signed 64-bit integer register. Same lane count as `f64xN`.
     type i64xN: FullyInteroperable<Self::f64xN, Self::u64xN, Lanes = Self::Native64Width, Element = i64, Unsigned = Self::u64xN, Signed = Self::i64xN>
         + WellFormedSignedIntegerRegister + IndexableRegister<Self::u64xN> + SwizzleRegister;
+    /// Native-width unsigned 64-bit integer register. Same lane count as `f64xN`.
     type u64xN: FullyInteroperable<Self::f64xN, Self::i64xN, Lanes = Self::Native64Width, Element = u64, Unsigned = Self::u64xN, Signed = Self::i64xN>
         + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u64xN> + SwizzleRegister;
 }
 
-/// Helper traits to guarantee certain relationships between registers, like which registers can be used as
-/// indices for which other registers, or which registers can be concatenated together.
+/// Helper traits bundling several register / vector relationships into one
+/// bound, so trait-heavy signatures elsewhere stay readable.
+///
+/// These are auto-implemented for any type that satisfies their component
+/// bounds; you never implement them by hand, you just write them in `where`
+/// clauses.
 pub mod helpers {
     use super::*;
 
-    /// Helper trait to group together unsigned integer registers that can be used as indices in scatter/gather ops for a given register.
+    /// Bundle: a register that accepts `usize`-, `u32`- and `u64`-typed index
+    /// registers of the same lane count for gather/scatter.
+    ///
+    /// Used as a single `IndexedBy<S::usizex4, S::u32x4, S::u64x4>` bound on
+    /// e.g. an `f32x4` register, rather than three separate
+    /// `IndexableRegister<...>` bounds.
     pub trait IndexedBy<
         USIZE: UnsignedIntegerRegister<Lanes = Self::Lanes>,
         U32: UnsignedIntegerRegister<Lanes = Self::Lanes>,
@@ -187,10 +309,18 @@ pub mod helpers {
     {
     }
 
+    /// Bundle: a register that can be zero-extended from `FROM`, including
+    /// its mask type. Used to chain register-width promotions through
+    /// generic code without re-stating the mask bound at every level.
     pub trait FullExtendRegister<FROM: Register>:
         Register<Mask: ExtendRegister<FROM::Mask>> + ExtendRegister<FROM>
     {
     }
+
+    /// Bundle: a register that is the concatenation of two `HALF` registers,
+    /// including its mask type. Implies [`FullExtendRegister`] and
+    /// [`ConcatRegister`], so a single bound covers both halves-into-whole
+    /// and whole-into-halves moves.
     pub trait FullConcatRegister<HALF: Register>:
         Register<Mask: ConcatRegister<HALF::Mask>> + FullExtendRegister<HALF> + ConcatRegister<HALF>
     {
@@ -205,6 +335,9 @@ pub mod helpers {
     {
     }
 
+    /// Vector-level mirror of [`IndexedBy`]: a vector that accepts `usize`-,
+    /// `u32`- and `u64`-typed index vectors of the same lane count for
+    /// gather/scatter.
     pub trait VectorIndexedBy<
         USIZE: UnsignedIntegerVector<Lanes = Self::Lanes>,
         U32: UnsignedIntegerVector<Lanes = Self::Lanes>,
@@ -227,7 +360,20 @@ pub mod helpers {
 
 use self::helpers::*;
 
-/// Fixed-size SIMD types of various lane counts and element sizes.
+/// Names every fixed-width SIMD register a backend offers.
+///
+/// Where [`NativeSimd`] gives you only the host's "natural" register width,
+/// `Simd` enumerates the full grid: lane counts of 2, 4, 8, and 16 for both
+/// 32-bit and 64-bit element families, plus the platform-pointer-sized
+/// `usizexN` group. Register widths that exceed the host's native width are
+/// emulated -- a `Simd::f64x16` on SSE2 is an `ArrayRegister` of four
+/// 2-lane `f64x2` registers -- but they expose the same interface, so
+/// generic code never has to special-case the "register too wide" path.
+///
+/// `Simd` is fine to bind directly when you want a specific width by name;
+/// [`NativeSimd`], [`SizedSimd`], [`FloatSimd`], and the free type aliases
+/// (`f32x4<S>`, etc.) at the module level are alternative entry points that
+/// can be more convenient in different contexts.
 #[rustfmt::skip]
 pub trait Simd: NativeSimd {
     type usizex2: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U2> + SwizzleRegister
@@ -423,10 +569,31 @@ pub trait Simd3: Simd3A<
         + CastRegister<Self::u32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
 }
 
-/// Fixed-width SIMD registers, which may be native SIMD types or composite types of the appropriate size.
+/// Names every SIMD register a backend offers, parameterized by a single
+/// type-level lane count `Width`.
 ///
-/// The width is specified by the `Width` type parameter, which must be a
-/// type-level integer representing the number of lanes in the SIMD register.
+/// Where [`Simd`] gives you `f32x2`, `f32x4`, `f32x8`, `f32x16` as separate
+/// associated types, `FixedWidthSimd<U4>` collapses them into a single
+/// `f32xN` associated type, and likewise for the other element types. This
+/// is what lets a function be written once and instantiated at the chosen
+/// width by callers.
+///
+/// Implemented automatically for every backend at widths `U1`, `U2`, `U3`
+/// (via [`Simd3`]), `U4`, `U8`, `U16`.
+///
+/// # Example
+///
+/// ```ignore
+/// fn process<S, W>(data: &mut [f32])
+/// where
+///     S: FixedWidthSimd<W>,
+///     W: Lanes,
+/// {
+///     // `S::f32xN` is the f32 vector with `W` lanes on backend `S`.
+///     let (_, chunks, _) = Vector::<S::f32xN>::align_slice_mut(data);
+///     for c in chunks { *c = c.sqrt(); }
+/// }
+/// ```
 pub trait FixedWidthSimd<Width: Lanes>: Simd {
     type usizexN: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = Width>;
 
@@ -631,7 +798,27 @@ pub trait SizedSimd<
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + FullConcatRegister<Self::ux8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
 }
 
-/// SIMD types for floating-point elements and their associated signed and unsigned integer types.
+/// Convenience over [`SizedSimd`]: pick a float element type, and the
+/// matching signed/unsigned integer "bits" types are inferred automatically.
+///
+/// For `F = f32` this is exactly `SizedSimd<f32, i32, u32>`; for `F = f64`,
+/// `SizedSimd<f64, i64, u64>`. Prefer this when the float type is the only
+/// parameter your function cares about and you do not want to spell out
+/// `<F as FloatElementWithBits>::SignedBits` etc.
+///
+/// # Example
+///
+/// ```ignore
+/// fn sin_inplace<S, F>(data: &mut [F])
+/// where
+///     F: WellFormedFloatElement,
+///     S: FloatSimd<F>,
+///     Vector<S::fxN>: TranscendentalMath,
+/// {
+///     let (_, chunks, _) = Vector::<S::fxN>::align_slice_mut(data);
+///     for c in chunks { *c = c.sin(); }
+/// }
+/// ```
 pub trait FloatSimd<F: WellFormedFloatElement + FloatElementWithBits>:
     SizedSimd<F, <F as FloatElementWithBits>::SignedBits, <F as FloatElementWithBits>::Bits>
 {
@@ -692,63 +879,127 @@ impl<S: Simd> SizedSimd<f64, i64, u64> for S {
     type ux16 = S::u64x16;
 }
 
+// =============================================================================
+// Vector type aliases, parameterized by a backend `S`.
+//
+// These are the recommended way to spell a SIMD vector type in user code:
+// pick a backend (`X86V3`, `Scalar`, or a generic `S: Simd`), and write
+// `f32x4<S>` rather than `Vector<<S as Simd>::f32x4>`.
+//
+// The `xN` suffix follows the host's native width via `NativeSimd`; the
+// numeric suffixes (`x2`/`x4`/`x8`/`x16`) come from `Simd`. The `x3A` and
+// `x3` variants come from `Simd3A`/`Simd3` (alpha-padded vs. true 3-lane).
+// =============================================================================
+
+/// `f32` vector at the backend's native 32-bit width.
 pub type f32xN<S> = Vector<<S as NativeSimd>::f32xN>;
+/// `i32` vector at the backend's native 32-bit width.
 pub type i32xN<S> = Vector<<S as NativeSimd>::i32xN>;
+/// `u32` vector at the backend's native 32-bit width.
 pub type u32xN<S> = Vector<<S as NativeSimd>::u32xN>;
 
+/// `f64` vector at the backend's native 64-bit width.
 pub type f64xN<S> = Vector<<S as NativeSimd>::f64xN>;
+/// `i64` vector at the backend's native 64-bit width.
 pub type i64xN<S> = Vector<<S as NativeSimd>::i64xN>;
+/// `u64` vector at the backend's native 64-bit width.
 pub type u64xN<S> = Vector<<S as NativeSimd>::u64xN>;
 
+/// 2-lane `f32` vector (64 bits on 32-bit-float backends).
 pub type f32x2<S> = Vector<<S as Simd>::f32x2>;
+/// 2-lane `i32` vector.
 pub type i32x2<S> = Vector<<S as Simd>::i32x2>;
+/// 2-lane `u32` vector.
 pub type u32x2<S> = Vector<<S as Simd>::u32x2>;
 
+/// 3-lane `f32` vector stored in a 4-lane register (alpha-padded). The
+/// 4th lane carries no semantic value but keeps register alignment.
 pub type f32x3A<S> = Vector<<S as Simd3A>::f32x3A>;
+/// 3-lane `i32` vector in alpha-padded 4-lane storage. See [`f32x3A`].
 pub type i32x3A<S> = Vector<<S as Simd3A>::i32x3A>;
+/// 3-lane `u32` vector in alpha-padded 4-lane storage. See [`f32x3A`].
 pub type u32x3A<S> = Vector<<S as Simd3A>::u32x3A>;
 
+/// 3-lane `usize` vector in a true 3-lane representation (e.g. SPIR-V `vec3`).
 pub type usizex3<S> = Vector<<S as Simd3>::usizex3>;
+/// 3-lane `f32` vector in a true 3-lane representation. See [`usizex3`].
 pub type f32x3<S> = Vector<<S as Simd3>::f32x3>;
+/// 3-lane `i32` vector in a true 3-lane representation. See [`usizex3`].
 pub type i32x3<S> = Vector<<S as Simd3>::i32x3>;
+/// 3-lane `u32` vector in a true 3-lane representation. See [`usizex3`].
 pub type u32x3<S> = Vector<<S as Simd3>::u32x3>;
 
+/// 4-lane `f32` vector (128 bits). Supports 4D linear-algebra helpers.
 pub type f32x4<S> = Vector<<S as Simd>::f32x4>;
+/// 4-lane `i32` vector (128 bits).
 pub type i32x4<S> = Vector<<S as Simd>::i32x4>;
+/// 4-lane `u32` vector (128 bits).
 pub type u32x4<S> = Vector<<S as Simd>::u32x4>;
 
+/// 8-lane `f32` vector (256 bits). Native on AVX2+ backends, emulated below.
 pub type f32x8<S> = Vector<<S as Simd>::f32x8>;
+/// 8-lane `i32` vector (256 bits).
 pub type i32x8<S> = Vector<<S as Simd>::i32x8>;
+/// 8-lane `u32` vector (256 bits).
 pub type u32x8<S> = Vector<<S as Simd>::u32x8>;
 
+/// 2-lane `f64` vector (128 bits).
 pub type f64x2<S> = Vector<<S as Simd>::f64x2>;
+/// 2-lane `i64` vector (128 bits).
 pub type i64x2<S> = Vector<<S as Simd>::i64x2>;
+/// 2-lane `u64` vector (128 bits).
 pub type u64x2<S> = Vector<<S as Simd>::u64x2>;
 
+/// 3-lane `f64` vector in alpha-padded 4-lane storage. See [`f32x3A`].
 pub type f64x3A<S> = Vector<<S as Simd3A>::f64x3A>;
+/// 3-lane `i64` vector in alpha-padded 4-lane storage. See [`f32x3A`].
 pub type i64x3A<S> = Vector<<S as Simd3A>::i64x3A>;
+/// 3-lane `u64` vector in alpha-padded 4-lane storage. See [`f32x3A`].
 pub type u64x3A<S> = Vector<<S as Simd3A>::u64x3A>;
 
+/// 3-lane `f64` vector in a true 3-lane representation. See [`usizex3`].
 pub type f64x3<S> = Vector<<S as Simd3>::f64x3>;
+/// 3-lane `i64` vector in a true 3-lane representation. See [`usizex3`].
 pub type i64x3<S> = Vector<<S as Simd3>::i64x3>;
+/// 3-lane `u64` vector in a true 3-lane representation. See [`usizex3`].
 pub type u64x3<S> = Vector<<S as Simd3>::u64x3>;
 
+/// 4-lane `f64` vector (256 bits). Supports 4D linear-algebra helpers.
 pub type f64x4<S> = Vector<<S as Simd>::f64x4>;
+/// 4-lane `i64` vector (256 bits).
 pub type i64x4<S> = Vector<<S as Simd>::i64x4>;
+/// 4-lane `u64` vector (256 bits).
 pub type u64x4<S> = Vector<<S as Simd>::u64x4>;
 
+/// 8-lane `f64` vector (512 bits). Native on AVX-512, emulated below.
 pub type f64x8<S> = Vector<<S as Simd>::f64x8>;
+/// 8-lane `i64` vector (512 bits).
 pub type i64x8<S> = Vector<<S as Simd>::i64x8>;
+/// 8-lane `u64` vector (512 bits).
 pub type u64x8<S> = Vector<<S as Simd>::u64x8>;
 
+/// 16-lane `f32` vector (512 bits). Native on AVX-512, emulated below.
 pub type f32x16<S> = Vector<<S as Simd>::f32x16>;
+/// 16-lane `i32` vector (512 bits).
 pub type i32x16<S> = Vector<<S as Simd>::i32x16>;
+/// 16-lane `u32` vector (512 bits).
 pub type u32x16<S> = Vector<<S as Simd>::u32x16>;
 
+/// 16-lane `f64` vector (1024 bits, always emulated).
 pub type f64x16<S> = Vector<<S as Simd>::f64x16>;
+/// 16-lane `i64` vector (1024 bits, always emulated).
 pub type i64x16<S> = Vector<<S as Simd>::i64x16>;
+/// 16-lane `u64` vector (1024 bits, always emulated).
 pub type u64x16<S> = Vector<<S as Simd>::u64x16>;
 
+/// Generates a backend-local `aliases` submodule with every vector type
+/// alias from [`crate::simd`] pre-bound to a specific backend.
+///
+/// Each backend invokes this once at its module root with its own
+/// `<Backend>` type, producing `aliases::f32x4`, `aliases::f32xN`, etc.
+/// without the `<S>` parameter -- so user code that imports
+/// `backend::x86_v3::prelude::*` (which re-exports `aliases::*`) gets the
+/// short names by default.
 macro_rules! decl_aliases {
     ($simd:ty) => {
         #[allow(non_camel_case_types)]
@@ -821,22 +1072,41 @@ use crate::vector::{
     SignedIntegerVectorWithRegister, SwizzleVector, UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,
 };
 
+/// Vector-level mirror of [`NativeSimd`]: names the native-width register
+/// types as [`Vector`] wrappers instead of raw registers.
+///
+/// Auto-implemented for every [`NativeSimd`] backend, so user code can use
+/// `S::f32xN`, `S::i64xN`, etc. as fully-typed vector aliases. When you
+/// also need the underlying [`crate::register::Register`] type
+/// to be reachable, bound on [`NativeSimdVectorsWithRegisters`] instead.
 pub trait NativeSimdVectors: NativeIsa {
+    /// Native-width `f32` vector. Lane count matches [`NativeIsa::Native32Width`].
     type f32xN: FloatVector<Lanes = <Self as NativeIsa>::Native32Width, Element = f32>
         + IndexableVector<<Self as NativeSimdVectors>::u32xN>;
+    /// Native-width signed 32-bit integer vector.
     type i32xN: SignedIntegerVector<Lanes = <Self as NativeIsa>::Native32Width, Element = i32>
         + IndexableVector<<Self as NativeSimdVectors>::u32xN>;
+    /// Native-width unsigned 32-bit integer vector.
     type u32xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native32Width, Element = u32>
         + IndexableVector<<Self as NativeSimdVectors>::u32xN>;
 
+    /// Native-width `f64` vector. Lane count matches [`NativeIsa::Native64Width`].
     type f64xN: FloatVector<Lanes = <Self as NativeIsa>::Native64Width, Element = f64>
         + IndexableVector<<Self as NativeSimdVectors>::u64xN>;
+    /// Native-width signed 64-bit integer vector.
     type i64xN: SignedIntegerVector<Lanes = <Self as NativeIsa>::Native64Width, Element = i64>
         + IndexableVector<<Self as NativeSimdVectors>::u64xN>;
+    /// Native-width unsigned 64-bit integer vector.
     type u64xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native64Width, Element = u64>
         + IndexableVector<<Self as NativeSimdVectors>::u64xN>;
 }
 
+/// Marker companion to [`NativeSimdVectors`] that also exposes each vector's
+/// underlying [`crate::register::Register`] type via
+/// [`VectorWithRegister`](crate::vector::VectorWithRegister).
+///
+/// Bind on this when generic code needs to round-trip a vector to its raw
+/// register storage (rare; the usual reason is FFI or hand-tuned codegen).
 pub trait NativeSimdVectorsWithRegisters: NativeSimd + NativeSimdVectors<
     // 32xN
     f32xN: FloatVectorWithRegister<
@@ -874,6 +1144,15 @@ impl<S: NativeSimd> NativeSimdVectors for S {
 
 impl<S: NativeSimd> NativeSimdVectorsWithRegisters for S {}
 
+/// Vector-level mirror of [`Simd`]: names every fixed-width register type
+/// the backend offers, as [`Vector`] wrappers.
+///
+/// Auto-implemented for every [`Simd`] backend. Provides the `usizexN`,
+/// `f32xN`/`i32xN`/`u32xN`, and `f64xN`/`i64xN`/`u64xN` groups at lane
+/// counts 2, 4, 8, and 16 -- the vector equivalents of the same names on
+/// [`Simd`]. When you also need each vector's underlying
+/// [`crate::register::Register`], bound on
+/// [`SimdVectorsWithRegisters`] instead.
 #[rustfmt::skip]
 pub trait SimdVectors: NativeSimdVectors {
     type usizex2: UnsignedIntegerVector<Lanes = U2, Element = crate::element::USize>
@@ -996,6 +1275,11 @@ pub trait SimdVectors: NativeSimdVectors {
         + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
 }
 
+/// Marker companion to [`SimdVectors`] that also exposes each vector's
+/// underlying [`crate::register::Register`] type.
+///
+/// Bind on this when generic code needs to move a fixed-width vector to or
+/// from its raw register storage.
 pub trait SimdVectorsWithRegisters: Simd + NativeSimdVectorsWithRegisters + SimdVectors<
     // usizes
     usizex2: UnsignedIntegerVectorWithRegister<Register = <Self as Simd>::usizex2>,
@@ -1067,6 +1351,14 @@ pub trait SimdVectorsWithRegisters: Simd + NativeSimdVectorsWithRegisters + Simd
         + FIV<<Self as SimdVectors>::f64x16, <Self as SimdVectors>::i64x16>,
 >{}
 
+/// Vector-level mirror of [`Simd3A`]: names the alpha-padded 3-lane vector
+/// types (`f32x3A`, `i32x3A`, etc.) as [`Vector`] wrappers.
+///
+/// Auto-implemented for every [`Simd3A`] backend. The 3-lane vectors share
+/// storage with the corresponding 4-lane registers; the 4th lane carries
+/// no semantic value but keeps alignment intact, which makes shuffles and
+/// other lane-aware ops cheap. For the truly-3-lane variant (e.g. SPIR-V
+/// `vec3`), use [`Simd3Vectors`].
 pub trait Simd3AVectors:
     SimdVectors<
         usizex4: ExtendVector<Self::usizex3A>,
@@ -1139,6 +1431,8 @@ pub trait Simd3AVectors:
         >;
 }
 
+/// Marker companion to [`Simd3AVectors`] that also exposes each vector's
+/// underlying [`crate::register::Register`] type.
 pub trait Simd3AVectorsWithRegisters: SimdVectorsWithRegisters + Simd3A + Simd3AVectors<
     // usizex3A
     usizex3A: UnsignedIntegerVectorWithRegister<Register = <Self as Simd3A>::usizex3A>,
@@ -1160,6 +1454,14 @@ pub trait Simd3AVectorsWithRegisters: SimdVectorsWithRegisters + Simd3A + Simd3A
         + FIV<<Self as Simd3AVectors>::f64x3A, <Self as Simd3AVectors>::i64x3A>,
 >{}
 
+/// Vector-level mirror of [`Simd3`]: names the truly-3-lane vector types
+/// (`f32x3`, `i32x3`, etc.) as [`Vector`] wrappers.
+///
+/// Only implemented on backends that have a real 3-lane representation
+/// (GPU/shader targets such as SPIR-V with `vec3`). On CPU backends, this
+/// is normally identical to [`Simd3AVectors`] -- the implementation just
+/// re-uses the alpha-padded form. Use it when you care about the
+/// "no padding lane" semantics, e.g. when emitting GPU shader code.
 pub trait Simd3Vectors:
     Simd3AVectors<
         usizex4: ExtendVector<Self::usizex3>,
@@ -1204,6 +1506,8 @@ pub trait Simd3Vectors:
         + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
 }
 
+/// Marker companion to [`Simd3Vectors`] that also exposes each vector's
+/// underlying [`crate::register::Register`] type.
 pub trait Simd3VectorsWithRegisters: SimdVectorsWithRegisters + Simd3 + Simd3Vectors<
     // usizex3
     usizex3: UnsignedIntegerVectorWithRegister<Register = <Self as Simd3>::usizex3>,

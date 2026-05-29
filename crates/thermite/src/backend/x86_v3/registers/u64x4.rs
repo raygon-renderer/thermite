@@ -461,11 +461,11 @@ impl IntegerRegister for U64x4V3 {
     }
 
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
-        Self::sub(Self::splat(32), Self::ilog2p1(value))
+        Self::sub(Self::splat(64), Self::ilog2p1(value))
     }
 
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
-        super::I64x4V3::count_ones(value)
+        super::I64x4V3::trailing_zeros(value)
     }
 
     fn leading_ones(value: Storage<Self>) -> Storage<Self> {

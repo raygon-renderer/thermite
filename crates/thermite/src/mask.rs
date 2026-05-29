@@ -14,18 +14,54 @@ use crate::{
     vector::Interleave,
 };
 
+/// Conversion between mask types of the same lane count but differing element
+/// width or backing representation.
+///
+/// A mask produced from, say, an `f32x8` comparison and one from an `i32x8`
+/// comparison are semantically the same eight booleans but may be different
+/// concrete types. `CastMask` reinterprets one as the other so a mask computed
+/// against one vector type can drive a [`select`](GenericMask::select) or
+/// masked operation on another. Most users reach this through
+/// [`GenericMask::cast`] rather than calling [`mask_from`](Self::mask_from)
+/// directly.
 pub trait CastMask<FROM>: Sized {
+    /// Reinterpret the `from` mask as `Self`, preserving the per-lane boolean
+    /// values.
     fn mask_from(from: FROM) -> Self;
 }
 
+/// Types whose lanes can be selected between by a mask.
+///
+/// Implemented by [`Vector`] (and any other lane-structured value). Given a
+/// mask, [`select`](Self::select) chooses each lane from one of two candidates.
+/// The associated [`SelectableMask`](Self::SelectableMask) names the mask type
+/// natural to this value; any mask castable to it (via [`CastMask`]) can be
+/// used, which is what lets a comparison on one element type select lanes of
+/// another.
 pub trait GenericSelectable: Copy {
+    /// The mask type whose lane count and layout match `Self`.
     type SelectableMask: Copy;
 
+    /// For each lane, take the value from `t` where `mask` is `true`, otherwise
+    /// from `f`.
     fn select<M>(mask: M, t: Self, f: Self) -> Self
     where
         Self::SelectableMask: CastMask<M>;
 }
 
+/// The boolean-vector trait: a per-lane mask supporting the logical and
+/// selection operations the rest of the library is built on.
+///
+/// Every [`Mask`] implements this. A mask has the same lane count as the vector
+/// it came from; each lane is either fully `true` or fully `false`. On
+/// pre-AVX-512 backends the representation is a full-width vector (all-ones /
+/// all-zeros per lane); on AVX-512 it is a dedicated `k` mask register.
+///
+/// Masks are produced by [`PartialOrdVector`](crate::vector::PartialOrdVector)
+/// comparisons (and similar predicates), combined with the bitwise operators
+/// (`&`, `|`, `^`, `!`, andnot), reduced with [`all`](Self::all) /
+/// [`any`](Self::any) / [`none`](Self::none), and consumed by
+/// [`select`](Self::select) and the `_c`/`_m`/`_z` masked operation variants.
 #[rustfmt::skip]
 pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     + CastMask<Self>
@@ -37,18 +73,42 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     + Not<Output = Self>
     + Interleave
 {
+    /// A mask with every lane set to `true` (all bits set).
     const TRUTHY: Self;
+    /// A mask with every lane set to `false` (all bits clear). This is also the
+    /// [`Default`].
     const FALSY: Self;
 
+    /// Returns `true` if every lane is `true`.
     fn all(self) -> bool;
+    /// Returns `true` if at least one lane is `true`.
     fn any(self) -> bool;
+    /// Returns `true` if every lane is `false`. Equivalent to `!self.any()`.
     fn none(self) -> bool;
 
+    /// Extract the mask as a packed integer bitmask, one bit per lane (lane 0 in
+    /// the least-significant bit), if the backend can produce one directly.
+    ///
+    /// Returns `None` when there is no native bit-packing instruction for this
+    /// mask representation (for example, very wide emulated masks, or backends
+    /// where lanes are not movemask-extractable). For a representation-agnostic
+    /// bitmask, enable the `bitvec` feature and use [`bitmask`](Self::bitmask).
     fn native_bitmask(&self) -> Option<u64>;
 
+    /// Extract the mask as a [`bitvec`] bit array, one bit per lane.
+    ///
+    /// Unlike [`native_bitmask`](Self::native_bitmask) this always succeeds,
+    /// falling back to a software pack when there is no native instruction.
+    /// Only available with the `bitvec` feature.
     #[cfg(feature = "bitvec")]
     fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>>;
 
+    /// Select between two lane-structured values: for each lane, take `t` where
+    /// this mask is `true` and `f` where it is `false`.
+    ///
+    /// Typically lowers to a single blend instruction. The selectable type `S`
+    /// may have a different element type, as long as its mask is
+    /// [`CastMask`]-compatible with this one.
     #[inline(always)]
     fn select<S>(self, t: S, f: S) -> S
     where
@@ -57,6 +117,9 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
         S::select(self, t, f)
     }
 
+    /// Reinterpret this mask as another mask type of the same lane count.
+    ///
+    /// Convenience wrapper over [`CastMask::mask_from`].
     #[inline(always)]
     fn cast<INTO>(self) -> INTO
     where
@@ -65,6 +128,8 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
         INTO::mask_from(self)
     }
 
+    /// Conditionally swap corresponding lanes of `a` and `b`: lanes where this
+    /// mask is `true` are exchanged, the rest are left in place.
     #[inline(always)]
     fn swap<S>(self, a: &mut S, b: &mut S)
     where
@@ -79,18 +144,30 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
         *b = b2;
     }
 
+    /// Arbitrary 3-input bitwise function of masks `a`, `b`, `c` selected by the
+    /// compile-time truth table `IMM`.
+    ///
+    /// The mask analogue of
+    /// [`BitwiseVector::ternlog`](crate::vector::BitwiseVector::ternlog); see
+    /// that method for how to compute `IMM`.
     fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 }
 
 /// SIMD Mask Vector, where each lane is a boolean value represented by
 /// all '1's' or '0's' bits in the underlying register.
 ///
-/// This is a wrapper around the underlying mask register type. It provides a way to create and manipulate masks
-/// for SIMD operations. See [`new`](Mask::new), [`splat`](Mask::splat),
-/// and [`From<bool>/From<Vector<R>>`](Mask::from) for creating masks from values.
+/// This is a `#[repr(transparent)]` wrapper around the underlying mask register
+/// type ([`Storage<R::Mask>`](crate::register::Storage)), exposing the
+/// [`GenericMask`] API for combining, reducing, and selecting with masks.
 ///
-/// Masks are created by certain operations on vectors, such as comparisons, and can be used
-/// to select elements from vectors based on the mask values.
+/// Masks are most often *produced* by predicate operations on vectors — e.g.
+/// the [`PartialOrdVector`](crate::vector::PartialOrdVector) comparisons
+/// (`cmp_lt`, `cmp_eq`, …) — and then used to select elements via
+/// [`select`](GenericMask::select) or to drive the `_c`/`_m`/`_z` masked
+/// operation variants. They can also be built directly from a scalar `bool`
+/// (splatting it to every lane) or from a [`Vector<R>`] (nonzero lanes become
+/// `true`) via the [`From`] impls, or from the [`TRUTHY`](GenericMask::TRUTHY) /
+/// [`FALSY`](GenericMask::FALSY) constants.
 #[repr(transparent)]
 pub struct Mask<R: Register>(#[doc(hidden)] pub Storage<R::Mask>);
 

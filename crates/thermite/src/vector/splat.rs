@@ -87,9 +87,14 @@ macro_rules! const_splat {
     };
 }
 
-/// Helper trait for `arr!` macro
+/// Type-level addition of two [`ArrayLength`] typenums.
+///
+/// Helper trait used by the `const_new!` machinery to compute the lane count of
+/// a vector built from a literal array: each element bumps a running length by
+/// one via [`Inc`]. Blanket-implemented for any `N1 + N2` whose sum is itself a
+/// valid `ArrayLength`.
 pub trait AddLength<N: ArrayLength>: ArrayLength {
-    /// Resulting length
+    /// The summed length, `N1 + N2`.
     type Output: ArrayLength;
 }
 
@@ -102,6 +107,10 @@ where
     type Output = <N1 as Add<N2>>::Output;
 }
 
+/// Type-level increment: the [`ArrayLength`] one greater than `U`.
+///
+/// Shorthand for `AddLength<U1>::Output`, used to count array elements one at a
+/// time in [`const_new_impl!`](crate::const_new_impl).
 pub type Inc<U> = <U as AddLength<generic_array::typenum::U1>>::Output;
 
 #[doc(hidden)]
@@ -173,16 +182,39 @@ macro_rules! const_new {
     }};
 }
 
+/// Build a vector `V` with every lane set to the compile-time constant carried
+/// by `E`.
+///
+/// This is the runtime entry point that the [`const_splat!`](crate::const_splat)
+/// macro expands to (inside a `const {}` block). `E` is a zero-sized
+/// [`SplatConst`] carrier holding the scalar value; the result is produced
+/// entirely at compile time. Prefer the macro over calling this directly.
 #[inline(never)]
 pub const fn const_splat<V: GenericVector, E: SplatConst<V::Element>>() -> V {
     <<V as SplatVector<V::Element>>::Splat<E> as VectorValue<E, V>>::VALUE
 }
 
+/// Build a vector `V` from the compile-time constant per-lane array carried by
+/// `C`.
+///
+/// This is the runtime entry point that the [`const_new!`](crate::const_new)
+/// macro expands to (inside a `const {}` block). `C` is a zero-sized
+/// [`NewConst`] carrier holding the `N`-element array, where `N` must equal
+/// `V`'s lane count. Prefer the macro over calling this directly.
 pub const fn const_new<V: GenericVector<Lanes = N>, N: ArrayLength, C: NewConst<V::Element, N>>() -> V {
     <<V as NewVector<V::Element, N>>::New<C> as VectorValue<C, V>>::VALUE
 }
 
+/// Associates a constant carrier `C` with the concrete vector constant `V` it
+/// produces.
+///
+/// The final link in the const-construction chain: a [`SplatVector::Splat`] /
+/// [`NewVector::New`] type implements this to expose the actual `const VALUE: V`
+/// for a given carrier. This indirection is what lets a generic vector type
+/// turn a compile-time constant into an instance of itself without const
+/// generics over arbitrary types.
 pub trait VectorValue<C, V: Sized>: Sized {
+    /// The materialized vector constant.
     const VALUE: V;
 }
 
@@ -195,14 +227,39 @@ pub trait SplatConst<E> {
     const VALUE: E;
 }
 
+/// Carrier for a compile-time constant array of `N` per-lane values of element
+/// type `E`.
+///
+/// The array analogue of [`SplatConst`]: used with
+/// [`NewVector`] / [`const_new()`] to construct a vector from a literal array at
+/// compile time. Typically implemented by an anonymous zero-sized type emitted
+/// by the [`const_new!`](crate::const_new) macro.
 pub trait NewConst<E, N: ArrayLength> {
+    /// The per-lane constant values.
     const VALUES: GenericArray<E, N>;
 }
 
+/// A vector type that can splat a compile-time [`SplatConst`] carrier into a
+/// constant of itself.
+///
+/// Implemented by every [`GenericVector`]. Given a carrier `T: SplatConst<E>`,
+/// the [`Splat`](Self::Splat) associated type names a [`VectorValue`] whose
+/// `VALUE` is `Self` with all lanes set to `T::VALUE`. Drives
+/// [`const_splat()`].
 pub trait SplatVector<E>: Sized {
+    /// For a given constant carrier `T`, the type exposing the splatted vector
+    /// constant via [`VectorValue`].
     type Splat<T: SplatConst<E>>: VectorValue<T, Self>;
 }
 
+/// A vector type that can build a constant of itself from a compile-time
+/// [`NewConst`] array carrier.
+///
+/// The array analogue of [`SplatVector`]. Given a carrier `T: NewConst<E, N>`,
+/// the [`New`](Self::New) associated type names a [`VectorValue`] whose `VALUE`
+/// is `Self` with its lanes set from `T::VALUES`. Drives [`const_new()`].
 pub trait NewVector<E, N: ArrayLength>: Sized {
+    /// For a given array carrier `T`, the type exposing the constructed vector
+    /// constant via [`VectorValue`].
     type New<T: NewConst<E, N>>: VectorValue<T, Self>;
 }

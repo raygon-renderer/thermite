@@ -1075,9 +1075,9 @@ impl<R: PartialOrdRegister> PartialOrd for Vector<R> {
     /// all lanes are less than, greater than, or equal.
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        let is_less = R::all(R::lt(self.0, other.0));
-        let is_greater = R::all(R::gt(self.0, other.0));
-        let is_equal = R::all(R::eq(self.0, other.0));
+        let is_less = <R::Mask as MaskRegister>::all(R::lt(self.0, other.0));
+        let is_greater = <R::Mask as MaskRegister>::all(R::gt(self.0, other.0));
+        let is_equal = <R::Mask as MaskRegister>::all(R::eq(self.0, other.0));
 
         match (is_less, is_greater, is_equal) {
             (true, false, false) => Some(core::cmp::Ordering::Less),

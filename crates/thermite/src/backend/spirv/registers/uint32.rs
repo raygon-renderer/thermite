@@ -51,7 +51,7 @@ macro_rules! decl_u32xN {
             }
         }
 
-        // Integer types support bitwise ops directly — no need to bitcast through another type.
+        // Integer types support bitwise ops directly - no need to bitcast through another type.
         #[thermite_macros::inline_always]
         impl BitwiseRegister for $name {
             fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -229,7 +229,7 @@ macro_rules! decl_u32xN {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::U_MAX }, false>(lhs, rhs) }
             }
 
-            // Scalar reductions via direct field access — no permutes needed on GPU.
+            // Scalar reductions via direct field access - no permutes needed on GPU.
  fn min_element(value: Storage<Self>) -> u32 {
                 Self::reduce(value, |a, b| if a < b { a } else { b })
             }
@@ -318,7 +318,7 @@ macro_rules! decl_u32xN {
             fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
                 unsafe { arch::op_opshiftrightlogical::<Self, Self>(value, shifts) }
             }
-            // OpBitReverse: native SPIR-V instruction — override the default swap+shift chain.
+            // OpBitReverse: native SPIR-V instruction - override the default swap+shift chain.
             fn reverse_bits(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opbitreverse::<Self>(value) }
             }
@@ -332,7 +332,7 @@ macro_rules! decl_u32xN {
                 hi
             }
 
-            // Low 32 bits of the product — same instruction as mul.
+            // Low 32 bits of the product - same instruction as mul.
             fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opimul::<Self>(lhs, rhs) }
             }

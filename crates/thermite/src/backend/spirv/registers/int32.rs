@@ -51,7 +51,7 @@ macro_rules! decl_i32xN {
             }
         }
 
-        // Integer types support bitwise ops directly — no need to bitcast through u32.
+        // Integer types support bitwise ops directly - no need to bitcast through u32.
         #[thermite_macros::inline_always]
         impl BitwiseRegister for $name {
             fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -218,7 +218,7 @@ macro_rules! decl_i32xN {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::S_MAX }, false>(lhs, rhs) }
             }
 
-            // Scalar reductions via direct field access — no permutes needed on GPU.
+            // Scalar reductions via direct field access - no permutes needed on GPU.
  fn min_element(value: Storage<Self>) -> i32 {
                 Self::reduce(value, |a, b| if a < b { a } else { b })
             }
@@ -307,7 +307,7 @@ macro_rules! decl_i32xN {
             fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
                 unsafe { arch::op_opshiftrightlogical::<Self, super::[<U32x $N>]>(value, shifts) }
             }
-            // OpBitReverse: native SPIR-V instruction — override the default swap+shift chain.
+            // OpBitReverse: native SPIR-V instruction - override the default swap+shift chain.
             fn reverse_bits(value: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opbitreverse::<Self>(value) }
             }
@@ -349,7 +349,7 @@ macro_rules! decl_i32xN {
                 hi
             }
 
-            // Low 32 bits of the product — same instruction as mul.
+            // Low 32 bits of the product - same instruction as mul.
             fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opimul::<Self>(lhs, rhs) }
             }
@@ -375,7 +375,7 @@ macro_rules! decl_i32xN {
                 Self::blendv(ovf_mask, diff, clamped)
             }
 
-            // OpBitCount is always available in SPIR-V — no software fallback needed.
+            // OpBitCount is always available in SPIR-V - no software fallback needed.
             const HAS_HARDWARE_POPCNT: bool = true;
 
             fn count_ones(value: Storage<Self>) -> Storage<Self> {
@@ -437,13 +437,13 @@ macro_rules! decl_i32xN {
 
         #[thermite_macros::inline_always]
         impl SignedIntegerRegister for $name {
-            // Arithmetic right shift — OpShiftRightArithmetic preserves the sign bit.
+            // Arithmetic right shift - OpShiftRightArithmetic preserves the sign bit.
             fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
                 let shifts = <super::[<U32x $N>]>::splat(shift);
                 unsafe { arch::op_opshiftrightarithmetic::<Self, super::[<U32x $N>]>(value, shifts) }
             }
 
-            // Variable arithmetic right shift — override the scalar fallback.
+            // Variable arithmetic right shift - override the scalar fallback.
             fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
                 unsafe { arch::op_opshiftrightarithmetic::<Self, super::[<U32x $N>]>(value, shifts) }
             }

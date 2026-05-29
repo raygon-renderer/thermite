@@ -1,3 +1,6 @@
+#![allow(clippy::excessive_precision)]
+
+/// Extensive set of constant special values used in float operations.
 pub trait FloatConsts {
     /// Negative zero (-0) (only sign bit set)
     const NEG_ZERO: Self;

@@ -231,6 +231,38 @@ decl_math! {
         /// This uses the recurrence relation to compute the polynomial iteratively.
         fn hermitev[][](self: Self, n: Self::Unsigned) -> Self;
 
+        /// Evaluates a finite series of [Chebyshev polynomials](https://en.wikipedia.org/wiki/Chebyshev_polynomials)
+        /// of the `K`-th kind at `x = self`:
+        ///
+        /// ```text
+        ///     Σ_{k=0}^{N-1} coeffs[k] · P_k(x)
+        /// ```
+        ///
+        /// where `P_k` is `T_k`, `U_k`, `V_k`, or `W_k` depending on `K`. All four kinds share the
+        /// recurrence `P_{k+1}(x) = 2x·P_k(x) - P_{k-1}(x)` with `P_0(x) = 1`; they differ only in
+        /// `P_1(x)`:
+        ///
+        /// | `K` | Kind   | `P_1(x)`   | Notes |
+        /// |-----|--------|------------|-------|
+        /// | `1` | First  (`T_k`) | `x`        | Most common; minimax/approximation basis on `[-1, 1]`. |
+        /// | `2` | Second (`U_k`) | `2x`       | Related to `sin((k+1)θ)/sin(θ)` under `x = cos θ`. |
+        /// | `3` | Third  (`V_k`) | `2x - 1`   | "Airfoil" polynomials; `cos((k+½)θ)/cos(θ/2)`. |
+        /// | `4` | Fourth (`W_k`) | `2x + 1`   | `sin((k+½)θ)/sin(θ/2)`. |
+        ///
+        /// Any other value of `K` is a compile-time error.
+        ///
+        /// Evaluation is done via Clenshaw's backward recurrence with FMA, which is
+        /// more numerically stable than a forward sum when the partial sums of
+        /// `Σ c_k P_k` are much smaller than `max |c_k P_k|` (e.g. fitted minimax series
+        /// with alternating-sign coefficients). `N` is the *length* of the coefficient
+        /// slice, so the highest polynomial term is `P_{N-1}`; `N = 0` is rejected,
+        /// `N = 1` evaluates to `coeffs[0]`.
+        ///
+        /// `coeffs[0]` multiplies `P_0 = 1`, `coeffs[1]` multiplies `P_1(x)` (which depends on `K`),
+        /// and so on. Because LLVM sees both `K` and `N` as constants, the recurrence loop and the
+        /// `P_1` selection are fully unrolled and specialized at monomorphization time.
+        #[skip_dispatch] fn chebyshev[const K: usize, const N: usize][K, N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
         /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
         ///
         /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
@@ -302,6 +334,30 @@ decl_math! {
         /// **Note**: This function uses `|x|^N` (the real absolute value), making it non-holomorphic
         /// and therefore only meaningful for real-valued inputs.
         fn algebraic_sigmoid[const N: usize][N](self: Self) -> (Self, Self);
+
+        /// Algebraic analogue of the [Swish](https://en.wikipedia.org/wiki/Swish_function) activation,
+        /// defined as `x * (1/2 + x / (2 * sqrt(1 + x^2)))`. Equivalent to gating `x` by
+        /// `(1 + algebraic_sigmoid::<2>(x)) / 2`, the `[0, 1]`-rescaled `N=2` algebraic sigmoid.
+        ///
+        /// Like standard Swish/SiLU, this is smooth and non-monotonic - it dips slightly below zero
+        /// for moderately negative `x` before rising - and shares the same asymptotes (`f(x) -> x` as
+        /// `x -> ∞`, `f(x) -> 0` as `x -> -∞`). Unlike Swish, it requires no `exp` or `log`, making
+        /// it substantially cheaper on hardware without fast transcendentals.
+        ///
+        /// Returns both the value and its derivative with respect to `x` simultaneously, as they
+        /// share most of the underlying computation (notably `1/sqrt(1 + x^2)`).
+        ///
+        /// # Historical note
+        ///
+        /// Algebraic gating functions of this form are effectively unknown in modern deep learning,
+        /// which standardized on `exp`-based activations (sigmoid, Swish/SiLU, GELU) once GPUs made
+        /// `exp` essentially free - a single-cycle special-function-unit op on most modern hardware.
+        /// On CPUs the calculus is different: a vectorized `exp` still costs ~20+ cycles even with
+        /// good polynomial approximations, while `sqrt`/`rsqrt` are cheap hardware ops (often
+        /// approximated in 4–7 cycles). For CPU-side inference, training on CPU, or embedded targets
+        /// without a transcendental SFU, this remains a competitive Swish-shaped activation at a
+        /// fraction of the cost.
+        fn algebraic_swish[][](self: Self) -> (Self, Self);
 
         /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector,
         /// and returns the sign of the Gamma function from before the absolute value was taken.

@@ -22,28 +22,6 @@ impl<R: Register> Clone for VectorDivider<R> {
 
 impl<R: Register> Copy for VectorDivider<R> {}
 
-// impl<R: Register> VectorDivider<DoublePumpRegister<R>>
-// where
-//     typenum::Double<R::Lanes>: Lanes,
-// {
-//     #[inline(always)]
-//     pub(crate) fn split(self) -> (VectorDivider<R>, VectorDivider<R>) {
-//         let DoublePumpRegister(low_multipliers, high_multipliers) = self.multipliers.0;
-//         let DoublePumpRegister(low_shifts, high_shifts) = self.shifts.0;
-
-//         (
-//             VectorDivider {
-//                 multipliers: Vector(low_multipliers),
-//                 shifts: Vector(low_shifts),
-//             },
-//             VectorDivider {
-//                 multipliers: Vector(high_multipliers),
-//                 shifts: Vector(high_shifts),
-//             },
-//         )
-//     }
-// }
-
 impl<R: IntegerRegister> VectorDivider<R>
 where
     R::Element: Denominator,

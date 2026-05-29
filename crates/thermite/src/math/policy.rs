@@ -558,8 +558,12 @@ impl Policy for GpuDefault {
     };
 }
 
+/// The default math policy, which may be different depending on the platform.
+///
+/// For example, this defaults to [`Size`] on WASM. On most CPU platforms this
+/// defaults to [`Performance`].
 pub type DefaultPolicy = cfg_select! {
-    all(feature = "wasm", target_arch = "wasm32") => Size,
+    all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")) => Size,
     all(feature = "spirv", target_arch = "spirv") => GpuDefault,
     _ => Performance,
 };

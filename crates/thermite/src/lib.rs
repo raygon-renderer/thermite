@@ -105,6 +105,18 @@ macro_rules! MM_SHUFFLE_R {
     }};
 }
 
+/// Common imports for working with Thermite.
+///
+/// `use thermite::prelude::*;` brings the core types ([`Vector`], [`Mask`]) and
+/// the vector/mask/math trait hierarchy into scope, with the traits imported
+/// anonymously (`as _`) so their methods and operators are available without
+/// cluttering the namespace. This is the recommended starting point for most
+/// code.
+///
+/// Note that the math traits are imported anonymously: their methods are
+/// callable, but the trait names are not in scope. To name one in a generic
+/// bound (e.g. `fn f<V: FloatVector + TranscendentalMath>`), import it
+/// explicitly with `use thermite::math::TranscendentalMath;`.
 pub mod prelude {
     pub use crate::{Mask, Vector};
 
@@ -172,20 +184,31 @@ pub use simd::HasIsa;
 pub use swizzle::Swizzle;
 pub use vector::Vector;
 
-cfg_if::cfg_if! {
-    if #[cfg(all(feature = "spirv", target_arch = "spirv", not(target_feature = "Int64")))] {
-        pub type LargeInt = i32;
-        pub type LargeUInt = u32;
-    } else {
-        pub type LargeInt = i64;
-        pub type LargeUInt = u64;
-    }
-}
+/// The widest signed integer type that is efficient on the current target.
+///
+/// Normally `i64`. On the SPIR-V GPU backend, however, 64-bit integers require
+/// the `Int64` capability, which not every device advertises; when targeting
+/// SPIR-V without that capability this falls back to `i32`. Use this (and
+/// [`LargeUInt`]) for index/size arithmetic that should stay native on every
+/// supported target rather than hard-coding `i64`.
+pub type LargeInt = cfg_select! {
+    all(feature = "spirv", target_arch = "spirv", not(target_feature = "Int64")) => i32,
+    _ => i64,
+};
+
+/// The widest unsigned integer type that is efficient on the current target.
+///
+/// The unsigned counterpart of [`LargeInt`]: `u64` everywhere except on a
+/// SPIR-V target lacking the `Int64` capability, where it falls back to `u32`.
+pub type LargeUInt = cfg_select! {
+    all(feature = "spirv", target_arch = "spirv", not(target_feature = "Int64")) => u32,
+    _ => u64,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
-        #[inline(always)] pub fn likely(b: bool) -> bool { b }
-        #[inline(always)] pub fn unlikely(b: bool) -> bool { b }
+        #[doc(hidden)] #[inline(always)] pub fn likely(b: bool) -> bool { b }
+        #[doc(hidden)] #[inline(always)] pub fn unlikely(b: bool) -> bool { b }
     } else {
         // borrows technique from https://github.com/rust-lang/hashbrown/pull/209
         #[inline]
@@ -193,13 +216,13 @@ cfg_if::cfg_if! {
         fn cold() {}
 
         #[rustfmt::skip]
-        #[inline(always)]
+        #[doc(hidden)] #[inline(always)]
         pub fn likely(b: bool) -> bool {
             if !b { cold() } b
         }
 
         #[rustfmt::skip]
-        #[inline(always)]
+        #[doc(hidden)] #[inline(always)]
         pub fn unlikely(b: bool) -> bool {
             if b { cold() } b
         }

@@ -1,6 +1,95 @@
 #![allow(missing_docs, clippy::missing_safety_doc)]
 #![deny(unconditional_recursion)] // just in case we miss one
 
+//! User-facing vector types and the trait hierarchy that defines them.
+//!
+//! This module is the top of Thermite's public API. It provides the
+//! [`Vector<R>`] newtype - the value you actually compute with - and the tower
+//! of traits ([`GenericVector`] and its descendants) that describe what a
+//! vector can do.
+//!
+//! # Generic over *behavior*, not over a backend
+//!
+//! The central idea of Thermite is that you write code against
+//! [`GenericVector`] (or a more specific trait like [`NumericVector`],
+//! [`FloatVector`], or [`IntegerVector`]) and let the caller pick the concrete
+//! type. That concrete type decides the ISA, the lane count, and the element
+//! type - your code does not name any of them:
+//!
+//! ```
+//! use thermite::prelude::*;
+//! use thermite::math::TranscendentalMath;
+//!
+//! // Works on any backend, any width, any float element type.
+//! fn gaussian<V: FloatVector + TranscendentalMath>(v: V) -> V {
+//!     (-v * v).exp()
+//! }
+//! ```
+//!
+//! Crucially, "generic" here is stronger than "generic over the hardware
+//! backend". A [`GenericVector`] is not required to be a dense array of scalars
+//! sitting in a hardware register at all. The trait describes an *algebra of
+//! lanes*, and anything that satisfies that algebra is a first-class vector.
+//!
+//! # Composable abstractions all the way up
+//!
+//! Because the trait bounds are the only contract, wrapper types that are not
+//! SIMD registers in any conventional sense can still implement the hierarchy
+//! and flow through the very same generic functions:
+//!
+//! - **Complex numbers** - a `Complex<V>` pairing two real vectors implements
+//!   the [`GenericVector`]/[`FloatVector`] traits, so a function written for
+//!   real `FloatVector`s operates transparently on complex data.
+//! - **Compensated arithmetic** - a double-double `Compensated<V>` that tracks
+//!   rounding error implements the same traits; existing generic code gains
+//!   extended precision just by being instantiated with it.
+//! - **Dual / hyperdual numbers** - automatic differentiation via the same
+//!   trait composition, so a generic numeric routine differentiates itself when
+//!   handed a dual type.
+//!
+//! And these compose: `Complex<Compensated<f32x8>>` is a perfectly valid vector
+//! type where every complex operation is carried out in compensated real
+//! arithmetic, all still SIMD-accelerated underneath. The function you wrote
+//! once against `FloatVector` does not change.
+//!
+//! # The trait hierarchy
+//!
+//! Each trait adds capability on top of the previous one; bound on the least
+//! specific trait that supplies the operations you need.
+//!
+//! ```text
+//! GenericVector          construction, lane access, memory I/O, gather/scatter,
+//!   │                    reinterpretation, map/fold/reduce, interleave
+//!   ├─ BitwiseVector     &, |, ^, !, andnot, ternlog
+//!   │   └─ BitshiftVector   shifts, rotations, byte-shifts
+//!   └─ PartialOrdVector  cmp_lt/le/gt/ge/eq/ne → Mask
+//!       └─ NumericVector    +, -, *, /, %, min/max/clamp, reductions, FMA
+//!            ├─ SignedVector     abs, signum, copysign, neg
+//!            │    └─ FloatVector        sqrt, rcp/rsqrt, rounding, mix, consts
+//!            │         └─ FloatVectorWithBits  ldexp/frexp, bit-level ops
+//!            └─ IntegerVector    saturating/wrapping, popcount, dividers
+//!                 │              (also requires BitshiftVector)
+//!                 ├─ SignedIntegerVector    arithmetic shift, avg
+//!                 │                         (also requires SignedVector)
+//!                 └─ UnsignedIntegerVector  is_power_of_two, parity, avg
+//! ```
+//!
+//! `FloatVector` and `SignedIntegerVector` both sit under [`SignedVector`];
+//! `SignedIntegerVector` additionally requires [`IntegerVector`], so it is the
+//! meeting point of the signed and integer branches. `IntegerVector` itself
+//! does **not** require [`SignedVector`] — unsigned integer vectors are
+//! integers without being signed.
+//!
+//! Alongside these, [`LinAlg3Vector`]/[`LinAlg4Vector`] add 3D/4D linear-algebra
+//! operations, and the `Swizzle`/[`Swizzle3`]/[`Swizzle4`] traits add lane
+//! permutation. Masked (`_c`/`_m`/`_z`) variants of most operations live in the
+//! [`ops`] submodule.
+//!
+//! Three layers cooperate to make all of this work: an `Element` (the scalar),
+//! a [`Register`](crate::register::Register) (the functional hardware layer),
+//! and [`Vector<R>`] (this module's ergonomic wrapper). Most users only ever
+//! touch the [`Vector`] layer and its traits.
+
 use core::{
     marker::PhantomData,
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not},
@@ -36,6 +125,18 @@ pub use self::num::NumVector;
 pub use self::splat::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 pub use self::vector::Vector;
 
+/// Three vector types (`Self`, `A`, `B`) whose masks can all be freely cast to
+/// one another.
+///
+/// All three must share the same [`Lanes`](GenericVector::Lanes) count, and
+/// each one's [`Mask`](GenericVector::Mask) must implement [`CastMask`] into
+/// the other two. This is a convenience bound for generic code that selects or
+/// blends across vectors of different element types but identical width - e.g.
+/// using a mask produced from a float comparison to select lanes of an integer
+/// vector.
+///
+/// It is blanket-implemented for every triple of types satisfying the cast
+/// requirements, so it never needs to be implemented manually.
 pub trait MaskInteroperable<A, B>: GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
 where
     A: GenericVector<Lanes = Self::Lanes, Mask: CastMask<Self::Mask> + CastMask<B::Mask>>,
@@ -51,6 +152,17 @@ where
 {
 }
 
+/// [`MaskInteroperable`] plus bidirectional numeric ([`CastVector`]) conversion
+/// among `Self`, `A`, and `B`.
+///
+/// In addition to interoperable masks, this guarantees `Self`, `A`, and `B` can
+/// all be numerically cast into one another in either direction (`A`/`B` into
+/// `Self` *and* `Self` into `A`/`B`), so generic code can freely move operands
+/// of differing element types into whichever common type it needs before
+/// combining them. It does **not** require bit-level reinterpretation; for that
+/// see [`FullyInteroperable`].
+///
+/// Blanket-implemented for every triple satisfying the bounds.
 pub trait PartiallyInteroperable<A, B>:
     GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
     // casts
@@ -75,6 +187,17 @@ where
 {
 }
 
+/// [`PartiallyInteroperable`] plus zero-cost bit-level reinterpretation
+/// ([`BitCastVector`]) among `Self`, `A`, and `B`.
+///
+/// The strongest of the three interoperability bounds: masks are mutually
+/// castable, the three element types convert numerically, *and* their bit
+/// patterns can be reinterpreted into one another. This is what a float vector
+/// needs against its own bits/signed-bits integer vectors (see
+/// [`FloatVectorWithBits`]) so that bit-twiddling algorithms can hop between the
+/// float view and the integer view with no instructions emitted.
+///
+/// Blanket-implemented for every triple satisfying the bounds.
 pub trait FullyInteroperable<A, B>:
     GenericVector<Mask: CastMask<A::Mask> + CastMask<B::Mask>>
     // bits
@@ -125,22 +248,113 @@ trait GenericVectorExt: GenericVector {
 
 impl<V: GenericVector> GenericVectorExt for V {}
 
-/// Type that can be used as indices for gather/scatter operations of the vector type `V`
+/// An unsigned integer vector that can be used as the index operand for
+/// gather/scatter operations producing/consuming a vector of type `V`.
+///
+/// This is the inverse-facing companion to [`IndexableVector`]: where
+/// `IndexableVector<I>` is implemented on the gathered vector type, this is
+/// implemented on the index type. It is blanket-implemented for every index
+/// type `I` such that `V: IndexableVector<I>`, simply forwarding to `V`'s
+/// methods. The index lanes are element offsets (not byte offsets) and must
+/// match `V`'s lane count.
+///
+/// The methods here are the raw pointer primitives; prefer the safe,
+/// bounds-checked wrappers on [`GenericVector`] ([`gather`](GenericVector::gather),
+/// [`scatter`](GenericVector::scatter), etc.) instead of calling these directly.
 pub trait VectorIndices<V: GenericVector>: UnsignedIntegerVector<Lanes = V::Lanes> {
+    /// Gather one element of `V` per lane from `ptr[indices[lane]]`.
+    ///
+    /// # Safety
+    /// `ptr` must be valid for reads, and for every lane the offset
+    /// `indices[lane]` must land within the allocation `ptr` points into
+    /// (i.e. `ptr.add(indices[lane])` must be readable). Indices are not
+    /// bounds-checked.
     unsafe fn gather_ptr(ptr: *const V::Element, indices: Self) -> V;
+
+    /// Like [`gather_ptr`](Self::gather_ptr), but only lanes where `mask` is
+    /// `true` are loaded; the rest are taken from `src`.
+    ///
+    /// # Safety
+    /// Same as [`gather_ptr`](Self::gather_ptr), but only the offsets for lanes
+    /// where `mask` is `true` need to be in bounds; masked-off lanes are not
+    /// accessed.
     unsafe fn gather_ptr_m(src: V, mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
+
+    /// Like [`gather_ptr_m`](Self::gather_ptr_m), but masked-off lanes are
+    /// zeroed instead of taken from a source vector.
+    ///
+    /// # Safety
+    /// Same as [`gather_ptr_m`](Self::gather_ptr_m).
     unsafe fn gather_ptr_z(mask: V::Mask, ptr: *const V::Element, indices: Self) -> V;
 
+    /// Scatter each lane of `value` to `ptr[indices[lane]]`.
+    ///
+    /// # Safety
+    /// `ptr` must be valid for writes, and for every lane the offset
+    /// `indices[lane]` must land within the allocation `ptr` points into.
+    /// Indices are not bounds-checked, and overlapping (duplicate) indices
+    /// produce an unspecified winning lane.
     unsafe fn scatter_ptr(value: V, ptr: *mut V::Element, indices: Self);
+
+    /// Like [`scatter_ptr`](Self::scatter_ptr), but only lanes where `mask` is
+    /// `true` are written.
+    ///
+    /// # Safety
+    /// Same as [`scatter_ptr`](Self::scatter_ptr), but only the offsets for
+    /// lanes where `mask` is `true` need to be in bounds; masked-off lanes are
+    /// not written.
     unsafe fn scatter_ptr_m(value: V, mask: V::Mask, ptr: *mut V::Element, indices: Self);
 }
 
+/// A vector type that supports gather/scatter using index vectors of type `I`.
+///
+/// Implemented on the gathered/scattered vector type (`Self`), parameterized by
+/// the unsigned integer index vector type `I` (which must share `Self`'s lane
+/// count). Backends with hardware gather/scatter (e.g. AVX2's `vpgatherdd`)
+/// provide an accelerated implementation; others fall back to scalar loops.
+///
+/// These are the raw pointer primitives; index lanes are element offsets, not
+/// byte offsets, and are not bounds-checked. Prefer the safe, bounds-checked
+/// [`GenericVector`] wrappers ([`gather`](GenericVector::gather),
+/// [`scatter`](GenericVector::scatter), etc.) in normal code.
 pub trait IndexableVector<I: UnsignedIntegerVector<Lanes = Self::Lanes>>: GenericVector {
+    /// Gather one element per lane from `ptr[indices[lane]]`.
+    ///
+    /// # Safety
+    /// `ptr` must be valid for reads, and every offset `indices[lane]` must
+    /// land within the allocation `ptr` points into. Indices are not
+    /// bounds-checked.
     unsafe fn gather_ptr(ptr: *const Self::Element, indices: I) -> Self;
+
+    /// Like [`gather_ptr`](Self::gather_ptr), but only lanes where `mask` is
+    /// `true` are loaded; the rest are taken from `src`.
+    ///
+    /// # Safety
+    /// Same as [`gather_ptr`](Self::gather_ptr), but only the offsets for lanes
+    /// where `mask` is `true` need to be in bounds.
     unsafe fn gather_ptr_m(src: Self, mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
+
+    /// Like [`gather_ptr_m`](Self::gather_ptr_m), but masked-off lanes are
+    /// zeroed instead of taken from a source vector.
+    ///
+    /// # Safety
+    /// Same as [`gather_ptr_m`](Self::gather_ptr_m).
     unsafe fn gather_ptr_z(mask: Self::Mask, ptr: *const Self::Element, indices: I) -> Self;
 
+    /// Scatter each lane of `value` to `ptr[indices[lane]]`.
+    ///
+    /// # Safety
+    /// `ptr` must be valid for writes, and every offset `indices[lane]` must
+    /// land within the allocation `ptr` points into. Indices are not
+    /// bounds-checked; duplicate indices produce an unspecified winning lane.
     unsafe fn scatter_ptr(value: Self, ptr: *mut Self::Element, indices: I);
+
+    /// Like [`scatter_ptr`](Self::scatter_ptr), but only lanes where `mask` is
+    /// `true` are written.
+    ///
+    /// # Safety
+    /// Same as [`scatter_ptr`](Self::scatter_ptr), but only the offsets for
+    /// lanes where `mask` is `true` need to be in bounds.
     unsafe fn scatter_ptr_m(value: Self, mask: Self::Mask, ptr: *mut Self::Element, indices: I);
 }
 
@@ -189,17 +403,43 @@ where
     }
 }
 
+/// Joining two `HALF`-width values into one double-width `Self`, and splitting
+/// back apart.
+///
+/// Implemented for both vectors and masks. `Self` has exactly twice the lane
+/// count of `HALF`. Most users should go through
+/// [`GenericVector::concat`] / [`GenericVector::split`] rather than naming this
+/// trait directly. Because the wide type can always be narrowed back to a half,
+/// `Concat` requires [`Extend`].
 pub trait Concat<HALF>: Extend<HALF> {
+    /// Build the double-width value from a `lo` and `hi` half, with `lo`'s lanes
+    /// occupying the lower half of the result and `hi`'s the upper half.
     fn concat(lo: HALF, hi: HALF) -> Self;
+
+    /// Split into `(lo, hi)` halves, the inverse of [`concat`](Self::concat).
     fn split(self) -> (HALF, HALF);
 }
 
-/// Zero-extend vectors or masks
+/// Zero-extend a narrower `FROM` value into a wider `Self`, and narrow back.
+///
+/// Implemented for both vectors and masks. Most users should go through
+/// [`GenericVector::extend`] / [`GenericVector::narrow`].
 pub trait Extend<FROM> {
+    /// Widen `v` into `Self`, placing `v`'s lanes in the lower half and filling
+    /// the upper half with zeros.
     fn extend(v: FROM) -> Self;
+
+    /// Narrow back to `FROM` by keeping the lower lanes and discarding the
+    /// upper lanes.
     fn narrow(self) -> FROM;
 }
 
+/// [`Concat`] specialized to vector types: `Self` is a [`GenericVector`] that is
+/// the concatenation of two `HALF` vectors of the same element type, and whose
+/// mask is likewise the concatenation of two `HALF` masks.
+///
+/// Blanket-implemented; this is the bound used by [`GenericVector::concat`] /
+/// [`GenericVector::split`].
 pub trait ConcatVector<HALF: GenericVector<Element = Self::Element>>:
     Concat<HALF> + GenericVector<Mask: Concat<HALF::Mask>>
 {
@@ -224,6 +464,12 @@ where
 {
 }
 
+/// A [`GenericVector`] whose lanes can be permuted by the
+/// [`Swizzle`](crate::swizzle::Swizzle) machinery for its lane count.
+///
+/// Blanket-implemented for every vector that satisfies the swizzle bound; it is
+/// the prerequisite for the human-readable swizzle traits ([`Swizzle3`],
+/// [`Swizzle4`]) and the [`swizzle!`](crate::swizzle) macro.
 pub trait SwizzleVector: GenericVector + crate::swizzle::Swizzle<Self::Lanes> {}
 impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::Lanes> {}
 
@@ -250,7 +496,18 @@ pub trait Interleave: Sized {
 
 /// Core trait for generic vector types.
 ///
-/// Provides the basis for further specialized vector traits.
+/// Provides the basis for further specialized vector traits. Every other vector
+/// trait in the hierarchy (`NumericVector`, `FloatVector`, `IntegerVector`, etc.)
+/// is built on top of this one.
+///
+/// A `GenericVector` is a fixed-length, immutable, copyable array of `Element`s
+/// laid out contiguously and aligned to its register's native alignment. The
+/// number of lanes is known at compile time via the [`LANES`](Self::LANES)
+/// constant and the [`Lanes`](Self::Lanes) associated type (a `typenum`).
+///
+/// All construction, lane access, memory I/O, gather/scatter, reinterpretation,
+/// and scalar-fallback (`map`/`fold`/`reduce`) operations live on this trait.
+/// Arithmetic, bitwise and float operations are added by the sub-traits.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + const_default::ConstDefault
@@ -299,9 +556,17 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         + CastMask<<Self::Signed as GenericVector>::Mask>;
 
     /// Create a new vector from an array of elements.
+    ///
+    /// The array length `N` must equal [`LANES`](Self::LANES); this is enforced
+    /// at compile time by the `Const<N> == Lanes` bound.
     fn new<const N: usize>(value: [Self::Element; N]) -> Self
         where generic_array::typenum::Const<N>: generic_array::IntoArrayLength<ArrayLength = Self::Lanes>;
 
+    /// Consume the vector and return its elements as a `GenericArray`.
+    ///
+    /// This is the inverse of [`new`](Self::new); it copies lane-by-lane and
+    /// has no runtime cost beyond a register-to-memory store on backends where
+    /// the storage and array layouts are bit-identical (the common case).
     fn into_array(self) -> GenericArray<Self::Element, Self::Lanes>;
 
     /// Create a new vector from a single element by splatting it across all lanes.
@@ -619,20 +884,52 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// If `idx` is out of bounds for the vector's lanes.
     #[conditional] fn broadcastv(self, idx: usize) -> Self;
 
-    /// Extract a single element from the vector at the given index.
+    /// Extract a single element from the vector at the const-generic index `I`.
+    ///
+    /// Because `I` is known at compile time, the backend can lower this to a
+    /// single instruction (e.g. `pextrd`) with no runtime branch.
+    ///
+    /// # Compile-time errors
+    /// `I` must be less than [`LANES`](Self::LANES).
     fn extract<const I: usize>(self) -> Self::Element;
 
+    /// Extract a single element from the vector at the runtime index `idx`.
+    ///
+    /// Prefer [`extract`](Self::extract) when the index is known at compile
+    /// time; this variant typically lowers to a small jump table or per-lane
+    /// blend and is slower.
+    ///
+    /// # Panics
+    /// If `idx` is out of bounds for the vector's lanes.
     fn extractv(self, idx: usize) -> Self::Element;
 
-    /// Replace a single element in the vector at the given index with a new value.
+    /// Replace a single element in the vector at the const-generic index `I`.
+    ///
+    /// Returns a new vector; the original is unmodified. The lane index is
+    /// resolved at compile time.
+    ///
+    /// # Compile-time errors
+    /// `I` must be less than [`LANES`](Self::LANES).
     fn insert<const I: usize>(self, value: Self::Element) -> Self;
 
+    /// Replace a single element in the vector at the runtime index `idx`.
+    ///
+    /// Prefer [`insert`](Self::insert) when the index is known at compile time.
+    ///
+    /// # Panics
+    /// If `idx` is out of bounds for the vector's lanes.
     fn insertv(self, idx: usize, value: Self::Element) -> Self;
 
     /// Reverse the order of the elements in the vector.
+    ///
+    /// For a vector `[a, b, c, d]` this returns `[d, c, b, a]`.
     #[conditional] fn reverse(self) -> Self;
 
-    /// Swap the byte order of each element in the vector. i.e., converts between little-endian and big-endian.
+    /// Swap the byte order of each element in the vector, converting between
+    /// little-endian and big-endian representations lane-by-lane.
+    ///
+    /// Only the bytes within each element are reordered; lane order is
+    /// preserved. For a `u32` vector `[0x11223344]` this returns `[0x44332211]`.
     #[conditional] fn swap_bytes(self) -> Self;
 
     /// (Zero If False) Zero elements if the corresponding mask lane is false; otherwise, leave unchanged.
@@ -666,6 +963,13 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element;
 
+    /// Numeric cast to another vector type, matching the semantics of Rust's
+    /// `as` operator on the underlying scalar elements.
+    ///
+    /// Lane count is preserved; only the element type changes. The cast may
+    /// be widening, narrowing, signed/unsigned, or float/int. Out-of-range
+    /// float-to-int conversions follow the same saturating behavior as
+    /// scalar `as` on the host backend.
     #[inline(always)] fn cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
@@ -673,6 +977,14 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         INTO::cast_from(self)
     }
 
+    /// Fast numeric cast to another vector type.
+    ///
+    /// Equivalent to [`cast`](Self::cast) when the backend has no faster path,
+    /// but may relax IEEE corner cases (NaN propagation, out-of-range
+    /// float-to-int handling) in exchange for fewer instructions.
+    ///
+    /// Use [`cast`](Self::cast) when you need the documented `as` semantics
+    /// exactly; use this when you have already ruled out problematic inputs.
     #[inline(always)] fn fast_cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
@@ -680,6 +992,12 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         INTO::fast_cast_from(self)
     }
 
+    /// Reinterpret the bits of this vector as another vector type of the same
+    /// size and lane count.
+    ///
+    /// This is a zero-cost transmute; no conversion is performed. Typical use
+    /// is moving between a float vector and its integer "bits" vector for
+    /// bit-level manipulation.
     #[inline(always)] fn into_bits<INTO>(self) -> INTO
     where
         INTO: BitCastVector<Self>,
@@ -763,6 +1081,18 @@ pub trait BitwiseVector:
     /// instruction for this.
     #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
 
+    /// Two-input version of [`ternlog`](Self::ternlog).
+    ///
+    /// Computes an arbitrary bitwise boolean function of two inputs (`a`, `b`)
+    /// based on the 4-bit truth table specified by the low nibble of `IMM`.
+    /// Bit `i` of `IMM` selects the output when `(a, b)` equals the binary
+    /// representation of `i`. As with `ternlog`, the magic constants are
+    /// `A = 0xC` (`1100`) and `B = 0xA` (`1010`); evaluate your desired logic
+    /// against them to obtain `IMM`. For example, `A & B == 0x8`, `A | B == 0xE`,
+    /// `A ^ B == 0x6`, `!A == 0x3`.
+    ///
+    /// Since `IMM` is a compile-time constant, the compiler lowers this to
+    /// the most efficient native instruction sequence for the target ISA.
     #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self;
 }
 
@@ -778,15 +1108,28 @@ pub trait BitshiftVector:
     + ops::ShlMasked<Self::Mask, u32, Output = Self>
     + ops::ShlAssignMasked<Self::Mask, u32>
 {
+    /// `true` if the backend has a true per-lane variable shift instruction
+    /// (e.g. AVX2 `vpsllvd`). When `false`, [`shlv`](Self::shlv) /
+    /// [`shrv`](Self::shrv) are emulated and may be slower than splatting a
+    /// scalar shift count through [`shli`](Self::shli) / [`shri`](Self::shri).
     const HAS_TRUE_SHIFTV: bool;
+
+    /// `true` if the backend can byte-shift the entire vector as a single
+    /// large integer at register widths above 128 bits without lane-boundary
+    /// stitching. When `false`, [`bshli`](Self::bshli) / [`bshri`](Self::bshri)
+    /// on wider vectors are emulated via shuffles.
     const HAS_WIDE_BYTE_SHIFTS: bool;
 
     /// Treats the entire vector as a single large integer and shifts left by the immediate value
     /// number of BYTES. Not bits, bytes.
+    ///
+    /// Bits shifted out at the high end are discarded; the low end is zero-filled.
     #[conditional] fn bshli<const I: i32>(self) -> Self;
 
     /// Treats the entire vector as a single large integer and shifts right by the immediate value
     /// number of BYTES. Not bits, bytes.
+    ///
+    /// Bits shifted out at the low end are discarded; the high end is zero-filled.
     #[conditional] fn bshri<const I: i32>(self) -> Self;
 
     /// For each lane in the vector, shift left by the immediate value.
@@ -826,34 +1169,101 @@ pub trait BitshiftVector:
     #[conditional] fn reverse_bits(self) -> Self;
 }
 
+/// Per-lane numeric conversion between vector types.
+///
+/// Implementing `CastVector<FROM>` for `Self` means a `FROM` value can be
+/// converted into `Self` with the same semantics as Rust's `as` operator on
+/// the underlying scalar elements. Most users should call
+/// [`GenericVector::cast`] rather than these methods directly.
 pub trait CastVector<FROM: Sized>: Sized {
+    /// Convert a vector of type `FROM` into `Self`, lane-by-lane, using `as`
+    /// semantics on each element.
     fn cast_from(from: FROM) -> Self;
+
+    /// Convert this vector into a vector of type `FROM`, lane-by-lane.
     fn cast_into(self) -> FROM;
 
+    /// Like [`cast_from`](Self::cast_from), but may take a faster path that
+    /// relaxes IEEE corner cases. See [`GenericVector::fast_cast`].
     #[inline(always)]
     fn fast_cast_from(from: FROM) -> Self {
         Self::cast_from(from)
     }
 
+    /// Like [`cast_into`](Self::cast_into), but may take a faster path that
+    /// relaxes IEEE corner cases. See [`GenericVector::fast_cast`].
     #[inline(always)]
     fn fast_cast_into(self) -> FROM {
         Self::cast_into(self)
     }
 }
 
+/// Zero-cost bit-level reinterpretation between vector types of the same
+/// size and lane count.
+///
+/// Unlike [`CastVector`], no numeric conversion is performed: the underlying
+/// bits are reinterpreted as the destination element type. Typical use is
+/// moving between a float vector and its integer "bits" vector.
 pub trait BitCastVector<FROM: Sized>: Sized {
+    /// Reinterpret the bit pattern of `bits` as a value of `Self`.
     fn from_bits(bits: FROM) -> Self;
 }
 
+/// Per-lane comparison producing a [`Mask`](GenericVector::Mask).
+///
+/// Each comparison returns a mask whose lanes are `true` where the predicate
+/// held for the corresponding lane pair and `false` otherwise. The mask can
+/// then be used with [`select`](crate::mask::GenericMask::select),
+/// `_c`/`_m`/`_z` masked variants, or reduced via
+/// [`all`](crate::mask::GenericMask::all) /
+/// [`any`](crate::mask::GenericMask::any).
+///
+/// For floating-point vectors, NaN compares unequal to everything, so e.g.
+/// `cmp_lt(x, NaN)` is always `false`, matching the `<` operator on `f32`/`f64`.
 pub trait PartialOrdVector: GenericVector + PartialEq {
+    /// Lane-wise `self < other`.
     fn cmp_lt(self, other: Self) -> Self::Mask;
+    /// Lane-wise `self <= other`.
     fn cmp_le(self, other: Self) -> Self::Mask;
+    /// Lane-wise `self > other`.
     fn cmp_gt(self, other: Self) -> Self::Mask;
+    /// Lane-wise `self >= other`.
     fn cmp_ge(self, other: Self) -> Self::Mask;
+    /// Lane-wise `self == other`.
     fn cmp_eq(self, other: Self) -> Self::Mask;
+    /// Lane-wise `self != other`.
     fn cmp_ne(self, other: Self) -> Self::Mask;
 }
 
+/// Vectors that support arithmetic and comparison operations on their elements.
+///
+/// This trait sits between [`PartialOrdVector`] and the more specific
+/// [`SignedVector`] / [`IntegerVector`] / [`FloatVector`] traits, and provides
+/// the operator overloads (`+`, `-`, `*`, `/`, `%`, their `*Assign` variants,
+/// and the masked `_c`/`_m`/`_z` forms via [`ops`]).
+///
+/// # Overflow semantics
+///
+/// **For integer element types, the basic arithmetic operators (`+`, `-`, `*`,
+/// `/`, `%`) are wrapping on overflow.** This matches the behavior of every
+/// SIMD ISA (`paddd`, `pmulld`, etc. all wrap silently) and avoids per-lane
+/// panics inside vectorized loops. Concretely, on every backend including the
+/// scalar reference backend, `Vector::<i32x4>::splat(i32::MAX) + Vector::ONE`
+/// produces `i32::MIN` in every lane rather than panicking.
+///
+/// This is intentional and is **not affected by debug vs release builds**: the
+/// scalar backend uses `wrapping_add` / `wrapping_sub` / `wrapping_mul`
+/// internally, so the wrapping behavior is consistent across all build
+/// configurations. If you need saturation or explicit wrapping naming, use
+/// [`saturating_add`](IntegerVector::saturating_add) /
+/// [`saturating_sub`](IntegerVector::saturating_sub), or the
+/// `num_traits::WrappingAdd` / `WrappingSub` / `WrappingMul` impls.
+///
+/// Integer division (`/`, `%`) panics on division by zero, matching scalar
+/// Rust. Float division by zero produces an infinity or NaN per IEEE 754.
+///
+/// For float element types, overflow simply produces an infinity per IEEE 754;
+/// there is nothing to wrap.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait NumericVector:
     PartialOrdVector<Element: num_traits::NumOps>
@@ -950,15 +1360,31 @@ pub trait NumericVector:
     /// This operation has an `O(log2 n)` complexity to reduce.
     fn prod_elements(self) -> Self::Element;
 
-    /// Effectively returns `Self::splat(Self::LANES as Self::Element)`.
+    /// Returns a vector whose every lane equals [`LANES`](GenericVector::LANES),
+    /// converted into the element type.
+    ///
+    /// Equivalent to `Self::splat(Self::LANES as Self::Element)`. Useful for
+    /// stepping an [`indexed`](Self::indexed) counter forward by one full
+    /// vector's worth of lanes in tight loops.
     fn offset() -> Self;
 
-    /// Returns a vector where each element is the index of the lane as that element type.
+    /// Returns a vector where each lane holds its own index, cast to the
+    /// element type: `[0, 1, 2, ..., LANES-1]`.
     ///
-    /// `[0, 1, 2, 3]`, etc.
+    /// This is the typical starting point for index-based vector loops. The
+    /// counter can be advanced by adding [`offset`](Self::offset).
     fn indexed() -> Self;
 }
 
+/// Vectors whose elements can represent negative values.
+///
+/// Adds negation, absolute value, sign extraction, and sign-conditional
+/// selection on top of [`NumericVector`]. Implemented for signed integer and
+/// floating-point vectors; not for unsigned integer vectors.
+///
+/// As with the base [`NumericVector`] operators, unary `-` on a signed integer
+/// vector is **wrapping**: `-Vector::<i32x4>::splat(i32::MIN)` returns
+/// `i32::MIN` in every lane rather than panicking.
 // TODO: Add back in some kind of `Signed` trait requirement for Element?
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self> {
@@ -992,6 +1418,27 @@ pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self
     fn select_negative(self, if_neg: Self, if_pos: Self) -> Self;
 }
 
+/// Vectors of integer elements.
+///
+/// Adds bitwise shifts (via [`BitshiftVector`]), bit-counting, saturating
+/// arithmetic, branchfree integer division helpers, and exposes the type of
+/// the per-divider precomputed structures used for vectorized division.
+///
+/// # Wrapping arithmetic
+///
+/// The basic operators (`+`, `-`, `*`, their assigning forms, and unary `-`
+/// for signed integer vectors) **wrap on overflow** on every backend, in both
+/// debug and release builds. See [`NumericVector`] for the rationale. The
+/// `num_traits::WrappingAdd` / `WrappingSub` / `WrappingMul` impls are simply
+/// renames of the operator forms; for explicit saturation use
+/// [`saturating_add`](Self::saturating_add) /
+/// [`saturating_sub`](Self::saturating_sub).
+///
+/// # Reductions
+///
+/// Horizontal reductions ([`sum_elements`](NumericVector::sum_elements),
+/// [`prod_elements`](NumericVector::prod_elements), [`wrapping_sum`](Self::wrapping_sum),
+/// [`wrapping_prod`](Self::wrapping_prod)) all wrap on overflow.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 pub trait IntegerVector:
     NumericVector<Element: Denominator>
@@ -1004,33 +1451,70 @@ pub trait IntegerVector:
     + num_traits::SaturatingSub + num_traits::WrappingMul
     + num_traits::WrappingAdd + num_traits::WrappingSub
 {
+    /// Precomputed scalar divider used by per-lane division against a
+    /// runtime-known but loop-invariant divisor. See [`crate::Divider`].
     type Divider: Copy;
+    /// Branchfree variant of [`Divider`](Self::Divider). Slightly slower for
+    /// some divisors but always emits straight-line code with no conditional
+    /// branches, which is what you want inside a hot SIMD loop.
     type BranchfreeDivider: Copy;
+    /// Precomputed per-lane divider produced by [`to_divider`](Self::to_divider).
+    /// Used when each lane needs a different (but loop-invariant) divisor.
     type VectorizedDivider: Copy;
 
-    /// Multiply two vectors, returning the high half of each product.
+    /// Multiply two vectors lane-wise and return the *high* half of each
+    /// double-width product.
+    ///
+    /// For signed `i32` lanes the result is `(a as i64 * b as i64) >> 32`;
+    /// for unsigned `u32` it is the same with `u64`. Together with
+    /// [`mullo`](Self::mullo) this gives the full double-width product
+    /// without widening the vector type.
     #[conditional] fn mulhi(self, other: Self) -> Self;
 
-    /// Multiply two vectors, returning the low half of each product.
+    /// Multiply two vectors lane-wise and return the *low* half of each
+    /// product, with wrapping on overflow.
     ///
-    /// This is usually the same as regular multiplication, but some architectures
-    /// have specialized instructions for this operation.
+    /// This is bit-identical to the `*` operator on integer vectors; the
+    /// dedicated method exists because some ISAs have specialized
+    /// low-half-only multiply instructions worth emitting directly.
     #[conditional] fn mullo(self, other: Self) -> Self;
 
     // fn wrapping_add(self, other: Self) -> Self;
     // fn wrapping_sub(self, other: Self) -> Self;
     // fn wrapping_mul(self, other: Self) -> Self;
 
-    /// Perform saturating addition for each element of the vectors.
+    /// Per-lane saturating addition: instead of wrapping, the result is
+    /// clamped to the element type's range (`MIN`..=`MAX`) on overflow.
     #[conditional] fn saturating_add(self, other: Self) -> Self;
 
-    /// Perform saturating subtraction for each element of the vectors.
+    /// Per-lane saturating subtraction: instead of wrapping, the result is
+    /// clamped to the element type's range (`MIN`..=`MAX`) on overflow.
     #[conditional] fn saturating_sub(self, other: Self) -> Self;
 
+    /// Horizontal sum of all lanes, wrapping on overflow.
+    ///
+    /// Equivalent to [`sum_elements`](NumericVector::sum_elements) on integer
+    /// vectors; the explicit name documents the wrapping behavior at the
+    /// callsite.
     #[conditional] fn wrapping_sum(self) -> Self::Element;
+
+    /// Horizontal product of all lanes, wrapping on overflow.
+    ///
+    /// Equivalent to [`prod_elements`](NumericVector::prod_elements); the
+    /// explicit name documents the wrapping behavior at the callsite.
     #[conditional] fn wrapping_prod(self) -> Self::Element;
 
+    /// Build a [`Divider`](Self::Divider) for a single scalar divisor `d`,
+    /// suitable for repeatedly dividing many vectors by the same `d`.
+    ///
+    /// Construction is `O(1)` but non-trivial; build once outside the hot
+    /// loop, then use `vec / divider` inside.
     fn create_divider(d: Self::Element) -> Self::Divider;
+
+    /// Build a [`BranchfreeDivider`](Self::BranchfreeDivider) for a single
+    /// scalar divisor `d`. Prefer this over [`create_divider`](Self::create_divider)
+    /// inside tight SIMD loops where conditional branches would hurt
+    /// throughput.
     fn create_branchfree_divider(d: Self::Element) -> Self::BranchfreeDivider;
 
     /// Use this vector as the denominators for a vectorized division operation.
@@ -1094,8 +1578,20 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
     #[conditional] fn avg(self, other: Self) -> Self;
 }
 
+/// Escape hatch tying a [`Vector`] to its specific underlying
+/// [`Register`](crate::register::Register) type.
+///
+/// Provides round-trip conversion between the user-facing [`Vector`] and the
+/// raw register storage. Most generic code should bound on
+/// [`GenericVector`] (or a more specific vector trait) and never need this;
+/// it exists so that code which deliberately specializes on a particular
+/// backend can drop down to the register layer without losing the trait
+/// hierarchy on the way back up.
 pub trait VectorWithRegister<R: crate::register::Register>: GenericVector {
+    /// Consume the vector and yield its raw register storage.
     fn into_register(self) -> crate::register::Storage<R>;
+
+    /// Wrap a raw register storage value back into a `Vector`.
     fn from_register(reg: crate::register::Storage<R>) -> Self;
 }
 
@@ -1165,26 +1661,62 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// Check if each element in the vector is subnormal, returning a mask.
     fn is_subnormal(self) -> Self::Mask;
 
+    /// `true` if the backend has a hardware approximate-reciprocal
+    /// instruction (e.g. `rcpps` on x86). When `false`, [`rcp`](Self::rcp)
+    /// falls back to a full IEEE division and provides no speed advantage
+    /// over `Self::ONE / self`.
     const HAS_APPROX_RCP: bool;
+
+    /// `true` if the backend has a hardware approximate-reciprocal-square-root
+    /// instruction (e.g. `rsqrtps` on x86). When `false`, [`rsqrt`](Self::rsqrt)
+    /// falls back to `Self::ONE / self.sqrt()`.
     const HAS_APPROX_RSQRT: bool;
 
-    /// Square root
+    /// Lane-wise IEEE 754 square root.
+    ///
+    /// Negative inputs (other than `-0.0`) produce NaN. `sqrt(-0.0)` is `-0.0`.
     #[conditional] fn sqrt(self) -> Self;
 
-    /// Approximate reciprocal square root, hardware dependent accuracy.
+    /// Lane-wise approximate reciprocal square root.
+    ///
+    /// Accuracy is hardware-dependent (typically 12 bits on x86 `rsqrtps`,
+    /// closer to full precision on newer ISAs). For full-precision results
+    /// or backends without hardware support, see [`HAS_APPROX_RSQRT`](Self::HAS_APPROX_RSQRT).
     #[conditional] fn rsqrt(self) -> Self;
 
-    /// Approximate reciprocal, hardware dependent accuracy.
+    /// Lane-wise approximate reciprocal: `1 / self`.
+    ///
+    /// Accuracy is hardware-dependent (typically 12 bits on x86 `rcpps`).
+    /// For full-precision results or backends without hardware support,
+    /// see [`HAS_APPROX_RCP`](Self::HAS_APPROX_RCP), or use `Self::ONE / self`.
     #[conditional] fn rcp(self) -> Self;
 
+    /// Lane-wise floor: largest integer less than or equal to each element.
+    ///
+    /// Result type stays the same; the value is the integer rounded toward
+    /// negative infinity, kept in the float representation.
     #[conditional] fn floor(self) -> Self;
+
+    /// Lane-wise ceiling: smallest integer greater than or equal to each
+    /// element, kept in the float representation.
     #[conditional] fn ceil(self) -> Self;
 
-    /// Round to nearest
+    /// Lane-wise round-to-nearest.
+    ///
+    /// Halfway cases follow the current rounding mode of the hardware. On
+    /// x86 this is round-half-to-even (banker's rounding), which differs
+    /// from the scalar `f32::round` / `f64::round` half-away-from-zero
+    /// convention. If you need a specific tie-breaking rule, do it explicitly.
     #[conditional] fn round(self) -> Self;
-    /// Truncate to int
+
+    /// Lane-wise truncation toward zero (drops the fractional part), kept
+    /// in the float representation.
     #[conditional] fn trunc(self) -> Self;
-    /// Fractional part
+
+    /// Lane-wise fractional part: `self - self.trunc()`.
+    ///
+    /// Result has the same sign as the input. For very large magnitudes the
+    /// fractional part is exactly zero because the float has no fractional bits.
     #[conditional] fn fract(self) -> Self;
 
     /// Effectively `self * sign.signum()`, multiplying the sign bits.
@@ -1205,6 +1737,18 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// may optimize into certain other formulations.
     fn mix(self, a: Self, b: Self) -> Self;
 
+    /// Inhibit further LLVM auto-vectorization of code surrounding this call.
+    ///
+    /// LLVM sometimes tries to "vectorize the vectors" -- repacking
+    /// already-SIMD code into a wider form that ends up slower. Inserting
+    /// this call inside a hot loop blocks that pass at the use site. The
+    /// call itself emits no instructions; only the optimizer barrier remains.
+    ///
+    /// # Safety
+    ///
+    /// Memory-safe to call, but the side effect on code generation is
+    /// significant. Only reach for this when you have measured a regression
+    /// caused by over-aggressive auto-vectorization.
     unsafe fn block_autovectorization(&mut self);
 
     /// Attempt to upcast this FloatVector to a FloatVectorWithBits,
@@ -1217,6 +1761,19 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     }
 }
 
+/// Run a closure-like block with a generic [`FloatVector`] temporarily upcast
+/// to a [`FloatVectorWithBits`], when the backend supports it.
+///
+/// Given an array of `FloatVector` values and a body parameterized over a
+/// `FloatVectorWithBits` type, this expands to a call to
+/// [`FloatVector::with_bits`] with an anonymous kernel implementing
+/// [`AsFloatVectorWithBitsKernel`]. The body only runs when bit access is
+/// available for the concrete backend; otherwise the whole expression evaluates
+/// to `None` (the return type is therefore `Option<_>`).
+///
+/// This is the ergonomic front-end to the [`AsFloatVectorWithBitsKernel`]
+/// pattern; reach for it inside generic code bounded only on `FloatVector` that
+/// wants an optional fast path requiring bit-level access.
 #[macro_export]
 macro_rules! with_bits {
     // (($first_value:expr $(, $value:expr)+): $ty:ty as fn($first_decl:ident: $first_alias:ident $(,$decl:ident: $alias:ident)* ) -> $ret:ty $(where $($c:ty: $constraint:ident),*)? { $($body:tt)* }) => {{
@@ -1282,7 +1839,23 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
     ) -> Self::Output;
 }
 
-// These do not have masked variants
+/// A [`FloatVector`] that additionally exposes its raw bit representation as
+/// companion integer vectors, enabling bit-level float algorithms.
+///
+/// On top of [`FloatVector`] this provides:
+/// - the [`Bits`](Self::Bits) (unsigned) and [`SignedBits`](Self::SignedBits)
+///   integer vector types matching this float's bit width and lane count, with
+///   full [`FullyInteroperable`] cast/bitcast interop between all three views;
+/// - hardware-accelerated `native_*` transcendentals gated by
+///   [`NATIVE_CAP`](Self::NATIVE_CAP);
+/// - bit-level helpers like [`total_order`](Self::total_order) /
+///   [`linear_order`](Self::linear_order) for sorting and ULP math.
+///
+/// Not every float vector implements this (it requires the element to be a
+/// [`FloatElementWithBits`]); generic code that only sometimes needs bit access
+/// can attempt to obtain it via [`FloatVector::with_bits`].
+///
+/// The methods on this trait do **not** have masked (`_c`/`_m`/`_z`) variants.
 pub trait FloatVectorWithBits:
     BitwiseVector
     + FloatVector<Element: FloatElementWithBits, Signed: CastVector<Self::SignedBits>, Unsigned: CastVector<Self::Bits>>
@@ -1309,19 +1882,81 @@ pub trait FloatVectorWithBits:
         > + FullyInteroperable<Self, Self::SignedBits>
         + CastVector<Self::Unsigned>;
 
+    /// Bit-flag set describing which `native_*` methods on this trait have a
+    /// real hardware implementation on the current backend.
+    ///
+    /// Test with `NATIVE_CAP.has(NativeCapability::SIN)` etc. before calling
+    /// the corresponding `native_*` method directly; otherwise the default
+    /// implementation will panic.
     const NATIVE_CAP: NativeCapability;
 
+    /// Hardware-accelerated `ldexp`: `self * 2^exp`, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `LDEXP`.
+    /// Calling on a backend without hardware support is undefined behavior
+    /// (the default impl panics via `unreachable!` at the register layer).
     unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self;
+
+    /// Hardware-accelerated `frexp`: split each lane into a normalized
+    /// mantissa in `[0.5, 1.0)` and an integer exponent.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `FREXP`.
     unsafe fn native_frexp(self) -> (Self, Self::SignedBits);
 
+    /// Hardware-accelerated combined sine and cosine, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `SIN_COS`.
     unsafe fn native_sin_cos<P: Policy>(self) -> (Self, Self);
+
+    /// Hardware-accelerated sine, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `SIN`.
     unsafe fn native_sin<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated cosine, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `COS`.
     unsafe fn native_cos<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated tangent, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `TAN`.
     unsafe fn native_tan<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated `2^self`, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `EXP2`.
     unsafe fn native_exp2<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated `log2(self)`, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `LOG2`.
     unsafe fn native_log2<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated `e^self`, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `EXP`.
     unsafe fn native_exp<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated natural logarithm, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `LN`.
     unsafe fn native_ln<P: Policy>(self) -> Self;
+
+    /// Hardware-accelerated `self^exp`, lane-wise.
+    ///
+    /// # Safety
+    /// Only callable when [`NATIVE_CAP`](Self::NATIVE_CAP) advertises `POWF`.
     unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self;
 
     /// Return a signed integer vector that is capable of encapsulating
@@ -1361,24 +1996,48 @@ pub trait FloatVectorWithBits:
     fn linear_order(self) -> Self::SignedBits;
 }
 
+/// Convenience accessors `x()` / `y()` automatically available on any
+/// 2-lane [`GenericVector`].
+///
+/// Each method is just shorthand for [`extract`](GenericVector::extract) at
+/// the corresponding compile-time index.
 #[rustfmt::skip]
 pub trait GenericVector2: GenericVector {
+    /// Returns the value of lane 0.
     #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    /// Returns the value of lane 1.
     #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
 }
 
+/// Convenience accessors `x()` / `y()` / `z()` automatically available on any
+/// 3-lane [`GenericVector`].
+///
+/// Each method is just shorthand for [`extract`](GenericVector::extract) at
+/// the corresponding compile-time index.
 #[rustfmt::skip]
 pub trait GenericVector3: GenericVector {
+    /// Returns the value of lane 0.
     #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    /// Returns the value of lane 1.
     #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
+    /// Returns the value of lane 2.
     #[inline(always)] fn z(&self) -> Self::Element { self.extract::<2>() }
 }
 
+/// Convenience accessors `x()` / `y()` / `z()` / `w()` automatically available
+/// on any 4-lane [`GenericVector`].
+///
+/// Each method is just shorthand for [`extract`](GenericVector::extract) at
+/// the corresponding compile-time index.
 #[rustfmt::skip]
 pub trait GenericVector4: GenericVector {
+    /// Returns the value of lane 0.
     #[inline(always)] fn x(&self) -> Self::Element { self.extract::<0>() }
+    /// Returns the value of lane 1.
     #[inline(always)] fn y(&self) -> Self::Element { self.extract::<1>() }
+    /// Returns the value of lane 2.
     #[inline(always)] fn z(&self) -> Self::Element { self.extract::<2>() }
+    /// Returns the value of lane 3.
     #[inline(always)] fn w(&self) -> Self::Element { self.extract::<3>() }
 }
 
@@ -1392,6 +2051,11 @@ macro_rules! impl_swizzle4 {
     (@ y) => { 1 };
     (@ z) => { 2 };
     (@ w) => { 3 };
+
+    (IMPL x x x x) => { #[inline(always)] fn xxxx(self) -> Self { self.broadcast::<0>() } };
+    (IMPL y y y y) => { #[inline(always)] fn yyyy(self) -> Self { self.broadcast::<1>() } };
+    (IMPL z z z z) => { #[inline(always)] fn zzzz(self) -> Self { self.broadcast::<2>() } };
+    (IMPL w w w w) => { #[inline(always)] fn wwww(self) -> Self { self.broadcast::<3>() } };
 
     (IMPL $a:ident $b:ident $c:ident $d:ident) => {paste::paste! {
         #[inline(always)]
@@ -1432,6 +2096,10 @@ macro_rules! impl_swizzle4 {
 
 #[rustfmt::skip]
 macro_rules! impl_swizzle3 {
+    (IMPL x x x) => { #[inline(always)] fn xxx(self) -> Self { self.broadcast::<0>() } };
+    (IMPL y y y) => { #[inline(always)] fn yyy(self) -> Self { self.broadcast::<1>() } };
+    (IMPL z z z) => { #[inline(always)] fn zzz(self) -> Self { self.broadcast::<2>() } };
+
     (IMPL $a:ident $b:ident $c:ident) => {paste::paste! {
         #[inline(always)]
         fn [<$a $b $c>](self) -> Self {

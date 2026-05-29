@@ -94,14 +94,14 @@ impl BitshiftRegister for [<u $width>] {
     const HAS_TRUE_SHIFTV: bool = true; // Technically true!
     const HAS_WIDE_BYTE_SHIFTS: bool = true; // Also technically true!
 
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value << (8 * IMM8) }
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value >> (8 * IMM8) }
-    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value << shift }
-    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value >> shift }
-    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value << shifts }
-    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value >> shifts }
-    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value << IMM8 }
-    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value >> IMM8 }
+    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value.unbounded_shl((8 * IMM8) as u32) }
+    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value.unbounded_shr((8 * IMM8) as u32) }
+    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value.unbounded_shl(shift) }
+    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value.unbounded_shr(shift) }
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value.unbounded_shl(shifts as u32) }
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value.unbounded_shr(shifts as u32) }
+    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value.unbounded_shl(IMM8 as u32) }
+    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value.unbounded_shr(IMM8 as u32) }
 
     fn rolv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { Self::rol(value, shifts as _) }
     fn rorv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { Self::ror(value, shifts as _) }
@@ -164,11 +164,11 @@ impl NumericRegister for [<u $width>] {
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> { lo.wrapping_add(hi) }
     fn offset() -> Storage<Self> { 1 }
     fn indexed() -> Storage<Self> { 0 }
-    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
-    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
-    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
-    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
-    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
+    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.wrapping_add(rhs) }
+    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.wrapping_sub(rhs) }
+    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.wrapping_mul(rhs) }
+    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.wrapping_div(rhs) }
+    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.wrapping_rem(rhs) }
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.min(rhs) }
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.max(rhs) }
     fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
@@ -211,7 +211,7 @@ impl IntegerRegister for [<u $width>] {
     const HAS_HARDWARE_POPCNT: bool = true;
 
     fn count_ones(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
-    fn count_zeros(value: Storage<Self>) -> Storage<Self> { value.count_ones() as _ }
+    fn count_zeros(value: Storage<Self>) -> Storage<Self> { value.count_zeros() as _ }
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> { value.leading_zeros() as _ }
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> { value.trailing_zeros() as _ }
     fn leading_ones(value: Storage<Self>) -> Storage<Self> { value.leading_ones() as _ }

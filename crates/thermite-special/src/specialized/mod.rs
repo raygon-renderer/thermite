@@ -361,6 +361,74 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+        const {
+            assert!(K >= 1 && K <= 4, "chebyshev: K must be 1, 2, 3, or 4");
+            assert!(N >= 1, "chebyshev: N must be at least 1");
+        }
+
+        // S = Σ cₖ P₀ = c₀ when N = 1; skip the whole recurrence.
+        if const { N == 1 } {
+            return Self::splat(coeffs[0]);
+        }
+
+        let x = self;
+        let x2 = x + x;
+
+        // P₁: T₁ = x, U₁ = 2x, V₁ = 2x - 1, W₁ = 2x + 1.
+        let p1 = if const { K == 1 } {
+            x
+        } else if const { K == 2 } {
+            x2
+        } else if const { K == 3 } {
+            x2 - Self::ONE
+        } else if const { K == 4 } {
+            x2 + Self::ONE
+        } else {
+            unsafe { core::hint::unreachable_unchecked() }
+        };
+
+        let cn1 = Self::splat(coeffs[N - 1]);
+        let cn2 = Self::splat(coeffs[N - 2]);
+
+        // S = c₀ + c₁·P₁(x) when N = 2.
+        if const { N == 2 } {
+            return p1.mul_adde(cn1, cn2);
+        }
+
+        // Clenshaw's backward recurrence. All four kinds share the recurrence
+        // Pₖ₊₁ = 2x·Pₖ - Pₖ₋₁ with P₀ = 1, so the bₖ loop is identical for all of them
+        // and only the final-step P₁(x) differs:
+        //
+        //     b_{N+1} = b_N = 0
+        //     for k = N-1 down to 1:  bₖ = 2x·bₖ₊₁ - bₖ₊₂ + cₖ
+        //     S = (c₀ - b₂) + b₁ · P₁(x)
+        //
+        // This is more numerically stable than the forward sum (especially when the
+        // partial sums of Σ cₖ Pₖ are much smaller than max|cₖ Pₖ|) and uses only two
+        // running scalars instead of three.
+        //
+        // Hoist the first two iterations to eliminate the b₂ = 0 subtraction in the loop:
+        //     k = N-1:  b_{N-1} = 2x·0 + c_{N-1} - 0          = c_{N-1}
+        //     k = N-2:  b_{N-2} = 2x·c_{N-1} + c_{N-2} - 0    = 2x·c_{N-1} + c_{N-2}
+        let mut b1 = x2.mul_adde(cn1, cn2); // bₖ₊₁ = b_{N-2}
+        let mut b2 = cn1; // bₖ₊₂ = b_{N-1}
+
+        // Iterate k = N-3, N-4, ..., 1.
+        let mut k = N - 2;
+        while k > 1 {
+            k -= 1;
+            // bₖ = (2x·bₖ₊₁ + cₖ) - bₖ₊₂
+            let bk = x2.mul_adde(b1, Self::splat(coeffs[k]) - b2);
+            b2 = b1;
+            b1 = bk;
+        }
+
+        // S = b₁ · P₁(x) + (c₀ - b₂)
+        b1.mul_adde(p1, Self::splat(coeffs[0]) - b2)
+    }
+
+    #[inline(always)]
     fn jacobi<P: Policy>(mut x: Self, mut alpha: Self, mut beta: Self, mut n: u32, m: u32) -> Self {
         if thermite::unlikely(m > n) {
             return Self::ZERO;
@@ -691,6 +759,75 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         }
 
         (y, dy)
+    }
+
+    // f(x)  = x*(1/2 + x/(2 sqrt(1 + x^2)))
+    // f'(x) = (x^3 + sqrt(1 + x^2) x^2 + sqrt(1 + x^2) + 2 x) / (2 (1 + x^2)^(3/2))
+    //
+    // With a = 1 + x^2, r = sqrt(a), q = x/r:
+    //   f(x)  = (x/2)*(1 + q)
+    //   f'(x) = (1 + q + q/a) / 2     (since q' = 1/(a*r), so f' = g + x*g' = (1+q)/2 + q/(2a))
+    #[inline(always)]
+    fn algebraic_swish<P: Policy>(self) -> (Self, Self) {
+        let x = self;
+
+        if const { Self::HAS_TRUE_FMA } {
+            // rsqrt is about 30% faster than sqrt+div, even with the extra
+            // newton iteration merged in.
+            if const { Self::HAS_APPROX_RSQRT } {
+                let a = x.mul_add(x, Self::ONE);
+                let y0 = a.rsqrt();
+                let ay2 = a * y0 * y0;
+                let ch = ay2.nmul_add(Self::HALF, Self::splat(<E as FloatElement>::ConstRatio::<3, 2>::VALUE));
+                let r_inv = y0 * ch; // Newton-refined 1/sqrt(a)
+                let q = x * r_inv;
+                let xh = Self::HALF * x;
+                let y = q.mul_add(xh, xh);
+
+                // 1/a from the already-refined 1/sqrt(a)
+                let inv_a = r_inv * r_inv;
+                let qa = q.mul_add(inv_a, q); // q + q/a
+                let dy = qa.mul_add(Self::HALF, Self::HALF); // (qa + 1)/2
+
+                (y, dy)
+            } else {
+                let a = x.mul_add(x, Self::ONE);
+                let q = x / a.sqrt();
+                let xh = x * Self::HALF;
+                let y = q.mul_add(xh, xh);
+
+                let inv_a = a.reciprocal_p::<P>();
+                let qa = q.mul_add(inv_a, q);
+                let dy = qa.mul_add(Self::HALF, Self::HALF);
+
+                (y, dy)
+            }
+        } else if const { Self::HAS_APPROX_RCP } {
+            let a = x * x + Self::ONE;
+            let y0 = a.rsqrt();
+            let ay2 = a * y0 * y0;
+            let c = Self::splat(<E as FloatElement>::ConstInt::<3>::VALUE) - ay2;
+            let r_inv_2 = y0 * c; // = 2 * (Newton-refined 1/sqrt(a))
+            let hxy1 = Self::splat(<E as FloatElement>::ConstRatio::<1, 4>::VALUE) * (x * r_inv_2); // = q/2
+            let w = Self::HALF + hxy1; // = (1 + q)/2
+            let y = x * w;
+
+            // 1/a ≈ (r_inv_2 / 2)^2 = r_inv_2^2 / 4
+            let inv_a = Self::splat(<E as FloatElement>::ConstRatio::<1, 4>::VALUE) * (r_inv_2 * r_inv_2);
+            // q/(2a) = (2*hxy1)/(2a) = hxy1 * inv_a
+            let dy = w + hxy1 * inv_a;
+
+            (y, dy)
+        } else {
+            let a = x * x + Self::ONE;
+            let q = x / a.sqrt();
+            let q1 = q + Self::ONE;
+            let y = x * Self::HALF * q1;
+
+            let dy = Self::HALF * (q1 + q / a);
+
+            (y, dy)
+        }
     }
 
     #[inline(always)]

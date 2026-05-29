@@ -27,7 +27,7 @@ macro_rules! decl_MxN {
             const HAS_EQUAL_SIZE_MASK: bool = true;
 
             fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Self {
-                // OpSelect: component-wise select — on_true where mask is true, on_false otherwise.
+                // OpSelect: component-wise select - on_true where mask is true, on_false otherwise.
                 unsafe { arch::op_opselect::<Self, Self>(mask, on_true, on_false) }
             }
 

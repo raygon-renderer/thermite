@@ -587,6 +587,12 @@ pub trait Register:
         unsafe { Self::store(ptr, value) }
     }
 
+    /// # Safety
+    ///
+    /// Every lane of `indices` must be a valid index into `values` (i.e. `< values.len()`).
+    /// The default implementation bounds-checks and panics on an out-of-range index, but
+    /// hardware-gather overrides (e.g. `_mm256_permutevar8x32_ps`, `vpgatherdd`) do not -
+    /// passing an out-of-range index there is undefined behavior.
     unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
         let indices = <Self::Unsigned as Register>::as_array(&indices);
 

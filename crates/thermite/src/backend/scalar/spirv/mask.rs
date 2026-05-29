@@ -39,17 +39,17 @@ impl CoreRegister for bool {
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl BitwiseRegister for bool {
- fn bitxor(lhs: bool, rhs: bool) -> bool { lhs ^ rhs }
- fn bitand(lhs: bool, rhs: bool) -> bool { lhs & rhs }
- fn bitor (lhs: bool, rhs: bool) -> bool { lhs | rhs }
- fn not(value: bool) -> bool { !value }
+    fn bitxor(lhs: bool, rhs: bool) -> bool { lhs ^ rhs }
+    fn bitand(lhs: bool, rhs: bool) -> bool { lhs & rhs }
+    fn bitor (lhs: bool, rhs: bool) -> bool { lhs | rhs }
+    fn not(value: bool) -> bool { !value }
 }
 
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl InterleaveRegister for bool {
- fn interleave (a: bool, b: bool) -> (bool, bool) { (a, b) }
- fn deinterleave(a: bool, b: bool) -> (bool, bool) { (a, b) }
+    fn interleave (a: bool, b: bool) -> (bool, bool) { (a, b) }
+    fn deinterleave(a: bool, b: bool) -> (bool, bool) { (a, b) }
 }
 
 #[rustfmt::skip]
@@ -58,12 +58,12 @@ impl MaskRegister for bool {
     const TRUTHY: bool = true;
     const FALSY:  bool = false;
 
- fn set(_mask: bool, _lane: usize, value: bool) -> bool { value }
- fn test(mask: bool, _lane: usize) -> bool { mask }
- fn new_mask(value: GenericArray<bool, Self::Lanes>) -> bool { value[0] }
- fn all(value: bool) -> bool { value }
- fn any(value: bool) -> bool { value }
- fn native_bitmask(value: bool) -> Option<u64> { Some(value as u64) }
+    fn set(_mask: bool, _lane: usize, value: bool) -> bool { value }
+    fn test(mask: bool, _lane: usize) -> bool { mask }
+    fn new_mask(value: GenericArray<bool, Self::Lanes>) -> bool { value[0] }
+    fn all(value: bool) -> bool { value }
+    fn any(value: bool) -> bool { value }
+    fn native_bitmask(value: bool) -> Option<u64> { Some(value as u64) }
 
     #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: bool, view: &mut bitvec::slice::BitSlice<u32>) {
@@ -74,5 +74,5 @@ impl MaskRegister for bool {
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl CastMaskRegister<bool> for bool {
- fn mask_from(value: bool) -> bool { value }
+    fn mask_from(value: bool) -> bool { value }
 }
