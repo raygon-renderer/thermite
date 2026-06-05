@@ -743,8 +743,9 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     }
 
     fn mat4_det(m: &[Self; 4]) -> Self::Element {
+        let mut tmp = *m;
         let mut det = Self::Element::ZERO;
-        R::mat4_inverse::<true>(unsafe { core::mem::transmute(&mut m.clone()) }, &mut det);
+        Self::mat4_inverse_inplace::<true>(&mut tmp, &mut det);
         det
     }
 

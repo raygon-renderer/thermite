@@ -864,7 +864,11 @@ where
         let mut result = [R::EMPTY; M];
         let min = const { if N < M { N } else { M } };
 
-        result.copy_from_slice(&value.0[..min]);
+        // copy the low `min` registers; the rest stay `R::EMPTY`. The
+        // destination subslice must match the source length - `copy_from_slice`
+        // requires equal lengths (writing `result.copy_from_slice` panicked when
+        // M > N).
+        result[..min].copy_from_slice(&value.0[..min]);
 
         Self(result)
     }
@@ -874,7 +878,7 @@ where
         let mut result = [R::EMPTY; N];
         let min = const { if N < M { N } else { M } };
 
-        result.copy_from_slice(&value.0[..min]);
+        result[..min].copy_from_slice(&value.0[..min]);
 
         ArrayRegister(result)
     }

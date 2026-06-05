@@ -222,6 +222,14 @@ where
         1 => FloatVector::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
         2 => V::log2::<P>(x),
         10 => V::log10::<P>(x),
-        _ => V::log2::<P>(x).scale(const { if N <= 32 { E::LOG2_TABLE[N - 3] } else { E::ZERO } }),
+        _ => V::log2::<P>(x).scale(
+            const {
+                if N <= 32 {
+                    E::LOG2_TABLE[N.saturating_sub(3)]
+                } else {
+                    E::ZERO
+                }
+            },
+        ),
     }
 }

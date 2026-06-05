@@ -384,7 +384,10 @@ impl SignedRegister for F64x2V2 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
+        let s = Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO));
+        #[cfg(feature = "strict_ieee754")]
+        let s = Self::blendv(Self::is_nan(value), s, value);
+        s
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {

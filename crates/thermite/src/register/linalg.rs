@@ -113,7 +113,8 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
     /// 3x3 Matrix Transpose
     ///
     /// Each register holds one column (first 3 lanes). On 4-lane registers the
-    /// 4th lane of every output row is zeroed; on 3-lane registers `zero4` is a no-op.
+    /// 4th lane of every output row is **unspecified** - only the first three
+    /// lanes are meaningful. Use [`LinAlg3Vector::zero4`] if you need it cleared.
     #[inline(always)]
     fn mat3_transpose(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
         if const { Self::Lanes::USIZE == 4 } {
@@ -270,29 +271,23 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// 4x4 Matrix Transpose
     #[inline(always)]
     fn mat4_transpose(m: &[Storage<Self>; 4]) -> [Storage<Self>; 4] {
-        // Stage 1: Interleave Low and High halves
-        // r0: [00, 01, 02, 03]
-        // r1: [10, 11, 12, 13]
-        // tmp0 (UnpackLo) -> [00, 10, 01, 11] (Rows 0+1 mixed lower)
-        // tmp1 (UnpackHi) -> [02, 12, 03, 13] (Rows 0+1 mixed upper)
-        let (tmp0, tmp1) = Self::interleave(m[0], m[1]);
+        // Two-stage interleave transpose. NOTE: thermite's `interleave` is
+        // order-preserving (`interleave(a, b) = ([a0,b0,a1,b1], [a2,b2,a3,b3])`),
+        // NOT raw `unpcklps`/`movelh`. With that semantic the stage-1 pairing
+        // must be (r0,r2) and (r1,r3) - pairing (r0,r1)/(r2,r3) instead swaps
+        // lanes 1 and 2 of every output row.
+        //
+        // r0=[00,01,02,03] r2=[20,21,22,23]
+        //   i0 = [00,20,01,21]   i1 = [02,22,03,23]
+        let (i0, i1) = Self::interleave(m[0], m[2]);
+        // r1=[10,11,12,13] r3=[30,31,32,33]
+        //   i2 = [10,30,11,31]   i3 = [12,32,13,33]
+        let (i2, i3) = Self::interleave(m[1], m[3]);
 
-        // r2: [20, 21, 22, 23]
-        // r3: [30, 31, 32, 33]
-        // tmp2 (UnpackLo) -> [20, 30, 21, 31] (Rows 2+3 mixed lower)
-        // tmp3 (UnpackHi) -> [22, 32, 23, 33] (Rows 2+3 mixed upper)
-        let (tmp2, tmp3) = Self::interleave(m[2], m[3]);
-
-        // Stage 2: Swap 64-bit blocks (mixing the results of Stage 1)
-        // Final columns are created by unpacking the results of Stage 1.
-
-        // Col0 = UnpackLo(tmp0, tmp2) -> [00, 10, 20, 30]
-        // Col1 = UnpackHi(tmp0, tmp2) -> [01, 11, 21, 31]
-        let (c0, c1) = Self::interleave(tmp0, tmp2);
-
-        // Col2 = UnpackLo(tmp1, tmp3) -> [02, 12, 22, 32]
-        // Col3 = UnpackHi(tmp1, tmp3) -> [03, 13, 23, 33]
-        let (c2, c3) = Self::interleave(tmp1, tmp3);
+        // c0 = [00,10,20,30]  c1 = [01,11,21,31]
+        let (c0, c1) = Self::interleave(i0, i2);
+        // c2 = [02,12,22,32]  c3 = [03,13,23,33]
+        let (c2, c3) = Self::interleave(i1, i3);
 
         [c0, c1, c2, c3]
     }

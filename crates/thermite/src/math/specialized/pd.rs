@@ -503,7 +503,9 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 52));
 
         if const { !P::POLICY.check_overflow } {
-            return z;
+            // x^0 == 1, kept even on the fast path (exponent-split otherwise
+            // leaves x's exponent in for y == 0).
+            return y.cmp_eq(V::ZERO).select(V::ONE, z);
         }
 
         // check exponent for overflow and underflow
@@ -543,6 +545,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
             z = xsign.select(z1, z);
         }
+
+        // x^0 == 1 for every (finite) x; line 534 only covered x == 0, so without
+        // this the `not_special` fast return below leaks x's exponent for y == 0.
+        z = yzero.select(V::ONE, z);
 
         let not_special = (xfinite & yfinite & (efinite | xzero));
 
@@ -655,7 +661,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
-        ln_d_internal::<Self, P, false>(self).scale(FloatConsts::LOG10_2)
+        ln_d_internal::<Self, P, false>(self).scale(FloatConsts::LOG10_E)
     }
 
     #[inline(always)]

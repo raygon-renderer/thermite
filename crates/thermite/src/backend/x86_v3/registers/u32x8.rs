@@ -318,12 +318,10 @@ impl SwizzleRegister for U32x8V3 {
     const HAS_PERMUTEV: bool = true;
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            arch::_mm256_castps_si256(arch::_mm256_permutevar_ps(
-                arch::_mm256_castsi256_ps(value),
-                core::mem::transmute(idxs),
-            ))
-        }
+        // `_mm256_permutevar_ps` only permutes *within* each 128-bit lane, so it
+        // cannot express cross-lane routing (e.g. a full 8-lane reverse). Use the
+        // true cross-lane `_mm256_permutevar8x32_epi32` (result[i] = value[idx[i] & 7]).
+        unsafe { arch::_mm256_permutevar8x32_epi32(value, core::mem::transmute(idxs)) }
     }
 
     //
@@ -348,7 +346,7 @@ impl PartialOrdRegister for U32x8V3 {
     }
 
     fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_cmpgt_epu32x_v3(rhs, lhs) }
+        unsafe { arch::_mm256_cmple_epu32x_v3(lhs, rhs) }
     }
 
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -356,7 +354,7 @@ impl PartialOrdRegister for U32x8V3 {
     }
 
     fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_cmpgt_epu32x_v3(lhs, rhs) }
+        unsafe { arch::_mm256_cmpge_epu32x_v3(lhs, rhs) }
     }
 
     fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

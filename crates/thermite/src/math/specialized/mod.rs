@@ -751,16 +751,17 @@ where
             let min = x.min(y);
             let t = min / max;
 
-            let mut res = max * t.mul_adde(t, V::ONE);
+            let s = t.mul_adde(t, V::ONE); // 1 + t²
 
+            let mut res;
             if INV {
-                res = res.inverse_sqrt_p::<P>();
+                res = s.inverse_sqrt_p::<P>() / max;
 
                 if const { P::POLICY.check_overflow } {
                     res = max.is_infinite().select(V::ZERO, res);
                 }
             } else {
-                res = res.sqrt();
+                res = max * s.sqrt();
 
                 if const { P::POLICY.check_overflow } {
                     res = max.is_infinite().select(max, res);

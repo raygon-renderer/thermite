@@ -437,7 +437,10 @@ impl SignedRegister for F32x4V3 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
+        let s = Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO));
+        #[cfg(feature = "strict_ieee754")]
+        let s = Self::blendv(Self::is_nan(value), s, value);
+        s
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
@@ -543,11 +546,16 @@ impl FloatRegister for F32x4V3 {
 }
 
 macro_rules! s {
+    // Indices are in lane order (`out[i] = src(idx[i])`), matching `swizzle_const`.
+    // `MM_SHUFFLE_R!` packs lane 0 into the low bits (what `_mm_permute_ps` /
+    // `_mm_shuffle_ps` read first); the conventional `MM_SHUFFLE!` reverses lanes.
     ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
-        unsafe { arch::_mm_permute_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v) }
+        unsafe { arch::_mm_permute_ps::<{ MM_SHUFFLE_R!($a, $b, $c, $d) }>($v) }
     };
+    // Two-input form takes lanes 0,1 from `$v1` and 2,3 from `$v2`; callers must use
+    // the `[lo from v1, hi from v2]` split. `& 3` maps the v2 indices (4..=7) into v2.
     ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
-        unsafe { arch::_mm_shuffle_ps::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v1, $v2) }
+        unsafe { arch::_mm_shuffle_ps::<{ MM_SHUFFLE_R!($a, $b, $c & 3, $d & 3) }>($v1, $v2) }
     };
 }
 

@@ -195,7 +195,9 @@ impl SignedRegister for [<i $width>] {
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        if mask { -value } else { value }
+        // wrapping, not `-value`: integer negation must wrap (not panic) on MIN
+        // in debug too, per the NumericVector contract. The base `neg` wraps.
+        if mask { value.wrapping_neg() } else { value }
     }
 }
 

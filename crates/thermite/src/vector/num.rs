@@ -319,7 +319,7 @@ where
     /// Returns true if **all** lanes are positive, false otherwise.
     #[inline(always)] fn is_sign_positive(self) -> bool { self.0.is_positive().all() }
 
-    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { Self(crate::generic::ops::MulAddExt::mul_adde(self.0, a.0, b.0)) }
+    #[inline(always)] fn mul_add(self, a: Self, b: Self) -> Self { Self(crate::vector::ops::MulAddExt::mul_adde(self.0, a.0, b.0)) }
     #[inline(always)] fn recip(self)            -> Self { Self(V::ONE / self.0) }
     #[inline(always)] fn powi(self, n: i32)     -> Self { Self(CoreMath::powi(self.0, n)) }
     #[inline(always)] fn powf(self, n: Self)    -> Self { Self(TranscendentalMath::powf(self.0, n.0)) }

@@ -379,12 +379,10 @@ impl SwizzleRegister for I32x8V3 {
     const HAS_PERMUTEV: bool = true;
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            arch::_mm256_castps_si256(arch::_mm256_permutevar_ps(
-                arch::_mm256_castsi256_ps(value),
-                core::mem::transmute(idxs),
-            ))
-        }
+        // `_mm256_permutevar_ps` only permutes *within* each 128-bit lane, so it
+        // cannot express cross-lane routing (e.g. a full 8-lane reverse). Use the
+        // true cross-lane `_mm256_permutevar8x32_epi32` (result[i] = value[idx[i] & 7]).
+        unsafe { arch::_mm256_permutevar8x32_epi32(value, core::mem::transmute(idxs)) }
     }
 
     //
@@ -517,13 +515,9 @@ impl SignedRegister for I32x8V3 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        // same thing as above, but negating 1 instead of an input value
-        unsafe {
-            arch::_mm256_sign_epi32(
-                arch::_mm256_set1_epi32(1),
-                arch::_mm256_or_si256(value, arch::_mm256_set1_epi32(1)),
-            )
-        }
+        // psignd: +1 where value > 0, -1 where value < 0, 0 where value == 0
+        // (three-valued, matching Rust `i32::signum`).
+        unsafe { arch::_mm256_sign_epi32(arch::_mm256_set1_epi32(1), value) }
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {

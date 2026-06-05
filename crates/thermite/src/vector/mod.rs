@@ -1400,6 +1400,10 @@ pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self
     /// For each element in the vector, return a new vector
     /// where each element is either -1 or +1 depending
     /// on the sign of the element.
+    ///
+    /// For integers, this will also return zero (0) if the
+    /// element is zero. This matches Rust's behavior for integer
+    /// `signum`. Floats remain only -1 or +1.
     fn signum(self) -> Self;
 
     /// For each element in the vector, set the sign of that
@@ -2232,7 +2236,10 @@ pub trait LinAlg3Vector: FloatVector {
     /// Returns the product of the first three elements of the register.
     fn prod_elements3(self) -> Self::Element;
 
-    /// 3x3 Matrix Transpose
+    /// 3x3 Matrix Transpose.
+    ///
+    /// Only the first three lanes of each output column are meaningful; the 4th
+    /// lane (on 4-lane vectors) is unspecified.
     fn mat3_transpose(m: &[Self; 3]) -> [Self; 3];
 
     /// 3x3 Matrix-Vector multiplication, assuming `self` as the vector.

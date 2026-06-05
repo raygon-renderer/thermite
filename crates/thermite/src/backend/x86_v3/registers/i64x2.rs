@@ -457,7 +457,13 @@ impl SignedRegister for I64x2V3 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_blendv_epi8(Self::NEG_ONE, Self::ONE, arch::_mm_cmpgt_epi64(value, Self::NEG_ONE)) }
+        // (value < 0 ? -1 : 0) - (value > 0 ? -1 : 0)  =>  -1 / 0 / +1
+        // (three-valued, matching Rust `i64::signum`; there is no `psignq`).
+        unsafe {
+            let lt = arch::_mm_cmpgt_epi64(Self::ZERO, value); // -1 where value < 0
+            let gt = arch::_mm_cmpgt_epi64(value, Self::ZERO); // -1 where value > 0
+            arch::_mm_sub_epi64(lt, gt)
+        }
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {

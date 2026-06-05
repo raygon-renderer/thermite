@@ -201,8 +201,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut y2 = V::EMPTY;
 
-        // if not all are small, use exponential functions
-        if const { P::POLICY.avoid_branching } || !x_small.all() {
+        // if not all are small, use exponential functions. Tiers with
+        // `precision < Average` skip the small-x polynomial below, so they must
+        // run this path unconditionally - otherwise all-small input leaves
+        // `y2 == 0` and `sinh(small)` returns 0.
+        if const { P::POLICY.avoid_branching || P::POLICY.precision.lt(PrecisionPolicy::Average) } || !x_small.all() {
             y2 = x.exph_p::<P>();
             y2 -= V::FRAC_1_4 / y2;
 
@@ -242,8 +245,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         let mut y2 = V::EMPTY;
 
-        // if not all are small
-        if const { P::POLICY.avoid_branching } || !x_small.all() {
+        // if not all are small. Tiers with `precision < Average` skip the
+        // small-x polynomial below, so they must run this path unconditionally
+        // (else all-small input leaves `y2 == 0` and `tanh(small)` returns 0).
+        if const { P::POLICY.avoid_branching || P::POLICY.precision.lt(PrecisionPolicy::Average) } || !x_small.all() {
             // tanh(x) = (e^2x − 1) / (e^2x + 1). `exph` returns e^t / 2 with one
             // extra bit of exponent headroom, so with h = exph(2x) = e^2x / 2
             // the identity folds to (h − ½) / (h + ½): same value, e^2x
@@ -311,7 +316,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let t = s * s;
 
             // place the s * 0.43157974 in the FMA to encourage instruction-level parallelism
-            let r = t.mul_adde(s * crate::const_splat!(f32: 0.43157974), V::ONE)
+            let r = t.mul_adde(s * crate::const_splat!(f32: 0.43157974), s)
                 / t.mul_adde(
                     crate::const_splat!(f32: 0.05831938),
                     crate::const_splat!(f32: 0.76443945),
@@ -606,7 +611,9 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 23));
 
         if const { !P::POLICY.check_overflow } {
-            return z;
+            // x^0 == 1 is important enough to keep even on the fast path (the
+            // exponent-split form otherwise leaves x's exponent in for y == 0).
+            return y.cmp_eq(zero).select(one, z);
         }
 
         // check exponent for overflow and underflow
@@ -883,7 +890,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
             let t = s * s;
 
-            let mut r = t.mul_adde(s * crate::const_splat!(f32: 0.43157974), V::ONE)
+            let mut r = t.mul_adde(s * crate::const_splat!(f32: 0.43157974), s)
                 / t.mul_adde(
                     crate::const_splat!(f32: 0.05831938),
                     crate::const_splat!(f32: 0.76443945),
@@ -930,7 +937,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         re = (x | y).is_zero().select(zero, re); // atan2(0,+0) = 0 by convention
         re = x.select_negative(V::PI - re, re); // also for x = -0.
 
-        re
+        re.copysign(y)
     }
 }
 
@@ -1285,7 +1292,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         // Compute t such that b^x = 2^t
         let t = match MODE {
             EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x.scale(FloatConsts::LOG2_E),
-            EXP_MODE_POW10 => x.scale(FloatConsts::LOG10_2),
+            EXP_MODE_POW10 => x.scale(FloatConsts::LOG2_10),
             EXP_MODE_POW2 => x,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         };

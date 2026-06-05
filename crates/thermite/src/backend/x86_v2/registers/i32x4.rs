@@ -401,13 +401,9 @@ impl SignedRegister for I32x4V2 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        // same thing as above, but negating 1 instead of an input value
-        unsafe {
-            arch::_mm_sign_epi32(
-                arch::_mm_set1_epi32(1),
-                arch::_mm_or_si128(value, arch::_mm_set1_epi32(1)),
-            )
-        }
+        // psignd: +1 where value > 0, -1 where value < 0, 0 where value == 0
+        // (three-valued, matching Rust `i32::signum`).
+        unsafe { arch::_mm_sign_epi32(arch::_mm_set1_epi32(1), value) }
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {

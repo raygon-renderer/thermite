@@ -343,8 +343,12 @@ impl SwizzleRegister for F64x4V3 {
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs);
-            arch::_mm256_permutevar_pd(value, arch::_mm256_cvtepu32_epi64(idxs))
+            let idxs: arch::__m128i = core::mem::transmute(idxs); // [i0, i1, i2, i3]
+            let even = arch::_mm_slli_epi32(idxs, 1); // [2i0, 2i1, 2i2, 2i3]
+            let odd = arch::_mm_add_epi32(even, arch::_mm_set1_epi32(1)); // [2i0+1, ...]
+            // interleave -> [2i0,2i0+1, 2i1,2i1+1 | 2i2,2i2+1, 2i3,2i3+1]
+            let idx8 = arch::_mm256_set_m128i(arch::_mm_unpackhi_epi32(even, odd), arch::_mm_unpacklo_epi32(even, odd));
+            arch::_mm256_castps_pd(arch::_mm256_permutevar8x32_ps(arch::_mm256_castpd_ps(value), idx8))
         }
     }
 }
@@ -372,7 +376,7 @@ impl PartialOrdRegister for F64x4V3 {
     }
 
     fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_cmp_pd(lhs, rhs, arch::_CMP_NEQ_OQ) }
+        unsafe { arch::_mm256_cmp_pd(lhs, rhs, arch::_CMP_NEQ_UQ) }
     }
 }
 
@@ -480,7 +484,10 @@ impl SignedRegister for F64x4V3 {
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {
-        Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
+        let s = Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO));
+        #[cfg(feature = "strict_ieee754")]
+        let s = Self::blendv(Self::is_nan(value), s, value);
+        s
     }
 
     fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
@@ -573,7 +580,7 @@ impl FloatRegister for F64x4V3 {
 
 macro_rules! s {
     ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
-        unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE!($a, $b, $c, $d) }>($v) }
+        unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE_R!($a, $b, $c, $d) }>($v) }
     };
     ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
         Self::swizzle($v1, $v2, const { GenericArray::from_array([$a, $b, $c, $d]) })
