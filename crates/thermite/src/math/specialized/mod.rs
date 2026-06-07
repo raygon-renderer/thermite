@@ -1084,12 +1084,15 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                 t = t.mul_sube(bar, bar_a);
             }
 
-            let xn1 = t.powi_p::<P>((N - 1) as i32);
+            // This closure is only reached for N >= 3, but it is still monomorphized
+            // (and its const-generic arithmetic const-evaluated) for N = 0/1, where
+            // `N - 1` / `2*N - 1` would underflow `usize` at compile time.
+            let xn1 = t.powi_p::<P>(N as i32 - 1);
 
             let coeffs = const { Smoothstep::<N>::COEFFICIENTS };
 
             let mut fx = Self::splat(E::from_int(coeffs[0]));
-            let mut fpx = Self::splat(E::from_int(coeffs[0] * (2 * N - 1) as crate::LargeInt));
+            let mut fpx = Self::splat(E::from_int(coeffs[0] * (2 * N).saturating_sub(1) as crate::LargeInt));
 
             let mut k = 1usize;
 
@@ -1271,7 +1274,10 @@ impl<const N: usize> Smoothstep<N> {
     // ensure these coefficients are generated at compile time
     pub const COEFFICIENTS: [crate::LargeInt; N] = const {
         let mut coeffs = [0; N];
-        let n = (N - 1) as i32;
+        // `N as i32 - 1` (not `(N - 1) as i32`) so the N=0 case - an empty coeff
+        // array whose loop never runs, so `n` is unused - doesn't underflow `usize`
+        // at compile time. This lets `smoothstep`/`inverse_smoothstep::<0>` compile.
+        let n = N as i32 - 1;
 
         let mut k = 0;
         while k < N {

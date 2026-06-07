@@ -40,7 +40,7 @@ impl ConcatRegister<f64> for F64x2V2 {
 #[thermite_macros::inline_always]
 impl ExtendRegister<f64> for F64x2V2 {
     fn extend(value: Storage<f64>) -> Storage<Self> {
-        unsafe { arch::_mm_set1_pd(value) }
+        unsafe { arch::_mm_setr_pd(value, 0.0) }
     }
 
     fn narrow(value: Storage<Self>) -> Storage<f64> {
