@@ -219,7 +219,7 @@ impl Register for F32x4V3 {
     }
 
     fn reverse(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_permute_ps(value, 0b11_01_10_00) }
+        unsafe { arch::_mm_permute_ps::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
