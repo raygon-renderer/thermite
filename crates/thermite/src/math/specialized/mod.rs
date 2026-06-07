@@ -1074,7 +1074,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let bounds = edges.or(Some((Self::ZERO, Self::ONE)));
 
         #[rustfmt::skip]
-        let (Ok(v) | Err(v)) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, #[inline(always)] move |x: Self| {
+        let (v, _converged) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, #[inline(always)] move |x: Self| {
             let mut t = x;
             let dt_dx = bar;
 
