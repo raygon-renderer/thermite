@@ -144,10 +144,10 @@ impl InterleaveRegister for F32x4V2 {
 
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            let a = arch::_mm_shuffle_ps(a, b, 0x88);
-            let b = arch::_mm_shuffle_ps(a, b, 0xDD);
+            let lo = arch::_mm_shuffle_ps(a, b, 0x88);
+            let hi = arch::_mm_shuffle_ps(a, b, 0xDD);
 
-            (a, b)
+            (lo, hi)
         }
     }
 }
