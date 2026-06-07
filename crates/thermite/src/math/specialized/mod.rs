@@ -114,7 +114,8 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             let is_underflow = exp.is_negative();
             let input_was_subnormal = biased_exp.is_zero();
 
-            result = result.zz(is_underflow | input_was_subnormal); // zero result if underflow or input was subnormal
+            // zero the result where underflow or the input was subnormal.
+            result = result.nz(is_underflow | input_was_subnormal);
         }
 
         Self::from_bits(result)
