@@ -129,6 +129,21 @@ impl<T> Divider<T> {
     }
 }
 
+impl<T: Copy + core::fmt::Debug> core::fmt::Debug for Divider<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Divider")
+            .field("multiplier", &self.multiplier())
+            .field("shift", &self.shift())
+            .finish()
+    }
+}
+
+impl<T: Copy + core::fmt::Debug> core::fmt::Debug for BranchfreeDivider<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("BranchfreeDivider").field(&self.0).finish()
+    }
+}
+
 pub(crate) const ADD_MARKER: u8 = 0x40;
 pub(crate) const NEG_DIVISOR: u8 = 0x80;
 

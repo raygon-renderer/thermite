@@ -137,8 +137,8 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     {
         let mask = S::SelectableMask::mask_from(self);
 
-        let a2 = S::select(mask, *a, *b);
-        let b2 = S::select(mask, *b, *a);
+        let a2 = S::select(mask, *b, *a);
+        let b2 = S::select(mask, *a, *b);
 
         *a = a2;
         *b = b2;
