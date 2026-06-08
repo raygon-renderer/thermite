@@ -106,3 +106,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 # [[bench]]
 # name = "nm"
 # harness = false
+
+[[bench]]
+name = "linalg"
+harness = false
