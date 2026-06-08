@@ -578,22 +578,34 @@ impl FloatRegister for F64x4V3 {
     const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
 }
 
-macro_rules! s {
-    ($ty:ty: $v:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
-        unsafe { arch::_mm256_permute4x64_pd::<{ MM_SHUFFLE_R!($a, $b, $c, $d) }>($v) }
-    };
-    ($ty:ty: $v1:expr, $v2:expr, [$a:literal, $b:literal, $c:literal, $d:literal]) => {
-        Self::swizzle($v1, $v2, const { GenericArray::from_array([$a, $b, $c, $d]) })
-    };
-}
-
 #[thermite_macros::inline_always]
 impl LinAlg4Register for F64x4V3 {
-    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
-        // dedicated x86-v3 implementation that takes
-        // advantage of `_mm256_permute4x64_pd`, though
-        // generic swizzling is still used for some operations.
-        impl_mat4_inverse!(m, det, s, DET_ONLY)
+    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut f64) -> bool {
+        // Use 2x128-bit registers on AVX2 f64x4 to avoid lane-crossing shuffles
+        // that are significantly slower than just using two xmm registers.
+        type Paired = ArrayRegister<super::F64x2V3, 2>;
+
+        let mut pm: [Storage<Paired>; 4] = [Paired::EMPTY; 4];
+
+        let mut i = 0;
+        while i < 4 {
+            let (lo, hi) = Self::split(m[i]);
+            pm[i] = <Paired as ConcatRegister<super::F64x2V3>>::concat(lo, hi);
+            i += 1;
+        }
+
+        if <Paired as LinAlg4Register>::mat4_inverse::<DET_ONLY>(&mut pm, det) {
+            let mut i = 0;
+            while i < 4 {
+                let (lo, hi) = <Paired as ConcatRegister<super::F64x2V3>>::split(pm[i]);
+                m[i] = Self::concat(lo, hi);
+                i += 1;
+            }
+
+            true
+        } else {
+            false
+        }
     }
 }
 
