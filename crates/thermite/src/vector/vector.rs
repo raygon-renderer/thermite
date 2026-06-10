@@ -678,7 +678,7 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
 impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     fn dot3(self, other: Self) -> Self::Element { R::dot3(self.0, other.0) }
     fn cross3<const DOP: bool>(self, other: Self) -> Self { Vector(R::cross3::<DOP>(self.0, other.0)) }
-    fn refract(self, n: Self, eta: Self) -> Self { Vector(R::refract(self.0, n.0, eta.0)) }
+    fn refract(self, n: Self, eta: Self::Element) -> Self { Vector(R::refract(self.0, n.0, eta)) }
     fn zero4(self) -> Self { Vector(R::zero4(self.0)) }
     fn one4(self) -> Self { Vector(R::one4(self.0)) }
     fn min_element3(self) -> Self::Element { R::min_element3(self.0) }

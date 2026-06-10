@@ -101,7 +101,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
     /// the zero vector, otherwise `$\eta\, i - (\eta\,(n \cdot i) + \sqrt{k})\, n$`.
     #[allow(clippy::upper_case_acronyms)]
     #[inline(always)]
-    fn refract(i: Storage<Self>, n: Storage<Self>, eta: Storage<Self>) -> Storage<Self> {
+    fn refract(i: Storage<Self>, n: Storage<Self>, eta: Self::Element) -> Storage<Self> {
         type ZXYW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::ZXYW;
         type YZXW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::YZXW;
 
@@ -114,13 +114,13 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
         );
 
         // k = 1 - eta^2*(1 - d^2)
+        let etav = Self::splat(eta);
         let omd2 = Self::nmul_adde(d, d, Self::ONE); // 1 - d^2
-        let eta2 = Self::mul(eta, eta);
-        let k = Self::nmul_adde(eta2, omd2, Self::ONE); // 1 - eta^2*(1 - d^2)
+        let k = Self::nmul_adde(Self::mul(etav, etav), omd2, Self::ONE); // 1 - eta^2*(1 - d^2)
 
         // r = eta*i - (eta*d + sqrt(k))*n
-        let coef = Self::mul_adde(eta, d, Self::sqrt(k));
-        let r = Self::nmul_adde(coef, n, Self::mul(eta, i));
+        let coef = Self::mul_adde(etav, d, Self::sqrt(k));
+        let r = Self::nmul_adde(coef, n, Self::mul(etav, i));
 
         // Total internal reflection (k < 0, including the NaN from sqrt(negative)) -> 0.
         Self::select_negative(k, Self::ZERO, r)

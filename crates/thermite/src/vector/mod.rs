@@ -2216,7 +2216,7 @@ pub trait LinAlg3Vector: FloatVector {
     ///
     /// Total internal reflection (`1 - eta^2*(1 - dot(n,self)^2) < 0`) returns the
     /// zero vector; otherwise `eta*self - (eta*dot(n,self) + sqrt(k))*n`
-    fn refract(self, n: Self, eta: Self) -> Self;
+    fn refract(self, n: Self, eta: Self::Element) -> Self;
 
     /// Efficiently set the 4th (last) lane of the register to 0.0.
     ///
