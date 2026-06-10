@@ -510,10 +510,13 @@ macro_rules! s {
 
 #[thermite_macros::inline_always]
 impl LinAlg4Register for F32x4V2 {
-    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
-        // dedicated x86-v2/v1 implementation that takes
-        // advantage of `_mm_shuffle_ps` directly.
-        impl_mat4_inverse!(m, det, s, DET_ONLY)
+    // dedicated x86-v2/v1 implementation that takes advantage of `_mm_shuffle_ps` directly.
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
+        impl_mat4_inverse!(m, s)
+    }
+
+    fn mat4_det(m: &[Storage<Self>; 4]) -> Self::Element {
+        impl_mat4_inverse!(DET_ONLY m, s)
     }
 }
 

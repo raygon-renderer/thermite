@@ -1,3 +1,5 @@
+use num_traits::Zero;
+
 use super::*;
 
 // Concrete SwizzleIndices types for the two 3D cross-product permutations,
@@ -92,6 +94,38 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
         }
     }
 
+    /// Refraction of incident vector `i` through a surface with normal `n` and
+    /// relative index of refraction `eta` (`$\eta = \eta_i/\eta_t$`). `i` and `n` are assumed unit length.
+    ///
+    /// `$k = 1 - \eta^2(1 - (n \cdot i)^2)$`; total internal reflection (`k < 0`) yields
+    /// the zero vector, otherwise `$\eta\, i - (\eta\,(n \cdot i) + \sqrt{k})\, n$`.
+    #[allow(clippy::upper_case_acronyms)]
+    #[inline(always)]
+    fn refract(i: Storage<Self>, n: Storage<Self>, eta: Storage<Self>) -> Storage<Self> {
+        type ZXYW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::ZXYW;
+        type YZXW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::YZXW;
+
+        // d = dot3(n, i) replicated to every lane: sum the three lane products
+        // via the two cross-product rotations (no extract-to-scalar + splat).
+        let prod = Self::mul(n, i);
+        let d = Self::add(
+            Self::add(prod, Self::permutev_const::<YZXW<Self>>(prod)),
+            Self::permutev_const::<ZXYW<Self>>(prod),
+        );
+
+        // k = 1 - eta^2*(1 - d^2)
+        let omd2 = Self::nmul_adde(d, d, Self::ONE); // 1 - d^2
+        let eta2 = Self::mul(eta, eta);
+        let k = Self::nmul_adde(eta2, omd2, Self::ONE); // 1 - eta^2*(1 - d^2)
+
+        // r = eta*i - (eta*d + sqrt(k))*n
+        let coef = Self::mul_adde(eta, d, Self::sqrt(k));
+        let r = Self::nmul_adde(coef, n, Self::mul(eta, i));
+
+        // Total internal reflection (k < 0, including the NaN from sqrt(negative)) -> 0.
+        Self::select_negative(k, Self::ZERO, r)
+    }
+
     #[inline(always)]
     fn zero4(value: Storage<Self>) -> Storage<Self> {
         if const { Self::Lanes::USIZE == 4 } {
@@ -154,32 +188,152 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
         }
     }
 
-    /// 3x3 Matrix multiplied by 3D Vector
+    /// 3x3 matrix times `N` 3D vectors.
     ///
     /// Each column/row is a register whose first 3 lanes hold the matrix data.
-    /// If the register has 4 lanes the 4th lane of the result is always zeroed.
+    /// If the register has 4 lanes the 4th lane of each result is always zeroed.
+    /// Same small-`N` semantics as [`mat4_vec4_product`](LinAlg4Register::mat4_vec4_product).
     #[inline(always)]
-    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 3], vector: Storage<Self>) -> Storage<Self> {
-        let mut result = Self::EMPTY;
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 3],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            let v = vectors[i];
+            out[i] = if const { COLUMN_MAJOR } {
+                let x = Self::broadcast::<0>(v);
+                let y = Self::broadcast::<1>(v);
+                let z = Self::broadcast::<2>(v);
+                // (cols[0] * x) + (cols[1] * y) then FMA cols[2] * z on top.
+                Self::mul_adde(cols[2], z, Self::mul_adde(cols[1], y, Self::mul(cols[0], x)))
+            } else {
+                // Row-major: result[j] = dot3(row[j], vector).
+                let mut r = Self::EMPTY;
+                r = Self::insert::<0>(r, Self::dot3(cols[0], v));
+                r = Self::insert::<1>(r, Self::dot3(cols[1], v));
+                Self::insert::<2>(r, Self::dot3(cols[2], v))
+            };
+            i += 1;
+        }
+        out
+    }
 
-        if const { !COLUMN_MAJOR } {
-            // Row-major: result[i] = dot3(row[i], vector).
-            let x = Self::dot3(cols[0], vector);
-            let y = Self::dot3(cols[1], vector);
-            let z = Self::dot3(cols[2], vector);
-            result = Self::insert::<0>(result, x);
-            result = Self::insert::<1>(result, y);
-            result = Self::insert::<2>(result, z);
-        } else {
-            let x = Self::broadcast::<0>(vector);
-            let y = Self::broadcast::<1>(vector);
-            let z = Self::broadcast::<2>(vector);
-
-            // (cols[0] * x) + (cols[1] * y) then FMA cols[2] * z on top.
-            result = Self::mul_adde(cols[2], z, Self::mul_adde(cols[1], y, Self::mul(cols[0], x)));
+    /// Column-major 3x3 * vec3 evaluated through the double-width register.
+    ///
+    /// Packs `[c0 | c1]` and `[c2 | 0]` (the third column zero-extended) so the
+    /// three column-scales collapse into a single wide multiply + a single wide
+    /// FMA, with the coefficients built by in-lane shuffles; the two halves of
+    /// the product `[c0*x + c2*z | c1*y]` are then summed. Requires a true wide
+    /// register.
+    #[inline(always)]
+    fn mat3_vec3_product_wide(cols: &[Storage<Self>; 3], vector: Storage<Self>) -> Storage<Self>
+    where
+        Self: WideRegister<Wide: FloatRegister>,
+        typenum::Double<Self::Lanes>: Lanes,
+    {
+        const {
+            assert!(
+                !<Self::Wide as CoreRegister>::IS_EMULATED,
+                "Wide matrix-vector multiplication requires true wide registers."
+            );
         }
 
-        result
+        // a = [c0 | c1] (contiguous -> folds into a 256-bit load); b = [c2 | 0].
+        let a = Self::Wide::concat(cols[0], cols[1]);
+        let b = <Self::Wide as ExtendRegister<Self>>::extend(cols[2]);
+
+        // coef_ab = [x x x x | y y y y]; coef_c's high half is irrelevant (b is 0 there).
+        let coef_ab = Self::Wide::concat(Self::broadcast::<0>(vector), Self::broadcast::<1>(vector));
+        let coef_c = Self::Wide::concat(Self::broadcast::<2>(vector), Self::broadcast::<2>(vector));
+
+        // [c0*x + c2*z | c1*y + 0]
+        let prod = Self::Wide::mul_adde(b, coef_c, Self::Wide::mul(a, coef_ab));
+
+        let (lo, hi) = Self::Wide::split(prod);
+        Self::add(lo, hi)
+    }
+
+    /// Multiplies two 3x3 matrices (each stored as 3 column registers).
+    ///
+    /// This is "transform each of `rhs`'s 3 columns by `lhs`", so it inherits the
+    /// (wide) batching of [`mat3_vec3_product`](Self::mat3_vec3_product). If
+    /// `COLUMN_MAJOR` is `false` the operands are swapped (`rhs * lhs`) to account
+    /// for row-major storage, mirroring [`mat4_product`](LinAlg4Register::mat4_product).
+    #[inline(always)]
+    fn mat3_product<const COLUMN_MAJOR: bool>(
+        lhs: &[Storage<Self>; 3],
+        rhs: &[Storage<Self>; 3],
+    ) -> [Storage<Self>; 3] {
+        let (lhs, rhs) = if const { COLUMN_MAJOR } { (lhs, rhs) } else { (rhs, lhs) };
+        Self::mat3_vec3_product::<true, 3>(lhs, rhs)
+    }
+
+    /// Determinant of a column-major 3x3 matrix: the scalar triple product
+    /// `c0 . (c1 x c2)`.
+    #[inline(always)]
+    fn mat3_det(cols: &[Storage<Self>; 3]) -> Self::Element {
+        Self::dot3(cols[0], Self::cross3::<false>(cols[1], cols[2]))
+    }
+
+    /// In-place inverse of a column-major 3x3 matrix; **returns the determinant**.
+    ///
+    /// Uses the cofactor/cross-product form: the rows of the inverse are
+    /// `$c_1 \times c_2$`, `$c_2 \times c_0$`, `$c_0 \times c_1$`, each divided by the determinant.
+    ///
+    /// An **exactly-zero determinant leaves the matrix untouched**; a near-zero
+    /// (ill-conditioned) determinant produces a finite but unreliable result, so
+    /// inspect the returned determinant before trusting the matrix.
+    #[inline(always)]
+    fn mat3_inverse(cols: &mut [Storage<Self>; 3]) -> Self::Element {
+        let [c0, c1, c2] = *cols;
+
+        // Cofactor rows; these transpose into the inverse's columns.
+        let r0 = Self::cross3::<false>(c1, c2);
+        let r1 = Self::cross3::<false>(c2, c0);
+        let r2 = Self::cross3::<false>(c0, c1);
+
+        let d = Self::dot3(c0, r0);
+
+        if crate::likely(!d.is_zero()) {
+            let dv = Self::splat(d);
+            let t = Self::mat3_transpose(&[r0, r1, r2]);
+            cols[0] = Self::div(t[0], dv);
+            cols[1] = Self::div(t[1], dv);
+            cols[2] = Self::div(t[2], dv);
+        }
+
+        d
+    }
+
+    /// "Normal matrix" for transforming normals/directions under non-uniform
+    /// scale, built from the cofactor cross-products `$(c_1 \times c_2,\ c_2 \times c_0,\ c_0 \times c_1)$` of a
+    /// column-major 3x3 (stored as its columns).
+    ///
+    /// `DIVIDE` selects the variant:
+    /// - `true` -> the true inverse-transpose `$(M^{-1})^{T}$` (cofactors divided by the
+    ///   determinant). A singular input yields non-finite results.
+    /// - `false` -> the cofactor (adjugate-transpose) matrix, **un-divided**. This
+    ///   skips the determinant and division entirely (and is never singular);
+    ///   it transforms normals to the *same direction*, so it's the cheaper
+    ///   choice whenever you re-normalize the result.
+    ///
+    /// Either way this is cheaper than [`mat3_inverse`](Self::mat3_inverse) - it
+    /// skips that method's transpose step.
+    #[inline(always)]
+    fn mat3_normal<const DIVIDE: bool>(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
+        let [c0, c1, c2] = *cols;
+        let a = Self::cross3::<false>(c1, c2);
+        let b = Self::cross3::<false>(c2, c0);
+        let c = Self::cross3::<false>(c0, c1);
+
+        if const { DIVIDE } {
+            let dv = Self::splat(Self::dot3(c0, a));
+            [Self::div(a, dv), Self::div(b, dv), Self::div(c, dv)]
+        } else {
+            [a, b, c]
+        }
     }
 
     fn min_element3(value: Storage<Self>) -> Self::Element;
@@ -268,6 +422,82 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         Self::add(cross_q_t, Self::add(w_t, v))
     }
 
+    /// Rotation matrix of a **unit** quaternion as 3 registers; the 4th lane of
+    /// each is unspecified.
+    ///
+    /// `COLUMN_MAJOR` selects the storage (the registers are the rotation's
+    /// columns when `true`, its rows when `false`) - i.e. `false` yields the
+    /// transpose. It's free: only the sign masks differ at compile time.
+    ///
+    /// Trig-free: the entries are pairwise products of `{x, y, z, w}` assembled
+    /// with FMAs - no `sin`/`cos`/`sqrt`. The quaternion is assumed normalized;
+    /// normalize first if unsure.
+    ///
+    /// For rotating many vectors by one quaternion, prefer converting once here
+    /// and batching through [`mat3_vec3_product`](LinAlg3Register::mat3_vec3_product)
+    /// with the matching `COLUMN_MAJOR` - cheaper than a per-vector
+    /// [`quat4_vec3_product`](Self::quat4_vec3_product) for large `N`.
+    #[inline(always)]
+    fn quat_to_mat3<const COLUMN_MAJOR: bool>(q: Storage<Self>) -> [Storage<Self>; 3] {
+        use crate::{math::FloatConsts as C, register::Element as E};
+
+        // 2q, with each component broadcast across all lanes.
+        let q2 = Self::add(q, q);
+        let x2 = Self::broadcast::<0>(q2);
+        let y2 = Self::broadcast::<1>(q2);
+        let z2 = Self::broadcast::<2>(q2);
+        let w2 = Self::broadcast::<3>(q2);
+
+        // The `2w` terms reuse the three `quat4_product` permutes. Only the sign
+        // masks distinguish column-major (forward R) from row-major (R^T) - the
+        // off-diagonal cross terms flip under transpose - so the choice is free.
+        //   column: p0 = ( w,  z, -y, -x)  p1 = (-z,  w,  x, -y)  p2 = ( y, -x,  w, -z)
+        //   row:    p0 = ( w, -z,  y, -x)  p1 = ( z,  w, -x, -y)  p2 = (-y,  x,  w, -z)
+        let (m0, m1, m2) = if const { COLUMN_MAJOR } {
+            (
+                const { reg::<Self, 4>([E::ZERO, E::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
+                const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
+                const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) },
+            )
+        } else {
+            (
+                const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) },
+                const { reg::<Self, 4>([E::ZERO, E::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
+                const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
+            )
+        };
+
+        let p0 = Self::bitxor(s!(Self: q, [3, 2, 1, 0]), m0);
+        let p1 = Self::bitxor(s!(Self: q, [2, 3, 0, 1]), m1);
+        let p2 = Self::bitxor(s!(Self: q, [1, 0, 3, 2]), m2);
+
+        // out_j = (2*comp_j)*q + (2w*p_j - e_j). The trailing -e_j (the -1 on the
+        // diagonal) folds into a fused multiply-sub, so no `-1` constant is needed.
+        let e0 = const { reg::<Self, 4>([E::ONE, E::ZERO, E::ZERO, E::ZERO]) };
+        let e1 = const { reg::<Self, 4>([E::ZERO, E::ONE, E::ZERO, E::ZERO]) };
+        let e2 = const { reg::<Self, 4>([E::ZERO, E::ZERO, E::ONE, E::ZERO]) };
+
+        let r0 = Self::mul_adde(x2, q, Self::mul_sube(w2, p0, e0));
+        let r1 = Self::mul_adde(y2, q, Self::mul_sube(w2, p1, e1));
+        let r2 = Self::mul_adde(z2, q, Self::mul_sube(w2, p2, e2));
+
+        [r0, r1, r2]
+    }
+
+    /// Homogeneous 4x4 rotation matrix of a **unit** quaternion: the
+    /// [`quat_to_mat3`](Self::quat_to_mat3) rotation in the upper-left 3x3 with
+    /// each rotation register's 4th lane zeroed, plus a `[0, 0, 0, 1]` 4th
+    /// register. `COLUMN_MAJOR` is forwarded to `quat_to_mat3`; the 4th register
+    /// is identical either way since the translation is zero. Same trig-free,
+    /// unit-quaternion assumptions as `quat_to_mat3`.
+    #[inline(always)]
+    fn quat_to_mat4<const COLUMN_MAJOR: bool>(q: Storage<Self>) -> [Storage<Self>; 4] {
+        use crate::register::Element as E;
+        let [c0, c1, c2] = Self::quat_to_mat3::<COLUMN_MAJOR>(q);
+        let w_col = const { reg::<Self, 4>([E::ZERO, E::ZERO, E::ZERO, E::ONE]) };
+        [Self::zero4(c0), Self::zero4(c1), Self::zero4(c2), w_col]
+    }
+
     /// 4x4 Matrix Transpose
     #[inline(always)]
     fn mat4_transpose(m: &[Storage<Self>; 4]) -> [Storage<Self>; 4] {
@@ -292,40 +522,69 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         [c0, c1, c2, c3]
     }
 
-    /// 4x4 Matrix multiplied by 3D Vector
+    /// 4x4 matrix times `N` 3D vectors (the 4th column is ignored).
+    ///
+    /// Same small-`N`, transpose-once semantics as [`mat4_vec4_product`](Self::mat4_vec4_product).
     #[inline(always)]
-    fn mat4_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self> {
-        if const { !COLUMN_MAJOR } {
-            // transpose and treat as column-major
-            return Self::mat4_vec3_product::<true>(&Self::mat4_transpose(cols), vector);
+    fn mat4_vec3_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 4],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        let m = if const { COLUMN_MAJOR } {
+            *cols
+        } else {
+            Self::mat4_transpose(cols)
+        };
+
+        let mut out = [Self::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            let v = vectors[i];
+            let x = Self::broadcast::<0>(v);
+            let y = Self::broadcast::<1>(v);
+            let z = Self::broadcast::<2>(v);
+            out[i] = Self::mul_adde(m[2], z, Self::mul_adde(m[1], y, Self::mul(m[0], x)));
+            i += 1;
         }
-
-        let x = Self::broadcast::<0>(vector);
-        let y = Self::broadcast::<1>(vector);
-        let z = Self::broadcast::<2>(vector);
-
-        Self::mul_adde(cols[2], z, Self::mul_adde(cols[1], y, Self::mul(cols[0], x)))
+        out
     }
 
-    /// 4x4 Matrix multiplied by 4D Vector
+    /// 4x4 matrix times `N` 4D vectors, returning the transformed array.
+    ///
+    /// Intended for **small** `N`: the array is taken/returned **by value** and
+    /// the loop fully unrolls, so a large `N` bloats code/stack. Row-major
+    /// matrices are transposed **once** up front (amortized over `N`). Backends
+    /// with a true double-width register override this to process two vectors
+    /// per wide pass; the [`Vector`](crate::Vector) layer exposes a single-vector
+    /// convenience over this (`N == 1`).
     #[inline(always)]
-    fn mat4_vec4_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self> {
-        if const { !COLUMN_MAJOR } {
-            // transpose and treat as column-major
-            return Self::mat4_vec4_product::<true>(&Self::mat4_transpose(cols), vector);
+    fn mat4_vec4_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 4],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        let m = if const { COLUMN_MAJOR } {
+            *cols
+        } else {
+            Self::mat4_transpose(cols)
+        };
+
+        let mut out = [Self::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            let v = vectors[i];
+            let x = Self::broadcast::<0>(v);
+            let y = Self::broadcast::<1>(v);
+            let z = Self::broadcast::<2>(v);
+            let w = Self::broadcast::<3>(v);
+
+            // Two fused multiply-adds in parallel (ILP), then merge.
+            out[i] = Self::add(
+                Self::mul_adde(m[1], y, Self::mul(m[0], x)),
+                Self::mul_adde(m[3], w, Self::mul(m[2], z)),
+            );
+            i += 1;
         }
-
-        let x = Self::broadcast::<0>(vector);
-        let y = Self::broadcast::<1>(vector);
-        let z = Self::broadcast::<2>(vector);
-        let w = Self::broadcast::<3>(vector);
-
-        // Run two fused multiply-add operations in parallel using instruction-level parallelism
-        let sum_ab = Self::mul_adde(cols[1], y, Self::mul(cols[0], x));
-        let sum_cd = Self::mul_adde(cols[3], w, Self::mul(cols[2], z));
-
-        // Final merge
-        Self::add(sum_ab, sum_cd)
+        out
     }
 
     /// Multiplies two 4x4 Matrices.
@@ -337,12 +596,8 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         // swap operands if not column-major
         let (lhs, rhs) = if const { COLUMN_MAJOR } { (lhs, rhs) } else { (rhs, lhs) };
 
-        [
-            Self::mat4_vec4_product::<true>(lhs, rhs[0]),
-            Self::mat4_vec4_product::<true>(lhs, rhs[1]),
-            Self::mat4_vec4_product::<true>(lhs, rhs[2]),
-            Self::mat4_vec4_product::<true>(lhs, rhs[3]),
-        ]
+        // Multiplying is transforming each of `rhs`'s 4 columns by `lhs`.
+        Self::mat4_vec4_product::<true, 4>(lhs, rhs)
     }
 
     #[inline(always)]
@@ -412,10 +667,96 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         [c0, c1, c2, c3]
     }
 
+    /// Column-major 4x4 * vec4, evaluated through the double-width register.
+    ///
+    /// Packs two basis columns per 256-bit lane (`[c0|c1]`, `[c2|c3]`) so the
+    /// four column-scales collapse into a single wide multiply + a single wide
+    /// FMA (instead of two 128-bit FMAs), with the coefficients built by in-lane
+    /// shuffles rather than four separate broadcasts. The two halves of the
+    /// product are then summed to give `c0*x + c1*y + c2*z + c3*w`.
+    ///
+    /// Assumes **column-major**. Requires a true wide register.
     #[inline(always)]
-    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
+    fn mat4_vec4_product_wide(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self>
+    where
+        Self: WideRegister<Wide: FloatRegister>,
+    {
+        const {
+            assert!(
+                !<Self::Wide as CoreRegister>::IS_EMULATED,
+                "Wide matrix-vector multiplication requires true wide registers."
+            );
+        }
+
+        // Pack columns two-per-lane: a = [c0 | c1], b = [c2 | c3].
+        // (Contiguous in the source array, so these fold into 256-bit loads.)
+        let a = Self::Wide::concat(cols[0], cols[1]);
+        let b = Self::Wide::concat(cols[2], cols[3]);
+
+        // Coefficients, built from in-lane shuffles of `vector` (the compiler
+        // lowers concat(broadcast(i), broadcast(j)) to vbroadcastf128 + vpermilps):
+        //   coef_ab = [x x x x | y y y y],  coef_cd = [z z z z | w w w w]
+        let coef_ab = Self::Wide::concat(Self::broadcast::<0>(vector), Self::broadcast::<1>(vector));
+        let coef_cd = Self::Wide::concat(Self::broadcast::<2>(vector), Self::broadcast::<3>(vector));
+
+        // [c0*x + c2*z | c1*y + c3*w] in one wide multiply + one wide FMA.
+        let prod = Self::Wide::mul_adde(b, coef_cd, Self::Wide::mul(a, coef_ab));
+
+        // Fold the two halves: (c0*x + c2*z) + (c1*y + c3*w).
+        let (lo, hi) = Self::Wide::split(prod);
+
+        Self::add(lo, hi)
+    }
+
+    /// Column-major 4x4 * vec3 evaluated through the double-width register.
+    ///
+    /// A vec3 only uses the first three columns, so this is the 3-term sibling of
+    /// [`mat4_vec4_product_wide`]: it packs `[c0 | c1]` and `[c2 | 0]` (the third
+    /// column zero-extended), collapsing the column-scales into one wide multiply
+    /// plus one wide FMA, then sums the halves. Assumes **column-major**. Requires a
+    /// true wide register.
+    #[inline(always)]
+    fn mat4_vec3_product_wide(cols: &[Storage<Self>; 4], vector: Storage<Self>) -> Storage<Self>
+    where
+        Self: WideRegister<Wide: FloatRegister>,
+    {
+        const {
+            assert!(
+                !<Self::Wide as CoreRegister>::IS_EMULATED,
+                "Wide matrix-vector multiplication requires true wide registers."
+            );
+        }
+
+        // a = [c0 | c1] (folds into a 256-bit load); b = [c2 | 0] (zero-extended).
+        let a = Self::Wide::concat(cols[0], cols[1]);
+        let b = <Self::Wide as ExtendRegister<Self>>::extend(cols[2]);
+
+        // coef_ab = [x x x x | y y y y]; coef_c's high half is irrelevant (b is 0 there).
+        let coef_ab = Self::Wide::concat(Self::broadcast::<0>(vector), Self::broadcast::<1>(vector));
+        let coef_c = Self::Wide::concat(Self::broadcast::<2>(vector), Self::broadcast::<2>(vector));
+
+        // [c0*x + c2*z | c1*y]
+        let prod = Self::Wide::mul_adde(b, coef_c, Self::Wide::mul(a, coef_ab));
+
+        let (lo, hi) = Self::Wide::split(prod);
+        Self::add(lo, hi)
+    }
+
+    /// Full in-place 4x4 inverse; **returns the determinant**.
+    ///
+    /// An exactly-zero determinant leaves the matrix untouched; a near-zero
+    /// (ill-conditioned) determinant produces a finite but unreliable result, so
+    /// inspect the returned determinant before trusting the matrix.
+    #[inline(always)]
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
         // standard implementation using swizzle macro that
         // invokes permutev/swizzle meta-instructions
-        impl_mat4_inverse!(m, det, s, DET_ONLY)
+        impl_mat4_inverse!(m, s)
+    }
+
+    /// Determinant of a column-major 4x4 matrix.
+    #[inline(always)]
+    fn mat4_det(m: &[Storage<Self>; 4]) -> Self::Element {
+        impl_mat4_inverse!(DET_ONLY m, s)
     }
 }

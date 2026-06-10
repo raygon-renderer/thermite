@@ -568,10 +568,95 @@ impl LinAlg4Register for F32x4V3 {
         Self::mat4_product_wide::<COLUMN_MAJOR>(lhs, rhs)
     }
 
-    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
-        // dedicated x86-v3 implementation that takes
-        // advantage of `_mm_permute_ps`/`_mm_shuffle_ps` directly.
-        impl_mat4_inverse!(m, det, s, DET_ONLY)
+    fn mat4_vec3_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 4],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        type W = super::F32x8V3;
+
+        let m = if const { COLUMN_MAJOR } { *cols } else { Self::mat4_transpose(cols) };
+
+        // Duplicate the three basis columns into both halves (hoisted).
+        let a0 = W::concat(m[0], m[0]);
+        let a1 = W::concat(m[1], m[1]);
+        let a2 = W::concat(m[2], m[2]);
+
+        let mut out = [Self::EMPTY; N];
+
+        // Two vectors per pass: [M*v_i | M*v_{i+1}] (3 terms, no fold).
+        let mut i = 0;
+        while i + 1 < N {
+            let (va, vb) = (vectors[i], vectors[i + 1]);
+            let x = W::concat(Self::broadcast::<0>(va), Self::broadcast::<0>(vb));
+            let y = W::concat(Self::broadcast::<1>(va), Self::broadcast::<1>(vb));
+            let z = W::concat(Self::broadcast::<2>(va), Self::broadcast::<2>(vb));
+            let prod = W::mul_adde(a2, z, W::mul_adde(a1, y, W::mul(a0, x)));
+            let (ra, rb) = W::split(prod);
+            out[i] = ra;
+            out[i + 1] = rb;
+            i += 2;
+        }
+
+        if const { N % 2 == 1 } {
+            out[N - 1] = Self::mat4_vec3_product_wide(&m, vectors[N - 1]);
+        }
+
+        out
+    }
+
+    fn mat4_vec4_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 4],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        type W = super::F32x8V3;
+
+        let m = if const { COLUMN_MAJOR } { *cols } else { Self::mat4_transpose(cols) };
+
+        // Duplicate each basis column into both 128-bit halves; hoisted across
+        // every pair (4 ymm, loop-invariant).
+        let a0 = W::concat(m[0], m[0]);
+        let a1 = W::concat(m[1], m[1]);
+        let a2 = W::concat(m[2], m[2]);
+        let a3 = W::concat(m[3], m[3]);
+
+        let mut out = [Self::EMPTY; N];
+
+        // Process two vectors per wide pass: [M*v_i | M*v_{i+1}], no per-vector fold.
+        let mut i = 0;
+        while i + 1 < N {
+            let (va, vb) = (vectors[i], vectors[i + 1]);
+            // coefficients: lane k of each vector broadcast within its own 128-bit half
+            let x = W::concat(Self::broadcast::<0>(va), Self::broadcast::<0>(vb));
+            let y = W::concat(Self::broadcast::<1>(va), Self::broadcast::<1>(vb));
+            let z = W::concat(Self::broadcast::<2>(va), Self::broadcast::<2>(vb));
+            let w = W::concat(Self::broadcast::<3>(va), Self::broadcast::<3>(vb));
+
+            let prod = W::add(
+                W::mul_adde(a1, y, W::mul(a0, x)),
+                W::mul_adde(a3, w, W::mul(a2, z)),
+            );
+
+            let (ra, rb) = W::split(prod);
+            out[i] = ra;
+            out[i + 1] = rb;
+            i += 2;
+        }
+
+        // Odd tail: one leftover vector via the single-vector wide path.
+        if const { N % 2 == 1 } {
+            out[N - 1] = Self::mat4_vec4_product_wide(&m, vectors[N - 1]);
+        }
+
+        out
+    }
+
+    // dedicated x86-v3 implementation that takes advantage of `_mm_permute_ps`/`_mm_shuffle_ps`.
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
+        impl_mat4_inverse!(m, s)
+    }
+
+    fn mat4_det(m: &[Storage<Self>; 4]) -> Self::Element {
+        impl_mat4_inverse!(DET_ONLY m, s)
     }
 }
 
@@ -588,6 +673,53 @@ impl LinAlg3Register for F32x4V3 {
 
     fn one4(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::one4_v2(value) }
+    }
+
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 3],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+
+        if const { COLUMN_MAJOR } {
+            type W = super::F32x8V3;
+
+            // Duplicate the three columns into both halves (hoisted).
+            let a0 = W::concat(cols[0], cols[0]);
+            let a1 = W::concat(cols[1], cols[1]);
+            let a2 = W::concat(cols[2], cols[2]);
+
+            // Two vectors per pass: [M*v_i | M*v_{i+1}] (3 terms, no fold).
+            let mut i = 0;
+            while i + 1 < N {
+                let (va, vb) = (vectors[i], vectors[i + 1]);
+                let x = W::concat(Self::broadcast::<0>(va), Self::broadcast::<0>(vb));
+                let y = W::concat(Self::broadcast::<1>(va), Self::broadcast::<1>(vb));
+                let z = W::concat(Self::broadcast::<2>(va), Self::broadcast::<2>(vb));
+                let prod = W::mul_adde(a2, z, W::mul_adde(a1, y, W::mul(a0, x)));
+                let (ra, rb) = W::split(prod);
+                out[i] = ra;
+                out[i + 1] = rb;
+                i += 2;
+            }
+
+            if const { N % 2 == 1 } {
+                out[N - 1] = Self::mat3_vec3_product_wide(cols, vectors[N - 1]);
+            }
+        } else {
+            // row-major: per-row dot3
+            let mut i = 0;
+            while i < N {
+                let v = vectors[i];
+                let mut r = Self::EMPTY;
+                r = Self::insert::<0>(r, Self::dot3(cols[0], v));
+                r = Self::insert::<1>(r, Self::dot3(cols[1], v));
+                out[i] = Self::insert::<2>(r, Self::dot3(cols[2], v));
+                i += 1;
+            }
+        }
+
+        out
     }
 
     fn min_element3(value: Storage<Self>) -> Self::Element {

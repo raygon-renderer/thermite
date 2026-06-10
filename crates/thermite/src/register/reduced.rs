@@ -1042,8 +1042,18 @@ where
     }
 
     #[inline(always)]
-    fn mat3_vec3_product<const COLUMN_MAJOR: bool>(cols: &[Storage<Self>; 3], vector: Storage<Self>) -> Storage<Self> {
-        // Entirely delegate to the inner register's method
-        unsafe { generic_array::const_transmute(R::mat3_vec3_product::<COLUMN_MAJOR>(core::mem::transmute(cols), vector.0)) }
+    fn mat3_vec3_product<const COLUMN_MAJOR: bool, const M: usize>(
+        cols: &[Storage<Self>; 3],
+        vectors: &[Storage<Self>; M],
+    ) -> [Storage<Self>; M] {
+        // Entirely delegate to the inner register's method.
+        unsafe {
+            let raw = R::mat3_vec3_product::<COLUMN_MAJOR, M>(
+                core::mem::transmute(cols),
+                core::mem::transmute(vectors),
+            );
+            // Storage<Self> is layout-compatible with Storage<R>.
+            core::mem::transmute_copy::<[Storage<R>; M], [Storage<Self>; M]>(&raw)
+        }
     }
 }

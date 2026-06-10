@@ -233,7 +233,7 @@ macro_rules! decl_f32xN {
             }
 
             // Single OpVectorShuffle with every output lane pointing to I.
-            // Each slot gets its own operand name ({i0}, {i1}, …) driven by $idx so
+            // Each slot gets its own operand name ({i0}, {i1}, ...) driven by $idx so
             // the macro repetition has a fragment to expand on; all bind to const I.
             fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
@@ -282,7 +282,7 @@ macro_rules! decl_f32xN {
             }
 
             // Single OpVectorShuffle with indices in descending order.
-            // Each slot {r0}, {r1}, … binds to const { $N - 1 - $idx }.
+            // Each slot {r0}, {r1}, ... binds to const { $N - 1 - $idx }.
             fn reverse(value: Storage<Self>) -> Storage<Self> {
                 let mut result = Self::EMPTY;
                 unsafe {
@@ -352,7 +352,7 @@ macro_rules! decl_f32xN {
                 Self::pairwise_sum_impl(lo, hi)
             }
 
-            // Lane count as a splat; 0.0, 1.0, … per lane.
+            // Lane count as a splat; 0.0, 1.0, ... per lane.
  fn offset() -> Storage<Self> { Self::splat($N as f32) }
  fn indexed() -> Storage<Self> { Self { $($f: $idx as f32,)* } }
         }
@@ -972,7 +972,7 @@ impl LinAlg4Register for F32x4 {
         }
     }
 
-    // Giesen fast quat-vec3 rotate: v + 2w(q×v) + 2(q×(q×v)).
+    // Giesen fast quat-vec3 rotate: v + 2w(q x v) + 2(q x (q x v)).
     // Replaces the SIMD default which broadcasts w into a full register before multiplying.
     fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
         let w = q.w;
@@ -999,16 +999,24 @@ impl LinAlg4Register for F32x4 {
     // Column-major:    OpMatrixTimesVector(M, v)  =  M * v
     // Row-major:       OpVectorTimesMatrix(v, M)  =  M * v  when M stores rows as columns,
     //                  since result[j] = dot(v, col_j(M)) = dot(v, row_j)
-    fn mat4_vec4_product<const COLUMN_MAJOR: bool>(
+    fn mat4_vec4_product<const COLUMN_MAJOR: bool, const N: usize>(
         cols: &[Storage<Self>; 4],
-        vector: Storage<Self>,
-    ) -> Storage<Self> {
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        // SIMT: each invocation is one lane, so just apply the native matrix op
+        // to every vector (the matrix is built once).
         let mat = F32x4x4 { x: cols[0], y: cols[1], z: cols[2], w: cols[3] };
-        if const { COLUMN_MAJOR } {
-            unsafe { arch::op_opmatrixtimesvector::<F32x4, F32x4x4>(mat, vector) }
-        } else {
-            unsafe { arch::op_opvectortimesmatrix::<F32x4, F32x4x4>(vector, mat) }
+        let mut out = [Self::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            out[i] = if const { COLUMN_MAJOR } {
+                unsafe { arch::op_opmatrixtimesvector::<F32x4, F32x4x4>(mat, vectors[i]) }
+            } else {
+                unsafe { arch::op_opvectortimesmatrix::<F32x4, F32x4x4>(vectors[i], mat) }
+            };
+            i += 1;
         }
+        out
     }
 
     // Swap lhs/rhs for row-major: OpMatrixTimesMatrix(rhs_stored, lhs_stored)
@@ -1026,23 +1034,22 @@ impl LinAlg4Register for F32x4 {
     }
 
     // GLSL Determinant + MatrixInverse in one asm block (via arch::glsl_determinant_and_inverse).
-    // Returns false and leaves `m` unchanged for exactly-singular matrices (det == 0).
-    // Note: GLSL MatrixInverse is undefined for ill-conditioned near-singular matrices.
-    fn mat4_inverse<const DET_ONLY: bool>(m: &mut [Storage<Self>; 4], det: &mut Self::Element) -> bool {
+    // Returns the determinant and leaves `m` untouched for an exactly-singular
+    // matrix (GLSL MatrixInverse is undefined there); the caller inspects the det.
+    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
         let mat = F32x4x4 { x: m[0], y: m[1], z: m[2], w: m[3] };
-        if const { DET_ONLY } {
-            *det = unsafe { arch::glsl_determinant(mat) };
-            return false;
-        }
         let (d, result): (f32, F32x4x4) = unsafe { arch::glsl_determinant_and_inverse(mat) };
-        *det = d;
-        if d == 0.0 {
-            return false;
+        if crate::likely(d != 0.0) {
+            m[0] = result.x;
+            m[1] = result.y;
+            m[2] = result.z;
+            m[3] = result.w;
         }
-        m[0] = result.x;
-        m[1] = result.y;
-        m[2] = result.z;
-        m[3] = result.w;
-        true
+        d
+    }
+
+    fn mat4_det(cols: &[Storage<Self>; 4]) -> Self::Element {
+        let mat = F32x4x4 { x: cols[0], y: cols[1], z: cols[2], w: cols[3] };
+        unsafe { arch::glsl_determinant(mat) }
     }
 }

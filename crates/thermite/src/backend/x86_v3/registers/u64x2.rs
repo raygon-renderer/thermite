@@ -469,7 +469,7 @@ impl IntegerRegister for U64x2V3 {
     }
 
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
-        // Delegate to the signed sibling (mirrors U32x4V3 → I32x4V3); the
+        // Delegate to the signed sibling (mirrors U32x4V3 -> I32x4V3); the
         // previous `count_ones(value)` was a copy-paste error.
         super::I64x2V3::trailing_zeros(value)
     }

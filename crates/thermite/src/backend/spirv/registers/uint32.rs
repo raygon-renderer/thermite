@@ -360,7 +360,7 @@ macro_rules! decl_u32xN {
                 unsafe { arch::op_opbitcount::<Self>(value) }
             }
 
-            // GLSLstd450 FindUMsb: position of the highest set bit (0–31), or undefined for 0.
+            // GLSLstd450 FindUMsb: position of the highest set bit (0-31), or undefined for 0.
             // Blend in 32 for the zero case.
             fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
                 let msb = unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::FIND_U_MSB }, false>(value) };
@@ -373,7 +373,7 @@ macro_rules! decl_u32xN {
                 Self::blendv(is_zero, lz, Self::splat(32u32))
             }
 
-            // GLSLstd450 FindILsb: position of the lowest set bit (0–31), or -1 for 0.
+            // GLSLstd450 FindILsb: position of the lowest set bit (0-31), or -1 for 0.
             fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
                 // FindILsb result in U32xN space: 0..=31 for non-zero, 0xFFFF_FFFF for 0.
                 let lsb = unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::FIND_I_LSB }, false>(value) };

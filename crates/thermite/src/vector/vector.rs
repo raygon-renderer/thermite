@@ -678,6 +678,7 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
 impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     fn dot3(self, other: Self) -> Self::Element { R::dot3(self.0, other.0) }
     fn cross3<const DOP: bool>(self, other: Self) -> Self { Vector(R::cross3::<DOP>(self.0, other.0)) }
+    fn refract(self, n: Self, eta: Self) -> Self { Vector(R::refract(self.0, n.0, eta.0)) }
     fn zero4(self) -> Self { Vector(R::zero4(self.0)) }
     fn one4(self) -> Self { Vector(R::one4(self.0)) }
     fn min_element3(self) -> Self::Element { R::min_element3(self.0) }
@@ -690,7 +691,45 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     }
 
     fn mat3_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 3]) -> Self {
-        Vector(R::mat3_vec3_product::<COLUMN_MAJOR>(unsafe { core::mem::transmute(m) }, self.0))
+        // Single-vector convenience over the array form (`N == 1`).
+        Self::mat3_vec3_product_array::<COLUMN_MAJOR, 1>(m, &[self])[0]
+    }
+
+    fn mat3_vec3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 3],
+        vectors: &[Self; N],
+    ) -> [Self; N] {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        let raw = R::mat3_vec3_product::<COLUMN_MAJOR, N>(
+            unsafe { core::mem::transmute(m) },
+            unsafe { core::mem::transmute(vectors) },
+        );
+        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
+        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+    }
+
+    fn mat3_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 3], rhs: &[Self; 3]) -> [Self; 3] {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        R::mat3_product::<COLUMN_MAJOR>(
+            unsafe { core::mem::transmute(lhs) },
+            unsafe { core::mem::transmute(rhs) },
+        )
+        .map(Vector)
+    }
+
+    fn mat3_det(m: &[Self; 3]) -> Self::Element {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        R::mat3_det(unsafe { core::mem::transmute(m) })
+    }
+
+    fn mat3_inverse_inplace(m: &mut [Self; 3]) -> Self::Element {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        R::mat3_inverse(unsafe { core::mem::transmute(m) })
+    }
+
+    fn mat3_normal<const DIVIDE: bool>(m: &[Self; 3]) -> [Self; 3] {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        R::mat3_normal::<DIVIDE>(unsafe { core::mem::transmute(m) }).map(Vector)
     }
 }
 
@@ -708,6 +747,14 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         Vector(R::quat4_vec3_product::<DOP>(self.0, vec.0))
     }
 
+    fn quat_to_mat3<const COLUMN_MAJOR: bool>(self) -> [Self; 3] {
+        R::quat_to_mat3::<COLUMN_MAJOR>(self.0).map(Vector)
+    }
+
+    fn quat_to_mat4<const COLUMN_MAJOR: bool>(self) -> [Self; 4] {
+        R::quat_to_mat4::<COLUMN_MAJOR>(self.0).map(Vector)
+    }
+
     fn mat4_transpose(m: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
@@ -715,21 +762,26 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     }
 
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
-        Self(R::mat4_vec4_product::<COLUMN_MAJOR>(
-            // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
-            // because Vector<R> is repr(transparent) around Storage<R>
-            unsafe { core::mem::transmute(m) },
-            self.0,
-        ))
+        // Single-vector convenience over the array form (`N == 1`).
+        Self::mat4_vec4_product_array::<COLUMN_MAJOR, 1>(m, &[self])[0]
     }
 
     fn mat4_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
-        Self(R::mat4_vec3_product::<COLUMN_MAJOR>(
-            // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
-            // because Vector<R> is repr(transparent) around Storage<R>
+        // Single-vector convenience over the array form (`N == 1`).
+        Self::mat4_vec3_product_array::<COLUMN_MAJOR, 1>(m, &[self])[0]
+    }
+
+    fn mat4_vec3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        vectors: &[Self; N],
+    ) -> [Self; N] {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        let raw = R::mat4_vec3_product::<COLUMN_MAJOR, N>(
             unsafe { core::mem::transmute(m) },
-            self.0,
-        ))
+            unsafe { core::mem::transmute(vectors) },
+        );
+        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
+        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }
 
     fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
@@ -742,17 +794,30 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         .map(Vector)
     }
 
-    fn mat4_det(m: &[Self; 4]) -> Self::Element {
-        let mut tmp = *m;
-        let mut det = Self::Element::ZERO;
-        Self::mat4_inverse_inplace::<true>(&mut tmp, &mut det);
-        det
+    fn mat4_vec4_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        vectors: &[Self; N],
+    ) -> [Self; N] {
+        // SAFETY: transmute &[Vector<R>; _] to &[Storage<R>; _] is safe because
+        // Vector<R> is repr(transparent) around Storage<R>.
+        let raw = R::mat4_vec4_product::<COLUMN_MAJOR, N>(
+            unsafe { core::mem::transmute(m) },
+            unsafe { core::mem::transmute(vectors) },
+        );
+        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
+        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }
 
-    fn mat4_inverse_inplace<const DET_ONLY: bool>(m: &mut [Self; 4], det: &mut Self::Element) -> bool {
+    fn mat4_det(m: &[Self; 4]) -> Self::Element {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_inverse::<DET_ONLY>(unsafe { core::mem::transmute(m) }, det)
+        R::mat4_det(unsafe { core::mem::transmute(m) })
+    }
+
+    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> Self::Element {
+        // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
+        // because Vector<R> is repr(transparent) around Storage<R>
+        R::mat4_inverse(unsafe { core::mem::transmute(m) })
     }
 }
 

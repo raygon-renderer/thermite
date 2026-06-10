@@ -59,25 +59,25 @@
 //!
 //! ```text
 //! GenericVector          construction, lane access, memory I/O, gather/scatter,
-//!   │                    reinterpretation, map/fold/reduce, interleave
-//!   ├─ BitwiseVector     &, |, ^, !, andnot, ternlog
-//!   │   └─ BitshiftVector   shifts, rotations, byte-shifts
-//!   └─ PartialOrdVector  cmp_lt/le/gt/ge/eq/ne → Mask
-//!       └─ NumericVector    +, -, *, /, %, min/max/clamp, reductions, FMA
-//!            ├─ SignedVector     abs, signum, copysign, neg
-//!            │    └─ FloatVector        sqrt, rcp/rsqrt, rounding, mix, consts
-//!            │         └─ FloatVectorWithBits  ldexp/frexp, bit-level ops
-//!            └─ IntegerVector    saturating/wrapping, popcount, dividers
-//!                 │              (also requires BitshiftVector)
-//!                 ├─ SignedIntegerVector    arithmetic shift, avg
-//!                 │                         (also requires SignedVector)
-//!                 └─ UnsignedIntegerVector  is_power_of_two, parity, avg
+//!   |                    reinterpretation, map/fold/reduce, interleave
+//!   |- BitwiseVector     &, |, ^, !, andnot, ternlog
+//!   |   \- BitshiftVector   shifts, rotations, byte-shifts
+//!   \- PartialOrdVector  cmp_lt/le/gt/ge/eq/ne -> Mask
+//!       \- NumericVector    +, -, *, /, %, min/max/clamp, reductions, FMA
+//!            |- SignedVector     abs, signum, copysign, neg
+//!            |    \- FloatVector        sqrt, rcp/rsqrt, rounding, mix, consts
+//!            |         \- FloatVectorWithBits  ldexp/frexp, bit-level ops
+//!            \- IntegerVector    saturating/wrapping, popcount, dividers
+//!                 |              (also requires BitshiftVector)
+//!                 |- SignedIntegerVector    arithmetic shift, avg
+//!                 |                         (also requires SignedVector)
+//!                 \- UnsignedIntegerVector  is_power_of_two, parity, avg
 //! ```
 //!
 //! `FloatVector` and `SignedIntegerVector` both sit under [`SignedVector`];
 //! `SignedIntegerVector` additionally requires [`IntegerVector`], so it is the
 //! meeting point of the signed and integer branches. `IntegerVector` itself
-//! does **not** require [`SignedVector`] — unsigned integer vectors are
+//! does **not** require [`SignedVector`] - unsigned integer vectors are
 //! integers without being signed.
 //!
 //! Alongside these, [`LinAlg3Vector`]/[`LinAlg4Vector`] add 3D/4D linear-algebra
@@ -2210,6 +2210,14 @@ pub trait LinAlg3Vector: FloatVector {
     /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
     fn cross3<const DOP: bool>(self, other: Self) -> Self;
 
+    /// Refraction of incident vector `self` through a surface with normal `n`
+    /// and relative index of refraction `eta` (`$\eta = \eta_i/\eta_t$`). `self` and `n` are
+    /// assumed unit length.
+    ///
+    /// Total internal reflection (`1 - eta^2*(1 - dot(n,self)^2) < 0`) returns the
+    /// zero vector; otherwise `eta*self - (eta*dot(n,self) + sqrt(k))*n`
+    fn refract(self, n: Self, eta: Self) -> Self;
+
     /// Efficiently set the 4th (last) lane of the register to 0.0.
     ///
     /// Useful for sanitizing 3D Homogeneous vectors.
@@ -2244,6 +2252,54 @@ pub trait LinAlg3Vector: FloatVector {
 
     /// 3x3 Matrix-Vector multiplication, assuming `self` as the vector.
     fn mat3_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 3]) -> Self;
+
+    /// 3x3 matrix times `N` 3D vectors (small-`N` batch; see
+    /// [`mat4_vec4_product_array`](LinAlg4Vector::mat4_vec4_product_array)).
+    fn mat3_vec3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 3],
+        vectors: &[Self; N],
+    ) -> [Self; N];
+
+    /// 3x3 Matrix-Matrix multiplication.
+    ///
+    /// If `COLUMN_MAJOR` is `false`, the matrices are treated as row-major and
+    /// the multiplication order becomes `rhs * lhs`, mirroring
+    /// [`mat4_product`](LinAlg4Vector::mat4_product).
+    fn mat3_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 3], rhs: &[Self; 3]) -> [Self; 3];
+
+    /// Determinant of a column-major 3x3 matrix.
+    fn mat3_det(m: &[Self; 3]) -> Self::Element;
+
+    /// In-place 3x3 Matrix inversion; **returns the determinant**.
+    ///
+    /// An exactly-zero determinant leaves the matrix untouched; a near-zero
+    /// (ill-conditioned) determinant gives a finite but unreliable result, so
+    /// inspect the returned determinant before trusting the matrix.
+    fn mat3_inverse_inplace(m: &mut [Self; 3]) -> Self::Element;
+
+    /// 3x3 Matrix inversion.
+    ///
+    /// Returns `Some(inverse)`, or `None` if the matrix is exactly singular.
+    /// Consider [`mat3_inverse_inplace`](Self::mat3_inverse_inplace) (which hands
+    /// back the determinant) to avoid the copy and to use a custom tolerance.
+    #[inline(always)]
+    fn mat3_inverse(m: &[Self; 3]) -> Option<[Self; 3]> {
+        let mut mat = *m;
+        if Self::mat3_inverse_inplace(&mut mat) == Self::Element::ZERO {
+            None
+        } else {
+            Some(mat)
+        }
+    }
+
+    /// "Normal matrix" for transforming normals under non-uniform scale, from
+    /// the cofactor cross-products of a column-major 3x3.
+    ///
+    /// `DIVIDE = true` gives the true inverse-transpose `$(M^{-1})^{T}$` (non-finite if
+    /// singular); `DIVIDE = false` gives the un-divided cofactor matrix, which is
+    /// cheaper, never singular, and points normals the same direction (use it
+    /// when you re-normalize the result). Cheaper than a full inverse either way.
+    fn mat3_normal<const DIVIDE: bool>(m: &[Self; 3]) -> [Self; 3];
 }
 
 /// Vector suitable for 4D linear algebra operations.
@@ -2283,6 +2339,28 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
     fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self;
 
+    /// Rotation matrix of a **unit** quaternion as 3 registers; the 4th lane of
+    /// each is unspecified.
+    ///
+    /// `COLUMN_MAJOR` picks the storage: the rotation's columns when `true`, its
+    /// rows when `false` (i.e. the transpose). The choice is free - only the
+    /// compile-time sign masks differ.
+    ///
+    /// Trig-free - the entries are pairwise products of `{x, y, z, w}`, no
+    /// `sin`/`cos`/`sqrt`. The quaternion is assumed normalized.
+    ///
+    /// To rotate many vectors by one quaternion, convert once here and batch via
+    /// [`mat3_vec3_product`](LinAlg3Vector::mat3_vec3_product) with the matching
+    /// `COLUMN_MAJOR` - cheaper than a per-vector
+    /// [`quat4_vec3_product`](Self::quat4_vec3_product) for large `N`.
+    fn quat_to_mat3<const COLUMN_MAJOR: bool>(self) -> [Self; 3];
+
+    /// Homogeneous 4x4 rotation matrix of a **unit** quaternion: the
+    /// [`quat_to_mat3`](Self::quat_to_mat3) rotation with each rotation
+    /// register's 4th lane zeroed and a `[0, 0, 0, 1]` 4th register.
+    /// `COLUMN_MAJOR` is forwarded to `quat_to_mat3`.
+    fn quat_to_mat4<const COLUMN_MAJOR: bool>(self) -> [Self; 4];
+
     /// 4x4 Matrix Transpose.
     fn mat4_transpose(m: &[Self; 4]) -> [Self; 4];
 
@@ -2309,6 +2387,13 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// transposed before the actual multiplication, which will incur a performance penalty.
     fn mat4_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
 
+    /// 4x4 matrix times `N` 3D vectors (small-`N` batch; see
+    /// [`mat4_vec4_product_array`](Self::mat4_vec4_product_array)).
+    fn mat4_vec3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        vectors: &[Self; N],
+    ) -> [Self; N];
+
     /// 4x4 Matrix-Matrix multiplication.
     ///
     /// If `COLUMN_MAJOR` is `false`, the matrices are assumed to be in row-major order,
@@ -2330,32 +2415,40 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// 4 individual matrix-vector multiplications.
     fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4];
 
-    /// In-place 4x4 Matrix inversion.
+    /// Transform `N` vectors by a single 4x4 matrix, returning the transformed array.
     ///
-    /// Writes the determinant to `det` regardless of success. Returns `true` if the
-    /// matrix was successfully inverted, or `false` if the matrix is singular.
-    fn mat4_inverse_inplace<const DET_ONLY: bool>(m: &mut [Self; 4], det: &mut Self::Element) -> bool;
+    /// Intended for **small** `N` (a handful of points): the array is taken and
+    /// returned **by value** and the loop fully unrolls, so a large `N` will
+    /// bloat code size and stack usage. For large or dynamic counts, loop
+    /// [`mat4_vec4_product`](Self::mat4_vec4_product) over a slice instead.
+    ///
+    /// Row-major matrices are transposed once up front (amortized over `N`).
+    /// Backends with a true double-width register transform two vectors per pass.
+    fn mat4_vec4_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        vectors: &[Self; N],
+    ) -> [Self; N];
+
+    /// In-place 4x4 Matrix inversion; **returns the determinant**.
+    ///
+    /// An exactly-zero determinant leaves the matrix untouched; a near-zero
+    /// (ill-conditioned) determinant gives a finite but unreliable result, so
+    /// inspect the returned determinant before trusting the matrix.
+    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> Self::Element;
 
     /// Compute the determinant of a 4x4 matrix without inverting it.
-    #[inline(always)]
-    fn mat4_det(m: &[Self; 4]) -> Self::Element {
-        let mut det = Self::Element::ZERO;
-        Self::mat4_inverse_inplace::<true>(&mut m.clone(), &mut det);
-        det
-    }
+    fn mat4_det(m: &[Self; 4]) -> Self::Element;
 
     /// 4x4 Matrix inversion.
     ///
-    /// Returns `Some(inverted_matrix)` if the matrix was successfully inverted,
-    /// or `None` if the matrix is singular and could not be inverted.
-    ///
-    /// Consider using [`Vector::mat4_inverse_inplace`] if you want to avoid
-    /// an extra copy.
+    /// Returns `Some(inverted_matrix)`, or `None` if the matrix is exactly
+    /// singular. Consider [`Vector::mat4_inverse_inplace`] (which hands back the
+    /// determinant) to avoid the copy and to use a custom tolerance.
     #[inline(always)]
     fn mat4_inverse(m: &[Self; 4]) -> Option<[Self; 4]> {
         let mut mat = *m;
-        let mut det = Self::Element::ZERO;
-        if Self::mat4_inverse_inplace::<false>(&mut mat, &mut det) {
+
+        if crate::likely(Self::mat4_inverse_inplace(&mut mat) != Self::Element::ZERO) {
             Some(mat)
         } else {
             None

@@ -89,7 +89,7 @@ macro_rules! decl_i32xN {
                 unsafe { arch::op_opinotequal::<super::[<Mx $N>], Self>(value, Self::EMPTY) }
             }
 
-            // MSB set ↔ negative signed value.
+            // MSB set <-> negative signed value.
             fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opslessthan::<super::[<Mx $N>], Self>(value, Self::EMPTY) }
             }
@@ -326,7 +326,7 @@ macro_rules! decl_i32xN {
                 unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::S_ABS }, false>(value) }
             }
 
-            // MSB set ↔ negative for two's-complement integers; same as msb_to_mask.
+            // MSB set <-> negative for two's-complement integers; same as msb_to_mask.
             fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
                 unsafe { arch::op_opslessthan::<super::[<Mx $N>], Self>(value, Self::EMPTY) }
             }
@@ -382,7 +382,7 @@ macro_rules! decl_i32xN {
                 unsafe { arch::op_opbitcount::<Self>(value) }
             }
 
-            // GLSLstd450 FindUMsb: position of the highest set bit (0–31), or undefined for 0.
+            // GLSLstd450 FindUMsb: position of the highest set bit (0-31), or undefined for 0.
             // Blend in 32 for the zero-input case (spec says result is undefined for 0).
             fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
                 // Treat the bit pattern as unsigned for FindUMsb.
@@ -396,7 +396,7 @@ macro_rules! decl_i32xN {
                 Self::blendv(is_zero, lz, Self::splat(32))
             }
 
-            // GLSLstd450 FindILsb: position of the lowest set bit (0–31), or -1 for 0.
+            // GLSLstd450 FindILsb: position of the lowest set bit (0-31), or -1 for 0.
             // Blend in 32 for the zero-input case.
             fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
                 let lsb     = unsafe { arch::glsl_op1::<Self, Self, { arch::glsl::FIND_I_LSB }, false>(value) };

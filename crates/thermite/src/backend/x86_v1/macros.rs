@@ -52,7 +52,7 @@ macro_rules! _mm_reduce_epi32_v1 {
     }}};
 }
 
-/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` → `[a0+a1, a2+a3, b0+b1, b2+b3]`
+/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` -> `[a0+a1, a2+a3, b0+b1, b2+b3]`
 #[rustfmt::skip]
 macro_rules! _mm_pairwise_sum_ps_v1 {
     ($lhs:expr, $rhs:expr) => {#[allow(unused_unsafe)] unsafe {
@@ -62,7 +62,7 @@ macro_rules! _mm_pairwise_sum_ps_v1 {
     }};
 }
 
-/// `[a0,a1]` hadd `[b0,b1]` → `[a0+a1, b0+b1]`
+/// `[a0,a1]` hadd `[b0,b1]` -> `[a0+a1, b0+b1]`
 #[rustfmt::skip]
 macro_rules! _mm_pairwise_sum_pd_v1 {
     ($lhs:expr, $rhs:expr) => {#[allow(unused_unsafe)] unsafe {
@@ -72,7 +72,7 @@ macro_rules! _mm_pairwise_sum_pd_v1 {
     }};
 }
 
-/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` → `[a0+a1, a2+a3, b0+b1, b2+b3]`
+/// `[a0,a1,a2,a3]` hadd `[b0,b1,b2,b3]` -> `[a0+a1, a2+a3, b0+b1, b2+b3]`
 /// Uses float shuffle to mix two sources (no 2-source `_mm_shuffle_epi32`).
 #[rustfmt::skip]
 macro_rules! _mm_pairwise_sum_epi32_v1 {
@@ -85,7 +85,7 @@ macro_rules! _mm_pairwise_sum_epi32_v1 {
     }}};
 }
 
-/// `[a0,a1]` hadd `[b0,b1]` → `[a0+a1, b0+b1]`
+/// `[a0,a1]` hadd `[b0,b1]` -> `[a0+a1, b0+b1]`
 /// Uses double shuffle to mix two sources (no 2-source `_mm_shuffle_epi32` for 64-bit).
 #[rustfmt::skip]
 macro_rules! _mm_pairwise_sum_epi64_v1 {

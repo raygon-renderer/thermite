@@ -419,7 +419,7 @@ impl NumericRegister for F32x8V3 {
     }
 
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
-        // hadd gives [a01,a23,b01,b23,a45,a67,b45,b67]; vpermq [0,2,1,3] → strict
+        // hadd gives [a01,a23,b01,b23,a45,a67,b45,b67]; vpermq [0,2,1,3] -> strict
         let relaxed = Self::relaxed_pairwise_sum(lo, hi);
         unsafe {
             arch::_mm256_castpd_ps(arch::_mm256_permute4x64_pd(

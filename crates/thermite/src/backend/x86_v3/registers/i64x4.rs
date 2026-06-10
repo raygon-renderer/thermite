@@ -381,7 +381,7 @@ impl NumericRegister for I64x4V3 {
 
     fn relaxed_pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
         unsafe {
-            // [a0,a1,a2,a3] hadd [b0,b1,b2,b3] → [a0+a1, b0+b1, a2+a3, b2+b3] (relaxed)
+            // [a0,a1,a2,a3] hadd [b0,b1,b2,b3] -> [a0+a1, b0+b1, a2+a3, b2+b3] (relaxed)
             let lo_pd = arch::_mm256_castsi256_pd(lo);
             let hi_pd = arch::_mm256_castsi256_pd(hi);
             let even = arch::_mm256_shuffle_pd(lo_pd, hi_pd, 0b0000); // [a0,b0,a2,b2]
