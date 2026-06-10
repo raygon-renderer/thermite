@@ -160,9 +160,9 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
 /// type ([`Storage<R::Mask>`](crate::register::Storage)), exposing the
 /// [`GenericMask`] API for combining, reducing, and selecting with masks.
 ///
-/// Masks are most often *produced* by predicate operations on vectors — e.g.
+/// Masks are most often *produced* by predicate operations on vectors - e.g.
 /// the [`PartialOrdVector`](crate::vector::PartialOrdVector) comparisons
-/// (`cmp_lt`, `cmp_eq`, …) — and then used to select elements via
+/// (`cmp_lt`, `cmp_eq`, ...) - and then used to select elements via
 /// [`select`](GenericMask::select) or to drive the `_c`/`_m`/`_z` masked
 /// operation variants. They can also be built directly from a scalar `bool`
 /// (splatting it to every lane) or from a [`Vector<R>`] (nonzero lanes become

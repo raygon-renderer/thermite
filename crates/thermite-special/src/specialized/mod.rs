@@ -35,7 +35,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     ///
     /// Uses the power series for x < 1 and the Stieltjes continued fraction for x >= 1,
     /// computed in parallel across SIMD lanes and blended at the end.
-    /// For N > 1, applies the recurrence `E_{n+1}(x) = (e^{-x} - x·E_n(x)) / n`.
+    /// For N > 1, applies the recurrence `$E_{n+1}(x) = (e^{-x} - x \cdot E_n(x)) / n$`.
     #[inline(always)]
     fn expint<P: Policy, const N: usize>(self) -> Self {
         let x = self;
@@ -45,14 +45,14 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
         // === Interleaved power series (x < 1) and continued fraction (x >= 1) ===
         //
-        // Power series: E_1(x) = -γ - ln(x) - Σ_{k=1}^∞ (-x)^k / (k·k!)
-        //   Recurrence on terms: A_{k+1} = A_k · (-x · k) / (k+1)²
+        // Power series: E_1(x) = -γ - ln(x) - Σ_{k=1}^∞ (-x)^k / (k*k!)
+        //   Recurrence on terms: A_{k+1} = A_k * (-x * k) / (k+1)^2
         //   Starting with A_1 = -x, sum = A_1.
         //
-        // Continued fraction (Stieltjes): E_1(x)·eˣ = 1/(x+1 - 1²/(x+3 - 2²/(x+5 - 3²/(x+7 - ...))))
-        //   In standard Lentz form: b₀=0, a₁=1, b₁=x+1; then aⱼ=-(j-1)², bⱼ=x+2j-1 for j≥2.
+        // Continued fraction (Stieltjes): E_1(x)*e^x = 1/(x+1 - 1^2/(x+3 - 2^2/(x+5 - 3^2/(x+7 - ...))))
+        //   In standard Lentz form: b_0=0, a_1=1, b_1=x+1; then a_j=-(j-1)^2, b_j=x+2j-1 for j≥2.
         //   Bootstrap j=1 outside the loop, iterate j≥2 inside.
-        //   Result: E_1(x) = f · e^{-x}
+        //   Result: E_1(x) = f * e^{-x}
 
         let use_series = x.cmp_lt(Self::ONE);
 
@@ -63,29 +63,29 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
         // --- Continued fraction state (modified Lentz's method) ---
         //
-        // E_1(x)·eˣ = 1/(x+1 - 1²/(x+3 - 2²/(x+5 - 3²/(x+7 - ...))))
+        // E_1(x)*e^x = 1/(x+1 - 1^2/(x+3 - 2^2/(x+5 - 3^2/(x+7 - ...))))
         //
-        // In standard Lentz form b₀ + a₁/(b₁ + a₂/(b₂ + ...)):
-        //   b₀ = 0
-        //   j=1: a₁ = 1,       b₁ = x+1
-        //   j≥2: aⱼ = -(j-1)², bⱼ = x + 2j - 1
+        // In standard Lentz form b_0 + a_1/(b_1 + a_2/(b_2 + ...)):
+        //   b_0 = 0
+        //   j=1: a_1 = 1,       b_1 = x+1
+        //   j≥2: a_j = -(j-1)^2, b_j = x + 2j - 1
         //
         let tiny = Self::MIN_POSITIVE;
 
-        // b₀ = 0, so f₀ = tiny, C₀ = tiny, D₀ = 0
+        // b_0 = 0, so f_0 = tiny, C_0 = tiny, D_0 = 0
         let mut cf_f = tiny;
         let mut cf_c = tiny;
         let mut cf_d = Self::ZERO;
 
-        // Bootstrap j=1 step: a₁ = 1, b₁ = x+1
+        // Bootstrap j=1 step: a_1 = 1, b_1 = x+1
         {
             let b1 = x + Self::ONE;
-            // D₁ = 1/(b₁ + a₁·D₀) = 1/(x+1)
+            // D_1 = 1/(b_1 + a_1*D_0) = 1/(x+1)
             cf_d = b1.reciprocal_p::<P>();
-            // C₁ = b₁ + a₁/C₀ = (x+1) + 1/tiny ≈ 1/tiny
+            // C_1 = b_1 + a_1/C_0 = (x+1) + 1/tiny ≈ 1/tiny
             cf_c = b1 + cf_c.reciprocal_p::<P>();
             let delta = cf_c * cf_d;
-            cf_f *= delta; // tiny · (1/tiny)/(x+1) ≈ 1/(x+1)
+            cf_f *= delta; // tiny * (1/tiny)/(x+1) ≈ 1/(x+1)
         }
 
         // Convergence tolerance
@@ -100,7 +100,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             let kp1 = Self::splat(E::from_int(k as thermite::LargeInt + 1));
 
             // --- Power series step ---
-            // A_{k+1} = A_k · (-x · k) / (k+1)²
+            // A_{k+1} = A_k * (-x * k) / (k+1)^2
             if !series_done.all() {
                 s_term *= (neg_x * kf) / (kp1 * kp1);
                 s_sum = series_done.select(s_sum, s_sum + s_term);
@@ -116,13 +116,13 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             }
 
             // --- Continued fraction step (j = k+1, so j ≥ 2) ---
-            // aⱼ = -(j-1)² = -k², bⱼ = x + 2j - 1 = x + 2k + 1
+            // a_j = -(j-1)^2 = -k^2, b_j = x + 2j - 1 = x + 2k + 1
             if !cf_done.all() {
-                let neg_a_k = kf * kf; // |aⱼ| = k²
+                let neg_a_k = kf * kf; // |a_j| = k^2
                 let b_k = (x + kf) + (kf + Self::ONE); // x + 2k + 1
 
-                // D = 1 / (b - |a|·D_prev)  [note: subtraction because a is negative]
-                let d_denom = neg_a_k.nmul_adde(cf_d, b_k); // b - |a|·D
+                // D = 1 / (b - |a|*D_prev)  [note: subtraction because a is negative]
+                let d_denom = neg_a_k.nmul_adde(cf_d, b_k); // b - |a|*D
                 let new_d = d_denom.cmp_eq(Self::ZERO).select(tiny, d_denom).reciprocal_p::<P>();
 
                 // C = b - |a|/C_prev  [same sign flip]
@@ -153,7 +153,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         // Series: E_1(x) = -γ - ln(x) - sum
         let mut series_result = Self::EMPTY;
 
-        // CF: E_1(x) = cf_f · e^{-x}  (cf_f approximates E_1(x)·eˣ)
+        // CF: E_1(x) = cf_f * e^{-x}  (cf_f approximates E_1(x)*e^x)
         let mut cf_result = Self::EMPTY;
 
         if use_series.any() {
@@ -167,7 +167,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let mut e_n = use_series.select(series_result, cf_result);
 
         // --- Apply recurrence for N > 1 ---
-        // E_{n+1}(x) = (e^{-x} - x · E_n(x)) / n
+        // E_{n+1}(x) = (e^{-x} - x * E_n(x)) / n
         if const { N > 1 } {
             let exp_neg_x = (-x).exp_p::<P>();
 
@@ -367,7 +367,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             assert!(N >= 1, "chebyshev: N must be at least 1");
         }
 
-        // S = Σ cₖ P₀ = c₀ when N = 1; skip the whole recurrence.
+        // S = Σ c_k P_0 = c_0 when N = 1; skip the whole recurrence.
         if const { N == 1 } {
             return Self::splat(coeffs[0]);
         }
@@ -375,7 +375,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let x = self;
         let x2 = x + x;
 
-        // P₁: T₁ = x, U₁ = 2x, V₁ = 2x - 1, W₁ = 2x + 1.
+        // P_1: T_1 = x, U_1 = 2x, V_1 = 2x - 1, W_1 = 2x + 1.
         let p1 = if const { K == 1 } {
             x
         } else if const { K == 2 } {
@@ -391,40 +391,40 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let cn1 = Self::splat(coeffs[N - 1]);
         let cn2 = Self::splat(coeffs[N - 2]);
 
-        // S = c₀ + c₁·P₁(x) when N = 2.
+        // S = c_0 + c_1*P_1(x) when N = 2.
         if const { N == 2 } {
             return p1.mul_adde(cn1, cn2);
         }
 
         // Clenshaw's backward recurrence. All four kinds share the recurrence
-        // Pₖ₊₁ = 2x·Pₖ - Pₖ₋₁ with P₀ = 1, so the bₖ loop is identical for all of them
-        // and only the final-step P₁(x) differs:
+        // P_{k+1} = 2x*P_k - P_{k-1} with P_0 = 1, so the b_k loop is identical for all of them
+        // and only the final-step P_1(x) differs:
         //
         //     b_{N+1} = b_N = 0
-        //     for k = N-1 down to 1:  bₖ = 2x·bₖ₊₁ - bₖ₊₂ + cₖ
-        //     S = (c₀ - b₂) + b₁ · P₁(x)
+        //     for k = N-1 down to 1:  b_k = 2x*b_{k+1} - b_{k+2} + c_k
+        //     S = (c_0 - b_2) + b_1 * P_1(x)
         //
         // This is more numerically stable than the forward sum (especially when the
-        // partial sums of Σ cₖ Pₖ are much smaller than max|cₖ Pₖ|) and uses only two
+        // partial sums of Σ c_k P_k are much smaller than max|c_k P_k|) and uses only two
         // running scalars instead of three.
         //
-        // Hoist the first two iterations to eliminate the b₂ = 0 subtraction in the loop:
-        //     k = N-1:  b_{N-1} = 2x·0 + c_{N-1} - 0          = c_{N-1}
-        //     k = N-2:  b_{N-2} = 2x·c_{N-1} + c_{N-2} - 0    = 2x·c_{N-1} + c_{N-2}
-        let mut b1 = x2.mul_adde(cn1, cn2); // bₖ₊₁ = b_{N-2}
-        let mut b2 = cn1; // bₖ₊₂ = b_{N-1}
+        // Hoist the first two iterations to eliminate the b_2 = 0 subtraction in the loop:
+        //     k = N-1:  b_{N-1} = 2x*0 + c_{N-1} - 0          = c_{N-1}
+        //     k = N-2:  b_{N-2} = 2x*c_{N-1} + c_{N-2} - 0    = 2x*c_{N-1} + c_{N-2}
+        let mut b1 = x2.mul_adde(cn1, cn2); // b_{k+1} = b_{N-2}
+        let mut b2 = cn1; // b_{k+2} = b_{N-1}
 
         // Iterate k = N-3, N-4, ..., 1.
         let mut k = N - 2;
         while k > 1 {
             k -= 1;
-            // bₖ = (2x·bₖ₊₁ + cₖ) - bₖ₊₂
+            // b_k = (2x*b_{k+1} + c_k) - b_{k+2}
             let bk = x2.mul_adde(b1, Self::splat(coeffs[k]) - b2);
             b2 = b1;
             b1 = bk;
         }
 
-        // S = b₁ · P₁(x) + (c₀ - b₂)
+        // S = b_1 * P_1(x) + (c_0 - b_2)
         b1.mul_adde(p1, Self::splat(coeffs[0]) - b2)
     }
 

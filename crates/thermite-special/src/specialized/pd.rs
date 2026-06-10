@@ -26,21 +26,21 @@ where
 
     #[inline(always)]
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
-        // Computes both W₀(x) and W₋₁(x) simultaneously.
+        // Computes both W_0(x) and W_{-1}(x) simultaneously.
         //
-        // Lambert W₀(x): principal branch, defined for x >= -1/e, returns values >= -1.
-        // Lambert W₋₁(x): secondary real branch, defined for -1/e <= x < 0, returns values <= -1.
-        // Both satisfy w·eʷ = x.
+        // Lambert W_0(x): principal branch, defined for x >= -1/e, returns values >= -1.
+        // Lambert W_{-1}(x): secondary real branch, defined for -1/e <= x < 0, returns values <= -1.
+        // Both satisfy w*e^w = x.
         //
         // Uses Halley's method with piecewise initial approximations, interleaving
         // iterations for both branches to maximize instruction-level parallelism.
         // f64 needs more iterations than f32 due to 52-bit mantissa.
         //
-        // Halley's iteration for w·exp(w) = x:
-        //   ew = exp(w), f = w·ew - x, wp1 = w + 1
+        // Halley's iteration for w*exp(w) = x:
+        //   ew = exp(w), f = w*ew - x, wp1 = w + 1
         //   Denominator rewritten to avoid an extra division:
-        //     d = 2·wp1²·ew - (w+2)·f
-        //   w' = w - 2·wp1·f / d
+        //     d = 2*wp1^2*ew - (w+2)*f
+        //   w' = w - 2*wp1*f / d
 
         // For initial guess and first Halley iterations, use fast and loose precision
         type Approx<P> = WorstPrecision<CheckOverflow<P, false>>;
@@ -55,7 +55,7 @@ where
         let p0 = x.mul_adde(Self::E, Self::ONE); // ex + 1
         let p = (p0 + p0).sqrt(); // sqrt(2(ex+1))
 
-        // p·(1 + p·(-1/3 + p·11/72))
+        // p*(1 + p*(-1/3 + p*11/72))
         let puiseux_numer = p * p.mul_adde(
             p.mul_adde(
                 thermite::const_splat!(f64: 11.0 / 72.0),
@@ -64,31 +64,31 @@ where
             Self::ONE,
         );
 
-        // 1 + K·p₀·p
+        // 1 + K*p_0*p
         let puiseux_denom = p0.mul_adde(p * thermite::const_splat!(f64: 0.12991546098765432), Self::ONE);
 
         let puiseux = puiseux_numer / puiseux_denom;
 
-        // W₀ branch: -1 + series, W₋₁ branch: -1 - series
+        // W_0 branch: -1 + series, W_{-1} branch: -1 - series
         let w0_branch = puiseux + Self::NEG_ONE;
         let wm1_branch = Self::NEG_ONE - puiseux;
 
-        // W₀ middle region: ex/(2+ex), exact at x = -1/e and x = 0.
+        // W_0 middle region: ex/(2+ex), exact at x = -1/e and x = 0.
         let ex = x * Self::E;
         let w0_mid = ex / (Self::TWO + ex);
 
         // Shared ln for asymptotic regions
         let lnx = x.abs().ln_p::<Approx<P>>();
 
-        // W₀ asymptotic (x > e): L₁ - L₂ + L₂/L₁ where L₁ = ln(x), L₂ = ln(L₁).
-        // The L₂/L₁ correction is 0 at x = e (since L₂ = ln(1) = 0), so it doesn't
+        // W_0 asymptotic (x > e): L_1 - L_2 + L_2/L_1 where L_1 = ln(x), L_2 = ln(L_1).
+        // The L_2/L_1 correction is 0 at x = e (since L_2 = ln(1) = 0), so it doesn't
         // overshoot near the transition, but closes the gap at large x.
         let l2 = lnx.ln_p::<Approx<P>>();
         let w0_asymptotic = (lnx - l2) + (l2 / lnx);
 
-        // W₋₁ asymptotic (x near 0⁻): L₁ - L₂ where L₁ = ln(-x), L₂ = ln(-L₁)
+        // W_{-1} asymptotic (x near 0^-): L_1 - L_2 where L_1 = ln(-x), L_2 = ln(-L_1)
         // lnx = ln(|x|) = ln(-x) since x < 0; this is negative for small |x|.
-        // -lnx is positive, so (-lnx).ln() = ln(-ln(-x)) = L₂.
+        // -lnx is positive, so (-lnx).ln() = ln(-ln(-x)) = L_2.
         let wm1_asymptotic = lnx - (-lnx).ln_p::<Approx<P>>();
 
         // Select initial guesses
@@ -108,15 +108,15 @@ where
             W: FloatVectorWithBits<Element = f64> + SpecializedTranscendentalMath<f64>,
         {
             // Use exp(-w) to avoid overflow/underflow in e^w for extreme w.
-            // g = w - x·e^{-w} = f·e^{-w}, d = (w²+2w+2) + (w+2)·x·e^{-w}
+            // g = w - x*e^{-w} = f*e^{-w}, d = (w^2+2w+2) + (w+2)*x*e^{-w}
             // g and d are both single FMAs off enw, independent of each other.
             let enw = (-w).exp_p::<P>();
 
             let wp1 = w + W::ONE;
-            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)² + 1 = w² + 2w + 2
-            let wp2h_x = wp1.mul_adde(x, x); // (w+2)·x - no exp dependency
-            let g = x.nmul_adde(enw, w); // w - x·e^{-w}
-            let d = wp2h_x.mul_adde(enw, q); // (w+2)·x·e^{-w} + (w²+2w+2)
+            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)^2 + 1 = w^2 + 2w + 2
+            let wp2h_x = wp1.mul_adde(x, x); // (w+2)*x - no exp dependency
+            let g = x.nmul_adde(enw, w); // w - x*e^{-w}
+            let d = wp2h_x.mul_adde(enw, q); // (w+2)*x*e^{-w} + (w^2+2w+2)
             (wp1 + wp1).nmul_adde(g / d, w)
         }
 
@@ -139,27 +139,27 @@ where
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             let x_is_zero = x.is_zero();
 
-            // At x = -1/e, both W₀ and W₋₁ = -1
+            // At x = -1/e, both W_0 and W_{-1} = -1
             w0 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, w0);
-            w0 = w0.nz(x_is_zero); // W₀(0) = 0
+            w0 = w0.nz(x_is_zero); // W_0(0) = 0
 
             wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
-            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W_{-1}(0) = -inf
         }
 
         if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
-            // for subnormal inputs, W₀(x) ≈ x
+            // for subnormal inputs, W_0(x) ≈ x
             w0 = x.is_subnormal().select(x, w0);
         }
 
         if const { P::POLICY.check_overflow } {
             let in_domain = x.cmp_ge(Self::FRAC_NEG_1_E);
 
-            // W₀ is undefined for x < -1/e, +inf -> +inf
+            // W_0 is undefined for x < -1/e, +inf -> +inf
             w0 = in_domain.select(w0, Self::NAN);
             w0 = x.cmp_eq(Self::INFINITY).select(Self::INFINITY, w0);
 
-            // W₋₁ is only defined for -1/e <= x < 0
+            // W_{-1} is only defined for -1/e <= x < 0
             wm1 = in_domain.select(wm1, Self::NAN);
             wm1 = x.cmp_gt(Self::ZERO).select(Self::NAN, wm1);
         }

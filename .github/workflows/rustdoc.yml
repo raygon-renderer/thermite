@@ -38,7 +38,7 @@ jobs:
       - name: Build workspace documentation
         run: cargo doc --workspace --no-deps --exclude "spirv*" --exclude "docgen"
         env:
-          RUSTDOCFLAGS: "${{ env.RUSTDOCFLAGS }} --html-after-content doc-footer.html"
+          RUSTDOCFLAGS: "${{ env.RUSTDOCFLAGS }} --html-after-content doc-footer.html --html-in-header ${{ github.workspace }}/katex-header.html"
 
       - run: |
           echo "<meta http-equiv=refresh content=0;url=`echo $GITHUB_REPOSITORY | cut -d '/' -f 2 | tr '[:upper:]' '[:lower:]'`/index.html>" > target/doc/index.html

@@ -59,7 +59,7 @@ pub(super) unsafe fn spirv_count_ones_u64(x: u64) -> u64 {
 #[inline(always)]
 pub(super) unsafe fn spirv_leading_zeros_u32(x: u32) -> u32 {
     let msb = unsafe { arch::glsl_op1::<u32, u32, { glsl::FIND_U_MSB }, false>(x) };
-    // FindUMsb(0) = 0xFFFFFFFF; 31u32.wrapping_sub(0xFFFFFFFF) = 32 ✓
+    // FindUMsb(0) = 0xFFFFFFFF; 31u32.wrapping_sub(0xFFFFFFFF) = 32 (correct)
     31u32.wrapping_sub(msb)
 }
 

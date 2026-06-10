@@ -1562,7 +1562,7 @@ pub trait SignedIntegerRegister:
         value
     }
 
-    /// Floor average: `(a + b) >> 1` rounded toward −∞, computed without overflow.
+    /// Floor average: `(a + b) >> 1` rounded toward -∞, computed without overflow.
     #[conditional]
     fn avg_floor(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         Self::add(Self::bitand(a, b), Self::srai::<1>(Self::bitxor(a, b)))

@@ -5,127 +5,127 @@ pub trait FloatConsts {
     /// Negative zero (-0) (only sign bit set)
     const NEG_ZERO: Self;
 
-    /// Euler’s number (e)
+    /// Euler's number (e)
     const E: Self;
 
     /// Euler-Mascheroni constant (γ)
     const EULER_GAMMA: Self;
 
-    /// π^2
+    /// `$\pi^2$`
     const PI_SQUARED: Self;
 
-    /// π^3
+    /// `$\pi^3$`
     const PI_CUBED: Self;
 
-    /// π^4
+    /// `$\pi^4$`
     const PI_FOURTH: Self;
 
-    /// 1/π
+    /// `$1/\pi$`
     const FRAC_1_PI: Self;
 
-    /// 1/sqrt(2)
+    /// `$1/\sqrt{2}$`
     const FRAC_1_SQRT_2: Self;
 
-    /// 1/sqrt(3)
+    /// `$1/\sqrt{3}$`
     const FRAC_1_SQRT_3: Self;
 
-    /// 2/π
+    /// `$2/\pi$`
     const FRAC_2_PI: Self;
 
-    /// 1/sqrt(π)
+    /// `$1/\sqrt{\pi}$`
     const FRAC_1_SQRT_PI: Self;
 
-    /// 2/sqrt(π)
+    /// `$2/\sqrt{\pi}$`
     const FRAC_2_SQRT_PI: Self;
 
-    /// sqrt(pi)/2
+    /// `$\sqrt{\pi}/2$`
     const FRAC_SQRT_PI_2: Self;
 
-    /// 1/sqrt(2π)
+    /// `$1/\sqrt{2\pi}$`
     const FRAC_1_SQRT_TAU: Self;
 
-    /// π/2
+    /// `$\pi/2$`
     const FRAC_PI_2: Self;
 
-    /// π/3
+    /// `$\pi/3$`
     const FRAC_PI_3: Self;
 
-    /// π/4
+    /// `$\pi/4$`
     const FRAC_PI_4: Self;
 
-    /// π/6
+    /// `$\pi/6$`
     const FRAC_PI_6: Self;
 
-    /// π/8
+    /// `$\pi/8$`
     const FRAC_PI_8: Self;
 
-    /// π/180
+    /// `$\pi/180$`
     const FRAC_PI_180: Self;
 
-    /// 180/π
+    /// `$180/\pi$`
     const FRAC_180_PI: Self;
 
-    /// ln(2)
+    /// `$\ln 2$`
     const LN_2: Self;
 
-    /// ln(10)
+    /// `$\ln 10$`
     const LN_10: Self;
 
-    /// ln(π)
+    /// `$\ln \pi$`
     const LN_PI: Self;
 
-    /// ln(pi)/2
+    /// `$	frac{1}{2}\ln \pi$`
     const FRAC_LN_PI_2: Self;
 
-    /// log2(10)
+    /// `$\log_2 10$`
     const LOG2_10: Self;
 
-    /// log2(e)
+    /// `$\log_2 e$`
     const LOG2_E: Self;
 
-    /// log10(2)
+    /// `$\log_{10} 2$`
     const LOG10_2: Self;
 
-    /// log10(e)
+    /// `$\log_{10} e$`
     const LOG10_E: Self;
 
-    /// Archimedes’ constant (π)
+    /// Archimedes' constant (π)
     const PI: Self;
 
-    /// sqrt(2)
+    /// `$\sqrt{2}$`
     const SQRT_2: Self;
 
-    /// sqrt(3)
+    /// `$\sqrt{3}$`
     const SQRT_3: Self;
 
-    /// sqrt(e)
+    /// `$\sqrt{e}$`
     const SQRT_E: Self;
 
     /// The machine epsilon
     const EPSILON: Self;
 
-    /// The square root of the machine epsilon (sqrt(epsilon))
+    /// The square root of the machine epsilon (`$\sqrt{arepsilon}$`)
     const SQRT_EPSILON: Self;
 
-    /// The fourth root of the machine epsilon (fourth_root(epsilon))
+    /// The fourth root of the machine epsilon (`$\sqrt[4]{arepsilon}$`)
     const FOURTH_ROOT_EPSILON: Self;
 
     /// The full circle constant (τ)
     const TAU: Self;
 
-    /// sqrt(π/2)
+    /// `$\sqrt{\pi/2}$`
     const SQRT_FRAC_PI_2: Self;
 
-    /// sqrt(2π)
+    /// `$\sqrt{2\pi}$`
     const SQRT_TAU: Self;
 
     /// The golden ratio (φ)
     const PHI: Self;
 
-    /// 1/3
+    /// `$1/3$`
     const FRAC_1_3: Self;
 
-    /// 2/3
+    /// `$2/3$`
     const FRAC_2_3: Self;
 
     /// 1/4

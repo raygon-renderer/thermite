@@ -1555,7 +1555,7 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
 
-    /// Floor average: `(a + b) >> 1` rounded toward −∞, computed without overflow.
+    /// Floor average: `(a + b) >> 1` rounded toward -∞, computed without overflow.
     #[conditional] fn avg_floor(self, other: Self) -> Self;
     /// Ceiling average: `(a + b + 1) >> 1` rounded toward +∞, computed without overflow.
     #[conditional] fn avg_ceil(self, other: Self) -> Self;

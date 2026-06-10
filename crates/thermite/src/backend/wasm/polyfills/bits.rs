@@ -10,7 +10,7 @@ use core::arch::wasm32::*;
 pub fn wasm_bshli<const IMM8: i32>(value: v128) -> v128 {
     let z = i8x16_splat(0);
     // a=zeros, b=value; indices 0-15 select from zeros, 16-31 from value.
-    // Result byte i: i < IMM8 → zero, else value[i - IMM8].
+    // Result byte i: i < IMM8 -> zero, else value[i - IMM8].
     match IMM8 {
         0  => value,
         1  => i8x16_shuffle::<0,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30>(z, value),
@@ -42,7 +42,7 @@ pub fn wasm_bshli<const IMM8: i32>(value: v128) -> v128 {
 pub fn wasm_bshri<const IMM8: i32>(value: v128) -> v128 {
     let z = i8x16_splat(0);
     // a=value, b=zeros; indices 0-15 select from value, 16-31 from zeros.
-    // Result byte i: i + IMM8 < 16 → value[i + IMM8], else zero.
+    // Result byte i: i + IMM8 < 16 -> value[i + IMM8], else zero.
     match IMM8 {
         0  => value,
         1  => i8x16_shuffle::< 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16>(value, z),

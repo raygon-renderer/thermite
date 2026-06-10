@@ -162,7 +162,7 @@ decl_math! {
         /// Computes the complementary error function.
         fn erfc[][](self: Self) -> Self;
 
-        /// Computes the Logistic sigmoid function, defined as `1 / (1 + exp(-x))`.
+        /// Computes the Logistic sigmoid function, defined as `$\sigma(x) = \frac{1}{1 + e^{-x}}$`.
         ///
         /// It's worth mentioning that the derivative of the logistic sigmoid can be computed very cheaply
         /// from the output of the logistic sigmoid itself, in the form of:
@@ -177,7 +177,7 @@ decl_math! {
         /// inputs without overflow or underflow issues.
         fn logistic_sigmoid[][](self: Self) -> Self;
 
-        /// Computes the softplus function, defined as `(1/k) * ln(1 + exp(k * x))`,
+        /// Computes the softplus function, defined as `$\frac{1}{k}\ln(1 + e^{kx})$`,
         /// as well as its derivative with respect to `x`.
         ///
         /// This is a smooth approximation to the ReLU function
@@ -190,23 +190,23 @@ decl_math! {
         /// with the same `k` can pre-compute the reciprocal once rather than recomputing it per call.
         fn softplus[][](self: Self, k: Self, rcp_k: Self) -> (Self, Self);
 
-        /// Computes the Gamma function (`Γ(z)`) for any real input, for each value in a vector.
+        /// Computes the Gamma function (`$\Gamma(z)$`) for any real input, for each value in a vector.
         ///
         /// This implementation uses a few different behaviors to ensure the greatest precision where possible.
         ///
         /// * For non-integer positive inputs, it uses the Lanczos approximation.
-        /// * For small non-integer negative inputs, it uses the recursive identity `Γ(z)=Γ(z+1)/z` until `z` is positive.
-        /// * For large non-integer negative inputs, it uses the reflection formula `-π/(Γ(z)sin(πz)z)`.
+        /// * For small non-integer negative inputs, it uses the recursive identity `$\Gamma(z) = \Gamma(z+1)/z$` until `z` is positive.
+        /// * For large non-integer negative inputs, it uses the reflection formula `$-\pi / (\Gamma(z)\sin(\pi z)\,z)$`.
         /// * For positive integers, it simply computes the factorial in a tight loop to ensure precision. Lookup tables could not be used with SIMD.
         /// * At zero, the result will be positive or negative infinity based on the input sign (signed zero is a thing).
         ///
         /// **NOTE**: The Gamma function is not defined for negative integers.
         fn tgamma[][](self: Self) -> Self;
 
-        /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector.
+        /// Computes the natural log of the Gamma function (`$\ln|\Gamma(x)|$`) for any real input, for each value in a vector.
         fn lgamma[][](self: Self) -> Self;
 
-        /// Computes the Beta function `Β(x, y)`
+        /// Computes the Beta function `$\mathrm{B}(x, y)$`
         fn beta[][](self: Self, y: Self) -> Self;
 
         /// Computes the m-th derivative of the n-th degree Jacobi polynomial
@@ -234,26 +234,26 @@ decl_math! {
         /// Evaluates a finite series of [Chebyshev polynomials](https://en.wikipedia.org/wiki/Chebyshev_polynomials)
         /// of the `K`-th kind at `x = self`:
         ///
-        /// ```text
-        ///     Σ_{k=0}^{N-1} coeffs[k] · P_k(x)
+        /// ```math
+        /// \sum_{k=0}^{N-1} \mathrm{coeffs}[k] \cdot P_k(x)
         /// ```
         ///
         /// where `P_k` is `T_k`, `U_k`, `V_k`, or `W_k` depending on `K`. All four kinds share the
-        /// recurrence `P_{k+1}(x) = 2x·P_k(x) - P_{k-1}(x)` with `P_0(x) = 1`; they differ only in
+        /// recurrence `$P_{k+1}(x) = 2x \cdot P_k(x) - P_{k-1}(x)$` with `P_0(x) = 1`; they differ only in
         /// `P_1(x)`:
         ///
         /// | `K` | Kind   | `P_1(x)`   | Notes |
         /// |-----|--------|------------|-------|
         /// | `1` | First  (`T_k`) | `x`        | Most common; minimax/approximation basis on `[-1, 1]`. |
-        /// | `2` | Second (`U_k`) | `2x`       | Related to `sin((k+1)θ)/sin(θ)` under `x = cos θ`. |
-        /// | `3` | Third  (`V_k`) | `2x - 1`   | "Airfoil" polynomials; `cos((k+½)θ)/cos(θ/2)`. |
-        /// | `4` | Fourth (`W_k`) | `2x + 1`   | `sin((k+½)θ)/sin(θ/2)`. |
+        /// | `2` | Second (`U_k`) | `2x`       | Related to `$\sin((k+1)\theta)/\sin(\theta)$` under `$x = \cos\theta$`. |
+        /// | `3` | Third  (`V_k`) | `2x - 1`   | "Airfoil" polynomials; `$\cos((k+\tfrac12)\theta)/\cos(\theta/2)$`. |
+        /// | `4` | Fourth (`W_k`) | `2x + 1`   | `$\sin((k+\tfrac12)\theta)/\sin(\theta/2)$`. |
         ///
         /// Any other value of `K` is a compile-time error.
         ///
         /// Evaluation is done via Clenshaw's backward recurrence with FMA, which is
         /// more numerically stable than a forward sum when the partial sums of
-        /// `Σ c_k P_k` are much smaller than `max |c_k P_k|` (e.g. fitted minimax series
+        /// `$\sum c_k P_k$` are much smaller than `$\max_k |c_k P_k|$` (e.g. fitted minimax series
         /// with alternating-sign coefficients). `N` is the *length* of the coefficient
         /// slice, so the highest polynomial term is `P_{N-1}`; `N = 0` is rejected,
         /// `N = 1` evaluates to `coeffs[0]`.
@@ -263,7 +263,7 @@ decl_math! {
         /// `P_1` selection are fully unrolled and specialized at monomorphization time.
         #[skip_dispatch] fn chebyshev[const K: usize, const N: usize][K, N](self: Self, coeffs: &[Self::Element; N]) -> Self;
 
-        /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
+        /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `$a\, e^{-\frac{1}{2}(x/c)^2}$`.
         ///
         /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
         fn gaussian[][](self: Self, a: Self, c: Self) -> Self;
@@ -278,9 +278,9 @@ decl_math! {
         /// Internally, this is computed with [`jacobi`](SpecialMath::jacobi) when m > 0.
         fn legendre[][](self: Self, n: u32, m: u32) -> Self;
 
-        /// Computes both branches of the Lambert W function simultaneously: (W₀(x), W₋₁(x)).
+        /// Computes both branches of the Lambert W function simultaneously: (`$W_0(x)$`, `$W_{-1}(x)$`).
         ///
-        /// The W₀ result is valid for x >= -1/e; the W₋₁ result is valid for -1/e <= x < 0.
+        /// The `$W_0$` result is valid for `x >= -1/e`; the `$W_{-1}$` result is valid for `-1/e <= x < 0`.
         /// Outside these domains, the respective result is NaN (when overflow checking is enabled).
         fn lambert_w[][](self: Self) -> (Self, Self);
 
@@ -303,7 +303,7 @@ decl_math! {
         /// of the standard normal distribution.
         fn probit[][](self: Self) -> Self;
 
-        /// GELU activation function, defined as `0.5 * x * (1 + erf((alpha * x) / sqrt(2)))`,
+        /// GELU activation function, defined as `$\tfrac{1}{2} x \left(1 + \operatorname{erf}\!\left(\frac{\alpha x}{\sqrt{2}}\right)\right)$`,
         /// where `alpha` helps control the shape of the curve. The standard GELU function
         /// is recovered when `alpha` is 1.
         ///
@@ -316,7 +316,7 @@ decl_math! {
         /// is essentially free.
         fn gelu[][](self: Self, alpha: Self) -> (Self, Self);
 
-        /// Swish activation function, defined as `x * sigmoid(beta * x) = x / (1 + exp(-beta * x))`,
+        /// Swish activation function, defined as `$x\,\sigma(\beta x) = \frac{x}{1 + e^{-\beta x}}$`,
         /// where `beta` controls the sharpness of the gate. The standard Swish/SiLU function
         /// is recovered when `beta` is 1. As `beta -> 0`, the output approaches `x/2` (half-identity);
         /// as `beta -> inf`, Swish approaches ReLU.
@@ -324,19 +324,19 @@ decl_math! {
         /// Returns both the Swish value and its derivative with respect to `x` simultaneously.
         fn swish[][](self: Self, beta: Self) -> (Self, Self);
 
-        /// Computes the algebraic sigmoid function, defined as `x / (1 + |x|^N)^(1/N)`, where
+        /// Computes the algebraic sigmoid function, defined as `$\frac{x}{(1 + |x|^N)^{1/N}}$`, where
         /// `N` is a positive integer parameter that controls the steepness of the curve. It also
         /// returns the derivative with respect to `x` simultaneously, as it shares much of the same computation.
         ///
         /// This also has the unique behavior where for `N=0`, the function is just the identity function,
         /// and for `N=1` it is the [softsign function](https://en.wikipedia.org/wiki/Activation_function#Softsign).
         ///
-        /// **Note**: This function uses `|x|^N` (the real absolute value), making it non-holomorphic
+        /// **Note**: This function uses `$|x|^N$` (the real absolute value), making it non-holomorphic
         /// and therefore only meaningful for real-valued inputs.
         fn algebraic_sigmoid[const N: usize][N](self: Self) -> (Self, Self);
 
         /// Algebraic analogue of the [Swish](https://en.wikipedia.org/wiki/Swish_function) activation,
-        /// defined as `x * (1/2 + x / (2 * sqrt(1 + x^2)))`. Equivalent to gating `x` by
+        /// defined as `$x\left(\frac{1}{2} + \frac{x}{2\sqrt{1 + x^2}}\right)$`. Equivalent to gating `x` by
         /// `(1 + algebraic_sigmoid::<2>(x)) / 2`, the `[0, 1]`-rescaled `N=2` algebraic sigmoid.
         ///
         /// Like standard Swish/SiLU, this is smooth and non-monotonic - it dips slightly below zero
@@ -345,7 +345,7 @@ decl_math! {
         /// it substantially cheaper on hardware without fast transcendentals.
         ///
         /// Returns both the value and its derivative with respect to `x` simultaneously, as they
-        /// share most of the underlying computation (notably `1/sqrt(1 + x^2)`).
+        /// share most of the underlying computation (notably `$1/\sqrt{1 + x^2}$`).
         ///
         /// # Historical note
         ///
@@ -354,12 +354,12 @@ decl_math! {
         /// `exp` essentially free - a single-cycle special-function-unit op on most modern hardware.
         /// On CPUs the calculus is different: a vectorized `exp` still costs ~20+ cycles even with
         /// good polynomial approximations, while `sqrt`/`rsqrt` are cheap hardware ops (often
-        /// approximated in 4–7 cycles). For CPU-side inference, training on CPU, or embedded targets
+        /// approximated in 4-7 cycles). For CPU-side inference, training on CPU, or embedded targets
         /// without a transcendental SFU, this remains a competitive Swish-shaped activation at a
         /// fraction of the cost.
         fn algebraic_swish[][](self: Self) -> (Self, Self);
 
-        /// Computes the natural log of the Gamma function (`ln(|Γ(x)|)`) for any real input, for each value in a vector,
+        /// Computes the natural log of the Gamma function (`$\ln|\Gamma(x)|$`) for any real input, for each value in a vector,
         /// and returns the sign of the Gamma function from before the absolute value was taken.
         fn lgamma_r[][](self: Self) -> (Self, Self);
 

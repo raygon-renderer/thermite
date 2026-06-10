@@ -358,10 +358,10 @@ where
         // Seed from the standard-precision lambert_w on the value field,
         // then refine each branch with a single compensated Halley iteration.
         //
-        // Halley's iteration for w·eʷ = x:
-        //   ew = exp(w), f = w·ew - x, wp1 = w + 1
-        //   d = 2·wp1²·ew - (w+2)·f
-        //   w' = w - 2·wp1·f / d
+        // Halley's iteration for w*e^w = x:
+        //   ew = exp(w), f = w*ew - x, wp1 = w + 1
+        //   d = 2*wp1^2*ew - (w+2)*f
+        //   w' = w - 2*wp1*f / d
 
         let x = self;
         let (w0_seed, wm1_seed) = x.value.lambert_w_p::<P>();

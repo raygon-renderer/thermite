@@ -33,20 +33,20 @@ where
 
     #[inline(always)]
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
-        // Computes both W₀(x) and W₋₁(x) simultaneously.
+        // Computes both W_0(x) and W_{-1}(x) simultaneously.
         //
-        // Lambert W₀(x): principal branch, defined for x >= -1/e, returns values >= -1.
-        // Lambert W₋₁(x): secondary real branch, defined for -1/e <= x < 0, returns values <= -1.
-        // Both satisfy w·eʷ = x.
+        // Lambert W_0(x): principal branch, defined for x >= -1/e, returns values >= -1.
+        // Lambert W_{-1}(x): secondary real branch, defined for -1/e <= x < 0, returns values <= -1.
+        // Both satisfy w*e^w = x.
         //
         // Uses Halley's method with piecewise initial approximations, interleaving
         // iterations for both branches to maximize instruction-level parallelism.
         //
-        // Halley's iteration for w·exp(w) = x:
-        //   ew = exp(w), f = w·ew - x, wp1 = w + 1
+        // Halley's iteration for w*exp(w) = x:
+        //   ew = exp(w), f = w*ew - x, wp1 = w + 1
         //   Denominator rewritten to avoid an extra division:
-        //     d = 2·wp1²·ew - (w+2)·f
-        //   w' = w - 2·wp1·f / d
+        //     d = 2*wp1^2*ew - (w+2)*f
+        //   w' = w - 2*wp1*f / d
 
         // For initial guess and first Halley iterations, use fast and loose precision
         type Approx<P> = WorstPrecision<CheckOverflow<P, false>>;
@@ -57,23 +57,23 @@ where
         //
         // Branch-point region (x near -1/e): damped Puiseux series.
         //
-        // W has a square-root singularity at x = -1/e (double root of w·eʷ - x at w = -1),
+        // W has a square-root singularity at x = -1/e (double root of w*e^w - x at w = -1),
         // so Halley degenerates to linear convergence without a sqrt-based initial guess.
         //
-        // The raw Puiseux series is W ≈ -1 ± (p - p²/3 + 11p³/72) where p = sqrt(2(ex+1)),
-        // with + for W₀ and - for W₋₁. This converges well near -1/e but diverges further
+        // The raw Puiseux series is W ≈ -1 ± (p - p^2/3 + 11p^3/72) where p = sqrt(2(ex+1)),
+        // with + for W_0 and - for W_{-1}. This converges well near -1/e but diverges further
         // out. We damp it with a denominator that grows with distance from -1/e:
         //
-        //   w_branch = -1 ± p·(1 + p·(-1/3 + p·11/72)) / (1 + K·p₀·p)
+        //   w_branch = -1 ± p*(1 + p*(-1/3 + p*11/72)) / (1 + K*p_0*p)
         //
-        // where p₀ = ex+1, and K = 1/(C · e^(3/2) · √2) with C ≈ 1.2144578338 found by
-        // minimizing the integrated backward error |w·eʷ - x| over [-1/e, 0] in Desmos.
-        // The denominator arises from (x + 1/e)^1.5 / C = (p₀/e)^1.5 / C = p₀·p / (C·e^(3/2)·√2).
+        // where p_0 = ex+1, and K = 1/(C * e^(3/2) * sqrt(2)) with C ≈ 1.2144578338 found by
+        // minimizing the integrated backward error |w*e^w - x| over [-1/e, 0] in Desmos.
+        // The denominator arises from (x + 1/e)^1.5 / C = (p_0/e)^1.5 / C = p_0*p / (C*e^(3/2)*sqrt(2)).
 
         let p0 = x.mul_adde(Self::E, Self::ONE); // ex + 1
         let p = (p0 + p0).sqrt(); // sqrt(2(ex+1))
 
-        // p·(1 + p·(-1/3 + p·11/72))
+        // p*(1 + p*(-1/3 + p*11/72))
         let puiseux_numer = p * p.mul_adde(
             p.mul_adde(
                 thermite::const_splat!(f32: 11.0 / 72.0),
@@ -82,24 +82,24 @@ where
             Self::ONE,
         );
 
-        // 1 + K·p₀·p
+        // 1 + K*p_0*p
         let puiseux_denom = p0.mul_adde(p * thermite::const_splat!(f32: 0.12991546098765432), Self::ONE);
 
         let puiseux = puiseux_numer / puiseux_denom;
 
-        // W₀ branch: -1 + series, W₋₁ branch: -1 - series
+        // W_0 branch: -1 + series, W_{-1} branch: -1 - series
         let w0_branch = puiseux + Self::NEG_ONE;
         let wm1_branch = Self::NEG_ONE - puiseux;
 
-        // W₀ middle region: ex/(2+ex)
+        // W_0 middle region: ex/(2+ex)
         let ex = x * Self::E;
         let w0_mid = ex / (Self::TWO + ex);
 
         // Shared ln for asymptotic regions
         let lnx = x.abs().ln_p::<Approx<P>>();
 
-        // W₀ asymptotic (x > e): L₁ - L₂ + L₂/L₁ where L₁ = ln(x), L₂ = ln(L₁).
-        // The L₂/L₁ correction is 0 at x = e (since L₂ = ln(1) = 0), so it doesn't
+        // W_0 asymptotic (x > e): L_1 - L_2 + L_2/L_1 where L_1 = ln(x), L_2 = ln(L_1).
+        // The L_2/L_1 correction is 0 at x = e (since L_2 = ln(1) = 0), so it doesn't
         // overshoot near the transition, but closes the gap at large x.
         let l2 = lnx.ln_p::<Approx<P>>();
 
@@ -109,9 +109,9 @@ where
             (lnx - l2) + (l2 / lnx)
         };
 
-        // W₋₁ asymptotic (x near 0⁻): L₁ - L₂ where L₁ = ln(-x), L₂ = ln(-L₁)
+        // W_{-1} asymptotic (x near 0^-): L_1 - L_2 where L_1 = ln(-x), L_2 = ln(-L_1)
         // lnx = ln(|x|) = ln(-x) since x < 0; this is negative for small |x|.
-        // -lnx is positive, so (-lnx).ln() = ln(-ln(-x)) = L₂.
+        // -lnx is positive, so (-lnx).ln() = ln(-ln(-x)) = L_2.
         let wm1_asymptotic = lnx - (-lnx).ln_p::<Approx<P>>();
 
         // Select initial guesses
@@ -130,15 +130,15 @@ where
             W: FloatVectorWithBits<Element = f32> + SpecializedTranscendentalMath<f32>,
         {
             // Use exp(-w) to avoid overflow/underflow in e^w for extreme w.
-            // g = w - x·e^{-w} = f·e^{-w}, d = (w²+2w+2) + (w+2)·x·e^{-w}
+            // g = w - x*e^{-w} = f*e^{-w}, d = (w^2+2w+2) + (w+2)*x*e^{-w}
             // g and d are both single FMAs off enw, independent of each other.
             let enw = (-w).exp_p::<P>();
 
             let wp1 = w + W::ONE;
-            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)² + 1 = w² + 2w + 2
-            let wp2h_x = wp1.mul_adde(x, x); // (w+2)·x - no exp dependency
-            let g = x.nmul_adde(enw, w); // w - x·e^{-w}
-            let d = wp2h_x.mul_adde(enw, q); // (w+2)·x·e^{-w} + (w²+2w+2)
+            let q = wp1.mul_adde(wp1, W::ONE); // (w+1)^2 + 1 = w^2 + 2w + 2
+            let wp2h_x = wp1.mul_adde(x, x); // (w+2)*x - no exp dependency
+            let g = x.nmul_adde(enw, w); // w - x*e^{-w}
+            let d = wp2h_x.mul_adde(enw, q); // (w+2)*x*e^{-w} + (w^2+2w+2)
             (wp1 + wp1).nmul_adde(g / d, w)
         }
 
@@ -163,18 +163,18 @@ where
         if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             let x_is_zero = x.is_zero();
 
-            // At x = -1/e, both W₀ and W₋₁ = -1
+            // At x = -1/e, both W_0 and W_{-1} = -1
             w0 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, w0);
-            // Honestly the approximation handles W₀(0) = 0 pretty well,
+            // Honestly the approximation handles W_0(0) = 0 pretty well,
             // but just in case, explicitly set it to the correct value.
-            w0 = w0.nz(x_is_zero); // W₀(0) = 0
+            w0 = w0.nz(x_is_zero); // W_0(0) = 0
 
             wm1 = x.cmp_eq(Self::FRAC_NEG_1_E).select(Self::NEG_ONE, wm1);
-            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W₋₁(0) = -inf
+            wm1 = x_is_zero.select(Self::NEG_INFINITY, wm1); // W_{-1}(0) = -inf
         }
 
         if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
-            // for subnormal inputs, W₀(x) ≈ x
+            // for subnormal inputs, W_0(x) ≈ x
             w0 = x.is_subnormal().select(x, w0);
 
             // NOTE: Somehow wm1 handles denormals fine on its own,
@@ -187,11 +187,11 @@ where
         if const { P::POLICY.check_overflow } {
             let in_domain = x.cmp_ge(Self::FRAC_NEG_1_E);
 
-            // W₀ is undefined for x < -1/e, +inf -> +inf
+            // W_0 is undefined for x < -1/e, +inf -> +inf
             w0 = in_domain.select(w0, Self::NAN);
             w0 = x.cmp_eq(Self::INFINITY).select(Self::INFINITY, w0);
 
-            // W₋₁ is only defined for -1/e <= x < 0
+            // W_{-1} is only defined for -1/e <= x < 0
             wm1 = in_domain.select(wm1, Self::NAN);
             wm1 = x.cmp_gt(Self::ZERO).select(Self::NAN, wm1);
         }
@@ -278,11 +278,11 @@ where
 
         let mut res = Self::ONE;
 
-        // Reflect ALL negative values via Γ(z) = -π / (z·sin(πz)·Γ(|z|))
+        // Reflect ALL negative values via Γ(z) = -π / (z*sin(πz)*Γ(|z|))
         // This avoids the repeated-division recurrence which accumulates rounding error.
         if const { P::POLICY.avoid_branching } || is_negative.any() {
             reflected = is_negative;
-            let refl_res = z * z.sin_pi_p::<P>(); // z · sin(πz)
+            let refl_res = z * z.sin_pi_p::<P>(); // z * sin(πz)
             res = reflected.select(refl_res, res);
             z = z.abs();
         }
@@ -686,8 +686,8 @@ where
 
     // ========================================================
     // Small-x path: |x| < 2
-    // J₀(x) ≈ (1+x/2)(1-x/2) + z*(R(z)/S(z)),  z = x²
-    // The (1+x/2)(1-x/2) form avoids cancellation vs 1-x²/4.
+    // J_0(x) ≈ (1+x/2)(1-x/2) + z*(R(z)/S(z)),  z = x^2
+    // The (1+x/2)(1-x/2) form avoids cancellation vs 1-x^2/4.
     // ========================================================
     let z = x * x;
 
@@ -714,7 +714,7 @@ where
 
     // ========================================================
     // Large-x path: |x| >= 2
-    // J₀(x) = FRAC_1_SQRT_PI * (P(x)*cc - Q(x)*ss) / sqrt(x)
+    // J_0(x) = FRAC_1_SQRT_PI * (P(x)*cc - Q(x)*ss) / sqrt(x)
     //
     // cc and ss encode cos(x-π/4) and sin(x-π/4) via a
     // numerical conditioning trick to avoid cancellation.
@@ -724,8 +724,8 @@ where
         let (sinx, cosx) = ax.sin_cos_p::<P>();
 
         // -cos(2x): fresh trig call at doubled argument for Best+ precision
-        // (avoids cancellation in 1-2cos²x near x ≈ kπ/4);
-        // otherwise 1-2cos²x, which is exact at the cancellation point
+        // (avoids cancellation in 1-2cos^2x near x ≈ kπ/4);
+        // otherwise 1-2cos^2x, which is exact at the cancellation point
         // and only loses bits near - but not at - those values.
         let neg_cos2x = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             -(ax + ax).cos_p::<P>()
@@ -734,7 +734,7 @@ where
         };
 
         // cc = sin(x) + cos(x),  ss = sin(x) - cos(x)
-        // Identity: cc * ss = sin²x - cos²x = -cos(2x)
+        // Identity: cc * ss = sin^2x - cos^2x = -cos(2x)
         // Whichever of |cc|, |ss| is smaller gets recomputed
         // as -cos(2x) / (the larger one) for better precision.
         let cc_raw = sinx + cosx;
@@ -745,7 +745,7 @@ where
         let cc = fix_cc.select(ratio, cc_raw);
         let ss = fix_cc.select(ss_raw, ratio);
 
-        // Envelope polynomials (combined to share masks and 1/x²)
+        // Envelope polynomials (combined to share masks and 1/x^2)
         let (pz, qz) = bessel_j0_pqzero::<V, P>(ax, ix);
 
         let yl = V::FRAC_1_SQRT_PI * (pz * cc - qz * ss) / ax.sqrt();

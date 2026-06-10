@@ -191,7 +191,7 @@ impl SignedRegister for [<i $width>] {
         unsafe { arch::op_opselect::<Self, bool>(mask, Self::neg(value), value) }
     }
 
-    // MSB set ↔ negative for two's-complement; compare-to-zero via OpSLessThan.
+    // MSB set <-> negative for two's-complement; compare-to-zero via OpSLessThan.
     fn is_negative(value: Self) -> bool {
         unsafe { arch::op_opslessthan::<bool, Self>(value, 0) }
     }

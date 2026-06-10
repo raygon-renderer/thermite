@@ -752,7 +752,7 @@ where
             let min = x.min(y);
             let t = min / max;
 
-            let s = t.mul_adde(t, V::ONE); // 1 + t²
+            let s = t.mul_adde(t, V::ONE); // 1 + t^2
 
             let mut res;
             if INV {

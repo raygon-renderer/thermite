@@ -314,7 +314,7 @@ decl_math! {
         /// Computes `sin(x) / x` with improved precision when the policy allows.
         fn sinc[][](self: Self) -> Self;
 
-        /// Computes `sin(pi * x) / (pi * x)` with improved precision when the policy allows.
+        /// Computes `$\frac{\sin(\pi x)}{\pi x}$` with improved precision when the policy allows.
         fn sinc_pi[][](self: Self) -> Self;
 
         /// Hyperbolic sine and cosine, together. This will be more efficient than calling `sinh` and `cosh` separately.
@@ -359,7 +359,7 @@ decl_math! {
         fn nth_root[const N: usize][N](self: Self) -> Self;
         /// Returns the natural logarithm of `self`.
         fn ln[][](self: Self) -> Self;
-        /// Returns `ln(1 + x)` of `self`.
+        /// Returns `$\ln(1 + x)$` of `self`.
         fn ln_1p[][](self: Self) -> Self;
         /// Returns the base-2 logarithm of `self`.
         fn log2[][](self: Self) -> Self;
@@ -377,7 +377,7 @@ decl_math! {
         /// For bases 0 and 1, the result is 0 and Infinity respectively.
         fn log_n[const N: usize][N](self: Self) -> Self;
 
-        /// Returns `ln(1 - exp(-x))`, which depending on the policy may be
+        /// Returns `$\ln(1 - e^{-x})$`, which depending on the policy may be
         /// an approximation more performant than the exact calculation. If you're using a policy with below
         /// average precision, and happen to have `ln(x)` available, you can use [`ln1m_expnx_ext`](TranscendentalMath::ln1m_expnx_ext) instead
         /// to provide that.
@@ -407,13 +407,13 @@ decl_math! {
         /// Check out [`hypot_n`](SpatialMath::hypot_n) for a more general version that computes the hypotenuse of N values.
         fn hypot[][](self: Self, other: Self) -> Self;
 
-        /// Computes the Euclidean norm (hypotenuse) of N values, i.e., `sqrt(x1^2 + x2^2 + ... + xN^2)`.
+        /// Computes the Euclidean norm (hypotenuse) of N values, i.e., `$\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
         ///
         /// This is typically higher performance than naively computing the sum of squares and then taking the square root,
         /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
         fn hypot_n[const N: usize][N](values: [Self; N]) -> Self;
 
-        /// Computes the inverse Euclidean norm (inverse hypotenuse) of N values, i.e., `1 / sqrt(x1^2 + x2^2 + ... + xN^2)`.
+        /// Computes the inverse Euclidean norm (inverse hypotenuse) of N values, i.e., `$1/\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
         ///
         /// This is typically higher performance than naively computing the sum of squares, taking the square root, and then inverting,
         /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
@@ -516,7 +516,7 @@ decl_math! {
         /// - `k < 1`: sharpens the curve, concentrating the transition near the midpoint.
         /// - `k = 1`: the standard balanced sigmoid-like transition.
         /// - `k > 1`: stretches the transition region, making the curve more gradual.
-        /// - `k ≈ 2/√3` (~1.1547): the function becomes bimodal - use with caution above this value.
+        /// - `$k \approx 2/\sqrt{3}$` (~1.1547): the function becomes bimodal - use with caution above this value.
         fn smooth_interpolator[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
         /// Inverse of [`smooth_interpolator`](SpatialMath::smooth_interpolator).

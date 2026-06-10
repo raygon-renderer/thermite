@@ -222,14 +222,14 @@ impl<V: MathVector, P: Policy> Complex<V, P> {
         // formula: x^y = (a + i b)^(c + i d)
         // = (ρ e^(i θ))^c (ρ e^(i θ))^(i d)
         //    where ρ=|x| and θ=arg(x)
-        // = ρ^c e^(−d θ) e^(i c θ) ρ^(i d)
-        // = p^c e^(−d θ) (cos(c θ)
+        // = ρ^c e^(-d θ) e^(i c θ) ρ^(i d)
+        // = p^c e^(-d θ) (cos(c θ)
         //   + i sin(c θ)) (cos(d ln(ρ)) + i sin(d ln(ρ)))
-        // = p^c e^(−d θ) (
-        //   cos(c θ) cos(d ln(ρ)) − sin(c θ) sin(d ln(ρ))
+        // = p^c e^(-d θ) (
+        //   cos(c θ) cos(d ln(ρ)) - sin(c θ) sin(d ln(ρ))
         //   + i(cos(c θ) sin(d ln(ρ)) + sin(c θ) cos(d ln(ρ))))
-        // = p^c e^(−d θ) (cos(c θ + d ln(ρ)) + i sin(c θ + d ln(ρ)))
-        // = from_polar(p^c e^(−d θ), c θ + d ln(ρ))
+        // = p^c e^(-d θ) (cos(c θ + d ln(ρ)) + i sin(c θ + d ln(ρ)))
+        // = from_polar(p^c e^(-d θ), c θ + d ln(ρ))
         let (r, theta) = self.to_polar();
         Self::from_polar(
             r.powf_p::<P>(exp.re) * (-exp.im * theta).exp_p::<P>(),

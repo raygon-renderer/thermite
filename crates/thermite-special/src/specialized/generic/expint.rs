@@ -15,15 +15,15 @@ use thermite::{
 
 // Computes the largest x for which the forward recurrence E_1 -> E_N is reliable.
 //
-// The recurrence E_{n+1}(x) = (e^{-x} - x·E_n(x)) / n has a homogeneous growing solution:
-// any error δ in E_1 is amplified after N steps to δ · x^(N-1) / (N-1)!
+// The recurrence E_{n+1}(x) = (e^{-x} - x*E_n(x)) / n has a homogeneous growing solution:
+// any error δ in E_1 is amplified after N steps to δ * x^(N-1) / (N-1)!
 //
 // The mantissa budget is 2^mantissa_bits, so precision is lost once:
 //   x^(N-1) / (N-1)! > 2^mantissa_bits
 //
-// Solving for x gives the recurrence limit: x_rec = ((N-1)! · 2^mantissa_bits)^(1/(N-1))
+// Solving for x gives the recurrence limit: x_rec = ((N-1)! * 2^mantissa_bits)^(1/(N-1))
 //
-// However, x_rec converges toward (N-1)/e ≈ 0.368·N as N -> ∞ and eventually falls
+// However, x_rec converges toward (N-1)/e ≈ 0.368*N as N -> ∞ and eventually falls
 // below N. The asymptotic series only starts shrinking when x > N (since the first-term
 // ratio N/x < 1 requires x > N), so below N it diverges immediately and gives wrong
 // results. The threshold is therefore clamped to at least N to ensure the asymptotic
@@ -50,7 +50,7 @@ const fn recurrence_threshold(n: usize, mantissa_bits: u32) -> f64 {
 
     let k = (n - 1) as u32;
 
-    // target = (n-1)! · 2^mantissa_bits
+    // target = (n-1)! * 2^mantissa_bits
     let target: f64 = {
         let mut f = (1u64 << mantissa_bits) as f64;
         let mut i = 2usize;
@@ -239,8 +239,8 @@ where
 
     e_n = is_large.select((V::ONE + large_e1) * x_ex, e_n);
 
-    // --- Recurrence E_1 -> E_N for x < 2.5·N ---
-    // E_{n+1}(x) = (e^{-x} - x·E_n(x)) / n
+    // --- Recurrence E_1 -> E_N for x < 2.5*N ---
+    // E_{n+1}(x) = (e^{-x} - x*E_n(x)) / n
     //
     // The n=1 step has no division (divides by 1), so it is peeled out to avoid a
     // runtime `if n > 1` check inside the loop.

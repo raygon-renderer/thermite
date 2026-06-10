@@ -249,11 +249,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // small-x polynomial below, so they must run this path unconditionally
         // (else all-small input leaves `y2 == 0` and `tanh(small)` returns 0).
         if const { P::POLICY.avoid_branching || P::POLICY.precision.lt(PrecisionPolicy::Average) } || !x_small.all() {
-            // tanh(x) = (e^2x − 1) / (e^2x + 1). `exph` returns e^t / 2 with one
+            // tanh(x) = (e^2x - 1) / (e^2x + 1). `exph` returns e^t / 2 with one
             // extra bit of exponent headroom, so with h = exph(2x) = e^2x / 2
-            // the identity folds to (h − ½) / (h + ½): same value, e^2x
+            // the identity folds to (h - 1/2) / (h + 1/2): same value, e^2x
             // overflows slightly later, and no extra square is needed.
-            // (Note `exph(x)²` would be e^2x / 4, which is *not* what tanh
+            // (Note `exph(x)^2` would be e^2x / 4, which is *not* what tanh
             // wants - that was the bug here.)
             let h = (x + x).exph_p::<P>();
             y2 = (h - V::HALF) / (h + V::HALF);
