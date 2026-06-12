@@ -2,6 +2,7 @@
 name = "spirv_builder"
 version = "0.1.0"
 edition = "2024"
+publish = false # dev tool: depends on a local rust-gpu checkout
 
 # NOTE: This crate compiles rustc_codegen_spirv (the rust-gpu compiler backend) as part of its
 # build. That requires the toolchain to match rust-gpu's pinned nightly (see rust-toolchain.toml

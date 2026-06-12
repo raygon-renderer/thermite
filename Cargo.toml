@@ -2,6 +2,17 @@
 members = ["bin/*", "crates/*"]
 resolver = "3"
 
+# Shared package metadata inherited by members via `field.workspace = true`.
+# Keep publishable crates in lockstep on this version.
+[workspace.package]
+version = "0.2.0-beta.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/raygon-renderer/thermite"
+homepage = "https://github.com/raygon-renderer/thermite"
+authors = ["novacrazy <novacrazy@gmail.com>"]
+
 [workspace.lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))', 'cfg(tarpaulin_include)'] }
 
@@ -29,8 +40,9 @@ strip = true
 panic = "abort"
 
 [workspace.dependencies]
-spirv-builder = { version = "*" }
-spirv-std-macros = { version = "*" }
-
-# spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder", version = "*" }
-# spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros", version = "*" }
+# Local rust-gpu checkout. The `version` is the crates.io release that matches the
+# pinned checkout (0.9.0); it is required (not `*`) because `thermite` re-exports
+# `spirv-std-macros` under its `spirv` target deps, and crates.io rejects wildcard
+# version requirements on published crates.
+spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder", version = "0.9.0" }
+spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros", version = "0.9.0" }

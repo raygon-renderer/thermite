@@ -2,6 +2,7 @@
 name = "spirv_testing"
 version = "0.1.0"
 edition = "2024"
+publish = false # dev tool: SPIR-V shader test library, depends on a local rust-gpu checkout
 
 [lints]
 workspace = true

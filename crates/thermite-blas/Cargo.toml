@@ -1,11 +1,18 @@
 [package]
 name = "thermite-blas"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "SIMD linear-algebra (BLAS-style) routines built on Thermite"
+publish = false                                                             # not ready for release yet
 
 [dependencies]
 paste = "1"
-thermite = { path = "../thermite" }
+thermite = { path = "../thermite", version = "0.2.0-beta.0" }
 fast_polynomial = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 const-default = { version = "1.0.0", default-features = false }
