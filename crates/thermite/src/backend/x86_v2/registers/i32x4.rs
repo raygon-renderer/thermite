@@ -395,9 +395,10 @@ impl SignedRegister for I32x4V2 {
     }
 
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        // sign_epi32 negates if b is negative, but also sets lhs to zero
-        // if rhs is zero, so we OR it with 1 to prevent that behavior
-        unsafe { arch::_mm_sign_epi32(lhs, arch::_mm_or_si128(rhs, arch::_mm_set1_epi32(1))) }
+        // NOT psignd: that negates whenever rhs is negative regardless of
+        // lhs's own sign, which is wrong for negative lhs. True copysign
+        // negates exactly where the signs differ.
+        unsafe { arch::_mm_copysign_epi32x_v1(lhs, rhs) }
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {

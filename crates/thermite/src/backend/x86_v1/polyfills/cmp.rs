@@ -48,6 +48,10 @@ pub unsafe fn _mm_cmpgt_epi64x_v1(a: __m128i, b: __m128i) -> __m128i {
     let b_flip = _mm_xor_si128(b, sign_mask);
     let cmp_lo = _mm_cmpgt_epi32(a_flip, b_flip);
 
+    // The low-dword results live in the even lanes (0, 2); move them up to the
+    // odd lanes (1, 3) where the high-dword results are, so they can be combined.
+    let cmp_lo = _mm_shuffle_epi32::<0b10_10_00_00>(cmp_lo);
+
     // 3. Compare High 32-bits (Signed)
     let cmp_hi = _mm_cmpgt_epi32(a, b);
 
@@ -73,7 +77,9 @@ pub unsafe fn _mm_cmpgt_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
 
 #[inline(always)]
 pub unsafe fn _mm_cmpgt_epu64x_v1(a: __m128i, b: __m128i) -> __m128i {
-    let mask = _mm_set1_epu64x(0x8000000080000000);
+    // Flip only the 64-bit sign bit: the signed comparison's low half is
+    // already unsigned, so touching bit 31 would corrupt it.
+    let mask = _mm_set1_epu64x(1 << 63);
     _mm_cmpgt_epi64x_v1(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))
 }
 
@@ -90,6 +96,18 @@ pub unsafe fn _mm_cmple_epu32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
 #[inline(always)]
 pub unsafe fn _mm_cmplt_epu32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
     _mm_cmpgt_epu32x_v1(rhs, lhs)
+}
+
+/// POLYFILL: `_mm_min_epi32` (SSE4.1)
+#[inline(always)]
+pub unsafe fn _mm_min_epi32x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(a, b, _mm_cmpgt_epi32(a, b))
+}
+
+/// POLYFILL: `_mm_max_epi32` (SSE4.1)
+#[inline(always)]
+pub unsafe fn _mm_max_epi32x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(b, a, _mm_cmpgt_epi32(a, b))
 }
 
 #[inline(always)]

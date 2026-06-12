@@ -1,5 +1,9 @@
 use super::*;
 
+// NOTE: The blendv polyfill is a full bitwise select, so every mask must be
+// lane-uniform (all-ones/all-zeros). Raw operands are sign-broadcast with the
+// `signbits` helpers; comparison results are already lane-uniform.
+
 // SSE2 Version
 #[inline(always)]
 pub unsafe fn _mm_adds_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
@@ -12,7 +16,7 @@ pub unsafe fn _mm_adds_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
             _mm_set1_epi32(i32::MAX),
             _mm_signbits_epi32x_v1(res),
         ),
-        _mm_xor_si128(rhs, _mm_cmpgt_epi32(lhs, res)),
+        _mm_xor_si128(_mm_signbits_epi32x_v1(rhs), _mm_cmpgt_epi32(lhs, res)),
     )
 }
 
@@ -38,8 +42,12 @@ pub unsafe fn _mm_adds_epi64x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
 
     _mm_blendv_epi8x_v1(
         res,
-        _mm_blendv_epi8x_v1(_mm_set1_epi64x(i64::MIN), _mm_set1_epi64x(i64::MAX), res),
-        _mm_xor_si128(rhs, _mm_cmpgt_epi64x_v1(lhs, res)),
+        _mm_blendv_epi8x_v1(
+            _mm_set1_epi64x(i64::MIN),
+            _mm_set1_epi64x(i64::MAX),
+            _mm_signbits_epi64x_v1(res),
+        ),
+        _mm_xor_si128(_mm_signbits_epi64x_v1(rhs), _mm_cmpgt_epi64x_v1(lhs, res)),
     )
 }
 
@@ -49,12 +57,154 @@ pub unsafe fn _mm_subs_epi64x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
 
     _mm_blendv_epi8x_v1(
         res,
-        _mm_blendv_epi8x_v1(_mm_set1_epi64x(i64::MIN), _mm_set1_epi64x(i64::MAX), res),
+        _mm_blendv_epi8x_v1(
+            _mm_set1_epi64x(i64::MIN),
+            _mm_set1_epi64x(i64::MAX),
+            _mm_signbits_epi64x_v1(res),
+        ),
         _mm_xor_si128(
             _mm_cmpgt_epi64x_v1(rhs, _mm_setzero_si128()),
             _mm_cmpgt_epi64x_v1(lhs, res),
         ),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Rounding (SSE4.1 `roundps`/`roundpd` polyfills)
+//
+// All of these use the classic "magic number" trick: adding and subtracting
+// 2^23 (f32) / 2^52 (f64) forces the FPU to round to an integer in the
+// current rounding mode (assumed round-to-nearest-even, the Rust default).
+// Values with |x| >= 2^23 / 2^52 are already integral and are passed through,
+// which also handles NaN and infinity (the `cmplt` is false for NaN).
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: `_mm_round_ps(v, _MM_FROUND_TO_NEAREST_INT)` - round half to even.
+#[inline(always)]
+pub unsafe fn _mm_round_psx_v1(value: __m128) -> __m128 {
+    let neg_zero = _mm_set1_ps(-0.0);
+    let magic = _mm_set1_ps(8388608.0); // 2^23
+
+    let sign = _mm_and_ps(value, neg_zero);
+    let abs = _mm_andnot_ps(neg_zero, value);
+
+    // round |v|, then restore the sign (also turns -0.4 into -0.0, not +0.0)
+    let rounded = _mm_sub_ps(_mm_add_ps(abs, magic), magic);
+    let rounded = _mm_or_ps(rounded, sign);
+
+    // |v| < 2^23: rounded, else (already integral, inf, NaN): passthrough
+    _mm_blendv_psx_v1(value, rounded, _mm_cmplt_ps(abs, magic))
+}
+
+/// POLYFILL: `_mm_floor_ps`
+#[inline(always)]
+pub unsafe fn _mm_floor_psx_v1(value: __m128) -> __m128 {
+    let rounded = _mm_round_psx_v1(value);
+    // subtract 1 where we rounded up
+    _mm_sub_ps(rounded, _mm_and_ps(_mm_cmpgt_ps(rounded, value), _mm_set1_ps(1.0)))
+}
+
+/// POLYFILL: `_mm_ceil_ps`
+///
+/// Implemented as `-floor(-v)` rather than `round + 1` correction: the additive
+/// form computes `-0.0 + 0.0` for inputs in `[-0.5, -0.0]` and loses the sign
+/// of zero (IEEE: `ceil(-0.5)` is `-0.0`).
+#[inline(always)]
+pub unsafe fn _mm_ceil_psx_v1(value: __m128) -> __m128 {
+    let neg_zero = _mm_set1_ps(-0.0);
+    _mm_xor_ps(_mm_floor_psx_v1(_mm_xor_ps(value, neg_zero)), neg_zero)
+}
+
+/// POLYFILL: `_mm_round_ps(v, _MM_FROUND_TO_ZERO)` - truncate via `floor(|v|)` with the sign restored.
+#[inline(always)]
+pub unsafe fn _mm_trunc_psx_v1(value: __m128) -> __m128 {
+    let neg_zero = _mm_set1_ps(-0.0);
+    let magic = _mm_set1_ps(8388608.0); // 2^23
+
+    let sign = _mm_and_ps(value, neg_zero);
+    let abs = _mm_andnot_ps(neg_zero, value);
+
+    let rounded = _mm_sub_ps(_mm_add_ps(abs, magic), magic);
+    let rounded = _mm_blendv_psx_v1(abs, rounded, _mm_cmplt_ps(abs, magic));
+
+    // floor(|v|): subtract 1 where we rounded up
+    let trunced = _mm_sub_ps(rounded, _mm_and_ps(_mm_cmpgt_ps(rounded, abs), _mm_set1_ps(1.0)));
+
+    _mm_or_ps(trunced, sign)
+}
+
+/// POLYFILL: `_mm_round_pd(v, _MM_FROUND_TO_NEAREST_INT)` - round half to even.
+#[inline(always)]
+pub unsafe fn _mm_round_pdx_v1(value: __m128d) -> __m128d {
+    let neg_zero = _mm_set1_pd(-0.0);
+    let magic = _mm_set1_pd(4503599627370496.0); // 2^52
+
+    let sign = _mm_and_pd(value, neg_zero);
+    let abs = _mm_andnot_pd(neg_zero, value);
+
+    let rounded = _mm_sub_pd(_mm_add_pd(abs, magic), magic);
+    let rounded = _mm_or_pd(rounded, sign);
+
+    _mm_blendv_pdx_v1(value, rounded, _mm_cmplt_pd(abs, magic))
+}
+
+/// POLYFILL: `_mm_floor_pd`
+#[inline(always)]
+pub unsafe fn _mm_floor_pdx_v1(value: __m128d) -> __m128d {
+    let rounded = _mm_round_pdx_v1(value);
+    _mm_sub_pd(rounded, _mm_and_pd(_mm_cmpgt_pd(rounded, value), _mm_set1_pd(1.0)))
+}
+
+/// POLYFILL: `_mm_ceil_pd` - see [`_mm_ceil_psx_v1`] for why this is `-floor(-v)`.
+#[inline(always)]
+pub unsafe fn _mm_ceil_pdx_v1(value: __m128d) -> __m128d {
+    let neg_zero = _mm_set1_pd(-0.0);
+    _mm_xor_pd(_mm_floor_pdx_v1(_mm_xor_pd(value, neg_zero)), neg_zero)
+}
+
+/// POLYFILL: `_mm_round_pd(v, _MM_FROUND_TO_ZERO)` - truncate via `floor(|v|)` with the sign restored.
+#[inline(always)]
+pub unsafe fn _mm_trunc_pdx_v1(value: __m128d) -> __m128d {
+    let neg_zero = _mm_set1_pd(-0.0);
+    let magic = _mm_set1_pd(4503599627370496.0); // 2^52
+
+    let sign = _mm_and_pd(value, neg_zero);
+    let abs = _mm_andnot_pd(neg_zero, value);
+
+    let rounded = _mm_sub_pd(_mm_add_pd(abs, magic), magic);
+    let rounded = _mm_blendv_pdx_v1(abs, rounded, _mm_cmplt_pd(abs, magic));
+
+    let trunced = _mm_sub_pd(rounded, _mm_and_pd(_mm_cmpgt_pd(rounded, abs), _mm_set1_pd(1.0)));
+
+    _mm_or_pd(trunced, sign)
+}
+
+// ---------------------------------------------------------------------------
+// 32-bit signed helpers (SSSE3 `pabsd`/`psignd` replacements)
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: `_mm_abs_epi32`
+#[inline(always)]
+pub unsafe fn _mm_abs_epi32x_v1(value: __m128i) -> __m128i {
+    let m = _mm_srai_epi32(value, 31);
+    _mm_sub_epi32(_mm_xor_si128(value, m), m)
+}
+
+/// POLYFILL: true `copysign` for `i32` lanes - the magnitude of `lhs` with the
+/// sign of `rhs` (negates `lhs` exactly where the signs differ).
+#[inline(always)]
+pub unsafe fn _mm_copysign_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
+    let change_sign = _mm_xor_si128(_mm_srai_epi32(lhs, 31), _mm_srai_epi32(rhs, 31));
+    _mm_sub_epi32(_mm_xor_si128(lhs, change_sign), change_sign)
+}
+
+/// POLYFILL: three-valued signum for `i32` lanes (-1 / 0 / +1), matching Rust `i32::signum`.
+#[inline(always)]
+pub unsafe fn _mm_signum_epi32x_v1(value: __m128i) -> __m128i {
+    let zero = _mm_setzero_si128();
+    let lt = _mm_cmpgt_epi32(zero, value); // -1 where value < 0
+    let gt = _mm_cmpgt_epi32(value, zero); // -1 where value > 0
+    _mm_sub_epi32(lt, gt)
 }
 
 #[inline(always)]
@@ -231,6 +381,8 @@ pub unsafe fn _mm_nextuppd_v1(value: __m128d) -> __m128d {
     let abs = _mm_andnot_si128(_mm_set1_epu64x(0x8000_0000_0000_0000), bits);
 
     let is_infinity = _mm_cmpeq_epi64x_v1(bits, _mm_set1_epu64x(0x7FF0_0000_0000_0000));
+    let unchanged = _mm_or_si128(is_nan, is_infinity);
+
     let is_positive = _mm_cmpeq_epi64x_v1(abs, bits);
     let is_zero = _mm_cmpeq_epi64x_v1(abs, _mm_setzero_si128());
 
@@ -243,7 +395,7 @@ pub unsafe fn _mm_nextuppd_v1(value: __m128d) -> __m128d {
     // if(is_zero) { 0x1 } else { next_bits }
     let next_bits = _mm_blendv_epi8x_v1(next_bits, _mm_set1_epu64x(0x1), is_zero);
 
-    _mm_castsi128_pd(next_bits)
+    _mm_castsi128_pd(_mm_blendv_epi8x_v1(next_bits, bits, unchanged))
 }
 
 #[inline(always)]

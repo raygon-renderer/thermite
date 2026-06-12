@@ -145,6 +145,8 @@ pub unsafe fn _mm256_nextuppd_v3(value: __m256d) -> __m256d {
     let abs = _mm256_andnot_si256(_mm256_set1_epu64x(0x8000_0000_0000_0000), bits);
 
     let is_infinity = _mm256_cmpeq_epi64(bits, _mm256_set1_epu64x(0x7FF0_0000_0000_0000));
+    let unchanged = _mm256_or_si256(is_nan, is_infinity);
+
     let is_positive = _mm256_cmpeq_epi64(abs, bits);
     let is_zero = _mm256_cmpeq_epi64(abs, _mm256_setzero_si256());
 
@@ -157,7 +159,7 @@ pub unsafe fn _mm256_nextuppd_v3(value: __m256d) -> __m256d {
     // if(is_zero) { 0x1 } else { next_bits }
     let next_bits = _mm256_blendv_epi8(next_bits, _mm256_set1_epu64x(0x1), is_zero);
 
-    _mm256_castsi256_pd(next_bits)
+    _mm256_castsi256_pd(_mm256_blendv_epi8(next_bits, bits, unchanged))
 }
 
 #[inline(always)]
@@ -182,6 +184,17 @@ pub unsafe fn _mm256_nextdownpd_v3(value: __m256d) -> __m256d {
     let next_bits = _mm256_blendv_epi8(next_bits, _mm256_set1_epu64x(0x1 | 0x8000_0000_0000_0000), is_zero);
 
     _mm256_castsi256_pd(_mm256_blendv_epi8(next_bits, bits, unchanged))
+}
+
+/// POLYFILL: true `copysign` for `i32` lanes - the magnitude of `lhs` with the
+/// sign of `rhs` (negates `lhs` exactly where the signs differ).
+///
+/// Note `vpsignd` is *not* copysign: it negates `lhs` whenever `rhs` is
+/// negative regardless of `lhs`'s own sign, which is wrong for negative `lhs`.
+#[inline(always)]
+pub unsafe fn _mm256_copysign_epi32x_v3(lhs: __m256i, rhs: __m256i) -> __m256i {
+    let change_sign = _mm256_xor_si256(_mm256_srai_epi32(lhs, 31), _mm256_srai_epi32(rhs, 31));
+    _mm256_sub_epi32(_mm256_xor_si256(lhs, change_sign), change_sign)
 }
 
 #[inline(always)]

@@ -19,8 +19,62 @@ pub use divider::*;
 pub use math::*;
 
 #[inline(always)]
-pub unsafe fn _mm_blendv_epi8x_v1(xmm0: __m128i, xmm1: __m128i, mask: __m128i) -> __m128i {
-    _mm_or_si128(_mm_and_si128(mask, xmm0), _mm_andnot_si128(mask, xmm1))
+pub const unsafe fn identity<T>(x: T) -> T {
+    x
+}
+
+/// POLYFILL: Variable blend matching `_mm_blendv_epi8` argument order:
+/// `mask ? b : a`.
+///
+/// Unlike the SSE4.1 instruction (which selects per byte on each byte's high
+/// bit), this is a full bitwise select, so the mask must be lane-uniform
+/// (all-ones or all-zeros per lane), as produced by the `_mm_cmp*` family
+/// or the `_mm_signbits_*` helpers. Raw values are not valid masks.
+#[inline(always)]
+pub unsafe fn _mm_blendv_epi8x_v1(a: __m128i, b: __m128i, mask: __m128i) -> __m128i {
+    _mm_or_si128(_mm_and_si128(mask, b), _mm_andnot_si128(mask, a))
+}
+
+/// POLYFILL: see [`_mm_blendv_epi8x_v1`]; same lane-uniform mask requirement.
+#[inline(always)]
+pub unsafe fn _mm_blendv_epi32x_v1(a: __m128i, b: __m128i, mask: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(a, b, mask)
+}
+
+/// POLYFILL: see [`_mm_blendv_epi8x_v1`]; same lane-uniform mask requirement.
+#[inline(always)]
+pub unsafe fn _mm_blendv_epi64x_v1(a: __m128i, b: __m128i, mask: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(a, b, mask)
+}
+
+/// POLYFILL: `_mm_blendv_ps` (`mask ? b : a`) via bitwise select.
+/// The mask must be lane-uniform (e.g. a comparison result), not just sign bits.
+#[inline(always)]
+pub unsafe fn _mm_blendv_psx_v1(a: __m128, b: __m128, mask: __m128) -> __m128 {
+    _mm_or_ps(_mm_and_ps(mask, b), _mm_andnot_ps(mask, a))
+}
+
+/// POLYFILL: `_mm_blendv_pd` (`mask ? b : a`) via bitwise select.
+/// The mask must be lane-uniform (e.g. a comparison result), not just sign bits.
+#[inline(always)]
+pub unsafe fn _mm_blendv_pdx_v1(a: __m128d, b: __m128d, mask: __m128d) -> __m128d {
+    _mm_or_pd(_mm_and_pd(mask, b), _mm_andnot_pd(mask, a))
+}
+
+/// POLYFILL: `_mm_blend_ps` (constant per-lane blend, `IMM8` bit `i` selects
+/// lane `i` from `b`) via bitwise select with a compile-time mask.
+#[inline(always)]
+pub unsafe fn _mm_blend_psx_v1<const IMM8: i32>(a: __m128, b: __m128) -> __m128 {
+    let mask = const {
+        [
+            f32::from_bits(if IMM8 & 0b0001 != 0 { !0 } else { 0 }),
+            f32::from_bits(if IMM8 & 0b0010 != 0 { !0 } else { 0 }),
+            f32::from_bits(if IMM8 & 0b0100 != 0 { !0 } else { 0 }),
+            f32::from_bits(if IMM8 & 0b1000 != 0 { !0 } else { 0 }),
+        ]
+    };
+    let mask = _mm_loadu_ps(mask.as_ptr());
+    _mm_blendv_psx_v1(a, b, mask)
 }
 
 #[inline(always)]

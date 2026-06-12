@@ -7,4 +7,17 @@ pub mod arch {
 }
 
 pub mod polyfills;
-//pub mod registers;
+pub mod registers;
+
+use crate::vector::Vector;
+
+pub use registers::X86V1;
+
+decl_aliases!(X86V1);
+pub use self::aliases::*;
+
+pub mod prelude {
+    pub use super::X86V1;
+    pub use super::aliases::*;
+    pub use crate::prelude::*;
+}

@@ -16,11 +16,6 @@ pub use cmp::*;
 pub use divider::*;
 pub use math::*;
 
-#[inline(always)]
-pub const unsafe fn identity<T>(x: T) -> T {
-    x
-}
-
 /// This uses _mm_shuffle_epi8 to permute the register as that's the only
 /// instruction for arbitrary register-controlled shuffles available to SSE4.1
 /// effectively recreating _mm_permutevar_ps/_mm_permutevar_epi32

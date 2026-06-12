@@ -31,16 +31,15 @@ struct Backend {
     /// this backend (e.g. `"backend::x86_v3::X86V3"`).
     ///
     /// `None` when the backend does not yet have a complete, runtime-dispatchable `Simd`
-    /// implementation (e.g. x86-v1 whose `registers/` submodule is still WIP).
-    /// Such backends are skipped by `dispatch_dyn!` and their hardware falls through to
-    /// the scalar fallback.
+    /// implementation (e.g. NEON). Such backends are skipped by `dispatch_dyn!` and
+    /// their hardware falls through to the scalar fallback.
     simd_type: Option<&'static str>,
 }
 
 static BACKENDS: &[Backend] = cfg_select! {
     feature = "x86" => &[
         Backend { isa: "Scalar", target_feature: "",         simd_type: Some("backend::scalar::Scalar")   },
-        //Backend { isa: "X86V1",  target_feature: "sse2",     simd_type: None                              },
+        Backend { isa: "X86V1",  target_feature: "sse2",     simd_type: Some("backend::x86_v1::X86V1")   },
         Backend { isa: "X86V2",  target_feature: "sse4.2",   simd_type: Some("backend::x86_v2::X86V2")   },
         Backend { isa: "X86V3",  target_feature: "avx2,fma", simd_type: Some("backend::x86_v3::X86V3")   },
     ],
@@ -84,7 +83,7 @@ struct DispatchAttributes {
 ///
 /// Rewrites the annotated item so that every method/function body is wrapped in an
 /// `#[inline(always)]` inner copy and then called through a per-backend
-/// `#[target_feature(enable = "…")]` trampoline, selected at compile time by matching
+/// `#[target_feature(enable = "...")]` trampoline, selected at compile time by matching
 /// on `<S as HasIsa>::ISA` - a const that is resolved when `S` is monomorphized.
 ///
 /// # Syntax
@@ -92,19 +91,19 @@ struct DispatchAttributes {
 /// ```rust,ignore
 /// // `S` is the default SIMD type parameter name; override with a positional ident:
 /// #[dispatch]
-/// fn my_fn<S: HasIsa>(…) { … }
+/// fn my_fn<S: HasIsa>(...) { ... }
 ///
 /// // Explicit SIMD parameter name:
 /// #[dispatch(V)]
-/// fn my_fn<V: HasIsa>(…) { … }
+/// fn my_fn<V: HasIsa>(...) { ... }
 ///
 /// // Override the thermite crate path (needed when calling from inside thermite itself):
 /// #[dispatch(thermite = "crate")]
-/// fn my_fn<S: HasIsa>(…) { … }
+/// fn my_fn<S: HasIsa>(...) { ... }
 ///
 /// // Both together:
 /// #[dispatch(V, thermite = "crate")]
-/// fn my_fn<V: HasIsa>(…) { … }
+/// fn my_fn<V: HasIsa>(...) { ... }
 /// ```
 ///
 /// # Supported items
@@ -123,12 +122,12 @@ struct DispatchAttributes {
 ///
 /// # How it works
 ///
-/// For a function `fn foo<S: HasIsa>(args…)`:
+/// For a function `fn foo<S: HasIsa>(args...)`:
 ///
 /// 1. The original body is moved into an `#[inline(always)]` copy named `foo`.
-/// 2. For each backend a `#[target_feature(enable = "…")] unsafe fn __dispatch_<backend>`
+/// 2. For each backend a `#[target_feature(enable = "...")] unsafe fn __dispatch_<backend>`
 ///    is generated that calls `foo` under the appropriate CPU feature flags.
-/// 3. The outer body becomes a `match <S as HasIsa>::ISA { … }` that selects the
+/// 3. The outer body becomes a `match <S as HasIsa>::ISA { ... }` that selects the
 ///    right trampoline.  Because `ISA` is a const, LLVM folds the match away at
 ///    monomorphization time - there is no runtime branch.
 ///
@@ -147,7 +146,7 @@ struct DispatchAttributes {
 /// impl MyType {
 ///     // OK - concrete type supplied explicitly:
 ///     #[dispatch(MyType)]
-///     fn process(&self) { … }
+///     fn process(&self) { ... }
 /// }
 /// ```
 ///
@@ -160,9 +159,9 @@ struct DispatchAttributes {
 /// ```rust,ignore
 /// #[dispatch(Self)]          // `Self` is resolved correctly at the impl-block level
 /// impl MyType {
-///     fn process(&self) { … }
+///     fn process(&self) { ... }
 ///     #[skip_dispatch]       // opt individual methods out if needed
-///     fn helper(&self) { … }
+///     fn helper(&self) { ... }
 /// }
 /// ```
 #[proc_macro_attribute]
@@ -586,7 +585,7 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
             *f.block = syn::parse_quote! {{
                 compile_error!(
                     "#[dispatch] on a method with a receiver requires the concrete type name. \
-                    Either annotate the whole impl block (`#[dispatch(Self)] impl Type { … }`), \
+                    Either annotate the whole impl block (`#[dispatch(Self)] impl Type { ... }`), \
                     or supply the type to this attribute: `#[dispatch(TypeName)]`."
                 );
             }};
@@ -786,9 +785,9 @@ fn forward_args_impl<'a>(inputs: impl IntoIterator<Item = &'a FnArg>, reborrow: 
                     //
                     //   - Slice / trait-object DST inner type (e.g. `&[T]`, `&mut [T]`,
                     //     `&dyn Trait`): emit `&*ident` / `&mut *ident`. Deref bridges
-                    //     owners (`Vec<T>` → `[T]`, `Box<[T]>` → `[T]`, `String` →
-                    //     `str`) and reborrows references (`&[T]` → `&[T]`,
-                    //     `&mut [T]` → `&mut [T]`).
+                    //     owners (`Vec<T>` -> `[T]`, `Box<[T]>` -> `[T]`, `String` ->
+                    //     `str`) and reborrows references (`&[T]` -> `&[T]`,
+                    //     `&mut [T]` -> `&mut [T]`).
                     //   - Sized inner type (e.g. `&Vec<T>`, `&mut Vec<T>`, `&T`): emit
                     //     plain `&ident` / `&mut ident`. We deliberately avoid `&*ident`
                     //     here because it would invoke `Deref{,Mut}` and overshoot to
@@ -874,7 +873,7 @@ impl VisitMut for SimdTypeReplacer<'_> {
     ///
     /// `f32x4::method` is an `Expr::Path` with two segments; the SIMD name is NOT in a
     /// type position so `visit_type_mut` never sees it.  We rewrite
-    /// `f32x4::rest` → `<#thermite::Vector<S::f32x4>>::rest`.
+    /// `f32x4::rest` -> `<#thermite::Vector<S::f32x4>>::rest`.
     ///
     /// A bare `f32x4` with no further segments is not a valid standalone expression and
     /// is left alone (it would be a compile error regardless).
@@ -928,9 +927,9 @@ struct DispatchDynInput {
     /// Path to the thermite crate root (defaults to `::thermite`).
     thermite: TokenStream,
     /// The identifier bound to the runtime-dispatched `Simd` type (from `for<S>`).
-    /// Defaults to `S` if the `for<…>` clause is omitted.
+    /// Defaults to `S` if the `for<...>` clause is omitted.
     dispatch_ident: Ident,
-    /// Explicit trait bounds on the dispatch type parameter (from `for<S: Bound + …>`).
+    /// Explicit trait bounds on the dispatch type parameter (from `for<S: Bound + ...>`).
     /// If empty, the generated code defaults to `Simd3`.
     dispatch_bounds: Punctuated<TypeParamBound, Token![+]>,
     /// Zero or more extra generic parameters (`<T: Bound, const N: usize>`, etc.) that
@@ -966,7 +965,7 @@ impl Parse for DispatchDynInput {
 
         // Optional `for<S>` or `for<S: Bound + Bound2>` - the dispatch type binding.
         // Detected unambiguously: `for` keyword followed by `<`.
-        // Defaults to the identifier `S` with no explicit bounds (→ `Simd3` at codegen time).
+        // Defaults to the identifier `S` with no explicit bounds (-> `Simd3` at codegen time).
         let (dispatch_ident, dispatch_bounds) = if stream.peek(Token![for]) && stream.peek2(Token![<]) {
             stream.parse::<Token![for]>()?;
             stream.parse::<Token![<]>()?;
@@ -974,7 +973,7 @@ impl Parse for DispatchDynInput {
             if ty_param.eq_token.is_some() {
                 return Err(syn::Error::new(
                     ty_param.ident.span(),
-                    "default types (`= Type`) are not allowed in `for<…>` dispatch binding",
+                    "default types (`= Type`) are not allowed in `for<...>` dispatch binding",
                 ));
             }
             stream.parse::<Token![>]>()?;
@@ -1080,31 +1079,31 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 /// dispatch_dyn!(for<S> |data: &mut [f32]| {
 ///     let (head, mid, tail) = data.try_aligned_simd_iter_mut::<f32xN>();
 ///     for v in mid { *v = v.sin(); }
-///     /* … */
+///     /* ... */
 /// });
 ///
 /// // Custom bound - restrict or widen the set of usable Simd traits:
-/// dispatch_dyn!(for<S: Simd> |data: &[f32]| -> f32 { /* … */ });
-/// dispatch_dyn!(for<S: Simd3 + MyCustomTrait> |data: &[f32]| { /* … */ });
+/// dispatch_dyn!(for<S: Simd> |data: &[f32]| -> f32 { /* ... */ });
+/// dispatch_dyn!(for<S: Simd3 + MyCustomTrait> |data: &[f32]| { /* ... */ });
 ///
 /// // With extra caller-provided generics and a where clause:
 /// dispatch_dyn!(for<S> <T: Clone, const N: usize> |arg: T| -> T where T: Debug { arg });
 ///
 /// // Override the thermite crate path (needed when calling from inside thermite itself):
-/// dispatch_dyn!(thermite = "crate"; for<S> |data: &[f32]| -> f32 { /* … */ });
+/// dispatch_dyn!(thermite = "crate"; for<S> |data: &[f32]| -> f32 { /* ... */ });
 /// ```
 ///
 /// When `for<Ident>` is present, `Ident` is in scope inside `body` as a generic type
 /// satisfying the stated bound (or `Simd3` by default).  When omitted, no explicit
 /// dispatch binding is in scope - rely on the automatic SIMD type rewriting below.
 ///
-/// Any extra generic parameters from `<…>` are assumed to be in scope at the macro call
+/// Any extra generic parameters from `<...>` are assumed to be in scope at the macro call
 /// site; the macro passes them through as explicit turbofish arguments.
 ///
 /// # Automatic SIMD type rewriting
 ///
 /// Before code generation the macro rewrites every **bare, unqualified** reference to a
-/// known `Simd` associated-type name into its fully-qualified `Vector<S::…>` form.
+/// known `Simd` associated-type name into its fully-qualified `Vector<S::...>` form.
 /// For example, `f32x4` becomes `::thermite::Vector<S::f32x4>`.
 ///
 /// The full set of names that trigger rewriting is every associated type declared on the
@@ -1194,7 +1193,7 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 ///    dispatch_dyn!(for<S> |xs: &[f32], out: &mut [f32]| {
 ///        let (head, mid, tail) = xs.try_aligned_simd_iter::<f32xN>();
 ///        let (oh,   om,  ot)   = out.try_aligned_simd_iter_mut::<f32xN>();
-///        // … SIMD body operates on f32xN<S> values …
+///        // ... SIMD body operates on f32xN<S> values ...
 ///    });
 ///    ```
 ///
@@ -1213,7 +1212,7 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     } = syn::parse_macro_input!(input as DispatchDynInput);
 
     // Rewrite bare SIMD type names (e.g. `f32x4`) in the body to their fully-qualified
-    // `Vector<dispatch_ident::…>` form before any code generation happens.
+    // `Vector<dispatch_ident::...>` form before any code generation happens.
     SimdTypeReplacer {
         thermite: &thermite,
         dispatch_ident: &dispatch_ident,

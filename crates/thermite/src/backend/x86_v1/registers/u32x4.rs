@@ -10,7 +10,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
         array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
@@ -20,24 +20,24 @@ use super::arch;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct U64x2V2;
+pub struct U32x4V1;
 
 #[thermite_macros::inline_always]
-impl CoreRegister for U64x2V2 {
-    type Lanes = typenum::U2;
+impl CoreRegister for U32x4V1 {
+    type Lanes = typenum::U4;
     type Storage = arch::__m128i;
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
 
-    const ISA: InstructionSet = InstructionSet::X86V2;
+    const ISA: InstructionSet = InstructionSet::X86V1;
 
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 
     const HAS_EQUAL_SIZE_MASK: bool = true;
 
     fn blendv(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_blendv_epi8(lhs, rhs, mask) }
+        unsafe { arch::_mm_blendv_epi8x_v1(lhs, rhs, mask) }
     }
 
     fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
@@ -49,7 +49,7 @@ impl CoreRegister for U64x2V2 {
     }
 
     fn zeroupper_z<Z: crate::register::ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
-        super::I64x2V2::zeroupper_z::<Z>(value) // just reuse the i64 version since it's the same mask
+        super::I32x4V1::zeroupper_z::<Z>(value) // just reuse the i32 version since it's the same mask
     }
 
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
@@ -58,10 +58,7 @@ impl CoreRegister for U64x2V2 {
 }
 
 #[thermite_macros::inline_always]
-impl MaskRegister for U64x2V2 {
-    const FALSY: Storage<Self> = reg::<Self, 2>([0; 2]);
-    const TRUTHY: Storage<Self> = reg::<Self, 2>([!0; 2]);
-
+impl MaskRegister for U32x4V1 {
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
         Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
@@ -71,12 +68,15 @@ impl MaskRegister for U64x2V2 {
         Self::as_array(&mask)[lane].to_bool()
     }
 
+    const FALSY: Storage<Self> = reg::<Self, 4>([0; 4]);
+    const TRUTHY: Storage<Self> = reg::<Self, 4>([!0; 4]);
+
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm_cvtboolx2_to_epi64_mask_v2(value) }
+        unsafe { arch::_mm_cvtboolx4_to_epi32_mask_v1(value) }
     }
 
     fn all(value: Storage<Self>) -> bool {
-        unsafe { arch::_mm_movemask_epi8(value) == 0xFFFF }
+        unsafe { arch::_mm_movemask_epi8(value) as u32 == 0xFFFF }
     }
 
     fn any(value: Storage<Self>) -> bool {
@@ -88,19 +88,19 @@ impl MaskRegister for U64x2V2 {
     }
 
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
-        Some(unsafe { arch::_mm_movemask_pd(arch::_mm_castsi128_pd(value)) as u64 })
+        Some(unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u64 })
     }
 
     #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
-        let mask = unsafe { arch::_mm_movemask_pd(arch::_mm_castsi128_pd(value)) as u32 };
+        let mask = unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u32 };
         let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
         view.copy_from_bitslice(&mask[..Self::Lanes::USIZE]);
     }
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
-impl BitwiseRegister for U64x2V2 {
+impl BitwiseRegister for U32x4V1 {
     fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_xor_si128(lhs, rhs) }
     }
@@ -123,48 +123,33 @@ impl BitwiseRegister for U64x2V2 {
 }
 
 #[thermite_macros::inline_always]
-impl ConcatRegister<u64> for U64x2V2 {
-    fn concat(lo: Storage<u64>, hi: Storage<u64>) -> Storage<Self> {
-        unsafe { arch::_mm_setr_epi64x(lo as i64, hi as i64) }
+impl ExtendRegister<u32> for U32x4V1 {
+    fn extend(value: Storage<u32>) -> Storage<Self> {
+        unsafe { arch::_mm_setr_epu32x(value, 0, 0, 0) }
     }
 
-    fn split(value: Storage<Self>) -> (Storage<u64>, Storage<u64>) {
-        unsafe {
-            let mut arr = [0; 2];
-            Self::store_unaligned(arr.as_mut_ptr(), value);
-            (arr[0], arr[1])
-        }
+    fn narrow(value: Storage<Self>) -> Storage<u32> {
+        unsafe { arch::_mm_cvtsi128_si32(value) as u32 }
     }
 }
 
 #[thermite_macros::inline_always]
-impl ExtendRegister<u64> for U64x2V2 {
-    fn extend(value: Storage<u64>) -> Storage<Self> {
-        unsafe { arch::_mm_setr_epi64x(value as i64, 0) }
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<u64> {
-        unsafe { arch::_mm_cvtsi128_si64(value) as u64 }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl InterleaveRegister for U64x2V2 {
+impl InterleaveRegister for U32x4V1 {
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+        super::I32x4V1::interleave(a, b)
     }
 
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        unsafe { (arch::_mm_unpacklo_epi64(a, b), arch::_mm_unpackhi_epi64(a, b)) }
+        super::I32x4V1::deinterleave(a, b)
     }
 }
 
 #[thermite_macros::inline_always]
-impl Register for U64x2V2 {
-    type Element = u64;
+impl Register for U32x4V1 {
+    type Element = u32;
 
-    type Signed = super::I64x2V2;
-    type Unsigned = super::U64x2V2;
+    type Signed = super::I32x4V1;
+    type Unsigned = super::U32x4V1;
 
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
@@ -175,7 +160,7 @@ impl Register for U64x2V2 {
     }
 
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
-        super::I64x2V2::is_negative(value) // reuse signed implementation
+        unsafe { arch::_mm_srai_epi32(value, 31) }
     }
 
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
@@ -183,11 +168,11 @@ impl Register for U64x2V2 {
     }
 
     fn single(value: Self::Element) -> Storage<Self> {
-        unsafe { arch::_mm_setr_epi64x(value as i64, 0) }
+        unsafe { arch::_mm_setr_epi32(value as i32, 0, 0, 0) }
     }
 
     fn splat(value: Self::Element) -> Storage<Self> {
-        unsafe { arch::_mm_set1_epi64x(value as i64) }
+        unsafe { arch::_mm_set1_epi32(value as i32) }
     }
 
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
@@ -207,162 +192,165 @@ impl Register for U64x2V2 {
     }
 
     unsafe fn load_stream(ptr: *const Self::Element) -> Storage<Self> {
-        unsafe { arch::_mm_stream_load_si128(ptr as _) }
+        // no non-temporal load before SSE4.1 (`movntdqa`); a regular aligned load is the best SSE2 can do
+        unsafe { arch::_mm_load_si128(ptr as *const _) }
     }
 
     unsafe fn store_stream(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
     }
 
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE_R!(2, 3, 0, 1) }>(value) }
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE!(0, 1, 2, 3) }>(value) }
     }
 
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_bswap_epi64x_v2(value) }
-    }
-
-    fn reduce<F>(value: Storage<Self>, f: F) -> Self::Element
-    where
-        F: Fn(Self::Element, Self::Element) -> Self::Element,
-    {
-        let arr = Self::as_array(&value);
-
-        f(arr[0], arr[1])
-    }
-}
-
-#[rustfmt::skip] #[thermite_macros::inline_always]
-impl BitshiftRegister for U64x2V2 {
-    const HAS_TRUE_SHIFTV: bool = false;
-    const HAS_WIDE_BYTE_SHIFTS: bool = true;
-
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_bslli_si128(value, IMM8) }
-    }
-
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_bsrli_si128(value, IMM8) }
-    }
-
-    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
-        unsafe { arch::_mm_sll_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
-    }
-
-    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
-        unsafe { arch::_mm_srl_epi64(value, arch::_mm_cvtsi32_si128(shift as i32)) }
-    }
-
-    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
-        unsafe { arch::_mm_srlv_epi64x_v1(value, shifts) }
-    }
-
-    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
-        unsafe { arch::_mm_sllv_epi64x_v1(value, shifts) }
-    }
-
-    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_slli_epi64(value, IMM8) }
-    }
-
-    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_srli_epi64(value, IMM8) }
+        unsafe { arch::_mm_bswap_epi32x_v1(value) }
     }
 }
 
 #[thermite_macros::inline_always]
-impl ShuffleRegister for U64x2V2 {
+impl ShuffleRegister for U32x4V1 {
     fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe {
-            arch::_mm_castpd_si128(arch::_mm_shuffle_pd(
-                arch::_mm_castsi128_pd(lhs),
-                arch::_mm_castsi128_pd(rhs),
+            arch::_mm_castps_si128(arch::_mm_shuffle_ps(
+                arch::_mm_castsi128_ps(lhs),
+                arch::_mm_castsi128_ps(rhs),
                 IMM8,
             ))
         }
     }
 }
 
-// impl PermuteRegister for U64x2V2 {
-//     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-//         unsafe { arch::_mm_permute_epi64x(value, IMM8) }
-//     }
-// }
+#[thermite_macros::inline_always]
+impl PermuteRegister for U32x4V1 {
+    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_shuffle_epi32(value, IMM8) }
+    }
+}
 
 #[thermite_macros::inline_always]
-impl SwizzleRegister for U64x2V2 {
+impl SwizzleRegister for U32x4V1 {
+    // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
     const HAS_PERMUTEV: bool = false;
 }
 
-impl PartialOrdRegister for U64x2V2 {
-    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_cmpgt_epu64x_v2(lhs, rhs) }
+#[rustfmt::skip] #[thermite_macros::inline_always]
+impl BitshiftRegister for U32x4V1 {
+    const HAS_TRUE_SHIFTV: bool = false;
+    const HAS_WIDE_BYTE_SHIFTS: bool = true;
+
+    fn bshli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bslli_si128(value, IMM8) }
     }
 
-    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_cmpeq_epi64x_v1(lhs, rhs) }
+    fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_bsrli_si128(value, IMM8) }
+    }
+
+    fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
+        unsafe { arch::_mm_sll_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
+    }
+
+    fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
+        unsafe { arch::_mm_srl_epi32(value, arch::_mm_cvtsi32_si128(shift as i32)) }
+    }
+
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_sllv_epi32x_v1(value, shifts) }
+    }
+
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_srlv_epi32x_v1(value, shifts) }
+    }
+
+    fn shli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_slli_epi32(value, IMM8) }
+    }
+
+    fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_srli_epi32(value, IMM8) }
     }
 }
 
 #[thermite_macros::inline_always]
-impl NumericRegister for U64x2V2 {
-    const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
-    const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
-    const TWO: Storage<Self> = reg::<Self, 2>([2; 2]);
+impl PartialOrdRegister for U32x4V1 {
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_cmplt_epu32x_v1(lhs, rhs) }
+    }
 
-    const MIN: Storage<Self> = reg::<Self, 2>([u64::MIN; 2]);
-    const MAX: Storage<Self> = reg::<Self, 2>([u64::MAX; 2]);
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_cmple_epu32x_v1(lhs, rhs) }
+    }
+
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_cmpgt_epu32x_v1(lhs, rhs) }
+    }
+
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_cmpge_epu32x_v1(lhs, rhs) }
+    }
+
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_cmpeq_epi32(lhs, rhs) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl NumericRegister for U32x4V1 {
+    const ZERO: Storage<Self> = reg::<Self, 4>([0; 4]);
+    const ONE: Storage<Self> = reg::<Self, 4>([1; 4]);
+    const TWO: Storage<Self> = reg::<Self, 4>([2; 4]);
+
+    const MIN: Storage<Self> = reg::<Self, 4>([u32::MIN; 4]);
+    const MAX: Storage<Self> = reg::<Self, 4>([u32::MAX; 4]);
 
     fn min_element(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.min(hi)
+        _mm_reduce_epi32_v1!(value; _mm_min_epu32x_v1 _mm_min_epu32x_v1) as u32
     }
 
     fn max_element(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.max(hi)
+        _mm_reduce_epi32_v1!(value; _mm_max_epu32x_v1 _mm_max_epu32x_v1) as u32
     }
 
     fn sum_elements(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.wrapping_add(hi)
+        _mm_reduce_epi32_v1!(value; _mm_add_epi32 _mm_add_epi32) as u32
     }
 
     fn prod_elements(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.wrapping_mul(hi)
+        _mm_reduce_epi32_v1!(value; _mm_mullo_epi32x_v1 _mm_mullo_epi32x_v1) as u32
     }
 
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
-        _mm_pairwise_sum_epi64_v1!(lo, hi)
+        _mm_pairwise_sum_epi32_v1!(lo, hi)
     }
 
     fn offset() -> Storage<Self> {
-        Self::splat(<Self::Lanes as typenum::Unsigned>::U64)
+        Self::splat(<Self::Lanes as typenum::Unsigned>::U32)
     }
 
     fn indexed() -> Storage<Self> {
-        Self::new(GenericArray::generate(|i| i as u64))
+        Self::new(GenericArray::generate(|i| i as u32))
     }
 
     fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_add_epi64(lhs, rhs) }
+        unsafe { arch::_mm_add_epi32(lhs, rhs) }
     }
 
     fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_sub_epi64(lhs, rhs) }
+        unsafe { arch::_mm_sub_epi32(lhs, rhs) }
     }
 
     fn add_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_add_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
+        unsafe { arch::_mm_add_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
     fn sub_c(mask: Storage<Self::Mask>, lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_sub_epi64(lhs, arch::_mm_and_si128(rhs, mask)) }
+        unsafe { arch::_mm_sub_epi32(lhs, arch::_mm_and_si128(rhs, mask)) }
     }
 
     fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
+        unsafe { arch::_mm_mullo_epi32x_v1(lhs, rhs) }
     }
 
     fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -374,22 +362,22 @@ impl NumericRegister for U64x2V2 {
     }
 
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_min_epu64x_v2(lhs, rhs) }
+        unsafe { arch::_mm_min_epu32x_v1(lhs, rhs) }
     }
 
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_max_epu64x_v2(lhs, rhs) }
+        unsafe { arch::_mm_max_epu32x_v1(lhs, rhs) }
     }
 }
 
 #[thermite_macros::inline_always]
-impl IntegerRegister for U64x2V2 {
+impl IntegerRegister for U32x4V1 {
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_mullhi_epu64x_v1(lhs, rhs) }
+        unsafe { arch::_mm_mullhi_epu32x_v1(lhs, rhs) }
     }
 
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_mullo_epi64x_v2(lhs, rhs) }
+        unsafe { arch::_mm_mullo_epi32x_v1(lhs, rhs) }
     }
 
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -401,13 +389,11 @@ impl IntegerRegister for U64x2V2 {
     }
 
     fn wrapping_sum(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.wrapping_add(hi)
+        _mm_reduce_epi32_v1!(value; _mm_add_epi32 _mm_add_epi32) as u32
     }
 
     fn wrapping_product(value: Storage<Self>) -> Self::Element {
-        let [lo, hi]: [u64; 2] = unsafe { core::mem::transmute(value) };
-        lo.wrapping_mul(hi)
+        _mm_reduce_epi32_v1!(value; _mm_mullo_epi32x_v1 _mm_mullo_epi32x_v1) as u32
     }
 
     fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
@@ -425,48 +411,29 @@ impl IntegerRegister for U64x2V2 {
     const HAS_HARDWARE_POPCNT: bool = false;
 
     fn count_ones(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_popcnt_epi64x_v2(value) }
-    }
-
-    fn count_zeros(value: Storage<Self>) -> Storage<Self> {
-        Self::count_ones(Self::not(value))
+        unsafe { arch::_mm_popcnt_epi32x_v1(value) }
     }
 
     fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
-        Self::sub(Self::splat(64), Self::ilog2p1(value))
+        Self::sub(Self::splat(32), Self::ilog2p1(value))
     }
 
     fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
-        super::I64x2V2::trailing_zeros(value)
+        // treat as unsigned
+        super::I32x4V1::trailing_zeros(value)
     }
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U64x2V2 {}
+impl UnsignedIntegerRegister for U32x4V1 {}
 
-impl CastRegister<ArrayRegister<U64x2V2, 2>> for super::U32x4V2 {
-    fn cast_from(value: Storage<ArrayRegister<U64x2V2, 2>>) -> Storage<Self> {
-        let (lo, hi) = <ArrayRegister<U64x2V2, 2> as ConcatRegister<U64x2V2>>::split(value);
-        unsafe { arch::_mm_cvtepi64_epi32x_v2(lo, hi) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl CastRegister<<Scalar as Simd>::u32x2> for U64x2V2 {
-    fn cast_from(value: Storage<<Scalar as Simd>::u32x2>) -> Storage<Self> {
-        // zero-extend lower two u32 lanes to u64 lanes
-        unsafe { arch::_mm_setr_epi32(value.0[0] as i32, 0, value.0[1] as i32, 0) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl CastRegister<U64x2V2> for <Scalar as Simd>::u32x2 {
-    fn cast_from(value: Storage<U64x2V2>) -> Storage<<Scalar as Simd>::u32x2> {
+impl CastRegister<U32x4V1> for ArrayRegister<super::U64x2V1, 2> {
+    fn cast_from(value: Storage<U32x4V1>) -> Storage<Self> {
         unsafe {
-            ArrayRegister([
-                arch::_mm_cvtsi128_si32(value) as u32,      // lowest 32 bits
-                arch::_mm_extract_epi32::<2>(value) as u32, // next 32 bits after 64 bits
-            ])
+            let lo = arch::_mm_cvtepu32_epi64x_v1(value);
+            let hi = arch::_mm_cvtepu32_epi64x_v1(arch::_mm_srli_si128(value, 8));
+
+            ArrayRegister([lo, hi])
         }
     }
 }
