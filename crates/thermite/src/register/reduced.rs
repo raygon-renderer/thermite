@@ -42,9 +42,15 @@ impl<R: CoreRegister, N> Clone for ReducedRegister<R, N> {
 
 impl<R: CoreRegister, N> Copy for ReducedRegister<R, N> {}
 
-impl<R: CoreRegister, N> core::fmt::Debug for ReducedRegister<R, N> {
+impl<R: CoreRegister, N: Unsigned> core::fmt::Debug for ReducedRegister<R, N>
+where
+    R: CoreReducible<N>,
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        todo!()
+        // Can't use `as_array` here to trim the underlying register, so just zero the
+        // trailing lanes for more ergonomics Debug views.
+        let cleaned = R::zz(Self::mask(), self.0);
+        f.debug_tuple("ReducedRegister").field(&cleaned).finish()
     }
 }
 
@@ -222,14 +228,71 @@ impl<R: InterleaveRegister, N: Unsigned> InterleaveRegister for ReducedRegister<
 where
     R: CoreReducible<N>,
 {
+    // Both methods exploit the fact that interleaving the L = M - N meaningful
+    // lanes produces a 2L-element stream that is a *prefix* of the underlying
+    // M-lane register's full 2M-element interleave stream. The upper lanes of
+    // reduced registers are don't-cares, so the leftover full-width lanes can be
+    // ignored (interleave) or overwritten (deinterleave).
+    //
+    // Only `InterleaveRegister` + flat lane storage are required, which keeps
+    // this implementation valid for mask registers (which are not `Register`,
+    // so no `as_array`/swizzle access exists here).
+
     #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        todo!()
+        const {
+            assert!(
+                size_of::<Storage<R>>().is_multiple_of(<R::Lanes as Unsigned>::USIZE),
+                "ReducedRegister interleave requires flat lane storage (do not nest ReducedRegister)"
+            );
+        }
+
+        // stream[0..L] is the low half of the full interleave, unchanged.
+        let (full_lo, full_hi) = R::interleave(a.0, b.0);
+
+        // stream[L..2L] is a *contiguous* lane window starting at lane L of the
+        // (full_lo ++ full_hi) pair: spill the pair and take one unaligned load.
+        // For the common 4 -> 3 lane (`f32x3A`) case this is the fast path:
+        // native interleave + two stores + one `movups`-class load, no lane loop.
+        let hi = unsafe {
+            let buf = [full_lo, full_hi];
+            let elem = const { size_of::<Storage<R>>() / <R::Lanes as Unsigned>::USIZE };
+            let offset = <Self as CoreRegister>::Lanes::USIZE * elem;
+            core::ptr::read_unaligned(buf.as_ptr().cast::<u8>().add(offset).cast::<Storage<R>>())
+        };
+
+        (Self(full_lo, PhantomData), Self(hi, PhantomData))
     }
 
     #[inline(always)]
-    fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
-        todo!()
+    fn deinterleave(lo: Storage<Self>, hi: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        const {
+            assert!(
+                size_of::<Storage<R>>().is_multiple_of(<R::Lanes as Unsigned>::USIZE),
+                "ReducedRegister deinterleave requires flat lane storage (do not nest ReducedRegister)"
+            );
+        }
+
+        unsafe {
+            let elem = const { size_of::<Storage<R>>() / <R::Lanes as Unsigned>::USIZE };
+            let offset = <Self as CoreRegister>::Lanes::USIZE * elem;
+
+            // Rebuild the contiguous 2L-element stream by storing `hi` *overlapping*
+            // at lane offset L, overwriting `lo`'s ignored padding lanes.
+            let mut buf = [lo.0, hi.0];
+            let base = buf.as_mut_ptr().cast::<u8>();
+            core::ptr::write_unaligned(base.add(offset).cast::<Storage<R>>(), hi.0);
+
+            // Full-width deinterleave of the two M-lane windows: the evens/odds of
+            // stream[0..2M] start with the L evens/odds of the valid 2L prefix,
+            // which are exactly the original `a` and `b` (upper lanes are junk).
+            let x = core::ptr::read(base.cast::<Storage<R>>());
+            let y = core::ptr::read(base.add(size_of::<Storage<R>>()).cast::<Storage<R>>());
+
+            let (a, b) = R::deinterleave(x, y);
+
+            (Self(a, PhantomData), Self(b, PhantomData))
+        }
     }
 }
 
@@ -594,10 +657,21 @@ impl<R: BitshiftRegister, N: Unsigned> BitshiftRegister for ReducedRegister<R, N
     #[conditional] fn shli<const IMM: i32>(lhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn shri<const IMM: i32>(lhs: Storage<Self>) -> Storage<Self> {}
 
-    // TODO: These is incorrect if reduced, since it shifts the entire register
     const HAS_WIDE_BYTE_SHIFTS: bool = R::HAS_WIDE_BYTE_SHIFTS;
+
+    // bshli is safe to delegate: bytes only move toward *higher* lanes, so the
+    // padding-lane junk never enters the valid region (it only collects more junk).
     #[conditional] fn bshli<const IMM8: i32>(lhs: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn bshri<const IMM8: i32>(lhs: Storage<Self>) -> Storage<Self> {}
+
+    // bshri must NOT be a plain delegation: a full-width byte shift pulls the
+    // padding-lane junk *down* into the valid lanes. Zeroing the padding first
+    // makes the full-width shift exactly match an L-lane-wide register (zeros
+    // shift in from the top). No `#[conditional]` here: the masked variants then
+    // come from the trait defaults, which are built on this corrected body
+    // (the macro-generated variants would delegate to R's junk-leaking ones).
+    fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        Self(R::bshri::<IMM8>(R::zz(Self::mask(), value.0)), PhantomData)
+    }
 
     const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
 
@@ -1048,10 +1122,8 @@ where
     ) -> [Storage<Self>; M] {
         // Entirely delegate to the inner register's method.
         unsafe {
-            let raw = R::mat3_vec3_product::<COLUMN_MAJOR, M>(
-                core::mem::transmute(cols),
-                core::mem::transmute(vectors),
-            );
+            let raw =
+                R::mat3_vec3_product::<COLUMN_MAJOR, M>(core::mem::transmute(cols), core::mem::transmute(vectors));
             // Storage<Self> is layout-compatible with Storage<R>.
             core::mem::transmute_copy::<[Storage<R>; M], [Storage<Self>; M]>(&raw)
         }
