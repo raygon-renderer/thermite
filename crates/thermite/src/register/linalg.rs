@@ -148,7 +148,7 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + Swiz
     ///
     /// Each register holds one column (first 3 lanes). On 4-lane registers the
     /// 4th lane of every output row is **unspecified** - only the first three
-    /// lanes are meaningful. Use [`LinAlg3Vector::zero4`] if you need it cleared.
+    /// lanes are meaningful. Use [`LinAlg3Vector::zero4`](crate::vector::LinAlg3Vector::zero4) if you need it cleared.
     #[inline(always)]
     fn mat3_transpose(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
         if const { Self::Lanes::USIZE == 4 } {
@@ -711,7 +711,7 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// Column-major 4x4 * vec3 evaluated through the double-width register.
     ///
     /// A vec3 only uses the first three columns, so this is the 3-term sibling of
-    /// [`mat4_vec4_product_wide`]: it packs `[c0 | c1]` and `[c2 | 0]` (the third
+    /// [`mat4_vec4_product_wide`](Self::mat4_vec4_product_wide): it packs `[c0 | c1]` and `[c2 | 0]` (the third
     /// column zero-extended), collapsing the column-scales into one wide multiply
     /// plus one wide FMA, then sums the halves. Assumes **column-major**. Requires a
     /// true wide register.

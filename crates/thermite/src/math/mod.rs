@@ -519,7 +519,7 @@ decl_math! {
         /// - `$k \approx 2/\sqrt{3}$` (~1.1547): the function becomes bimodal - use with caution above this value.
         fn smooth_interpolator[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
-        /// Inverse of [`smooth_interpolator`](SpatialMath::smooth_interpolator).
+        /// Inverse of [`smooth_interpolator`](crate::math::RealMath::smooth_interpolator).
         ///
         /// Given an output value `y` in `[0, 1]`, recovers the input `x` such that
         /// `smooth_interpolator(x, edges, k) ≈ y`.

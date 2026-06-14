@@ -17,7 +17,7 @@ use crate::vector::{
 ///
 /// - **Aligned**: the slice must be exactly aligned to the vector's alignment with no
 ///   leading or trailing scalar remainder. Panics if alignment does not hold. Use this
-///   when you control the allocation (e.g., via [`NativeSimd`]-aligned containers).
+///   when you control the allocation (e.g., via [`NativeSimd`](crate::simd::NativeSimd)-aligned containers).
 ///
 /// - **Streaming**: like aligned, but yields [`StreamingVector`]/[`StreamingVectorMut`]
 ///   wrappers that expose non-temporal (NT) load/store instructions. Suitable for large

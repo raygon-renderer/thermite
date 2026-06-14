@@ -11,7 +11,7 @@ use super::GenericVector;
 
 /// A view over a slice of elements that allows unaligned vector loads.
 ///
-/// This can be constructed via [`Vector::from_slice_unaligned`].
+/// This can be constructed via [`GenericVector::iter_unaligned`].
 #[repr(transparent)]
 pub struct Unaligned<'a, V: GenericVector>(pub(crate) &'a [V::Element]);
 
@@ -64,7 +64,7 @@ impl<'a, V: GenericVector> Unaligned<'a, V> {
 
 /// A mutable view over a slice of elements that allows unaligned vector loads and stores.
 ///
-/// This can be constructed via [`Vector::from_slice_unaligned_mut`].
+/// This can be constructed via [`GenericVector::iter_mut_unaligned`].
 #[repr(transparent)]
 pub struct UnalignedMut<'a, V: GenericVector>(pub(crate) &'a mut [V::Element]);
 

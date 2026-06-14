@@ -2129,7 +2129,7 @@ macro_rules! impl_swizzle3 {
     }};
 
     ($( $(#[$meta:meta])* [$a:ident $b:ident $c:ident]),*) => {
-        /// Only available for "3-lane" (ignoring 4th lane) [`LinAlg3Register`] vectors,
+        /// Only available for "3-lane" (ignoring 4th lane) [`LinAlg3Register`](crate::register::LinAlg3Register) vectors,
         /// this allows human-readable swizzle/permutations of the vector. Permutations
         /// will ignore the 4th lane of the register, leaving it unchanged.
         pub trait Swizzle3: SwizzleVector<Lanes = typenum::U3> { $(impl_swizzle3!(DECL $(#[$meta])* $a $b $c);)* }

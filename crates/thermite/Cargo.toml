@@ -16,8 +16,8 @@ categories = ["no-std", "mathematics", "hardware-support"]
 workspace = true
 
 [package.metadata.docs.rs]
-features = ["const-default", "document_registers", "std"]
-rustdoc-args = ["--cfg", "docsrs"]
+features = ["document_registers", "std"]
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
 default = ["document_registers", "bitvec"]

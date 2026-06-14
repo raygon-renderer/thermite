@@ -22,7 +22,7 @@
 //! `Compensated` vector's "element" is itself a `Compensated` value, so
 //! implementing the specialized traits for that element gives every
 //! `Compensated` vector full transcendental support with no changes to generic
-//! callers. The same pattern is intended for [`Complex`] and dual/hyperdual
+//! callers. The same pattern is intended for `Complex` (in `thermite-complex`) and dual/hyperdual
 //! numbers as those land - implement the specialized math for the new element
 //! type and the entire public math API lights up for it automatically.
 //!

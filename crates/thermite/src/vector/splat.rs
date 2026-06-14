@@ -54,6 +54,24 @@ macro_rules! const_splat {
         >() }
     }};
 
+    // Compile-time integer constant cast to a generic float element E.
+    // N must be a const expression of type i64.
+    // Requires E: FloatElement (provides E::ConstInt<N> implementing SplatConst<E>).
+    //
+    // NOTE: this arm and the `ratio` arm below must come before the generic
+    // `($ty:ty: $value:expr)` arm — `int <E>` is syntactically a valid type
+    // (`int<E>`), so the `$ty:ty` matcher would otherwise swallow it.
+    (int <$E:ty>: $n:expr) => {
+        const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::ConstInt<{$n}>>() }
+    };
+
+    // Compile-time rational constant N/D cast to a generic float element E.
+    // N and D must be const expressions of type i64.
+    // Requires E: FloatElement (provides E::ConstRatio<N, D> implementing SplatConst<E>).
+    (ratio <$E:ty>: $n:expr, $d:expr) => {
+        const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::ConstRatio<{$n}, {$d}>>() }
+    };
+
     // Static type, direct value
     ($ty:ty: $value:expr) => {{
         struct __ConstSplatValue;
@@ -71,20 +89,6 @@ macro_rules! const_splat {
         }
         const { $crate::vector::const_splat::<_, __ConstSplatValue>() }
     }};
-
-    // Compile-time integer constant cast to a generic float element E.
-    // N must be a const expression of type i64.
-    // Requires E: FloatElement (provides E::IntSplat<N> implementing SplatConst<E>).
-    (int <$E:ty>: $n:expr) => {
-        const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::IntSplat<{$n}>>() }
-    };
-
-    // Compile-time rational constant N/D cast to a generic float element E.
-    // N and D must be const expressions of type i64.
-    // Requires E: FloatElement (provides E::RatioSplat<N, D> implementing SplatConst<E>).
-    (ratio <$E:ty>: $n:expr, $d:expr) => {
-        const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::RatioSplat<{$n}, {$d}>>() }
-    };
 }
 
 /// Type-level addition of two [`ArrayLength`] typenums.

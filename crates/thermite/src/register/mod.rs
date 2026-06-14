@@ -174,7 +174,7 @@ pub trait Lanes:
 {
     /// For a register of `Self` lanes, this is the number of `u32` words needed to hold a bitmask.
     ///
-    /// Used in [`Mask::bitmask()`](crate::Mask::bitmask).
+    /// Used in [`GenericMask::bitmask()`](crate::mask::GenericMask::bitmask).
     type BitmaskLength: ArrayLength;
 
     #[cfg(feature = "bitvec")]

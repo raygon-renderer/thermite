@@ -1,14 +1,12 @@
-#![allow(unused)]
-
 extern crate proc_macro;
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 
 use syn::{
-    Attribute, ConstParam, Expr, ExprCall, ExprPath, FnArg, GenericArgument, GenericParam, Ident, ImplItem, ImplItemFn,
-    Item, ItemFn, ItemImpl, ItemMod, ItemTrait, Lifetime, LifetimeParam, Pat, Path, PathArguments, PathSegment, QSelf,
-    ReturnType, Signature, Token, TraitItem, Type, TypeParamBound, WhereClause, WherePredicate,
+    Attribute, Expr, ExprCall, ExprPath, FnArg, GenericParam, Ident, ImplItem, Item, ItemFn, ItemImpl, ItemMod,
+    ItemTrait, Pat, Path, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem, Type, TypeParamBound,
+    WhereClause, WherePredicate,
     parse::{Parse, ParseStream, Parser as _},
     punctuated::Punctuated,
     visit_mut::VisitMut,
@@ -254,7 +252,6 @@ impl VisitMut for TypeVisitor {
 struct SelfTraitVisitor {
     depth: u32,
     method: Ident,
-    self_ty: Box<Type>,
     trait_: Path,
     qself: QSelf,
 }
@@ -263,7 +260,7 @@ impl SelfTraitVisitor {
     fn new(trait_: Path, self_ty: Box<Type>, method: Ident) -> SelfTraitVisitor {
         let qself = QSelf {
             lt_token: Default::default(),
-            ty: self_ty.clone(),
+            ty: self_ty,
             position: trait_.segments.len(),
             as_token: Some(Default::default()),
             gt_token: Default::default(),
@@ -272,7 +269,6 @@ impl SelfTraitVisitor {
         SelfTraitVisitor {
             depth: 0,
             method,
-            self_ty,
             trait_,
             qself,
         }
@@ -1043,8 +1039,8 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 /// # The dispatch boundary hides the chosen backend
 ///
 /// The whole point of `dispatch_dyn!` is to pick the best available ISA at runtime and
-/// run the body under it, so the **outside world cannot know which backend was chosen**
-/// - and therefore cannot mention its SIMD types. Concrete vector types like
+/// run the body under it, so the **outside world cannot know which backend was chosen**,
+/// and therefore cannot mention its SIMD types. Concrete vector types like
 /// `Vector<<S as Simd>::f32x4>`, `f32xN`, etc. depend on the generic `S`, which only
 /// exists *inside* the body. The per-backend `#[target_feature]` trampolines and the
 /// outer `match` arm aren't generic over `S`; if a vector type appeared in the

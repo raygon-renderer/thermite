@@ -9,13 +9,13 @@ pub mod ph;
 /// Marker type for a compile-time integer constant cast to a float element type.
 ///
 /// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
-/// [`const_splat!`](crate::const_splat) and [`FloatElement::IntSplat`].
+/// [`const_splat!`](crate::const_splat) and [`FloatElement::ConstInt`].
 pub struct IntConst<const N: crate::LargeInt>;
 
 /// Marker type for a compile-time rational constant (N/D) cast to a float element type.
 ///
 /// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
-/// [`const_splat!`](crate::const_splat) and [`FloatElement::RatioSplat`].
+/// [`const_splat!`](crate::const_splat) and [`FloatElement::ConstRatio`].
 pub struct RatioConst<const N: crate::LargeInt, const D: crate::LargeInt>;
 
 impl<const N: crate::LargeInt> SplatConst<f32> for IntConst<N> {

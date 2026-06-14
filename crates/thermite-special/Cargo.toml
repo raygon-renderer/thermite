@@ -10,6 +10,10 @@ authors.workspace = true
 description = "Extended special functions for the Thermite SIMD library"
 publish = false                                                          # not ready for release yet
 
+[package.metadata.docs.rs]
+features = ["document_registers", "std"]
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
+
 [lints]
 workspace = true
 
