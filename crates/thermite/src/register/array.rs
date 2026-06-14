@@ -461,33 +461,6 @@ where
         value
     }
 
-    fn reverse_c(mask: Storage<Self::Mask>, mut value: Storage<Self>) -> Storage<Self> {
-        value.0.reverse();
-        for (r, mask_reg) in value.0.iter_mut().zip(mask.0.iter()) {
-            *r = R::reverse_c(*mask_reg, *r);
-        }
-
-        value
-    }
-
-    fn reverse_m(src: Storage<Self>, mask: Storage<Self::Mask>, mut value: Storage<Self>) -> Storage<Self> {
-        value.0.reverse();
-        for (r, mask_reg) in value.0.iter_mut().zip(mask.0.iter()) {
-            *r = R::reverse_m(src.0[0], *mask_reg, *r);
-        }
-
-        value
-    }
-
-    fn reverse_z(mask: Storage<Self::Mask>, mut value: Storage<Self>) -> Storage<Self> {
-        value.0.reverse();
-        for (r, mask_reg) in value.0.iter_mut().zip(mask.0.iter()) {
-            *r = R::reverse_z(*mask_reg, *r);
-        }
-
-        value
-    }
-
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self> {}
 }
 

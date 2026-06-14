@@ -21,7 +21,7 @@ pub unsafe fn _mm_srlv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 
     shifted_high = _mm_unpackhi_epi64(shifted_high, shifted_high); // move result to higher 64 bits
 
-    _mm_unpacklo_epi64(shifted_high, shifted_low) // combine results
+    _mm_unpacklo_epi64(shifted_low, shifted_high) // combine results (lane0 from low-shift, lane1 from high-shift)
 }
 
 #[target_feature(enable = "sse2")] // LLVM can probably auto-vectorize this to some degree
@@ -46,7 +46,7 @@ pub unsafe fn _mm_sllv_epi64x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 
     shifted_high = _mm_unpackhi_epi64(shifted_high, shifted_high); // move result to higher 64 bits
 
-    _mm_unpacklo_epi64(shifted_high, shifted_low) // combine results
+    _mm_unpacklo_epi64(shifted_low, shifted_high) // combine results (lane0 from low-shift, lane1 from high-shift)
 }
 
 #[target_feature(enable = "sse2")]
