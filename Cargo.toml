@@ -40,9 +40,5 @@ strip = true
 panic = "abort"
 
 [workspace.dependencies]
-# Local rust-gpu checkout. The `version` is the crates.io release that matches the
-# pinned checkout (0.9.0); it is required (not `*`) because `thermite` re-exports
-# `spirv-std-macros` under its `spirv` target deps, and crates.io rejects wildcard
-# version requirements on published crates.
-spirv-builder = { path = "F:/bin/rust-gpu/crates/spirv-builder", version = "0.9.0" }
-spirv-std-macros = { path = "F:/bin/rust-gpu/crates/spirv-std/macros", version = "0.9.0" }
+spirv-builder = { version = "0.9.0" }
+spirv-std-macros = { version = "0.9.0" }
