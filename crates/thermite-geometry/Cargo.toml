@@ -11,4 +11,4 @@ description = "SIMD geometry primitives built on Thermite"
 publish = false                                            # not ready for release yet
 
 [dependencies]
-thermite = { path = "../thermite", version = "0.2.0-beta.0" }
+thermite = { workspace = true }

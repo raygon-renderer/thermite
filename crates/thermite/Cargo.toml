@@ -70,12 +70,12 @@ spirv = ["nightly"] # Uses SPIR-V backend, only available on nightly
 
 # Nightly features
 nightly = []
-std_simd = ["nightly", "std"]
+# std_simd = ["nightly", "std"] # WIP
 
 [dependencies]
 cfg-if = { version = "1", default-features = false }
 crunchy = "0.2"
-thermite-macros = { path = "../thermite-macros", version = "0.2.0-beta.0" }
+thermite-macros = { workspace = true }
 fast_polynomial = { version = "0.4", default-features = false }
 generic-array = { version = "1.4.0" }
 bitvec = { version = "1.0.1", default-features = false, optional = true }
@@ -86,35 +86,27 @@ num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
 libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 rand = { version = "0.10", optional = true, default-features = false }
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", default-features = false }
+thermite-dispatch = { workspace = true }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 core_detect = "1"
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", features = ["x86"] }
+thermite-dispatch = { workspace = true, features = ["x86"] }
 
 [target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", features = ["neon"] }
+thermite-dispatch = { workspace = true, features = ["neon"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", features = ["wasm"] }
+thermite-dispatch = { workspace = true, features = ["wasm"] }
 
 [target.'cfg(target_arch = "wasm64")'.dependencies]
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", features = ["wasm"] }
+thermite-dispatch = { workspace = true, features = ["wasm"] }
 
 [target.'cfg(target_arch = "spirv")'.dependencies]
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", features = ["spirv"] }
+thermite-dispatch = { workspace = true, features = ["spirv"] }
 spirv-std-macros.workspace = true
 
 [dev-dependencies]
-glam = "0.32"
+glam = "0.33"
 rand = "0.10"
 num-traits = { version = "0.2.19", default-features = true }
 criterion = { version = "0.8", features = ["html_reports"] }
-
-# [[bench]]
-# name = "nm"
-# harness = false
-
-[[bench]]
-name = "linalg"
-harness = false

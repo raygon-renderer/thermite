@@ -30,8 +30,8 @@ preserve_denormals = ["thermite/preserve_denormals"]
 
 [dependencies]
 paste = "1"
-thermite = { path = "../thermite", default-features = false }
-thermite-special = { path = "../thermite-special", default-features = false }
+thermite = { workspace = true }
+thermite-special = { workspace = true }
 libc = { version = "0.2", default-features = false }
 
 [build-dependencies]

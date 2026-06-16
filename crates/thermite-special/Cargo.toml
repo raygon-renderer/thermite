@@ -23,8 +23,8 @@ disable_dispatch = ["thermite/disable_dispatch"] # Disable dispatch in thermite 
 [dependencies]
 cfg-if = "1"
 crunchy = "0.2"
-thermite = { path = "../thermite", version = "0.2.0-beta.0", default-features = false }
-thermite-dispatch = { path = "../dispatch", version = "0.2.0-beta.0", default-features = false }
+thermite = { workspace = true }
+thermite-dispatch = { workspace = true }
 paste = "1"
 
 [dev-dependencies]

@@ -12,7 +12,7 @@ publish = false                                                             # no
 
 [dependencies]
 paste = "1"
-thermite = { path = "../thermite", version = "0.2.0-beta.0" }
+thermite = { workspace = true }
 fast_polynomial = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 const-default = { version = "1.0.0", default-features = false }
