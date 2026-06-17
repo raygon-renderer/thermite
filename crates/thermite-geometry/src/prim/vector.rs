@@ -1,4 +1,4 @@
-use core::ops::{Add, Index, IndexMut, Mul, Sub};
+use core::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
 use thermite::{
     mask::GenericSelectable,
@@ -63,17 +63,85 @@ impl<V: FloatVector, const N: usize> Vector<V, N> {
 
         self
     }
+
+    /// Component-wise absolute value.
+    #[inline(always)]
+    pub fn abs(mut self) -> Self {
+        for i in 0..N {
+            self.0[i] = self.0[i].abs();
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+
+    /// Component-wise sign (`+1`/`-1`, matching `FloatVector::signum`).
+    #[inline(always)]
+    pub fn signum(mut self) -> Self {
+        for i in 0..N {
+            self.0[i] = self.0[i].signum();
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+
+    // TODO: Use the MulAddExt trait maybe?
+
+    /// Fused `self * scalar + acc`, component-wise. Uses FMA where the hardware
+    /// supports it, otherwise a separate multiply and add.
+    #[inline(always)]
+    pub fn mul_adde(mut self, scalar: V, acc: Self) -> Self {
+        for i in 0..N {
+            self.0[i] = self.0[i].mul_adde(scalar, acc.0[i]);
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+
+    /// Fused `acc - self * scalar`, component-wise. Uses FMA where the hardware
+    /// supports it, otherwise a separate multiply and subtract.
+    #[inline(always)]
+    pub fn nmul_adde(mut self, scalar: V, acc: Self) -> Self {
+        for i in 0..N {
+            self.0[i] = self.0[i].nmul_adde(scalar, acc.0[i]);
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
 }
 
 impl<V: FloatVector> Vector<V, 2> {
     pub const X: Self = Self::basis::<0>();
     pub const Y: Self = Self::basis::<1>();
+
+    /// 2D cross product (perp-dot): `self.x * other.y - self.y * other.x`.
+    #[inline(always)]
+    pub fn cross(self, other: Self) -> V {
+        self.0[0].mul_sube(other.0[1], self.0[1] * other.0[0])
+    }
 }
 
 impl<V: FloatVector> Vector<V, 3> {
     pub const X: Self = Self::basis::<0>();
     pub const Y: Self = Self::basis::<1>();
     pub const Z: Self = Self::basis::<2>();
+
+    /// 3D cross product `self x other`.
+    #[inline(always)]
+    pub fn cross(self, other: Self) -> Self {
+        Vector([
+            self.0[1].mul_sube(other.0[2], self.0[2] * other.0[1]),
+            self.0[2].mul_sube(other.0[0], self.0[0] * other.0[2]),
+            self.0[0].mul_sube(other.0[1], self.0[1] * other.0[0]),
+        ])
+    }
 }
 
 impl<V: FloatVector> Vector<V, 4> {
@@ -135,6 +203,36 @@ impl<V: FloatVector, const N: usize> Mul<V> for Vector<V, N> {
     fn mul(mut self, rhs: V) -> Self::Output {
         for i in 0..N {
             self.0[i] *= rhs;
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+}
+
+impl<V: FloatVector, const N: usize> Div<Self> for Vector<V, N> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(mut self, rhs: Self) -> Self::Output {
+        for i in 0..N {
+            self.0[i] /= rhs.0[i];
+
+            unsafe { self.0[i].block_autovectorization() };
+        }
+
+        self
+    }
+}
+
+impl<V: FloatVector, const N: usize> Div<V> for Vector<V, N> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(mut self, rhs: V) -> Self::Output {
+        for i in 0..N {
+            self.0[i] /= rhs;
 
             unsafe { self.0[i].block_autovectorization() };
         }

@@ -19,6 +19,39 @@ impl<V: FloatVector, const N: usize> Bounds<V, N> {
         Self([[max, min]; N])
     }
 
+    /// Bounds from explicit minimum and maximum corners.
+    #[inline(always)]
+    pub fn from_corners(min: Vector<V, N>, max: Vector<V, N>) -> Self {
+        Bounds(core::array::from_fn(|i| [min[i], max[i]]))
+    }
+
+    /// Bounds symmetric about the origin with the given (positive) half-extents,
+    /// i.e. `[-half_extent, half_extent]` per axis.
+    #[inline(always)]
+    pub fn symmetric(half_extent: Vector<V, N>) -> Self {
+        Bounds(core::array::from_fn(|i| [-half_extent[i], half_extent[i]]))
+    }
+
+    /// Grow the bounds outward by `amount` on every side.
+    #[inline(always)]
+    pub fn expand(mut self, amount: V) -> Self {
+        for i in 0..N {
+            self.0[i][0] -= amount;
+            self.0[i][1] += amount;
+        }
+        self
+    }
+
+    /// Intersection of two bounds (may be empty/inverted if they are disjoint).
+    #[inline(always)]
+    pub fn intersection(mut self, other: Self) -> Self {
+        for i in 0..N {
+            self.0[i][0] = self.0[i][0].max(other.0[i][0]);
+            self.0[i][1] = self.0[i][1].min(other.0[i][1]);
+        }
+        self
+    }
+
     /// Returns one of the vertices of the bounds, specified by the given index,
     /// where the index can be between 0 and 2^N - 1. Index 0 is the minimum corner,
     /// and index 2^N - 1 is the maximum corner, though if you need those specifically,
