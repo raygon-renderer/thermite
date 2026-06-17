@@ -9,6 +9,9 @@ homepage.workspace = true
 authors.workspace = true
 publish = false
 
+[features]
+std = ["thermite/std"]
+
 [dependencies]
 thermite = { workspace = true }
 thermite-geometry = { workspace = true }

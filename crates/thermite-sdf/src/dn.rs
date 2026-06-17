@@ -219,7 +219,7 @@ impl<V: SdfVector, const N: usize> SDF<V, N> for NEllipsoid<V, N> {
         let k0 = p1.dot(&p1).sqrt();
         let p2 = p1 / self.r;
         let dd = p2.dot(&p2);
-        let k1 = dd.cmp_gt(V::ZERO).select(V::ONE / dd.sqrt(), V::ZERO); // guard origin
+        let k1 = dd.cmp_gt(V::ZERO).select(dd.inverse_sqrt(), V::ZERO); // guard origin
         k0.mul_sube(k0, k0) * k1
     }
 }
@@ -231,7 +231,7 @@ impl<V: SdfVector, const N: usize> GradientSdf<V, N> for NEllipsoid<V, N> {
         let k0 = p1.dot(&p1).sqrt();
         let p2 = p1 / self.r;
         let dd = p2.dot(&p2);
-        let k1 = dd.cmp_gt(V::ZERO).select(V::ONE / dd.sqrt(), V::ZERO); // guard origin
+        let k1 = dd.cmp_gt(V::ZERO).select(dd.inverse_sqrt(), V::ZERO); // guard origin
         (k0.mul_sube(k0, k0) * k1, p2 * k1)
     }
 }

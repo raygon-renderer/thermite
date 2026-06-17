@@ -12,7 +12,7 @@ use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
 
 use thermite_geometry::algo::d2::point_on_ellipse;
-use thermite_geometry::prim::{Bounds, Point2, Vector2, vector::VectorOps as _};
+use thermite_geometry::prim::{Bounds, Point2, Vector, Vector2, vector::VectorOps as _};
 
 use crate::consts::{cint, frac};
 use crate::{BoundedSdf, GradientSdf, SDF, SdfConsts, SdfVector, unit_or_zero};
@@ -2319,6 +2319,88 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for QuadraticBezier
             res = needs_trig.select(bez(tx).min(bez(ty)), res);
         }
         res.sqrt()
+    }
+}
+
+/// `clamp(num / den, 0, 1)`, returning `0` (not `NaN`) on the `0/0` lane.
+///
+/// Bezier extrema are roots of the derivative, found by dividing by a leading
+/// coefficient that vanishes for degenerate (collinear) control polygons. A
+/// vanishing denominator means the extremum is at infinity, outside `[0, 1]`,
+/// so the endpoints already bound that axis; mapping it to `t = 0` keeps the
+/// result finite without changing the box.
+#[inline(always)]
+fn bezier_root<V: SdfVector>(num: V, den: V) -> V {
+    let zero = den.cmp_eq(V::ZERO);
+    zero.select(V::ZERO, num / zero.select(V::ONE, den)).clamp(V::ZERO, V::ONE)
+}
+
+/// Exact axis-aligned bounding box of a quadratic Bezier segment with control
+/// points `p0`, `p1`, `p2` (`<https://iquilezles.org/articles/bezierbbox>`).
+///
+/// The box always contains `p0` and `p2`; the interior extremum on each axis is
+/// the derivative root `$t = -b/a$` with `$a = p_0 - 2p_1 + p_2$`,
+/// `$b = p_1 - p_0$`, clamped to `[0, 1]`. Dimension-generic, so the same code
+/// gives the 2D and 3D boxes.
+#[inline(always)]
+pub fn quadratic_bezier_aabb<V: SdfVector, const N: usize>(
+    p0: Vector<V, N>,
+    p1: Vector<V, N>,
+    p2: Vector<V, N>,
+) -> Bounds<V, N> {
+    let a = p0 - p1 * V::TWO + p2;
+    let b = p1 - p0;
+    let mut q = p0;
+    for i in 0..N {
+        let t = bezier_root(-b[i], a[i]);
+        // q_i = p0_i + t*(2 b_i + t a_i)
+        q[i] = a[i].mul_adde(t, V::TWO * b[i]).mul_adde(t, p0[i]);
+    }
+    Bounds::from_corners(p0.min(p2).min(q), p0.max(p2).max(q))
+}
+
+/// Exact axis-aligned bounding box of a cubic Bezier segment with control
+/// points `p0`..`p3` (`<https://iquilezles.org/articles/bezierbbox>`).
+///
+/// The derivative is a quadratic `$a t^2 + 2 b t + c$` with
+/// `$a = -p_0 + 3p_1 - 3p_2 + p_3$`, `$b = p_0 - 2p_1 + p_2$`,
+/// `$c = -p_0 + p_1$`; its two clamped roots, plus the endpoints `p0`/`p3`,
+/// bound each axis. Dimension-generic.
+#[inline(always)]
+pub fn cubic_bezier_aabb<V: SdfVector, const N: usize>(
+    p0: Vector<V, N>,
+    p1: Vector<V, N>,
+    p2: Vector<V, N>,
+    p3: Vector<V, N>,
+) -> Bounds<V, N> {
+    let c = p1 - p0;
+    let b = p0 - p1 * V::TWO + p2;
+    let a = (p1 - p2) * (V::ONE + V::TWO) + (p3 - p0);
+    let mut lo = p0.min(p3);
+    let mut hi = p0.max(p3);
+    for i in 0..N {
+        let g = b[i].mul_sube(b[i], a[i] * c[i]).max(V::ZERO).sqrt(); // sqrt(max(b^2 - a c, 0))
+        for t in [bezier_root(-b[i] - g, a[i]), bezier_root(-b[i] + g, a[i])] {
+            // cubic at t: p0 + t*(3c + t*(3b + t*a))
+            let three = V::ONE + V::TWO;
+            let q = a[i]
+                .mul_adde(t, three * b[i])
+                .mul_adde(t, three * c[i])
+                .mul_adde(t, p0[i]);
+            lo[i] = lo[i].min(q);
+            hi[i] = hi[i].max(q);
+        }
+    }
+    Bounds::from_corners(lo, hi)
+}
+
+impl<V: SdfVector, P: Policy> BoundedSdf<V, 2> for QuadraticBezier2D<V, P>
+where
+    Self: SDF<V, 2>,
+{
+    #[inline(always)]
+    fn aabb(&self) -> Bounds<V, 2> {
+        quadratic_bezier_aabb(self.p0, self.p1, self.p2)
     }
 }
 

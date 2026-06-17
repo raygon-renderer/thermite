@@ -12,7 +12,7 @@
 //! [`FiniteDiff`] can be used to efficiently compute gradients/normals on SDFs that do
 //! not have native analytic `GradientSdf` implementations.
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use thermite::mask::GenericMask as _;
 
@@ -37,12 +37,14 @@ pub mod consts;
 pub mod d2;
 pub mod d3;
 pub mod dn;
+pub mod fbm;
 pub mod ops;
 
 pub use consts::SdfConsts;
 pub use d2::*;
 pub use d3::*;
 pub use dn::*;
+pub use fbm::*;
 pub use ops::*;
 
 pub use ops::FiniteDiff;
@@ -320,6 +322,38 @@ mod tests {
         agree!(Heart2D);
         agree!(Ellipse2D { ab: p(1.5, 0.8) });
         agree!(Parabola2D::<V>::new(v(1.0)));
+    }
+
+    #[test]
+    fn implicit_distance_estimate() {
+        // A non-metric field whose zero-set is the unit circle: f(p) = |p|^2 - 1
+        // has gradient 2|p|, so its raw value badly overestimates distance. The
+        // estimator |f|/|grad f| should recover ~ the true circle distance |p|-1.
+        let field = Field(|q: Vector2<V>| q[0] * q[0] + q[1] * q[1] - v(1.0));
+        let de = DistanceEstimate::with_eps(field, v(1e-3));
+        // The Taylor estimate is only valid near the surface (|truth| small), so
+        // sample a ring just inside/outside the unit circle.
+        for (x, y) in [(1.1f32, 0.0f32), (0.0, 1.2), (0.85, 0.0), (0.0, 0.8), (0.92, 0.39)] {
+            let r = (x * x + y * y).sqrt();
+            let truth = r - 1.0; // exact signed distance to the unit circle
+            let est = s(de.eval(p(x, y)));
+            assert!((est - truth).abs() < 0.04, "at ({x},{y}): est {est} vs {truth}");
+            assert_eq!(est < 0.0, truth < 0.0, "sign preserved at ({x},{y})");
+        }
+
+        // A constant rescale of a true SDF must leave distances ~unchanged
+        // (gradient scales with the field, the ratio cancels).
+        let scaled = Field(|q: Vector2<V>| ((q[0] * q[0] + q[1] * q[1]).sqrt() - v(1.0)) * v(7.0));
+        let de2 = DistanceEstimate::with_eps(scaled, v(1e-3));
+        for (x, y) in [(3.0f32, 0.0f32), (0.0, 2.0)] {
+            let truth = (x * x + y * y).sqrt() - 1.0;
+            assert!((s(de2.eval(p(x, y))) - truth).abs() < 2e-2);
+        }
+
+        // gradient is unit length away from the center
+        let (_, g) = de.eval_grad(p(2.0, 0.0));
+        let len = (s(g[0]) * s(g[0]) + s(g[1]) * s(g[1])).sqrt();
+        assert!((len - 1.0).abs() < 1e-2, "grad len {len}");
     }
 
     #[test]
@@ -1055,6 +1089,53 @@ mod tests {
     }
 
     #[test]
+    fn bezier_bounding_boxes() {
+        // p1 well above the p0/p2 chord: the box must rise above both endpoints
+        // (to the curve apex y = 0.75) but not all the way to p1 at y = 1.5.
+        let bez = QuadraticBezier2D::<V>::new(p(-1.0, 0.0), p(0.0, 1.5), p(1.0, 0.0));
+        let bb = bez.aabb();
+        let (ymin, ymax) = (s(bb.0[1][0]), s(bb.0[1][1]));
+        assert!((ymin - 0.0).abs() < 1e-5, "ymin {ymin}");
+        assert!((ymax - 0.75).abs() < 1e-4, "ymax {ymax} (apex, not the control point)");
+        // x extent is just the endpoints
+        assert!((s(bb.0[0][0]) + 1.0).abs() < 1e-5 && (s(bb.0[0][1]) - 1.0).abs() < 1e-5);
+
+        // every sampled curve point lies inside the (closed) box
+        let inside = |bb: &thermite_geometry::prim::Bounds<V, 2>, q: Vector2<V>| {
+            s(q[0]) >= s(bb.0[0][0]) - 1e-5
+                && s(q[0]) <= s(bb.0[0][1]) + 1e-5
+                && s(q[1]) >= s(bb.0[1][0]) - 1e-5
+                && s(q[1]) <= s(bb.0[1][1]) + 1e-5
+        };
+        for i in 0..=40 {
+            let t = i as f32 / 40.0;
+            let (om, q0, q1, q2) = (1.0 - t, p(-1.0, 0.0), p(0.0, 1.5), p(1.0, 0.0));
+            let bq = q0 * v(om * om) + q1 * v(2.0 * om * t) + q2 * v(t * t);
+            assert!(inside(&bb, bq), "quadratic B({t}) escaped its bbox");
+        }
+
+        // cubic: an S-curve. Sample B(t) and confirm containment + that the box
+        // is tighter than the control-point hull on at least one axis.
+        let (c0, c1, c2, c3) = (p(0.0, 0.0), p(0.0, 2.0), p(1.0, -1.0), p(1.0, 1.0));
+        let cb = cubic_bezier_aabb(c0, c1, c2, c3);
+        for i in 0..=60 {
+            let t = i as f32 / 60.0;
+            let om = 1.0 - t;
+            let bq = c0 * v(om * om * om) + c1 * v(3.0 * om * om * t) + c2 * v(3.0 * om * t * t) + c3 * v(t * t * t);
+            assert!(inside(&cb, bq), "cubic B({t}) escaped its bbox");
+        }
+        // hull y-range is [-1, 2]; the actual curve never reaches those, so the
+        // exact box is strictly inside the control hull vertically.
+        assert!(s(cb.0[1][0]) > -1.0 + 1e-3 && s(cb.0[1][1]) < 2.0 - 1e-3);
+
+        // 3D-generic path: a planar quadratic in xy with z fixed gives a flat box.
+        use thermite_geometry::prim::Vector as NV;
+        let q3 = |x, y, z| NV::<V, 3>::new([v(x), v(y), v(z)]);
+        let bb3 = quadratic_bezier_aabb(q3(-1.0, 0.0, 0.5), q3(0.0, 1.5, 0.5), q3(1.0, 0.0, 0.5));
+        assert!((s(bb3.0[2][0]) - 0.5).abs() < 1e-6 && (s(bb3.0[2][1]) - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
     fn batch2b_trig() {
         use thermite::math::policy::DefaultPolicy;
         let star = Star2D::<V>::from_params(v(1.0), 5, v(3.0));
@@ -1347,6 +1428,73 @@ mod tests {
     }
 
     #[test]
+    fn repetition_variants() {
+        // An off-centre disk (centre at +0.3 x within its tile) is asymmetric
+        // about the tile boundary, so naive single-tile repetition overestimates
+        // distance near the seams. The corrected scan must never report a larger
+        // distance than the naive version, and must match a brute-force min over
+        // a 5x5 block of explicit copies.
+        let off = |q: Vector2<V>| {
+            // disk r=0.25 centred at (0.3, 0)
+            let d = Vector2::new([q[0] - v(0.3), q[1]]);
+            (d[0] * d[0] + d[1] * d[1]).sqrt() - v(0.25)
+        };
+        let spacing = p(1.0, 1.0);
+        let naive = Repetition {
+            shape: Field(off),
+            spacing,
+        };
+        let correct = CorrectRepetition {
+            shape: Field(off),
+            spacing,
+        };
+        // brute force: min distance to all copies in a wide block
+        let brute = |q: Vector2<V>| {
+            let mut best = f32::INFINITY;
+            for iy in -3..=3 {
+                for ix in -3..=3 {
+                    let qq = p(s(q[0]) - ix as f32, s(q[1]) - iy as f32);
+                    best = best.min(s(off(qq)));
+                }
+            }
+            best
+        };
+        for (x, y) in [(0.55f32, 0.0f32), (1.4, 0.2), (-0.6, 0.3), (2.45, -0.1), (0.5, 0.5)] {
+            let q = p(x, y);
+            let (dn, dc, db) = (s(naive.eval(q)), s(correct.eval(q)), brute(q));
+            assert!(dc <= dn + 1e-5, "corrected {dc} should not exceed naive {dn}");
+            assert!((dc - db).abs() < 1e-4, "corrected {dc} vs brute {db} at ({x},{y})");
+        }
+
+        // Limited repetition: a 3x1 grid of disks (ids x in {-1,0,1}, y == 0).
+        // Far past the last copy on +x, distance must equal the distance to that
+        // last copy (a real SDF), not keep tiling.
+        let lim = LimitedRepetition::centered(Field(off), spacing, [3, 1]);
+        // last copy centre is at id x=1 -> world x = 1 + 0.3 = 1.3, radius 0.25
+        let far = p(5.0, 0.0);
+        let expected = (5.0 - 1.3) - 0.25; // distance to the rightmost disk
+        assert!((s(lim.eval(far)) - expected).abs() < 1e-4, "limited rep edge distance");
+        // a y far from the single row also stops repeating
+        assert!(s(lim.eval(p(0.3, 4.0))) > 3.0);
+        // inside the grid it still matches an in-range copy
+        assert!(s(lim.eval(p(0.3, 0.0))) < 0.0);
+
+        // Mirrored repetition: even tiles match naive, the analytic gradient
+        // agrees with a finite difference (through the reflection).
+        let circ = Circle2D { radius: v(0.3) };
+        let mir = MirroredRepetition {
+            shape: circ,
+            spacing,
+        };
+        let fd = FiniteDiff::with_eps(mir, v(1e-3));
+        for q in [p(0.2, 0.1), p(1.2, -0.15), p(-0.8, 0.25)] {
+            let (_, ga) = mir.eval_grad(q);
+            let (_, gf) = fd.eval_grad(q);
+            assert!((s(ga[0]) - s(gf[0])).abs() < 3e-2 && (s(ga[1]) - s(gf[1])).abs() < 3e-2);
+        }
+    }
+
+    #[test]
     fn alternate_constructors() {
         // Vesica: from_circle(r,d) == from_size(half_width=r-d, half_height=sqrt(r^2-d^2))
         let va = Vesica2D::from_circle(v(1.2), v(0.5));
@@ -1438,6 +1586,240 @@ mod tests {
             v(0.5),
         );
         assert!(s(bd.eval(p3(0.2, 0.1, 0.05))).is_finite());
+    }
+
+    #[test]
+    fn smooth_kernel_family() {
+        let a = Circle2D { radius: v(1.0) };
+        let b = Circle2D { radius: v(1.0) };
+        let k = v(0.2);
+
+        // Normalization invariant: where the two fields are equal, every kernel
+        // dips exactly k below the hard min. On the y axis between two unit
+        // circles centred at +-1.5 the fields coincide; here we use two identical
+        // circles so da == db everywhere and the dip is exactly -k below d.
+        macro_rules! check_norm {
+            ($kernel:expr) => {{
+                let u = SmoothUnionK { a, b, k, kernel: $kernel };
+                // at p where da==db==d, smin == d - k
+                let q = p(0.5, 0.0);
+                let d = s(a.eval(q)); // == b.eval(q)
+                assert!(
+                    (s(u.eval(q)) - (d - 0.2)).abs() < 1e-4,
+                    "{}: dip != k",
+                    stringify!($kernel)
+                );
+            }};
+        }
+        check_norm!(Quadratic);
+        check_norm!(Cubic);
+        check_norm!(Quartic);
+        check_norm!(Circular);
+        check_norm!(Root);
+
+        // Quadratic kernel must reproduce the original SmoothUnion exactly, in
+        // both value and gradient.
+        let legacy = SmoothUnion { a, b: Box2D { b: p(0.5, 1.0) }, k };
+        let modern = SmoothUnionK {
+            a,
+            b: Box2D { b: p(0.5, 1.0) },
+            k,
+            kernel: Quadratic,
+        };
+        for q in [p(0.6, 0.3), p(1.1, 0.2), p(-0.7, 0.8), p(0.2, 1.2)] {
+            assert!((s(legacy.eval(q)) - s(modern.eval(q))).abs() < 1e-5);
+            let (_, gl) = legacy.eval_grad(q);
+            let (_, gm) = modern.eval_grad(q);
+            assert!((s(gl[0]) - s(gm[0])).abs() < 1e-5 && (s(gl[1]) - s(gm[1])).abs() < 1e-5);
+        }
+
+        // CD kernels are rigid: far outside the blend band they equal the hard
+        // min (no distortion). Root (non-rigid) distorts, so it is excluded.
+        // Concentric circles with a big radius gap: at p=(1,0) the inner field is
+        // +0.8 and the outer is -1.0, so |da-db| = 1.8 exceeds every kernel's
+        // blend band (max k' is cubic's 1.2), putting us strictly outside.
+        let inner = Circle2D { radius: v(0.2) };
+        let outer = Circle2D { radius: v(2.0) };
+        macro_rules! rigid_outside {
+            ($kernel:expr) => {{
+                let u = SmoothUnionK { a: inner, b: outer, k, kernel: $kernel };
+                let q = p(1.0, 0.0);
+                let hard = s(inner.eval(q)).min(s(outer.eval(q)));
+                assert!(
+                    (s(u.eval(q)) - hard).abs() < 1e-5,
+                    "{} not rigid outside band",
+                    stringify!($kernel)
+                );
+            }};
+        }
+        rigid_outside!(Quadratic);
+        rigid_outside!(Cubic);
+        rigid_outside!(Quartic);
+        rigid_outside!(Circular);
+
+        // Analytic gradients of every kernel and every smooth boolean match a
+        // central difference in a smooth (non-kink) region.
+        let bb = Box2D { b: p(0.6, 1.0) };
+        macro_rules! grad_fd {
+            ($shape:expr) => {{
+                let shape = $shape;
+                let fd = FiniteDiff::with_eps(shape, v(1e-3));
+                // points chosen in smooth regions, off the box edges/abs folds.
+                // Smooth-min blend gradients are genuinely sub-unit (|grad| < 1),
+                // while FiniteDiff renormalises to unit length, so we compare
+                // directions: normalise the analytic gradient first.
+                for q in [p(0.35, 0.45), p(0.8, 0.25), p(-0.4, 0.55)] {
+                    let (_, ga) = shape.eval_grad(q);
+                    let (_, gf) = fd.eval_grad(q);
+                    let mag = (s(ga[0]) * s(ga[0]) + s(ga[1]) * s(ga[1])).sqrt();
+                    let (nx, ny) = (s(ga[0]) / mag, s(ga[1]) / mag);
+                    assert!(
+                        (nx - s(gf[0])).abs() < 3e-2 && (ny - s(gf[1])).abs() < 3e-2,
+                        "{} gradient direction mismatch",
+                        stringify!($shape)
+                    );
+                }
+            }};
+        }
+        grad_fd!(SmoothUnionK { a, b: bb, k, kernel: Cubic });
+        grad_fd!(SmoothUnionK { a, b: bb, k, kernel: Circular });
+        grad_fd!(SmoothUnionK { a, b: bb, k, kernel: Root });
+        grad_fd!(SmoothIntersectionK { a, b: bb, k, kernel: Quartic });
+        grad_fd!(SmoothSubtractionK { a, b: bb, k, kernel: Circular });
+
+        // Mix factor: two separated unit disks. Right at one disk's centre the
+        // other is far away (|da-db| >> k), so the blend weight saturates: ~0 of
+        // b near a, ~1 of b near b.
+        let da = |q: Vector2<V>| ((q[0] + v(2.0)) * (q[0] + v(2.0)) + q[1] * q[1]).sqrt() - v(0.5);
+        let db = |q: Vector2<V>| ((q[0] - v(2.0)) * (q[0] - v(2.0)) + q[1] * q[1]).sqrt() - v(0.5);
+        let u = SmoothUnionK {
+            a: Field(da),
+            b: Field(db),
+            k,
+            kernel: Quadratic,
+        };
+        let (_, wb_near_a) = u.blend(p(-2.0, 0.0)); // disk a's centre
+        let (_, wb_near_b) = u.blend(p(2.0, 0.0)); // disk b's centre
+        assert!(s(wb_near_a) < 0.01 && s(wb_near_b) > 0.99, "mix weights at extremes");
+    }
+
+    #[test]
+    fn fbm_detail() {
+        // Terrain on a flat ground plane (host distance == p.y).
+        let host = Plane3D {
+            n: p3(0.0, 1.0, 0.0),
+            h: v(0.0),
+        };
+        let terrain = FbmDetail::<V, _>::new(host);
+
+        let mut perturbed = false;
+        for (x, z) in [(0.3f32, 0.7f32), (1.6, -0.4), (-0.9, 2.1), (3.3, 1.1)] {
+            for y in [-0.5f32, 0.0, 0.5, 1.5] {
+                let d = s(terrain.eval(p3(x, y, z)));
+                assert!(d.is_finite(), "fbm finite at ({x},{y},{z})");
+                // additive detail only ever pulls the surface up (smin lowers the
+                // distance), so it never exceeds the host distance by more than fp
+                // slack, and stays within a bounded crust below it.
+                assert!(d <= y + 1e-3, "additive fbm above host at ({x},{y},{z})");
+                assert!(d >= y - 2.0, "fbm crust unreasonably thick at ({x},{y},{z})");
+                if (d - y).abs() > 1e-3 {
+                    perturbed = true;
+                }
+            }
+        }
+        assert!(perturbed, "fbm added no detail");
+
+        // Subtractive (erosion) only ever carves inward: result >= host.
+        let eroded = FbmDetail::<V, _>::carved(Sphere3D { radius: v(1.5) });
+        for q in [p3(1.5, 0.0, 0.0), p3(0.0, 1.6, 0.3), p3(0.8, 0.8, 0.8)] {
+            let base = s((Sphere3D { radius: v(1.5) }).eval(q));
+            let d = s(eroded.eval(q));
+            assert!(d.is_finite() && d >= base - 1e-3, "subtractive fbm below host");
+        }
+
+        // Determinism.
+        let q = p3(0.42, 0.1, -0.7);
+        assert_eq!(s(terrain.eval(q)), s(terrain.eval(q)));
+
+        // Pluggable hash: the trig-free Hoskins hash is a valid, finite,
+        // detail-adding alternative that produces a *different* field from the
+        // default SinHash (different randomness), while obeying the same bounds.
+        let terrain_h = FbmDetail::<V, _>::new(host).with_hash(HoskinsHash);
+        let mut differs = false;
+        for (x, z) in [(0.3f32, 0.7f32), (1.6, -0.4), (-0.9, 2.1)] {
+            for y in [0.0f32, 0.5] {
+                let dh = s(terrain_h.eval(p3(x, y, z)));
+                assert!(dh.is_finite() && dh <= y + 1e-3, "hoskins fbm finite & additive");
+                if (dh - s(terrain.eval(p3(x, y, z)))).abs() > 1e-4 {
+                    differs = true;
+                }
+            }
+        }
+        assert!(differs, "swapping the hash should change the field");
+
+        // N-dimensional: the same op works in 2D and 4D.
+        // 2D additive crust on a disk host.
+        let disk = FbmDetail::<V, _>::new(Circle2D { radius: v(1.0) });
+        let mut perturbed2 = false;
+        for (x, y) in [(1.0f32, 0.0f32), (0.3, 0.9), (-0.7, 0.6)] {
+            let base = s((Circle2D { radius: v(1.0) }).eval(p(x, y)));
+            let d = s(disk.eval(p(x, y)));
+            assert!(d.is_finite() && d <= base + 1e-3, "2D fbm finite & additive");
+            if (d - base).abs() > 1e-3 {
+                perturbed2 = true;
+            }
+        }
+        assert!(perturbed2, "2D fbm added no detail");
+
+        // Pluggable octave transform: Givens rotation is a valid, finite,
+        // detail-adding alternative that yields a different field from the
+        // default IqRotation.
+        let disk_g = FbmDetail::<V, _>::new(Circle2D { radius: v(1.0) }).with_transform(GivensRotation);
+        let mut differs_t = false;
+        for (x, y) in [(1.0f32, 0.0f32), (0.3, 0.9), (-0.7, 0.6)] {
+            let base = s((Circle2D { radius: v(1.0) }).eval(p(x, y)));
+            let dg = s(disk_g.eval(p(x, y)));
+            assert!(dg.is_finite() && dg <= base + 1e-3, "givens fbm finite & additive");
+            if (dg - s(disk.eval(p(x, y)))).abs() > 1e-4 {
+                differs_t = true;
+            }
+        }
+        assert!(differs_t, "swapping the octave transform should change the field");
+
+        // Pluggable lattice primitive + smooth kernel: both stay finite and
+        // additive, and the sqrt-free BoxCell / a Cubic kernel each change the
+        // field vs. the SphereCell + Quadratic default.
+        let host2 = Circle2D { radius: v(1.0) };
+        let disk_box = FbmDetail::<V, _>::new(host2).with_primitive(BoxCell);
+        let disk_cubic = FbmDetail::<V, _>::new(host2).with_kernel(Cubic);
+        let (mut box_differs, mut kernel_differs) = (false, false);
+        for (x, y) in [(1.0f32, 0.0f32), (0.3, 0.9), (-0.7, 0.6)] {
+            let base = s(host2.eval(p(x, y)));
+            let dref = s(disk.eval(p(x, y)));
+            let db = s(disk_box.eval(p(x, y)));
+            let dc = s(disk_cubic.eval(p(x, y)));
+            assert!(db.is_finite() && db <= base + 1e-3, "box-cell fbm finite & additive");
+            assert!(dc.is_finite() && dc <= base + 1e-3, "cubic-kernel fbm finite & additive");
+            if (db - dref).abs() > 1e-4 {
+                box_differs = true;
+            }
+            if (dc - dref).abs() > 1e-4 {
+                kernel_differs = true;
+            }
+        }
+        assert!(box_differs, "BoxCell should change the field vs SphereCell");
+        assert!(kernel_differs, "Cubic kernel should change the field vs Quadratic");
+
+        // 4D carved detail on a hypersphere host (cost 2^4 = 16 corners/octave).
+        use thermite_geometry::prim::Vector as NV;
+        let p4 = |a, b, c, d| NV::<V, 4>::new([v(a), v(b), v(c), v(d)]);
+        let ball4 = NSphere { radius: v(1.5) };
+        let eroded4 = FbmDetail::<V, _>::carved(ball4).with_hash(HoskinsHash);
+        for q in [p4(1.5, 0.0, 0.0, 0.0), p4(0.6, 0.7, 0.5, 0.3)] {
+            let base = s(ball4.eval(q));
+            let d = s(eroded4.eval(q));
+            assert!(d.is_finite() && d >= base - 1e-3, "4D carved fbm finite & inward");
+        }
     }
 
     #[test]

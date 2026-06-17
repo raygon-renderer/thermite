@@ -15,7 +15,7 @@ use thermite::prelude::*;
 
 use thermite_geometry::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
 
-use crate::consts::{cint, frac};
+use crate::consts::{cint, frac, vint};
 use crate::{BoundedSdf, GradientSdf, SDF, SdfVector, unit_or_zero};
 
 // ---------------------------------------------------------------------------
@@ -366,6 +366,357 @@ impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: BoundedSdf<V, N>> BoundedSdf
 }
 
 // ---------------------------------------------------------------------------
+// Smooth-min kernel family (Quilez "smooth minimum", the DD family)
+// ---------------------------------------------------------------------------
+
+/// A smooth-minimum kernel `$g(x)$` of the "Direct-Difference" family
+/// (`<https://iquilezles.org/articles/smin>`).
+///
+/// All members express the smooth-min through a single kernel `$g$`:
+///
+/// ```math
+/// \operatorname{smin}(a, b) = b - k'\, g(x), \qquad
+/// x = \frac{b - a}{k'}, \qquad k' = \frac{k}{g(0)}.
+/// ```
+///
+/// The normalization `$g(0)$` makes the blend-band thickness equal `k` in
+/// distance units across every kernel (so they are interchangeable). The kernel
+/// behaves like a relaxed `$\max(x, 0)$`: `$g \to x$` as `$x \to +\infty$` and
+/// `$g \to 0$` as `$x \to -\infty$`. Its derivative gives the analytic gradient
+/// as a blend of the operand gradients,
+///
+/// ```math
+/// \nabla\operatorname{smin} = g'(x)\,\nabla a + \bigl(1 - g'(x)\bigr)\,\nabla b,
+/// \qquad g'(x) \in [0, 1],
+/// ```
+/// so `$g'(x)$` doubles as the material-mixing weight toward operand `a`.
+///
+/// The "Clamped-Difference" members (`Quadratic`, `Cubic`, `Quartic`,
+/// `Circular`) satisfy `$g(\pm1)$`/`$g'(\pm1)$` boundary conditions that make the
+/// blend strictly local to the `$|a-b| < k$` band and never overestimate
+/// distance; `Root` is non-rigid (distorts everywhere) but cheap.
+pub trait SmoothKernel: Copy {
+    /// Normalization `$g(0)$`.
+    fn g0<V: SdfVector>() -> V;
+    /// Kernel `$g(x)$`.
+    fn g<V: SdfVector>(x: V) -> V;
+    /// Derivative `$g'(x) \in [0,1]$` (the blend weight toward operand `a`).
+    fn gp<V: SdfVector>(x: V) -> V;
+}
+
+/// `(smin(a, b, k), weight_of_a)` for kernel `K`. `weight_of_a == g'(x)` is the
+/// mix factor used by both the gradient and material blending.
+#[inline(always)]
+fn kernel_smin<K: SmoothKernel, V: SdfVector>(a: V, b: V, k: V) -> (V, V) {
+    let kp = k / K::g0::<V>();
+    let x = (b - a) / kp;
+    let val = (-kp).mul_adde(K::g::<V>(x), b); // b - k'*g(x)
+    (val, K::gp::<V>(x))
+}
+
+/// Scalar smooth-min `smin(a, b, k)` for kernel `K`, value only (skips the mix
+/// weight that [`kernel_smin`] also returns).
+#[inline(always)]
+pub(crate) fn smin_k<K: SmoothKernel, V: SdfVector>(a: V, b: V, k: V) -> V {
+    let kp = k / K::g0::<V>();
+    let x = (b - a) / kp;
+    (-kp).mul_adde(K::g::<V>(x), b) // b - k'*g(x)
+}
+
+/// Scalar smooth-max `smax(a, b, k) = -smin(-a, -b, k)` for kernel `K`.
+#[inline(always)]
+pub(crate) fn smax_k<K: SmoothKernel, V: SdfVector>(a: V, b: V, k: V) -> V {
+    -smin_k::<K, V>(-a, -b, k)
+}
+
+/// Quadratic-polynomial kernel - fast, near-circular, conservative; the default
+/// and most common choice.
+///
+/// ```math
+/// g(x) = \begin{cases}
+///   0 & x \le -1 \\[2pt]
+///   \dfrac{x(2+x)+1}{4} & -1 \le x \le 1 \\[6pt]
+///   x & x \ge 1
+/// \end{cases}, \qquad g(0) = \tfrac14
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Quadratic;
+impl SmoothKernel for Quadratic {
+    #[inline(always)]
+    fn g0<V: SdfVector>() -> V {
+        frac::<V, 1, 4>()
+    }
+    #[inline(always)]
+    fn g<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        let core = xc.mul_adde(xc + V::TWO, V::ONE) * frac::<V, 1, 4>(); // (x(2+x)+1)/4
+        x.cmp_gt(V::ONE).select(x, core)
+    }
+    #[inline(always)]
+    fn gp<V: SdfVector>(x: V) -> V {
+        ((x + V::ONE) * V::HALF).clamp(V::ZERO, V::ONE) // clamp((x+1)/2, 0, 1)
+    }
+}
+
+/// Cubic-polynomial kernel - slightly wider, smoother blend than [`Quadratic`].
+/// Clamped to `$0$` / `$x$` outside `$[-1, 1]$`.
+///
+/// ```math
+/// g(x) = \frac{1 + 3x(x+1) - |x|^3}{6} \ \ (-1 \le x \le 1), \qquad g(0) = \tfrac16
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Cubic;
+impl SmoothKernel for Cubic {
+    #[inline(always)]
+    fn g0<V: SdfVector>() -> V {
+        frac::<V, 1, 6>()
+    }
+    #[inline(always)]
+    fn g<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // (1 + 3x(x+1) - |x|^3)/6
+        let core = (xc * (xc + V::ONE)).mul_adde(cint::<V, 3>(), V::ONE - xc.abs() * (xc * xc))
+            * frac::<V, 1, 6>();
+        x.cmp_gt(V::ONE).select(x, core)
+    }
+    #[inline(always)]
+    fn gp<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // (2x + 1 - x|x|)/2
+        xc.nmul_adde(xc.abs(), xc.mul_adde(V::TWO, V::ONE)) * V::HALF
+    }
+}
+
+/// Quartic-polynomial kernel - the smoothest of the polynomial CD members.
+/// Clamped to `$0$` / `$x$` outside `$[-1, 1]$`.
+///
+/// ```math
+/// g(x) = \frac{(x+1)^2\,(3 - x(x-2))}{16} \ \ (-1 \le x \le 1), \qquad g(0) = \tfrac{3}{16}
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Quartic;
+impl SmoothKernel for Quartic {
+    #[inline(always)]
+    fn g0<V: SdfVector>() -> V {
+        frac::<V, 3, 16>()
+    }
+    #[inline(always)]
+    fn g<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // (x+1)^2 (3 - x(x-2)) / 16
+        let xp = xc + V::ONE;
+        let core = (xp * xp) * xc.nmul_adde(xc - V::TWO, cint::<V, 3>()) * frac::<V, 1, 16>();
+        x.cmp_gt(V::ONE).select(x, core)
+    }
+    #[inline(always)]
+    fn gp<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // (x+1)^2 (2 - x) / 4
+        let xp = xc + V::ONE;
+        (xp * xp) * (V::TWO - xc) * frac::<V, 1, 4>()
+    }
+}
+
+/// Circular kernel - the only CD member with an exactly circular blend profile
+/// between perpendicular surfaces (uses one sqrt). Clamped to `$0$` / `$x$`
+/// outside `$[-1, 1]$`.
+///
+/// ```math
+/// g(x) = 1 + \frac{x - \sqrt{2 - x^2}}{2} \ \ (-1 \le x \le 1), \qquad g(0) = 1 - \tfrac{1}{\sqrt2}
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Circular;
+impl SmoothKernel for Circular {
+    #[inline(always)]
+    fn g0<V: SdfVector>() -> V {
+        V::ONE - V::FRAC_1_SQRT_2
+    }
+    #[inline(always)]
+    fn g<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // 1 + (x - sqrt(2 - x^2))/2
+        let core = (xc - xc.nmul_adde(xc, V::TWO).sqrt()).mul_adde(V::HALF, V::ONE);
+        x.cmp_gt(V::ONE).select(x, core)
+    }
+    #[inline(always)]
+    fn gp<V: SdfVector>(x: V) -> V {
+        let xc = x.clamp(V::NEG_ONE, V::ONE);
+        // (1 + x/sqrt(2 - x^2))/2
+        (xc / xc.nmul_adde(xc, V::TWO).sqrt()).mul_adde(V::HALF, V::HALF)
+    }
+}
+
+/// Square-root kernel - smooth everywhere and associative, but non-rigid (it
+/// distorts the operands at all distances, with no clamp).
+///
+/// ```math
+/// g(x) = \frac{x + \sqrt{x^2 + 1}}{2}, \qquad g(0) = \tfrac12
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Root;
+impl SmoothKernel for Root {
+    #[inline(always)]
+    fn g0<V: SdfVector>() -> V {
+        V::HALF
+    }
+    #[inline(always)]
+    fn g<V: SdfVector>(x: V) -> V {
+        // (x + sqrt(x^2 + 1))/2
+        (x + x.mul_adde(x, V::ONE).sqrt()) * V::HALF
+    }
+    #[inline(always)]
+    fn gp<V: SdfVector>(x: V) -> V {
+        // (1 + x/sqrt(x^2 + 1))/2
+        (x / x.mul_adde(x, V::ONE).sqrt()).mul_adde(V::HALF, V::HALF)
+    }
+}
+
+/// Smooth union with a selectable [`SmoothKernel`] and blend radius `k`.
+///
+/// Generalizes [`SmoothUnion`] (which is this with [`Quadratic`]) to the whole
+/// DD family. Besides [`SDF`]/[`GradientSdf`], it exposes [`blend`](Self::blend)
+/// returning the blend weight for mixing per-operand materials/colors.
+#[derive(Debug, Clone, Copy)]
+pub struct SmoothUnionK<V: SdfVector, A, B, K: SmoothKernel = Quadratic> {
+    pub a: A,
+    pub b: B,
+    pub k: V,
+    pub kernel: K,
+}
+
+impl<V: SdfVector, A, B, K: SmoothKernel> SmoothUnionK<V, A, B, K> {
+    /// `(distance, weight)` where `weight in [0, 1]` is the blend fraction of
+    /// operand `b` (0 = fully `a`, 1 = fully `b`) - use it to `mix` materials.
+    #[inline(always)]
+    pub fn blend<const N: usize>(&self, p: Vector<V, N>) -> (V, V)
+    where
+        A: SDF<V, N>,
+        B: SDF<V, N>,
+    {
+        let (da, db) = (self.a.eval(p), self.b.eval(p));
+        let (val, wa) = kernel_smin::<K, V>(da, db, self.k);
+        (val, V::ONE - wa) // weight of b
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> SDF<V, N>
+    for SmoothUnionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        kernel_smin::<K, V>(self.a.eval(p), self.b.eval(p), self.k).0
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
+    GradientSdf<V, N> for SmoothUnionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        let (da, ga) = self.a.eval_grad(p);
+        let (db, gb) = self.b.eval_grad(p);
+        let (val, wa) = kernel_smin::<K, V>(da, db, self.k);
+        // grad = wa*ga + (1-wa)*gb = mix(gb, ga, wa)
+        let grad = (ga - gb).mul_adde(wa, gb);
+        (val, grad)
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel>
+    BoundedSdf<V, N> for SmoothUnionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn aabb(&self) -> Bounds<V, N> {
+        (self.a.aabb() | self.b.aabb()).expand(self.k)
+    }
+}
+
+/// Smooth intersection with a selectable [`SmoothKernel`]: `$\operatorname{smax}
+/// (a,b) = -\operatorname{smin}(-a,-b)$`.
+#[derive(Debug, Clone, Copy)]
+pub struct SmoothIntersectionK<V: SdfVector, A, B, K: SmoothKernel = Quadratic> {
+    pub a: A,
+    pub b: B,
+    pub k: V,
+    pub kernel: K,
+}
+
+impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> SDF<V, N>
+    for SmoothIntersectionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        -kernel_smin::<K, V>(-self.a.eval(p), -self.b.eval(p), self.k).0
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
+    GradientSdf<V, N> for SmoothIntersectionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        let (da, ga) = self.a.eval_grad(p);
+        let (db, gb) = self.b.eval_grad(p);
+        // wa = weight of (-a) in smin(-a,-b); grad(smax) = wa*ga + (1-wa)*gb
+        let (val, wa) = kernel_smin::<K, V>(-da, -db, self.k);
+        let grad = (ga - gb).mul_adde(wa, gb);
+        (-val, grad)
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel>
+    BoundedSdf<V, N> for SmoothIntersectionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn aabb(&self) -> Bounds<V, N> {
+        self.a.aabb().intersection(self.b.aabb())
+    }
+}
+
+/// Smooth subtraction with a selectable [`SmoothKernel`]: carves `a` out of `b`
+/// via `$\operatorname{smax}(-a, b) = -\operatorname{smin}(a, -b)$`.
+#[derive(Debug, Clone, Copy)]
+pub struct SmoothSubtractionK<V: SdfVector, A, B, K: SmoothKernel = Quadratic> {
+    pub a: A,
+    pub b: B,
+    pub k: V,
+    pub kernel: K,
+}
+
+impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> SDF<V, N>
+    for SmoothSubtractionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        -kernel_smin::<K, V>(self.a.eval(p), -self.b.eval(p), self.k).0
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
+    GradientSdf<V, N> for SmoothSubtractionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        let (da, ga) = self.a.eval_grad(p);
+        let (db, gb) = self.b.eval_grad(p);
+        // smax(-a, b) = -smin(a, -b); wa = weight of a in smin(a,-b).
+        // grad = -wa*ga + (1-wa)*gb
+        let (val, wa) = kernel_smin::<K, V>(da, -db, self.k);
+        let grad = gb.mul_adde(V::ONE - wa, ga * -wa); // (1-wa)*gb + (-wa)*ga
+        (-val, grad)
+    }
+}
+
+impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel> BoundedSdf<V, N>
+    for SmoothSubtractionK<V, A, B, K>
+{
+    #[inline(always)]
+    fn aabb(&self) -> Bounds<V, N> {
+        self.b.aabb().expand(self.k)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Positioning / domain operators
 // ---------------------------------------------------------------------------
 
@@ -501,6 +852,177 @@ impl<V: SdfVector, const N: usize, S: GradientSdf<V, N>> GradientSdf<V, N> for R
             s.nmul_adde((p.0[i] / s).round(), p.0[i])
         }));
         self.shape.eval_grad(q)
+    }
+}
+
+/// Correct infinite domain repetition: scans the nearest `$2^N$` tiles so the
+/// field stays a true SDF even when the inner shape is **not** symmetric about
+/// the tile boundary (`<https://iquilezles.org/articles/sdfrepetition>`).
+///
+/// Plain [`Repetition`] only evaluates the tile containing `p`, which
+/// underestimates distance whenever the closest copy lives in a neighbouring
+/// tile (asymmetric or off-centre shapes). This variant additionally checks the
+/// neighbour in the direction of `$\operatorname{sign}(p - s\,\text{id})$` on
+/// each axis - 2 tiles in 1D, 4 in 2D, 8 in 3D - and takes the min. It assumes
+/// each copy still fits within roughly one tile; larger shapes need a wider
+/// scan. Costs `$2^N$` inner evals, so no analytic gradient is offered (wrap in
+/// [`FiniteDiff`]).
+#[derive(Debug, Clone, Copy)]
+pub struct CorrectRepetition<V: SdfVector, S, const N: usize> {
+    pub shape: S,
+    pub spacing: Vector<V, N>,
+}
+
+#[inline(always)]
+fn repetition_tile<V: SdfVector, const N: usize>(
+    p: Vector<V, N>,
+    spacing: Vector<V, N>,
+) -> (Vector<V, N>, Vector<V, N>) {
+    let mut id = Vector::ZERO;
+    let mut o = Vector::ZERO;
+    for i in 0..N {
+        id[i] = (p[i] / spacing[i]).round();
+        o[i] = spacing[i].nmul_adde(id[i], p[i]).signum(); // sign(p - s*id)
+    }
+    (id, o)
+}
+
+/// Min over the `$2^N$` candidate tiles whose id is `base + bit*o`, optionally
+/// clamped to `[lo, hi]` (for the finite-grid variant). `clamp` is identity when
+/// `lo`/`hi` are `None`.
+#[inline(always)]
+fn repetition_scan<V: SdfVector, const N: usize, S: SDF<V, N>>(
+    shape: &S,
+    p: Vector<V, N>,
+    spacing: Vector<V, N>,
+    base: Vector<V, N>,
+    o: Vector<V, N>,
+    limit: Option<(Vector<V, N>, Vector<V, N>)>,
+) -> V {
+    let mut d = V::INFINITY;
+    let corners = 1usize << N;
+    let mut mask = 0usize;
+    while mask < corners {
+        let mut r = Vector::ZERO;
+        for i in 0..N {
+            let mut rid = base[i] + if (mask >> i) & 1 == 1 { o[i] } else { V::ZERO };
+            if let Some((lo, hi)) = limit {
+                rid = rid.clamp(lo[i], hi[i]);
+            }
+            r[i] = spacing[i].nmul_adde(rid, p[i]); // p - s*rid
+        }
+        d = d.min(shape.eval(r));
+        mask += 1;
+    }
+    d
+}
+
+impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for CorrectRepetition<V, S, N> {
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        let (id, o) = repetition_tile(p, self.spacing);
+        repetition_scan(&self.shape, p, self.spacing, id, o, None)
+    }
+}
+
+/// Finite (limited) domain repetition: an `N`-D grid of copies whose tile ids
+/// are clamped to `[lo, hi]` (`<https://iquilezles.org/articles/sdfrepetition>`).
+///
+/// Unlike intersecting an infinite [`Repetition`] with a container box - which
+/// produces a broken field near the edges - clamping the *id* keeps the result a
+/// correct SDF everywhere: outside the grid you measure distance to the nearest
+/// edge copy. Like [`CorrectRepetition`] it scans `$2^N$` neighbours, so it also
+/// works for asymmetric shapes.
+#[derive(Debug, Clone, Copy)]
+pub struct LimitedRepetition<V: SdfVector, S, const N: usize> {
+    pub shape: S,
+    pub spacing: Vector<V, N>,
+    /// Inclusive minimum tile id on each axis.
+    pub lo: Vector<V, N>,
+    /// Inclusive maximum tile id on each axis.
+    pub hi: Vector<V, N>,
+}
+
+impl<V: SdfVector, S, const N: usize> LimitedRepetition<V, S, N> {
+    /// Grid of `counts[i]` copies per axis centred on the origin, spaced by
+    /// `spacing`. Even counts straddle the origin (ids `..., -1, 0` etc.).
+    #[inline(always)]
+    pub fn centered(shape: S, spacing: Vector<V, N>, counts: [u32; N]) -> Self {
+        let mut lo = Vector::ZERO;
+        let mut hi = Vector::ZERO;
+        for i in 0..N {
+            // ids span `counts` consecutive integers centred on 0:
+            // [-floor((n-1)/2), ceil((n-1)/2)] = [-(n/2), (n-1)/2] for our purposes.
+            let n = counts[i] as thermite::LargeInt;
+            lo[i] = vint::<V>(-(n / 2));
+            hi[i] = vint::<V>((n - 1) / 2);
+        }
+        Self { shape, spacing, lo, hi }
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for LimitedRepetition<V, S, N> {
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        let (id, o) = repetition_tile(p, self.spacing);
+        repetition_scan(&self.shape, p, self.spacing, id, o, Some((self.lo, self.hi)))
+    }
+}
+
+/// Fast infinite repetition that mirrors every other tile so the closest copy is
+/// always in the current tile - a single inner eval, no neighbour scan
+/// (`<https://iquilezles.org/articles/sdfrepetition>`, after Fizzer).
+///
+/// Reflecting odd tiles forces symmetry across every boundary, which is exactly
+/// the condition under which naive single-tile repetition is already correct.
+/// The trade-off is the mirrored layout (every other copy is flipped); when that
+/// is acceptable it is the cheapest correct repetition. Because the domain map is
+/// a (possibly reflected) translation, the analytic gradient passes through with
+/// the mirrored axes negated.
+#[derive(Debug, Clone, Copy)]
+pub struct MirroredRepetition<V: SdfVector, S, const N: usize> {
+    pub shape: S,
+    pub spacing: Vector<V, N>,
+}
+
+#[inline(always)]
+fn mirrored_fold<V: SdfVector, const N: usize>(
+    p: Vector<V, N>,
+    spacing: Vector<V, N>,
+) -> (Vector<V, N>, Vector<V, N>) {
+    // returns (folded point, per-axis sign +-1 for the gradient)
+    let mut q = Vector::ZERO;
+    let mut sign = Vector::ONE;
+    for i in 0..N {
+        let s = spacing[i];
+        let id = (p[i] / s).round();
+        let r = s.nmul_adde(id, p[i]); // p - s*id, in [-s/2, s/2]
+        // odd tile <=> id - 2*trunc(id/2) != 0  (trunc avoids the .5 rounding trap)
+        let parity = (id * V::HALF).trunc().nmul_adde(V::TWO, id); // id - 2*trunc(id/2)
+        let odd = parity.cmp_ne(V::ZERO);
+        sign[i] = odd.select(V::NEG_ONE, V::ONE);
+        q[i] = odd.select(-r, r);
+    }
+    (q, sign)
+}
+
+impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for MirroredRepetition<V, S, N> {
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        let (q, _) = mirrored_fold(p, self.spacing);
+        self.shape.eval(q)
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: GradientSdf<V, N>> GradientSdf<V, N> for MirroredRepetition<V, S, N> {
+    #[inline(always)]
+    fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        let (q, sign) = mirrored_fold(p, self.spacing);
+        let (d, mut g) = self.shape.eval_grad(q);
+        for i in 0..N {
+            g[i] = g[i] * sign[i]; // chain rule through the per-axis reflection
+        }
+        (d, g)
     }
 }
 
@@ -704,57 +1226,80 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for FiniteDiff<V, S> 
     }
 }
 
+/// Shared finite-difference stencil used by [`FiniteDiff`] and
+/// [`DistanceEstimate`]. Returns `(inner.eval(p), raw, magnitude)` where `raw`
+/// points along `$\nabla f$` and `magnitude` is the true `$\lVert\nabla f\rVert$`.
+///
+/// The raw simplex sums are proportional to the gradient by a tap-dependent
+/// constant (the tetrahedron and triangle taps integrate `$\sum u u^T$` to
+/// `$4I$` / `$\tfrac32 I$` respectively, the central form to `$2I$`); the
+/// per-branch `inv_scale` removes it so `magnitude` is in real units. The
+/// direction `raw` is returned unscaled because [`FiniteDiff`] only needs it for
+/// normalisation, where the constant cancels.
+#[inline(always)]
+fn finite_diff_gradient<V: SdfVector, const N: usize, S: SDF<V, N>>(
+    shape: &S,
+    p: Vector<V, N>,
+    h: V,
+) -> (V, Vector<V, N>, V) {
+    let dist = shape.eval(p);
+    let mut grad = Vector::ZERO;
+    let inv_scale;
+
+    if const { N == 3 } {
+        // Tetrahedron technique (Falcao/Iquilez): 4 taps with central-difference
+        // quality and no axis bias - cheaper than the 6-tap central form. The
+        // four offsets are a regular tetrahedron inscribed in the cube:
+        // (+++), (+--), (-+-), (--+). raw ~ 4 h^2 grad.
+        let mut j = 0;
+        while j < 4 {
+            let mut e = Vector::ZERO;
+            let mut k = 0;
+            while k < N {
+                let plus = j == 0 || k + 1 == j; // single '+' at axis j-1, else all '+'
+                e[k] = if plus { h } else { -h };
+                k += 1;
+            }
+            grad = e.mul_adde(shape.eval(p + e), grad);
+            j += 1;
+        }
+        inv_scale = V::ONE / (cint::<V, 4>() * h * h);
+    } else if const { N == 2 } {
+        // 2D analogue: an equilateral triangle of directions summing to zero
+        // (3 taps, unbiased). raw ~ (3/2) h^2 grad.
+        let sx = h * V::SQRT_3 * V::HALF; // h*sqrt(3)/2
+        let hy = h * V::HALF;
+        let dirs = [[V::ZERO, h], [-sx, -hy], [sx, -hy]];
+        let mut j = 0;
+        while j < 3 {
+            let mut e = Vector::ZERO;
+            e[0] = dirs[j][0];
+            e[1] = dirs[j][1];
+            grad = e.mul_adde(shape.eval(p + e), grad);
+            j += 1;
+        }
+        inv_scale = cint::<V, 2>() / (cint::<V, 3>() * h * h);
+    } else {
+        // General N: central differences per axis (2N taps). raw ~ 2 h grad.
+        let mut i = 0;
+        while i < N {
+            let mut hp = p;
+            let mut hm = p;
+            hp[i] = p[i] + h;
+            hm[i] = p[i] - h;
+            grad[i] = shape.eval(hp) - shape.eval(hm);
+            i += 1;
+        }
+        inv_scale = V::ONE / (V::TWO * h);
+    }
+
+    (dist, grad, grad.l2_norm() * inv_scale)
+}
+
 impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDiff<V, S> {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
-        let h = self.eps;
-        let dist = self.shape.eval(p); // distance stays exact
-        let mut grad = Vector::ZERO;
-
-        if const { N == 3 } {
-            // Tetrahedron technique (Falcao/Iquilez): 4 taps with central-difference
-            // quality and no axis bias - cheaper than the 6-tap central form. The
-            // four offsets are a regular tetrahedron inscribed in the cube:
-            // (+++), (+--), (-+-), (--+). Normalization absorbs the scale factor.
-            let mut j = 0;
-            while j < 4 {
-                let mut e = Vector::ZERO;
-                let mut k = 0;
-                while k < N {
-                    let plus = j == 0 || k + 1 == j; // single '+' at axis j-1, else all '+'
-                    e[k] = if plus { h } else { -h };
-                    k += 1;
-                }
-                grad = e.mul_adde(self.shape.eval(p + e), grad);
-                j += 1;
-            }
-        } else if const { N == 2 } {
-            // 2D analogue: an equilateral triangle of directions summing to zero
-            // (3 taps, unbiased).
-            let sx = h * V::SQRT_3 * V::HALF; // h*sqrt(3)/2
-            let hy = h * V::HALF;
-            let dirs = [[V::ZERO, h], [-sx, -hy], [sx, -hy]];
-            let mut j = 0;
-            while j < 3 {
-                let mut e = Vector::ZERO;
-                e[0] = dirs[j][0];
-                e[1] = dirs[j][1];
-                grad = e.mul_adde(self.shape.eval(p + e), grad);
-                j += 1;
-            }
-        } else {
-            // General N: central differences per axis (2N taps).
-            let mut i = 0;
-            while i < N {
-                let mut hp = p;
-                let mut hm = p;
-                hp[i] = p[i] + h;
-                hm[i] = p[i] - h;
-                grad[i] = self.shape.eval(hp) - self.shape.eval(hm);
-                i += 1;
-            }
-        }
-
+        let (dist, grad, _) = finite_diff_gradient(&self.shape, p, self.eps);
         (dist, unit_or_zero(grad, grad.l2_norm()))
     }
 }
@@ -763,5 +1308,86 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Fin
     #[inline(always)]
     fn aabb(&self) -> Bounds<V, N> {
         self.shape.aabb()
+    }
+}
+
+/// Adapts an arbitrary scalar field closure `Fn(p) -> value` into an [`SDF`].
+///
+/// Useful as the operand of [`DistanceEstimate`], whose whole purpose is to turn
+/// a *non-metric* implicit field `$f$` (whose zero-set is the shape, but whose
+/// gradient is not unit-length) into a usable approximate SDF.
+#[derive(Debug, Clone, Copy)]
+pub struct Field<F>(pub F);
+
+impl<V: SdfVector, const N: usize, F: Fn(Vector<V, N>) -> V> SDF<V, N> for Field<F> {
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        (self.0)(p)
+    }
+}
+
+/// Gradient-normalised distance estimate to the `$f = 0$` isosurface of an
+/// arbitrary implicit field (`<https://iquilezles.org/articles/distance>`).
+///
+/// For a field `$f$` that is not a true distance function (e.g. a procedural
+/// pattern, a fractal potential, or a `min`/`max` combination), the first-order
+/// distance to its zero-set is
+///
+/// ```math
+/// d(p) \approx \frac{f(p)}{\lVert \nabla f(p) \rVert}
+/// ```
+///
+/// This rescales `$f$` so its gradient has length ~1 near the surface, which is
+/// exactly what a raymarcher needs and what gives procedural outlines a constant
+/// thickness instead of one that compresses where the field steepens. The
+/// gradient is estimated with the same simplex stencil as [`FiniteDiff`] (4 taps
+/// in 3D, 3 in 2D), so each `eval` costs one field sample plus the stencil. The
+/// sign of `$f$` is preserved, so interior stays negative.
+///
+/// Unlike a real SDF this is only a *bound* (the Taylor estimate underestimates
+/// where the field curves), so it is not marked [`BoundedSdf`]; wrap an
+/// [`SDF`]-implementing field or a [`Field`] closure.
+#[derive(Debug, Clone, Copy)]
+pub struct DistanceEstimate<V: SdfVector, S> {
+    pub shape: S,
+    /// Finite-difference step for the gradient estimate (see [`FiniteDiff`]).
+    pub eps: V,
+}
+
+impl<V: SdfVector, S> DistanceEstimate<V, S> {
+    /// Wraps `shape` with the default step `$\text{eps} = 1/4096$`.
+    #[inline(always)]
+    pub fn new(shape: S) -> Self {
+        Self {
+            shape,
+            eps: frac::<V, 1, 4096>(),
+        }
+    }
+
+    /// Wraps `shape` with an explicit gradient step `eps`.
+    #[inline(always)]
+    pub fn with_eps(shape: S, eps: V) -> Self {
+        Self { shape, eps }
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for DistanceEstimate<V, S> {
+    #[inline(always)]
+    fn eval(&self, p: Vector<V, N>) -> V {
+        let (f, _, mag) = finite_diff_gradient(&self.shape, p, self.eps);
+        // f / |grad f|, guarded so a vanishing gradient (an extremum) returns f
+        // rather than +-inf/NaN.
+        f / mag.cmp_gt(V::ZERO).select(mag, V::ONE)
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for DistanceEstimate<V, S> {
+    #[inline(always)]
+    fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        // The corrected field shares its surface normal with f to first order,
+        // so reuse the raw stencil direction; the distance is the rescaled value.
+        let (f, grad, mag) = finite_diff_gradient(&self.shape, p, self.eps);
+        let d = f / mag.cmp_gt(V::ZERO).select(mag, V::ONE);
+        (d, unit_or_zero(grad, grad.l2_norm()))
     }
 }

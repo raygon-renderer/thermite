@@ -24,6 +24,14 @@ pub(crate) fn cint<V: SdfVector, const N: i64>() -> V {
     V::splat(const { <V::Element as FloatElement>::ConstInt::<N>::VALUE })
 }
 
+/// Runtime integer `n`, splatted into the vector type `V`. Unlike [`cint`] this
+/// takes a non-const value (e.g. a per-axis instance count); the magnitude must
+/// be exactly representable in the float format.
+#[inline(always)]
+pub(crate) fn vint<V: SdfVector>(n: thermite::LargeInt) -> V {
+    V::splat(<V::Element as FloatElement>::from_int(n))
+}
+
 /// Compile-time constants used by the closed-form regular-polygon / star SDFs.
 ///
 /// Implemented on the scalar element types; splat the values into a vector with
