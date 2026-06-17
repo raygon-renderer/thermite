@@ -10,7 +10,7 @@
 //! for free.
 //!
 //! Each primitive computes the primal with the inner vector's policy math, then
-//! propagates derivatives with the chain rule `f(a + bε) = f(a) + b·f'(a)ε`.
+//! propagates derivatives with the chain rule `f(a + bε) = f(a) + b*f'(a)ε`.
 //! Every *non*-primitive (e.g. `tan`, `sin`, `powi`, `lerp`, `smoothstep`)
 //! comes from the trait defaults, which compose out of the dual arithmetic and
 //! are therefore differentiated automatically.
@@ -170,7 +170,11 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.powf_p::<P>(e.re);
         // d/dx x^y = y x^(y-1) = y * (x^y) / x = e.re * v / x;  d/dy x^y = x^y ln x
         let a = e.re * v / self.re;
-        let b = v * self.re.ln_p::<P>();
+        // ln(x) is -inf/NaN for x <= 0; zero the d/dy contribution there so a
+        // constant exponent (e.dual == 0) isn't NaN-poisoned by `b * 0` when the
+        // primal value is still finite (e.g. (-2)^2). Where the exponent genuinely
+        // varies and x <= 0 the result is already NaN via `v`/`a`, so this is safe.
+        let b = (v * self.re.ln_p::<P>()).nz(self.re.cmp_le(V::ZERO));
         let mut dual = self.dual;
         let mut i = 0;
         while i < N {
@@ -215,15 +219,15 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn log2<P: Policy>(self) -> Self {
         let v = self.re.log2_p::<P>();
-        // 1 / (x ln 2)
-        self.chain(v, self.re.reciprocal_p::<P>() / V::LN_2)
+        // d/dx log2(x) = 1 / (x ln 2) = log2(e) / x
+        self.chain(v, self.re.reciprocal_p::<P>() * V::LOG2_E)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
         let v = self.re.log10_p::<P>();
-        // 1 / (x ln 10)
-        self.chain(v, self.re.reciprocal_p::<P>() / V::LN_10)
+        // d/dx log10(x) = 1 / (x ln 10) = log10(e) / x
+        self.chain(v, self.re.reciprocal_p::<P>() * V::LOG10_E)
     }
 
     #[inline(always)]

@@ -759,6 +759,27 @@ impl_masked!(Mul::mul);
 impl_masked!(Div::div);
 impl_masked!(Rem::rem);
 
+// `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
+// binary (`fn m(self, Self) -> Self`) vector ops, as plain blends -- the same
+// select pattern `impl_masked!` uses for the `core::ops` methods above. Invoked
+// inside the relevant trait impls below.
+macro_rules! dual_masked {
+    (unary: $($m:ident),* $(,)?) => { paste::paste! {
+        $(
+            #[inline(always)] fn [<$m _c>](self, mask: Self::Mask) -> Self { mask.select(self.$m(), self) }
+            #[inline(always)] fn [<$m _m>](self, src: Self, mask: Self::Mask) -> Self { mask.select(self.$m(), src) }
+            #[inline(always)] fn [<$m _z>](self, mask: Self::Mask) -> Self { mask.select(self.$m(), Self::ZERO) }
+        )*
+    }};
+    (binary: $($m:ident),* $(,)?) => { paste::paste! {
+        $(
+            #[inline(always)] fn [<$m _c>](self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), self) }
+            #[inline(always)] fn [<$m _m>](self, src: Self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), src) }
+            #[inline(always)] fn [<$m _z>](self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), Self::ZERO) }
+        )*
+    }};
+}
+
 // =====================================================================================
 // NumericVector
 // =====================================================================================
@@ -822,7 +843,7 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
     #[inline(always)] fn offset() -> Self { Self::constant(V::offset()) }
     #[inline(always)] fn indexed() -> Self { Self::constant(V::indexed()) }
 
-    #[inline(always)] fn arg_minmax(self) -> (usize, usize) { todo!() }
+    #[inline(always)] fn arg_minmax(self) -> (usize, usize) { self.re.arg_minmax() }
 
     // Product rule by a (possibly-dual) scalar, splatting the scalar components directly into
     // the inner ops rather than building an intermediate splatted `Dual` and going through `Mul`
@@ -839,17 +860,35 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
         }
         Self { re: self.re * fr, dual }
     }
+
     #[inline(always)] fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(self.scale(factor), self) }
     #[inline(always)] fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(self.scale(factor), src) }
     #[inline(always)] fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(self.scale(factor), Self::ZERO) }
-    #[inline(always)] fn min_c(self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn min_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn min_z(self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn max_c(self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn max_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn max_z(self, _mask: Self::Mask, _other: Self) -> Self { todo!() }
-    #[inline(always)] fn pairwise_sum(_lo: Self, _hi: Self) -> Self { todo!() }
-    #[inline(always)] fn relaxed_pairwise_sum(_lo: Self, _hi: Self) -> Self { todo!() }
+    dual_masked!(binary: min, max);
+
+    // pairwise_sum is a linear rearrange-and-add, so the derivative is the
+    // pairwise_sum of the corresponding component parts.
+    #[inline(always)]
+    fn pairwise_sum(lo: Self, hi: Self) -> Self {
+        let mut dual = lo.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = V::pairwise_sum(lo.dual[i], hi.dual[i]);
+            i += 1;
+        }
+        Self { re: V::pairwise_sum(lo.re, hi.re), dual }
+    }
+
+    #[inline(always)]
+    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self {
+        let mut dual = lo.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = V::relaxed_pairwise_sum(lo.dual[i], hi.dual[i]);
+            i += 1;
+        }
+        Self { re: V::relaxed_pairwise_sum(lo.re, hi.re), dual }
+    }
 }
 
 // =====================================================================================
@@ -917,12 +956,8 @@ impl<V: DualFloatVector, const N: usize> SignedVector for Dual<V, N> {
         self.neg_c(self.is_negative() ^ sign.is_negative())
     }
 
-    #[inline(always)] fn abs_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn abs_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn abs_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn copysign_c(self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
-    #[inline(always)] fn copysign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
-    #[inline(always)] fn copysign_z(self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
+    dual_masked!(unary: abs);
+    dual_masked!(binary: copysign);
 }
 
 // =====================================================================================
@@ -1001,42 +1036,9 @@ impl<V: DualFloatVector, const N: usize> FloatVector for Dual<V, N> {
         }
     }
 
-    #[inline(always)] fn mix(self, _a: Self, _b: Self) -> Self { todo!() }
+    // mix(t) = a*(1 - t) + b*t = a + (b - a)*t, composed through dual arithmetic.
+    #[inline(always)] fn mix(self, a: Self, b: Self) -> Self { a + (b - a) * self }
 
-    #[inline(always)] fn sqrt_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn sqrt_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn sqrt_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rsqrt_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rsqrt_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rsqrt_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rcp_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rcp_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn rcp_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn floor_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn floor_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn floor_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn ceil_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn ceil_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn ceil_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn round_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn round_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn round_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn trunc_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn trunc_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn trunc_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn fract_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn fract_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn fract_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn mul_sign_c(self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
-    #[inline(always)] fn mul_sign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
-    #[inline(always)] fn mul_sign_z(self, _mask: Self::Mask, _sign: Self) -> Self { todo!() }
-    #[inline(always)] fn signed_zero_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn signed_zero_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn signed_zero_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_up_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_up_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_up_z(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_down_c(self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_down_m(self, _src: Self, _mask: Self::Mask) -> Self { todo!() }
-    #[inline(always)] fn next_down_z(self, _mask: Self::Mask) -> Self { todo!() }
+    dual_masked!(unary: sqrt, rsqrt, rcp, floor, ceil, round, trunc, fract, signed_zero, next_up, next_down);
+    dual_masked!(binary: mul_sign);
 }
