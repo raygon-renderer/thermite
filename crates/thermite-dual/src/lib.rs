@@ -29,12 +29,14 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square};
 
+pub mod ad;
 pub mod math;
 pub mod vector;
 
 #[cfg(feature = "special")]
 pub mod special;
 
+pub use ad::AutoDiff;
 pub use vector::DualFloatVector;
 
 /// A value usable as the primal/derivative storage of a [`Dual`].
