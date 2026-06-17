@@ -52,7 +52,10 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Rou
     }
 }
 
-/// Makes a shape annular (a ring/onion shell of thickness `radius`).
+/// Makes a shape annular by peeling a shell of half-thickness `radius` off the surface.
+///
+/// Computes `|d| - radius`, so the result is zero on the original surface displaced
+/// inward and outward by `radius`. Total wall thickness is `2 * radius`.
 #[derive(Debug, Clone, Copy)]
 pub struct Onion<V: SdfVector, S> {
     pub shape: S,
@@ -212,10 +215,16 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 // ---------------------------------------------------------------------------
 
 /// Smooth union with blend radius `k`. Only an approximate SDF near the seam.
+///
+/// Uses the polynomial smooth-min (Quilez): the blend is active where `|da - db| < 4k`;
+/// outside that band the result equals the hard union.
 #[derive(Debug, Clone, Copy)]
 pub struct SmoothUnion<V: SdfVector, A, B> {
     pub a: A,
     pub b: B,
+    /// Blend radius. Controls the width of the smooth transition zone; larger values give a
+    /// wider, more gradual blend. With `$h = \max(4k - |d_a - d_b|,\, 0)$`, the result is
+    /// `$\min(a, b) - \frac{h^2}{16k}$` (the factor-of-4 internal scaling appears twice).
     pub k: V,
 }
 
@@ -261,6 +270,8 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 pub struct SmoothIntersection<V: SdfVector, A, B> {
     pub a: A,
     pub b: B,
+    /// Blend radius. Blend active where `|da - db| < 4k`; with `$h = \max(4k - |d_a - d_b|,\, 0)$`,
+    /// the result is `$\max(a, b) + \frac{h^2}{16k}$`.
     pub k: V,
 }
 
@@ -309,6 +320,8 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 pub struct SmoothSubtraction<V: SdfVector, A, B> {
     pub a: A,
     pub b: B,
+    /// Blend radius. Blend active where `|da + db| < 4k`; with `$h = \max(4k - |d_a + d_b|,\, 0)$`,
+    /// the result is `$\max(-a, b) + \frac{h^2}{16k}$`.
     pub k: V,
 }
 
@@ -462,6 +475,10 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Sym
 #[derive(Debug, Clone, Copy)]
 pub struct Repetition<V: SdfVector, S, const N: usize> {
     pub shape: S,
+    /// Per-axis tile period. The domain fold is
+    /// `$q_i = p_i - s_i \operatorname{round}(p_i / s_i)$`, centering a copy at every integer
+    /// multiple of `spacing`. The shape must fit within `[-spacing/2, spacing/2]` to avoid
+    /// overlap (which would break the SDF metric).
     pub spacing: Vector<V, N>,
 }
 
@@ -516,10 +533,17 @@ impl<V: SdfVector, S: BoundedSdf<V, 2>> BoundedSdf<V, 3> for Extrusion<V, S> {
     }
 }
 
-/// Revolves a 2D shape around the y axis, offset from the axis by `offset`.
+/// Revolves a 2D shape (in the xy-plane) around the y axis.
+///
+/// Maps 3D point `p` to 2D `$\left(\sqrt{p_x^2 + p_z^2} - \text{offset},\; p_y\right)$` before
+/// evaluating the inner shape. With `offset = 0` this is a standard solid of revolution; with
+/// `offset > 0` the profile is displaced radially, so a 2D disk of radius `r` becomes
+/// a torus of major radius `offset` and minor radius `r`.
 #[derive(Debug, Clone, Copy)]
 pub struct Revolution<V: SdfVector, S> {
     pub shape: S,
+    /// Radial distance from the y axis to the origin of the 2D profile. Zero gives a
+    /// standard solid of revolution; positive values create torus-family shapes.
     pub offset: V,
 }
 
@@ -547,9 +571,13 @@ impl<V: SdfVector, S: BoundedSdf<V, 2>> BoundedSdf<V, 3> for Revolution<V, S> {
 // ---------------------------------------------------------------------------
 
 /// Twists a 3D shape around the y axis at rate `k` (radians per unit height).
+///
+/// This is a domain distortion, not an exact SDF — the result underestimates the true
+/// distance. Reduce ray-march step size proportionally to `|k| * shape_radius`.
 #[derive(Debug, Clone, Copy)]
 pub struct Twist<V: SdfVector, S, P: Policy = DefaultPolicy> {
     pub shape: S,
+    /// Twist rate in radians per unit of y. `k = 2*pi` rotates a full turn over 1 unit.
     pub k: V,
     _policy: PhantomData<P>,
 }
@@ -575,10 +603,15 @@ impl<V: SdfVector + TranscendentalMathWithPolicy, S: SDF<V, 3>, P: Policy> SDF<V
     }
 }
 
-/// Bends a 3D shape around the z axis at rate `k` (radians per unit `x`).
+/// Bends a 3D shape in the xy-plane at rate `k` (radians per unit x).
+///
+/// Domain distortion — not an exact SDF. Keep `|k| * shape_x_extent` well below `pi/2`
+/// for a usable bound.
 #[derive(Debug, Clone, Copy)]
 pub struct Bend<V: SdfVector, S, P: Policy = DefaultPolicy> {
     pub shape: S,
+    /// Bend rate in radians per unit of x. `k = pi/L` curves a shape of x-extent `L`
+    /// into a semicircle.
     pub k: V,
     _policy: PhantomData<P>,
 }

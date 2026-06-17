@@ -125,9 +125,15 @@ impl<V: SdfVector, const N: usize> BoundedSdf<V, N> for NBox<V, N> {
 // ===========================================================================
 
 /// Half-space with unit normal `n` and offset `h`: `dot(p, n) + h`.
+///
+/// The plane is at `dot(p, n) + h = 0`, equivalently passing through the point `-h * n`.
+/// Since `n` is the outward normal, positive `h` shifts the plane in the `-n` direction
+/// (shrinking the inside/negative half-space); negative `h` shifts it toward `n` (growing it).
 #[derive(Debug, Clone, Copy)]
 pub struct NPlane<V: SdfVector, const N: usize> {
+    /// Unit outward normal. Must be normalized by the caller.
     pub n: Vector<V, N>,
+    /// Signed offset along `n`. The plane passes through `-h * n`.
     pub h: V,
 }
 
@@ -205,6 +211,10 @@ pub struct NEllipsoid<V: SdfVector, const N: usize> {
 impl<V: SdfVector, const N: usize> SDF<V, N> for NEllipsoid<V, N> {
     #[inline(always)]
     fn eval(&self, p: Vector<V, N>) -> V {
+        // Quilez approximate ellipsoid SDF:
+        //   k0 = |p/r|          (distance in unit-sphere space)
+        //   k1 = 1/|p/r^2|      (Jacobian correction for the radial stretch)
+        //   dist = k0*(k0-1)*k1  (exact on the surface where k0=1; overestimates elsewhere)
         let p1 = p / self.r;
         let k0 = p1.dot(&p1).sqrt();
         let p2 = p1 / self.r;
@@ -241,15 +251,24 @@ impl<V: SdfVector, const N: usize> BoundedSdf<V, N> for NEllipsoid<V, N> {
 
 /// N-dimensional cross-polytope (the L1 / orthoplex "ball") of radius `s`.
 ///
-/// Returns `(|p|_1 - s) / sqrt(N)`, a 1-Lipschitz lower bound on the true
-/// distance (exact along the face normals). The `1/sqrt(N)` factor is a runtime
-/// reciprocal sqrt - unlike the baked `1/sqrt(3)` constant in the 3D-specific
+/// Returns `$(\lVert p \rVert_1 - s) / \sqrt{N}$`, a 1-Lipschitz lower bound on the true
+/// distance (exact along the face normals). The `$1/\sqrt{N}$` factor is a runtime
+/// reciprocal sqrt - unlike the baked `$1/\sqrt{3}$` constant in the 3D-specific
 /// `OctahedronBound3D`, which is why this one is its own type rather than an alias.
 #[derive(Debug, Clone, Copy)]
 pub struct CrossPolytope<V: SdfVector> {
     pub s: V,
 }
 
+/// Returns `$1/\sqrt{N}$` as a vector constant.
+///
+/// The gradient of `$\lVert p \rVert_1 - s$` is `$\operatorname{sign}(p)$`, whose L2 norm
+/// is `$\sqrt{N}$`. Multiplying by `$1/\sqrt{N}$` makes the gradient unit length on face
+/// normals, satisfying the eikonal equation where the lower-bound approximation is exact.
+///
+/// The `while` accumulation compiles to a constant under a fixed `N` (splat of
+/// `V::ONE` folds away); `core::array::map` does not inline reliably in
+/// `#[target_feature]` contexts, hence the manual loop.
 #[inline(always)]
 fn inv_sqrt_n<V: SdfVector, const N: usize>() -> V {
     // N as a vector, accumulated so it stays const-foldable under a fixed N

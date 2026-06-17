@@ -443,7 +443,10 @@ impl<V: SdfVector> BoundedSdf<V, 3> for BoxFrame3D<V> {
     }
 }
 
-/// Infinite cylinder parallel to the y axis: `c = (center_x, center_z, radius)`.
+/// Infinite cylinder parallel to the y axis.
+///
+/// `c` packs three values as `[center_x, center_z, radius]` to match Quilez's original
+/// convention. The cylinder axis passes through `(c[0], *, c[1])` with radius `c[2]`.
 #[derive(Debug, Clone, Copy)]
 pub struct InfiniteCylinder3D<V: SdfVector> {
     pub c: Vector3<V>,
@@ -602,6 +605,9 @@ pub struct CutSphere3D<V: SdfVector> {
 }
 
 impl<V: SdfVector> CutSphere3D<V> {
+    /// Sphere of radius `r` cut by a horizontal plane at height `h`, retaining `y >= h`.
+    /// `h` in `(-r, r)` for a proper cap. Precomputes `$w = \sqrt{r^2 - h^2}$`, the radius
+    /// of the cut circle.
     #[inline(always)]
     pub fn new(r: V, h: V) -> Self {
         Self {
@@ -680,6 +686,8 @@ pub struct CutHollowSphere3D<V: SdfVector> {
 }
 
 impl<V: SdfVector> CutHollowSphere3D<V> {
+    /// Hollow spherical cap: sphere of radius `r` cut at height `h` with shell thickness
+    /// `t`. Precomputes `$w = \sqrt{r^2 - h^2}$`.
     #[inline(always)]
     pub fn new(r: V, h: V, t: V) -> Self {
         Self {
@@ -726,6 +734,14 @@ pub struct DeathStar3D<V: SdfVector> {
 }
 
 impl<V: SdfVector> DeathStar3D<V> {
+    /// Sphere of radius `ra` at the origin with a spherical bite of radius `rb` whose
+    /// center is displaced by `d` along the x axis.
+    ///
+    /// Precomputes the intersection circle coordinates:
+    ///
+    /// ```math
+    /// a = \frac{r_a^2 - r_b^2 + d^2}{2d}, \quad b = \sqrt{\max(r_a^2 - a^2,\; 0)}
+    /// ```
     #[inline(always)]
     pub fn new(ra: V, rb: V, d: V) -> Self {
         let a = d.mul_adde(d, ra.mul_sube(ra, rb * rb)) / (d * V::TWO);
@@ -797,6 +813,12 @@ impl<V: SdfVector> BoundedSdf<V, 3> for Octahedron3D<V> {
 }
 
 /// Octahedron lower-bound approximation (cheap, not exact).
+///
+/// Evaluates `$(|x| + |y| + |z| - s) / \sqrt{3}$`, which is the exact SDF of a regular
+/// octahedron along its face normals but underestimates elsewhere. Valid for sphere
+/// tracing with conservative step sizes; use [`Octahedron3D`] when an exact SDF is needed.
+///
+/// `s` is the L1 "radius": the surface satisfies `|x| + |y| + |z| = s`.
 #[derive(Debug, Clone, Copy)]
 pub struct OctahedronBound3D<V: SdfVector> {
     pub s: V,
@@ -971,6 +993,10 @@ pub struct RoundCone3DVert<V: SdfVector> {
 }
 
 impl<V: SdfVector> RoundCone3DVert<V> {
+    /// Vertical rounded cone from base radius `r1` (at `y = 0`) to apex radius `r2`
+    /// (at `y = h`). Precomputes the lateral taper `$b = \frac{r_1 - r_2}{h}$` (radial
+    /// slope) and `$a = \sqrt{1 - b^2}$` (axial component of the flank unit normal), reused
+    /// to classify the nearest region in every `eval` call.
     #[inline(always)]
     pub fn new(r1: V, r2: V, h: V) -> Self {
         let b = (r1 - r2) / h;

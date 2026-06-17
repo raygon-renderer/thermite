@@ -8,6 +8,9 @@
 //! Primitives live in [`d2`], [`d3`], and [`dn`]; combinators (union, intersection,
 //! rounding, domain repetition, ...) live in [`ops`]. All are generic over the
 //! Thermite vector type, so the same code runs on any backend and lane width.
+//!
+//! [`FiniteDiff`] can be used to efficiently compute gradients/normals on SDFs that do
+//! not have native analytic `GradientSdf` implementations.
 
 #![no_std]
 
@@ -41,6 +44,8 @@ pub use d2::*;
 pub use d3::*;
 pub use dn::*;
 pub use ops::*;
+
+pub use ops::FiniteDiff;
 
 pub trait SDF<V: SdfVector, const N: usize> {
     /// Returns the signed distance

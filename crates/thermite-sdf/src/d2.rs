@@ -193,8 +193,13 @@ impl<V: SdfVector> Vesica2D<V> {
         }
     }
 
-    /// From the lens size: `half_width` (the x half-extent) and `half_height`
-    /// (the y half-extent).
+    /// From the lens size: `half_width` (`w`, tip-to-center) and `half_height` (`h`,
+    /// widest chord half-length). The two-circle parameterization follows from:
+    ///
+    /// ```math
+    /// w = r - d, \quad h = \sqrt{r^2 - d^2}
+    /// \implies d = \frac{h^2 - w^2}{2w}, \quad r = w + d
+    /// ```
     #[inline(always)]
     pub fn from_size(half_width: V, half_height: V) -> Self {
         // half_width = r - d,  half_height = sqrt(r^2 - d^2)
@@ -311,7 +316,9 @@ impl<V: SdfVector> GradientSdf<V, 2> for Cross2D<V> {
     }
 }
 
-/// Regular hexagon with circumradius (flat-to-flat half-distance) `r`.
+/// Regular hexagon with apothem `r` (flat-to-flat half-distance, also called the inradius).
+///
+/// The circumradius (center-to-vertex) is `$r \cdot \frac{2}{\sqrt{3}}$`.
 #[derive(Debug, Clone, Copy)]
 pub struct Hexagon2D<V: SdfVector> {
     pub r: V,
@@ -520,6 +527,14 @@ pub struct Moon2D<V: SdfVector> {
 }
 
 impl<V: SdfVector> Moon2D<V> {
+    /// Outer circle of radius `ra` at the origin; inner (cutting) circle of radius `rb`
+    /// centered at `(d, 0)`. The crescent retains the region inside `ra` but outside `rb`.
+    ///
+    /// Precomputes the radical-axis coordinates:
+    ///
+    /// ```math
+    /// a = \frac{r_a^2 - r_b^2 + d^2}{2d}, \quad b = \sqrt{\max(r_a^2 - a^2,\; 0)}
+    /// ```
     #[inline(always)]
     pub fn new(d: V, ra: V, rb: V) -> Self {
         let a = d.mul_adde(d, ra.mul_sube(ra, rb * rb)) / (d * V::TWO); // (ra^2 - rb^2 + d^2)/(2d)
@@ -1247,6 +1262,12 @@ pub struct UnevenCapsule2D<V: SdfVector> {
 }
 
 impl<V: SdfVector> UnevenCapsule2D<V> {
+    /// Capsule from bottom radius `r1` (at `y = 0`), top radius `r2` (at `y = h`), and
+    /// center-to-center height `h`.
+    ///
+    /// Precomputes the lateral taper `$b = \frac{r_1 - r_2}{h}$` (sine of the flank
+    /// half-angle) and `$a = \sqrt{1 - b^2}$` (cosine), which together give the flank's
+    /// inward unit normal.
     #[inline(always)]
     pub fn new(r1: V, r2: V, h: V) -> Self {
         let b = (r1 - r2) / h;
@@ -1694,6 +1715,9 @@ pub struct CutDisk2D<V: SdfVector> {
 }
 
 impl<V: SdfVector> CutDisk2D<V> {
+    /// Disk of radius `r` cut by a horizontal chord at height `h`, retaining `y >= h`.
+    /// `h` must be in `(-r, r)`; at the limits the shape degenerates. Precomputes the
+    /// half-chord `$w = \sqrt{r^2 - h^2}$`.
     #[inline(always)]
     pub fn new(r: V, h: V) -> Self {
         Self {
@@ -1884,6 +1908,12 @@ pub struct Egg2D<V: SdfVector> {
 }
 
 impl<V: SdfVector> Egg2D<V> {
+    /// Egg from height `he`, bottom cap radius `ra`, top cap radius `rb`, and bulge `bu`.
+    ///
+    /// `bu` is a dimensionless curvature factor controlling the lateral arc that joins the
+    /// two caps: its radius is `$r = \frac{h_e + r_a + r_b}{2\,b_u}$`, so smaller `bu` gives
+    /// a larger, flatter arc and larger `bu` a tighter one. Also precomputes the tangency
+    /// point `(x, y)` where the lateral arc meets the caps.
     #[inline(always)]
     pub fn new(he: V, ra: V, rb: V, bu: V) -> Self {
         let r = (he + ra + rb) * V::HALF / bu;
@@ -1945,6 +1975,8 @@ impl<V: SdfVector> SDF<V, 2> for Tunnel2D<V> {
 #[derive(Debug, Clone, Copy)]
 pub struct Stairs2D<V: SdfVector> {
     pub wh: Vector2<V>,
+    /// Number of steps as a float vector (use `V::splat(n as f32)`). Must be a positive
+    /// integer value; non-integer values produce an undefined shape.
     pub n: V,
 }
 
@@ -2054,8 +2086,12 @@ pub struct Star2D<V: SdfVector, P: Policy = DefaultPolicy> {
 }
 
 impl<V: SdfVector, P: Policy> Star2D<V, P> {
-    /// Build from the point count `n` and sharpness `m`, precomputing the angle
+    /// Build from point count `n` and sharpness `m` (in `[2, n]`), precomputing angle
     /// constants with policy `P`.
+    ///
+    /// `m` controls tip sharpness: `m = n` gives a true star polygon with sharp points;
+    /// `m = 2` gives wide, petal-like arms. The precomputed `acs = (cos(pi/n), sin(pi/n))`
+    /// and `ecs = (cos(pi/m), sin(pi/m))` encode the sector and tip half-angles.
     #[inline(always)]
     pub fn from_params(r: V, n: u32, m: V) -> Self
     where
@@ -2167,7 +2203,10 @@ impl<V: SdfVector> SDF<V, 2> for CircleWave2D<V> {
 // Batch 2c: curves needing a per-evaluation cubic solve (policy `P`)
 // ===========================================================================
 
-/// Segment of the parabola of half-width `wi` and height `he` (vertex up).
+/// Segment of the parabola clipped to `x in [-wi, wi]`, vertex at `(0, he)`.
+///
+/// The parabola passes through `(+-wi, 0)` with equation `$y = h_e \left(1 - x^2/w_i^2\right)$`.
+/// Nearest-point computation reduces to a depressed cubic solved via Cardano / trig.
 #[derive(Debug, Clone, Copy)]
 pub struct ParabolaSegment2D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub wi: V,
