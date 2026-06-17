@@ -5,7 +5,7 @@
 //! - [`GradientSdf`] - distance plus the analytic, unit-length gradient/normal.
 //! - [`BoundedSdf`] - a closed-form axis-aligned bounding box.
 //!
-//! Primitives live in [`d2`] and [`d3`]; combinators (union, intersection,
+//! Primitives live in [`d2`], [`d3`], and [`dn`]; combinators (union, intersection,
 //! rounding, domain repetition, ...) live in [`ops`]. All are generic over the
 //! Thermite vector type, so the same code runs on any backend and lane width.
 
@@ -122,7 +122,14 @@ mod tests {
         };
         fin2((Circle2D { radius: v(1.0) }).eval_grad(p(0.0, 0.0))); // center
         fin2((Circle2D { radius: v(1.0) }).eval_grad(p(1.0, 0.0))); // surface
-        fin2((Segment2D { a: p(-1.0, 0.0), b: p(1.0, 0.0), r: v(0.0) }).eval_grad(p(0.0, 0.0))); // on axis
+        fin2(
+            (Segment2D {
+                a: p(-1.0, 0.0),
+                b: p(1.0, 0.0),
+                r: v(0.0),
+            })
+            .eval_grad(p(0.0, 0.0)),
+        ); // on axis
         fin2((Moon2D::new(v(0.6), v(1.0), v(0.8))).eval_grad(p(0.0, 0.0)));
         fin2((Ellipse2D { ab: p(1.5, 0.8) }).eval_grad(p(0.0, 0.0)));
 
@@ -131,7 +138,14 @@ mod tests {
         };
         fin3((Sphere3D { radius: v(1.0) }).eval_grad(p3(0.0, 0.0, 0.0)));
         fin3((VerticalCylinder3D::from_height(v(2.0), v(1.0))).eval_grad(p3(0.0, 0.0, 0.0))); // axis
-        fin3((Cylinder3D { a: p3(0.0, -1.0, 0.0), b: p3(0.0, 1.0, 0.0), r: v(1.0) }).eval_grad(p3(0.0, 0.5, 0.0)));
+        fin3(
+            (Cylinder3D {
+                a: p3(0.0, -1.0, 0.0),
+                b: p3(0.0, 1.0, 0.0),
+                r: v(1.0),
+            })
+            .eval_grad(p3(0.0, 0.5, 0.0)),
+        );
 
         // Ellipsoid eval no longer NaN at the origin (was 1/sqrt(0))
         assert!(s((Ellipsoid3D { r: p3(1.0, 1.0, 1.0) }).eval(p3(0.0, 0.0, 0.0))).is_finite());
@@ -362,56 +376,124 @@ mod tests {
         agrees!(Box2D { b: p(1.0, 0.6) }, [p(1.5, 0.1), p(0.15, 1.1), p(-1.4, -0.2)]);
         agrees!(Ellipse2D { ab: p(1.5, 0.8) }, [p(2.0, 0.2), p(0.1, 1.3), p(-1.8, -0.3)]);
         agrees!(
-            Segment2D { a: p(-1.0, 0.0), b: p(1.0, 0.5), r: v(0.3) },
+            Segment2D {
+                a: p(-1.0, 0.0),
+                b: p(1.0, 0.5),
+                r: v(0.3)
+            },
             [p(0.0, 0.8), p(1.4, 0.6), p(-1.3, -0.4)]
         );
         // Tier A/B additions (interior + exterior; avoid abs-fold axes and kinks)
-        agrees!(RoundedX2D { w: v(1.5), r: v(0.2) }, [p(1.0, 0.2), p(0.9, 0.7), p(0.3, 0.15)]);
         agrees!(
-            RoundedBox2D { b: p(1.0, 0.7), r: [v(0.3), v(0.1), v(0.4), v(0.2)] },
+            RoundedX2D { w: v(1.5), r: v(0.2) },
+            [p(1.0, 0.2), p(0.9, 0.7), p(0.3, 0.15)]
+        );
+        agrees!(
+            RoundedBox2D {
+                b: p(1.0, 0.7),
+                r: [v(0.3), v(0.1), v(0.4), v(0.2)]
+            },
             [p(1.4, 0.2), p(0.2, 1.1), p(0.5, 0.3), p(-1.3, -0.2)]
         );
         agrees!(
-            OrientedBox2D { a: p(-1.0, -0.4), b: p(1.0, 0.5), th: v(0.6) },
+            OrientedBox2D {
+                a: p(-1.0, -0.4),
+                b: p(1.0, 0.5),
+                th: v(0.6)
+            },
             [p(1.2, 0.9), p(-1.1, -0.7), p(0.1, 0.05)]
         );
-        agrees!(UnevenCapsule2D::new(v(0.7), v(0.3), v(1.2)), [p(0.5, -0.3), p(0.4, 1.4), p(0.6, 0.6), p(0.2, 0.5)]);
+        agrees!(
+            UnevenCapsule2D::new(v(0.7), v(0.3), v(1.2)),
+            [p(0.5, -0.3), p(0.4, 1.4), p(0.6, 0.6), p(0.2, 0.5)]
+        );
         // fold-polygon family (avoid x=0 / y=0 abs axes and the fold seams)
-        agrees!(EquilateralTriangle2D { r: v(1.0) }, [p(0.4, -0.3), p(-0.5, 0.2), p(0.3, 0.5), p(0.55, -0.6)]);
-        agrees!(Pentagon2D { r: v(1.0) }, [p(0.5, 0.8), p(-0.6, 0.4), p(0.3, -0.7), p(0.25, 0.3)]);
-        agrees!(Octagon2D { r: v(1.0) }, [p(0.7, 0.4), p(-0.5, 0.6), p(0.4, -0.8), p(0.3, 0.25)]);
-        agrees!(Hexagram2D { r: v(1.0) }, [p(0.8, 0.3), p(-0.4, 0.7), p(0.5, -0.5), p(0.25, 0.3)]);
+        agrees!(
+            EquilateralTriangle2D { r: v(1.0) },
+            [p(0.4, -0.3), p(-0.5, 0.2), p(0.3, 0.5), p(0.55, -0.6)]
+        );
+        agrees!(
+            Pentagon2D { r: v(1.0) },
+            [p(0.5, 0.8), p(-0.6, 0.4), p(0.3, -0.7), p(0.25, 0.3)]
+        );
+        agrees!(
+            Octagon2D { r: v(1.0) },
+            [p(0.7, 0.4), p(-0.5, 0.6), p(0.4, -0.8), p(0.3, 0.25)]
+        );
+        agrees!(
+            Hexagram2D { r: v(1.0) },
+            [p(0.8, 0.3), p(-0.4, 0.7), p(0.5, -0.5), p(0.25, 0.3)]
+        );
 
         // a domain/round op forwards the gradient unchanged
         agrees!(
-            Round { shape: Box2D { b: p(0.8, 0.5) }, radius: v(0.2) },
+            Round {
+                shape: Box2D { b: p(0.8, 0.5) },
+                radius: v(0.2)
+            },
             [p(1.4, 0.1), p(0.1, 1.0), p(-1.2, -0.2)]
         );
 
         // 3D
         agrees!(Sphere3D { radius: v(1.0) }, [p3(1.4, 0.3, 0.2), p3(-0.7, 0.9, 0.5)]);
-        agrees!(Torus3D { ra: v(1.0), rb: v(0.3) }, [p3(1.6, 0.2, 0.1), p3(0.1, 0.5, 1.5)]);
         agrees!(
-            Box3D { b: p3(1.0, 0.8, 0.6), r: v(0.0) },
+            Torus3D { ra: v(1.0), rb: v(0.3) },
+            [p3(1.6, 0.2, 0.1), p3(0.1, 0.5, 1.5)]
+        );
+        agrees!(
+            Box3D {
+                b: p3(1.0, 0.8, 0.6),
+                r: v(0.0)
+            },
             [p3(1.5, 0.1, 0.0), p3(0.1, 1.3, 0.1), p3(0.0, 0.0, 1.2)]
         );
         // Tier A 3D additions
-        agrees!(Plane3D { n: p3(0.0, 1.0, 0.0), h: v(0.0) }, [p3(0.5, 0.7, -0.3), p3(-0.4, -0.6, 0.2)]);
-        agrees!(InfiniteCylinder3D { c: p3(0.0, 0.0, 1.0) }, [p3(1.5, 0.3, 0.2), p3(0.4, 0.9, 0.5)]);
-        agrees!(VerticalCapsule3D { h: v(1.0), r: v(0.4) }, [p3(0.7, 0.5, 0.0), p3(0.0, 1.5, 0.3), p3(0.2, 0.5, 0.1)]);
+        agrees!(
+            Plane3D {
+                n: p3(0.0, 1.0, 0.0),
+                h: v(0.0)
+            },
+            [p3(0.5, 0.7, -0.3), p3(-0.4, -0.6, 0.2)]
+        );
+        agrees!(
+            InfiniteCylinder3D { c: p3(0.0, 0.0, 1.0) },
+            [p3(1.5, 0.3, 0.2), p3(0.4, 0.9, 0.5)]
+        );
+        agrees!(
+            VerticalCapsule3D { h: v(1.0), r: v(0.4) },
+            [p3(0.7, 0.5, 0.0), p3(0.0, 1.5, 0.3), p3(0.2, 0.5, 0.1)]
+        );
         // octahedron-bound: keep components clearly nonzero (sign(p) is the gradient)
         agrees!(OctahedronBound3D { s: v(1.0) }, [p3(0.8, 0.3, 0.2), p3(0.3, 0.2, 0.15)]);
         agrees!(
-            RoundedCylinder3D { ra: v(1.0), rb: v(0.2), h: v(0.6) },
-            [p3(1.4, 0.2, 0.1), p3(0.3, 1.0, 0.2), p3(0.2, 0.1, 0.3), p3(0.8, 0.3, 0.0)]
+            RoundedCylinder3D {
+                ra: v(1.0),
+                rb: v(0.2),
+                h: v(0.6)
+            },
+            [
+                p3(1.4, 0.2, 0.1),
+                p3(0.3, 1.0, 0.2),
+                p3(0.2, 0.1, 0.3),
+                p3(0.8, 0.3, 0.0)
+            ]
         );
         // Tier C: cut sphere (sphere / cap / rim regions) and unsigned tri/quad
         agrees!(
             CutSphere3D::new(v(1.0), v(0.3)),
-            [p3(1.4, 0.3, 0.2), p3(0.2, 0.6, 0.15), p3(1.1, 0.5, 0.0), p3(0.0, -1.3, 0.1)]
+            [
+                p3(1.4, 0.3, 0.2),
+                p3(0.2, 0.6, 0.15),
+                p3(1.1, 0.5, 0.0),
+                p3(0.0, -1.3, 0.1)
+            ]
         );
         agrees!(
-            UdTriangle3D { a: p3(-1.0, 0.0, 0.0), b: p3(1.0, 0.0, 0.0), c: p3(0.0, 1.2, 0.3) },
+            UdTriangle3D {
+                a: p3(-1.0, 0.0, 0.0),
+                b: p3(1.0, 0.0, 0.0),
+                c: p3(0.0, 1.2, 0.3)
+            },
             [p3(0.0, 0.4, 0.8), p3(-0.8, 0.1, 0.5), p3(1.2, 0.2, -0.4)]
         );
         agrees!(
@@ -455,27 +537,60 @@ mod tests {
         }
 
         // 4D
-        grad_fd!(NSphere { radius: v(1.0) }, [p4(1.2, 0.3, 0.2, 0.4), p4(-0.5, 0.6, 0.3, 0.2)]);
-        grad_fd!(NBox { b: p4(1.0, 0.8, 0.6, 0.5) }, [p4(1.4, 0.1, 0.1, 0.1), p4(0.2, 0.3, 0.1, 0.7)]);
         grad_fd!(
-            NCapsule { a: p4(-1.0, 0.0, 0.0, 0.0), b: p4(1.0, 0.4, 0.2, 0.1), r: v(0.3) },
+            NSphere { radius: v(1.0) },
+            [p4(1.2, 0.3, 0.2, 0.4), p4(-0.5, 0.6, 0.3, 0.2)]
+        );
+        grad_fd!(
+            NBox {
+                b: p4(1.0, 0.8, 0.6, 0.5)
+            },
+            [p4(1.4, 0.1, 0.1, 0.1), p4(0.2, 0.3, 0.1, 0.7)]
+        );
+        grad_fd!(
+            NCapsule {
+                a: p4(-1.0, 0.0, 0.0, 0.0),
+                b: p4(1.0, 0.4, 0.2, 0.1),
+                r: v(0.3)
+            },
             [p4(0.0, 0.7, 0.3, 0.2), p4(1.3, 0.2, -0.3, 0.1)]
         );
-        grad_fd!(CrossPolytope { s: v(1.0) }, [p4(0.6, 0.3, 0.2, 0.15), p4(0.4, 0.25, 0.2, 0.1)]);
+        grad_fd!(
+            CrossPolytope { s: v(1.0) },
+            [p4(0.6, 0.3, 0.2, 0.15), p4(0.4, 0.25, 0.2, 0.1)]
+        );
         // NEllipsoid is an approximate field with IQ's approximate normal, so it is
         // not finite-difference-checkable; just confirm it stays finite and signed.
-        let e4 = NEllipsoid { r: p4(1.5, 0.8, 1.0, 0.6) };
+        let e4 = NEllipsoid {
+            r: p4(1.5, 0.8, 1.0, 0.6),
+        };
         assert!(s(e4.eval(p4(0.1, 0.0, 0.0, 0.0))) < 0.0); // exact origin is guarded to 0
         assert!(s(e4.eval(p4(2.0, 0.0, 0.0, 0.0))) > 0.0);
-        grad_fd!(NPlane { n: p4(0.5, 0.5, 0.5, 0.5), h: v(0.0) }, [p4(0.3, 0.7, -0.2, 0.4)]);
+        grad_fd!(
+            NPlane {
+                n: p4(0.5, 0.5, 0.5, 0.5),
+                h: v(0.0)
+            },
+            [p4(0.3, 0.7, -0.2, 0.4)]
+        );
 
         // 5D
-        grad_fd!(NSphere { radius: v(1.0) }, [p5(0.9, 0.4, 0.3, 0.2, 0.5), p5(-0.6, 0.5, 0.4, 0.3, 0.2)]);
-        grad_fd!(NBox { b: p5(1.0, 0.8, 0.6, 0.5, 0.4) }, [p5(1.3, 0.1, 0.1, 0.1, 0.1), p5(0.2, 0.3, 0.1, 0.1, 0.6)]);
+        grad_fd!(
+            NSphere { radius: v(1.0) },
+            [p5(0.9, 0.4, 0.3, 0.2, 0.5), p5(-0.6, 0.5, 0.4, 0.3, 0.2)]
+        );
+        grad_fd!(
+            NBox {
+                b: p5(1.0, 0.8, 0.6, 0.5, 0.4)
+            },
+            [p5(1.3, 0.1, 0.1, 0.1, 0.1), p5(0.2, 0.3, 0.1, 0.1, 0.6)]
+        );
         grad_fd!(CrossPolytope { s: v(1.0) }, [p5(0.5, 0.3, 0.2, 0.15, 0.1)]);
 
         // sign sanity + generic BoundedSdf containment (4D box)
-        let b4 = NBox { b: p4(1.0, 1.0, 1.0, 1.0) };
+        let b4 = NBox {
+            b: p4(1.0, 1.0, 1.0, 1.0),
+        };
         assert!(s(b4.eval(p4(0.0, 0.0, 0.0, 0.0))) < 0.0);
         assert!(s(b4.eval(p4(3.0, 3.0, 3.0, 3.0))) > 0.0);
         let bb: thermite_geometry::prim::Bounds<V, 4> = b4.aabb();
@@ -490,14 +605,24 @@ mod tests {
     #[test]
     fn smooth_boolean_gradient_dominance() {
         let a = Circle2D { radius: v(0.7) };
-        let b = Segment2D { a: p(0.6, -0.8), b: p(1.4, 0.7), r: v(0.25) };
+        let b = Segment2D {
+            a: p(0.6, -0.8),
+            b: p(1.4, 0.7),
+            r: v(0.25),
+        };
         let k = 0.15f32;
         // The op scales its blend band to 4*k internally, so an operand strictly
         // dominates (h == 0) only past that.
         let band = 4.0 * k;
         let pts = [
-            p(-0.95, 0.0), p(-0.6, -0.75), p(-0.2, -1.1), p(0.0, 1.2),
-            p(-1.0, 0.5), p(1.5, 0.7), p(1.0, -0.1), p(0.9, 0.45),
+            p(-0.95, 0.0),
+            p(-0.6, -0.75),
+            p(-0.2, -1.1),
+            p(0.0, 1.2),
+            p(-1.0, 0.5),
+            p(1.5, 0.7),
+            p(1.0, -0.1),
+            p(0.9, 0.45),
         ];
         let close = |g: Vector2<V>, h: Vector2<V>| (s(g[0]) - s(h[0])).abs() < 1e-4 && (s(g[1]) - s(h[1])).abs() < 1e-4;
 
@@ -550,12 +675,19 @@ mod tests {
         eikonal!(Circle2D { radius: v(1.0) }, [p(1.5, 0.3), p(-0.9, 0.6), p(0.4, -1.4)]);
         eikonal!(Box2D { b: p(1.0, 0.6) }, [p(1.6, 0.1), p(0.1, 1.2), p(-1.5, -0.2)]);
         eikonal!(
-            Segment2D { a: p(-1.0, 0.0), b: p(1.0, 0.5), r: v(0.3) },
+            Segment2D {
+                a: p(-1.0, 0.0),
+                b: p(1.0, 0.5),
+                r: v(0.3)
+            },
             [p(0.0, 0.9), p(1.5, 0.7), p(-1.4, -0.5)]
         );
         eikonal!(Hexagon2D { r: v(1.0) }, [p(1.5, 0.2), p(-0.2, 1.4), p(0.9, -0.9)]);
         eikonal!(Sphere3D { radius: v(1.0) }, [p3(1.5, 0.2, 0.3), p3(-0.8, 0.9, 0.4)]);
-        eikonal!(Torus3D { ra: v(1.0), rb: v(0.3) }, [p3(1.7, 0.2, 0.1), p3(0.1, 0.6, 1.6)]);
+        eikonal!(
+            Torus3D { ra: v(1.0), rb: v(0.3) },
+            [p3(1.7, 0.2, 0.1), p3(0.1, 0.6, 1.6)]
+        );
     }
 
     #[test]

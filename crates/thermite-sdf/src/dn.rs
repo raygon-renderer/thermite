@@ -75,7 +75,7 @@ impl<V: SdfVector, const N: usize> SDF<V, N> for NBox<V, N> {
             g = g.max(q[i]);
             i += 1;
         }
-        q.max(Vector::splat(V::ZERO)).l2_norm() + g.min(V::ZERO)
+        q.max(Vector::ZERO).l2_norm() + g.min(V::ZERO)
     }
 }
 
@@ -87,7 +87,7 @@ impl<V: SdfVector, const N: usize> GradientSdf<V, N> for NBox<V, N> {
 
         // running maximum component, with a per-lane one-hot of its axis for the
         // interior (where the gradient snaps to the nearest face normal)
-        let zero = Vector::splat(V::ZERO);
+        let zero = Vector::ZERO;
         let mut g = q[0];
         let mut face = {
             let mut e = zero;

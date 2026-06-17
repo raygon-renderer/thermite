@@ -672,7 +672,7 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDif
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
         // Central difference per axis: grad[i] ~ f(p + eps*e_i) - f(p - eps*e_i).
-        let mut grad = Vector::splat(V::ZERO);
+        let mut grad = Vector::ZERO;
         let mut i = 0;
         while i < N {
             let mut hp = p;

@@ -489,8 +489,8 @@ impl<V: SdfVector> SDF<V, 3> for HexPrism3D<V> {
         let pz = p[2].abs();
 
         let m = kx.mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= m * kx;
-        py -= m * ky;
+        px = kx.nmul_adde(m, px); // px - m*kx
+        py = ky.nmul_adde(m, py); // py - m*ky
 
         let cx = px - px.clamp(-(kz * self.h[0]), kz * self.h[0]);
         let cy = py - self.h[0];
@@ -1231,7 +1231,10 @@ impl<V: SdfVector> GradientSdf<V, 3> for UdTriangle3D<V> {
         let face_grad = nor * (npa.signum() / nlen);
 
         let pick_edge = inside.cmp_lt(V::TWO);
-        (pick_edge.select(edge_dist, face_dist), pick_edge.select(edge_grad, face_grad))
+        (
+            pick_edge.select(edge_dist, face_dist),
+            pick_edge.select(edge_grad, face_grad),
+        )
     }
 }
 
@@ -1305,7 +1308,10 @@ impl<V: SdfVector> GradientSdf<V, 3> for UdQuad3D<V> {
         let face_grad = nor * (npa.signum() / nlen);
 
         let pick_edge = inside.cmp_lt(V::ONE + V::TWO);
-        (pick_edge.select(edge_dist, face_dist), pick_edge.select(edge_grad, face_grad))
+        (
+            pick_edge.select(edge_dist, face_dist),
+            pick_edge.select(edge_grad, face_grad),
+        )
     }
 }
 

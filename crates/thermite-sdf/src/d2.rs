@@ -1195,8 +1195,8 @@ impl<V: SdfVector> SDF<V, 2> for EquilateralTriangle2D<V> {
         let k = V::SQRT_3;
         let px0 = p[0].abs() - self.r;
         let py0 = p[1] + self.r / k;
-        let fold = (px0 + k * py0).cmp_gt(V::ZERO); // p.x + k*p.y > 0
-        let px1 = fold.select((px0 - k * py0) * V::HALF, px0);
+        let fold = k.mul_adde(py0, px0).cmp_gt(V::ZERO); // p.x + k*p.y > 0
+        let px1 = fold.select(k.nmul_adde(py0, px0) * V::HALF, px0); // (px0 - k*py0)/2
         let py1 = fold.select(k.nmul_adde(px0, -py0) * V::HALF, py0); // (-k*px - py)/2
         let px2 = px1 - px1.clamp(-(self.r * V::TWO), V::ZERO);
         -px2.mul_adde(px2, py1 * py1).sqrt().mul_sign(py1)
@@ -1210,8 +1210,8 @@ impl<V: SdfVector> GradientSdf<V, 2> for EquilateralTriangle2D<V> {
         let sx = p[0].signum();
         let px0 = p[0].abs() - self.r;
         let py0 = p[1] + self.r / k;
-        let fold = (px0 + k * py0).cmp_gt(V::ZERO);
-        let px1 = fold.select((px0 - k * py0) * V::HALF, px0);
+        let fold = k.mul_adde(py0, px0).cmp_gt(V::ZERO); // px0 + k*py0 > 0
+        let px1 = fold.select(k.nmul_adde(py0, px0) * V::HALF, px0); // (px0 - k*py0)/2
         let py1 = fold.select(k.nmul_adde(px0, -py0) * V::HALF, py0);
         let px2 = px1 - px1.clamp(-(self.r * V::TWO), V::ZERO);
         let l = px2.mul_adde(px2, py1 * py1).sqrt();
@@ -1221,10 +1221,11 @@ impl<V: SdfVector> GradientSdf<V, 2> for EquilateralTriangle2D<V> {
         let g1 = unit_or_zero(Vector2::new([px2, py1]), l) * -py1.signum();
         // un-reflect through the fold plane (R is its own transpose)
         let half = V::HALF;
+        let kh = k * half;
         let g0 = fold.select(
             Vector2::new([
-                g1[0] * half - g1[1] * (k * half),
-                g1[0] * -(k * half) - g1[1] * half,
+                g1[0].mul_sube(half, g1[1] * kh),  // g1.x*half - g1.y*kh
+                g1[0].nmul_sube(kh, g1[1] * half), // -g1.x*kh - g1.y*half
             ]),
             g1,
         );
@@ -1333,11 +1334,11 @@ where
         let mut py = p[1];
 
         let d1 = (-kx).mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= d1 * -kx;
-        py -= d1 * ky;
+        px = kx.mul_adde(d1, px); // px - d1*(-kx)
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let d2 = kx.mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= d2 * kx;
-        py -= d2 * ky;
+        px = kx.nmul_adde(d2, px); // px - d2*kx
+        py = ky.nmul_adde(d2, py); // py - d2*ky
 
         px -= px.clamp(-(self.r * kz), self.r * kz);
         py -= self.r;
@@ -1360,13 +1361,13 @@ where
         let dot1 = (-kx).mul_adde(px, ky * py); // dot((-kx, ky), p)
         let a1 = dot1.cmp_lt(V::ZERO);
         let d1 = dot1.min(V::ZERO) * V::TWO;
-        px -= d1 * -kx;
-        py -= d1 * ky;
+        px = kx.mul_adde(d1, px); // px - d1*(-kx)
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let dot2 = kx.mul_adde(px, ky * py); // dot((kx, ky), p)
         let a2 = dot2.cmp_lt(V::ZERO);
         let d2 = dot2.min(V::ZERO) * V::TWO;
-        px -= d2 * kx;
-        py -= d2 * ky;
+        px = kx.nmul_adde(d2, px); // px - d2*kx
+        py = ky.nmul_adde(d2, py); // py - d2*ky
 
         let px2 = px - px.clamp(-(self.r * kz), self.r * kz);
         let py2 = py - self.r;
@@ -1375,10 +1376,10 @@ where
 
         let mut g = unit_or_zero(Vector2::new([px2, py2]), l) * py2.signum();
         // un-reflect in reverse order (each reflection is its own transpose)
-        let t2 = (kx * g[0] + ky * g[1]) * V::TWO;
-        g = a2.select(Vector2::new([g[0] - t2 * kx, g[1] - t2 * ky]), g);
-        let t1 = ((-kx) * g[0] + ky * g[1]) * V::TWO;
-        g = a1.select(Vector2::new([g[0] + t1 * kx, g[1] - t1 * ky]), g);
+        let t2 = kx.mul_adde(g[0], ky * g[1]) * V::TWO;
+        g = a2.select(Vector2::new([kx.nmul_adde(t2, g[0]), ky.nmul_adde(t2, g[1])]), g);
+        let t1 = (-kx).mul_adde(g[0], ky * g[1]) * V::TWO;
+        g = a1.select(Vector2::new([kx.mul_adde(t1, g[0]), ky.nmul_adde(t1, g[1])]), g);
 
         (d, Vector2::new([sx * g[0], g[1]]))
     }
@@ -1414,11 +1415,11 @@ where
         let mut py = p[1].abs();
 
         let d1 = kx.mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= d1 * kx;
-        py -= d1 * ky;
+        px = kx.nmul_adde(d1, px); // px - d1*kx
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let d2 = (-kx).mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= d2 * -kx;
-        py -= d2 * ky;
+        px = kx.mul_adde(d2, px); // px - d2*(-kx)
+        py = ky.nmul_adde(d2, py); // py - d2*ky
 
         px -= px.clamp(-(kz * self.r), kz * self.r);
         py -= self.r;
@@ -1442,13 +1443,13 @@ where
         let dot1 = kx.mul_adde(px, ky * py); // dot((kx, ky), p)
         let a1 = dot1.cmp_lt(V::ZERO);
         let d1 = dot1.min(V::ZERO) * V::TWO;
-        px -= d1 * kx;
-        py -= d1 * ky;
+        px = kx.nmul_adde(d1, px); // px - d1*kx
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let dot2 = (-kx).mul_adde(px, ky * py); // dot((-kx, ky), p)
         let a2 = dot2.cmp_lt(V::ZERO);
         let d2 = dot2.min(V::ZERO) * V::TWO;
-        px -= d2 * -kx;
-        py -= d2 * ky;
+        px = kx.mul_adde(d2, px); // px - d2*(-kx)
+        py = ky.nmul_adde(d2, py); // py - d2*ky
 
         let px2 = px - px.clamp(-(kz * self.r), kz * self.r);
         let py2 = py - self.r;
@@ -1456,10 +1457,10 @@ where
         let d = l.mul_sign(py2);
 
         let mut g = unit_or_zero(Vector2::new([px2, py2]), l) * py2.signum();
-        let t2 = ((-kx) * g[0] + ky * g[1]) * V::TWO;
-        g = a2.select(Vector2::new([g[0] + t2 * kx, g[1] - t2 * ky]), g);
-        let t1 = (kx * g[0] + ky * g[1]) * V::TWO;
-        g = a1.select(Vector2::new([g[0] - t1 * kx, g[1] - t1 * ky]), g);
+        let t2 = (-kx).mul_adde(g[0], ky * g[1]) * V::TWO;
+        g = a2.select(Vector2::new([kx.mul_adde(t2, g[0]), ky.nmul_adde(t2, g[1])]), g);
+        let t1 = kx.mul_adde(g[0], ky * g[1]) * V::TWO;
+        g = a1.select(Vector2::new([kx.nmul_adde(t1, g[0]), ky.nmul_adde(t1, g[1])]), g);
 
         (d, Vector2::new([sx * g[0], sy * g[1]]))
     }
@@ -1495,11 +1496,11 @@ where
         let mut py = p[1].abs();
 
         let d1 = kx.mul_adde(px, ky * py).min(V::ZERO) * V::TWO;
-        px -= d1 * kx;
-        py -= d1 * ky;
+        px = kx.nmul_adde(d1, px); // px - d1*kx
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let d2 = ky.mul_adde(px, kx * py).min(V::ZERO) * V::TWO; // k.yx = (ky, kx)
-        px -= d2 * ky;
-        py -= d2 * kx;
+        px = ky.nmul_adde(d2, px); // px - d2*ky
+        py = kx.nmul_adde(d2, py); // py - d2*kx
 
         px -= px.clamp(self.r * kz, self.r * kw);
         py -= self.r;
@@ -1523,13 +1524,13 @@ where
         let dot1 = kx.mul_adde(px, ky * py); // dot((kx, ky), p)
         let a1 = dot1.cmp_lt(V::ZERO);
         let d1 = dot1.min(V::ZERO) * V::TWO;
-        px -= d1 * kx;
-        py -= d1 * ky;
+        px = kx.nmul_adde(d1, px); // px - d1*kx
+        py = ky.nmul_adde(d1, py); // py - d1*ky
         let dot2 = ky.mul_adde(px, kx * py); // dot((ky, kx), p)
         let a2 = dot2.cmp_lt(V::ZERO);
         let d2 = dot2.min(V::ZERO) * V::TWO;
-        px -= d2 * ky;
-        py -= d2 * kx;
+        px = ky.nmul_adde(d2, px); // px - d2*ky
+        py = kx.nmul_adde(d2, py); // py - d2*kx
 
         let px2 = px - px.clamp(self.r * kz, self.r * kw);
         let py2 = py - self.r;
@@ -1537,10 +1538,10 @@ where
         let d = l.mul_sign(py2);
 
         let mut g = unit_or_zero(Vector2::new([px2, py2]), l) * py2.signum();
-        let t2 = (ky * g[0] + kx * g[1]) * V::TWO;
-        g = a2.select(Vector2::new([g[0] - t2 * ky, g[1] - t2 * kx]), g);
-        let t1 = (kx * g[0] + ky * g[1]) * V::TWO;
-        g = a1.select(Vector2::new([g[0] - t1 * kx, g[1] - t1 * ky]), g);
+        let t2 = ky.mul_adde(g[0], kx * g[1]) * V::TWO;
+        g = a2.select(Vector2::new([ky.nmul_adde(t2, g[0]), kx.nmul_adde(t2, g[1])]), g);
+        let t1 = kx.mul_adde(g[0], ky * g[1]) * V::TWO;
+        g = a1.select(Vector2::new([kx.nmul_adde(t1, g[0]), ky.nmul_adde(t1, g[1])]), g);
 
         (d, Vector2::new([sx * g[0], sy * g[1]]))
     }
@@ -1662,12 +1663,12 @@ where
 
         // reflect across v1 = (k1x, -k1y)
         let m1 = k1x.mul_sube(px, k1y * py).max(V::ZERO) * V::TWO; // 2*max(dot(v1,p),0)
-        px -= m1 * k1x;
-        py -= m1 * -k1y;
+        px = k1x.nmul_adde(m1, px); // px - m1*k1x
+        py = k1y.mul_adde(m1, py); // py - m1*(-k1y)
         // reflect across v2 = (-k1x, -k1y)
         let m2 = (-k1x).mul_sube(px, k1y * py).max(V::ZERO) * V::TWO;
-        px -= m2 * -k1x;
-        py -= m2 * -k1y;
+        px = k1x.mul_adde(m2, px); // px - m2*(-k1x)
+        py = k1y.mul_adde(m2, py); // py - m2*(-k1y)
 
         px = px.abs();
         py -= self.r;
@@ -1974,7 +1975,7 @@ impl<V: SdfVector> SDF<V, 2> for Stairs2D<V> {
         py = r1y;
 
         let id = (px / dia).round().clamp(V::ZERO, self.n - V::ONE);
-        px -= id * dia;
+        px = dia.nmul_adde(id, px); // px - id*dia
 
         // p = mat2(wh.x, wh.y, -wh.y, wh.x) * p / dia
         let r2x = whx.mul_sube(px, why * py) / dia; // wh.x*px - wh.y*py
@@ -2274,8 +2275,8 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for QuadraticBezier
             let vv = (q / (p * z * V::TWO)).acos_p::<P>() / third;
             let m = vv.cos_p::<P>();
             let n = vv.sin_p::<P>() * V::SQRT_3;
-            let tx = (m * V::TWO * z - kx).clamp(V::ZERO, V::ONE);
-            let ty = ((-n - m) * z - kx).clamp(V::ZERO, V::ONE);
+            let tx = (m * V::TWO).mul_sube(z, kx).clamp(V::ZERO, V::ONE); // 2*m*z - kx
+            let ty = (n + m).nmul_sube(z, kx).clamp(V::ZERO, V::ONE); // -(n+m)*z - kx
             res = needs_trig.select(bez(tx).min(bez(ty)), res);
         }
         res.sqrt()
@@ -2433,7 +2434,8 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for Hyperbola2D<V, 
         let w = (u + x2).sqrt();
         let b = k.mul_sube(py, x2 * px * V::TWO); // k*py - 2*x2*px
         let mut t = px / cint::<V, 4>() - w + (V::TWO * x2 - u + b / w / cint::<V, 4>()).sqrt();
-        let floor = (self.he * self.he * V::HALF + k).sqrt() - self.he * inv_sqrt2;
+        // sqrt(he^2/2 + k) - he/sqrt(2)
+        let floor = inv_sqrt2.nmul_adde(self.he, (self.he * self.he).mul_adde(V::HALF, k).sqrt());
         t = t.max(floor);
 
         let dx = px - t;
