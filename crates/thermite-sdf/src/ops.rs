@@ -89,7 +89,7 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Oni
 // Hard booleans
 // ---------------------------------------------------------------------------
 
-/// Union of two shapes, `min(a, b)` (gradient follows the nearer one).
+/// Union of two shapes, `$\min(a, b)$` (gradient follows the nearer one).
 #[derive(Debug, Clone, Copy)]
 pub struct Union<A, B> {
     pub a: A,
@@ -120,7 +120,7 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
     }
 }
 
-/// Intersection of two shapes, `max(a, b)` (gradient follows the binding one).
+/// Intersection of two shapes, `$\max(a, b)$` (gradient follows the binding one).
 #[derive(Debug, Clone, Copy)]
 pub struct Intersection<A, B> {
     pub a: A,
@@ -153,7 +153,7 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
     }
 }
 
-/// Subtraction `max(-a, b)`: carves `a` out of `b`. Not commutative.
+/// Subtraction `$\max(-a, b)$`: carves `a` out of `b`. Not commutative.
 #[derive(Debug, Clone, Copy)]
 pub struct Subtraction<A, B> {
     pub a: A,
@@ -186,7 +186,7 @@ impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: BoundedSdf<V, N>> BoundedSdf
     }
 }
 
-/// Exclusive-or `max(min(a, b), -max(a, b))`: the symmetric difference. Stays a
+/// Exclusive-or `$\max(\min(a, b),\, -\max(a, b))$`: the symmetric difference. Stays a
 /// true SDF; gradient is not provided (the field is piecewise from four cases).
 #[derive(Debug, Clone, Copy)]
 pub struct Xor<A, B> {
@@ -216,7 +216,7 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 
 /// Smooth union with blend radius `k`. Only an approximate SDF near the seam.
 ///
-/// Uses the polynomial smooth-min (Quilez): the blend is active where `|da - db| < 4k`;
+/// Uses the polynomial smooth-min (Quilez): the blend is active where `$|d_a - d_b| < 4k$`;
 /// outside that band the result equals the hard union.
 #[derive(Debug, Clone, Copy)]
 pub struct SmoothUnion<V: SdfVector, A, B> {
@@ -270,7 +270,7 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 pub struct SmoothIntersection<V: SdfVector, A, B> {
     pub a: A,
     pub b: B,
-    /// Blend radius. Blend active where `|da - db| < 4k`; with `$h = \max(4k - |d_a - d_b|,\, 0)$`,
+    /// Blend radius. Blend active where `$|d_a - d_b| < 4k$`; with `$h = \max(4k - |d_a - d_b|,\, 0)$`,
     /// the result is `$\max(a, b) + \frac{h^2}{16k}$`.
     pub k: V,
 }
@@ -320,7 +320,7 @@ impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>> Bou
 pub struct SmoothSubtraction<V: SdfVector, A, B> {
     pub a: A,
     pub b: B,
-    /// Blend radius. Blend active where `|da + db| < 4k`; with `$h = \max(4k - |d_a + d_b|,\, 0)$`,
+    /// Blend radius. Blend active where `$|d_a + d_b| < 4k$`; with `$h = \max(4k - |d_a + d_b|,\, 0)$`,
     /// the result is `$\max(-a, b) + \frac{h^2}{16k}$`.
     pub k: V,
 }
@@ -577,7 +577,7 @@ impl<V: SdfVector, S: BoundedSdf<V, 2>> BoundedSdf<V, 3> for Revolution<V, S> {
 #[derive(Debug, Clone, Copy)]
 pub struct Twist<V: SdfVector, S, P: Policy = DefaultPolicy> {
     pub shape: S,
-    /// Twist rate in radians per unit of y. `k = 2*pi` rotates a full turn over 1 unit.
+    /// Twist rate in radians per unit of y. `$k = 2\pi$` rotates a full turn over 1 unit.
     pub k: V,
     _policy: PhantomData<P>,
 }
@@ -605,12 +605,12 @@ impl<V: SdfVector + TranscendentalMathWithPolicy, S: SDF<V, 3>, P: Policy> SDF<V
 
 /// Bends a 3D shape in the xy-plane at rate `k` (radians per unit x).
 ///
-/// Domain distortion — not an exact SDF. Keep `|k| * shape_x_extent` well below `pi/2`
+/// Domain distortion — not an exact SDF. Keep `|k| * shape_x_extent` well below `$\pi/2$`
 /// for a usable bound.
 #[derive(Debug, Clone, Copy)]
 pub struct Bend<V: SdfVector, S, P: Policy = DefaultPolicy> {
     pub shape: S,
-    /// Bend rate in radians per unit of x. `k = pi/L` curves a shape of x-extent `L`
+    /// Bend rate in radians per unit of x. `$k = \pi/L$` curves a shape of x-extent `L`
     /// into a semicircle.
     pub k: V,
     _policy: PhantomData<P>,
@@ -666,14 +666,14 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>, F: Fn(Vector<V, N>) -> V> SDF<V
 /// unbiased (no axis shift) while keeping the eval count low, this uses the
 /// simplex schemes from IQ's "normals for an SDF": the 4-tap **tetrahedron** in
 /// 3D and a 3-tap equilateral triangle in 2D, falling back to `2*N`-tap central
-/// differences for `N >= 4`. The returned distance is the *exact* `inner.eval(p)`
+/// differences for `$N \ge 4$`. The returned distance is the *exact* `inner.eval(p)`
 /// (one more eval); only the normal is approximate. This gives the distance-only
 /// primitives - and arbitrary user shapes - a usable normal with no hand-derived
 /// gradient. (When autodiff dual numbers land in Thermite this becomes exact.)
 ///
 /// `eps` trades truncation error against the field's scale/smoothness; a real
 /// raymarcher should scale it with the ray's distance to band-limit aliasing.
-/// [`new`](Self::new) defaults it to `1/4096`. [`BoundedSdf`] is forwarded.
+/// [`new`](Self::new) defaults it to `$1/4096$`. [`BoundedSdf`] is forwarded.
 #[derive(Debug, Clone, Copy)]
 pub struct FiniteDiff<V: SdfVector, S> {
     pub shape: S,
@@ -681,7 +681,7 @@ pub struct FiniteDiff<V: SdfVector, S> {
 }
 
 impl<V: SdfVector, S> FiniteDiff<V, S> {
-    /// Wraps `shape` with the default step `eps = 1/4096`.
+    /// Wraps `shape` with the default step `$\text{eps} = 1/4096$`.
     #[inline(always)]
     pub fn new(shape: S) -> Self {
         Self {

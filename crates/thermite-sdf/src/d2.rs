@@ -171,7 +171,7 @@ pub type Segment2D<V> = crate::dn::NCapsule<V, 2>;
 /// are offset by `d` either side of the origin.
 ///
 /// Stored in the cheapest-to-evaluate form: `r`, `d`, and the precomputed
-/// half-height `b = sqrt(r^2 - d^2)` (so evaluation needs no square root).
+/// half-height `$b = \sqrt{r^2 - d^2}$` (so evaluation needs no square root).
 /// Construct with [`from_circle`](Self::from_circle) or
 /// [`from_size`](Self::from_size).
 #[derive(Debug, Clone, Copy)]
@@ -778,7 +778,7 @@ impl<V: SdfVector> GradientSdf<V, 2> for Ellipse2D<V> {
     }
 }
 
-/// Parabola `y = k * x^2`, opening upward.
+/// Parabola `$y = k x^2$`, opening upward.
 ///
 /// Finding the nearest point requires solving a depressed cubic, whose roots
 /// need either a cube root (one-real-root case) or trigonometry (three-real-root
@@ -1250,8 +1250,8 @@ impl<V: SdfVector> GradientSdf<V, 2> for EquilateralTriangle2D<V> {
 
 /// Capsule between two circles of radii `r1` (at origin) and `r2` (at height `h`).
 ///
-/// Stores the precomputed slope `b = (r1-r2)/h` and `a = sqrt(1 - b^2)`. Build
-/// with [`new`](Self::new).
+/// Stores the precomputed slope `$b = \frac{r_1 - r_2}{h}$` and
+/// `$a = \sqrt{1 - b^2}$`. Build with [`new`](Self::new).
 #[derive(Debug, Clone, Copy)]
 pub struct UnevenCapsule2D<V: SdfVector> {
     r1: V,
@@ -1705,7 +1705,7 @@ where
 
 /// Disk of radius `r` with a straight cut at height `h` (in `[-r, r]`).
 ///
-/// Stores the precomputed half-chord `w = sqrt(r^2 - h^2)`. Build with
+/// Stores the precomputed half-chord `$w = \sqrt{r^2 - h^2}$`. Build with
 /// [`new`](Self::new).
 #[derive(Debug, Clone, Copy)]
 pub struct CutDisk2D<V: SdfVector> {
@@ -2076,11 +2076,11 @@ impl<V: SdfVector> SDF<V, 2> for CoolS2D {
 #[derive(Debug, Clone, Copy)]
 pub struct Star2D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub r: V,
-    /// half-sector angle `pi / n`
+    /// half-sector angle `$\pi / n$`
     pub an: V,
-    /// `(cos(pi/n), sin(pi/n))`
+    /// `$(\cos(\pi/n),\ \sin(\pi/n))$`
     pub acs: Vector2<V>,
-    /// `(cos(pi/m), sin(pi/m))`
+    /// `$(\cos(\pi/m),\ \sin(\pi/m))$`
     pub ecs: Vector2<V>,
     _policy: PhantomData<P>,
 }
@@ -2090,8 +2090,8 @@ impl<V: SdfVector, P: Policy> Star2D<V, P> {
     /// constants with policy `P`.
     ///
     /// `m` controls tip sharpness: `m = n` gives a true star polygon with sharp points;
-    /// `m = 2` gives wide, petal-like arms. The precomputed `acs = (cos(pi/n), sin(pi/n))`
-    /// and `ecs = (cos(pi/m), sin(pi/m))` encode the sector and tip half-angles.
+    /// `m = 2` gives wide, petal-like arms. The precomputed `$acs = (\cos(\pi/n),\ \sin(\pi/n))$`
+    /// and `$ecs = (\cos(\pi/m),\ \sin(\pi/m))$` encode the sector and tip half-angles.
     #[inline(always)]
     pub fn from_params(r: V, n: u32, m: V) -> Self
     where
@@ -2147,7 +2147,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 2> for Star2D<V
 /// trig-free, so the shape carries no policy.
 #[derive(Debug, Clone, Copy)]
 pub struct CircleWave2D<V: SdfVector> {
-    /// arc center `ra * (sin(theta), cos(theta))`
+    /// arc center `$r_a \cdot (\sin\theta,\ \cos\theta)$`
     pub co: Vector2<V>,
     pub ra: V,
 }
@@ -2424,7 +2424,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for QuadraticCircle
     }
 }
 
-/// Rectangular hyperbola `x*y = k`, clipped to half-extent `he`.
+/// Rectangular hyperbola `$xy = k$`, clipped to half-extent `he`.
 #[derive(Debug, Clone, Copy)]
 pub struct Hyperbola2D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub k: V,

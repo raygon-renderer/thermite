@@ -182,7 +182,7 @@ impl<V: SdfVector> GradientSdf<V, 3> for RoundCone3D<V> {
     }
 }
 
-/// Vertical capped cone of height `2*he` (centered on the origin), base radius
+/// Vertical capped cone of height `$2 h_e$` (centered on the origin), base radius
 /// `r1` (at `y < 0`) and top radius `r2`.
 #[derive(Debug, Clone, Copy)]
 pub struct CappedCone3D<V: SdfVector> {
@@ -818,7 +818,7 @@ impl<V: SdfVector> BoundedSdf<V, 3> for Octahedron3D<V> {
 /// octahedron along its face normals but underestimates elsewhere. Valid for sphere
 /// tracing with conservative step sizes; use [`Octahedron3D`] when an exact SDF is needed.
 ///
-/// `s` is the L1 "radius": the surface satisfies `|x| + |y| + |z| = s`.
+/// `s` is the L1 "radius": the surface satisfies `$|x| + |y| + |z| = s$`.
 #[derive(Debug, Clone, Copy)]
 pub struct OctahedronBound3D<V: SdfVector> {
     pub s: V,
@@ -981,7 +981,7 @@ impl<V: SdfVector> SDF<V, 3> for InfiniteCone3D<V> {
 
 /// Vertical rounded cone from radius `r1` at the base to `r2` at height `h`.
 ///
-/// Stores the precomputed slope `b = (r1-r2)/h` and `a = sqrt(1 - b^2)`. Build
+/// Stores the precomputed slope `$b = \frac{r_1 - r_2}{h}$` and `$a = \sqrt{1 - b^2}$`. Build
 /// with [`new`](Self::new).
 #[derive(Debug, Clone, Copy)]
 pub struct RoundCone3DVert<V: SdfVector> {
@@ -1039,7 +1039,7 @@ impl<V: SdfVector> BoundedSdf<V, 3> for RoundCone3DVert<V> {
 // 3D primitives, batch 2 (pyramid, rhombus, vesica segment, cone, triangles)
 // ===========================================================================
 
-/// Square pyramid of height `h` over a unit base (`[-0.5, 0.5]^2`).
+/// Square pyramid of height `h` over a unit base (`$[-0.5, 0.5]^2$`).
 #[derive(Debug, Clone, Copy)]
 pub struct Pyramid3D<V: SdfVector> {
     pub h: V,
