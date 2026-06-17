@@ -177,8 +177,7 @@ decl_math! {
         /// inputs without overflow or underflow issues.
         fn logistic_sigmoid[][](self: Self) -> Self;
 
-        /// Computes the softplus function, defined as `$\frac{1}{k}\ln(1 + e^{kx})$`,
-        /// as well as its derivative with respect to `x`.
+        /// Computes the softplus function, defined as `$\frac{1}{k}\ln(1 + e^{kx})$`.
         ///
         /// This is a smooth approximation to the ReLU function
         /// that is more numerically stable for large inputs.
@@ -188,7 +187,10 @@ decl_math! {
         ///
         /// `rcp_k` must equal `1/k`. It is passed explicitly so callers that invoke softplus repeatedly
         /// with the same `k` can pre-compute the reciprocal once rather than recomputing it per call.
-        fn softplus[][](self: Self, k: Self, rcp_k: Self) -> (Self, Self);
+        ///
+        /// To also obtain the derivative with respect to `x`, use
+        /// [`softplus_d`](crate::RealPrimalMath::softplus_d).
+        fn softplus[][](self: Self, k: Self, rcp_k: Self) -> Self;
 
         /// Computes the Gamma function (`$\Gamma(z)$`) for any real input, for each value in a vector.
         ///
@@ -307,33 +309,34 @@ decl_math! {
         /// where `alpha` helps control the shape of the curve. The standard GELU function
         /// is recovered when `alpha` is 1.
         ///
-        /// Returns both the GELU value and its derivative with respect to `x` simultaneously,
-        /// as they share much of the same computation.
-        ///
         /// For f32 vectors, this remains decently accurate even with the `Medium` and `Worst` precision policies,
-        /// thanks to good `erf` implementations at the various precision levels. See `erf` for more details. Furthermore,
-        /// on `Average` and above precision policies, or on GPUs with native `exp` support, the derivative
-        /// is essentially free.
-        fn gelu[][](self: Self, alpha: Self) -> (Self, Self);
+        /// thanks to good `erf` implementations at the various precision levels. See `erf` for more details.
+        ///
+        /// To also obtain the derivative with respect to `x` (which shares most of the computation), use
+        /// [`gelu_d`](crate::RealPrimalMath::gelu_d).
+        fn gelu[][](self: Self, alpha: Self) -> Self;
 
         /// Swish activation function, defined as `$x\,\sigma(\beta x) = \frac{x}{1 + e^{-\beta x}}$`,
         /// where `beta` controls the sharpness of the gate. The standard Swish/SiLU function
         /// is recovered when `beta` is 1. As `beta -> 0`, the output approaches `x/2` (half-identity);
         /// as `beta -> inf`, Swish approaches ReLU.
         ///
-        /// Returns both the Swish value and its derivative with respect to `x` simultaneously.
-        fn swish[][](self: Self, beta: Self) -> (Self, Self);
+        /// To also obtain the derivative with respect to `x`, use
+        /// [`swish_d`](crate::RealPrimalMath::swish_d).
+        fn swish[][](self: Self, beta: Self) -> Self;
 
         /// Computes the algebraic sigmoid function, defined as `$\frac{x}{(1 + |x|^N)^{1/N}}$`, where
-        /// `N` is a positive integer parameter that controls the steepness of the curve. It also
-        /// returns the derivative with respect to `x` simultaneously, as it shares much of the same computation.
+        /// `N` is a positive integer parameter that controls the steepness of the curve.
         ///
         /// This also has the unique behavior where for `N=0`, the function is just the identity function,
         /// and for `N=1` it is the [softsign function](https://en.wikipedia.org/wiki/Activation_function#Softsign).
         ///
         /// **Note**: This function uses `$|x|^N$` (the real absolute value), making it non-holomorphic
         /// and therefore only meaningful for real-valued inputs.
-        fn algebraic_sigmoid[const N: usize][N](self: Self) -> (Self, Self);
+        ///
+        /// To also obtain the derivative with respect to `x`, use
+        /// [`algebraic_sigmoid_d`](crate::RealPrimalMath::algebraic_sigmoid_d).
+        fn algebraic_sigmoid[const N: usize][N](self: Self) -> Self;
 
         /// Algebraic analogue of the [Swish](https://en.wikipedia.org/wiki/Swish_function) activation,
         /// defined as `$x\left(\frac{1}{2} + \frac{x}{2\sqrt{1 + x^2}}\right)$`. Equivalent to gating `x` by
@@ -344,8 +347,9 @@ decl_math! {
         /// `x -> ∞`, `f(x) -> 0` as `x -> -∞`). Unlike Swish, it requires no `exp` or `log`, making
         /// it substantially cheaper on hardware without fast transcendentals.
         ///
-        /// Returns both the value and its derivative with respect to `x` simultaneously, as they
-        /// share most of the underlying computation (notably `$1/\sqrt{1 + x^2}$`).
+        /// To also obtain the derivative with respect to `x` (which shares most of the underlying
+        /// computation, notably `$1/\sqrt{1 + x^2}$`), use
+        /// [`algebraic_swish_d`](crate::RealPrimalMath::algebraic_swish_d).
         ///
         /// # Historical note
         ///
@@ -357,7 +361,7 @@ decl_math! {
         /// approximated in 4-7 cycles). For CPU-side inference, training on CPU, or embedded targets
         /// without a transcendental SFU, this remains a competitive Swish-shaped activation at a
         /// fraction of the cost.
-        fn algebraic_swish[][](self: Self) -> (Self, Self);
+        fn algebraic_swish[][](self: Self) -> Self;
 
         /// Computes the natural log of the Gamma function (`$\ln|\Gamma(x)|$`) for any real input, for each value in a vector,
         /// and returns the sign of the Gamma function from before the absolute value was taken.
@@ -368,5 +372,34 @@ decl_math! {
         ///
         /// The position `b` is assumed to be zero, so offset the limits accordingly for a non-zero position.
         fn gaussian_integral[][](x0: Self, x1: Self, a: Self, c: Self) -> Self;
+    }
+
+    /// "Primal" special functions: the value-and-derivative (`_d`) forms of the activation
+    /// functions, returning `(value, derivative)` together.
+    ///
+    /// These exist for *single-value* real numbers (`f32`, `f64`, `Compensated`, ...) where the
+    /// analytic derivative is a useful, cheaply-shared byproduct of the value. They are **not**
+    /// implemented for derivative-carrying numbers such as `Dual`: an automatic-differentiation
+    /// type already produces the derivative from the plain value form (e.g. [`gelu`](SpecialMath::gelu)),
+    /// so the bundled `_d` derivative would be redundant work at the wrong level of abstraction.
+    ///
+    /// Each `*_d` method mirrors the like-named value-only function in [`SpecialMath`] /
+    /// [`RealSpecialMath`], returning that same value as the first tuple element.
+    trait RealPrimal: RealSpecialMathWithPolicy {
+        /// [`softplus`](SpecialMath::softplus) together with its derivative w.r.t. `x`
+        /// (the logistic sigmoid `$\sigma(kx)$`).
+        fn softplus_d[][](self: Self, k: Self, rcp_k: Self) -> (Self, Self);
+
+        /// [`gelu`](RealSpecialMath::gelu) together with its derivative w.r.t. `x`.
+        fn gelu_d[][](self: Self, alpha: Self) -> (Self, Self);
+
+        /// [`swish`](RealSpecialMath::swish) together with its derivative w.r.t. `x`.
+        fn swish_d[][](self: Self, beta: Self) -> (Self, Self);
+
+        /// [`algebraic_sigmoid`](RealSpecialMath::algebraic_sigmoid) together with its derivative w.r.t. `x`.
+        fn algebraic_sigmoid_d[const N: usize][N](self: Self) -> (Self, Self);
+
+        /// [`algebraic_swish`](RealSpecialMath::algebraic_swish) together with its derivative w.r.t. `x`.
+        fn algebraic_swish_d[][](self: Self) -> (Self, Self);
     }
 }

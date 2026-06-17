@@ -964,7 +964,28 @@ where
     }
 
     #[inline(always)]
-    fn gelu<P: Policy>(self, alpha: Self) -> (Self, Self) {
+    fn gelu<P: Policy>(self, alpha: Self) -> Self {
+        let x = self;
+
+        let alpha_x = alpha * x;
+
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        // O = false: skip the exp(-ax^2) byproduct that only the derivative needs.
+        let mut unused = Self::EMPTY;
+        let erf = erf_f_internal::<V, P, false, false>(alpha_x * Self::FRAC_1_SQRT_2, &mut unused);
+
+        if V::HAS_TRUE_FMA {
+            let half_x = x * Self::HALF;
+            half_x.mul_add(erf, half_x) // fma(0.5x, erf, 0.5x), one rounding
+        } else {
+            erf.mul_adde(Self::HALF, Self::HALF) * x
+        }
+    }
+}
+
+impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealPrimalMath<f32> for V {
+    #[inline(always)]
+    fn gelu_d<P: Policy>(self, alpha: Self) -> (Self, Self) {
         let x = self;
 
         let alpha_x = alpha * x;

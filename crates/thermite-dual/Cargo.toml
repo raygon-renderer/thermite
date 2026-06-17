@@ -1,0 +1,28 @@
+[package]
+name = "thermite-dual"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Forward-mode automatic differentiation (multidual numbers) built on Thermite"
+publish = false                                                                              # not ready for release yet
+
+[features]
+default = ["special"]
+special = ["dep:thermite-special"]
+std = ["thermite/std"]
+
+[dependencies]
+thermite = { workspace = true }
+thermite-special = { workspace = true, optional = true }
+num-traits = { version = "0.2", default-features = false }
+paste = "1"
+
+[dev-dependencies]
+libm = "0.2"
+
+[lints]
+workspace = true

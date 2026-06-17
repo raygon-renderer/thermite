@@ -216,7 +216,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn softplus<P: Policy>(self, k: Self, rcp_k: Self) -> (Self, Self) {
+    fn softplus<P: Policy>(self, k: Self, rcp_k: Self) -> Self {
         // For low precision, we can get better performance by computing in base-2 instead of base-e,
         // at the cost of some accuracy.
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
@@ -228,12 +228,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
             // e needs overflow checks to outright incorrect results here
             let e = kx.abs().neg().exp2_p::<CheckOverflow<P, true>>();
-            let y = (Self::ONE + e).log2_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
-
-            let rcp = (Self::ONE + e).reciprocal_p::<P>();
-            let dy = kx.select_negative(e * rcp, rcp);
-
-            return (y, dy);
+            return (Self::ONE + e).log2_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
         }
 
         let kx = self * k;
@@ -241,15 +236,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let e = kx.abs().neg().exp_p::<P>();
 
         // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
-        let y = e.ln_1p_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
-
-        // sigmoid from already-computed e = exp(-|kx|)
-        // kx >= 0: σ = 1/(1+e)
-        // kx <  0: σ = e/(1+e)
-        let rcp = (e + Self::ONE).reciprocal_p::<P>();
-        let dy = kx.select_negative(e * rcp, rcp);
-
-        (y, dy)
+        e.ln_1p_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO))
     }
 
     fn tgamma<P: Policy>(self) -> Self;
@@ -654,30 +641,23 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn probit<P: Policy>(self) -> Self;
 
     #[inline(always)]
-    fn gelu<P: Policy>(self, alpha: Self) -> (Self, Self) {
+    fn gelu<P: Policy>(self, alpha: Self) -> Self {
         let alpha_x = alpha * self;
 
         // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
         let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
 
-        let y = if Self::HAS_TRUE_FMA {
+        if Self::HAS_TRUE_FMA {
             // if we have true FMA, we can maintain precision while avoiding extra work.
             let half_x = self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE);
             half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
         } else {
             self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE) * (Self::ONE + erf)
-        };
-
-        let dy = (alpha_x * alpha_x)
-            .scale(E::ConstRatio::<{ -1 }, { 2 }>::VALUE)
-            .exp_p::<P>()
-            .scale(FloatConsts::FRAC_1_SQRT_TAU);
-
-        (y, dy.mul_adde(alpha_x, y))
+        }
     }
 
     #[inline(always)]
-    fn swish<P: Policy>(self, beta: Self) -> (Self, Self) {
+    fn swish<P: Policy>(self, beta: Self) -> Self {
         let x = self;
         let beta_x = beta * x;
 
@@ -685,26 +665,20 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let e = (-beta_x).exp_p::<P>();
         let s = (Self::ONE + e).reciprocal_p::<P>();
 
-        let y = x * s;
-
-        // dy/dx = s + beta * y * (1 - s)
-        // 1 - s = e * s (numerically stable: avoids cancellation near s approx 1)
-        let dy = (beta * y).mul_adde(e * s, s);
-
-        (y, dy)
+        x * s
     }
 
     fn lgamma_r<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
-    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> (Self, Self) {
+    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> Self {
         if const { N == 0 } {
-            return (self, Self::ONE); // identity function
+            return self; // identity function
         }
 
         let pre_root = Self::ONE + self.abs().powi_p::<P>(N as i32); // = 1 + |x|^N
 
-        let mut denom = match N {
+        let denom = match N {
             1 => pre_root,
             2 => pre_root.sqrt(),
             3 => pre_root.cbrt_p::<P>(),
@@ -734,15 +708,199 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         };
 
         // denom now equals (1 + |x|^N)^(1/N)
-        // f'(x) = (1 + |x|^N)^(-(N+1)/N) = 1 / (pre_root * denom)
-        // because pre_root * denom = (1+|x|^N) * (1+|x|^N)^(1/N) = (1+|x|^N)^((N+1)/N)
 
+        let mut y = if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            // this is the same number of operations as the more precise version, but
+            // with better accuracy on large pre_root when using approximate rpc.
+            self * denom.reciprocal_p::<P>()
+        } else {
+            self / denom
+        };
+
+        if const { P::POLICY.check_overflow } {
+            y = pre_root.is_infinite().select(self.signum(), y);
+        }
+
+        y
+    }
+
+    // f(x)  = x*(1/2 + x/(2 sqrt(1 + x^2)))
+    // f'(x) = (x^3 + sqrt(1 + x^2) x^2 + sqrt(1 + x^2) + 2 x) / (2 (1 + x^2)^(3/2))
+    //
+    // With a = 1 + x^2, r = sqrt(a), q = x/r:
+    //   f(x)  = (x/2)*(1 + q)
+    //   f'(x) = (1 + q + q/a) / 2     (since q' = 1/(a*r), so f' = g + x*g' = (1+q)/2 + q/(2a))
+    #[inline(always)]
+    fn algebraic_swish<P: Policy>(self) -> Self {
+        let x = self;
+
+        if const { Self::HAS_TRUE_FMA } {
+            // rsqrt is about 30% faster than sqrt+div, even with the extra
+            // newton iteration merged in.
+            if const { Self::HAS_APPROX_RSQRT } {
+                let a = x.mul_add(x, Self::ONE);
+                let y0 = a.rsqrt();
+                let ay2 = a * y0 * y0;
+                let ch = ay2.nmul_add(Self::HALF, Self::splat(<E as FloatElement>::ConstRatio::<3, 2>::VALUE));
+                let r_inv = y0 * ch; // Newton-refined 1/sqrt(a)
+                let q = x * r_inv;
+                let xh = Self::HALF * x;
+                q.mul_add(xh, xh)
+            } else {
+                let a = x.mul_add(x, Self::ONE);
+                let q = x / a.sqrt();
+                let xh = x * Self::HALF;
+                q.mul_add(xh, xh)
+            }
+        } else if const { Self::HAS_APPROX_RCP } {
+            let a = x * x + Self::ONE;
+            let y0 = a.rsqrt();
+            let ay2 = a * y0 * y0;
+            let c = Self::splat(<E as FloatElement>::ConstInt::<3>::VALUE) - ay2;
+            let r_inv_2 = y0 * c; // = 2 * (Newton-refined 1/sqrt(a))
+            let hxy1 = Self::splat(<E as FloatElement>::ConstRatio::<1, 4>::VALUE) * (x * r_inv_2); // = q/2
+            let w = Self::HALF + hxy1; // = (1 + q)/2
+            x * w
+        } else {
+            let a = x * x + Self::ONE;
+            let q = x / a.sqrt();
+            let q1 = q + Self::ONE;
+            x * Self::HALF * q1
+        }
+    }
+
+    #[inline(always)]
+    fn gaussian_integral<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self {
+        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
+        let common = Self::SQRT_FRAC_PI_2 * a * c;
+        let denom = Self::SQRT_2 * c;
+
+        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            let d = denom.reciprocal_p::<P>();
+            (x1 * d, x0 * d)
+        } else {
+            (x1 / denom, x0 / denom)
+        };
+
+        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
+    }
+}
+
+/// Value-and-derivative (`_d`) forms of the activation functions, for single-value real numbers.
+///
+/// Every method is a provided default returning `(value, derivative)`; the `value` matches the
+/// like-named value-only function in [`SpecializedSpecialMath`] / [`SpecializedRealSpecialMath`].
+/// Implemented (as an empty impl) only for primal types -- *not* for derivative-carrying numbers
+/// like `Dual`, which obtain the derivative from the value form via automatic differentiation.
+pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> {
+    #[inline(always)]
+    fn softplus_d<P: Policy>(self, k: Self, rcp_k: Self) -> (Self, Self) {
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            let k = k.scale(FloatConsts::LOG2_E);
+            let rcp_k = rcp_k.scale(FloatConsts::LN_2);
+
+            let kx = self * k;
+
+            let e = kx.abs().neg().exp2_p::<CheckOverflow<P, true>>();
+            let y = (Self::ONE + e).log2_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
+
+            let rcp = (Self::ONE + e).reciprocal_p::<P>();
+            let dy = kx.select_negative(e * rcp, rcp);
+
+            return (y, dy);
+        }
+
+        let kx = self * k;
+
+        let e = kx.abs().neg().exp_p::<P>();
+
+        // max(0, x) + lnp1(e^(-|x|)) is more stable than ln(1 + e^x) for large |x|.
+        let y = e.ln_1p_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
+
+        // sigmoid from already-computed e = exp(-|kx|)
+        let rcp = (e + Self::ONE).reciprocal_p::<P>();
+        let dy = kx.select_negative(e * rcp, rcp);
+
+        (y, dy)
+    }
+
+    #[inline(always)]
+    fn gelu_d<P: Policy>(self, alpha: Self) -> (Self, Self) {
+        let alpha_x = alpha * self;
+
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
+
+        let y = if Self::HAS_TRUE_FMA {
+            let half_x = self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE);
+            half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
+        } else {
+            self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE) * (Self::ONE + erf)
+        };
+
+        let dy = (alpha_x * alpha_x)
+            .scale(E::ConstRatio::<{ -1 }, { 2 }>::VALUE)
+            .exp_p::<P>()
+            .scale(FloatConsts::FRAC_1_SQRT_TAU);
+
+        (y, dy.mul_adde(alpha_x, y))
+    }
+
+    #[inline(always)]
+    fn swish_d<P: Policy>(self, beta: Self) -> (Self, Self) {
+        let x = self;
+        let beta_x = beta * x;
+
+        let e = (-beta_x).exp_p::<P>();
+        let s = (Self::ONE + e).reciprocal_p::<P>();
+
+        let y = x * s;
+
+        // dy/dx = s + beta * y * (1 - s); 1 - s = e * s (stable near s ~ 1)
+        let dy = (beta * y).mul_adde(e * s, s);
+
+        (y, dy)
+    }
+
+    #[inline(always)]
+    fn algebraic_sigmoid_d<P: Policy, const N: usize>(self) -> (Self, Self) {
+        if const { N == 0 } {
+            return (self, Self::ONE); // identity function
+        }
+
+        let pre_root = Self::ONE + self.abs().powi_p::<P>(N as i32); // = 1 + |x|^N
+
+        let denom = match N {
+            1 => pre_root,
+            2 => pre_root.sqrt(),
+            3 => pre_root.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => pre_root.sqrt().sqrt(),
+            _ => {
+                let x = pre_root;
+
+                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(
+                    E::ONE / E::from_int(N as thermite::LargeInt),
+                ));
+
+                let y_n = y.powi_p::<P>(N as i32);
+
+                let np1 = Self::splat(E::from_int((N + 1) as thermite::LargeInt));
+                let nm1 = Self::splat(E::from_int((N - 1) as thermite::LargeInt));
+
+                let n = y * (x - y_n); // half of numerator
+                let d = y_n.mul_adde(np1, x * nm1);
+
+                y += (n + n) / d;
+
+                y
+            }
+        };
+
+        // denom = (1 + |x|^N)^(1/N); f'(x) = 1 / (pre_root * denom)
         let mut y;
         let mut dy;
 
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
-            // this is the same number of operations as the more precise version, but
-            // with better accuracy on large pre_root when using approximate rpc.
             let inv_denom = denom.reciprocal_p::<P>();
             y = self * inv_denom;
             dy = inv_denom / pre_root;
@@ -761,19 +919,11 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         (y, dy)
     }
 
-    // f(x)  = x*(1/2 + x/(2 sqrt(1 + x^2)))
-    // f'(x) = (x^3 + sqrt(1 + x^2) x^2 + sqrt(1 + x^2) + 2 x) / (2 (1 + x^2)^(3/2))
-    //
-    // With a = 1 + x^2, r = sqrt(a), q = x/r:
-    //   f(x)  = (x/2)*(1 + q)
-    //   f'(x) = (1 + q + q/a) / 2     (since q' = 1/(a*r), so f' = g + x*g' = (1+q)/2 + q/(2a))
     #[inline(always)]
-    fn algebraic_swish<P: Policy>(self) -> (Self, Self) {
+    fn algebraic_swish_d<P: Policy>(self) -> (Self, Self) {
         let x = self;
 
         if const { Self::HAS_TRUE_FMA } {
-            // rsqrt is about 30% faster than sqrt+div, even with the extra
-            // newton iteration merged in.
             if const { Self::HAS_APPROX_RSQRT } {
                 let a = x.mul_add(x, Self::ONE);
                 let y0 = a.rsqrt();
@@ -784,7 +934,6 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
                 let xh = Self::HALF * x;
                 let y = q.mul_add(xh, xh);
 
-                // 1/a from the already-refined 1/sqrt(a)
                 let inv_a = r_inv * r_inv;
                 let qa = q.mul_add(inv_a, q); // q + q/a
                 let dy = qa.mul_add(Self::HALF, Self::HALF); // (qa + 1)/2
@@ -812,9 +961,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
             let w = Self::HALF + hxy1; // = (1 + q)/2
             let y = x * w;
 
-            // 1/a ≈ (r_inv_2 / 2)^2 = r_inv_2^2 / 4
             let inv_a = Self::splat(<E as FloatElement>::ConstRatio::<1, 4>::VALUE) * (r_inv_2 * r_inv_2);
-            // q/(2a) = (2*hxy1)/(2a) = hxy1 * inv_a
             let dy = w + hxy1 * inv_a;
 
             (y, dy)
@@ -828,21 +975,5 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 
             (y, dy)
         }
-    }
-
-    #[inline(always)]
-    fn gaussian_integral<P: Policy>(x0: Self, x1: Self, a: Self, c: Self) -> Self {
-        // https://www.wolframalpha.com/input?i=integrate%20a*e%5E(-1%2F2%20*%20x%5E2%2Fc%5E2)%20from%20x%3Dx_0%20to%20x%3Dx_1
-        let common = Self::SQRT_FRAC_PI_2 * a * c;
-        let denom = Self::SQRT_2 * c;
-
-        let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            let d = denom.reciprocal_p::<P>();
-            (x1 * d, x0 * d)
-        } else {
-            (x1 / denom, x0 / denom)
-        };
-
-        common * (a1.erf_p::<P>() - a0.erf_p::<P>())
     }
 }
