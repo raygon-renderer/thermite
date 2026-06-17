@@ -627,16 +627,19 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>, F: Fn(Vector<V, N>) -> V> SDF<V
 // Automatic gradient
 // ---------------------------------------------------------------------------
 
-/// Supplies a [`GradientSdf`] for any [`SDF`] via central finite differences.
+/// Supplies a [`GradientSdf`] for any [`SDF`] via finite differences.
 ///
-/// The field is sampled at `+/- eps` along each axis (`2*N` extra evals) and the
-/// resulting vector is normalised into the surface normal. The returned distance
-/// is the *exact* `inner.eval(p)`; only the normal is approximate. This gives the
-/// distance-only primitives - and arbitrary user shapes - a usable normal with no
-/// hand-derived gradient. (When real autodiff dual numbers land in Thermite this
-/// becomes the exact route; until then, central differences are the clear win.)
+/// The normal is sampled around `p` at radius `eps` and normalised. To stay
+/// unbiased (no axis shift) while keeping the eval count low, this uses the
+/// simplex schemes from IQ's "normals for an SDF": the 4-tap **tetrahedron** in
+/// 3D and a 3-tap equilateral triangle in 2D, falling back to `2*N`-tap central
+/// differences for `N >= 4`. The returned distance is the *exact* `inner.eval(p)`
+/// (one more eval); only the normal is approximate. This gives the distance-only
+/// primitives - and arbitrary user shapes - a usable normal with no hand-derived
+/// gradient. (When autodiff dual numbers land in Thermite this becomes exact.)
 ///
-/// `eps` trades truncation error against the field's scale/smoothness;
+/// `eps` trades truncation error against the field's scale/smoothness; a real
+/// raymarcher should scale it with the ray's distance to band-limit aliasing.
 /// [`new`](Self::new) defaults it to `1/4096`. [`BoundedSdf`] is forwarded.
 #[derive(Debug, Clone, Copy)]
 pub struct FiniteDiff<V: SdfVector, S> {
@@ -671,19 +674,55 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for FiniteDiff<V, S> 
 impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDiff<V, S> {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
-        // Central difference per axis: grad[i] ~ f(p + eps*e_i) - f(p - eps*e_i).
+        let h = self.eps;
+        let dist = self.shape.eval(p); // distance stays exact
         let mut grad = Vector::ZERO;
-        let mut i = 0;
-        while i < N {
-            let mut hp = p;
-            let mut hm = p;
-            hp[i] = p[i] + self.eps;
-            hm[i] = p[i] - self.eps;
-            grad[i] = self.shape.eval(hp) - self.shape.eval(hm);
-            i += 1;
+
+        if const { N == 3 } {
+            // Tetrahedron technique (Falcao/Iquilez): 4 taps with central-difference
+            // quality and no axis bias - cheaper than the 6-tap central form. The
+            // four offsets are a regular tetrahedron inscribed in the cube:
+            // (+++), (+--), (-+-), (--+). Normalization absorbs the scale factor.
+            let mut j = 0;
+            while j < 4 {
+                let mut e = Vector::ZERO;
+                let mut k = 0;
+                while k < N {
+                    let plus = j == 0 || k + 1 == j; // single '+' at axis j-1, else all '+'
+                    e[k] = if plus { h } else { -h };
+                    k += 1;
+                }
+                grad = grad + e * self.shape.eval(p + e);
+                j += 1;
+            }
+        } else if const { N == 2 } {
+            // 2D analogue: an equilateral triangle of directions summing to zero
+            // (3 taps, unbiased).
+            let sx = h * V::SQRT_3 * V::HALF; // h*sqrt(3)/2
+            let hy = h * V::HALF;
+            let dirs = [[V::ZERO, h], [-sx, -hy], [sx, -hy]];
+            let mut j = 0;
+            while j < 3 {
+                let mut e = Vector::ZERO;
+                e[0] = dirs[j][0];
+                e[1] = dirs[j][1];
+                grad = grad + e * self.shape.eval(p + e);
+                j += 1;
+            }
+        } else {
+            // General N: central differences per axis (2N taps).
+            let mut i = 0;
+            while i < N {
+                let mut hp = p;
+                let mut hm = p;
+                hp[i] = p[i] + h;
+                hm[i] = p[i] - h;
+                grad[i] = self.shape.eval(hp) - self.shape.eval(hm);
+                i += 1;
+            }
         }
-        let len = grad.l2_norm();
-        (self.shape.eval(p), unit_or_zero(grad, len))
+
+        (dist, unit_or_zero(grad, grad.l2_norm()))
     }
 }
 
