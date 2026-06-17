@@ -2092,8 +2092,8 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for Star2D<V, P> {
         let mut qy = l.mul_sube(sb.abs(), self.r * acy);
 
         let t = (-qx.mul_adde(ecx, qy * ecy)).clamp(V::ZERO, self.r * acy / ecy);
-        qx += ecx * t;
-        qy += ecy * t;
+        qx = ecx.mul_adde(t, qx);
+        qy = ecy.mul_adde(t, qy);
         qx.mul_adde(qx, qy * qy).sqrt().mul_sign(qx)
     }
 }
@@ -2326,7 +2326,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for BlobbyCross2D<V
         x = x.min(V::FRAC_1_SQRT_2);
 
         let zx = x - qx;
-        let zy = he * x.mul_adde(x * -V::TWO, V::ONE) - qy; // he*(1-2x^2) - qy
+        let zy = he.mul_sube(x.mul_adde(x * -V::TWO, V::ONE), qy); // he*(1-2x^2) - qy
         zx.mul_adde(zx, zy * zy).sqrt().mul_sign(zy)
     }
 }

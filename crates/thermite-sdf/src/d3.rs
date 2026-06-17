@@ -888,7 +888,7 @@ impl<V: SdfVector> SDF<V, 3> for CappedTorus3D<V> {
         let lenxy = px.mul_adde(px, py * py).sqrt();
         let k = sy.mul_sube(px, sx * py).cmp_gt(V::ZERO).select(dotxy, lenxy);
         let pp = p.dot(&p);
-        self.ra.nmul_adde(k * V::TWO, pp + self.ra * self.ra).sqrt() - self.rb
+        self.ra.nmul_adde(k * V::TWO, self.ra.mul_adde(self.ra, pp)).sqrt() - self.rb
     }
 }
 

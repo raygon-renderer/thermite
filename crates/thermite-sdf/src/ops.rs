@@ -692,7 +692,7 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDif
                     e[k] = if plus { h } else { -h };
                     k += 1;
                 }
-                grad = grad + e * self.shape.eval(p + e);
+                grad = e.mul_adde(self.shape.eval(p + e), grad);
                 j += 1;
             }
         } else if const { N == 2 } {
@@ -706,7 +706,7 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDif
                 let mut e = Vector::ZERO;
                 e[0] = dirs[j][0];
                 e[1] = dirs[j][1];
-                grad = grad + e * self.shape.eval(p + e);
+                grad = e.mul_adde(self.shape.eval(p + e), grad);
                 j += 1;
             }
         } else {
