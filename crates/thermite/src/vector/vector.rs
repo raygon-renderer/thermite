@@ -776,10 +776,9 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         vectors: &[Self; N],
     ) -> [Self; N] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat4_vec3_product::<COLUMN_MAJOR, N>(
-            unsafe { core::mem::transmute(m) },
-            unsafe { core::mem::transmute(vectors) },
-        );
+        let raw = R::mat4_vec3_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
+            core::mem::transmute(vectors)
+        });
         // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
         unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }
@@ -800,10 +799,9 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     ) -> [Self; N] {
         // SAFETY: transmute &[Vector<R>; _] to &[Storage<R>; _] is safe because
         // Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat4_vec4_product::<COLUMN_MAJOR, N>(
-            unsafe { core::mem::transmute(m) },
-            unsafe { core::mem::transmute(vectors) },
-        );
+        let raw = R::mat4_vec4_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
+            core::mem::transmute(vectors)
+        });
         // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
         unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }

@@ -1,5 +1,5 @@
 /// Execution policy used for controlling performance/precision/size tradeoffs in mathematical functions.
-pub trait Policy {
+pub trait Policy: core::fmt::Debug + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + core::hash::Hash {
     /// The specific policy used. This is a constant to allow for dead-code elimination of branches.
     const POLICY: PolicyParameters;
 }

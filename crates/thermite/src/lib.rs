@@ -2,6 +2,7 @@
 //
 #![allow(unexpected_cfgs)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //
 #![allow(clippy::missing_transmute_annotations, clippy::let_and_return, unused_braces, unused)]
 // used for more intelligent const splat

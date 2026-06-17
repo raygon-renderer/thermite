@@ -459,8 +459,8 @@ impl CastRegister<U64x2V1> for <Scalar as Simd>::u32x2 {
     fn cast_from(value: Storage<U64x2V1>) -> Storage<<Scalar as Simd>::u32x2> {
         unsafe {
             ArrayRegister([
-                arch::_mm_cvtsi128_si32(value) as u32,              // lowest 32 bits
-                arch::_mm_extract_epi32x_v1::<2>(value) as u32,     // next 32 bits after 64 bits
+                arch::_mm_cvtsi128_si32(value) as u32,          // lowest 32 bits
+                arch::_mm_extract_epi32x_v1::<2>(value) as u32, // next 32 bits after 64 bits
             ])
         }
     }

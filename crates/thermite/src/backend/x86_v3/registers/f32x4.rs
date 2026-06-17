@@ -574,7 +574,11 @@ impl LinAlg4Register for F32x4V3 {
     ) -> [Storage<Self>; N] {
         type W = super::F32x8V3;
 
-        let m = if const { COLUMN_MAJOR } { *cols } else { Self::mat4_transpose(cols) };
+        let m = if const { COLUMN_MAJOR } {
+            *cols
+        } else {
+            Self::mat4_transpose(cols)
+        };
 
         // Duplicate the three basis columns into both halves (hoisted).
         let a0 = W::concat(m[0], m[0]);
@@ -610,7 +614,11 @@ impl LinAlg4Register for F32x4V3 {
     ) -> [Storage<Self>; N] {
         type W = super::F32x8V3;
 
-        let m = if const { COLUMN_MAJOR } { *cols } else { Self::mat4_transpose(cols) };
+        let m = if const { COLUMN_MAJOR } {
+            *cols
+        } else {
+            Self::mat4_transpose(cols)
+        };
 
         // Duplicate each basis column into both 128-bit halves; hoisted across
         // every pair (4 ymm, loop-invariant).
@@ -631,10 +639,7 @@ impl LinAlg4Register for F32x4V3 {
             let z = W::concat(Self::broadcast::<2>(va), Self::broadcast::<2>(vb));
             let w = W::concat(Self::broadcast::<3>(va), Self::broadcast::<3>(vb));
 
-            let prod = W::add(
-                W::mul_adde(a1, y, W::mul(a0, x)),
-                W::mul_adde(a3, w, W::mul(a2, z)),
-            );
+            let prod = W::add(W::mul_adde(a1, y, W::mul(a0, x)), W::mul_adde(a3, w, W::mul(a2, z)));
 
             let (ra, rb) = W::split(prod);
             out[i] = ra;

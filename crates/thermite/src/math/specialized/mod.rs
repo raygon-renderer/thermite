@@ -750,7 +750,11 @@ where
 
             let max = x.max(y);
             let min = x.min(y);
-            let t = min / max;
+
+            // guard the all-zero input: max == 0 would make min/max = 0/0 = NaN.
+            // Dividing by 1 instead yields t = 0, so the norm is 0 (and the
+            // inverse norm is +inf), matching the general N-ary path below.
+            let t = min / max.cmp_eq(V::ZERO).select(V::ONE, max);
 
             let s = t.mul_adde(t, V::ONE); // 1 + t^2
 

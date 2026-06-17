@@ -89,20 +89,14 @@ pub unsafe fn _mm_srav_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
 #[inline(always)]
 pub unsafe fn _mm_popcnt_epi8x_v1(v: __m128i) -> __m128i {
     // v = v - ((v >> 1) & 0x55)
-    let v = _mm_sub_epi8(
-        v,
-        _mm_and_si128(_mm_srli_epi16(v, 1), _mm_set1_epi8(0x55)),
-    );
+    let v = _mm_sub_epi8(v, _mm_and_si128(_mm_srli_epi16(v, 1), _mm_set1_epi8(0x55)));
     // v = (v & 0x33) + ((v >> 2) & 0x33)
     let v = _mm_add_epi8(
         _mm_and_si128(v, _mm_set1_epi8(0x33)),
         _mm_and_si128(_mm_srli_epi16(v, 2), _mm_set1_epi8(0x33)),
     );
     // v = (v + (v >> 4)) & 0x0F
-    _mm_and_si128(
-        _mm_add_epi8(v, _mm_srli_epi16(v, 4)),
-        _mm_set1_epi8(0x0F),
-    )
+    _mm_and_si128(_mm_add_epi8(v, _mm_srli_epi16(v, 4)), _mm_set1_epi8(0x0F))
 }
 
 /// POLYFILL: per-`i32`-lane population count.
@@ -111,10 +105,7 @@ pub unsafe fn _mm_popcnt_epi32x_v1(v: __m128i) -> __m128i {
     let bytes = _mm_popcnt_epi8x_v1(v);
 
     // horizontal byte sums within each 32-bit lane (no `pmaddubsw` on SSE2)
-    let sum16 = _mm_add_epi16(
-        _mm_and_si128(bytes, _mm_set1_epi16(0x00FF)),
-        _mm_srli_epi16(bytes, 8),
-    );
+    let sum16 = _mm_add_epi16(_mm_and_si128(bytes, _mm_set1_epi16(0x00FF)), _mm_srli_epi16(bytes, 8));
     _mm_add_epi32(
         _mm_and_si128(sum16, _mm_set1_epi32(0x0000FFFF)),
         _mm_srli_epi32(sum16, 16),

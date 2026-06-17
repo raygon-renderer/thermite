@@ -101,7 +101,16 @@ where
 /// This works for any type that implements the [`Swizzle`] trait, such as [`Vector`].
 ///
 /// The indices can either be given as a constant literal array, or an expression that evaluates to
-/// a `GenericArray<u32, R::Lanes>` for dynamic shuffling.
+/// a `GenericArray<u32, R::Lanes>` for dynamic shuffling. Either way the number of indices must
+/// equal the lane count (this is checked at compile time).
+///
+/// # Index range
+///
+/// Each index selects a source lane: `0..LANES` for the single-vector form, and `0..2*LANES` for
+/// the two-vector form (the second vector's lanes follow the first's). **Indices outside that range
+/// are undefined behavior** - the resulting lane is unspecified and differs by backend (some mask
+/// the index to the valid range, some do not). This is not checked, since the macro is intended for
+/// fixed, known-good index sets; keep every index in range.
 #[macro_export]
 macro_rules! swizzle {
     ($a:expr, $b:expr, [$($i:expr),* $(,)?]) => {{
