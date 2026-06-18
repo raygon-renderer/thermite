@@ -265,6 +265,22 @@ fn nth_root_override() {
 }
 
 #[test]
+fn hypot_gradient_at_origin_is_finite() {
+    // ||v|| is not differentiable at the origin: h = 0 -> 1/h = inf, dotted with a
+    // zero numerator -> NaN. The guard must pin the gradient to a finite 0 instead.
+    let x = D::variable(V::splat(0.0), 0);
+    let y = D::variable(V::splat(0.0), 1);
+    let h = x.hypot(y);
+
+    assert!(close(h.re.extract::<0>(), 0.0, 1e-12));
+    for k in 0..2 {
+        let d = h.dual[k].extract::<0>();
+        assert!(!d.is_nan(), "hypot gradient at origin was NaN (k={k})");
+        assert!(close(d, 0.0, 1e-12), "hypot gradient at origin = {d}");
+    }
+}
+
+#[test]
 fn abs_derivative_sign() {
     // d/dx |x| = sign(x): +1 for x>0, -1 for x<0.
     let xp = D::variable(V::splat(2.5), 0).abs();
@@ -274,6 +290,23 @@ fn abs_derivative_sign() {
     assert!(close(xp.dual[0].extract::<0>(), 1.0, 1e-12));
     assert!(close(xn.re.extract::<0>(), 2.5, 1e-12));
     assert!(close(xn.dual[0].extract::<0>(), -1.0, 1e-12));
+}
+
+#[test]
+fn inverse_trig_hyperbolic_derivatives() {
+    // asin'(x)=1/sqrt(1-x^2), acos'(x)=-1/sqrt(1-x^2) at x=0.5.
+    let x = D::variable(V::splat(0.5), 0);
+    let d_as = x.asin().dual[0].extract::<0>();
+    let d_ac = x.acos().dual[0].extract::<0>();
+    let inv = 1.0 / (1.0_f64 - 0.25).sqrt();
+    assert!(close(d_as, inv, 1e-7), "asin' = {d_as}");
+    assert!(close(d_ac, -inv, 1e-7), "acos' = {d_ac}");
+
+    // asinh'(x)=1/sqrt(x^2+1) at x=0.5; acosh'(x)=1/sqrt(x^2-1) at x=2.
+    let d_ash = D::variable(V::splat(0.5), 0).asinh().dual[0].extract::<0>();
+    assert!(close(d_ash, 1.0 / (0.25_f64 + 1.0).sqrt(), 1e-7), "asinh' = {d_ash}");
+    let d_ach = D::variable(V::splat(2.0), 0).acosh().dual[0].extract::<0>();
+    assert!(close(d_ach, 1.0 / (4.0_f64 - 1.0).sqrt(), 1e-7), "acosh' = {d_ach}");
 }
 
 #[test]

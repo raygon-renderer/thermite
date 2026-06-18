@@ -23,13 +23,13 @@
 //! [`splat`]: GenericVector::splat
 //! [`new`]: GenericVector::new
 
-use core::array::from_fn;
 use core::marker::PhantomData;
 use core::ops::{Add, Div, Mul, Rem, Sub};
 
 use num_traits::Bounded;
 
 use thermite::element::{Element, FloatElement, SignedElement};
+use thermite::math::algorithms::reduce_in_place;
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::vector::ops::{NegMasked, Square, SquareMasked};
@@ -37,6 +37,22 @@ use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue
 use thermite::{LargeInt, prelude::*};
 
 use crate::{Dual, DualValue};
+
+/// Build a `[_; $n]` array from a per-index expression without a closure, so it
+/// always inlines under `#[target_feature]` -- unlike `core::array::from_fn` /
+/// `array::map`, which are only `#[inline]` and can be left out-of-line (dropping
+/// the target feature). The body is pasted directly into a `while` loop.
+macro_rules! array_each {
+    ([$init:expr; $n:expr], |$j:ident| $body:expr) => {{
+        let mut out = [$init; $n];
+        let mut $j = 0usize;
+        while $j < $n {
+            out[$j] = $body;
+            $j += 1;
+        }
+        out
+    }};
+}
 
 /// A real [`FloatVector`] usable as the inner storage of a [`Dual`] vector.
 ///
@@ -336,7 +352,7 @@ where
     fn cast_from(from: Dual<FROM, N>) -> Self {
         Self {
             re: TO::cast_from(from.re),
-            dual: from_fn(|i| TO::cast_from(from.dual[i])),
+            dual: array_each!([TO::ZERO; N], |i| TO::cast_from(from.dual[i])),
         }
     }
 }
@@ -364,8 +380,8 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         Const<M>: IntoArrayLength<ArrayLength = Self::Lanes>,
     {
         Self {
-            re: V::new(value.map(|c| c.re)),
-            dual: from_fn(|j| V::new(value.map(|c| c.dual[j]))),
+            re: V::new(array_each!([<V::Element as Element>::ZERO; M], |m| value[m].re)),
+            dual: array_each!([V::ZERO; N], |j| V::new(array_each!([<V::Element as Element>::ZERO; M], |m| value[m].dual[j]))),
         }
     }
 
@@ -375,7 +391,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         for i in 0..Self::LANES {
             arr[i] = Dual {
                 re: self.re.extractv(i),
-                dual: from_fn(|j| self.dual[j].extractv(i)),
+                dual: array_each!([<V::Element as Element>::ZERO; N], |j| self.dual[j].extractv(i)),
             };
         }
         arr
@@ -385,7 +401,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn splat(value: Self::Element) -> Self {
         Self {
             re: V::splat(value.re),
-            dual: from_fn(|j| V::splat(value.dual[j])),
+            dual: array_each!([V::ZERO; N], |j| V::splat(value.dual[j])),
         }
     }
 
@@ -393,7 +409,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn single(value: Self::Element) -> Self {
         Self {
             re: V::single(value.re),
-            dual: from_fn(|j| V::single(value.dual[j])),
+            dual: array_each!([V::ZERO; N], |j| V::single(value.dual[j])),
         }
     }
 
@@ -484,7 +500,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn broadcast<const I: usize>(self) -> Self {
         Self {
             re: V::broadcast::<I>(self.re),
-            dual: from_fn(|j| V::broadcast::<I>(self.dual[j])),
+            dual: array_each!([V::ZERO; N], |j| V::broadcast::<I>(self.dual[j])),
         }
     }
 
@@ -492,7 +508,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn broadcastv(self, idx: usize) -> Self {
         Self {
             re: self.re.broadcastv(idx),
-            dual: from_fn(|j| self.dual[j].broadcastv(idx)),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].broadcastv(idx)),
         }
     }
 
@@ -500,7 +516,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn extract<const I: usize>(self) -> Self::Element {
         Dual {
             re: V::extract::<I>(self.re),
-            dual: from_fn(|j| V::extract::<I>(self.dual[j])),
+            dual: array_each!([<V::Element as Element>::ZERO; N], |j| V::extract::<I>(self.dual[j])),
         }
     }
 
@@ -508,7 +524,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn extractv(self, idx: usize) -> Self::Element {
         Dual {
             re: self.re.extractv(idx),
-            dual: from_fn(|j| self.dual[j].extractv(idx)),
+            dual: array_each!([<V::Element as Element>::ZERO; N], |j| self.dual[j].extractv(idx)),
         }
     }
 
@@ -516,7 +532,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn insert<const I: usize>(self, value: Self::Element) -> Self {
         Self {
             re: V::insert::<I>(self.re, value.re),
-            dual: from_fn(|j| V::insert::<I>(self.dual[j], value.dual[j])),
+            dual: array_each!([V::ZERO; N], |j| V::insert::<I>(self.dual[j], value.dual[j])),
         }
     }
 
@@ -524,7 +540,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn insertv(self, idx: usize, value: Self::Element) -> Self {
         Self {
             re: self.re.insertv(idx, value.re),
-            dual: from_fn(|j| self.dual[j].insertv(idx, value.dual[j])),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].insertv(idx, value.dual[j])),
         }
     }
 
@@ -532,7 +548,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn reverse(self) -> Self {
         Self {
             re: self.re.reverse(),
-            dual: from_fn(|j| self.dual[j].reverse()),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].reverse()),
         }
     }
 
@@ -540,7 +556,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn swap_bytes(self) -> Self {
         Self {
             re: self.re.swap_bytes(),
-            dual: from_fn(|j| self.dual[j].swap_bytes()),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].swap_bytes()),
         }
     }
 
@@ -548,7 +564,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn zz(self, mask: Self::Mask) -> Self {
         Self {
             re: self.re.zz(mask),
-            dual: from_fn(|j| self.dual[j].zz(mask)),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].zz(mask)),
         }
     }
 
@@ -556,7 +572,7 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     fn nz(self, mask: Self::Mask) -> Self {
         Self {
             re: self.re.nz(mask),
-            dual: from_fn(|j| self.dual[j].nz(mask)),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].nz(mask)),
         }
     }
 
@@ -815,30 +831,51 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
         Self { re, dual }
     }
 
+    // Ordering of a dual is by its primal, so let the inner vector's SIMD
+    // arg_minmax locate the winning lanes, then extract that lane's primal and
+    // derivative components -- never a scalar per-lane comparison.
     #[inline(always)]
     fn min_element(self) -> Self::Element {
-        let mut best = self.extractv(0);
-        for i in 1..Self::LANES {
-            let e = self.extractv(i);
-            if e.re < best.re { best = e; }
-        }
-        best
+        let (lo, _) = self.re.arg_minmax();
+        self.extractv(lo)
     }
 
     #[inline(always)]
     fn max_element(self) -> Self::Element {
-        let mut best = self.extractv(0);
-        for i in 1..Self::LANES {
-            let e = self.extractv(i);
-            if e.re > best.re { best = e; }
-        }
-        best
+        let (_, hi) = self.re.arg_minmax();
+        self.extractv(hi)
     }
 
-    #[inline(always)] fn min_max_element(self) -> (Self::Element, Self::Element) { (self.min_element(), self.max_element()) }
+    // One arg_minmax for both ends.
+    #[inline(always)]
+    fn min_max_element(self) -> (Self::Element, Self::Element) {
+        let (lo, hi) = self.re.arg_minmax();
+        (self.extractv(lo), self.extractv(hi))
+    }
 
-    #[inline(always)] fn sum_elements(self) -> Self::Element { self.reduce(|a, b| a + b) }
-    #[inline(always)] fn prod_elements(self) -> Self::Element { self.reduce(|a, b| a * b) }
+    // Sum is linear, so it commutes with the value/derivative split: reduce each
+    // component with the inner vector's native horizontal sum rather than
+    // extracting and folding `LANES` scalar duals.
+    #[inline(always)]
+    fn sum_elements(self) -> Self::Element {
+        let mut dual = [<V::Element as Element>::ZERO; N];
+        let mut j = 0;
+        while j < N {
+            dual[j] = self.dual[j].sum_elements();
+            j += 1;
+        }
+        Dual { re: self.re.sum_elements(), dual }
+    }
+
+    // Product is *not* linear (the per-lane derivatives cross-multiply), so it
+    // needs real dual multiplications across lanes. A log-depth tree reduction
+    // shortens the dependency chain versus a sequential fold.
+    #[inline(always)]
+    fn prod_elements(self) -> Self::Element {
+        let mut arr = self.into_array();
+        reduce_in_place(&mut arr, |a, b| a * b);
+        arr[0]
+    }
 
     #[inline(always)] fn offset() -> Self { Self::constant(V::offset()) }
     #[inline(always)] fn indexed() -> Self { Self::constant(V::indexed()) }
@@ -975,8 +1012,10 @@ impl<V: DualFloatVector, const N: usize> FloatVector for Dual<V, N> {
 
     type ExtendedPrecision = Self;
 
-    const HAS_APPROX_RCP: bool = false;
-    const HAS_APPROX_RSQRT: bool = false;
+    // The dual `rcp`/`rsqrt` derivatives are built from the inner primal estimate,
+    // so they're approximate exactly when the inner vector's are.
+    const HAS_APPROX_RCP: bool = V::HAS_APPROX_RCP;
+    const HAS_APPROX_RSQRT: bool = V::HAS_APPROX_RSQRT;
 
     #[inline(always)] fn is_infinite(self) -> Self::Mask { self.re.is_infinite() }
     #[inline(always)] fn is_finite(self) -> Self::Mask { self.re.is_finite() }
@@ -1018,7 +1057,7 @@ impl<V: DualFloatVector, const N: usize> FloatVector for Dual<V, N> {
     fn mul_sign(self, sign: Self) -> Self {
         Self {
             re: self.re.mul_sign(sign.re),
-            dual: from_fn(|i| self.dual[i].mul_sign(sign.re)),
+            dual: array_each!([V::ZERO; N], |i| self.dual[i].mul_sign(sign.re)),
         }
     }
 

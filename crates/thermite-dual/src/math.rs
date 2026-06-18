@@ -17,11 +17,13 @@
 
 use thermite::math::FloatConsts;
 use thermite::math::RealMathWithPolicy;
+use thermite::math::algorithms::reduce_in_place;
 use thermite::math::policy::Policy;
 use thermite::math::specialized::{
     SpecializedCoreMath, SpecializedRealMath, SpecializedSpatialMath, SpecializedTranscendentalMath,
 };
 use thermite::prelude::*;
+use thermite::vector::AsFloatVectorWithBitsKernel;
 
 use crate::Dual;
 use crate::vector::DualFloatVector;
@@ -92,15 +94,15 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn asin<P: Policy>(self) -> Self {
         let v = self.re.asin_p::<P>();
-        // 1 / sqrt(1 - x^2)
-        self.chain(v, self.re.nmul_adde(self.re, V::ONE).sqrt().reciprocal_p::<P>())
+        // 1 / sqrt(1 - x^2) = inverse_sqrt(1 - x^2)
+        self.chain(v, self.re.nmul_adde(self.re, V::ONE).inverse_sqrt_p::<P>())
     }
 
     #[inline(always)]
     fn acos<P: Policy>(self) -> Self {
         let v = self.re.acos_p::<P>();
-        // -1 / sqrt(1 - x^2)
-        self.chain(v, self.re.nmul_adde(self.re, V::ONE).sqrt().reciprocal_p::<P>().neg())
+        // -1 / sqrt(1 - x^2) = -inverse_sqrt(1 - x^2)
+        self.chain(v, self.re.nmul_adde(self.re, V::ONE).inverse_sqrt_p::<P>().neg())
     }
 
     #[inline(always)]
@@ -113,15 +115,15 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
         let v = self.re.asinh_p::<P>();
-        // 1 / sqrt(x^2 + 1)
-        self.chain(v, self.re.mul_adde(self.re, V::ONE).sqrt().reciprocal_p::<P>())
+        // 1 / sqrt(x^2 + 1) = inverse_sqrt(x^2 + 1)
+        self.chain(v, self.re.mul_adde(self.re, V::ONE).inverse_sqrt_p::<P>())
     }
 
     #[inline(always)]
     fn acosh<P: Policy>(self) -> Self {
         let v = self.re.acosh_p::<P>();
-        // 1 / sqrt(x^2 - 1)
-        self.chain(v, self.re.mul_sube(self.re, V::ONE).sqrt().reciprocal_p::<P>())
+        // 1 / sqrt(x^2 - 1) = inverse_sqrt(x^2 - 1)
+        self.chain(v, self.re.mul_sube(self.re, V::ONE).inverse_sqrt_p::<P>())
     }
 
     #[inline(always)]
@@ -170,10 +172,64 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.powf_p::<P>(e.re);
         // d/dx x^y = y x^(y-1) = y * (x^y) / x = e.re * v / x;  d/dy x^y = x^y ln x
         let a = e.re * v / self.re;
+
+        /// Kernel for [`FloatVector::with_bits`]: bitwise-OR all `N` exponent-derivative
+        /// components into one accumulator (a [`FloatVectorWithBits`] is a
+        /// [`BitwiseVector`], so `|` applies directly to the floats) and report whether
+        /// it is all-zero -- i.e. whether the exponent is a constant. Returns `None` on
+        /// backends without bit access, where the caller falls back to the full path.
+        struct ExpIsConstKernel;
+
+        impl<O: FloatVector, const N: usize> AsFloatVectorWithBitsKernel<O, N> for ExpIsConstKernel {
+            type Output = bool;
+
+            #[inline(always)]
+            fn with_bits<
+                W: FloatVectorWithBits<
+                        Element = O::Element,
+                        Lanes = O::Lanes,
+                        Mask = O::Mask,
+                        Signed = O::Signed,
+                        Unsigned = O::Unsigned,
+                        ExtendedPrecision = O::ExtendedPrecision,
+                    > + CastVector<O>,
+            >(
+                self,
+                mut v: [W; N],
+            ) -> bool {
+                reduce_in_place(&mut v, |x, y| x | y);
+                v[0].is_all_zero()
+            }
+        }
+
+        // The d/dy term (x^y ln x) needs a `ln` (a full transcendental) and its
+        // x<=0 NaN handling, but is only live when the exponent actually carries a
+        // derivative. For the common `x.powf(const)` case every `e.dual` is zero,
+        // so detect that and skip the whole d/dy term, falling back to the plain
+        // base-direction chain rule. Bit-capable backends do it as a single
+        // OR-reduce of the partials' bits; types without bit access (e.g.
+        // Compensated) take the numeric `is_all_zero` per partial instead.
+        let exp_is_const = match <V as FloatVector>::with_bits(e.dual, ExpIsConstKernel) {
+            Some(is_const) => is_const,
+            None => {
+                let mut is_const = true;
+                let mut i = 0;
+                while i < N {
+                    is_const &= e.dual[i].is_all_zero();
+                    i += 1;
+                }
+                is_const
+            }
+        };
+
+        if thermite::likely(exp_is_const) {
+            return self.chain(v, a);
+        }
+
         // ln(x) is -inf/NaN for x <= 0; zero the d/dy contribution there so a
-        // constant exponent (e.dual == 0) isn't NaN-poisoned by `b * 0` when the
-        // primal value is still finite (e.g. (-2)^2). Where the exponent genuinely
-        // varies and x <= 0 the result is already NaN via `v`/`a`, so this is safe.
+        // finite primal (e.g. an integer exponent over a negative base) isn't
+        // NaN-poisoned by `b * 0`. Where the exponent varies and x <= 0 the result
+        // is already NaN via `v`/`a`, so this is safe.
         let b = (v * self.re.ln_p::<P>()).nz(self.re.cmp_le(V::ZERO));
         let mut dual = self.dual;
         let mut i = 0;
@@ -313,7 +369,9 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
         }
 
         let h = <V as thermite::math::SpatialMathWithPolicy>::hypot_n_p::<P, K>(re);
-        let inv = h.reciprocal_p::<P>();
+        // d||v|| is undefined at the origin: h == 0 -> 1/h = inf, dotted with the
+        // zero numerator -> NaN. Pin the gradient to 0 there instead.
+        let inv = h.reciprocal_p::<P>().nz(h.is_zero());
 
         let mut dual = [V::ZERO; N];
         let mut i = 0;
@@ -342,7 +400,11 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
         }
 
         let ih = <V as thermite::math::SpatialMathWithPolicy>::inv_hypot_n_p::<P, K>(re);
-        let factor = (ih * ih * ih).neg(); // -1/||v||^3
+        // -1/||v||^3, undefined at the origin (ih = inf there, and the cube can
+        // overflow near it); zero the gradient wherever the factor isn't finite so
+        // it can't poison `factor * acc` into a NaN.
+        let factor = (ih * ih * ih).neg();
+        let factor = factor.zz(factor.is_finite());
 
         let mut dual = [V::ZERO; N];
         let mut i = 0;
