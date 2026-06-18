@@ -154,7 +154,8 @@ impl<V: FloatVector, const C: usize, const R: usize, const K: usize> Mul<Matrix<
                 let mut sum = self[0][r] * col_rhs[0];
 
                 for i in 1..C {
-                    sum = sum.mul_adde(self[i][r], col_rhs[i]);
+                    // sum += self[i][r] * col_rhs[i]
+                    sum = self[i][r].mul_adde(col_rhs[i], sum);
                 }
 
                 result[c][r] = sum;
