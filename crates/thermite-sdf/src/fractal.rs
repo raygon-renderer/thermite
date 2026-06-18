@@ -19,12 +19,13 @@
 use core::marker::PhantomData;
 
 use thermite::math::RealMathWithPolicy;
+use thermite::math::policy::policies::ExtraPrecision;
 use thermite::math::policy::{DefaultPolicy, Policy};
 use thermite::prelude::*;
 
 use thermite_geometry::prim::{Bounds, Vector, Vector2, Vector3, vector::VectorOps as _};
 
-use crate::consts::{cint, frac};
+use crate::consts::{cint, frac, vint};
 use crate::ops::FiniteDiff;
 use crate::{BoundedSdf, SDF, SdfVector, unit_or_zero};
 
@@ -136,6 +137,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> QuaternionJulia3D<V, P> {
     #[inline(always)]
     fn iterate<const TRAP: bool>(&self, p: Vector3<V>) -> (V, FractalOrbit<V, 3>) {
         let esc = escape::<V>();
+
         // quaternion z = (x, y, z, w), real part x (matching IQ's qsqr slicing)
         let (mut x, mut y, mut z, mut w) = (p[0], p[1], p[2], self.w);
         let mut m2 = x.mul_adde(x, y.mul_adde(y, z.mul_adde(z, w * w)));
@@ -147,6 +149,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> QuaternionJulia3D<V, P> {
         let (mut tx, mut ty, mut tz) = (x.abs(), y.abs(), z.abs());
         let four = cint::<V, 4>();
         let mut i = 0;
+
         while i < self.iterations {
             if !thermite::likely(active.any()) {
                 break;
@@ -164,15 +167,18 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> QuaternionJulia3D<V, P> {
             x = x.mul_adde_c(active, x, self.c[0] - isq);
             m2 = x.mul_adde(x, y.mul_adde(y, z.mul_adde(z, w * w))); // old where frozen
             count = count.add_c(active, V::ONE);
+
             if const { TRAP } {
                 tp = tp.min(x.mul_adde(x, y.mul_adde(y, z * z)));
                 tx = tx.min(x.abs());
                 ty = ty.min(y.abs());
                 tz = tz.min(z.abs());
             }
+
             active &= m2.cmp_lt(esc);
             i += 1;
         }
+
         // d = sqrt(m2/dz2) * 0.5*log(m2) * 0.5  (the trailing 0.5 keeps it an
         // upper bound, per the article's part 3). Lanes still active never
         // escaped (they are inside the set) -> distance 0.
@@ -184,6 +190,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> QuaternionJulia3D<V, P> {
             trap_point: tp.sqrt(),
             trap_planes: Vector3::new([tx, ty, tz]),
         };
+
         (active.select(V::ZERO, d), orbit)
     }
 }
@@ -210,28 +217,53 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 3> for Quaterni
     }
 }
 
-/// The classic power-8 Mandelbulb (`<https://iquilezles.org/articles/mandelbulb>`).
+/// The bulb exponent for [`Mandelbulb3D`].
 ///
-/// For each point `p` the orbit `$w_{n+1} = \mathrm{bulb}_8(w_n) + p$` is iterated
-/// from `$w_0 = p$`, with the scalar derivative `$dr_{n+1} = 8\,r_n^{7}\,dr_n + 1$`
-/// (`$r = |w|$`). The bulb cubes-and-rotates in spherical coordinates (polar form;
-/// trig, but exact and GPU-friendly). The DE is `$0.5\,r\,\log r / dr$`.
+/// `Integer` evaluates the radial power via repeated-squaring ([`powi`]), which
+/// is faster and avoids `log`/`exp`; `Float` uses [`powf`] for fractional or
+/// per-lane exponents (each lane may carry a different power).
+///
+/// [`powi`]: thermite::math::RealMathWithPolicy::powi_p
+/// [`powf`]: thermite::math::RealMathWithPolicy::powf_p
+#[derive(Debug, Clone, Copy)]
+pub enum MandelbulbPower<V: SdfVector> {
+    Integer(u32),
+    Float(V),
+}
+
+/// The Mandelbulb (`<https://iquilezles.org/articles/mandelbulb>`), with a
+/// configurable exponent (the classic bulb is power 8).
+///
+/// For each point `p` the orbit `$w_{n+1} = \mathrm{bulb}_k(w_n) + p$` is iterated
+/// from `$w_0 = p$`, with the scalar derivative `$dr_{n+1} = k\,r_n^{k-1}\,dr_n + 1$`
+/// (`$r = |w|$`, `$k$` the [power](MandelbulbPower)). The bulb raises `$r$` to the
+/// `$k$` and scales the spherical angles by `$k$` (polar form; trig, but exact and
+/// GPU-friendly). The DE is `$0.5\,r\,\log r / dr$`, independent of `$k$`.
 ///
 /// This is a geometric (algebraically "incorrect") construction, so the DE is an
 /// approximation, not the exact metric.
 #[derive(Debug, Clone, Copy)]
 pub struct Mandelbulb3D<V: SdfVector, P: Policy = DefaultPolicy> {
-    /// Iteration budget (power-8 escapes fast; ~8-16 suffices).
+    /// Iteration budget (the power-8 bulb escapes fast; ~8-16 suffices).
     pub iterations: u32,
+    /// Bulb exponent `$k$`.
+    pub power: MandelbulbPower<V>,
     _policy: PhantomData<(V, P)>,
 }
 
 impl<V: SdfVector, P: Policy> Mandelbulb3D<V, P> {
-    /// Builds with the given iteration budget.
+    /// Builds the classic power-8 bulb with the given iteration budget.
     #[inline(always)]
     pub fn new(iterations: u32) -> Self {
+        Self::with_power(iterations, MandelbulbPower::Integer(8))
+    }
+
+    /// Builds with the given iteration budget and bulb exponent.
+    #[inline(always)]
+    pub fn with_power(iterations: u32, power: MandelbulbPower<V>) -> Self {
         Self {
             iterations,
+            power,
             _policy: PhantomData,
         }
     }
@@ -249,43 +281,56 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbulb3D<V, P> {
         let mut count = V::ZERO;
         let mut tp = m2; // |w0|^2
         let (mut tx, mut ty, mut tz) = (wx.abs(), wy.abs(), wz.abs());
-        let eight = cint::<V, 8>();
+        // `k` is the power as a vector (for angle scaling); `km1` = k - 1.
+        let (k, km1) = match self.power {
+            MandelbulbPower::Integer(n) => (vint::<V>(n as thermite::LargeInt), n as i32 - 1),
+            MandelbulbPower::Float(f) => (f, 0),
+        };
+
         let mut i = 0;
         while i < self.iterations {
             if !thermite::likely(active.any()) {
                 break;
             }
+
             let r = m2.sqrt();
-            let r2 = m2; // r^2
-            let r4 = r2 * r2;
-            let r7 = r4 * r2 * r;
-            let r8 = r4 * r4;
-            // polar: wo = acos(wy/r), wi = atan2(wx, wz); scale angles by 8, r by ^8.
+            // r^(k-1) then r^k = r^(k-1) * r. Integer powers use repeated squaring;
+            // fractional/per-lane powers go through powf.
+            let rkm1 = match self.power {
+                MandelbulbPower::Integer(_) => r.powi_p::<P>(km1),
+                MandelbulbPower::Float(_) => r.powf_p::<P>(k - V::ONE),
+            };
+
+            let rk = rkm1 * r;
+            // polar: wo = acos(wy/r), wi = atan2(wx, wz); scale angles by k, r by ^k.
             // Guard r == 0 (the origin) and clamp the acos argument against fp drift;
-            // there r^8 == 0 anyway, so the exact angle is irrelevant.
+            // there r^k == 0 anyway, so the exact angle is irrelevant.
             let rg = r.cmp_gt(V::ZERO).select(r, V::ONE);
             let wo = (wy / rg).clamp(V::NEG_ONE, V::ONE).acos_p::<P>();
             let wi = wx.atan2_p::<P>(wz);
-            let (so, co) = (wo * eight).sin_cos_p::<P>();
-            let (si, ci) = (wi * eight).sin_cos_p::<P>();
-            let rs = r8 * so;
+            let (so, co) = (wo * k).sin_cos_p::<P>();
+            let (si, ci) = (wi * k).sin_cos_p::<P>();
+            let rs = rk * so;
             // Masked FMAs that keep the old value (`src`) where the lane escaped.
-            //   dr := 8 r^7 dr + 1 ;  w := r^8 (sin8o sin8i, cos8o, sin8o cos8i) + p
-            dr = dr.mul_adde_c(active, eight * r7, V::ONE);
+            //   dr := k r^(k-1) dr + 1 ;  w := r^k (sinKo sinKi, cosKo, sinKo cosKi) + p
+            dr = dr.mul_adde_c(active, k * rkm1, V::ONE);
             wx = rs.mul_adde_m(wx, active, si, p[0]);
-            wy = r8.mul_adde_m(wy, active, co, p[1]);
+            wy = rk.mul_adde_m(wy, active, co, p[1]);
             wz = rs.mul_adde_m(wz, active, ci, p[2]);
             m2 = wx.mul_adde(wx, wy.mul_adde(wy, wz * wz)); // old where frozen
             count = count.add_c(active, V::ONE);
+
             if const { TRAP } {
                 tp = tp.min(m2);
                 tx = tx.min(wx.abs());
                 ty = ty.min(wy.abs());
                 tz = tz.min(wz.abs());
             }
+
             active &= m2.cmp_lt(esc);
             i += 1;
         }
+
         // d = 0.5 * r * log(r) / dr  (= 0.25 * sqrt(m2) * log(m2) / dr)
         let r = m2.sqrt();
         let d = r * m2.ln() * frac::<V, 1, 4>() / dr;
@@ -296,6 +341,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbulb3D<V, P> {
             trap_point: tp.sqrt(),
             trap_planes: Vector3::new([tx, ty, tz]),
         };
+
         (active.select(V::ZERO, d), orbit)
     }
 }
@@ -317,8 +363,21 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> FractalSdf<V, 3> for Mandelbu
 impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 3> for Mandelbulb3D<V, P> {
     #[inline(always)]
     fn aabb(&self) -> Bounds<V, 3> {
-        // the power-8 bulb is contained in a sphere of radius ~1.2
-        Bounds::symmetric(Vector3::splat(frac::<V, 5, 4>()))
+        // Multibrot containment radius: the filled set lies inside |p| <= R with
+        // R = 2^(1/(k-1)) (the standard bail-out radius - if |c| exceeds it the
+        // orbit provably escapes). Tight and exact per power: ~1.104 at k=8,
+        // sqrt(2) at k=3, 2 at k=2. The bound is per-lane (SoA): a per-lane Float
+        // power yields a per-lane radius, no horizontal reduction.
+        let k = match self.power {
+            MandelbulbPower::Integer(n) => vint::<V>(n as thermite::LargeInt),
+            MandelbulbPower::Float(f) => f,
+        };
+
+        let r = (k - V::ONE)
+            .reciprocal_p::<ExtraPrecision<P>>()
+            .exp2_p::<ExtraPrecision<P>>();
+
+        Bounds::symmetric(Vector3::splat(r))
     }
 }
 
@@ -359,10 +418,12 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Julia2D<V, P> {
         let (mut tx, mut ty) = (x.abs(), y.abs());
         let four = cint::<V, 4>();
         let mut i = 0;
+
         while i < self.iterations {
             if !thermite::likely(active.any()) {
                 break;
             }
+
             let x2 = V::TWO * x;
             let ysq = y * y; // old
             dz2 = dz2.mul_adde_c(active, four * m2, V::ZERO);
@@ -370,14 +431,17 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Julia2D<V, P> {
             x = x.mul_adde_c(active, x, self.c[0] - ysq); // x^2 + (c.x - y^2), keeps old x
             m2 = x.mul_adde(x, y * y);
             count = count.add_c(active, V::ONE);
+
             if const { TRAP } {
                 tp = tp.min(m2);
                 tx = tx.min(x.abs());
                 ty = ty.min(y.abs());
             }
+
             active &= m2.cmp_lt(esc);
             i += 1;
         }
+
         let d = (m2 / dz2).sqrt() * (m2.ln() * V::HALF);
         let orbit = FractalOrbit {
             count,
@@ -386,6 +450,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Julia2D<V, P> {
             trap_point: tp.sqrt(),
             trap_planes: Vector2::new([tx, ty]),
         };
+
         (active.select(V::ZERO, d), orbit)
     }
 }
@@ -444,10 +509,12 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbrot2D<V, P> {
         let mut tp = V::INFINITY;
         let (mut tx, mut ty) = (V::INFINITY, V::INFINITY);
         let mut i = 0;
+
         while i < self.iterations {
             if !thermite::likely(active.any()) {
                 break;
             }
+
             let zysq = zy * zy;
             let t = zx.mul_sube(dx, zy * dy); // zx*dx - zy*dy
             let t2 = zx.mul_adde(dy, zy * dx); // zx*dy + zy*dx
@@ -459,17 +526,21 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbrot2D<V, P> {
             zx = zx.mul_adde_c(active, zx, cx - zysq); // zx^2 + (cx - zy^2)
             m2 = zx.mul_adde(zx, zy * zy);
             count = count.add_c(active, V::ONE);
+
             if const { TRAP } {
                 tp = tp.min(m2);
                 tx = tx.min(zx.abs());
                 ty = ty.min(zy.abs());
             }
+
             active &= m2.cmp_lt(esc);
             i += 1;
         }
+
         // |z'|^2 = dx^2 + dy^2
         let dz2 = dx.mul_adde(dx, dy * dy);
         let d = (m2 / dz2).sqrt() * (m2.ln() * V::HALF);
+
         let orbit = FractalOrbit {
             count,
             escaped: !active,
@@ -477,6 +548,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbrot2D<V, P> {
             trap_point: tp.sqrt(),
             trap_planes: Vector2::new([tx, ty]),
         };
+
         (active.select(V::ZERO, d), orbit)
     }
 }
@@ -536,11 +608,12 @@ impl<V: SdfVector> SDF<V, 3> for MengerSponge {
         let three = cint::<V, 3>();
         let mut s = V::ONE;
         let mut m = 0;
+
         while m < self.iterations {
             let ax = fold_cell(p[0] * s).abs();
             let ay = fold_cell(p[1] * s).abs();
             let az = fold_cell(p[2] * s).abs();
-            s = s * three;
+            s *= three;
             // r = |1 - 3|a||
             let rx = three.nmul_adde(ax, V::ONE).abs();
             let ry = three.nmul_adde(ay, V::ONE).abs();
@@ -581,10 +654,11 @@ impl<V: SdfVector> SDF<V, 2> for SierpinskiCarpet {
         let three = cint::<V, 3>();
         let mut s = V::ONE;
         let mut m = 0;
+
         while m < self.iterations {
             let ax = fold_cell(p[0] * s).abs();
             let ay = fold_cell(p[1] * s).abs();
-            s = s * three;
+            s *= three;
             let rx = three.nmul_adde(ax, V::ONE).abs();
             let ry = three.nmul_adde(ay, V::ONE).abs();
             d = d.max((rx.min(ry) - V::ONE) / s);
@@ -634,6 +708,7 @@ impl<V: SdfVector, const N: usize, B: SDF<V, N>, C: SDF<V, N>> SDF<V, N> for Rec
         let mut d = self.base.eval(p);
         let mut s = V::ONE;
         let mut m = 0;
+
         while m < self.iterations {
             let mut a = Vector::ZERO;
             let mut i = 0;
@@ -641,7 +716,7 @@ impl<V: SdfVector, const N: usize, B: SDF<V, N>, C: SDF<V, N>> SDF<V, N> for Rec
                 a[i] = fold_cell(p[i] * s);
                 i += 1;
             }
-            s = s * self.lacunarity;
+            s *= self.lacunarity;
             d = d.max(self.cell.eval(a) / s);
             m += 1;
         }
@@ -677,17 +752,21 @@ impl<V: SdfVector, S: FractalSdf<V, 3>> FractalGradientSdf<V> for FiniteDiff<V, 
         // offsets (+++), (+--), (-+-), (--+); normalization absorbed by unit_or_zero.
         let mut grad = Vector3::ZERO;
         let mut j = 0;
+
         while j < 4 {
             let mut e = Vector3::ZERO;
             let mut k = 0;
+
             while k < 3 {
                 let plus = j == 0 || k + 1 == j;
                 e[k] = if plus { h } else { -h };
                 k += 1;
             }
+
             grad = e.mul_adde(self.shape.eval(p + e), grad);
             j += 1;
         }
+
         (dist, unit_or_zero(grad, grad.l2_norm()), orbit)
     }
 
@@ -704,6 +783,7 @@ impl<V: SdfVector, S: FractalSdf<V, 3>> FractalGradientSdf<V> for FiniteDiff<V, 
         let mut grad = e0.mul_adde(d0, Vector3::ZERO);
         // taps 1..3 = (+--), (-+-), (--+): distance only
         let mut j = 1;
+
         while j < 4 {
             let mut e = Vector3::ZERO;
             let mut k = 0;
@@ -714,6 +794,7 @@ impl<V: SdfVector, S: FractalSdf<V, 3>> FractalGradientSdf<V> for FiniteDiff<V, 
             grad = e.mul_adde(self.shape.eval(p + e), grad);
             j += 1;
         }
+
         (unit_or_zero(grad, grad.l2_norm()), orbit)
     }
 }
@@ -740,8 +821,17 @@ mod tests {
         // DE reads ~0 on |p| = 1, 0 inside (never escapes), and grows outside.
         let j = QuaternionJulia3D::<V>::new([vv(0.0); 4], 64);
         // on the surface (several directions) -> ~0
-        for q in [p3(1.0, 0.0, 0.0), p3(0.0, 1.0, 0.0), p3(0.0, 0.0, 1.0), p3(-1.0, 0.0, 0.0)] {
-            assert!(sc(j.eval(q)).abs() < 1e-3, "surface {:?}", (sc(q[0]), sc(q[1]), sc(q[2])));
+        for q in [
+            p3(1.0, 0.0, 0.0),
+            p3(0.0, 1.0, 0.0),
+            p3(0.0, 0.0, 1.0),
+            p3(-1.0, 0.0, 0.0),
+        ] {
+            assert!(
+                sc(j.eval(q)).abs() < 1e-3,
+                "surface {:?}",
+                (sc(q[0]), sc(q[1]), sc(q[2]))
+            );
         }
         // interior -> 0 (lane never escapes), exterior -> positive and increasing
         assert!(sc(j.eval(p3(0.5, 0.0, 0.0))).abs() < 1e-6);
@@ -758,7 +848,12 @@ mod tests {
     fn julia_fractal_and_bounds() {
         // A genuine fractal c: finite everywhere, ~0 near the set, bounded.
         let j = QuaternionJulia3D::<V>::new([vv(-0.45), vv(0.2), vv(0.0), vv(0.0)], 100);
-        for q in [p3(0.0, 0.0, 0.0), p3(0.3, 0.1, 0.2), p3(2.0, 0.0, 0.0), p3(-1.5, 1.0, 0.5)] {
+        for q in [
+            p3(0.0, 0.0, 0.0),
+            p3(0.3, 0.1, 0.2),
+            p3(2.0, 0.0, 0.0),
+            p3(-1.5, 1.0, 0.5),
+        ] {
             assert!(sc(j.eval(q)).is_finite() && sc(j.eval(q)) >= -1e-4);
         }
         assert!(sc(j.eval(p3(3.0, 3.0, 3.0))) > 0.0);
@@ -816,7 +911,10 @@ mod tests {
         // normal is unit length and ~ +x (sphere normal)
         let len = (sc(n[0]) * sc(n[0]) + sc(n[1]) * sc(n[1]) + sc(n[2]) * sc(n[2])).sqrt();
         assert!((len - 1.0).abs() < 1e-2, "unit normal, got {len}");
-        assert!(sc(n[0]) > 0.9 && sc(n[1]).abs() < 0.1 && sc(n[2]).abs() < 0.1, "normal ~ +x");
+        assert!(
+            sc(n[0]) > 0.9 && sc(n[1]).abs() < 0.1 && sc(n[2]).abs() < 0.1,
+            "normal ~ +x"
+        );
 
         // distance and orbit come from the central tap == inner eval_orbit(q)
         let (dc, oc) = j.eval_orbit(q);
@@ -863,7 +961,10 @@ mod tests {
         let (_, ng, og) = fd.eval_orbit_grad(q);
         let (no, oo) = fd.normal_orbit(q);
         for k in 0..3 {
-            assert!((sc(ng[k]) - sc(no[k])).abs() < 2e-2, "normal_orbit ~ eval_orbit_grad axis {k}");
+            assert!(
+                (sc(ng[k]) - sc(no[k])).abs() < 2e-2,
+                "normal_orbit ~ eval_orbit_grad axis {k}"
+            );
         }
         // orbit comes from p + (eps,eps,eps); matches eval_orbit there
         let e0 = p3(1.05 + 1e-3, 1e-3, 1e-3);
@@ -948,13 +1049,24 @@ mod tests {
             rx.max(ry).min(ry.max(rz)).min(rz.max(rx)) - vv(1.0)
         });
         let menger_rc = RecursiveCarve {
-            base: Box3D { b: p3(1.0, 1.0, 1.0), r: vv(0.0) },
+            base: Box3D {
+                b: p3(1.0, 1.0, 1.0),
+                r: vv(0.0),
+            },
             cell: cross,
             iterations: 3,
             lacunarity: vv(3.0),
         };
-        for q in [p3(0.0, 0.0, 0.0), p3(0.95, 0.95, 0.95), p3(0.4, 0.1, 0.7), p3(0.0, 0.0, 0.9)] {
-            assert!((sc(menger_rc.eval(q)) - sc(m.eval(q))).abs() < 1e-5, "generic == MengerSponge");
+        for q in [
+            p3(0.0, 0.0, 0.0),
+            p3(0.95, 0.95, 0.95),
+            p3(0.4, 0.1, 0.7),
+            p3(0.0, 0.0, 0.9),
+        ] {
+            assert!(
+                (sc(menger_rc.eval(q)) - sc(m.eval(q))).abs() < 1e-5,
+                "generic == MengerSponge"
+            );
         }
     }
 
@@ -971,7 +1083,12 @@ mod tests {
         for q in [p3(0.9, 0.9, 0.9), p3(-1.1, 0.3, -0.2), p3(5.0, 0.0, 0.0)] {
             assert!(sc(m.eval(q)).is_finite());
         }
-        // bounded
-        assert!((sc(m.aabb().0[1][1]) - 1.25).abs() < 1e-6);
+        // bounded by the multibrot radius R = 2^(1/(k-1)): ~1.10409 at k=8,
+        // sqrt(2) at k=3, 2 at k=2.
+        assert!((sc(m.aabb().0[1][1]) - 2f32.powf(1.0 / 7.0)).abs() < 1e-6);
+        let m3 = Mandelbulb3D::<V>::with_power(12, MandelbulbPower::Integer(3));
+        assert!((sc(m3.aabb().0[1][1]) - 2f32.sqrt()).abs() < 1e-6);
+        let mf = Mandelbulb3D::<V>::with_power(12, MandelbulbPower::Float(vv(2.0)));
+        assert!((sc(mf.aabb().0[1][1]) - 2.0).abs() < 1e-6);
     }
 }

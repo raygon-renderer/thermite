@@ -60,8 +60,8 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Tra
     fn aabb(&self) -> Bounds<V, N> {
         let mut bb = self.shape.aabb();
         for k in 0..N {
-            bb.0[k][0] = bb.0[k][0] + self.offset[k];
-            bb.0[k][1] = bb.0[k][1] + self.offset[k];
+            bb.0[k][0] += self.offset[k];
+            bb.0[k][1] += self.offset[k];
         }
         bb
     }
@@ -112,8 +112,8 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Uni
     fn aabb(&self) -> Bounds<V, N> {
         let mut bb = self.shape.aabb();
         for k in 0..N {
-            bb.0[k][0] = bb.0[k][0] * self.factor;
-            bb.0[k][1] = bb.0[k][1] * self.factor;
+            bb.0[k][0] *= self.factor;
+            bb.0[k][1] *= self.factor;
         }
         bb
     }

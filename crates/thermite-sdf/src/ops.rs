@@ -476,8 +476,7 @@ impl SmoothKernel for Cubic {
     fn g<V: SdfVector>(x: V) -> V {
         let xc = x.clamp(V::NEG_ONE, V::ONE);
         // (1 + 3x(x+1) - |x|^3)/6
-        let core = (xc * (xc + V::ONE)).mul_adde(cint::<V, 3>(), V::ONE - xc.abs() * (xc * xc))
-            * frac::<V, 1, 6>();
+        let core = (xc * (xc + V::ONE)).mul_adde(cint::<V, 3>(), V::ONE - xc.abs() * (xc * xc)) * frac::<V, 1, 6>();
         x.cmp_gt(V::ONE).select(x, core)
     }
     #[inline(always)]
@@ -600,17 +599,15 @@ impl<V: SdfVector, A, B, K: SmoothKernel> SmoothUnionK<V, A, B, K> {
     }
 }
 
-impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> SDF<V, N>
-    for SmoothUnionK<V, A, B, K>
-{
+impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> SDF<V, N> for SmoothUnionK<V, A, B, K> {
     #[inline(always)]
     fn eval(&self, p: Vector<V, N>) -> V {
         kernel_smin::<K, V>(self.a.eval(p), self.b.eval(p), self.k).0
     }
 }
 
-impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
-    GradientSdf<V, N> for SmoothUnionK<V, A, B, K>
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel> GradientSdf<V, N>
+    for SmoothUnionK<V, A, B, K>
 {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
@@ -623,8 +620,8 @@ impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K
     }
 }
 
-impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel>
-    BoundedSdf<V, N> for SmoothUnionK<V, A, B, K>
+impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel> BoundedSdf<V, N>
+    for SmoothUnionK<V, A, B, K>
 {
     #[inline(always)]
     fn aabb(&self) -> Bounds<V, N> {
@@ -651,8 +648,8 @@ impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> 
     }
 }
 
-impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
-    GradientSdf<V, N> for SmoothIntersectionK<V, A, B, K>
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel> GradientSdf<V, N>
+    for SmoothIntersectionK<V, A, B, K>
 {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
@@ -665,8 +662,8 @@ impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K
     }
 }
 
-impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel>
-    BoundedSdf<V, N> for SmoothIntersectionK<V, A, B, K>
+impl<V: SdfVector, const N: usize, A: BoundedSdf<V, N>, B: BoundedSdf<V, N>, K: SmoothKernel> BoundedSdf<V, N>
+    for SmoothIntersectionK<V, A, B, K>
 {
     #[inline(always)]
     fn aabb(&self) -> Bounds<V, N> {
@@ -693,8 +690,8 @@ impl<V: SdfVector, const N: usize, A: SDF<V, N>, B: SDF<V, N>, K: SmoothKernel> 
     }
 }
 
-impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel>
-    GradientSdf<V, N> for SmoothSubtractionK<V, A, B, K>
+impl<V: SdfVector, const N: usize, A: GradientSdf<V, N>, B: GradientSdf<V, N>, K: SmoothKernel> GradientSdf<V, N>
+    for SmoothSubtractionK<V, A, B, K>
 {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
@@ -987,10 +984,7 @@ pub struct MirroredRepetition<V: SdfVector, S, const N: usize> {
 }
 
 #[inline(always)]
-fn mirrored_fold<V: SdfVector, const N: usize>(
-    p: Vector<V, N>,
-    spacing: Vector<V, N>,
-) -> (Vector<V, N>, Vector<V, N>) {
+fn mirrored_fold<V: SdfVector, const N: usize>(p: Vector<V, N>, spacing: Vector<V, N>) -> (Vector<V, N>, Vector<V, N>) {
     // returns (folded point, per-axis sign +-1 for the gradient)
     let mut q = Vector::ZERO;
     let mut sign = Vector::ONE;
@@ -1021,7 +1015,7 @@ impl<V: SdfVector, const N: usize, S: GradientSdf<V, N>> GradientSdf<V, N> for M
         let (q, sign) = mirrored_fold(p, self.spacing);
         let (d, mut g) = self.shape.eval_grad(q);
         for i in 0..N {
-            g[i] = g[i] * sign[i]; // chain rule through the per-axis reflection
+            g[i] *= sign[i]; // chain rule through the per-axis reflection
         }
         (d, g)
     }
