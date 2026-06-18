@@ -404,6 +404,11 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     }
 
     #[inline(always)]
+    fn exp10_m1<P: Policy>(self) -> Self {
+        exp_d_internal::<Self, P, EXP_MODE_POW10M1>(self)
+    }
+
+    #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
         let x0 = self;
 
@@ -944,7 +949,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
             x -= r;
             x *= V::LN_2;
         }
-        EXP_MODE_POW10 => {
+        EXP_MODE_POW10 | EXP_MODE_POW10M1 => {
             max_x = 307.65;
 
             let log10_2_hi: V = crate::const_splat!(f64: -0.30102999554947019); // log10(2) in two parts
@@ -995,7 +1000,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
     let n2 = pow2n_d::<V>(r);
 
     z = match MODE {
-        EXP_MODE_EXPM1 | EXP_MODE_POW2M1 => z.mul_adde(n2, n2 - V::ONE),
+        EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => z.mul_adde(n2, n2 - V::ONE),
         _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
     };
 
@@ -1006,7 +1011,13 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
             return z;
         }
 
-        let underflow_value = const { if MODE == EXP_MODE_EXPM1 || MODE == EXP_MODE_POW2M1 { V::NEG_ONE } else { V::ZERO } };
+        let underflow_value = const {
+            if MODE == EXP_MODE_EXPM1 || MODE == EXP_MODE_POW2M1 || MODE == EXP_MODE_POW10M1 {
+                V::NEG_ONE
+            } else {
+                V::ZERO
+            }
+        };
 
         r = x0.select_negative(underflow_value, V::INFINITY);
         z = in_range.select(z, r);

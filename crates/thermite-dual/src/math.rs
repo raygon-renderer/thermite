@@ -175,6 +175,13 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     }
 
     #[inline(always)]
+    fn exp10_m1<P: Policy>(self) -> Self {
+        let v = self.re.exp10_m1_p::<P>();
+        // d/dx (10^x - 1) = ln(10) 10^x = ln(10) (v + 1)
+        self.chain(v, v.mul_adde(V::LN_10, V::LN_10))
+    }
+
+    #[inline(always)]
     fn powf<P: Policy>(self, e: Self) -> Self {
         let v = self.re.powf_p::<P>(e.re);
         // d/dx x^y = y x^(y-1) = y * (x^y) / x = e.re * v / x;  d/dy x^y = x^y ln x
@@ -291,6 +298,20 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.log10_p::<P>();
         // d/dx log10(x) = 1 / (x ln 10) = log10(e) / x
         self.chain(v, self.re.reciprocal_p::<P>() * V::LOG10_E)
+    }
+
+    #[inline(always)]
+    fn log2_p1<P: Policy>(self) -> Self {
+        let v = self.re.log2_p1_p::<P>();
+        // d/dx log2(1 + x) = 1 / ((1 + x) ln 2) = log2(e) / (1 + x)
+        self.chain(v, (V::ONE + self.re).reciprocal_p::<P>() * V::LOG2_E)
+    }
+
+    #[inline(always)]
+    fn log10_p1<P: Policy>(self) -> Self {
+        let v = self.re.log10_p1_p::<P>();
+        // d/dx log10(1 + x) = 1 / ((1 + x) ln 10) = log10(e) / (1 + x)
+        self.chain(v, (V::ONE + self.re).reciprocal_p::<P>() * V::LOG10_E)
     }
 
     #[inline(always)]

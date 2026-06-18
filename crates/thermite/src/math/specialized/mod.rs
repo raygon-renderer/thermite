@@ -634,6 +634,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn exp10<P: Policy>(self) -> Self;
     fn exp_m1<P: Policy>(self) -> Self;
     fn exp2_m1<P: Policy>(self) -> Self;
+    fn exp10_m1<P: Policy>(self) -> Self;
 
     fn powf<P: Policy>(self, e: Self) -> Self;
     fn cbrt<P: Policy>(self) -> Self;
@@ -687,6 +688,19 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn ln_1p<P: Policy>(self) -> Self;
     fn log2<P: Policy>(self) -> Self;
     fn log10<P: Policy>(self) -> Self;
+
+    // log_b(1 + x) = ln(1 + x) / ln(b) = ln_1p(x) * log_b(e). Routing through the
+    // cancellation-safe ln_1p keeps the near-zero accuracy; scaling by a constant
+    // preserves the relative error.
+    #[inline(always)]
+    fn log2_p1<P: Policy>(self) -> Self {
+        Self::ln_1p::<P>(self) * Self::LOG2_E
+    }
+
+    #[inline(always)]
+    fn log10_p1<P: Policy>(self) -> Self {
+        Self::ln_1p::<P>(self) * Self::LOG10_E
+    }
 
     fn log_n<P: Policy, const N: usize>(self) -> Self;
 
@@ -1211,6 +1225,7 @@ enum ExpMode {
     Pow2,
     Pow2m1,
     Pow10,
+    Pow10m1,
 }
 
 const EXP_MODE_EXP: u8 = ExpMode::Exp as u8;
@@ -1219,6 +1234,7 @@ const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
 const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
 const EXP_MODE_POW2M1: u8 = ExpMode::Pow2m1 as u8;
 const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
+const EXP_MODE_POW10M1: u8 = ExpMode::Pow10m1 as u8;
 
 const fn binomial(a: i32, b: i32) -> crate::LargeInt {
     if b <= 0 {

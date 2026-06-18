@@ -414,6 +414,11 @@ where
     }
 
     #[inline(always)]
+    fn exp10_m1<P: Policy>(self) -> Self {
+        Self::exp_internal::<P, EXP_MODE_POW10M1>(self)
+    }
+
+    #[inline(always)]
     fn powf<P: Policy>(self, e: Self) -> Self {
         // pow(x, y) = exp(y * ln(x))
         (e * self.ln_p::<P>()).exp_p::<P>()
@@ -609,6 +614,7 @@ enum ExpMode {
     Pow2,    // 2^x
     Pow2m1,  // 2^x - 1
     Pow10,   // 10^x
+    Pow10m1, // 10^x - 1
 }
 
 const EXP_MODE_EXP: u8 = ExpMode::Exp as u8;
@@ -617,6 +623,7 @@ const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
 const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
 const EXP_MODE_POW2M1: u8 = ExpMode::Pow2m1 as u8;
 const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
+const EXP_MODE_POW10M1: u8 = ExpMode::Pow10m1 as u8;
 
 // impl<V: FloatVectorWithBits> Compensated<V> {
 //     #[inline(always)]
@@ -679,14 +686,14 @@ impl<V: CompensatedFloatVector> Compensated<V> {
 
         // Note that the with_bits version will
         // need to do this with expm1, just not here.
-        if const { EXP_MODE_EXPM1 != MODE && EXP_MODE_POW2M1 != MODE } {
+        if const { EXP_MODE_EXPM1 != MODE && EXP_MODE_POW2M1 != MODE && EXP_MODE_POW10M1 != MODE } {
             sum += V::ONE;
         }
 
         if const { P::POLICY.precision.le(MAX_PRECISION_HI_ONLY) } {
             // Linear correction for low part
             // sum += exp(r_hi) * r_lo
-            if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE } {
+            if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE || EXP_MODE_POW10M1 == MODE } {
                 sum = (sum + V::ONE).mul_adde(x.error, sum);
             } else {
                 sum = sum.mul_adde(x.error, sum);
@@ -740,7 +747,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
 
                     let overflow_boundary = match MODE {
                         EXP_MODE_POW2 | EXP_MODE_POW2M1 => max_exp,
-                        EXP_MODE_POW10 => max_exp * FloatConsts::LOG10_2,
+                        EXP_MODE_POW10 | EXP_MODE_POW10M1 => max_exp * FloatConsts::LOG10_2,
                         EXP_MODE_EXP | EXP_MODE_EXPM1 | EXP_MODE_EXPH => max_exp * FloatConsts::LN_2,
                         _ => Element::ZERO, // unreachable
                     };
@@ -761,7 +768,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                     k = x.value().round();
                     r = (x - k) * Compensated::LN_2;
                 } else {
-                    if const { EXP_MODE_POW10 == MODE } {
+                    if const { EXP_MODE_POW10 == MODE || EXP_MODE_POW10M1 == MODE } {
                         // Base 10: 10^x = e^(x * ln10), k = round(x * log2(10)), r = x * ln(10) - k * ln(2)
                         k = (x.value() * <V as FloatConsts>::LOG2_10).round();
 
@@ -790,8 +797,8 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 if const { EXP_MODE_EXPH == MODE } {
                     // to divide res by 2, we can just subtract 1 from the exponent
                     k -= NumericVector::ONE;
-                } else if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE } {
-                    // expm1/exp2m1 needs an adjustment of +1 before scaling
+                } else if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE || EXP_MODE_POW10M1 == MODE } {
+                    // expm1/exp2m1/exp10m1 needs an adjustment of +1 before scaling
                     y += V::ONE;
                 }
 
@@ -800,7 +807,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 y.value = W::cast_from(y.value).ldexp_p::<CheckOverflow<P, false>>(k).cast_into();
                 y.error = W::cast_from(y.error).ldexp_p::<CheckOverflow<P, false>>(k).cast_into();
 
-                if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE } {
+                if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE || EXP_MODE_POW10M1 == MODE } {
                     // small input values get the raw unscaled result
                     y = k.is_zero().select(y0, y - V::ONE);
                 }
@@ -839,7 +846,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
 
         if const { EXP_MODE_POW2 == MODE || EXP_MODE_POW2M1 == MODE } {
             r *= Self::LN_2;
-        } else if const { EXP_MODE_POW10 == MODE } {
+        } else if const { EXP_MODE_POW10 == MODE || EXP_MODE_POW10M1 == MODE } {
             r *= Self::LN_10;
         }
 
@@ -848,7 +855,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
         for _ in 0..n {
             let y_sq = y.square();
 
-            y = if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE } {
+            y = if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE || EXP_MODE_POW10M1 == MODE } {
                 // correction for expm1 squaring
                 y_sq + Compensated {
                     value: y.value + y.value, // 2x should be lossless

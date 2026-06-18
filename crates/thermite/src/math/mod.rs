@@ -350,6 +350,8 @@ decl_math! {
         fn exp_m1[][](self: Self) -> Self;
         /// Returns `2^(self) - 1`, which is more precise than calculating `exp2(self) - 1` directly.
         fn exp2_m1[][](self: Self) -> Self;
+        /// Returns `10^(self) - 1`, which is more precise than calculating `exp10(self) - 1` directly.
+        fn exp10_m1[][](self: Self) -> Self;
         /// Returns `self` raised to the power of `e`.
         fn powf[][](self: Self, e: Self) -> Self;
         /// Returns the cube root of `self`.
@@ -367,6 +369,10 @@ decl_math! {
         fn log2[][](self: Self) -> Self;
         /// Returns the base-10 logarithm of `self`.
         fn log10[][](self: Self) -> Self;
+        /// Returns `$\log_2(1 + x)$` of `self`, which is more precise than `log2(1 + x)` directly near zero.
+        fn log2_p1[][](self: Self) -> Self;
+        /// Returns `$\log_{10}(1 + x)$` of `self`, which is more precise than `log10(1 + x)` directly near zero.
+        fn log10_p1[][](self: Self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given `base`.
         fn log[][](self: Self, base: Self) -> Self;
