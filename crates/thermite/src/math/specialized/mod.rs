@@ -633,6 +633,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn exp2<P: Policy>(self) -> Self;
     fn exp10<P: Policy>(self) -> Self;
     fn exp_m1<P: Policy>(self) -> Self;
+    fn exp2_m1<P: Policy>(self) -> Self;
 
     fn powf<P: Policy>(self, e: Self) -> Self;
     fn cbrt<P: Policy>(self) -> Self;
@@ -1208,6 +1209,7 @@ enum ExpMode {
     Expm1,
     Exph,
     Pow2,
+    Pow2m1,
     Pow10,
 }
 
@@ -1215,6 +1217,7 @@ const EXP_MODE_EXP: u8 = ExpMode::Exp as u8;
 const EXP_MODE_EXPM1: u8 = ExpMode::Expm1 as u8;
 const EXP_MODE_EXPH: u8 = ExpMode::Exph as u8;
 const EXP_MODE_POW2: u8 = ExpMode::Pow2 as u8;
+const EXP_MODE_POW2M1: u8 = ExpMode::Pow2m1 as u8;
 const EXP_MODE_POW10: u8 = ExpMode::Pow10 as u8;
 
 const fn binomial(a: i32, b: i32) -> crate::LargeInt {

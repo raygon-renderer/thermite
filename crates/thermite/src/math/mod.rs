@@ -348,6 +348,8 @@ decl_math! {
         fn exp10[][](self: Self) -> Self;
         /// Returns `exp(self) - 1` of `self`, which is more precise than calculating `exp(self) - 1` directly.
         fn exp_m1[][](self: Self) -> Self;
+        /// Returns `2^(self) - 1`, which is more precise than calculating `exp2(self) - 1` directly.
+        fn exp2_m1[][](self: Self) -> Self;
         /// Returns `self` raised to the power of `e`.
         fn powf[][](self: Self, e: Self) -> Self;
         /// Returns the cube root of `self`.

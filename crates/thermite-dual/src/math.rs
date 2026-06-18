@@ -168,6 +168,13 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     }
 
     #[inline(always)]
+    fn exp2_m1<P: Policy>(self) -> Self {
+        let v = self.re.exp2_m1_p::<P>();
+        // d/dx (2^x - 1) = ln(2) 2^x = ln(2) (v + 1)
+        self.chain(v, v.mul_adde(V::LN_2, V::LN_2))
+    }
+
+    #[inline(always)]
     fn powf<P: Policy>(self, e: Self) -> Self {
         let v = self.re.powf_p::<P>(e.re);
         // d/dx x^y = y x^(y-1) = y * (x^y) / x = e.re * v / x;  d/dy x^y = x^y ln x

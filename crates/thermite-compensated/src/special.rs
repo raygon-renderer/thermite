@@ -4,7 +4,14 @@ use thermite::math::TranscendentalMathWithPolicy;
 use thermite::prelude::*;
 
 use thermite_special::SpecialMathWithPolicy;
-use thermite_special::specialized::{SpecializedRealSpecialMath, SpecializedSpecialMath};
+use thermite_special::specialized::{SpecializedRealPrimalMath, SpecializedRealSpecialMath, SpecializedSpecialMath};
+
+// Compensated is a single-value real, so it belongs in the "primal" tier and gains the
+// value-and-derivative (`_d`) activation forms (via the trait defaults).
+impl<V: CompensatedFloatVector> SpecializedRealPrimalMath<Compensated<V::Element>> for Compensated<V> where
+    V: SpecialMathWithPolicy
+{
+}
 
 impl<V: CompensatedFloatVector> Compensated<V>
 where

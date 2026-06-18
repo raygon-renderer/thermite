@@ -509,6 +509,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     }
 
     #[inline(always)]
+    fn exp2_m1<P: Policy>(self) -> Self {
+        exp_f_internal::<P, Self, EXP_MODE_POW2M1>(self)
+    }
+
+    #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::POWF) } {
             return unsafe { self.native_powf::<P>(y) };
@@ -1293,7 +1298,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         let t = match MODE {
             EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x.scale(FloatConsts::LOG2_E),
             EXP_MODE_POW10 => x.scale(FloatConsts::LOG2_10),
-            EXP_MODE_POW2 => x,
+            EXP_MODE_POW2 | EXP_MODE_POW2M1 => x,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         };
 
@@ -1333,13 +1338,13 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 
         match MODE {
             EXP_MODE_EXPH => z.scale(0.5),
-            EXP_MODE_EXPM1 => z - V::ONE,
+            EXP_MODE_EXPM1 | EXP_MODE_POW2M1 => z - V::ONE,
             EXP_MODE_EXP | EXP_MODE_POW2 | EXP_MODE_POW10 => z,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         }
     } else {
         match MODE {
-            EXP_MODE_POW2 => {
+            EXP_MODE_POW2 | EXP_MODE_POW2M1 => {
                 r = x0.round();
 
                 x -= r;
@@ -1380,14 +1385,14 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             let n2 = pow2n_f::<V>(r);
 
             match MODE {
-                EXP_MODE_EXPM1 => z.mul_adde(n2, n2 - V::ONE),
+                EXP_MODE_EXPM1 | EXP_MODE_POW2M1 => z.mul_adde(n2, n2 - V::ONE),
                 _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
             }
         } else {
             let (n2a, n2b) = pow2n_f_safe::<V>(r);
 
             match MODE {
-                EXP_MODE_EXPM1 => z.mul_adde(n2a, n2a - V::ONE).mul_adde(n2b, n2b - V::ONE),
+                EXP_MODE_EXPM1 | EXP_MODE_POW2M1 => z.mul_adde(n2a, n2a - V::ONE).mul_adde(n2b, n2b - V::ONE),
                 _ => z.mul_adde(n2a, n2a) * n2b, // (z + 1) * n2a * n2b
             }
         }
@@ -1403,6 +1408,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
                 EXP_MODE_EXPM1 => (-87.0, 88.72),  // ln(FLT_MAX)
                 EXP_MODE_EXPH => (-103.97, 89.42), // ln(2 * FLT_MAX)
                 EXP_MODE_POW2 => (-150.0, 128.0),  // (2^-150 rounds to 0, log2(FLT_MAX))
+                EXP_MODE_POW2M1 => (-150.0, 128.0), // (2^x - 1 -> -1 below, log2(FLT_MAX))
                 EXP_MODE_POW10 => (-45.15, 38.53), // (log10(2^-150), log10(FLT_MAX))
 
                 _ => panic!("Invalid MODE for exp_f_internal"), // unreachable!() isn't const apparently
@@ -1413,7 +1419,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             #[rustfmt::skip]
             let max_x = const { match MODE {
                 EXP_MODE_EXP => 87.3,
-                EXP_MODE_POW2 => 126.0,
+                EXP_MODE_POW2 | EXP_MODE_POW2M1 => 126.0,
                 EXP_MODE_POW10 => 37.9,
                 EXP_MODE_EXPH | EXP_MODE_EXPM1 => 89.0,
 
@@ -1430,7 +1436,7 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 
         #[rustfmt::skip]
         let underflow_value = const { match MODE {
-            EXP_MODE_EXPM1 => V::NEG_ONE,
+            EXP_MODE_EXPM1 | EXP_MODE_POW2M1 => V::NEG_ONE,
             _ => V::ZERO,
         } };
 
