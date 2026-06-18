@@ -838,6 +838,12 @@ impl<V: SdfVector> GradientSdf<V, 3> for OctahedronBound3D<V> {
         let dist = (p[0].abs() + p[1].abs() + p[2].abs() - self.s) * V::FRAC_1_SQRT_3;
         (dist, p.signum() * V::FRAC_1_SQRT_3)
     }
+
+    #[inline(always)]
+    fn normal(&self, p: Vector3<V>) -> Vector3<V> {
+        // sign(p)/sqrt(3) - skips the |p|_1 sum and the distance scaling
+        p.signum() * V::FRAC_1_SQRT_3
+    }
 }
 
 impl<V: SdfVector> BoundedSdf<V, 3> for OctahedronBound3D<V> {
@@ -1022,8 +1028,7 @@ impl<V: SdfVector> SDF<V, 3> for RoundCone3DVert<V> {
         let qyh = qy - self.h;
         let d_high = qx.mul_adde(qx, qyh * qyh).sqrt() - self.r2;
         let d_mid = a.mul_adde(qx, b * qy) - self.r1;
-        k.cmp_lt(V::ZERO)
-            .select(d_low, k.cmp_gt(a * self.h).select(d_high, d_mid))
+        k.select_negative(d_low, k.cmp_gt(a * self.h).select(d_high, d_mid))
     }
 }
 

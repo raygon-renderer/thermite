@@ -755,7 +755,7 @@ impl<V: SdfVector> SDF<V, 2> for Ellipse2D<V> {
 
         let q = point_on_ellipse(Point2::new([pa[0], pa[1]]), self.ab);
         let d = (pa - Vector2::new([q[0], q[1]])).l2_norm();
-        d * outside.select(V::ONE, V::NEG_ONE)
+        d.neg_c(!outside) // outside ? d : -d
     }
 }
 
@@ -1163,8 +1163,8 @@ impl<V: SdfVector> SDF<V, 2> for Parallelogram2D<V> {
         let (ex, ey) = (self.sk, self.he);
         // p = (p.y<0)? -p : p
         let flip1 = p[1].cmp_lt(V::ZERO);
-        let p1x = flip1.select(-p[0], p[0]);
-        let p1y = flip1.select(-p[1], p[1]);
+        let p1x = p[0].neg_c(flip1);
+        let p1y = p[1].neg_c(flip1);
 
         let w0 = p1x - ex;
         let wx = w0 - w0.clamp(-self.wi, self.wi);
@@ -1174,8 +1174,8 @@ impl<V: SdfVector> SDF<V, 2> for Parallelogram2D<V> {
 
         let s = p1x.mul_sube(ey, p1y * ex); // p.x*e.y - p.y*e.x
         let flip2 = s.cmp_lt(V::ZERO);
-        let p2x = flip2.select(-p1x, p1x);
-        let p2y = flip2.select(-p1y, p1y);
+        let p2x = p1x.neg_c(flip2);
+        let p2y = p1y.neg_c(flip2);
 
         let vx0 = p2x - self.wi;
         let vy0 = p2y;
@@ -1294,8 +1294,7 @@ impl<V: SdfVector> SDF<V, 2> for UnevenCapsule2D<V> {
         let d_high = px.mul_adde(px, ph * ph).sqrt() - self.r2;
         let d_mid = a.mul_adde(px, b * py) - self.r1; // dot(p, (a, b)) - r1
 
-        k.cmp_lt(V::ZERO)
-            .select(d_low, k.cmp_gt(a * self.h).select(d_high, d_mid))
+        k.select_negative(d_low, k.cmp_gt(a * self.h).select(d_high, d_mid))
     }
 }
 
@@ -1320,7 +1319,7 @@ impl<V: SdfVector> GradientSdf<V, 2> for UnevenCapsule2D<V> {
         let d_mid = a.mul_adde(px, b * py) - self.r1;
 
         let mid_or_high = k.cmp_gt(a * self.h);
-        let dist = k.cmp_lt(V::ZERO).select(d_low, mid_or_high.select(d_high, d_mid));
+        let dist = k.select_negative(d_low, mid_or_high.select(d_high, d_mid));
         let g = k.cmp_lt(V::ZERO).select(
             unit_or_zero(plow, llow),
             mid_or_high.select(unit_or_zero(phigh, lhigh), Vector2::new([a, b])),
@@ -1629,7 +1628,7 @@ impl<V: SdfVector, const N: usize> SDF<V, 2> for Polygon2D<V, N> {
             let c2 = p[1].cmp_lt(v[j][1]);
             let c3 = (e[0] * w[1]).cmp_gt(e[1] * w[0]);
             let flip = (c1 & c2 & c3) | (!c1 & !c2 & !c3);
-            s = flip.select(-s, s);
+            s = s.neg_c(flip);
 
             j = i;
             i += 1;
@@ -2019,9 +2018,9 @@ impl<V: SdfVector> SDF<V, 2> for Stairs2D<V> {
         py -= hh;
         s = py.cmp_gt(hh.mul_sign(px)).select(V::ONE, s);
 
-        let keep = id.cmp_lt(V::HALF) | px.cmp_gt(V::ZERO);
-        px = keep.select(px, -px);
-        py = keep.select(py, -py);
+        let flip = !(id.cmp_lt(V::HALF) | px.cmp_gt(V::ZERO));
+        px = px.neg_c(flip);
+        py = py.neg_c(flip);
 
         let cy = py.clamp(-hh, hh);
         d = d.min(px.mul_adde(px, (py - cy) * (py - cy)));
@@ -2562,6 +2561,6 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> SDF<V, 2> for Hyperbola2D<V, 
         let dx = px - t;
         let dy = py - k / t;
         let d = dx.mul_adde(dx, dy * dy).sqrt();
-        (px * py).cmp_lt(k).select(d, -d)
+        d.neg_c((px * py).cmp_ge(k)) // (px*py < k) ? d : -d
     }
 }

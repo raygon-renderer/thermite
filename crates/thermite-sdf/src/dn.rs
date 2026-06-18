@@ -150,6 +150,12 @@ impl<V: SdfVector, const N: usize> GradientSdf<V, N> for NPlane<V, N> {
         // the gradient is the (unit) plane normal everywhere
         (p.dot(&self.n) + self.h, self.n)
     }
+
+    #[inline(always)]
+    fn normal(&self, _p: Vector<V, N>) -> Vector<V, N> {
+        // constant everywhere - skip the distance dot product entirely
+        self.n
+    }
 }
 
 // `Plane3D` alias lives in `d3`.
@@ -306,6 +312,12 @@ impl<V: SdfVector, const N: usize> GradientSdf<V, N> for CrossPolytope<V> {
         }
         // grad of (|p|_1 - s)/sqrt(N) is sign(p)/sqrt(N), already unit length
         ((acc - self.s) * scale, p.signum() * scale)
+    }
+
+    #[inline(always)]
+    fn normal(&self, p: Vector<V, N>) -> Vector<V, N> {
+        // sign(p)/sqrt(N) - skips the |p|_1 accumulation the distance needs
+        p.signum() * inv_sqrt_n::<V, N>()
     }
 }
 

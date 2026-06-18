@@ -35,17 +35,23 @@ pub(crate) fn unit_or_zero<V: SdfVector, const N: usize>(v: Vector<V, N>, len: V
 
 pub mod consts;
 pub mod d2;
+pub mod d2_linf;
 pub mod d3;
 pub mod dn;
 pub mod fbm;
+pub mod fractal;
 pub mod ops;
+pub mod transform;
 
 pub use consts::SdfConsts;
 pub use d2::*;
+pub use d2_linf::*;
 pub use d3::*;
 pub use dn::*;
 pub use fbm::*;
+pub use fractal::*;
 pub use ops::*;
+pub use transform::*;
 
 pub use ops::FiniteDiff;
 
@@ -63,6 +69,18 @@ pub trait SDF<V: SdfVector, const N: usize> {
 pub trait GradientSdf<V: SdfVector, const N: usize>: SDF<V, N> {
     /// Returns the signed distance + N-dimensional gradient.
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>);
+
+    /// The unit surface normal at `p`, without the distance.
+    ///
+    /// Defaults to `eval_grad(p).1`, which is free for analytic gradients (the
+    /// distance and gradient share work). Numerical implementors like
+    /// [`FiniteDiff`] override it to skip the redundant central
+    /// distance tap - use it on a raymarch hit where you already hold the distance
+    /// from the step that reached the surface.
+    #[inline(always)]
+    fn normal(&self, p: Vector<V, N>) -> Vector<V, N> {
+        self.eval_grad(p).1
+    }
 }
 
 /// An [`SDF`] that also has a closed-form axis-aligned bounding box of its solid
@@ -379,6 +397,38 @@ mod tests {
             for k in 0..3 {
                 assert!((s(gf[k]) - s(ga[k])).abs() < 2e-2, "axis {k}");
             }
+        }
+
+        // GradientSdf::normal(): the analytic default is exactly eval_grad().1,
+        // while FiniteDiff overrides it to the central-tap-free simplex - which
+        // must match its own eval_grad gradient bit-for-bit.
+        for q in [p(1.5, 0.0), p(0.7, 0.9)] {
+            assert!(s(circle.normal(q)[0]) == s(circle.eval_grad(q).1[0])); // analytic default
+            let (_, gf) = fd.eval_grad(q);
+            let nf = fd.normal(q);
+            assert_eq!(s(nf[0]), s(gf[0]));
+            assert_eq!(s(nf[1]), s(gf[1]));
+        }
+
+        // The cheap-normal overrides (constant / sign-based) must agree exactly
+        // with eval_grad().1 - they skip distance work, not gradient correctness.
+        let plane = Plane3D {
+            n: p3(0.0, 1.0, 0.0),
+            h: v(0.0),
+        };
+        let octa = OctahedronBound3D { s: v(1.2) };
+        for q in [p3(0.7, -0.3, 0.5), p3(-1.1, 0.9, -0.2), p3(0.2, 0.1, 0.8)] {
+            for k in 0..3 {
+                assert_eq!(s(plane.normal(q)[k]), s(plane.eval_grad(q).1[k]), "plane axis {k}");
+                assert_eq!(s(octa.normal(q)[k]), s(octa.eval_grad(q).1[k]), "octa axis {k}");
+            }
+        }
+        // N-D CrossPolytope override too
+        use thermite_geometry::prim::Vector as NV;
+        let cp = CrossPolytope { s: v(1.0) };
+        let q4 = NV::<V, 4>::new([v(0.5), v(-0.3), v(0.7), v(-0.2)]);
+        for k in 0..4 {
+            assert_eq!(s(cp.normal(q4)[k]), s(cp.eval_grad(q4).1[k]), "crosspolytope axis {k}");
         }
     }
 

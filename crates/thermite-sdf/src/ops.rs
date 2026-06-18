@@ -16,6 +16,7 @@ use thermite::prelude::*;
 use thermite_geometry::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
 
 use crate::consts::{cint, frac, vint};
+use crate::d2_linf::{BoundedLinfSdf, GradientLinfSdf, LinfSdf};
 use crate::{BoundedSdf, GradientSdf, SDF, SdfVector, unit_or_zero};
 
 // ---------------------------------------------------------------------------
@@ -1001,7 +1002,7 @@ fn mirrored_fold<V: SdfVector, const N: usize>(
         let parity = (id * V::HALF).trunc().nmul_adde(V::TWO, id); // id - 2*trunc(id/2)
         let odd = parity.cmp_ne(V::ZERO);
         sign[i] = odd.select(V::NEG_ONE, V::ONE);
-        q[i] = odd.select(-r, r);
+        q[i] = r.neg_c(odd); // odd ? -r : r
     }
     (q, sign)
 }
@@ -1237,12 +1238,29 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for FiniteDiff<V, S> 
 /// direction `raw` is returned unscaled because [`FiniteDiff`] only needs it for
 /// normalisation, where the constant cancels.
 #[inline(always)]
-fn finite_diff_gradient<V: SdfVector, const N: usize, S: SDF<V, N>>(
-    shape: &S,
+fn finite_diff_gradient<V: SdfVector, const N: usize>(
+    field: impl Fn(Vector<V, N>) -> V,
     p: Vector<V, N>,
     h: V,
 ) -> (V, Vector<V, N>, V) {
-    let dist = shape.eval(p);
+    // The central tap is the exact distance; the gradient never consumes it (the
+    // simplex sums are over the offset taps only), so it is computed separately.
+    let dist = field(p);
+    let (grad, mag) = finite_diff_raw_grad(field, p, h);
+    (dist, grad, mag)
+}
+
+/// The simplex part of [`finite_diff_gradient`] - the offset taps only, with no
+/// central evaluation. Returns `(raw, magnitude)` where `raw` points along
+/// `$\nabla f$` and `magnitude` is the true `$\lVert\nabla f\rVert$`. This is the
+/// gradient-only path used by [`FiniteDiff::normal`], which avoids re-evaluating
+/// `field(p)` when the caller already holds the distance.
+#[inline(always)]
+fn finite_diff_raw_grad<V: SdfVector, const N: usize>(
+    field: impl Fn(Vector<V, N>) -> V,
+    p: Vector<V, N>,
+    h: V,
+) -> (Vector<V, N>, V) {
     let mut grad = Vector::ZERO;
     let inv_scale;
 
@@ -1260,7 +1278,7 @@ fn finite_diff_gradient<V: SdfVector, const N: usize, S: SDF<V, N>>(
                 e[k] = if plus { h } else { -h };
                 k += 1;
             }
-            grad = e.mul_adde(shape.eval(p + e), grad);
+            grad = e.mul_adde(field(p + e), grad);
             j += 1;
         }
         inv_scale = V::ONE / (cint::<V, 4>() * h * h);
@@ -1275,7 +1293,7 @@ fn finite_diff_gradient<V: SdfVector, const N: usize, S: SDF<V, N>>(
             let mut e = Vector::ZERO;
             e[0] = dirs[j][0];
             e[1] = dirs[j][1];
-            grad = e.mul_adde(shape.eval(p + e), grad);
+            grad = e.mul_adde(field(p + e), grad);
             j += 1;
         }
         inv_scale = cint::<V, 2>() / (cint::<V, 3>() * h * h);
@@ -1287,20 +1305,28 @@ fn finite_diff_gradient<V: SdfVector, const N: usize, S: SDF<V, N>>(
             let mut hm = p;
             hp[i] = p[i] + h;
             hm[i] = p[i] - h;
-            grad[i] = shape.eval(hp) - shape.eval(hm);
+            grad[i] = field(hp) - field(hm);
             i += 1;
         }
         inv_scale = V::ONE / (V::TWO * h);
     }
 
-    (dist, grad, grad.l2_norm() * inv_scale)
+    (grad, grad.l2_norm() * inv_scale)
 }
 
 impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for FiniteDiff<V, S> {
     #[inline(always)]
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
-        let (dist, grad, _) = finite_diff_gradient(&self.shape, p, self.eps);
+        let (dist, grad, _) = finite_diff_gradient(|q| self.shape.eval(q), p, self.eps);
         (dist, unit_or_zero(grad, grad.l2_norm()))
+    }
+
+    /// Skips the central distance tap: only the simplex taps (4 in 3D, 3 in 2D,
+    /// `2N` general). Use when the distance is already in hand.
+    #[inline(always)]
+    fn normal(&self, p: Vector<V, N>) -> Vector<V, N> {
+        let (grad, _) = finite_diff_raw_grad(|q| self.shape.eval(q), p, self.eps);
+        unit_or_zero(grad, grad.l2_norm())
     }
 }
 
@@ -1308,6 +1334,31 @@ impl<V: SdfVector, const N: usize, S: BoundedSdf<V, N>> BoundedSdf<V, N> for Fin
     #[inline(always)]
     fn aabb(&self) -> Bounds<V, N> {
         self.shape.aabb()
+    }
+}
+
+// --- L-infinity counterparts: forward the metric through the wrapper and
+// reuse the same finite-difference stencil over `eval_linf`. ---
+
+impl<V: SdfVector, const N: usize, S: LinfSdf<V, N>> LinfSdf<V, N> for FiniteDiff<V, S> {
+    #[inline(always)]
+    fn eval_linf(&self, p: Vector<V, N>) -> V {
+        self.shape.eval_linf(p)
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: LinfSdf<V, N>> GradientLinfSdf<V, N> for FiniteDiff<V, S> {
+    #[inline(always)]
+    fn eval_linf_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
+        let (dist, grad, _) = finite_diff_gradient(|q| self.shape.eval_linf(q), p, self.eps);
+        (dist, unit_or_zero(grad, grad.l2_norm()))
+    }
+}
+
+impl<V: SdfVector, const N: usize, S: BoundedLinfSdf<V, N>> BoundedLinfSdf<V, N> for FiniteDiff<V, S> {
+    #[inline(always)]
+    fn aabb_linf(&self) -> Bounds<V, N> {
+        self.shape.aabb_linf()
     }
 }
 
@@ -1374,7 +1425,7 @@ impl<V: SdfVector, S> DistanceEstimate<V, S> {
 impl<V: SdfVector, const N: usize, S: SDF<V, N>> SDF<V, N> for DistanceEstimate<V, S> {
     #[inline(always)]
     fn eval(&self, p: Vector<V, N>) -> V {
-        let (f, _, mag) = finite_diff_gradient(&self.shape, p, self.eps);
+        let (f, _, mag) = finite_diff_gradient(|q| self.shape.eval(q), p, self.eps);
         // f / |grad f|, guarded so a vanishing gradient (an extremum) returns f
         // rather than +-inf/NaN.
         f / mag.cmp_gt(V::ZERO).select(mag, V::ONE)
@@ -1386,7 +1437,7 @@ impl<V: SdfVector, const N: usize, S: SDF<V, N>> GradientSdf<V, N> for DistanceE
     fn eval_grad(&self, p: Vector<V, N>) -> (V, Vector<V, N>) {
         // The corrected field shares its surface normal with f to first order,
         // so reuse the raw stencil direction; the distance is the rescaled value.
-        let (f, grad, mag) = finite_diff_gradient(&self.shape, p, self.eps);
+        let (f, grad, mag) = finite_diff_gradient(|q| self.shape.eval(q), p, self.eps);
         let d = f / mag.cmp_gt(V::ZERO).select(mag, V::ONE);
         (d, unit_or_zero(grad, grad.l2_norm()))
     }
