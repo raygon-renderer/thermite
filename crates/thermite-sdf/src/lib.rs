@@ -40,8 +40,10 @@ pub mod d3;
 pub mod dn;
 pub mod fbm;
 pub mod fractal;
+pub mod hash;
 pub mod ops;
 pub mod transform;
+pub mod voronoi;
 
 pub use consts::SdfConsts;
 pub use d2::*;
@@ -50,8 +52,10 @@ pub use d3::*;
 pub use dn::*;
 pub use fbm::*;
 pub use fractal::*;
+pub use hash::*;
 pub use ops::*;
 pub use transform::*;
+pub use voronoi::*;
 
 pub use ops::FiniteDiff;
 

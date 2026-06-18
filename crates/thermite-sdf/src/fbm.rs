@@ -14,6 +14,42 @@
 //! as `$2^N$` (practical to roughly `N = 6`). The inter-octave decorrelation
 //! rotation uses the bespoke rational matrix from IQ for `N = 3` and a generic
 //! scaled axis-permutation rotation otherwise.
+//!
+//! # Examples
+//!
+//! [`FbmDetail`] carries four strategy type parameters ([`LatticeHash`],
+//! [`OctaveTransform`], [`LatticePrimitive`], [`SmoothKernel`]); a type alias over
+//! the host shape `S` names a reusable configuration, which the `with_*` builders
+//! then produce:
+//!
+//! ```
+//! use thermite::prelude::*;
+//! use thermite::math::policy::DefaultPolicy;
+//! use thermite_geometry::prim::Vector3;
+//! use thermite_sdf::{FbmDetail, SDF, Sphere3D};
+//! use thermite_sdf::{SinHash, HoskinsHash, IqRotation, GivensRotation, BoxCell};
+//!
+//! type F = Vector<f32>;
+//! type Ball = Sphere3D<F>;
+//!
+//! // Trig-free fBM (no `sin` in the hash) - for WASM / sin-light backends.
+//! type TrigFreeFbm<S> = FbmDetail<F, S, DefaultPolicy, HoskinsHash>;
+//!
+//! // Crystalline fBM: box (L-inf) cells give a blockier, faceted surface.
+//! type CrystalFbm<S> = FbmDetail<F, S, DefaultPolicy, HoskinsHash, IqRotation, BoxCell>;
+//!
+//! // For N != 3, GivensRotation decorrelates octaves better than IqRotation.
+//! type NdFbm<S> = FbmDetail<F, S, DefaultPolicy, SinHash, GivensRotation>;
+//!
+//! // Build via the ergonomic setters; each result has exactly the aliased type.
+//! let _trig: TrigFreeFbm<Ball> = FbmDetail::new(Sphere3D { radius: F::splat(1.0) }).with_hash(HoskinsHash);
+//! let _nd: NdFbm<Ball> = FbmDetail::new(Sphere3D { radius: F::splat(1.0) }).with_transform(GivensRotation);
+//! let detail: CrystalFbm<Ball> =
+//!     FbmDetail::new(Sphere3D { radius: F::splat(1.0) }).with_hash(HoskinsHash).with_primitive(BoxCell);
+//!
+//! let d = detail.eval(Vector3::new([F::splat(1.5), F::splat(0.0), F::splat(0.0)]));
+//! assert!(d.extract::<0>().is_finite());
+//! ```
 
 use core::marker::PhantomData;
 
@@ -23,96 +59,9 @@ use thermite::math::policy::{DefaultPolicy, Policy};
 use thermite_geometry::prim::{Vector, vector::VectorOps as _};
 
 use crate::consts::frac;
+use crate::hash::{LatticeHash, SinHash};
 use crate::ops::{Quadratic, SmoothKernel, smax_k, smin_k};
 use crate::{SDF, SdfVector};
-
-/// Strategy for hashing an integer lattice vertex to a per-lane pseudo-random
-/// value in `[0, 1)`. Implemented as zero-sized strategy types (like
-/// [`SmoothKernel`]) so [`FbmDetail`] can be parameterized
-/// over it.
-///
-/// The standard-library `Hash`/`Hasher` traits are a poor fit here: they stream
-/// bytes into a single `u64`, whereas an SDF needs a *branchless, per-lane* map
-/// from N float coordinates to N floats, evaluated for every lane of a SIMD
-/// vector at once. So this trait takes the lattice coordinates as a
-/// [`Vector<V, N>`] and returns one `V` of hashes.
-pub trait LatticeHash: Copy {
-    /// Pseudo-random value in `[0, 1)` per lane for integer lattice coordinates
-    /// `i`. `P` is the precision policy for any transcendental ops the
-    /// implementation uses (ignored by trig-free hashes).
-    fn hash<V: SdfVector + RealMathWithPolicy, P: Policy, const N: usize>(i: Vector<V, N>) -> V;
-}
-
-/// Default hash: `$\operatorname{fract}\bigl(\sin(i\cdot k)\,\beta\bigr)$` with
-/// `$\beta = 43758.54$`, where the per-axis weights `$k_j$` come from a
-/// multiplicative recurrence so the dot product extends to any `N`:
-///
-/// ```math
-/// h(i) = \operatorname{fract}\!\left( \sin\!\Bigl( \sum_{j=0}^{N-1} i_j\, k_j \Bigr) \beta \right),
-/// \qquad k_0 = 127.1, \quad k_{j+1} = 1.324\, k_j + 74.7.
-/// ```
-///
-/// One transcendental call. The constants are arbitrary irrational-ish seeds.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SinHash;
-
-impl LatticeHash for SinHash {
-    #[inline(always)]
-    fn hash<V: SdfVector + RealMathWithPolicy, P: Policy, const N: usize>(i: Vector<V, N>) -> V {
-        // dot(i, k) with k_0 = 127.1, k_{j+1} = 1.324*k_j + 74.7
-        let mut k = frac::<V, 1271, 10>();
-        let mut h = V::ZERO;
-        let mut j = 0;
-        while j < N {
-            h = i[j].mul_adde(k, h);
-            k = k.mul_adde(frac::<V, 1324, 1000>(), frac::<V, 747, 10>());
-            j += 1;
-        }
-        (h.sin_p::<P>() * frac::<V, 4375854, 100>()).fract() // *43758.54
-    }
-}
-
-/// Trig-free hash: a sequential, nonlinear fold of Dave Hoskins' `hash11`
-/// (<https://www.shadertoy.com/view/4djSRW>) over the axes,
-///
-/// ```math
-/// h_0 = \tfrac12, \qquad h_{j+1} = \operatorname{hash11}(h_j + i_j), \qquad h(i) = h_N.
-/// ```
-///
-/// The fold is order-sensitive, so the axes stay distinguishable. Pure
-/// multiply/`fract`, so it is cheaper than [`SinHash`] and needs no
-/// transcendental unit - useful on backends where `sin` is expensive or absent.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct HoskinsHash;
-
-impl HoskinsHash {
-    /// Hoskins `hash11`, scalar `$\to [0, 1)$`:
-    ///
-    /// ```math
-    /// \operatorname{hash11}(p) = \operatorname{fract}\bigl(q\,(q + q)\bigr),
-    /// \quad q = \operatorname{fract}(0.1031\,p)\,(\operatorname{fract}(0.1031\,p) + 33.33).
-    /// ```
-    #[inline(always)]
-    fn hash11<V: SdfVector>(p: V) -> V {
-        let q = (p * frac::<V, 1031, 10000>()).fract(); // p*0.1031
-        let q = q * (q + frac::<V, 3333, 100>()); // q*(q+33.33)
-        (q * (q + q)).fract() // fract(q*2q)
-    }
-}
-
-impl LatticeHash for HoskinsHash {
-    #[inline(always)]
-    fn hash<V: SdfVector + RealMathWithPolicy, P: Policy, const N: usize>(i: Vector<V, N>) -> V {
-        // Sequential, nonlinear fold so axis order is significant (no symmetry).
-        let mut h = frac::<V, 1, 2>(); // seed 0.5
-        let mut j = 0;
-        while j < N {
-            h = Self::hash11(h + i[j]);
-            j += 1;
-        }
-        h
-    }
-}
 
 /// Strategy for the primitive placed at each lattice vertex. Given the offset
 /// `d` from the corner to the sample point and a per-lane random `h` in
