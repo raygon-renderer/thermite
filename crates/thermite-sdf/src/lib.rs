@@ -35,6 +35,7 @@ pub(crate) fn unit_or_zero<V: SdfVector, const N: usize>(v: Vector<V, N>, len: V
 
 pub mod consts;
 pub mod d2;
+pub mod displace;
 pub mod d2_linf;
 pub mod d3;
 pub mod dn;
@@ -47,6 +48,7 @@ pub mod voronoi;
 
 pub use consts::SdfConsts;
 pub use d2::*;
+pub use displace::*;
 pub use d2_linf::*;
 pub use d3::*;
 pub use dn::*;

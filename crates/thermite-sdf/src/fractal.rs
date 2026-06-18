@@ -29,7 +29,9 @@ use crate::consts::{cint, frac, vint};
 use crate::ops::FiniteDiff;
 use crate::{BoundedSdf, SDF, SdfVector, unit_or_zero};
 
-/// Squared bail-out radius: once `$|z|^2$` exceeds this a lane has escaped.
+/// Default squared bail-out radius `$|z|^2$`: once `$|z|^2$` exceeds the
+/// (configurable) bailout, a lane has escaped. This is the historical default the
+/// escape-based fractals fall back to when none is set.
 #[inline(always)]
 fn escape<V: SdfVector>() -> V {
     cint::<V, 256>()
@@ -115,19 +117,31 @@ pub struct QuaternionJulia3D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub w: V,
     /// Iteration budget.
     pub iterations: u32,
+    /// Squared escape radius `$|z|^2$` (default `256`). Larger = smoother exterior
+    /// distance estimate (less escape-time banding); the set is unchanged. See
+    /// [`Julia2D::bailout`] for details.
+    pub bailout: V,
     _policy: PhantomData<P>,
 }
 
 impl<V: SdfVector, P: Policy> QuaternionJulia3D<V, P> {
-    /// Builds with the slice `w = 0` and the given iteration budget.
+    /// Builds with the slice `w = 0`, the given iteration budget, and the default
+    /// [`bailout`](Self::bailout).
     #[inline(always)]
     pub fn new(c: [V; 4], iterations: u32) -> Self {
         Self {
             c,
             w: V::ZERO,
             iterations,
+            bailout: escape::<V>(),
             _policy: PhantomData,
         }
+    }
+
+    /// Sets the squared escape radius `$|z|^2$`; see [`bailout`](Self::bailout).
+    #[inline(always)]
+    pub fn with_bailout(self, bailout: V) -> Self {
+        Self { bailout, ..self }
     }
 }
 
@@ -136,7 +150,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> QuaternionJulia3D<V, P> {
     /// the distance-only [`eval`](SDF::eval)).
     #[inline(always)]
     fn iterate<const TRAP: bool>(&self, p: Vector3<V>) -> (V, FractalOrbit<V, 3>) {
-        let esc = escape::<V>();
+        let esc = self.bailout;
 
         // quaternion z = (x, y, z, w), real part x (matching IQ's qsqr slicing)
         let (mut x, mut y, mut z, mut w) = (p[0], p[1], p[2], self.w);
@@ -248,6 +262,10 @@ pub struct Mandelbulb3D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub iterations: u32,
     /// Bulb exponent `$k$`.
     pub power: MandelbulbPower<V>,
+    /// Squared escape radius `$|w|^2$` (default `256`). Larger = smoother exterior
+    /// distance estimate (less escape-time banding); the bulb surface is unchanged.
+    /// See [`Julia2D::bailout`] for details.
+    pub bailout: V,
     _policy: PhantomData<(V, P)>,
 }
 
@@ -258,14 +276,22 @@ impl<V: SdfVector, P: Policy> Mandelbulb3D<V, P> {
         Self::with_power(iterations, MandelbulbPower::Integer(8))
     }
 
-    /// Builds with the given iteration budget and bulb exponent.
+    /// Builds with the given iteration budget and bulb exponent (default
+    /// [`bailout`](Self::bailout)).
     #[inline(always)]
     pub fn with_power(iterations: u32, power: MandelbulbPower<V>) -> Self {
         Self {
             iterations,
             power,
+            bailout: escape::<V>(),
             _policy: PhantomData,
         }
+    }
+
+    /// Sets the squared escape radius `$|w|^2$`; see [`bailout`](Self::bailout).
+    #[inline(always)]
+    pub fn with_bailout(self, bailout: V) -> Self {
+        Self { bailout, ..self }
     }
 }
 
@@ -273,7 +299,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbulb3D<V, P> {
     /// Shared iteration. `TRAP` gates orbit-trap accumulation.
     #[inline(always)]
     fn iterate<const TRAP: bool>(&self, p: Vector3<V>) -> (V, FractalOrbit<V, 3>) {
-        let esc = escape::<V>();
+        let esc = self.bailout;
         let (mut wx, mut wy, mut wz) = (p[0], p[1], p[2]);
         let mut m2 = wx.mul_adde(wx, wy.mul_adde(wy, wz * wz));
         let mut dr = V::ONE;
@@ -390,25 +416,42 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 3> for Mandelbu
 pub struct Julia2D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub c: Vector2<V>,
     pub iterations: u32,
+    /// Squared escape radius `$|z|^2$` (default `256`). A larger bailout makes the
+    /// *exterior* distance estimate smoother - the DE is frozen at the integer
+    /// escape iteration, so a small bailout creases it at every escape-time contour
+    /// (visible as banding on a displaced surface); the crease size shrinks like
+    /// `$1/\ln(\text{bailout})$`. The zero-set (the fractal) is unchanged, and only
+    /// a few extra iterations are needed to escape. For displacement/terrain
+    /// heightfields use a large value, e.g. `$10^6$` or more (keep it below
+    /// `$\sim 10^{18}$` in `f32` so `$|z|^2$` does not overflow after the escaping
+    /// step).
+    pub bailout: V,
     _policy: PhantomData<P>,
 }
 
 impl<V: SdfVector, P: Policy> Julia2D<V, P> {
-    /// Builds with the given constant and iteration budget.
+    /// Builds with the given constant and iteration budget (default [`bailout`](Self::bailout)).
     #[inline(always)]
     pub fn new(c: Vector2<V>, iterations: u32) -> Self {
         Self {
             c,
             iterations,
+            bailout: escape::<V>(),
             _policy: PhantomData,
         }
+    }
+
+    /// Sets the squared escape radius `$|z|^2$`; see [`bailout`](Self::bailout).
+    #[inline(always)]
+    pub fn with_bailout(self, bailout: V) -> Self {
+        Self { bailout, ..self }
     }
 }
 
 impl<V: SdfVector + RealMathWithPolicy, P: Policy> Julia2D<V, P> {
     #[inline(always)]
     fn iterate<const TRAP: bool>(&self, p: Vector2<V>) -> (V, FractalOrbit<V, 2>) {
-        let esc = escape::<V>();
+        let esc = self.bailout;
         let (mut x, mut y) = (p[0], p[1]);
         let mut m2 = x.mul_adde(x, y * y);
         let mut dz2 = V::ONE;
@@ -482,24 +525,36 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 2> for Julia2D<
 #[derive(Debug, Clone, Copy)]
 pub struct Mandelbrot2D<V: SdfVector, P: Policy = DefaultPolicy> {
     pub iterations: u32,
+    /// Squared escape radius `$|z|^2$` (default `256`). Larger = smoother exterior
+    /// distance estimate (less escape-time banding); the set is unchanged. See
+    /// [`Julia2D::bailout`] for details. Use a large value (`$10^6$`+) for
+    /// displacement/terrain heightfields.
+    pub bailout: V,
     _policy: PhantomData<(V, P)>,
 }
 
 impl<V: SdfVector, P: Policy> Mandelbrot2D<V, P> {
-    /// Builds with the given iteration budget.
+    /// Builds with the given iteration budget (default [`bailout`](Self::bailout)).
     #[inline(always)]
     pub fn new(iterations: u32) -> Self {
         Self {
             iterations,
+            bailout: escape::<V>(),
             _policy: PhantomData,
         }
+    }
+
+    /// Sets the squared escape radius `$|z|^2$`; see [`bailout`](Self::bailout).
+    #[inline(always)]
+    pub fn with_bailout(self, bailout: V) -> Self {
+        Self { bailout, ..self }
     }
 }
 
 impl<V: SdfVector + RealMathWithPolicy, P: Policy> Mandelbrot2D<V, P> {
     #[inline(always)]
     fn iterate<const TRAP: bool>(&self, p: Vector2<V>) -> (V, FractalOrbit<V, 2>) {
-        let esc = escape::<V>();
+        let esc = self.bailout;
         let (cx, cy) = (p[0], p[1]);
         let (mut zx, mut zy) = (V::ZERO, V::ZERO);
         let (mut dx, mut dy) = (V::ZERO, V::ZERO); // z' (full complex)
@@ -994,6 +1049,32 @@ mod tests {
         assert_eq!(sc(j.eval(p2(1.4, 0.3))), sc(d));
         assert_eq!(o.trap_planes.0.len(), 2);
         assert!(o.escaped.all());
+    }
+
+    #[test]
+    fn configurable_bailout() {
+        use thermite_geometry::prim::Vector2 as V2;
+        let p2 = |x: f32, y: f32| V2::<V>::new([vv(x), vv(y)]);
+
+        // Default is the historical 256; with_bailout overrides it.
+        assert_eq!(sc(Julia2D::<V>::new(p2(0.0, 0.0), 64).bailout), 256.0);
+        let j = Julia2D::<V>::new(p2(0.0, 0.0), 64).with_bailout(vv(1.0e6));
+        assert_eq!(sc(j.bailout), 1.0e6);
+
+        // A large bailout leaves the zero-set (c=0 unit circle) intact...
+        assert!(sc(j.eval(p2(1.0, 0.0))).abs() < 1e-3, "on circle");
+        assert!(sc(j.eval(p2(0.5, 0.0))).abs() < 1e-6, "interior still 0");
+        // ...and keeps the exterior DE finite, positive, and monotone outward.
+        let (a, b) = (sc(j.eval(p2(1.5, 0.0))), sc(j.eval(p2(3.0, 0.0))));
+        assert!(a.is_finite() && a > 0.0 && b > a, "exterior grows: {a} then {b}");
+
+        // The builder is present on the other escape-based fractals too.
+        assert_eq!(sc(Mandelbrot2D::<V>::new(64).with_bailout(vv(1.0e6)).bailout), 1.0e6);
+        assert_eq!(sc(Mandelbulb3D::<V>::new(12).with_bailout(vv(1.0e6)).bailout), 1.0e6);
+        assert_eq!(
+            sc(QuaternionJulia3D::<V>::new([vv(0.0); 4], 48).with_bailout(vv(1.0e6)).bailout),
+            1.0e6
+        );
     }
 
     #[test]
