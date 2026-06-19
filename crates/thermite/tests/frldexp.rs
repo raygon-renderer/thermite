@@ -604,6 +604,7 @@ fn frexp_f32_exhaustive_subnormals() {
 // with Preserve denormal policy:
 //
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct TestPolicy;
 
 impl Policy for TestPolicy {
