@@ -640,6 +640,53 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn cbrt<P: Policy>(self) -> Self;
 
     #[inline(always)]
+    fn sqrt1pm1<P: Policy>(self) -> Self {
+        // sqrt(1 + x) - 1 = x / (sqrt(1 + x) + 1); no cancellation near x = 0.
+        let s = (self + Self::ONE).sqrt();
+        let mut r = Self::approx_div::<P>(self, s + Self::ONE);
+
+        if const { P::POLICY.check_overflow } {
+            // x = +inf would give inf/inf = NaN; the naive form is correct for the
+            // non-finite inputs (and only those need the fallback).
+            r = self.is_finite().select(r, s - Self::ONE);
+        }
+
+        r
+    }
+
+    #[inline(always)]
+    fn compound<P: Policy>(self, n: Self) -> Self {
+        // (1 + x)^n = exp(n * ln(1 + x)); routing through ln_1p keeps it accurate for small x.
+        Self::exp::<P>(n * Self::ln_1p::<P>(self))
+    }
+
+    #[inline(always)]
+    fn powf_m1<P: Policy>(self, e: Self) -> Self {
+        // x^e - 1 = expm1(e * ln(x)); avoids the outer cancellation of pow(x, e) - 1.
+        Self::exp_m1::<P>(e * Self::ln::<P>(self))
+    }
+
+    #[inline(always)]
+    fn haversin<P: Policy>(self) -> Self {
+        // (1 - cos(x)) / 2 = sin^2(x/2); no cancellation near x = 0.
+        let s = Self::sin::<P>(self * Self::HALF);
+        s * s
+    }
+
+    #[inline(always)]
+    fn versin<P: Policy>(self) -> Self {
+        // 1 - cos(x) = 2 sin^2(x/2)
+        let h = Self::haversin::<P>(self);
+        h + h
+    }
+
+    #[inline(always)]
+    fn cos_m1<P: Policy>(self) -> Self {
+        // cos(x) - 1 = -(1 - cos(x))
+        -Self::versin::<P>(self)
+    }
+
+    #[inline(always)]
     fn nth_root<P: Policy, const N: usize>(self) -> Self {
         let mut x = self;
 
@@ -928,6 +975,21 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         };
 
         Self::lerp::<P>(t, out_min, out_max)
+    }
+
+    #[inline(always)]
+    fn logaddexp<P: Policy>(self, other: Self) -> Self {
+        // max(a, b) + ln(1 + exp(-|a - b|)): stable against overflow for large a, b.
+        let m = self.max(other);
+        let d = (self - other).abs();
+        let mut r = m + Self::ln_1p::<P>(Self::exp::<P>(-d));
+
+        if const { P::POLICY.check_overflow } {
+            // a == b == +-inf makes a - b NaN; the answer is that infinity (= m).
+            r = d.is_nan().select(m, r);
+        }
+
+        r
     }
 
     #[inline(always)]

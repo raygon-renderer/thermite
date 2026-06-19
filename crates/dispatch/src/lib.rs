@@ -587,6 +587,26 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
             }};
             return;
         }
+        // If the supplied dispatch ident is one of this method's own generic type
+        // parameters (e.g. `fn my_method<S: Simd>(&self)` with `#[dispatch(S)]`), the
+        // user wants to dispatch on the generic `S` while `Self` is some other concrete
+        // type the macro cannot see from the method alone. The helper trait must be
+        // implemented for `Self`, so this can only be expressed on the impl block.
+        if let Ok(simd_ident) = syn::parse2::<Ident>(attr.simd.clone())
+            && sig.generics.type_params().any(|tp| tp.ident == simd_ident)
+        {
+            *f.block = syn::parse_quote! {{
+                compile_error!(
+                    "#[dispatch(S)] names a generic type parameter of this method, so the \
+                     concrete `Self` type is unknown and the dispatch helper cannot be \
+                     implemented for it. Annotate the whole impl block instead: \
+                     `#[dispatch(S)] impl Type { ... }` - there the dispatch type and `Self` \
+                     are tracked separately."
+                );
+            }};
+            return;
+        }
+
         let simd = attr.simd.clone();
 
         let helper_trait_name = quote::format_ident!("__DispatchHelper_{}", ident);

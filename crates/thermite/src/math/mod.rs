@@ -300,6 +300,17 @@ decl_math! {
         /// Trigonometric tangent
         fn tan[][](self: Self) -> Self;
 
+        /// Returns `cos(x) - 1` of `self`, which is more precise than `cos(x) - 1` directly near zero.
+        ///
+        /// Evaluated as `$-2\sin^2(x/2)$`, which has no cancellation near `x = 0`.
+        fn cos_m1[][](self: Self) -> Self;
+        /// Returns the versine `$1 - \cos(x)$` of `self`, evaluated as `$2\sin^2(x/2)$` (accurate near zero).
+        fn versin[][](self: Self) -> Self;
+        /// Returns the haversine `$\tfrac{1 - \cos(x)}{2}$` of `self`, evaluated as `$\sin^2(x/2)$` (accurate near zero).
+        ///
+        /// This is the kernel of the haversine great-circle-distance formula.
+        fn haversin[][](self: Self) -> Self;
+
         /// Sine and cosine of `pi * x`, together. This will be more efficient than calling `sin_pi` and `cos_pi` separately,
         /// and more precise than computing them manually with `sin(pi * x)` and `cos(pi * x)`.
         fn sincos_pi[][](self: Self) -> (Self, Self);
@@ -352,8 +363,22 @@ decl_math! {
         fn exp2_m1[][](self: Self) -> Self;
         /// Returns `10^(self) - 1`, which is more precise than calculating `exp10(self) - 1` directly.
         fn exp10_m1[][](self: Self) -> Self;
+        /// Returns `$\sqrt{1 + x} - 1$` of `self`, which is more precise than `sqrt(1 + x) - 1` directly near zero.
+        ///
+        /// Evaluated as `$\frac{x}{\sqrt{1 + x} + 1}$`, which has no cancellation near `x = 0`.
+        fn sqrt1pm1[][](self: Self) -> Self;
         /// Returns `self` raised to the power of `e`.
         fn powf[][](self: Self, e: Self) -> Self;
+        /// Returns `$x^e - 1$` where `x = self`, computed accurately as `$e^{e \ln(x)}$`-style `expm1`.
+        ///
+        /// More precise than `powf(x, e) - 1` when the result is near zero (i.e. `x` near 1 or `e` near 0),
+        /// e.g. compound returns/growth rates.
+        fn powf_m1[][](self: Self, e: Self) -> Self;
+        /// Returns `$(1 + x)^n$` where `x = self`, computed accurately near `x = 0` as `$e^{n \ln(1 + x)}$`.
+        ///
+        /// This is the IEEE 754 `compound` operation, and is more precise than `powf(1 + x, n)` for small `x`
+        /// (e.g. compound-growth/interest over `n` periods at rate `x`).
+        fn compound[][](self: Self, n: Self) -> Self;
         /// Returns the cube root of `self`.
         fn cbrt[][](self: Self) -> Self;
         /// Returns the Nth root of `self`.
@@ -482,6 +507,14 @@ decl_math! {
         ///
         /// This operation is not clamped.
         fn rescale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
+
+        /// Returns `$\ln(e^{a} + e^{b})$` computed in a numerically stable way that avoids overflow,
+        /// where `a = self` and `b = other`.
+        ///
+        /// Evaluated as `$\max(a, b) + \ln(1 + e^{-|a - b|})$`, so the result is accurate even when `a`
+        /// and `b` are large. This is the workhorse of stable log-domain probability arithmetic
+        /// (e.g. the two-argument log-sum-exp).
+        fn logaddexp[][](self: Self, other: Self) -> Self;
 
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,
