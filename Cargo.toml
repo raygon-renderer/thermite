@@ -41,7 +41,6 @@ panic = "abort"
 
 [workspace.dependencies]
 thermite-macros = { path = "crates/thermite-macros", version = "0.2.0-beta.0" }
-thermite-dispatch = { path = "crates/dispatch", version = "0.2.0-beta.0" }
 
 thermite = { path = "crates/thermite", version = "0.2.0-beta.0", default-features = false }
 thermite-special = { path = "crates/thermite-special", version = "0.2.0-beta.0", default-features = false }

@@ -1,4 +1,4 @@
-use thermite_dispatch::dispatch;
+use thermite_macros::dispatch;
 
 // Stub since we can't import `thermite` here.
 pub mod thermite {
@@ -46,7 +46,7 @@ fn free_extra_generic<V: thermite::HasIsa, T: Copy>(_extra: T, x: V) -> V {
     x
 }
 
-// Lifetime parameter (early-bound — survives the trampoline boundary).
+// Lifetime parameter (early-bound - survives the trampoline boundary).
 #[dispatch(V, thermite = "thermite")]
 fn free_with_lifetime<'a, V: thermite::HasIsa>(x: &'a V) -> &'a V {
     x
@@ -74,7 +74,7 @@ impl thermite::HasIsa for SimdB {
     const ISA: thermite::InstructionSet = thermite::InstructionSet::Scalar;
 }
 
-// -- #[dispatch] on an impl block — all receiver shapes ------------------------
+// -- #[dispatch] on an impl block - all receiver shapes ------------------------
 //
 // The `Self` ident is valid here because the macro has the full impl context.
 
@@ -105,14 +105,14 @@ impl SimdA {
         self.0 + val.into()
     }
 
-    // Opted out — runs without any dispatch wrapping.
+    // Opted out - runs without any dispatch wrapping.
     #[skip_dispatch]
     fn helper(&self) -> f32 {
         self.0 * 2.0
     }
 }
 
-// -- Method-level #[dispatch] — concrete type must be supplied -----------------
+// -- Method-level #[dispatch] - concrete type must be supplied -----------------
 //
 // The macro only sees the method, not the surrounding impl block, so `Self` is
 // unavailable as the impl target. The concrete type name is supplied explicitly.
@@ -148,7 +148,7 @@ impl SimdB {
         self.0 + val.into()
     }
 
-    // Non-dispatched method in the same impl block — no attribute, no changes.
+    // Non-dispatched method in the same impl block - no attribute, no changes.
     fn plain(&self) -> f64 {
         self.0
     }

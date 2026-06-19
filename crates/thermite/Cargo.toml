@@ -86,23 +86,22 @@ num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
 libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 rand = { version = "0.10", optional = true, default-features = false }
-thermite-dispatch = { workspace = true }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 core_detect = "1"
-thermite-dispatch = { workspace = true, features = ["x86"] }
+thermite-macros = { workspace = true, features = ["x86"] }
 
 [target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
-thermite-dispatch = { workspace = true, features = ["neon"] }
+thermite-macros = { workspace = true, features = ["neon"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-thermite-dispatch = { workspace = true, features = ["wasm"] }
+thermite-macros = { workspace = true, features = ["wasm"] }
 
 [target.'cfg(target_arch = "wasm64")'.dependencies]
-thermite-dispatch = { workspace = true, features = ["wasm"] }
+thermite-macros = { workspace = true, features = ["wasm"] }
 
 [target.'cfg(target_arch = "spirv")'.dependencies]
-thermite-dispatch = { workspace = true, features = ["spirv"] }
+thermite-macros = { workspace = true, features = ["spirv"] }
 spirv-std-macros.workspace = true
 
 [dev-dependencies]

@@ -72,7 +72,7 @@ macro_rules! decl_math {
         #[doc = "which uses the [`DefaultPolicy`]. All floating-point vector types that implement"]
         #[doc = "the necessary internal math operations will automatically implement this trait, and"]
         #[doc = "the [`" $trait "Math`] trait as well for all types that implement this one."]
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         pub trait [<$trait MathWithPolicy>] $(: $($bound +)+)? {$(
             $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -91,7 +91,7 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "All methods here have an associated method in [`" $trait "MathWithPolicy`] with a `_p` suffix"]
         #[doc = "that accepts a policy parameter as the first generic argument."]
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
             $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -101,7 +101,7 @@ macro_rules! decl_math {
         impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
 
         // Note: The FloatVector<Element = E> bound is necessary to ensure E is bounded.
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         impl<E: $element, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
             where V: specialized::[<Specialized $trait Math>]<E>
         {$(
@@ -138,7 +138,7 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "For convenience, a default-policy version is provided by [`ScalarMath`], which"]
         #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`] for all operations."]
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
              $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -164,7 +164,7 @@ macro_rules! decl_math {
         #[doc = "hold a concrete scalar and do not need to be generic."]
         #[doc = ""]
         #[doc = "All types that implement [`ScalarMathWithPolicy`] automatically implement this trait."]
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         pub trait ScalarMath: ScalarMathWithPolicy {$($(
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -173,7 +173,7 @@ macro_rules! decl_math {
 
         impl<M> ScalarMath for M where M: ScalarMathWithPolicy {}
 
-        #[thermite_dispatch::dispatch(Self, thermite = "crate")]
+        #[thermite_macros::dispatch(Self, thermite = "crate")]
         impl<E: ElementExt<Element = Self> + FloatElementWithBits> ScalarMathWithPolicy for E
         where
             $crate::Vector<E>: Unwrap<Unwrapped = E> +

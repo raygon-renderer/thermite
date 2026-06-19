@@ -40,8 +40,7 @@ pub extern crate bitvec;
 pub extern crate const_default;
 pub extern crate generic_array;
 
-pub use thermite_dispatch::{dispatch, dispatch_dyn};
-pub use thermite_macros::HasIsa;
+pub use thermite_macros::{dispatch, dispatch_dyn, HasIsa};
 
 /// Creates a shuffle mask for various instructions. Note
 /// that the order of the arguments is reversed from the

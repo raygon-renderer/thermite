@@ -951,7 +951,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
     }
 }
 
-#[thermite_dispatch::dispatch(V, thermite = "crate")]
+#[thermite_macros::dispatch(V, thermite = "crate")]
 fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &V) -> (V, V, V::Bits) {
     let xa_bits: V::Bits = xa.into_bits();
 

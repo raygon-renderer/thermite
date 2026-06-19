@@ -13,6 +13,12 @@ description = "Procedural codegen macros for the Thermite SIMD library"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2", features = ["full"] }
+syn = { version = "2", features = ["full", "extra-traits", "visit", "visit-mut"] }
 quote = "1"
 proc-macro2 = "1"
+
+[features]
+x86 = []
+neon = []
+wasm = []
+spirv = []

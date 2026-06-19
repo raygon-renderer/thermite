@@ -1,52 +1,272 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::{ToTokens, format_ident, quote, quote_spanned};
-use syn::{
-    Attribute, FnArg, GenericArgument, Ident, ImplItem, ItemImpl, ItemTrait, Pat, PathArguments, ReturnType, TraitItem,
-    Type, parse_macro_input, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-};
 
-const MASKED: &str = "masked";
-const CONDITIONAL: &str = "conditional";
+mod dispatch;
+mod late_bound;
+mod internal;
 
-// --- Core Utilities ---
-
-/// Helper to check for and remove specific internal attributes.
-fn take_attribute(attrs: &mut Vec<Attribute>, name: &str) -> bool {
-    let len = attrs.len();
-    attrs.retain(|attr| !attr.path().is_ident(name));
-    attrs.len() < len
+/// Compile-time ISA dispatch for functions, `impl` blocks, traits, and modules.
+///
+/// Rewrites the annotated item so that every method/function body is wrapped in an
+/// `#[inline(always)]` inner copy and then called through a per-backend
+/// `#[target_feature(enable = "...")]` trampoline, selected at compile time by matching
+/// on `<S as HasIsa>::ISA` - a const that is resolved when `S` is monomorphized.
+///
+/// # Syntax
+///
+/// ```rust,ignore
+/// // `S` is the default SIMD type parameter name; override with a positional ident:
+/// #[dispatch]
+/// fn my_fn<S: HasIsa>(...) { ... }
+///
+/// // Explicit SIMD parameter name:
+/// #[dispatch(V)]
+/// fn my_fn<V: HasIsa>(...) { ... }
+///
+/// // Override the thermite crate path (needed when calling from inside thermite itself):
+/// #[dispatch(thermite = "crate")]
+/// fn my_fn<S: HasIsa>(...) { ... }
+///
+/// // Both together:
+/// #[dispatch(V, thermite = "crate")]
+/// fn my_fn<V: HasIsa>(...) { ... }
+/// ```
+///
+/// # Supported items
+///
+/// | Item | Effect |
+/// |------|--------|
+/// | `fn` | Wraps the body; the function gains per-backend trampolines. |
+/// | `impl` block | Every method in the block is wrapped individually. |
+/// | `trait` definition | Strips `#[skip_dispatch]` markers from trait methods (no-op otherwise). |
+/// | `mod` | Recursively applies `#[dispatch]` to every `fn` and `impl` inside. |
+///
+/// # `#[skip_dispatch]`
+///
+/// Place `#[skip_dispatch]` on any individual `fn` or `impl` item (or on the
+/// `impl` block itself) to opt it out of dispatch generation entirely.
+///
+/// # How it works
+///
+/// For a function `fn foo<S: HasIsa>(args...)`:
+///
+/// 1. The original body is moved into an `#[inline(always)]` copy named `foo`.
+/// 2. For each backend a `#[target_feature(enable = "...")] unsafe fn __dispatch_<backend>`
+///    is generated that calls `foo` under the appropriate CPU feature flags.
+/// 3. The outer body becomes a `match <S as HasIsa>::ISA { ... }` that selects the
+///    right trampoline.  Because `ISA` is a const, LLVM folds the match away at
+///    monomorphization time - there is no runtime branch.
+///
+/// `impl` blocks use a private helper trait to allow the trampolines to call back into
+/// `Self` without recursion.
+///
+/// # Methods with receivers (`&self`, `&mut self`, `self`)
+///
+/// Applying `#[dispatch]` directly to a single method that has a receiver requires
+/// supplying the **concrete implementing type** as the first attribute argument.  This
+/// is necessary because the macro only sees the method, not the surrounding `impl`
+/// block, so it cannot infer `Self`.  `impl Trait for Self` is not valid inside a
+/// function body.
+///
+/// ```rust,ignore
+/// impl MyType {
+///     // OK - concrete type supplied explicitly:
+///     #[dispatch(MyType)]
+///     fn process(&self) { ... }
+/// }
+/// ```
+///
+/// The supplied ident is used both as the dispatch match type
+/// (`<MyType as HasIsa>::ISA`) and as the impl target of the internal helper trait.
+///
+/// **Prefer annotating the whole `impl` block** when all (or most) methods need
+/// dispatch - it is less repetitive and avoids repeating the type name per method:
+///
+/// ```rust,ignore
+/// #[dispatch(Self)]          // `Self` is resolved correctly at the impl-block level
+/// impl MyType {
+///     fn process(&self) { ... }
+///     #[skip_dispatch]       // opt individual methods out if needed
+///     fn helper(&self) { ... }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    dispatch::dispatch_inner(attr, item)
 }
 
-/// Extracts documentation attributes from a list of attributes.
-fn get_doc_attrs(attrs: &[Attribute]) -> Vec<&Attribute> {
-    attrs.iter().filter(|attr| attr.path().is_ident("doc")).collect()
-}
-
-/// Extracts simple identifier names from function arguments for forwarding.
-fn extract_trait_arg_names(inputs: &Punctuated<FnArg, Comma>) -> impl Iterator<Item = &Ident> {
-    inputs.iter().map(|arg| match arg {
-        FnArg::Typed(pat_type) => match &*pat_type.pat {
-            Pat::Ident(pat_ident) => &pat_ident.ident,
-            _ => panic!("Macro only supports simple identifier arguments."),
-        },
-        FnArg::Receiver(_) => panic!("self receiver not supported."),
-    })
-}
-
-#[rustfmt::skip]
-fn skip_or_conditional_impl(method: &mut syn::ImplItemFn) -> (bool, bool) {
-    let conditional = take_attribute(&mut method.attrs, CONDITIONAL);
-    let skip = !(conditional || take_attribute(&mut method.attrs, MASKED)) || is_ineligible_return_type(&method.sig.output);
-    (skip, conditional)
-}
-
-#[rustfmt::skip]
-fn skip_or_conditional_trait(method: &mut syn::TraitItemFn) -> (bool, bool) {
-    let conditional = take_attribute(&mut method.attrs, CONDITIONAL);
-    let skip = !(conditional || take_attribute(&mut method.attrs, MASKED)) || is_ineligible_return_type(&method.sig.output);
-    (skip, conditional)
+/// Runtime ISA-dispatched expression.
+///
+/// Wraps the body in an `#[inline(always)]` inner function generic over `S: Simd` (plus
+/// any caller-supplied extra generics), creates `#[target_feature]`-annotated wrappers
+/// for each backend that has a complete [`Simd`] implementation, then dispatches at
+/// runtime via `InstructionSet::get()`.
+///
+/// The syntax is similar to closures, but captures are done via arguments, and must be typed.
+///
+/// # The dispatch boundary hides the chosen backend
+///
+/// The whole point of `dispatch_dyn!` is to pick the best available ISA at runtime and
+/// run the body under it, so the **outside world cannot know which backend was chosen**,
+/// and therefore cannot mention its SIMD types. Concrete vector types like
+/// `Vector<<S as Simd>::f32x4>`, `f32xN`, etc. depend on the generic `S`, which only
+/// exists *inside* the body. The per-backend `#[target_feature]` trampolines and the
+/// outer `match` arm aren't generic over `S`; if a vector type appeared in the
+/// parameter list or return type, that type would have nowhere to come from and
+/// nowhere to go.
+///
+/// In practice this means:
+///
+/// - **Parameters and return types must be ISA-agnostic.** Use scalar types
+///   (`f32`, `i32`, `bool`), slices (`&[f32]`, `&mut [f32]`), owned containers
+///   (`Vec<f32>`, `Box<[f32]>`), or any `Copy` / non-SIMD type. **Never** use
+///   `f32x4`, `f32xN`, `Vector<S::f32x4>`, `Mask<S::f32x4>`, etc. in the macro's
+///   signature.
+/// - **All SIMD work happens inside the body.** Load from slices into vectors,
+///   process, store back out. The body is where the SIMD rewriter and the generic
+///   `S` are in scope; the macro signature is the I/O contract with the surrounding
+///   scalar world.
+///
+/// This is by design: a function that *returns* SIMD vectors couldn't have its
+/// return type spelled at the call site (the caller doesn't know which backend ran),
+/// so it couldn't be assigned to a variable or used in any way. The dispatch boundary
+/// is necessarily scalar-shaped.
+///
+/// # Syntax
+///
+/// ```rust,ignore
+/// // Basic form - no explicit dispatch binding. Signature uses only ISA-agnostic types.
+/// dispatch_dyn!(|data: &[f32]| -> f32 { /* SIMD work here */ });
+///
+/// // Explicit dispatch binding (recommended): `for<Ident>` names the backend type.
+/// // Default bound is `Simd3`. `S` is in scope inside the body:
+/// dispatch_dyn!(for<S> |data: &mut [f32]| {
+///     let (head, mid, tail) = data.try_aligned_simd_iter_mut::<f32xN>();
+///     for v in mid { *v = v.sin(); }
+///     /* ... */
+/// });
+///
+/// // Custom bound - restrict or widen the set of usable Simd traits:
+/// dispatch_dyn!(for<S: Simd> |data: &[f32]| -> f32 { /* ... */ });
+/// dispatch_dyn!(for<S: Simd3 + MyCustomTrait> |data: &[f32]| { /* ... */ });
+///
+/// // With extra caller-provided generics and a where clause:
+/// dispatch_dyn!(for<S> <T: Clone, const N: usize> |arg: T| -> T where T: Debug { arg });
+///
+/// // Override the thermite crate path (needed when calling from inside thermite itself):
+/// dispatch_dyn!(thermite = "crate"; for<S> |data: &[f32]| -> f32 { /* ... */ });
+/// ```
+///
+/// When `for<Ident>` is present, `Ident` is in scope inside `body` as a generic type
+/// satisfying the stated bound (or `Simd3` by default).  When omitted, no explicit
+/// dispatch binding is in scope - rely on the automatic SIMD type rewriting below.
+///
+/// Any extra generic parameters from `<...>` are assumed to be in scope at the macro call
+/// site; the macro passes them through as explicit turbofish arguments.
+///
+/// # Automatic SIMD type rewriting
+///
+/// Before code generation the macro rewrites every **bare, unqualified** reference to a
+/// known `Simd` associated-type name into its fully-qualified `Vector<S::...>` form.
+/// For example, `f32x4` becomes `::thermite::Vector<S::f32x4>`.
+///
+/// The full set of names that trigger rewriting is every associated type declared on the
+/// `Simd` trait: `{f32,f64,i32,u32,i64,u64,usize}x{N,2,3A,4,8,16}`
+///
+/// The rewriting fires in all standard Rust type positions (annotations, return types,
+/// generic arguments, `as` casts, trait bounds, `where` clauses, fn-pointer types) as
+/// well as in **expression paths** such as `f32x4::splat(1.0)` or `f32x4::ZERO`, which
+/// become `<::thermite::Vector<S::f32x4>>::splat(1.0)` and
+/// `<::thermite::Vector<S::f32x4>>::ZERO` respectively.
+///
+/// **Explicit references are left untouched.** `S::f32x4`, `<S as Simd>::f32x4`, and
+/// any multi-segment path (`my_mod::f32x4`) are not rewritten, so you can always opt
+/// out by being explicit.
+///
+/// Macro invocations (`some_macro!(f32x4)`) are opaque to the rewriter and are also
+/// left untouched.
+///
+/// # Argument forwarding and reborrow rules
+///
+/// The macro captures call-site locals **by name** - each parameter must correspond
+/// to an in-scope binding of the same identifier. Forwarding to the per-backend
+/// trampoline is type-driven, with different rules for slice DST parameters and
+/// sized reference parameters:
+///
+/// | Declared parameter type | Emitted forwarding | What the caller may hold |
+/// |---|---|---|
+/// | `&[T]` / `&mut [T]` (slice DST)        | `&*ident` / `&mut *ident` | `Vec<T>`, `Box<[T]>`, `[T; N]`, `&[T]`, `&mut [T]` - any binding |
+/// | `&str` / `&dyn Trait` (other DSTs)     | `&*ident` / `&mut *ident` | `String`, `Box<str>`, `Box<dyn Trait>`, `&str`, `&dyn Trait` |
+/// | `&T` (sized, e.g. `&Vec<U>`, `&f64`)    | `&ident`                | the value itself, any binding, or a reference to it (deref-coerces) |
+/// | `&mut T` (sized, e.g. `&mut Vec<U>`)   | `&mut ident`            | a `mut`-bound owned value **or** a `mut`-bound reference |
+/// | anything else (by-value)               | `ident`                 | the value itself (moved) or a `Copy` primitive |
+///
+/// The slice-DST row uses `&*ident` rather than `&ident` so that `Vec<T>` / `Box<[T]>`
+/// can be passed where `&[T]` is expected - without that, the user would have to write
+/// `&vec[..]` at the call site. For sized reference parameters the macro emits a plain
+/// borrow because `&*ident` would invoke `Deref{,Mut}` and overshoot - e.g. `&mut *vec`
+/// where `vec: Vec<f64>` produces `&mut [f64]`, which does **not** match a `&mut Vec<f64>`
+/// parameter.
+///
+/// ## Recommendations
+///
+/// 1. **Prefer slice / `str` parameters over wrapper types in the macro signature.**
+///    `|data: &[f32]|` is more flexible than `|data: &Vec<f32>|` - it accepts owners,
+///    boxed slices, and slice references uniformly without any binding gymnastics. Only
+///    use `&Vec<T>` / `&mut Vec<T>` when you genuinely need wrapper-specific methods
+///    (e.g. `.push`, `.reserve`, `.clear`).
+///
+/// 2. **For a sized `&mut T` parameter, mark the caller's binding `mut`.** If the
+///    caller is a function parameter, write `mut` in the signature:
+///
+///    ```rust,ignore
+///    // Won't compile - `spectrum_buf` is not a `mut` binding, so the macro's
+///    // `&mut spectrum_buf` is rejected.
+///    fn render(spectrum_buf: &mut Vec<f64>) {
+///        dispatch_dyn!(|spectrum_buf: &mut Vec<f64>| { spectrum_buf.push(1.0); });
+///    }
+///
+///    // OK - one extra `mut` makes the binding itself mutable.
+///    fn render(mut spectrum_buf: &mut Vec<f64>) {
+///        dispatch_dyn!(|spectrum_buf: &mut Vec<f64>| { spectrum_buf.push(1.0); });
+///    }
+///    ```
+///
+///    Or, if you cannot change the signature, reborrow into a local first:
+///
+///    ```rust,ignore
+///    fn render(spectrum_buf: &mut Vec<f64>) {
+///        let spectrum_buf = &mut *spectrum_buf;
+///        dispatch_dyn!(|spectrum_buf: &mut Vec<f64>| { spectrum_buf.push(1.0); });
+///    }
+///    ```
+///
+/// 3. **Owned by-value parameters move the caller's binding.** `|data: Vec<f32>|`
+///    consumes the caller's `data`. Use a slice / reference parameter if you want
+///    the caller to retain ownership.
+///
+/// 4. **SIMD types belong only in the body - never in the signature.** See the
+///    *"The dispatch boundary hides the chosen backend"* section above. The macro
+///    cannot reasonably accept or return SIMD vector / mask types, because their
+///    identity depends on the runtime-selected backend (`S`) which the surrounding
+///    scalar code has no way to name. Treat each `dispatch_dyn!` invocation as a
+///    scalar-in / scalar-out island around a region of SIMD work:
+///
+///    ```rust,ignore
+///    // Pattern: load from slice, process with SIMD, store back to slice.
+///    dispatch_dyn!(for<S> |xs: &[f32], out: &mut [f32]| {
+///        let (head, mid, tail) = xs.try_aligned_simd_iter::<f32xN>();
+///        let (oh,   om,  ot)   = out.try_aligned_simd_iter_mut::<f32xN>();
+///        // ... SIMD body operates on f32xN<S> values ...
+///    });
+///    ```
+///
+///    If you need a vector value to escape the dispatch boundary, reduce it first
+///    (`v.sum_elements()`, `v.max_element()`, `v.into_array()`) and return the scalar.
+#[proc_macro]
+pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    dispatch::dispatch_dyn_inner(input)
 }
 
 /// Derives `thermite::simd::HasIsa` by forwarding the `ISA` constant from a generic parameter.
@@ -71,816 +291,40 @@ fn skip_or_conditional_trait(method: &mut syn::TraitItemFn) -> (bool, bool) {
 /// ```
 #[proc_macro_derive(HasIsa, attributes(isa, thermite))]
 pub fn derive_has_isa(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as syn::DeriveInput);
-
-    let mut krate: Option<syn::Path> = None;
-    let mut explicit_param: Option<Ident> = None;
-
-    for attr in &input.attrs {
-        let path = attr.path();
-
-        if path.is_ident("thermite") {
-            if let Ok(lit) = attr.parse_args::<syn::LitStr>() {
-                krate = lit.parse().ok();
-            }
-        } else if path.is_ident("isa") {
-            explicit_param = attr.parse_args::<Ident>().ok();
-        }
-    }
-
-    let krate: syn::Path = krate.unwrap_or_else(|| syn::parse_quote!(::thermite));
-
-    // Resolve which type parameter to forward from.
-    let isa_param: Ident = match explicit_param {
-        Some(ident) => ident,
-        None => {
-            let first = input.generics.type_params().next();
-            match first {
-                Some(tp) => tp.ident.clone(),
-                None => {
-                    return syn::Error::new_spanned(
-                        &input.ident,
-                        "#[derive(HasIsa)] requires at least one type parameter, \
-                         or an explicit `#[isa = S]` attribute",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-            }
-        }
-    };
-
-    let name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    quote! {
-        impl #impl_generics #krate::simd::HasIsa for #name #ty_generics #where_clause {
-            const ISA: #krate::isa::InstructionSet = <#isa_param as #krate::simd::HasIsa>::ISA;
-        }
-    }
-    .into()
+    internal::derive_has_isa_inner(input)
 }
 
 #[proc_macro_attribute]
-pub fn register_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut trait_def = parse_macro_input!(item as ItemTrait);
-    let mut new_items: Vec<TraitItem> = Vec::new();
-
-    for item in &mut trait_def.items {
-        let TraitItem::Fn(method) = item else { continue };
-
-        if method.default.is_some() {
-            method.attrs.push(parse_quote!(#[inline(always)]));
-        }
-
-        let (skip, with_conditional) = skip_or_conditional_trait(method);
-
-        if skip {
-            continue;
-        }
-
-        let name = &method.sig.ident;
-        let arg_names: Vec<_> = extract_trait_arg_names(&method.sig.inputs).collect();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-        let doc = get_doc_attrs(&method.attrs);
-        let unsafety = method.sig.unsafety.as_ref();
-
-        // shared among all variants
-        // if the method is unsafe, wrap the call in an unsafe block.
-        // while not strictly necessary, clippy will complain about calling
-        // unsafe functions outside of an unsafe block, even if the function itself
-        // is marked unsafe.
-        let call = quote_spanned! { name.span() =>
-            #unsafety { Self::#name #turbo(#(#arg_names),*) }
-        };
-
-        if with_conditional {
-            // --- Conditional (_c) variant ---
-            let mut sig_c = method.sig.clone();
-            sig_c.ident = format_ident!("{}_c", name);
-
-            let Some(this) = get_first_arg_name(&sig_c.inputs).cloned() else {
-                panic!("Expected at least one argument for conditional method.");
-            };
-
-            sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-            let m_doc = format!("Computes [`{name}`](Self::{name}) when `mask` is true, returns `{this}` where false.");
-            new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                #(#doc)* #[doc = #m_doc] #[inline(always)] #[allow(unused)] #sig_c {
-                    Self::blendv(mask, #this, #call)
-                }
-            }));
-        }
-
-        // --- Masked (_m) variant ---
-        let mut sig_m = method.sig.clone();
-        let m_name = format_ident!("{}_m", name);
-
-        sig_m.ident = m_name.clone();
-        sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-        sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
-
-        let m_doc = format!("Merges [`{name}`](Self::{name}) with `src` using `mask`.");
-        new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_m.span() =>
-            #(#doc)* #[doc = #m_doc] #[inline(always)] #[allow(unused)] #sig_m {
-                Self::blendv(mask, src, #call)
-            }
-        }));
-
-        // --- Zeroed (_z) variant ---
-        // For this, the default behavior should actually be to call the _m variant with EMPTY,
-        // since the _m variant may have better defaults on older platforms.
-        let mut sig_z = method.sig.clone();
-        sig_z.ident = format_ident!("{}_z", name);
-        sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-        let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
-        new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_z.span() =>
-            #(#doc)* #[doc = #z_doc] #[inline(always)] #[allow(unused)] #sig_z {
-                if const { <Self as CoreRegister>::HAS_EQUAL_SIZE_MASK } {
-                    Self::bitand(<Self as CoreRegister>::from_mask(mask), #unsafety { #call })
-                } else {
-                    #unsafety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
-                }
-            }
-        }));
-    }
-
-    trait_def.items.extend(new_items);
-    trait_def.into_token_stream().into()
+pub fn register_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::register_trait_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn double_pump_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
-        Some(ty) => ty,
-        None => {
-            return syn::Error::new_spanned(&impl_block.self_ty, "Expected DoublePumpRegister<R>")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let mut new_items = Vec::new();
-
-    for item in &mut impl_block.items {
-        // we only care about functions
-        let ImplItem::Fn(method) = item else { continue };
-
-        let (skip, with_conditional) = skip_or_conditional_impl(method);
-
-        let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-
-        // always mark as #[inline(always)], even if there is a custom body
-        method.attrs.push(parse_quote!(#[inline(always)]));
-
-        // 1. Generate base body if empty
-        if method.block.stmts.is_empty() {
-            let (args_0, args_1) = split_args_for_dp_call(&method.sig.inputs);
-
-            method.block = parse_quote!({
-                #unsafety { DoublePumpRegister(
-                    #reg_ty::#name #turbo(#args_0),
-                    #reg_ty::#name #turbo(#args_1)
-                ) }
-            });
-        }
-
-        if !skip {
-            let doc = get_doc_attrs(&method.attrs);
-
-            if with_conditional {
-                // --- Generate _c ---
-                let mut sig_c = method.sig.clone();
-                sig_c.ident = format_ident!("{}_c", name);
-                sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-                let (c0, c1) = split_args_for_dp_call(&sig_c.inputs);
-                let c_name = &sig_c.ident;
-
-                new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                        #unsafety { DoublePumpRegister(
-                            #reg_ty::#c_name #turbo(#c0),
-                            #reg_ty::#c_name #turbo(#c1)
-                        ) }
-                    }
-                }));
-            }
-
-            // --- Generate _m ---
-            let mut sig_m = method.sig.clone();
-            sig_m.ident = format_ident!("{}_m", name);
-            sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-            sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
-
-            let (m0, m1) = split_args_for_dp_call(&sig_m.inputs);
-            let m_name = &sig_m.ident;
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                    #unsafety { DoublePumpRegister(
-                        #reg_ty::#m_name #turbo(#m0),
-                        #reg_ty::#m_name #turbo(#m1)
-                    ) }
-                }
-            }));
-
-            // --- Generate _z ---
-            let mut sig_z = method.sig.clone();
-            sig_z.ident = format_ident!("{}_z", name);
-            sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-            let (z0, z1) = split_args_for_dp_call(&sig_z.inputs);
-            let z_name = &sig_z.ident;
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                    #unsafety { DoublePumpRegister(
-                        #reg_ty::#z_name #turbo(#z0),
-                        #reg_ty::#z_name #turbo(#z1)
-                    ) }
-                }
-            }));
-        }
-    }
-
-    impl_block.items.extend(new_items);
-    impl_block.into_token_stream().into()
+pub fn double_pump_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::double_pump_impl_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn array_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
-        Some(ty) => ty,
-        None => {
-            return syn::Error::new_spanned(&impl_block.self_ty, "Expected ArrayRegister<R, N>")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let mut new_items = Vec::new();
-
-    for item in &mut impl_block.items {
-        let ImplItem::Fn(method) = item else { continue };
-
-        let (skip, with_conditional) = skip_or_conditional_impl(method);
-
-        let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-
-        // always mark as #[inline(always)], even if there is a custom body
-        method.attrs.push(parse_quote!(#[inline(always)]));
-
-        let make_body = |sig: &syn::Signature, target_name: &Ident| -> proc_macro2::TokenStream {
-            let num_inputs = sig.inputs.len();
-            let mut arrays = Vec::with_capacity(num_inputs);
-            let mut closure_params = Vec::with_capacity(num_inputs);
-            let mut call_args = Vec::with_capacity(num_inputs);
-
-            for input in &sig.inputs {
-                if let FnArg::Typed(pt) = input {
-                    let Pat::Ident(pi) = &*pt.pat else { continue };
-                    let arg_name = &pi.ident;
-
-                    if is_splittable(&pt.ty) {
-                        arrays.push(quote!(#arg_name.0));
-                        let reg_name = format_ident!("{}_reg", arg_name);
-                        closure_params.push(reg_name.clone());
-                        call_args.push(reg_name.to_token_stream());
-                    } else {
-                        call_args.push(arg_name.to_token_stream());
-                    }
-                }
-            }
-
-            let call = quote_spanned! { target_name.span() =>
-                #unsafety { #reg_ty::#target_name #turbo(#(#call_args),*) }
-            };
-
-            match arrays.len() {
-                0 => quote!({ ArrayRegister(#call) }),
-
-                1 => {
-                    let a0 = &arrays[0];
-                    let p0 = &closure_params[0];
-                    quote!({ ArrayRegister(#a0.map(#[inline(always)] |#p0| #call)) })
-                }
-
-                n => {
-                    let array_zip = format_ident!("array_zip{n}");
-
-                    quote!({
-                       ArrayRegister(#array_zip(#(#arrays),*, #[inline(always)] |#(#closure_params),*| #call))
-                    })
-                }
-            }
-        };
-
-        // 1. Generate base body if empty
-        if method.block.stmts.is_empty() {
-            let body = make_body(&method.sig, name);
-            method.block = parse_quote!( #body );
-        }
-
-        if !skip {
-            let doc = get_doc_attrs(&method.attrs);
-
-            if with_conditional {
-                // --- Generate _c ---
-                let mut sig_c = method.sig.clone();
-                sig_c.ident = format_ident!("{}_c", name);
-                sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-                let c_name = &sig_c.ident;
-                let body = make_body(&sig_c, c_name);
-
-                new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c #body
-                }));
-            }
-
-            // --- Generate _m ---
-            let mut sig_m = method.sig.clone();
-            sig_m.ident = format_ident!("{}_m", name);
-            sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-            sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
-
-            let m_name = &sig_m.ident;
-            let body = make_body(&sig_m, m_name);
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m #body
-            }));
-
-            // --- Generate _z ---
-            let mut sig_z = method.sig.clone();
-            sig_z.ident = format_ident!("{}_z", name);
-            sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-            let z_name = &sig_z.ident;
-            let body = make_body(&sig_z, z_name);
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z #body
-            }));
-        }
-    }
-
-    impl_block.items.extend(new_items);
-    impl_block.into_token_stream().into()
+pub fn array_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::array_impl_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn reduced_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
-        Some(ty) => ty,
-        None => {
-            return syn::Error::new_spanned(&impl_block.self_ty, "Expected ReducedRegister<R>")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let mut new_items = Vec::new();
-
-    for item in &mut impl_block.items {
-        // we only care about functions
-        let ImplItem::Fn(method) = item else { continue };
-
-        let (skip, with_conditional) = skip_or_conditional_impl(method);
-
-        let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-
-        // always mark as #[inline(always)], even if there is a custom body
-        method.attrs.push(parse_quote!(#[inline(always)]));
-
-        // 1. Generate base body if empty
-        if method.block.stmts.is_empty() {
-            let args = args_for_reduced_call(&method.sig.inputs);
-
-            method.block = parse_quote!({
-                #unsafety { ReducedRegister( #reg_ty::#name #turbo(#args), PhantomData ) }
-            });
-        }
-
-        if !skip {
-            let doc = get_doc_attrs(&method.attrs);
-
-            if with_conditional {
-                // --- Generate _c ---
-                let mut sig_c = method.sig.clone();
-                sig_c.ident = format_ident!("{}_c", name);
-                sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-                let args = args_for_reduced_call(&sig_c.inputs);
-                let c_name = &sig_c.ident;
-
-                new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                    #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                        #unsafety { ReducedRegister( #reg_ty::#c_name #turbo(#args), PhantomData ) }
-                    }
-                }));
-            }
-
-            // --- Generate _m ---
-            let mut sig_m = method.sig.clone();
-            sig_m.ident = format_ident!("{}_m", name);
-            sig_m.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-            sig_m.inputs.insert(0, parse_quote!(src: Storage<Self>));
-
-            let args = args_for_reduced_call(&sig_m.inputs);
-            let m_name = &sig_m.ident;
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                    #unsafety { ReducedRegister( #reg_ty::#m_name #turbo(#args), PhantomData ) }
-                }
-            }));
-
-            // --- Generate _z ---
-            let mut sig_z = method.sig.clone();
-            sig_z.ident = format_ident!("{}_z", name);
-            sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
-
-            let args = args_for_reduced_call(&sig_z.inputs);
-            let z_name = &sig_z.ident;
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                    #unsafety { ReducedRegister( #reg_ty::#z_name #turbo(#args), PhantomData ) }
-                }
-            }));
-        }
-    }
-
-    impl_block.items.extend(new_items);
-    impl_block.into_token_stream().into()
+pub fn reduced_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::reduced_impl_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn inline_always(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut impl_block = parse_macro_input!(item as ItemImpl);
-
-    let inline_always: syn::Attribute = parse_quote!(#[inline(always)]);
-
-    for item in &mut impl_block.items {
-        let ImplItem::Fn(method) = item else { continue };
-        method.attrs.push(inline_always.clone());
-    }
-
-    impl_block.into_token_stream().into()
+pub fn inline_always(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::inline_always_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn vector_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut trait_def = parse_macro_input!(item as ItemTrait);
-    let mut new_items: Vec<TraitItem> = Vec::new();
-
-    for item in &mut trait_def.items {
-        // we only care about functions
-        let TraitItem::Fn(method) = item else { continue };
-
-        if method.default.is_some() {
-            method.attrs.push(parse_quote!(#[inline(always)]));
-        }
-
-        let (skip, conditional) = skip_or_conditional_trait(method);
-
-        if skip {
-            continue;
-        }
-
-        let name = &method.sig.ident;
-
-        let doc = get_doc_attrs(&method.attrs);
-
-        // 1 if method has a self receiver, 0 otherwise.
-        // We want to insert new arguments after the self receiver if it exists.
-        let insert_idx = method
-            .sig
-            .inputs
-            .first()
-            .map(|arg| matches!(arg, FnArg::Receiver(_)))
-            .unwrap_or(false) as usize;
-
-        if conditional {
-            // --- Conditional (_c) variant ---
-            let mut sig_c = method.sig.clone();
-            sig_c.ident = format_ident!("{}_c", name);
-            sig_c.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
-
-            let m_doc = format!("Computes [`{name}`](Self::{name}) when `mask` is true, returns `self` where false.");
-            new_items.push(TraitItem::Fn(
-                parse_quote_spanned! { sig_c.span() => #(#doc)* #[doc = #m_doc] #sig_c; },
-            ));
-        }
-
-        // --- Masked (_m) variant ---
-        // signature: fn method_m(self, src: Storage<Self>, mask: Storage<Self::Mask>, ...)
-        let mut sig_m = method.sig.clone();
-        sig_m.ident = format_ident!("{}_m", name);
-        sig_m.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
-        sig_m.inputs.insert(insert_idx, parse_quote!(src: Self));
-
-        let m_doc = format!("Merges [`{name}`](Self::{name}) with `src` using `mask`.");
-        new_items.push(TraitItem::Fn(
-            parse_quote_spanned! { sig_m.span() => #(#doc)* #[doc = #m_doc] #sig_m; },
-        ));
-
-        // --- Zeroed (_z) variant ---
-        // signature: fn method_z(self, mask: Storage<Self::Mask>, ...)
-        let mut sig_z = method.sig.clone();
-        sig_z.ident = format_ident!("{}_z", name);
-        sig_z.inputs.insert(insert_idx, parse_quote!(mask: Self::Mask));
-
-        let z_doc = format!("Computes [`{name}`](Self::{name}) masked (zeroed where mask is false).");
-        new_items.push(TraitItem::Fn(
-            parse_quote_spanned! { sig_z.span() => #(#doc)* #[doc = #z_doc] #sig_z; },
-        ));
-    }
-
-    trait_def.items.extend(new_items);
-    trait_def.into_token_stream().into()
+pub fn vector_trait(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::vector_trait_inner(attr, item)
 }
 
 #[proc_macro_attribute]
-pub fn vector_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut impl_block = parse_macro_input!(item as ItemImpl);
-    let reg_ty = match extract_inner_generic(&impl_block.self_ty) {
-        Some(ty) => ty,
-        None => {
-            return syn::Error::new_spanned(&impl_block.self_ty, "Expected Vector<R>")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let mut new_items = Vec::new();
-
-    for item in &mut impl_block.items {
-        let ImplItem::Fn(method) = item else { continue };
-
-        let (skip, with_conditional) = skip_or_conditional_impl(method);
-
-        let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
-        let (_, ty_gen, _) = method.sig.generics.split_for_impl();
-        let turbo = ty_gen.as_turbofish();
-
-        // always mark as #[inline(always)], even if there is a custom body
-        method.attrs.push(parse_quote!(#[inline(always)]));
-
-        if method.block.stmts.is_empty() {
-            let args = args_for_vector_call(&method.sig.inputs);
-
-            method.block = parse_quote_spanned!(method.span() => {
-                Vector(#unsafety { #reg_ty::#name #turbo(#args) })
-            });
-        }
-
-        if skip {
-            continue;
-        }
-
-        let doc = get_doc_attrs(&method.attrs);
-
-        let insert_idx = method
-            .sig
-            .inputs
-            .first()
-            .map(|arg| matches!(arg, FnArg::Receiver(_)))
-            .unwrap_or(false) as usize;
-
-        if with_conditional {
-            // --- Generate _c ---
-            let mut sig_c = method.sig.clone();
-            sig_c.ident = format_ident!("{}_c", name);
-
-            let args = args_for_vector_call(&sig_c.inputs);
-
-            sig_c.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
-
-            let c_name = &sig_c.ident;
-
-            new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
-                #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                    Vector(#unsafety { #reg_ty::#c_name #turbo(mask.0, #args) })
-                }
-            }));
-        }
-
-        // --- Generate _m ---
-        let mut sig_m = method.sig.clone();
-        sig_m.ident = format_ident!("{}_m", name);
-
-        let args = args_for_vector_call(&sig_m.inputs);
-
-        sig_m.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
-        sig_m.inputs.insert(insert_idx, parse_quote!(src: Self));
-
-        let m_name = &sig_m.ident;
-
-        new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
-            #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                Vector(#unsafety { #reg_ty::#m_name #turbo(src.0, mask.0, #args) })
-            }
-        }));
-
-        // --- Generate _z ---
-        let mut sig_z = method.sig.clone();
-        sig_z.ident = format_ident!("{}_z", name);
-
-        let args = args_for_vector_call(&sig_z.inputs);
-
-        sig_z.inputs.insert(insert_idx, parse_quote!(mask: Mask<#reg_ty>));
-
-        let z_name = &sig_z.ident;
-
-        new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
-            #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                Vector(#unsafety { #reg_ty::#z_name #turbo(mask.0, #args) })
-            }
-        }));
-    }
-
-    impl_block.items.extend(new_items);
-    impl_block.into_token_stream().into()
-}
-
-// --- Private Helpers ---
-
-fn extract_inner_generic(ty: &Type) -> Option<Type> {
-    if let Type::Path(tp) = ty
-        && let Some(segment) = tp.path.segments.last()
-        && let PathArguments::AngleBracketed(args) = &segment.arguments
-        && let Some(GenericArgument::Type(inner)) = args.args.first()
-    {
-        return Some(inner.clone());
-    }
-
-    None
-}
-
-#[rustfmt::skip]
-fn is_splittable(ty: &Type) -> bool {
-    let tp = match ty {
-        Type::Path(tp) => tp,
-        Type::Reference(r) => return is_splittable(&r.elem),
-        _ => return false,
-    };
-
-    tp.path.is_ident("Self") || tp.path.segments.last()
-        .is_some_and(|s| s.ident == "Storage" || s.ident == "DoublePumpRegister" || s.ident == "ReducedRegister" || s.ident == "Self")
-}
-
-#[rustfmt::skip]
-fn is_vectorlike_type(ty: &Type) -> bool {
-    let tp = match ty {
-        Type::Path(tp) => tp,
-        Type::Reference(r) => return is_vectorlike_type(&r.elem),
-        _ => return false,
-    };
-
-    // Allow `Self::*`
-    if tp.path.segments.first().is_some_and(|s| s.ident == "Self") {
-        // Unless it's `Self::Element`
-        if let Some(second) = tp.path.segments.get(1) && second.ident == "Element" {
-            return false;
-        }
-
-        return true;
-    }
-
-    // Allow `Self`, `Vector`, `Mask`
-    tp.path.is_ident("Self") || tp.path.segments.last().is_some_and(|s| s.ident == "Vector" || s.ident == "Mask")
-}
-
-fn is_ineligible_return_type(ty: &ReturnType) -> bool {
-    match ty {
-        ReturnType::Type(_, ty) => is_ineligible_type(ty),
-        ReturnType::Default => true,
-    }
-}
-
-fn is_ineligible_type(ty: &Type) -> bool {
-    let tp = match ty {
-        Type::Path(tp) => tp,
-        Type::Reference(r) => return is_ineligible_type(&r.elem),
-        _ => return false,
-    };
-
-    let Some(last) = tp.path.segments.last() else {
-        return false;
-    };
-
-    if last.ident == "Element" {
-        return true;
-    }
-
-    // `Storage<Self::Something>`
-    if last.ident == "Storage"
-        && let PathArguments::AngleBracketed(args) = &last.arguments
-        && let Some(GenericArgument::Type(inner)) = args.args.first()
-        && let Type::Path(inner_tp) = inner
-        && let Some(inner_first) = inner_tp.path.segments.first()
-        && inner_first.ident == "Self"
-        && inner_tp.path.segments.len() > 1
-    {
-        return true;
-    }
-
-    false
-}
-
-fn split_args_for_dp_call(inputs: &Punctuated<FnArg, Comma>) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let mut a0 = Vec::new();
-    let mut a1 = Vec::new();
-
-    for input in inputs {
-        if let FnArg::Typed(pt) = input {
-            let Pat::Ident(pi) = &*pt.pat else { continue };
-
-            let name = &pi.ident;
-
-            if is_splittable(&pt.ty) {
-                a0.push(quote!(#name.0));
-                a1.push(quote!(#name.1));
-            } else {
-                let name = name.to_token_stream();
-                a0.push(name.clone());
-                a1.push(name);
-            }
-        }
-    }
-
-    (quote!(#(#a0),*), quote!(#(#a1),*))
-}
-
-fn args_for_reduced_call(inputs: &Punctuated<FnArg, Comma>) -> proc_macro2::TokenStream {
-    let args = inputs.iter().filter_map(|input| match input {
-        FnArg::Receiver(r) => Some(quote_spanned!(r.span() => self.0)),
-        FnArg::Typed(pt) => {
-            let Pat::Ident(pi) = &*pt.pat else {
-                return None;
-            };
-
-            let name = &pi.ident;
-
-            Some(if is_splittable(&pt.ty) {
-                quote!(#name.0)
-            } else {
-                name.to_token_stream()
-            })
-        }
-    });
-
-    quote!(#(#args),*)
-}
-
-fn args_for_vector_call(inputs: &Punctuated<FnArg, Comma>) -> proc_macro2::TokenStream {
-    let args = inputs.iter().filter_map(|input| match input {
-        FnArg::Receiver(r) => Some(quote_spanned!(r.span() => self.0)),
-        FnArg::Typed(pt) => {
-            let Pat::Ident(pi) = &*pt.pat else {
-                return None;
-            };
-
-            let name = &pi.ident;
-
-            Some(if is_vectorlike_type(&pt.ty) {
-                quote!(#name.0)
-            } else {
-                name.to_token_stream()
-            })
-        }
-    });
-
-    quote!(#(#args),*)
-}
-
-fn get_first_arg_name(inputs: &Punctuated<FnArg, Comma>) -> Option<&Ident> {
-    for input in inputs {
-        if let FnArg::Typed(pt) = input {
-            let Pat::Ident(pi) = &*pt.pat else { continue };
-
-            return Some(&pi.ident);
-        }
-    }
-
-    None
+pub fn vector_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
+    internal::vector_impl_inner(attr, item)
 }
