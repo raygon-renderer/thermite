@@ -1,0 +1,73 @@
+name: CI
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: stable
+
+jobs:
+  test:
+    name: Test (stable, std)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Scoped to `-p thermite`: the rest of the workspace targets other ISAs
+      # (spirv/neon/wasm) or is mid-rewrite, so a `--workspace` run won't build on
+      # an x86_64 host. `std` is additive and lights up the fmt-gated panic paths.
+      - name: Run tests
+        run: cargo test -p thermite --features std
+
+      # The wasm backend is build-only here (no SIMD128 runtime on the runner).
+      - name: Check wasm backend builds
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check -p thermite --target wasm32-unknown-unknown --no-default-features --features wasm
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      # NOT `--all-features`: thermite's features select mutually exclusive
+      # backends (spirv/neon/wasm/avx512-tier*/std_simd) that cannot co-compile on
+      # x86_64. `--ignore-run-fail` still produces a number if an accepted
+      # assertion fails - the `test` job above is the strict pass/fail gate.
+      # `jq` is preinstalled on the ubuntu runners.
+      - name: Measure coverage
+        run: |
+          cargo llvm-cov -p thermite --features std --ignore-run-fail --json --summary-only > coverage.json
+          COVERAGE=$(jq '.data[0].totals.lines.percent' coverage.json)
+          COVERAGE=$(printf '%.1f' "$COVERAGE")
+          echo "COVERAGE=$COVERAGE" >> "$GITHUB_ENV"
+          echo "Line coverage: $COVERAGE%"
+
+      # Only publish from pushes to the live branches. PRs (especially from forks)
+      # cannot read GIST_SECRET, so the step is skipped there rather than failing.
+      - name: Publish coverage badge
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/rewrite' || github.ref == 'refs/heads/master')
+        uses: schneegans/dynamic-badges-action@v1.8.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 7270c68e5927fa2a1ef2de9f4286010b
+          filename: thermite-coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE }}%
+          valColorRange: ${{ env.COVERAGE }}
+          minColorRange: 50
+          maxColorRange: 95

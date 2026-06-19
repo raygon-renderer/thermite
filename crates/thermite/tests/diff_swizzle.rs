@@ -1,0 +1,266 @@
+//! Swizzle / permute coverage, checked against each register's own
+//! `scalar_swizzle` / `scalar_permutev` ground truth.
+//!
+//! Two halves:
+//!  - **Constant-index** paths (`swizzle_const` / `permute_const`, reached via
+//!    the public `swizzle!` macro) across native (`__m128`/`__m256`/`__m256d`)
+//!    and emulated registers on every backend. The 4-lane batteries deliberately
+//!    include the exact index patterns `impl_mat4_inverse!` relies on.
+//!  - **Runtime** paths (`R::permutev` / `R::swizzle` with variable
+//!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
+//!    random fuzzing - the coverage formerly in `array_swizzle.rs`, broadened
+//!    here from V3-emulated-only to native registers across v1/v2/v3.
+#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+
+use generic_array::{GenericArray, arr, typenum::Unsigned};
+use rand::RngExt;
+use thermite::Vector;
+use thermite::register::array::ArrayRegister;
+use thermite::register::{NumericRegister, Register, Storage, SwizzleRegister};
+use thermite::simd::Simd;
+
+use thermite::backend::scalar::Scalar;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
+
+/// `permute_const` (single-register, indices `0..LANES`) vs `scalar_permutev`.
+macro_rules! perm {
+    ($R:ty, $a:expr, [$($i:literal),* $(,)?]) => {{
+        let got = thermite::swizzle!(Vector::<$R>($a), [$($i),*]).0;
+        let want = <$R>::scalar_permutev($a, arr![$($i as u32),*]);
+        assert_eq!(
+            <$R>::as_array(&got), <$R>::as_array(&want),
+            "permute_const{:?} mismatch", [$($i),*]
+        );
+    }};
+}
+
+/// `swizzle_const` (two-register, indices `0..2*LANES`) vs `scalar_swizzle`.
+macro_rules! swz {
+    ($R:ty, $a:expr, $b:expr, [$($i:literal),* $(,)?]) => {{
+        let got = thermite::swizzle!(Vector::<$R>($a), Vector::<$R>($b), [$($i),*]).0;
+        let want = <$R>::scalar_swizzle($a, $b, arr![$($i as u32),*]);
+        assert_eq!(
+            <$R>::as_array(&got), <$R>::as_array(&want),
+            "swizzle_const{:?} mismatch", [$($i),*]
+        );
+    }};
+}
+
+/// 4-lane battery (f32x4 / f64x4 / i32x4 / i64x2-as-4? no - 4-lane only).
+macro_rules! battery4 {
+    ($R:ty) => {{
+        let a = <$R>::indexed();
+        let b = <$R>::add(a, a); // distinct second operand (= 2*a)
+
+        // --- permute (1-input, idx 0..3) ---
+        perm!($R, a, [0, 1, 2, 3]); // identity
+        perm!($R, a, [3, 2, 1, 0]); // reverse
+        perm!($R, a, [0, 0, 0, 0]);
+        perm!($R, a, [1, 1, 1, 1]);
+        perm!($R, a, [2, 2, 2, 2]);
+        perm!($R, a, [3, 3, 3, 3]);
+        perm!($R, a, [0, 0, 0, 2]); // from impl_mat4_inverse
+        perm!($R, a, [0, 2, 2, 2]); // from impl_mat4_inverse
+        perm!($R, a, [1, 0, 3, 2]);
+        perm!($R, a, [2, 3, 0, 1]);
+
+        // --- swizzle (2-input, idx 0..7) ---
+        swz!($R, a, b, [0, 1, 2, 3]); // identity (all a)
+        swz!($R, a, b, [4, 5, 6, 7]); // all b
+        swz!($R, a, b, [7, 6, 5, 4]); // b reversed
+        swz!($R, a, b, [0, 4, 1, 5]); // interleave
+        // exact patterns used by mat4_inverse:
+        swz!($R, a, b, [3, 3, 7, 7]);
+        swz!($R, a, b, [2, 2, 6, 6]);
+        swz!($R, a, b, [1, 1, 5, 5]);
+        swz!($R, a, b, [0, 0, 4, 4]);
+        swz!($R, a, b, [0, 2, 4, 6]);
+    }};
+}
+
+/// 8-lane battery (f32x8 / i32x8), stresses cross-128-bit-lane routing.
+macro_rules! battery8 {
+    ($R:ty) => {{
+        let a = <$R>::indexed();
+        let b = <$R>::add(a, a); // distinct second operand (= 2*a)
+
+        perm!($R, a, [0, 1, 2, 3, 4, 5, 6, 7]); // identity
+        perm!($R, a, [7, 6, 5, 4, 3, 2, 1, 0]); // reverse
+        perm!($R, a, [4, 5, 6, 7, 0, 1, 2, 3]); // swap 128-bit halves
+        perm!($R, a, [0, 0, 0, 0, 0, 0, 0, 0]);
+        perm!($R, a, [7, 7, 7, 7, 7, 7, 7, 7]);
+        perm!($R, a, [0, 4, 1, 5, 2, 6, 3, 7]); // cross-lane interleave
+
+        swz!($R, a, b, [0, 1, 2, 3, 4, 5, 6, 7]); // all a
+        swz!($R, a, b, [8, 9, 10, 11, 12, 13, 14, 15]); // all b
+        swz!($R, a, b, [15, 14, 13, 12, 11, 10, 9, 8]); // b reversed
+        swz!($R, a, b, [0, 8, 1, 9, 2, 10, 3, 11]); // interleave a/b
+    }};
+}
+
+macro_rules! reg4 {
+    ($name:ident, $backend:ty, $reg:ident) => {
+        #[test]
+        fn $name() {
+            battery4!(<$backend as Simd>::$reg);
+        }
+    };
+}
+macro_rules! reg8 {
+    ($name:ident, $backend:ty, $reg:ident) => {
+        #[test]
+        fn $name() {
+            battery8!(<$backend as Simd>::$reg);
+        }
+    };
+}
+
+// Native 128-bit registers
+reg4!(v2_f32x4, X86V2, f32x4);
+reg4!(v2_i32x4, X86V2, i32x4);
+reg4!(v2_u32x4, X86V2, u32x4);
+reg4!(v3_f32x4, X86V3, f32x4);
+reg4!(v3_i32x4, X86V3, i32x4);
+
+// v1 (SSE2): no pshufb, so variable permutes/swizzles take the scalar
+// SwizzleRegister default - a distinct code path from v2/v3.
+reg4!(v1_f32x4, X86V1, f32x4);
+reg4!(v1_i32x4, X86V1, i32x4);
+reg4!(v1_u32x4, X86V1, u32x4);
+reg4!(v1_f64x4, X86V1, f64x4); // ArrayRegister-emulated on v1
+reg4!(v1_i64x4, X86V1, i64x4);
+reg8!(v1_f32x8, X86V1, f32x8);
+reg8!(v1_i32x8, X86V1, i32x8);
+
+// Native 256-bit registers (V3)
+reg4!(v3_f64x4, X86V3, f64x4);
+reg4!(v3_i64x4, X86V3, i64x4);
+reg8!(v3_f32x8, X86V3, f32x8);
+reg8!(v3_i32x8, X86V3, i32x8);
+reg8!(v3_u32x8, X86V3, u32x8);
+
+// Scalar reference path (1-lane "register" - trivial but exercises the generic glue)
+reg4!(scalar_f32x4, Scalar, f32x4);
+reg4!(scalar_f64x4, Scalar, f64x4);
+
+// ===========================================================================
+// Runtime swizzle / permute coverage (ported from the former array_swizzle.rs).
+//
+// The `swizzle!` batteries above only reach the *const-index* paths. These drive
+// the runtime `R::permutev` / `R::swizzle` (variable `GenericArray` indices)
+// against each register's own `scalar_*` ground truth, with exhaustive
+// single-lane routing and random fuzzing. The impl masks indices to the lane
+// count (power-of-two widths), so out-of-range values wrap rather than panic.
+//
+// Broadened beyond the original (which was V3 + emulated `ArrayRegister` only)
+// to native 128-/256-bit registers across v1/v2/v3, so the hardware permute
+// paths (`pshufb` on v2, `vpermps` on v3) and the v1 scalar fallback all run.
+// ===========================================================================
+
+fn rt_permutev<R: SwizzleRegister>(input: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
+where
+    R::Element: PartialEq + core::fmt::Debug,
+{
+    let want = R::scalar_permutev(input, idxs.clone());
+    let got = R::permutev(input, idxs.clone());
+    assert_eq!(R::as_array(&want), R::as_array(&got), "permutev {idxs:?} vs scalar");
+}
+
+fn rt_swizzle<R: SwizzleRegister>(a: Storage<R>, b: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
+where
+    R::Element: PartialEq + core::fmt::Debug,
+{
+    let want = R::scalar_swizzle(a, b, idxs.clone());
+    let got = R::swizzle(a, b, idxs.clone());
+    assert_eq!(R::as_array(&want), R::as_array(&got), "swizzle {idxs:?} vs scalar");
+}
+
+fn run_runtime<R>()
+where
+    R: SwizzleRegister + NumericRegister,
+    R::Element: PartialEq + core::fmt::Debug,
+{
+    let lanes = <R::Lanes as Unsigned>::USIZE;
+    let a = R::indexed();
+    let b = R::add(a, a); // distinct second operand for the swizzle source
+    let mut idxs = GenericArray::<u32, R::Lanes>::default();
+
+    // identity + reverse
+    for i in 0..lanes {
+        idxs[i] = i as u32;
+    }
+    rt_permutev::<R>(a, &idxs);
+    rt_swizzle::<R>(a, b, &idxs);
+    for i in 0..lanes {
+        idxs[i] = (lanes - 1 - i) as u32;
+    }
+    rt_permutev::<R>(a, &idxs);
+    rt_swizzle::<R>(a, b, &idxs);
+
+    // every-lane broadcasts (permute: 0..N; swizzle: 0..2N)
+    for t in 0..lanes {
+        idxs.iter_mut().for_each(|x| *x = t as u32);
+        rt_permutev::<R>(a, &idxs);
+    }
+    for t in 0..2 * lanes {
+        idxs.iter_mut().for_each(|x| *x = t as u32);
+        rt_swizzle::<R>(a, b, &idxs);
+    }
+
+    // exhaustive single-lane routing (O(N^2)) - catches off-by-one / chunk bugs
+    for out in 0..lanes {
+        for inl in 0..lanes {
+            idxs.iter_mut().for_each(|x| *x = 0);
+            idxs[out] = inl as u32;
+            rt_permutev::<R>(a, &idxs);
+        }
+        for inl in 0..2 * lanes {
+            idxs.iter_mut().for_each(|x| *x = 0);
+            idxs[out] = inl as u32;
+            rt_swizzle::<R>(a, b, &idxs);
+        }
+    }
+
+    // dense random fuzzing (stresses the blendv accumulation)
+    let mut prng: rand::rngs::SmallRng = rand::make_rng();
+    for _ in 0..2000 {
+        for i in 0..lanes {
+            idxs[i] = prng.random_range(0..lanes as u32);
+        }
+        rt_permutev::<R>(a, &idxs);
+        for i in 0..lanes {
+            idxs[i] = prng.random_range(0..(2 * lanes) as u32);
+        }
+        rt_swizzle::<R>(a, b, &idxs);
+    }
+}
+
+macro_rules! rt {
+    ($name:ident, $R:ty) => {
+        #[test]
+        fn $name() {
+            run_runtime::<$R>();
+        }
+    };
+}
+
+// Emulated ArrayRegister (the original array_swizzle coverage).
+rt!(rt_v3_arr_f32x4x4, ArrayRegister<<X86V3 as Simd>::f32x4, 4>); // 16 lanes, 4 chunks
+rt!(rt_v3_arr_i64x2x4, ArrayRegister<<X86V3 as Simd>::i64x2, 4>); // 8 lanes, 4 chunks
+rt!(rt_v3_f32x16, <X86V3 as Simd>::f32x16);
+rt!(rt_v2_f32x16, <X86V2 as Simd>::f32x16);
+rt!(rt_v1_f32x16, <X86V1 as Simd>::f32x16);
+
+// Native hardware permute paths + the v1 scalar fallback.
+rt!(rt_v3_f32x4, <X86V3 as Simd>::f32x4);
+rt!(rt_v3_i32x4, <X86V3 as Simd>::i32x4);
+rt!(rt_v3_f32x8, <X86V3 as Simd>::f32x8);
+rt!(rt_v3_i32x8, <X86V3 as Simd>::i32x8);
+rt!(rt_v3_i64x4, <X86V3 as Simd>::i64x4);
+rt!(rt_v2_f32x4, <X86V2 as Simd>::f32x4);
+rt!(rt_v2_i32x4, <X86V2 as Simd>::i32x4);
+rt!(rt_v2_f32x8, <X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
+rt!(rt_v1_f32x4, <X86V1 as Simd>::f32x4);
+rt!(rt_v1_f32x8, <X86V1 as Simd>::f32x8);
