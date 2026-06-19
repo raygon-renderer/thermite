@@ -1,6 +1,8 @@
 Thermite SIMD: Melt Your CPU
 ============================
 
+[![CI](https://github.com/raygon-renderer/thermite/actions/workflows/ci.yml/badge.svg)](https://github.com/raygon-renderer/thermite/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/novacrazy/7270c68e5927fa2a1ef2de9f4286010b/raw/thermite-coverage.json)](https://github.com/raygon-renderer/thermite/actions/workflows/ci.yml)
 [![Thermite FFI Build](https://github.com/raygon-renderer/thermite/actions/workflows/ffi_artifacts.yaml/badge.svg)](https://github.com/raygon-renderer/thermite/actions/workflows/ffi_artifacts.yaml)
 [![Docs](https://github.com/raygon-renderer/thermite/actions/workflows/rustdoc.yml/badge.svg)](https://github.com/raygon-renderer/thermite/actions/workflows/rustdoc.yml)
 
