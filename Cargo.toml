@@ -1,5 +1,5 @@
 [workspace]
-members = ["bin/*", "crates/*"]
+members = ["bin/*", "crates/*", "tests/*"]
 resolver = "3"
 
 # Shared package metadata inherited by members via `field.workspace = true`.
