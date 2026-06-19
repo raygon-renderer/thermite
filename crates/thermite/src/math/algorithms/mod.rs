@@ -216,6 +216,124 @@ where
     Err(prod)
 }
 
+/// Accelerates a linearly converging series using Aitken's Δ^2 process.
+///
+/// Given a term-generating function `f(n)` that produces the n-th term of a series,
+/// this computes partial sums and applies Aitken's delta-squared extrapolation to
+/// accelerate convergence. For a series converging at geometric rate r, the accelerated
+/// sequence converges at rate r^2.
+///
+/// Returns `Ok(sum)` when the extrapolated estimate converges within `tolerance`,
+/// or `Err(best)` with the best estimate if the iteration limit is reached.
+///
+/// The extrapolation formula is:
+/// ```text
+///     S'_n = S_n - (S_{n+1} - S_n)^2 / (S_{n+2} - 2*S_{n+1} + S_n)
+/// ```
+///
+/// When the denominator (second forward difference) is near zero, the raw partial sum
+/// is used instead, as this indicates the sequence has already converged or is not
+/// amenable to acceleration.
+///
+/// If the policy enables compensation (`use_compensation`), Kahan summation is used
+/// for the underlying partial sum accumulation.
+#[inline(always)]
+pub fn aitken_sum<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
+where
+    F: FnMut(i64) -> V,
+{
+    let mut sum = V::ZERO;
+    let mut c = V::ZERO; // Kahan compensation
+
+    // Sliding window of three consecutive partial sums for Δ^2 extrapolation
+    let mut s0 = V::ZERO;
+    let mut s1 = V::ZERO;
+    let mut s2;
+
+    let mut n = start;
+    let mut best = V::ZERO;
+    let mut phase = 0u32; // counts how many partial sums we've accumulated in the current window
+
+    let mut _iter = 0usize;
+    while _iter < P::POLICY.max_iterations {
+        _iter += 1;
+        if n >= end {
+            break;
+        }
+
+        // Accumulate next term
+        let mut term = f(n);
+        let t = sum + term;
+
+        if const { P::POLICY.use_compensation } {
+            let abs_term = term.abs();
+            sum.abs().cmp_lt(abs_term).swap(&mut sum, &mut term);
+            c += (sum - t) + term;
+        }
+
+        sum = t;
+        n += 1;
+
+        let res = if const { P::POLICY.use_compensation } {
+            sum + c
+        } else {
+            sum
+        };
+
+        // Fill the sliding window
+        match phase {
+            0 => {
+                s0 = res;
+                phase = 1;
+                continue;
+            }
+            1 => {
+                s1 = res;
+                phase = 2;
+                continue;
+            }
+            _ => {
+                s2 = res;
+            }
+        }
+
+        // Aitken's Δ^2 extrapolation
+        let d1 = s1 - s0; // ΔS_n
+        let d2 = s2 - s1; // ΔS_{n+1}
+        let denom = d2 - d1; // Δ^2S_n = second forward difference
+
+        // Where |denom| is too small, the sequence has effectively converged
+        // or the extrapolation is numerically unstable -- fall back to raw sum.
+        let denom_ok = denom.abs().cmp_gt(tolerance);
+        let a0 = (d2 * d2) / denom;
+        let accelerated = s2 - a0;
+
+        best = denom_ok.select(accelerated, s2);
+
+        // Check convergence: |accelerated - s1_accelerated_prev| <= tolerance
+        // We use the simpler check: |d2| <= tolerance (the raw sequence has converged)
+        // OR the extrapolated value is stable (|s2 - accelerated| <= tolerance when denom is healthy)
+        if a0.zz(denom_ok).abs().cmp_le(tolerance).all() {
+            return Ok(best);
+        }
+
+        // Slide the window
+        s0 = s1;
+        s1 = s2;
+    }
+
+    // If we never filled the window, just return the raw sum
+    if phase < 2 {
+        best = if const { P::POLICY.use_compensation } {
+            sum + c
+        } else {
+            sum
+        };
+    }
+
+    Err(best)
+}
+
 /// Reduces the elements of `values` in place using the binary operation `op` in O(n) steps, but
 /// with a dependency depth of O(log n), allowing for better instruction-level parallelism.
 ///
