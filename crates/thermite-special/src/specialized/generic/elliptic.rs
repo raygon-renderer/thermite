@@ -384,27 +384,40 @@ where
 
     // x < y: atan(s)  ;  x > y: ln((sqrt(x) + sqrt(x-y))/sqrt(y)) = atanh(s). Both scaled by 1/sad.
     let num = d.cmp_gt(V::ZERO).select(s.atan_p::<P>(), neg_arg.ln_p::<P>());
-    let closed = if const { V::HAS_APPROX_RSQRT } { num * scale } else { num / scale };
+    let closed = if const { V::HAS_APPROX_RSQRT } {
+        num * scale
+    } else {
+        num / scale
+    };
 
     // Series for small |t|, where the closed forms cancel: S(t)/sqrt(x). S is univariate in t,
     // S(t) = 1 - t/3 + t^2/5 - ... ; evaluated leading-coefficient-first via poly_rev (Estrin + FMA).
     let t = d / x;
 
-    let series = t.poly_rev_p::<P, _>(&[
-        <E as FloatElement>::ConstRatio::<-1, 15>::VALUE,
-        <E as FloatElement>::ConstRatio::<1, 13>::VALUE,
-        <E as FloatElement>::ConstRatio::<-1, 11>::VALUE,
-        <E as FloatElement>::ConstRatio::<1, 9>::VALUE,
-        <E as FloatElement>::ConstRatio::<-1, 7>::VALUE,
-        <E as FloatElement>::ConstRatio::<1, 5>::VALUE,
-        <E as FloatElement>::ConstRatio::<-1, 3>::VALUE,
-        <E as FloatElement>::ConstRatio::<1, 1>::VALUE,
-    ]) * irx;
+    let mut res = closed;
 
     // |t| < 1/128 ~ 0.0078: series is accurate to <1e-16 with these 8 terms, and the closed
     // forms are already degrading there. Above it the closed forms are accurate. t == 0
     // (x == y) is covered by the series limit S(0) = 1.
-    t.abs().cmp_lt(c!(1 / 128)).select(series, closed)
+
+    let small = t.abs().cmp_lt(c!(1 / 128));
+
+    if const { P::POLICY.avoid_branching } || small.any() {
+        let series = t.poly_rev_p::<P, _>(&[
+            <E as FloatElement>::ConstRatio::<-1, 15>::VALUE,
+            <E as FloatElement>::ConstRatio::<1, 13>::VALUE,
+            <E as FloatElement>::ConstRatio::<-1, 11>::VALUE,
+            <E as FloatElement>::ConstRatio::<1, 9>::VALUE,
+            <E as FloatElement>::ConstRatio::<-1, 7>::VALUE,
+            <E as FloatElement>::ConstRatio::<1, 5>::VALUE,
+            <E as FloatElement>::ConstRatio::<-1, 3>::VALUE,
+            <E as FloatElement>::ConstRatio::<1, 1>::VALUE,
+        ]) * irx;
+
+        res = small.select(series, res);
+    }
+
+    res
 }
 
 /// Carlson symmetric integral of the third kind, `R_J(x, y, z, p)`, via duplication.
@@ -850,11 +863,16 @@ mod tests {
     // small-|t| series via R_C(4,4) = 1/2.
     #[test]
     fn carlson_rc_f32_rsqrt_path() {
-        let rc = |x: f32, y: f32| {
-            carlson_rc::<Precision, f32, _>(f32x4::splat(x), f32x4::splat(y)).extract::<0>() as f64
-        };
-        assert!(close(rc(1.0, 2.0), core::f64::consts::FRAC_PI_4, 1.0e-6), "R_C(1,2) = pi/4");
-        assert!(close(rc(2.0, 1.0), (1.0 + 2.0_f64.sqrt()).ln(), 1.0e-6), "R_C(2,1) = ln(1+sqrt2)");
+        let rc =
+            |x: f32, y: f32| carlson_rc::<Precision, f32, _>(f32x4::splat(x), f32x4::splat(y)).extract::<0>() as f64;
+        assert!(
+            close(rc(1.0, 2.0), core::f64::consts::FRAC_PI_4, 1.0e-6),
+            "R_C(1,2) = pi/4"
+        );
+        assert!(
+            close(rc(2.0, 1.0), (1.0 + 2.0_f64.sqrt()).ln(), 1.0e-6),
+            "R_C(2,1) = ln(1+sqrt2)"
+        );
         assert!(close(rc(4.0, 4.0), 0.5, 1.0e-6), "R_C(4,4) = 1/2 (series)");
     }
 
