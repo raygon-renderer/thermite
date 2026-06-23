@@ -1741,6 +1741,24 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// may optimize into certain other formulations.
     fn mix(self, a: Self, b: Self) -> Self;
 
+    /// Computes `$1 - x^2$` accurately, avoiding the cancellation a naive `1 - self * self`
+    /// suffers as `self` approaches `±1` (where the result is small but `self * self` is near 1).
+    ///
+    /// With hardware FMA this is `nmul_add(self, self, 1)`: the exact product `$x^2$` is formed
+    /// and subtracted from one with a single rounding. Without FMA it falls back to the factored
+    /// `$(1 - x)(1 + x)$`, also cancellation-free (`1 - self` is exact for `self` near 1 by
+    /// Sterbenz's lemma). Both keep full relative accuracy in the small result.
+    #[inline(always)]
+    fn one_minus_sq(self) -> Self {
+        if const { Self::HAS_TRUE_FMA } {
+            // FMA: 1 - self*self formed from the exact product with a single rounding.
+            self.nmul_add(self, Self::ONE)
+        } else {
+            // No FMA: factored difference of squares, cancellation-free near |self| = 1.
+            (Self::ONE - self) * (Self::ONE + self)
+        }
+    }
+
     /// Inhibit further LLVM auto-vectorization of code surrounding this call.
     ///
     /// LLVM sometimes tries to "vectorize the vectors" -- repacking

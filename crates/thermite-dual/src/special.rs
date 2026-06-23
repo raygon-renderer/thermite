@@ -61,6 +61,12 @@ impl<V: DualSpecialVector, const N: usize> SpecializedSpecialMath<Dual<V::Elemen
         todo!("Dual lgamma requires the digamma function (not provided by thermite-special)")
     }
 
+    // psi' = trigamma, which thermite-special does not provide
+    #[inline(always)]
+    fn digamma<P: Policy>(self) -> Self {
+        todo!("Dual digamma requires the trigamma function (not provided by thermite-special)")
+    }
+
     #[inline(always)]
     fn beta<P: Policy>(_a: Self, _b: Self) -> Self {
         todo!("Dual beta requires the digamma function (not provided by thermite-special)")

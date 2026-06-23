@@ -204,50 +204,50 @@ macro_rules! decl_u32xN {
             const MIN:  Self = Self { $($i: u32::MIN,)* };
             const MAX:  Self = Self { $($i: u32::MAX,)* };
 
- fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opiadd::<Self>(lhs, rhs) }
             }
- fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opisub::<Self>(lhs, rhs) }
             }
- fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opimul::<Self>(lhs, rhs) }
             }
             // Unsigned truncating division (matches Rust's /).
- fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opudiv::<Self>(lhs, rhs) }
             }
             // Unsigned remainder (matches Rust's %).
- fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opumod::<Self>(lhs, rhs) }
             }
 
- fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::U_MIN }, false>(lhs, rhs) }
             }
- fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::U_MAX }, false>(lhs, rhs) }
             }
 
             // Scalar reductions via direct field access - no permutes needed on GPU.
- fn min_element(value: Storage<Self>) -> u32 {
+            fn min_element(value: Storage<Self>) -> u32 {
                 Self::reduce(value, |a, b| if a < b { a } else { b })
             }
- fn max_element(value: Storage<Self>) -> u32 {
+            fn max_element(value: Storage<Self>) -> u32 {
                 Self::reduce(value, |a, b| if a > b { a } else { b })
             }
- fn sum_elements(value: Storage<Self>) -> u32 {
+            fn sum_elements(value: Storage<Self>) -> u32 {
                 Self::reduce(value, |a, b| a.wrapping_add(b))
             }
- fn prod_elements(value: Storage<Self>) -> u32 {
+            fn prod_elements(value: Storage<Self>) -> u32 {
                 Self::reduce(value, |a, b| a.wrapping_mul(b))
             }
- fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+            fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
                 Self::pairwise_sum_impl(lo, hi)
             }
 
- fn offset() -> Storage<Self> { Self::splat($N as u32) }
- fn indexed() -> Storage<Self> { Self { $($i: $idx as u32,)* } }
+            fn offset() -> Storage<Self> { Self::splat($N as u32) }
+            fn indexed() -> Storage<Self> { Self { $($i: $idx as u32,)* } }
         }
 
         #[thermite_macros::inline_always]

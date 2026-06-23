@@ -13,6 +13,8 @@ use thermite::{
     prelude::*,
 };
 
+use crate::RealSpecialMathWithPolicy as _;
+
 use super::*;
 
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpecialMath<f64> for V
@@ -186,7 +188,172 @@ where
 
     #[inline(always)]
     fn tgamma<P: Policy>(self) -> Self {
-        todo!()
+        let z = self;
+
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            // We have a good lgamma approximation, so use it for tgamma on lower precisions.
+            let (lgamma, sign) = z.lgamma_r_p::<P>();
+
+            // use min(P + 1, Average) precision here. We want decent precision,
+            // but not more than average.
+            return lgamma.exp_p::<ExtraPrecision<P>>() * sign;
+        }
+
+        let mut z = z.flush_denormals_p::<P>();
+
+        let orig_z = z;
+
+        let is_negative = z.is_negative();
+        let mut reflected = GenericMask::FALSY;
+
+        let mut res = Self::ONE;
+
+        // Reflect ALL negative values via Γ(z) = -π / (z*sin(πz)*Γ(|z|))
+        // This avoids the repeated-division recurrence which accumulates rounding error.
+        if const { P::POLICY.avoid_branching } || is_negative.any() {
+            reflected = is_negative;
+            let refl_res = z * z.sin_pi_p::<P>(); // z * sin(πz)
+            res = reflected.select(refl_res, res);
+            z = z.abs();
+        }
+
+        // Negative integer poles and ±0
+        let is_neg_int = is_negative & orig_z.cmp_eq(orig_z.floor()) & orig_z.cmp_ne(Self::ZERO);
+        let is_zero = orig_z.cmp_eq(Self::ZERO);
+
+        // Shift z ∈ (SQRT_EPSILON, 1) up by 1 via Γ(z) = Γ(z+1)/z.
+        // The Lanczos polynomial is fit for z >= 1; evaluating below that is the
+        // primary source of error in the (0, 1) range.
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let needs_shift = z.cmp_lt(Self::ONE) & z.cmp_ge(Self::SQRT_EPSILON);
+            res = needs_shift.select(res / z, res);
+            z = needs_shift.select(z + Self::ONE, z);
+        }
+
+        // Integers (positive, after reflection)
+
+        let mut is_int = GenericMask::FALSY;
+        let mut int_res = Self::ONE;
+
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let zf = z.floor();
+            // Cap at 172 - Γ overflows f64 beyond that, and this bounds the loop.
+            is_int = zf.cmp_eq(z) & zf.cmp_lt(Self::splat(172.0)) & !is_neg_int & !is_zero;
+
+            if thermite::unlikely(is_int.any()) {
+                let mut j = Self::ONE;
+                // Mask with is_int so non-integer lanes with large zf can't keep the loop alive.
+                let mut k = j.cmp_lt(zf) & is_int;
+
+                while k.any() {
+                    int_res = k.select(int_res * j, int_res);
+                    j += Self::ONE;
+                    k = j.cmp_lt(zf) & is_int;
+                }
+
+                if thermite::unlikely(is_int.all()) {
+                    return int_res;
+                }
+            }
+        }
+
+        // Full
+
+        let gh = Self::splat(const { LANCZOS_G - 0.5 });
+
+        // Uses the leading-term-first (reversed) Lanczos arrays - see LANCZOS_P_REV.
+        let lanczos_sum = z.poly_rev_p::<P, _>(&LANCZOS_P_REV) / z.poly_rev_p::<P, _>(&LANCZOS_Q_REV);
+
+        let zgh = z + gh;
+        let lzgh = zgh.ln_p::<P>();
+
+        // (z * lzfg) > ln(f64::MAX)
+        let very_large = (z * lzgh).cmp_gt(Self::splat(709.782712893383973096206318586483));
+
+        // only compute powf once
+        let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(Self::HALF, Self::splat(0.25)), z - Self::HALF));
+
+        // save a couple cycles by avoiding this division, but worst-case precision is slightly worse
+        let denom = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            lanczos_sum / zgh.exp_p::<P>()
+        } else {
+            lanczos_sum * (-zgh).exp_p::<P>()
+        };
+
+        let normal_res = very_large.select(h * h, h) * denom;
+
+        // Tiny
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            let is_tiny = z.cmp_lt(Self::SQRT_EPSILON);
+            let tiny_res = z.reciprocal_p::<P>() - Self::EULER_GAMMA;
+            res *= is_tiny.select(tiny_res, normal_res);
+        } else {
+            res *= normal_res;
+        }
+
+        // Edge cases: Γ(-int) = NaN, Γ(±0) = ±∞
+        let zero_res = is_negative.select(Self::NEG_INFINITY, Self::INFINITY);
+        let result = reflected.select(-Self::PI / res, is_int.select(int_res, res));
+        let mut result = is_neg_int.select(Self::NAN, result);
+
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                && matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
+            let is_subnormal = z.is_subnormal();
+
+            if thermite::unlikely(is_subnormal.any()) {
+                result = is_subnormal.select(Self::ONE / orig_z, result);
+            }
+        }
+
+        is_zero.select(zero_res, result)
+    }
+
+    #[inline(always)]
+    fn digamma<P: Policy>(self) -> Self {
+        // Asymptotic expansion coefficients for x >= 10 (17-digit precision, 53-bit mantissa).
+        // Coefficients from Boost.Math digamma_imp_large (BSL-1.0).
+        const P_LARGE: [f64; 8] = [
+            0.083333333333333333333333333333333333333333333333333,
+            -0.0083333333333333333333333333333333333333333333333333,
+            0.003968253968253968253968253968253968253968253968254,
+            -0.0041666666666666666666666666666666666666666666666667,
+            0.0075757575757575757575757575757575757575757575757576,
+            -0.021092796092796092796092796092796092796092796092796,
+            0.083333333333333333333333333333333333333333333333333,
+            -0.44325980392156862745098039215686274509803921568627,
+        ];
+
+        // Rational approximation on [1, 2]: digamma(x) = (x - root) * (Y + R(x-1)).
+        // 18-digit precision (53-bit mantissa). Coefficients from Boost.Math
+        // digamma_imp_1_2 (BSL-1.0).
+        // root = ROOTS[0] + ROOTS[1] + ROOTS[2], summed via staged subtraction for bits.
+        const Y: f64 = 0.99558162689208984;
+        const ROOTS: [f64; 3] = [
+            1569415565.0 / 1073741824.0,                 // / 2^30
+            (381566830.0 / 1073741824.0) / 1073741824.0, // / 2^60
+            0.9016312093258695918615325266959189453125e-19,
+        ];
+        const P_12: [f64; 6] = [
+            0.25479851061131551,
+            -0.32555031186804491,
+            -0.65031853770896507,
+            -0.28919126444774784,
+            -0.045251321448739056,
+            -0.0020713321167745952,
+        ];
+        const Q_12: [f64; 7] = [
+            1.0,
+            2.0767117023730469,
+            1.4606242909763515,
+            0.43593529692665969,
+            0.054151797245674225,
+            0.0021284987017821144,
+            -0.55789841321675513e-6,
+        ];
+
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, Y, &ROOTS, &P_LARGE, &P_12, &Q_12)
     }
 
     #[inline(always)]
@@ -241,20 +408,41 @@ where
 
 const LANCZOS_G: f64 = 6.024680040776729583740234375;
 
-const LANCZOS_P: [f64; 13] = [
-    23531376880.41075968857200767445163675473,
-    42919803642.64909876895789904700198885093,
-    35711959237.35566804944018545154716670596,
-    17921034426.03720969991975575445893111267,
-    6039542586.352028005064291644307297921070,
-    1439720407.311721673663223072794912393972,
-    248874557.8620541565114603864132294232163,
-    31426415.58540019438061423162831820536287,
-    2876370.628935372441225409051620849613599,
-    186056.2653952234950402949897160456992822,
-    8071.672002365816210638002902272250613822,
-    210.8242777515793458725097339207133627117,
+// `tgamma` evaluates the unscaled Lanczos sum with `poly_rev_p` (Horner from the
+// leading coefficient), which often optimizes better. `poly_rev_p` wants
+// leading-term-first order, so these are the canonical (constant-term-first)
+// arrays written out in reverse. `LANCZOS_Q` below is kept in constant-term-first
+// order for `lgamma_r`/`beta`, which consume it through `poly_rational_p`.
+const LANCZOS_P_REV: [f64; 13] = [
     2.506628274631000270164908177133837338626,
+    210.8242777515793458725097339207133627117,
+    8071.672002365816210638002902272250613822,
+    186056.2653952234950402949897160456992822,
+    2876370.628935372441225409051620849613599,
+    31426415.58540019438061423162831820536287,
+    248874557.8620541565114603864132294232163,
+    1439720407.311721673663223072794912393972,
+    6039542586.352028005064291644307297921070,
+    17921034426.03720969991975575445893111267,
+    35711959237.35566804944018545154716670596,
+    42919803642.64909876895789904700198885093,
+    23531376880.41075968857200767445163675473,
+];
+
+const LANCZOS_Q_REV: [f64; 13] = [
+    1.0,
+    66.0,
+    1925.0,
+    32670.0,
+    357423.0,
+    2637558.0,
+    13339535.0,
+    45995730.0,
+    105258076.0,
+    150917976.0,
+    120543840.0,
+    39916800.0,
+    0.0,
 ];
 
 const LANCZOS_Q: [f64; 13] = [
@@ -296,70 +484,142 @@ where
 {
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
+        // Branchless erfinv: a cheap Winitzki seed refined with Halley iterations
+        // against the (accurate) erfc, which is far friendlier to SIMD than the
+        // many-branch piecewise-rational approach.
+        //
+        // We solve erfc(x) = q for x >= 0, where q = 1 - |y|. The Newton/Halley
+        // residual erf(x) - |y| is evaluated as q - erfc(x): in the tail both
+        // terms are tiny, so their difference keeps full relative precision (the
+        // direct form erf(x) - |y| would cancel two ~1 values down to noise).
+        // Halley is cubic, so the ~1% Winitzki seed reaches full f64 in 2 steps.
+        const ALPHA: f64 = 0.147;
+        const RCP_PI_ALPHA_2: f64 = 4.330746750799873; // 2 / (pi * ALPHA)
+        const RCP_ALPHA: f64 = 1.0 / ALPHA;
+        const SQRT_PI_2: f64 = 0.8862269254527580136490837416706; // sqrt(pi) / 2 = 1 / erf'(0)
+
         let y = self.flush_denormals_p::<P>();
         let a = y.abs();
+        let q = Self::ONE - a; // 1 - |y|
+        let omsq = q * (Self::ONE + a); // 1 - y^2, computed without cancellation near |y| = 1
 
-        let w = -a.nmul_adde(a, V::ONE).ln_p::<P>();
+        // Winitzki seed (magnitude): sqrt(sqrt(t1^2 - ln(1-y^2)/alpha) - t1)
+        let lnv = omsq.ln_p::<P>(); // ln(1 - y^2) <= 0
+        let t1 = lnv.mul_adde(Self::HALF, Self::splat(RCP_PI_ALPHA_2));
+        let mut x = (t1.mul_adde(t1, lnv * Self::splat(-RCP_ALPHA)).sqrt() - t1).sqrt();
 
-        // https://www.desmos.com/calculator/yduhxx1ukm values extracted via JS console
-        let mut p0 = (w - thermite::const_splat!(f64: 2.5)).poly_rev_p::<P, _>(&[
-            -3.605158594283844e-12,
-            -1.1526825105953649e-11,
-            4.340759057762667e-10,
-            2.378447620687541e-9,
-            -7.498144332533493e-9,
-            1.565009183876413e-8,
-            4.691555466910589e-7,
-            -0.000003451228003698613,
-            -0.000005055953518603739,
-            0.00021818504236422313,
-            -0.001252754693878528,
-            -0.0041773392840529855,
-            0.2466402709383954,
-            1.501409350414994,
-        ]);
-
-        let w_big = w.cmp_ge(thermite::const_splat!(f64: 5.0)); // at around |x| > 0.99662533231, so unlikely
-
-        if P::POLICY.avoid_branching || thermite::unlikely(w_big.any()) {
-            let mut p1 = (w.sqrt() - thermite::const_splat!(f64: 3.0)).poly_rev_p::<P, _>(&[
-                -0.0000023620166848468398,
-                -0.00007449590390143766,
-                -0.0010722580888930223,
-                -0.009288117987439485,
-                -0.05369968979686224,
-                -0.21681459128064842,
-                -0.6192716293714041,
-                -1.2294848322739875,
-                -1.574375166164548,
-                -0.9258061028319879,
-                0.7600225853251197,
-                2.3489887347568135,
-                2.559965578101086,
-                1.5950004257395263,
-                1.5466942804733321,
-                2.914513093490991,
-            ]);
-
-            if P::POLICY.check_overflow {
-                p1 = a.cmp_eq(V::ONE).select(V::INFINITY, p1); // erfinv(x == 1) = inf
-                p1 = a.cmp_gt(V::ONE).select(V::NAN, p1); // erfinv(x > 1) = NaN
-            }
-
-            p0 = w_big.select(p1, p0);
+        // Halley refinement: x -= u / (1 + x*u), u = (erf(x) - |y|) / erf'(x)
+        //   erf(x) - |y| = q - erfc(x),   1/erf'(x) = (sqrt(pi)/2) * exp(x^2)
+        let steps = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            2
+        } else {
+            1
+        };
+        let mut i = 0;
+        while i < steps {
+            // erfc(x) already computes exp(-x^2); reuse it so exp(x^2) is just a reciprocal.
+            let mut exp_neg = Self::EMPTY;
+            let erfc = erf_d_internal::<Self, P, true, true>(x, &mut exp_neg);
+            let u = (q - erfc) * Self::splat(SQRT_PI_2) / exp_neg;
+            x -= u / x.mul_adde(u, Self::ONE);
+            i += 1;
         }
 
-        p0 * y
+        let mut res = x.copysign(y);
+
+        if const { P::POLICY.check_overflow } {
+            res = a.cmp_eq(Self::ONE).select(Self::INFINITY.copysign(y), res); // erfinv(+-1) = +-inf
+            res = a.cmp_gt(Self::ONE).select(Self::NAN, res); // out of domain
+        }
+
+        res
     }
 
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
-        todo!()
+        let mut z = self.flush_denormals_p::<P>();
+        let mut signum = Self::ONE;
+
+        let reflect = z.is_negative();
+
+        let mut t = Self::ONE;
+
+        if const { P::POLICY.avoid_branching } || reflect.any() {
+            let pix = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
+
+            signum |= reflect.select(pix.signed_zero(), signum);
+
+            t = reflect.select(pix.abs(), t);
+            z = z.abs();
+        }
+
+        let b = z - Self::HALF;
+        let g = Self::splat(LANCZOS_G);
+
+        let mut lanczos_sum = z.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q);
+
+        // Full A term
+        let mut a = (b + g).ln_p::<P>() - Self::ONE;
+
+        // tiny value handling
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            let is_not_tiny = z.cmp_ge(Self::SQRT_EPSILON);
+
+            // shove the tiny result into the log down below
+            lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - Self::EULER_GAMMA);
+
+            // force multiplier to zero for tiny case, allowing the modified
+            // lanczos sum and ln(t) to be combined for cheap
+            a = a.zz(is_not_tiny);
+        }
+
+        let c = (lanczos_sum * t).ln_p::<P>();
+
+        let res = a.mul_adde(b, c);
+
+        let y = reflect.select(Self::LN_PI - res, res);
+
+        (y, signum)
     }
 
+    /// Uses the algorithm from Peter John Acklam, sourced from here:
+    /// <https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/>
     #[inline(always)]
     fn probit<P: Policy>(self) -> Self {
-        todo!()
+        const A: [f64; 6] = [
+            2.506628277459239e+00,
+            -3.066479806614716e+01,
+            1.383577518672690e+02,
+            -2.759285104469687e+02,
+            2.209460984245205e+02,
+            -3.969683028665376e+01,
+        ];
+        const B: [f64; 6] = [
+            1.0,
+            -1.328068155288572e+01,
+            6.680131188771972e+01,
+            -1.556989798598866e+02,
+            1.615858368580409e+02,
+            -5.447609879822406e+01,
+        ];
+        const C: [f64; 6] = [
+            2.938163982698783e+00,
+            4.374664141464968e+00,
+            -2.549732539343734e+00,
+            -2.400758277161838e+00,
+            -3.223964580411365e-01,
+            -7.784894002430293e-03,
+        ];
+        const D: [f64; 5] = [
+            1.0,
+            3.754408661907416e+00,
+            2.445134137142996e+00,
+            3.224671290700398e-01,
+            7.784695709041462e-03,
+        ];
+
+        // f64: refine the Acklam estimate with one Halley step (REFINE = true).
+        generic::probit::probit_acklam::<P, _, _, true>(self, &A, &B, &C, &D)
     }
 
     // same form as f32

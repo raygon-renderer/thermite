@@ -13,6 +13,26 @@ use thermite::{
 
 pub mod specialized;
 
+use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
+
+/// Elliptic integral request structs and the traits they implement:
+///
+/// - Carlson symmetric integrals (for [`SpecialMath::carlson`]): [`CarlsonRf`](elliptic::CarlsonRf),
+///   [`CarlsonRc`](elliptic::CarlsonRc), [`CarlsonRd`](elliptic::CarlsonRd), [`CarlsonRj`](elliptic::CarlsonRj),
+///   [`CarlsonRg`](elliptic::CarlsonRg), implementing [`CarlsonKind`].
+/// - Legendre integrals (for [`SpecialMath::ellint`]): [`EllintK`](elliptic::EllintK)/[`EllintF`](elliptic::EllintF),
+///   [`EllintE`](elliptic::EllintE)/[`EllintEInc`](elliptic::EllintEInc),
+///   [`EllintD`](elliptic::EllintD)/[`EllintDInc`](elliptic::EllintDInc),
+///   [`EllintPi`](elliptic::EllintPi)/[`EllintPiInc`](elliptic::EllintPiInc), implementing
+///   [`EllipticKind`]. Completeness is encoded by the struct - a complete integral has no `phi` field.
+pub mod elliptic {
+    pub use crate::specialized::{CarlsonKind, CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj};
+
+    pub use crate::specialized::{
+        EllintD, EllintDInc, EllintE, EllintEInc, EllintF, EllintK, EllintPi, EllintPiInc, EllipticKind,
+    };
+}
+
 macro_rules! decl_math {
     ($(
         $(#[$trait_meta:meta])*
@@ -20,7 +40,18 @@ macro_rules! decl_math {
             $(#[$meta:meta])*
             fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
                 $(where [ $($where_clause:tt)* ])?;
-        )*}
+        )*
+        // Optional block of "kind-dispatched" methods: a single request-struct argument carrying
+        // the operation's data (e.g. `CarlsonRf { x, y, z }`). The struct's `eval` (a CarlsonKind /
+        // EllipticKind impl) does the work; this generates the full trait family (policy + default +
+        // dispatched vector impl + scalar) around it. Because the struct's element backend
+        // (EllipticEval) covers both `Vector<R>` and scalar floats, the same bound works at the
+        // scalar layer - no Unwrap wrapping needed here.
+        $(@kinds {$(
+            $(#[$kmeta:meta])*
+            fn $kname:ident : $ktrait:path;
+        )*})?
+        }
     )*) => {paste::paste! {$(
         #[doc = "" $trait " Math functions for floating-point vectors with customizable policies.\n\n"]
         #[doc = "Each method has a `_p`-suffixed variant in this trait that accepts a leading `P: Policy` generic.\n\n"]
@@ -31,7 +62,11 @@ macro_rules! decl_math {
         pub trait [<$trait MathWithPolicy>]: $($($bound +)+)? {$(
             $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
-        )*}
+        )*
+        $($(
+            $(#[$kmeta])* fn [<$kname _p>]<P: Policy, K: $ktrait<Output = Self>>(kind: K) -> Self;
+        )*)?
+        }
 
         #[doc = "" $trait " Math functions for floating-point vectors using the default policy.\n\n"]
         #[doc = "Implementors of [`" $trait "MathWithPolicy`] automatically implement this trait.\n\n"]
@@ -43,7 +78,12 @@ macro_rules! decl_math {
             $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*}
+        )*
+        $($(
+            $(#[$kmeta])* #[inline(always)] fn $kname<K: $ktrait<Output = Self>>(kind: K) -> Self
+            { [<$trait MathWithPolicy>]::[<$kname _p>]::<DefaultPolicy, K>(kind) }
+        )*)?
+        }
 
         impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
 
@@ -61,7 +101,19 @@ macro_rules! decl_math {
             $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { V::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*})*
+        )*
+        $($(
+            // Kind methods delegate to the request struct's own `eval`; `#[dispatch]` wraps this in
+            // the per-ISA trampolines, so `eval`'s inner Carlson/AGM work runs under target_feature.
+            #[cfg(not(feature = "disable_dispatch"))]
+            $(#[$kmeta])* #[inline(always)] fn [<$kname _p>]<P: Policy, K: $ktrait<Output = Self>>(kind: K) -> Self
+            { kind.eval::<P>() }
+
+            #[cfg(feature = "disable_dispatch")]
+            $(#[$kmeta])* #[skip_dispatch] #[inline(always)] fn [<$kname _p>]<P: Policy, K: $ktrait<Output = Self>>(kind: K) -> Self
+            { kind.eval::<P>() }
+        )*)?
+        })*
 
         #[doc = "Aggregate of all scalar special-math traits with customizable policies."]
         #[doc = ""]
@@ -87,7 +139,12 @@ macro_rules! decl_math {
         pub trait ScalarSpecialMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
              $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
-        )*)*}
+        )*
+        $($(
+            $(#[$kmeta])* fn [<scalar_ $kname _p>]<P: Policy, K: WrapTo>(kind: K) -> Self
+            where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>;
+        )*)?
+        )*}
 
         #[doc = "Aggregate of all scalar special-math traits using the default policy."]
         #[doc = ""]
@@ -114,7 +171,13 @@ macro_rules! decl_math {
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { ScalarSpecialMathWithPolicy::[<scalar_ $name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*)*}
+        )*
+        $($(
+            $(#[$kmeta])* #[inline(always)] fn [<scalar_ $kname>]<K: WrapTo>(kind: K) -> Self
+            where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>
+            { ScalarSpecialMathWithPolicy::[<scalar_ $kname _p>]::<DefaultPolicy, K>(kind) }
+        )*)?
+        )*}
 
         impl<M> ScalarSpecialMath for M where M: ScalarSpecialMathWithPolicy {}
 
@@ -140,7 +203,15 @@ macro_rules! decl_math {
 
                 Unwrap::unwrap(res)
             }
-        )*)*}
+        )*
+        $($(
+            // Kind methods: wrap the scalar request into its width-1 vector form (WrapTo), run the
+            // vector-only `eval`, then unwrap the scalar result. The backend stays vector-only.
+            $(#[$kmeta])* #[skip_dispatch] #[inline(always)] fn [<scalar_ $kname _p>]<P: Policy, K: WrapTo>(kind: K) -> Self
+            where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>
+            { Unwrap::unwrap(<K::Wrapped as Unwrap>::wrap(kind).eval::<P>()) }
+        )*)?
+        )*}
     }};
 
     // rename `self` to `this`. Requires an existing ident to bind to.
@@ -207,6 +278,21 @@ decl_math! {
 
         /// Computes the natural log of the Gamma function (`$\ln|\Gamma(x)|$`) for any real input, for each value in a vector.
         fn lgamma[][](self: Self) -> Self;
+
+        /// Computes the digamma function `$\psi(x) = \frac{\mathrm{d}}{\mathrm{d}x}\ln\Gamma(x) = \frac{\Gamma'(x)}{\Gamma(x)}$`
+        /// for any real input, for each value in a vector.
+        ///
+        /// The argument is handled in three regimes:
+        ///
+        /// * For `x >= 10`, an asymptotic expansion in `$1/x^2$` is used.
+        /// * For smaller `x`, the recurrence `$\psi(x) = \psi(x+1) - 1/x$` shifts the argument into
+        ///   `[1, 2]`, where a rational minimax approximation `$\psi(x) = (x - x_0)(Y + R(x-1))$` is used
+        ///   (`$x_0$` is the positive root of `$\psi$`).
+        /// * For `x <= -1`, the reflection formula `$\psi(1-x) = \psi(x) + \pi\cot(\pi x)$` is applied.
+        ///
+        /// **NOTE**: The digamma function is not defined at zero or the negative integers; those inputs
+        /// yield NaN when overflow checking is enabled.
+        fn digamma[][](self: Self) -> Self;
 
         /// Computes the Beta function `$\mathrm{B}(x, y)$`
         fn beta[][](self: Self, y: Self) -> Self;
@@ -290,6 +376,30 @@ decl_math! {
 
         /// Computes the generalized exponential integral `E_n(x)` for integer order `n`.
         fn expint[const N: usize][N](self: Self) -> Self;
+
+        @kinds {
+            /// Carlson symmetric elliptic integral, selected by a [`CarlsonKind`] request struct
+            /// with named fields - the arity (and which argument is the parameter / repeated one)
+            /// is fixed per kind, so the wrong shape is a compile error.
+            ///
+            /// ```rust,ignore
+            /// let rf = V::carlson(CarlsonRf { x, y, z });
+            /// let rj = V::carlson_p::<Precision, _>(CarlsonRj { x, y, z, p });
+            /// ```
+            fn carlson: CarlsonKind;
+
+            /// Legendre elliptic integral, selected by an [`EllipticKind`] request struct. Each
+            /// form ([`EllintK`](elliptic::EllintK)/[`EllintF`](elliptic::EllintF)/[`EllintE`](elliptic::EllintE)/
+            /// [`EllintEInc`](elliptic::EllintEInc)/[`EllintD`](elliptic::EllintD)/[`EllintDInc`](elliptic::EllintDInc)/
+            /// [`EllintPi`](elliptic::EllintPi)/[`EllintPiInc`](elliptic::EllintPiInc)) carries exactly
+            /// its own arguments; completeness is encoded by whether the struct has a `phi` field.
+            ///
+            /// ```rust,ignore
+            /// let k_int = V::ellint(EllintK { k });                       // K(k)
+            /// let e_inc = V::ellint_p::<Precision, _>(EllintEInc { phi, k }); // E(phi, k)
+            /// ```
+            fn ellint: EllipticKind;
+        }
     }
 
     /// Special math functions that are only defined for real-valued floating-point vectors.
@@ -380,7 +490,7 @@ decl_math! {
     /// These exist for *single-value* real numbers (`f32`, `f64`, `Compensated`, ...) where the
     /// analytic derivative is a useful, cheaply-shared byproduct of the value. They are **not**
     /// implemented for derivative-carrying numbers such as `Dual`: an automatic-differentiation
-    /// type already produces the derivative from the plain value form (e.g. [`gelu`](SpecialMath::gelu)),
+    /// type already produces the derivative from the plain value form (e.g. [`gelu`](RealSpecialMath::gelu)),
     /// so the bundled `_d` derivative would be redundant work at the wrong level of abstraction.
     ///
     /// Each `*_d` method mirrors the like-named value-only function in [`SpecialMath`] /

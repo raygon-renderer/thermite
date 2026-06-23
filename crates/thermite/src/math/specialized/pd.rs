@@ -717,8 +717,8 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
 
     let blend = x.cmp_gt(crate::const_splat!(f64: SQRT_2 * 0.5));
 
-    x = blend.select(x, x + x); // x = x.conditional_add(x, !blend);
-    fe = blend.select(fe + V::ONE, fe); // fe = fe.conditional_add(V::ONE, blend);
+    x = x.add_c(!blend, x);
+    fe = fe.add_c(blend, V::ONE);
 
     let xp1 = x - V::ONE;
 

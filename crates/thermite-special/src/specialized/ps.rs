@@ -383,6 +383,41 @@ where
     }
 
     #[inline(always)]
+    fn digamma<P: Policy>(self) -> Self {
+        // Asymptotic expansion coefficients for x >= 10 (9-digit precision, 24-bit mantissa).
+        // Coefficients from Boost.Math digamma_imp_large (BSL-1.0).
+        const P_LARGE: [f32; 3] = [
+            0.083333333333333333333333333333333333333333333333333,
+            -0.0083333333333333333333333333333333333333333333333333,
+            0.003968253968253968253968253968253968253968253968254,
+        ];
+
+        // Rational approximation on [1, 2]: digamma(x) = (x - root) * (Y + R(x-1)).
+        // 9-digit precision (24-bit mantissa). Coefficients from Boost.Math
+        // digamma_imp_1_2 (BSL-1.0).
+        // root = ROOTS[0] + ROOTS[1], summed via staged subtraction for bits.
+        const Y: f32 = 0.99558162689208984;
+        const ROOTS: [f32; 2] = [
+            1532632.0 / 1048576.0, // / 2^20
+            0.3700660185912626595423257213284682051735604e-6,
+        ];
+        const P_12: [f32; 4] = [
+            0.25479851023250261,
+            -0.44981331915268368,
+            -0.43916936919946835,
+            -0.061041765350579073,
+        ];
+        const Q_12: [f32; 4] = [
+            0.1e1,
+            0.15890202430554952e1,
+            0.65341249856146947,
+            0.63851690523355715e-1,
+        ];
+
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, Y, &ROOTS, &P_LARGE, &P_12, &Q_12)
+    }
+
+    #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
         let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
 
@@ -813,7 +848,7 @@ where
     }
 
     /// Uses the algorithm from Peter John Acklam, sourced from here:
-    /// https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/
+    /// <https://web.archive.org/web/20151030215612/http://home.online.no/~pjacklam/notes/invnorm/>
     fn probit<P: Policy>(self) -> Self {
         const A: [f32; 6] = [
             2.506628277459239e+00,
@@ -850,20 +885,8 @@ where
             7.784695709041462e-03,
         ];
 
-        let p = self.min(V::ONE - self); // reflect to (0, 0.5]
-        let is_tail = p.cmp_lt(thermite::const_splat!(f32: 0.02425)); // lower tail if p < 0.02425, upper tail if p > 0.97575
-
-        let q = p - V::HALF;
-        let mut y = q * (q * q).poly_rational_p::<P, _, _>(&A, &B);
-
-        if is_tail.any() {
-            let q = (-V::TWO * p.ln_p::<P>()).sqrt();
-            let t = q.poly_rational_p::<P, _, _>(&C, &D);
-
-            y = is_tail.select(t, y);
-        }
-
-        y.copysign(self - V::HALF)
+        // f32 is at its precision limit without refinement (REFINE = false).
+        generic::probit::probit_acklam::<P, _, _, false>(self, &A, &B, &C, &D)
     }
 
     #[inline(always)]

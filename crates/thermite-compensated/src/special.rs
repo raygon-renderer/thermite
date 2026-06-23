@@ -420,6 +420,10 @@ where
         Self::lgamma_r::<P>(self).0
     }
 
+    fn digamma<P: Policy>(self) -> Self {
+        todo!()
+    }
+
     fn bessel_j<P: Policy, const N: usize>(self) -> Self {
         todo!()
     }

@@ -307,54 +307,54 @@ macro_rules! decl_f32xN {
             const MIN:  Self = Self { $($f: f32::MIN,)* };
             const MAX:  Self = Self { $($f: f32::MAX,)* };
 
- fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfadd::<Self>(lhs, rhs) }
             }
- fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfsub::<Self>(lhs, rhs) }
             }
- fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfmul::<Self>(lhs, rhs) }
             }
- fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfdiv::<Self>(lhs, rhs) }
             }
             // OpFRem: truncating remainder (matches Rust's %)
- fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::op_opfrem::<Self>(lhs, rhs) }
             }
 
- fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::F_MIN }, false>(lhs, rhs) }
             }
- fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+            fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                 unsafe { arch::glsl_op2::<Self, Self, Self, { arch::glsl::F_MAX }, false>(lhs, rhs) }
             }
 
- fn scale(value: Storage<Self>, factor: Self::Element) -> Storage<Self> {
+            fn scale(value: Storage<Self>, factor: Self::Element) -> Storage<Self> {
                 unsafe { arch::op_opvectortimesscalar::<Storage<Self>, f32>(value, factor) }
             }
 
             // Scalar reductions via our unrolled field-level reduce/fold.
- fn min_element(value: Storage<Self>) -> f32 {
+            fn min_element(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| if a < b { a } else { b })
             }
- fn max_element(value: Storage<Self>) -> f32 {
+            fn max_element(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| if a > b { a } else { b })
             }
- fn sum_elements(value: Storage<Self>) -> f32 {
+            fn sum_elements(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| a + b)
             }
- fn prod_elements(value: Storage<Self>) -> f32 {
+            fn prod_elements(value: Storage<Self>) -> f32 {
                 Self::reduce(value, |a, b| a * b)
             }
- fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+            fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
                 Self::pairwise_sum_impl(lo, hi)
             }
 
             // Lane count as a splat; 0.0, 1.0, ... per lane.
- fn offset() -> Storage<Self> { Self::splat($N as f32) }
- fn indexed() -> Storage<Self> { Self { $($f: $idx as f32,)* } }
+            fn offset() -> Storage<Self> { Self::splat($N as f32) }
+            fn indexed() -> Storage<Self> { Self { $($f: $idx as f32,)* } }
         }
 
         #[thermite_macros::inline_always]

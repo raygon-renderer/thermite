@@ -1572,8 +1572,8 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
     let blend = x.cmp_gt(crate::const_splat!(f32: SQRT_2 * 0.5));
 
-    x = blend.select(x, x + x); // x.conditional_add(x, !blend)
-    e = blend.select(e + V::SignedBits::ONE, e); // e.conditional_add(V::SignedBits::ONE, blend)
+    x = x.add_c(!blend, x);
+    e = e.add_c(blend.cast(), V::SignedBits::ONE);
 
     let fe: V = e.cast();
 
