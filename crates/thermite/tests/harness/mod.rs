@@ -118,7 +118,16 @@ macro_rules! impl_diff_float {
                     return got.is_nan() && want.is_nan();
                 }
                 match tol {
-                    Tol::Exact | Tol::ExactOrNan => got.to_bits() == want.to_bits(),
+                    Tol::Exact => got.to_bits() == want.to_bits(),
+                    // Relaxed (non-strict) min/max may return +0.0 or -0.0 for an
+                    // opposite-signed-zero input pair (impl-defined - e.g. wasm
+                    // `f32x4_relaxed_min`); accept either, unless `strict_ieee754`
+                    // pins the deterministic result. (`Exact`, used by copysign /
+                    // signum, still distinguishes the sign of zero.)
+                    Tol::ExactOrNan => {
+                        (!cfg!(feature = "strict_ieee754") && got == 0.0 && want == 0.0)
+                            || got.to_bits() == want.to_bits()
+                    }
                     Tol::Ulp(n) => {
                         if got == want {
                             return true;

@@ -1107,12 +1107,14 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     const HAS_TRUE_SHIFTV: bool;
 
     #[conditional] fn shrv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
-        // Scalar fallback
+        // Scalar fallback. `shrv` is a *logical* (zero-fill) shift, so use
+        // `unsigned_shr`: a plain `>>` on a signed element arithmetic-shifts, which
+        // is `srav`, not `shrv`. (Backends with a hardware variable shift override this.)
         for (r, s) in Self::as_array_mut(&mut value)
             .iter_mut()
             .zip(<Self::Unsigned as Register>::as_array(&shifts))
         {
-            *r = *r >> *s;
+            *r = r.logical_shr(*s);
         }
 
         value
@@ -1388,14 +1390,18 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
         let is_neg = Self::is_negative(value);
         let is_zero = Self::eq(value, Self::ZERO);
 
+        // `blendv(mask, on_false, on_true)` selects `on_true` where the mask is set:
+        // negative -> -1, otherwise +1 (the zero case is fixed up below).
+        let sign = Self::blendv(is_neg, Self::ONE, Self::NEG_ONE);
+
         if const { Self::HAS_EQUAL_SIZE_MASK } {
             // this is almost certainly zero-cost on such platforms
             let is_zero = Self::from_mask(is_zero);
 
             // so use a bitandnot to zero out the result when is_zero is true
-            Self::bitandnot(is_zero, Self::blendv(is_neg, Self::NEG_ONE, Self::ONE))
+            Self::bitandnot(is_zero, sign)
         } else {
-            Self::blendv(is_zero, Self::ZERO, Self::blendv(is_neg, Self::NEG_ONE, Self::ONE))
+            Self::blendv(is_zero, sign, Self::ZERO)
         }
     }
 

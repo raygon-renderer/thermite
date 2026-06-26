@@ -5,7 +5,7 @@
 //! register emulates a 3-lane vector inside a 4-lane register; only the first
 //! three lanes are meaningful, so only those are checked). Pure arithmetic /
 //! bitwise / rounding ops are bit-exact (NaN-aware via the harness).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -18,9 +18,6 @@ use thermite::simd::Simd3A;
 use thermite::vector::ops::DivMasked;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// Binary op: `vop` on vectors vs `sop` per lane in Rust.
 macro_rules! bin {
@@ -993,6 +990,20 @@ macro_rules! sw_swizzle {
     }};
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 reduced_suite!(v3, X86V3, "x86_v3");
 reduced_suite!(v2, X86V2, "x86_v2");
 reduced_suite!(v1, X86V1, "x86_v1");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+reduced_suite!(wasm, Wasm, "wasm");
+}

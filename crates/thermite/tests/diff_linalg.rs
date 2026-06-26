@@ -8,7 +8,7 @@
 //! make the relative error meaningless. Pure lane-routing ops (transpose,
 //! zero4/one4) are bit-exact. 3D ops only check the first three lanes (the 4th
 //! is documented as unused / unspecified).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -155,16 +155,29 @@ macro_rules! linalg_suite {
     };
 }
 
+linalg_suite!(scalar_f32, Scalar, f32x4, f32, 2.0e-3, "scalar f32x4");
+linalg_suite!(scalar_f64, Scalar, f64x4, f64, 1.0e-9, "scalar f64x4");
+
+use thermite::backend::scalar::Scalar;
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 linalg_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-3, "x86_v3 f32x4");
 linalg_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-9, "x86_v3 f64x4");
 linalg_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-3, "x86_v2 f32x4");
 linalg_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-9, "x86_v2 f64x4");
 linalg_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-3, "x86_v1 f32x4");
 linalg_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-9, "x86_v1 f64x4");
-linalg_suite!(scalar_f32, Scalar, f32x4, f32, 2.0e-3, "scalar f32x4");
-linalg_suite!(scalar_f64, Scalar, f64x4, f64, 1.0e-9, "scalar f64x4");
+}
 
-use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+linalg_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-3, "wasm f32x4");
+linalg_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-9, "wasm f64x4");
+}

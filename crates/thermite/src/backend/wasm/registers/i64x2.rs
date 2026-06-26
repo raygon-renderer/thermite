@@ -358,7 +358,7 @@ impl SignedRegister for I64x2Wasm {
     }
 
     fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
-        arch::i64x2_gt(value, Self::ZERO)
+        arch::i64x2_ge(value, Self::ZERO)
     }
 
     fn abs(value: Storage<Self>) -> Storage<Self> {

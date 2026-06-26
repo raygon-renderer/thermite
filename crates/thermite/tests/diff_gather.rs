@@ -8,7 +8,7 @@
 //! One generic `fn check_gather::<V>()` over any `GenericVector`, instantiated
 //! per backend/width (Scalar + V2 + V3). Indices are the vector's own
 //! `Unsigned` type; values are bit-preserving, so NaN lanes must match too.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -21,9 +21,6 @@ use thermite::simd::Simd;
 use thermite::vector::{GenericVector, VectorIndices};
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 const TRIALS: usize = 256;
 
@@ -144,7 +141,24 @@ macro_rules! gather_suite {
     };
 }
 
+// scalar is the always-available oracle; on wasm gather is the scalar-fallback
+// IndexableRegister path (no hw gather), which still validates the API.
+gather_suite!(scalar, Scalar, "scalar");
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 gather_suite!(v3, X86V3, "x86_v3");
 gather_suite!(v2, X86V2, "x86_v2");
 gather_suite!(v1, X86V1, "x86_v1");
-gather_suite!(scalar, Scalar, "scalar");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+gather_suite!(wasm, Wasm, "wasm");
+}

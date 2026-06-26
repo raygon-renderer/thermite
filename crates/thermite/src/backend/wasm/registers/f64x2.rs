@@ -272,7 +272,7 @@ impl NumericRegister for F64x2Wasm {
     fn min_element(value: Storage<Self>) -> Self::Element {
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_64x2!(f value; f64x2_pmin f64x2_pmin)
+                reduce_64x2!(f value; f64x2_min f64x2_min)
             }
             _ => reduce_64x2!(f value; f64x2_relaxed_min f64x2_relaxed_min),
         }
@@ -281,7 +281,7 @@ impl NumericRegister for F64x2Wasm {
     fn max_element(value: Storage<Self>) -> Self::Element {
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_64x2!(f value; f64x2_pmax f64x2_pmax)
+                reduce_64x2!(f value; f64x2_max f64x2_max)
             }
             _ => reduce_64x2!(f value; f64x2_relaxed_max f64x2_relaxed_max),
         }
@@ -333,7 +333,7 @@ impl NumericRegister for F64x2Wasm {
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         cfg_select! {
             feature = "strict_ieee754" => {
-                arch::f64x2_pmin(lhs, rhs)
+                arch::f64x2_min(lhs, rhs)
             }
             _ => arch::f64x2_relaxed_min(lhs, rhs),
         }
@@ -342,7 +342,7 @@ impl NumericRegister for F64x2Wasm {
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         cfg_select! {
             feature = "strict_ieee754" => {
-                arch::f64x2_pmax(lhs, rhs)
+                arch::f64x2_max(lhs, rhs)
             }
             _ => arch::f64x2_relaxed_max(lhs, rhs),
         }

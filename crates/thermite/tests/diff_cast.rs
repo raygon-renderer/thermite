@@ -11,15 +11,12 @@
 //! out-of-range / NaN behaviour, where the x86 hardware path returns the
 //! "indefinite" integer instead of saturating like `as`, is a documented
 //! divergence captured (ignored) in `mod divergence`.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
 use harness::Tol;
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 use thermite::simd::Simd;
 
 // identity prep (int→int, int→float, float→float: scalar uses the same `as`,
@@ -114,6 +111,13 @@ macro_rules! cast_suite {
     };
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
+
 mod gate {
     use super::*;
     cast_suite!(v3, X86V3, "x86_v3");
@@ -175,4 +179,72 @@ mod divergence {
             Tol::Exact
         );
     }
+}
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+
+mod gate {
+    use super::*;
+    cast_suite!(wasm, Wasm, "wasm");
+}
+
+// Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
+// path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
+// divergence, not auto-failed - see TESTING.md.
+mod divergence {
+    use super::*;
+
+    #[test]
+    #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
+                indefinite integer instead of saturating like `as` (scalar). \
+                The general `cast` contract is 'like as'; backend needs a clamp or \
+                the `_limited` precondition must be documented."]
+    fn float_to_int_out_of_range() {
+        cast_diff!(
+            "wasm f64x4->i64x4 OOR",
+            <Wasm as Simd>::f64x4,
+            <Wasm as Simd>::i64x4,
+            <Scalar as Simd>::f64x4,
+            <Scalar as Simd>::i64x4,
+            f64,
+            |x| x,
+            Tol::Exact
+        );
+        cast_diff!(
+            "wasm f32x4->i32x4 OOR",
+            <Wasm as Simd>::f32x4,
+            <Wasm as Simd>::i32x4,
+            <Scalar as Simd>::f32x4,
+            <Scalar as Simd>::i32x4,
+            f32,
+            |x| x,
+            Tol::Exact
+        );
+    }
+
+    #[test]
+    #[ignore = "DIVERGENCE: f64→u64 `cast` routes to a `_limited` polyfill \
+                which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
+                instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
+                but the cast yields 3, and values ≥ 2^52 are corrupted. \
+                f64→i64 is full-range-correct and truncating; f64→u64 needs an \
+                equivalent path or a documented precondition."]
+    fn f64_to_u64_nonconforming() {
+        // (b) rounds vs truncates, even for tiny in-range values.
+        cast_diff!(
+            "wasm f64x4->u64x4 frac",
+            <Wasm as Simd>::f64x4,
+            <Wasm as Simd>::u64x4,
+            <Scalar as Simd>::f64x4,
+            <Scalar as Simd>::u64x4,
+            f64,
+            |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
+            Tol::Exact
+        );
+    }
+}
 }

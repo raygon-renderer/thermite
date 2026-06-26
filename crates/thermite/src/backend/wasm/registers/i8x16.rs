@@ -308,7 +308,7 @@ impl SignedRegister for I8x16Wasm {
         arch::i8x16_shr(value, 7)
     }
     fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
-        arch::i8x16_gt(value, Self::ZERO)
+        arch::i8x16_ge(value, Self::ZERO)
     }
     fn abs(value: Storage<Self>) -> Storage<Self> {
         arch::i8x16_abs(value)

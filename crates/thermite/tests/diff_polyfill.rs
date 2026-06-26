@@ -13,7 +13,7 @@
 //!
 //! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
 //! in both; the regression tests cover both backends.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -24,10 +24,6 @@ use thermite::register::{
     SignedRegister as _, UnsignedIntegerRegister as _,
 };
 use thermite::simd::Simd;
-
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 // ===========================================================================
 // Verified-correct polyfills - always-green.
@@ -105,6 +101,13 @@ macro_rules! for_float {
         oracle_unary!($l, $ut, $e, fract, |x| x - x.trunc(), Tol::Exact);
     }};
 }
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 
 mod correct {
     use super::*;
@@ -774,4 +777,39 @@ mod fixed {
         check!("v2", X86V2);
         check!("v3", X86V3);
     }
+}
+}
+
+// wasm: exercise the same backend-generic polyfill macros on Wasm's native types
+// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2) - validates wasm's count_ones/leading_zeros/
+// swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+
+mullo_for! {
+    i32x4: Wasm, i32, "wasm i32x4"; i64x2: Wasm, i64, "wasm i64x2";
+    u32x4: Wasm, u32, "wasm u32x4"; u64x2: Wasm, u64, "wasm u64x2";
+}
+popcount_for! {
+    i32x4: Wasm, i32, "wasm i32x4"; u32x4: Wasm, u32, "wasm u32x4";
+    i64x2: Wasm, i64, "wasm i64x2"; u64x2: Wasm, u64, "wasm u64x2";
+}
+bitperm_for! {
+    i32x4: Wasm, i32, "wasm i32x4"; u32x4: Wasm, u32, "wasm u32x4";
+    i64x2: Wasm, i64, "wasm i64x2"; u64x2: Wasm, u64, "wasm u64x2";
+}
+
+#[test]
+fn lztz_signed_float() {
+    for_lztz!("wasm i32x4", <Wasm as Simd>::i32x4, i32);
+    for_lztz!("wasm u32x4", <Wasm as Simd>::u32x4, u32);
+    for_lztz!("wasm i64x2", <Wasm as Simd>::i64x2, i64);
+    for_lztz!("wasm u64x2", <Wasm as Simd>::u64x2, u64);
+    for_signed!("wasm i32x4", <Wasm as Simd>::i32x4, i32, i64);
+    for_signed!("wasm i64x2", <Wasm as Simd>::i64x2, i64, i128);
+    for_float!("wasm f32x4", <Wasm as Simd>::f32x4, f32);
+    for_float!("wasm f64x2", <Wasm as Simd>::f64x2, f64);
+}
 }

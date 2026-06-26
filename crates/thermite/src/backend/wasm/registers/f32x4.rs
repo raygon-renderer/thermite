@@ -254,7 +254,7 @@ impl NumericRegister for F32x4Wasm {
     fn min_element(value: Storage<Self>) -> Self::Element {
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_32x4!(f value; f32x4_pmin f32x4_pmin)
+                reduce_32x4!(f value; f32x4_min f32x4_min)
             }
             _ => reduce_32x4!(f value; f32x4_relaxed_min f32x4_relaxed_min),
         }
@@ -263,7 +263,7 @@ impl NumericRegister for F32x4Wasm {
     fn max_element(value: Storage<Self>) -> Self::Element {
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_32x4!(f value; f32x4_pmax f32x4_pmax)
+                reduce_32x4!(f value; f32x4_max f32x4_max)
             }
             _ => reduce_32x4!(f value; f32x4_relaxed_max f32x4_relaxed_max),
         }
@@ -315,7 +315,7 @@ impl NumericRegister for F32x4Wasm {
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         cfg_select! {
             feature = "strict_ieee754" => {
-                arch::f32x4_pmin(lhs, rhs)
+                arch::f32x4_min(lhs, rhs)
             }
             _ => arch::f32x4_relaxed_min(lhs, rhs),
         }
@@ -324,7 +324,7 @@ impl NumericRegister for F32x4Wasm {
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         cfg_select! {
             feature = "strict_ieee754" => {
-                arch::f32x4_pmax(lhs, rhs)
+                arch::f32x4_max(lhs, rhs)
             }
             _ => arch::f32x4_relaxed_max(lhs, rhs),
         }
@@ -465,7 +465,7 @@ impl LinAlg3Register for F32x4Wasm {
         let v = arch::f32x4_replace_lane::<3>(value, f32::INFINITY);
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_32x4!(f v; f32x4_pmin f32x4_pmin)
+                reduce_32x4!(f v; f32x4_min f32x4_min)
             }
             _ => reduce_32x4!(f v; f32x4_relaxed_min f32x4_relaxed_min),
         }
@@ -476,7 +476,7 @@ impl LinAlg3Register for F32x4Wasm {
         let v = arch::f32x4_replace_lane::<3>(value, f32::NEG_INFINITY);
         cfg_select! {
             feature = "strict_ieee754" => {
-                reduce_32x4!(f v; f32x4_pmax f32x4_pmax)
+                reduce_32x4!(f v; f32x4_max f32x4_max)
             }
             _ => reduce_32x4!(f v; f32x4_relaxed_max f32x4_relaxed_max)
         }

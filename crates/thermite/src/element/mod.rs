@@ -82,6 +82,10 @@ macro_rules! impl_element {
             #[inline(always)] fn from_u8(value: u8) -> Self { value as $t }
             #[inline(always)] fn from_u16(value: u16) -> Self { value as $t }
         }
+
+        impl IntegerElement for $t {
+            #[inline(always)] fn logical_shr(self, n: $u) -> Self { ((self as $u) >> n) as $t }
+        }
     )+};
 
     (F $f:ty, $u:ty, $s:ty) => {
@@ -143,20 +147,8 @@ pub trait IntegerElement:
     + core::ops::Shr<Self::Unsigned, Output = Self>
     + core::ops::Shl<Self::Unsigned, Output = Self>
 {
-}
-
-impl<T> IntegerElement for T where
-    T: Element
-        + crate::divider::Denominator
-        + num_traits::PrimInt
-        + num_traits::WrappingAdd
-        + num_traits::WrappingMul
-        + num_traits::WrappingSub
-        + core::ops::Shr<Output = Self>
-        + core::ops::Shl<Output = Self>
-        + core::ops::Shr<Self::Unsigned, Output = Self>
-        + core::ops::Shl<Self::Unsigned, Output = Self>
-{
+    /// Logical (zero-fill) right shift by `n` bits, independent of signedness.
+    fn logical_shr(self, n: Self::Unsigned) -> Self;
 }
 
 pub trait SignedIntegerElement: IntegerElement<Signed = Self> + num_traits::Signed + TryInto<isize> {}

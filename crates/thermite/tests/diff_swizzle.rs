@@ -184,7 +184,13 @@ where
 {
     let want = R::scalar_permutev(input, idxs.clone());
     let got = R::permutev(input, idxs.clone());
-    assert_eq!(R::as_array(&want), R::as_array(&got), "permutev {idxs:?} vs scalar");
+    // Compare via black-boxed slices, not a direct array `assert_eq!`. For integer
+    // element types at -O3 the wasm backend can't select the vectorized all-lanes-
+    // equal reduction that array equality lowers to (LLVM "Cannot select ... setcc
+    // seteq"); `black_box` on opaque slices forces a scalar compare. (Floats lower
+    // via `f32x4.eq`, so this only bit the int register types.)
+    let (wa, ga) = (R::as_array(&want), R::as_array(&got));
+    assert_eq!(core::hint::black_box(wa.as_slice()), core::hint::black_box(ga.as_slice()), "permutev {idxs:?} vs scalar");
 }
 
 fn rt_swizzle<R: SwizzleRegister>(a: Storage<R>, b: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
@@ -193,7 +199,9 @@ where
 {
     let want = R::scalar_swizzle(a, b, idxs.clone());
     let got = R::swizzle(a, b, idxs.clone());
-    assert_eq!(R::as_array(&want), R::as_array(&got), "swizzle {idxs:?} vs scalar");
+    // See rt_permutev: black-boxed slice compare avoids the int -O3 wasm "Cannot select".
+    let (wa, ga) = (R::as_array(&want), R::as_array(&got));
+    assert_eq!(core::hint::black_box(wa.as_slice()), core::hint::black_box(ga.as_slice()), "swizzle {idxs:?} vs scalar");
 }
 
 fn run_runtime<R>()

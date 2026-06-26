@@ -7,7 +7,7 @@
 //! Sorting is checked by the identity `sort([n-1, …, 1, 0]) == [0, 1, …, n-1]`:
 //! `indexed()` is a known distinct ascending ramp, so its reverse must sort back
 //! to it exactly.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 use thermite::Vector;
 use thermite::isa::InstructionSet;
@@ -16,10 +16,9 @@ use thermite::register::NumericRegister;
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
+// ISA detection/ordering is x86-specific (on wasm `get()` returns a WASM set).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn instruction_set() {
     // runtime detection returns a concrete supported set on this host
@@ -100,7 +99,22 @@ macro_rules! sort_suite {
     };
 }
 
+sort_suite!(scalar, Scalar, "scalar");
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 sort_suite!(v3, X86V3, "x86_v3");
 sort_suite!(v2, X86V2, "x86_v2");
 sort_suite!(v1, X86V1, "x86_v1");
-sort_suite!(scalar, Scalar, "scalar");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+sort_suite!(wasm, Wasm, "wasm");
+}

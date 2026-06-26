@@ -6,7 +6,7 @@
 //! reference at the same element type x width, so the emulated `ArrayRegister`
 //! and `ReducedRegister` delegation paths (blendv / zz / nz, lane routing, the
 //! split/recombine helpers) are all exercised.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -19,9 +19,6 @@ use thermite::register::{
 use thermite::simd::{Simd, Simd3A};
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 macro_rules! n_of {
     ($ut:ty) => {
@@ -571,7 +568,21 @@ mod ext {
         };
     }
 
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    mod x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
     suite!(v3, X86V3, "x86_v3");
     suite!(v2, X86V2, "x86_v2");
     suite!(v1, X86V1, "x86_v1");
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    suite!(wasm, Wasm, "wasm");
+    }
 }

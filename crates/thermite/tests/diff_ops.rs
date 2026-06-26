@@ -3,7 +3,7 @@
 //!
 //! See `harness/mod.rs` for the methodology. Only built where the x86 SIMD
 //! backends exist; elsewhere there is nothing to differentiate against.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -16,10 +16,8 @@ use thermite::register::{
 };
 use thermite::simd::Simd;
 
-// Backend marker types.
+// Backend marker types. Scalar is the differential oracle used inside the macros.
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 // ---------------------------------------------------------------------------
 // Shift op needs a scalar shift amount, so it gets its own stamper.
@@ -180,6 +178,13 @@ macro_rules! int_common {
     }};
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
+
 // --- X86V3 (AVX2 + FMA) vs Scalar -----------------------------------------
 mod v3_float {
     use super::*;
@@ -220,8 +225,6 @@ mod v2_int {
 }
 
 // --- X86V1 (SSE2) vs Scalar ------------------------------------------------
-use thermite::backend::x86_v1::X86V1;
-
 mod v1_float {
     use super::*;
     float_reg_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
@@ -236,4 +239,33 @@ mod v1_int {
     int_reg_tests!(i64x2, X86V1, i64x2, "x86_v1 i64x2", signed);
     int_reg_tests!(u32x4, X86V1, u32x4, "x86_v1 u32x4", unsigned);
     int_reg_tests!(u64x2, X86V1, u64x2, "x86_v1 u64x2", unsigned);
+}
+}
+
+// wasm: native f32x4/f64x2/i32x4/i64x2/u32x4/u64x2 (128-bit), wider via ArrayRegister.
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+
+mod wasm_float {
+    use super::*;
+    float_reg_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
+    float_reg_tests!(f32x8, Wasm, f32x8, "wasm f32x8");
+    float_reg_tests!(f32x16, Wasm, f32x16, "wasm f32x16");
+    float_reg_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
+    float_reg_tests!(f64x4, Wasm, f64x4, "wasm f64x4");
+    float_reg_tests!(f64x8, Wasm, f64x8, "wasm f64x8");
+}
+mod wasm_int {
+    use super::*;
+    int_reg_tests!(i32x4, Wasm, i32x4, "wasm i32x4", signed);
+    int_reg_tests!(i32x8, Wasm, i32x8, "wasm i32x8", signed);
+    int_reg_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
+    int_reg_tests!(i64x4, Wasm, i64x4, "wasm i64x4", signed);
+    int_reg_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
+    int_reg_tests!(u32x8, Wasm, u32x8, "wasm u32x8", unsigned);
+    int_reg_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
+    int_reg_tests!(u64x4, Wasm, u64x4, "wasm u64x4", unsigned);
+}
 }

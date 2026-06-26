@@ -11,7 +11,7 @@
 //! Oracles are trivial and exact (bit-preserving, so NaN lanes must match too):
 //!   concat(lo, hi) == lo ++ hi          split(concat(lo,hi)) == (lo, hi)
 //!   extend(lo)     == lo ++ [0; HALF]   narrow(concat(lo,hi)) == lo
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -21,9 +21,6 @@ use thermite::simd::Simd;
 use thermite::vector::{ConcatVector, ExtendVector, GenericVector};
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// Read a vector's lanes into a `Vec` for comparison.
 fn lanes<V: GenericVector>(v: V) -> Vec<V::Element> {
@@ -116,7 +113,22 @@ macro_rules! reshape_suite {
     };
 }
 
+reshape_suite!(scalar, Scalar, "scalar");
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 reshape_suite!(v3, X86V3, "x86_v3");
 reshape_suite!(v2, X86V2, "x86_v2");
 reshape_suite!(v1, X86V1, "x86_v1");
-reshape_suite!(scalar, Scalar, "scalar");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+reshape_suite!(wasm, Wasm, "wasm");
+}

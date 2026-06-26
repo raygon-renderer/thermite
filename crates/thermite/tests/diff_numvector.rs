@@ -3,7 +3,7 @@
 //! `is_zero`/`is_one`/`eq` are **all-lane**, `ne`/`is_nan`/`is_sign_negative` are
 //! **any-lane**, plus `partial_cmp` and `classify`. The forwarded arithmetic /
 //! math ops just need to execute (correctness is covered elsewhere).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 use core::cmp::Ordering;
 use core::num::FpCategory;
@@ -18,9 +18,6 @@ use thermite::simd::Simd;
 use thermite::vector::NumVector;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 macro_rules! numvector_suite {
     ($mod:ident, $backend:ty) => {
@@ -271,7 +268,22 @@ macro_rules! numvector_suite {
     };
 }
 
+numvector_suite!(scalar, Scalar);
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 numvector_suite!(v3, X86V3);
 numvector_suite!(v2, X86V2);
 numvector_suite!(v1, X86V1);
-numvector_suite!(scalar, Scalar);
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+numvector_suite!(wasm, Wasm);
+}

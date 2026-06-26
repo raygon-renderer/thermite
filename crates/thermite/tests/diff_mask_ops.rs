@@ -5,7 +5,7 @@
 //!
 //! Masks are built from comparisons (known per-lane bool patterns) and every
 //! operation is checked against the booleans computed in plain Rust.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -18,9 +18,6 @@ use thermite::vector::Interleave;
 use thermite::vector::ops::{BitAndNot, BitAndNotAssign};
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// Lane-count-agnostic coverage for the **`MaskRegister`** primitives on the mask
 /// register of `R` (`new_mask`/`test`/`set`/`all`/`any`/`none`/`native_bitmask`) plus
@@ -111,16 +108,34 @@ macro_rules! reg_mask_suite {
     };
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_reg {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 reg_mask_suite!(reg_v3, X86V3, "x86_v3");
 reg_mask_suite!(reg_v2, X86V2, "x86_v2");
 reg_mask_suite!(reg_v1, X86V1, "x86_v1");
+}
 reg_mask_suite!(reg_scalar, Scalar, "scalar");
+
+#[cfg(target_arch = "wasm32")]
+mod wasm_reg {
+use super::*;
+use thermite::backend::wasm::Wasm;
+reg_mask_suite!(reg_wasm, Wasm, "wasm");
+}
 
 /// The same `MaskRegister` primitives on the 3-lane `ReducedRegister` mask types
 /// (`set`/`test`/`new_mask`/`native_bitmask`/`from_mask`/bitwise), which the
 /// native-width suite above doesn't reach.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod reduced_mask {
     use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
     use thermite::simd::Simd3A;
 
     macro_rules! t3 {
@@ -138,6 +153,24 @@ mod reduced_mask {
     t3!(v2_i64x3A, X86V2, i64x3A, "x86_v2");
     t3!(v1_f32x3A, X86V1, f32x3A, "x86_v1");
     t3!(v1_i32x3A, X86V1, i32x3A, "x86_v1");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod reduced_mask_wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    use thermite::simd::Simd3A;
+
+    macro_rules! t3 {
+        ($name:ident, $backend:ty, $reg:ident, $bl:expr) => {
+            #[test]
+            fn $name() {
+                check_mask_reg::<<$backend as Simd3A>::$reg>(concat!($bl, " ", stringify!($reg)));
+            }
+        };
+    }
+    t3!(wasm_f32x3A, Wasm, f32x3A, "wasm");
+    t3!(wasm_i64x3A, Wasm, i64x3A, "wasm");
 }
 
 macro_rules! mask_suite {
@@ -277,6 +310,19 @@ macro_rules! mask_suite {
     };
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
 mask_suite!(v3, X86V3);
 mask_suite!(v2, X86V2);
+}
 mask_suite!(scalar, Scalar);
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+mask_suite!(wasm, Wasm);
+}

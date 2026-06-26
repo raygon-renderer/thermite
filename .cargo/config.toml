@@ -1,0 +1,12 @@
+# Codegen config for running thermite's test suite on wasm.
+#
+# The wasm backend's SIMD intrinsics need the `simd128` proposal enabled, and its
+# `*_relaxed_swizzle` / `*_relaxed_laneselect` paths need `relaxed-simd`. These are
+# target-scoped, so they only affect `--target wasm32-wasip1` builds; native x86 builds are
+# untouched.
+#
+# The test *runner* (which executes each compiled libtest binary under wasmtime) is wired via
+# the `CARGO_TARGET_WASM32_WASIP1_RUNNER` env var in the `just wasm-test` recipe, not here, so
+# no machine-specific path is committed.
+[target.wasm32-wasip1]
+rustflags = ["-Ctarget-feature=+simd128,+relaxed-simd"]

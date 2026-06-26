@@ -7,16 +7,13 @@
 //!
 //! Deterministic distinct-value inputs (no ties), values exactly representable in
 //! f32/i32, so comparisons are exact.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 use thermite::Vector;
 use thermite::prelude::*;
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 macro_rules! common_methods {
     ($V:ty, $e:ty, $L:expr) => {{
@@ -91,9 +88,6 @@ macro_rules! methods_suite {
     };
 }
 
-methods_suite!(v3, X86V3);
-methods_suite!(v2, X86V2);
-methods_suite!(v1, X86V1);
 methods_suite!(scalar, Scalar);
 
 /// `reverse` across widths/types/backends (`indexed()` reversed). Catches the
@@ -128,6 +122,17 @@ macro_rules! ilv {
         assert_eq!(to(b2), to(b), concat!("deinterleave b ", stringify!($reg)));
     }};
 }
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+use super::*;
+use thermite::backend::x86_v1::X86V1;
+use thermite::backend::x86_v2::X86V2;
+use thermite::backend::x86_v3::X86V3;
+
+methods_suite!(v3, X86V3);
+methods_suite!(v2, X86V2);
+methods_suite!(v1, X86V1);
 
 #[test]
 fn interleave_roundtrip() {
@@ -166,4 +171,35 @@ fn reverse_widths() {
     rev!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
     rev!(<X86V1 as Simd>::f64x2);
     rev!(<X86V1 as Simd>::i64x2);
+}
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+use super::*;
+use thermite::backend::wasm::Wasm;
+
+methods_suite!(wasm, Wasm);
+
+#[test]
+fn interleave_roundtrip() {
+    ilv!(<Wasm as Simd>::f32x4);
+    ilv!(<Wasm as Simd>::f32x8);
+    ilv!(<Wasm as Simd>::f64x2);
+    ilv!(<Wasm as Simd>::f64x4);
+    ilv!(<Wasm as Simd>::i32x4);
+    ilv!(<Wasm as Simd>::i32x8);
+    ilv!(<Wasm as Simd>::u32x4);
+    ilv!(<Wasm as Simd>::i64x2);
+}
+
+#[test]
+fn reverse_widths() {
+    rev!(<Wasm as Simd>::f32x4);
+    rev!(<Wasm as Simd>::f32x8);
+    rev!(<Wasm as Simd>::f64x2);
+    rev!(<Wasm as Simd>::f64x4);
+    rev!(<Wasm as Simd>::i32x8);
+    rev!(<Wasm as Simd>::i64x4);
+}
 }

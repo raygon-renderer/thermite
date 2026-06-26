@@ -333,7 +333,7 @@ impl SignedRegister for I32x4Wasm {
     }
 
     fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
-        arch::i32x4_gt(value, Self::ZERO)
+        arch::i32x4_ge(value, Self::ZERO)
     }
 
     fn abs(value: Storage<Self>) -> Storage<Self> {
