@@ -159,6 +159,23 @@ where
 }
 
 #[thermite_macros::inline_always]
+impl<S, R, FR, B> PackedFloatVector<S, Vector<FR>> for Vector<R>
+where
+    S: crate::element::float::spec::FloatSpec,
+    B: CastRegister<R>,
+    FR: FloatRegister<Element = f32, Lanes = R::Lanes, Bits = B>,
+    R: register::PackedFloatRegister<S, FR> + CastRegister<B>,
+{
+    fn pack(values: Vector<FR>) -> Self {
+        Vector(<R as register::PackedFloatRegister<S, FR>>::pack(values.0))
+    }
+
+    fn unpack(self) -> Vector<FR> {
+        Vector(<R as register::PackedFloatRegister<S, FR>>::unpack(self.0))
+    }
+}
+
+#[thermite_macros::inline_always]
 impl<R> GenericSelectable for Vector<R>
 where
     R: Register,

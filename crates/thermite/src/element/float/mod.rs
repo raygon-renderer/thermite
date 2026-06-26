@@ -4,7 +4,7 @@ use crate::register::FloatRegister;
 use crate::vector::SplatConst;
 use crate::vector::ops::MulAddExt;
 
-pub mod ph;
+pub mod spec;
 
 /// Marker type for a compile-time integer constant cast to a float element type.
 ///

@@ -22,3 +22,9 @@ x86 = []
 neon = []
 wasm = []
 spirv = []
+
+# Assume the `f16c` CPU feature is available whenever AVX2 is (the x86-v3 backend).
+# Adds `f16c` to the `#[target_feature(enable = ...)]` set emitted for the AVX2 backend
+# by both `#[dispatch]` and `dispatch_dyn!`, enabling half-precision conversion
+# intrinsics in dispatched code without a separate runtime detection step.
+avx2-f16c = []

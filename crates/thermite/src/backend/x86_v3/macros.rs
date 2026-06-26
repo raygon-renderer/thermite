@@ -100,6 +100,34 @@ macro_rules! _mm256_reduce_epi32_v3 {
     }}};
 }
 
+/// Reduces a 16-lane 16-bit integer SIMD vector to a single lane value using `$op128` (the
+/// 128-bit lane-wise op, e.g. `_mm_min_epi16`). Folds the two 128-bit halves, then delegates
+/// to the 128-bit `_mm_reduce_epi16_v2!`. Returns an `i16` (cast at the call site for u16).
+#[rustfmt::skip]
+macro_rules! _mm256_reduce_epi16_v3 {
+    ($value:expr; $op128:ident) => {{#[allow(unused_unsafe)] unsafe {
+        let ymm0 = $value;
+        let xmm0 = arch::_mm256_castsi256_si128(ymm0);
+        let xmm1 = arch::_mm256_extracti128_si256(ymm0, 1);
+        let xmm0 = arch::$op128(xmm0, xmm1); // fold high 8 lanes into low 8
+        _mm_reduce_epi16_v2!(xmm0; $op128)
+    }}};
+}
+
+/// Reduces a 32-lane 8-bit integer SIMD vector to a single lane value using `$op128` (the
+/// 128-bit lane-wise op, e.g. `_mm_min_epi8`). Folds the two 128-bit halves, then delegates to
+/// the 128-bit `_mm_reduce_epi8_v2!`. Returns an `i8` (cast at the call site for u8).
+#[rustfmt::skip]
+macro_rules! _mm256_reduce_epi8_v3 {
+    ($value:expr; $op128:ident) => {{#[allow(unused_unsafe)] unsafe {
+        let ymm0 = $value;
+        let xmm0 = arch::_mm256_castsi256_si128(ymm0);
+        let xmm1 = arch::_mm256_extracti128_si256(ymm0, 1);
+        let xmm0 = arch::$op128(xmm0, xmm1); // fold high 16 lanes into low 16
+        _mm_reduce_epi8_v2!(xmm0; $op128)
+    }}};
+}
+
 macro_rules! _mm256_reduce_epi64_v3 {
     ($value:expr; $op:ident $last:ident) => {{#[allow(unused_unsafe)] unsafe {
         let ymm0 = $value;

@@ -1,3 +1,4 @@
+#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 //! Regression tests for the `const_splat!` macro arms.
 //!
 //! The `int`/`ratio` arms are not exercised anywhere in-tree, and that let two

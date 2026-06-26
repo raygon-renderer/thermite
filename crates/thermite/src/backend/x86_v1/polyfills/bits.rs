@@ -99,6 +99,20 @@ pub unsafe fn _mm_popcnt_epi8x_v1(v: __m128i) -> __m128i {
     _mm_and_si128(_mm_add_epi8(v, _mm_srli_epi16(v, 4)), _mm_set1_epi8(0x0F))
 }
 
+/// POLYFILL: per-`i16`-lane population count.
+#[inline(always)]
+pub unsafe fn _mm_popcnt_epi16x_v1(v: __m128i) -> __m128i {
+    let bytes = _mm_popcnt_epi8x_v1(v);
+    // sum the two bytes within each 16-bit lane (no `pmaddubsw` on SSE2)
+    _mm_add_epi16(_mm_and_si128(bytes, _mm_set1_epi16(0x00FF)), _mm_srli_epi16(bytes, 8))
+}
+
+/// POLYFILL: byte-swap within each 16-bit lane (no `pshufb` on SSE2).
+#[inline(always)]
+pub unsafe fn _mm_bswap_epi16x_v1(v: __m128i) -> __m128i {
+    _mm_or_si128(_mm_slli_epi16(v, 8), _mm_srli_epi16(v, 8))
+}
+
 /// POLYFILL: per-`i32`-lane population count.
 #[inline(always)]
 pub unsafe fn _mm_popcnt_epi32x_v1(v: __m128i) -> __m128i {
@@ -150,4 +164,95 @@ pub unsafe fn _mm_zeroupper_mask_epi32<Z: ZeroUpper>() -> __m128i {
         i32::from_bool(2 < Z::N),
         i32::from_bool(3 < Z::N),
     )
+}
+
+// ===========================================================================
+// 8-bit (byte) lane polyfills. x86 has no native 8-bit shift or multiply, so
+// these emulate them with 16-bit ops + masking. They use only SSE2 intrinsics,
+// so v2/v3 inherit them through the polyfill re-export chain. All shift counts
+// are assumed to be in `0..8` (the byte element width), matching the scalar
+// contract where shifting by >= the bit width is undefined.
+// ===========================================================================
+
+/// POLYFILL: logical left shift of each byte lane by a compile-time count.
+/// Shift as 16-bit, then mask off the bits that crossed byte boundaries.
+#[inline(always)]
+pub unsafe fn _mm_slli_epi8x_v1<const IMM8: i32>(v: __m128i) -> __m128i {
+    let keep = 0xFFu8.wrapping_shl(IMM8 as u32) as i8; // bits surviving inside a byte
+    _mm_and_si128(_mm_slli_epi16(v, IMM8), _mm_set1_epi8(keep))
+}
+
+/// POLYFILL: logical right shift of each byte lane by a compile-time count.
+#[inline(always)]
+pub unsafe fn _mm_srli_epi8x_v1<const IMM8: i32>(v: __m128i) -> __m128i {
+    let keep = (0xFFu8 >> IMM8) as i8;
+    _mm_and_si128(_mm_srli_epi16(v, IMM8), _mm_set1_epi8(keep))
+}
+
+/// POLYFILL: arithmetic right shift of each `i8` lane by a compile-time count.
+/// Logical shift, then branchless sign extension via `(x ^ m) - m`.
+#[inline(always)]
+pub unsafe fn _mm_srai_epi8x_v1<const IMM8: i32>(v: __m128i) -> __m128i {
+    let logical = _mm_srli_epi8x_v1::<IMM8>(v);
+    let m = _mm_set1_epi8((0x80u8 >> IMM8) as i8);
+    _mm_sub_epi8(_mm_xor_si128(logical, m), m)
+}
+
+/// POLYFILL: logical left shift of each byte lane by a runtime count.
+#[inline(always)]
+pub unsafe fn _mm_sll_epi8x_v1(v: __m128i, shift: u32) -> __m128i {
+    let keep = (0xFFu32.wrapping_shl(shift) as u8) as i8;
+    _mm_and_si128(_mm_sll_epi16(v, _mm_cvtsi32_si128(shift as i32)), _mm_set1_epi8(keep))
+}
+
+/// POLYFILL: logical right shift of each byte lane by a runtime count.
+#[inline(always)]
+pub unsafe fn _mm_srl_epi8x_v1(v: __m128i, shift: u32) -> __m128i {
+    let keep = ((0xFFu32 >> shift.min(31)) as u8) as i8;
+    _mm_and_si128(_mm_srl_epi16(v, _mm_cvtsi32_si128(shift as i32)), _mm_set1_epi8(keep))
+}
+
+/// POLYFILL: arithmetic right shift of each `i8` lane by a runtime count.
+#[inline(always)]
+pub unsafe fn _mm_sra_epi8x_v1(v: __m128i, shift: u32) -> __m128i {
+    let logical = _mm_srl_epi8x_v1(v, shift);
+    let m = _mm_set1_epi8(((0x80u32 >> shift.min(31)) as u8) as i8);
+    _mm_sub_epi8(_mm_xor_si128(logical, m), m)
+}
+
+/// POLYFILL: low 8 bits of each byte product (`a[i].wrapping_mul(b[i])`).
+/// Multiply even/odd bytes as 16-bit lanes, then recombine the low bytes.
+#[inline(always)]
+pub unsafe fn _mm_mullo_epi8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    let lo_mask = _mm_set1_epi16(0x00FF);
+    let even = _mm_mullo_epi16(_mm_and_si128(a, lo_mask), _mm_and_si128(b, lo_mask));
+    let odd = _mm_mullo_epi16(_mm_srli_epi16(a, 8), _mm_srli_epi16(b, 8));
+    _mm_or_si128(_mm_and_si128(even, lo_mask), _mm_slli_epi16(odd, 8))
+}
+
+/// POLYFILL: high 8 bits of each signed byte product (`((a as i16 * b as i16) >> 8) as i8`).
+#[inline(always)]
+pub unsafe fn _mm_mulhi_epi8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    let zero = _mm_setzero_si128();
+    // place each byte in the high half of a 16-bit lane, then arithmetic-shift to sign-extend
+    let a_lo = _mm_srai_epi16(_mm_unpacklo_epi8(zero, a), 8);
+    let b_lo = _mm_srai_epi16(_mm_unpacklo_epi8(zero, b), 8);
+    let a_hi = _mm_srai_epi16(_mm_unpackhi_epi8(zero, a), 8);
+    let b_hi = _mm_srai_epi16(_mm_unpackhi_epi8(zero, b), 8);
+    let p_lo = _mm_srai_epi16(_mm_mullo_epi16(a_lo, b_lo), 8);
+    let p_hi = _mm_srai_epi16(_mm_mullo_epi16(a_hi, b_hi), 8);
+    _mm_packs_epi16(p_lo, p_hi)
+}
+
+/// POLYFILL: high 8 bits of each unsigned byte product (`((a as u16 * b as u16) >> 8) as u8`).
+#[inline(always)]
+pub unsafe fn _mm_mulhi_epu8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    let zero = _mm_setzero_si128();
+    let a_lo = _mm_unpacklo_epi8(a, zero); // zero-extend low 8 bytes
+    let b_lo = _mm_unpacklo_epi8(b, zero);
+    let a_hi = _mm_unpackhi_epi8(a, zero);
+    let b_hi = _mm_unpackhi_epi8(b, zero);
+    let p_lo = _mm_srli_epi16(_mm_mullo_epi16(a_lo, b_lo), 8);
+    let p_hi = _mm_srli_epi16(_mm_mullo_epi16(a_hi, b_hi), 8);
+    _mm_packus_epi16(p_lo, p_hi)
 }

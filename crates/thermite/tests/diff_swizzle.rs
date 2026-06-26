@@ -10,7 +10,7 @@
 //!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
 //!    random fuzzing - the coverage formerly in `array_swizzle.rs`, broadened
 //!    here from V3-emulated-only to native registers across v1/v2/v3.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 use generic_array::{GenericArray, arr, typenum::Unsigned};
 use rand::RngExt;
@@ -20,9 +20,7 @@ use thermite::register::{NumericRegister, Register, Storage, SwizzleRegister};
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
+use thermite::simd::SimdExperimental;
 
 /// `permute_const` (single-register, indices `0..LANES`) vs `scalar_permutev`.
 macro_rules! perm {
@@ -117,33 +115,54 @@ macro_rules! reg8 {
     };
 }
 
-// Native 128-bit registers
-reg4!(v2_f32x4, X86V2, f32x4);
-reg4!(v2_i32x4, X86V2, i32x4);
-reg4!(v2_u32x4, X86V2, u32x4);
-reg4!(v3_f32x4, X86V3, f32x4);
-reg4!(v3_i32x4, X86V3, i32x4);
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_const {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
 
-// v1 (SSE2): no pshufb, so variable permutes/swizzles take the scalar
-// SwizzleRegister default - a distinct code path from v2/v3.
-reg4!(v1_f32x4, X86V1, f32x4);
-reg4!(v1_i32x4, X86V1, i32x4);
-reg4!(v1_u32x4, X86V1, u32x4);
-reg4!(v1_f64x4, X86V1, f64x4); // ArrayRegister-emulated on v1
-reg4!(v1_i64x4, X86V1, i64x4);
-reg8!(v1_f32x8, X86V1, f32x8);
-reg8!(v1_i32x8, X86V1, i32x8);
+    // Native 128-bit registers
+    reg4!(v2_f32x4, X86V2, f32x4);
+    reg4!(v2_i32x4, X86V2, i32x4);
+    reg4!(v2_u32x4, X86V2, u32x4);
+    reg4!(v3_f32x4, X86V3, f32x4);
+    reg4!(v3_i32x4, X86V3, i32x4);
 
-// Native 256-bit registers (V3)
-reg4!(v3_f64x4, X86V3, f64x4);
-reg4!(v3_i64x4, X86V3, i64x4);
-reg8!(v3_f32x8, X86V3, f32x8);
-reg8!(v3_i32x8, X86V3, i32x8);
-reg8!(v3_u32x8, X86V3, u32x8);
+    // v1 (SSE2): no pshufb, so variable permutes/swizzles take the scalar
+    // SwizzleRegister default - a distinct code path from v2/v3.
+    reg4!(v1_f32x4, X86V1, f32x4);
+    reg4!(v1_i32x4, X86V1, i32x4);
+    reg4!(v1_u32x4, X86V1, u32x4);
+    reg4!(v1_f64x4, X86V1, f64x4); // ArrayRegister-emulated on v1
+    reg4!(v1_i64x4, X86V1, i64x4);
+    reg8!(v1_f32x8, X86V1, f32x8);
+    reg8!(v1_i32x8, X86V1, i32x8);
 
-// Scalar reference path (1-lane "register" - trivial but exercises the generic glue)
-reg4!(scalar_f32x4, Scalar, f32x4);
-reg4!(scalar_f64x4, Scalar, f64x4);
+    // Native 256-bit registers (V3)
+    reg4!(v3_f64x4, X86V3, f64x4);
+    reg4!(v3_i64x4, X86V3, i64x4);
+    reg8!(v3_f32x8, X86V3, f32x8);
+    reg8!(v3_i32x8, X86V3, i32x8);
+    reg8!(v3_u32x8, X86V3, u32x8);
+
+    // Scalar reference path (1-lane "register" - trivial but exercises the generic glue)
+    reg4!(scalar_f32x4, Scalar, f32x4);
+    reg4!(scalar_f64x4, Scalar, f64x4);
+}
+
+// WASM: native 128-bit i8x16_swizzle const-index paths.
+#[cfg(target_arch = "wasm32")]
+mod wasm_const {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+
+    reg4!(wasm_f32x4, Wasm, f32x4);
+    reg4!(wasm_i32x4, Wasm, i32x4);
+    reg4!(wasm_u32x4, Wasm, u32x4);
+    reg4!(wasm_f64x4, Wasm, f64x4); // ArrayRegister-emulated
+    reg8!(wasm_f32x8, Wasm, f32x8); // ArrayRegister-emulated
+}
 
 // ===========================================================================
 // Runtime swizzle / permute coverage (ported from the former array_swizzle.rs).
@@ -246,21 +265,79 @@ macro_rules! rt {
     };
 }
 
-// Emulated ArrayRegister (the original array_swizzle coverage).
-rt!(rt_v3_arr_f32x4x4, ArrayRegister<<X86V3 as Simd>::f32x4, 4>); // 16 lanes, 4 chunks
-rt!(rt_v3_arr_i64x2x4, ArrayRegister<<X86V3 as Simd>::i64x2, 4>); // 8 lanes, 4 chunks
-rt!(rt_v3_f32x16, <X86V3 as Simd>::f32x16);
-rt!(rt_v2_f32x16, <X86V2 as Simd>::f32x16);
-rt!(rt_v1_f32x16, <X86V1 as Simd>::f32x16);
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_rt {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
 
-// Native hardware permute paths + the v1 scalar fallback.
-rt!(rt_v3_f32x4, <X86V3 as Simd>::f32x4);
-rt!(rt_v3_i32x4, <X86V3 as Simd>::i32x4);
-rt!(rt_v3_f32x8, <X86V3 as Simd>::f32x8);
-rt!(rt_v3_i32x8, <X86V3 as Simd>::i32x8);
-rt!(rt_v3_i64x4, <X86V3 as Simd>::i64x4);
-rt!(rt_v2_f32x4, <X86V2 as Simd>::f32x4);
-rt!(rt_v2_i32x4, <X86V2 as Simd>::i32x4);
-rt!(rt_v2_f32x8, <X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
-rt!(rt_v1_f32x4, <X86V1 as Simd>::f32x4);
-rt!(rt_v1_f32x8, <X86V1 as Simd>::f32x8);
+    // Emulated ArrayRegister (the original array_swizzle coverage).
+    rt!(rt_v3_arr_f32x4x4, ArrayRegister<<X86V3 as Simd>::f32x4, 4>); // 16 lanes, 4 chunks
+    rt!(rt_v3_arr_i64x2x4, ArrayRegister<<X86V3 as Simd>::i64x2, 4>); // 8 lanes, 4 chunks
+    rt!(rt_v3_f32x16, <X86V3 as Simd>::f32x16);
+    rt!(rt_v2_f32x16, <X86V2 as Simd>::f32x16);
+    rt!(rt_v1_f32x16, <X86V1 as Simd>::f32x16);
+
+    // Native hardware permute paths + the v1 scalar fallback.
+    rt!(rt_v3_f32x4, <X86V3 as Simd>::f32x4);
+    rt!(rt_v3_i32x4, <X86V3 as Simd>::i32x4);
+    rt!(rt_v3_f32x8, <X86V3 as Simd>::f32x8);
+    rt!(rt_v3_i32x8, <X86V3 as Simd>::i32x8);
+    rt!(rt_v3_i64x4, <X86V3 as Simd>::i64x4);
+    rt!(rt_v2_f32x4, <X86V2 as Simd>::f32x4);
+    rt!(rt_v2_i32x4, <X86V2 as Simd>::i32x4);
+    rt!(rt_v2_f32x8, <X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
+    rt!(rt_v1_f32x4, <X86V1 as Simd>::f32x4);
+    rt!(rt_v1_f32x8, <X86V1 as Simd>::f32x8);
+
+    // Native 16-bit pshufb permute paths: 128-bit (single pshufb) and 256-bit (cross-lane).
+    rt!(rt_v2_i16x8, <X86V2 as SimdExperimental>::i16x8);
+    rt!(rt_v2_u16x8, <X86V2 as SimdExperimental>::u16x8);
+    rt!(rt_v3_i16x8, <X86V3 as SimdExperimental>::i16x8);
+    rt!(rt_v3_u16x8, <X86V3 as SimdExperimental>::u16x8);
+    rt!(rt_v3_i16x16, <X86V3 as SimdExperimental>::i16x16);
+    rt!(rt_v3_u16x16, <X86V3 as SimdExperimental>::u16x16);
+    // Reduced (i16x4) and ArrayRegister (i16x2/i16x16-on-v2) forms route through the native permutev.
+    rt!(rt_v3_i16x4, <X86V3 as SimdExperimental>::i16x4);
+    rt!(rt_v2_i16x4, <X86V2 as SimdExperimental>::i16x4);
+    rt!(rt_v2_i16x16, <X86V2 as SimdExperimental>::i16x16);
+    // v1 (SSE2): no pshufb, so 16-bit permutes take the scalar SwizzleRegister fallback.
+    rt!(rt_v1_i16x8, <X86V1 as SimdExperimental>::i16x8);
+    rt!(rt_v1_u16x8, <X86V1 as SimdExperimental>::u16x8);
+
+    // Native 8-bit pshufb permute paths (the byte index IS the pshufb control): 128-bit on v2.
+    rt!(rt_v2_i8x16, <X86V2 as SimdExperimental>::i8xN);
+    rt!(rt_v2_u8x16, <X86V2 as SimdExperimental>::u8xN);
+    // v1 (SSE2): no pshufb, so 8-bit permutes take the scalar SwizzleRegister fallback.
+    rt!(rt_v1_i8x16, <X86V1 as SimdExperimental>::i8xN);
+    rt!(rt_v1_u8x16, <X86V1 as SimdExperimental>::u8xN);
+    // v3 (AVX2): native 256-bit, cross-lane byte permute (pshufb x2 + blend by bit4).
+    rt!(rt_v3_i8x32, <X86V3 as SimdExperimental>::i8xN);
+    rt!(rt_v3_u8x32, <X86V3 as SimdExperimental>::u8xN);
+    // v3 fixed 128-bit i8x16 (single pshufb permute, distinct register from the 256-bit native).
+    rt!(rt_v3_i8x16, <X86V3 as SimdExperimental>::i8x16);
+    rt!(rt_v3_u8x16, <X86V3 as SimdExperimental>::u8x16);
+}
+
+// WASM: runtime permute/swizzle via `i8x16`/`u8x16_relaxed_swizzle` (and the scalar/array glue).
+#[cfg(target_arch = "wasm32")]
+mod wasm_rt {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+
+    // native 128-bit + emulated array forms
+    rt!(rt_wasm_f32x4, <Wasm as Simd>::f32x4);
+    rt!(rt_wasm_i32x4, <Wasm as Simd>::i32x4);
+    rt!(rt_wasm_f32x8, <Wasm as Simd>::f32x8); // ArrayRegister-emulated
+    rt!(rt_wasm_f32x16, <Wasm as Simd>::f32x16); // ArrayRegister-emulated
+    rt!(rt_wasm_arr_f32x4x4, ArrayRegister<<Wasm as Simd>::f32x4, 4>);
+    // 16-bit: native i16x8 (byte-doubled relaxed_swizzle), reduced i16x4, array i16x16.
+    rt!(rt_wasm_i16x8, <Wasm as SimdExperimental>::i16x8);
+    rt!(rt_wasm_u16x8, <Wasm as SimdExperimental>::u16x8);
+    rt!(rt_wasm_i16x4, <Wasm as SimdExperimental>::i16x4);
+    rt!(rt_wasm_i16x16, <Wasm as SimdExperimental>::i16x16);
+    // 8-bit: native i8x16 relaxed_swizzle (byte index is the control directly).
+    rt!(rt_wasm_i8x16, <Wasm as SimdExperimental>::i8xN);
+    rt!(rt_wasm_u8x16, <Wasm as SimdExperimental>::u8xN);
+}

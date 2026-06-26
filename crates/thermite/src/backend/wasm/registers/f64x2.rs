@@ -141,7 +141,10 @@ impl Register for F64x2Wasm {
     }
 
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
-        value // float sign bit is the MSB
+        // `blendv` is `u8x16_relaxed_laneselect` (per-byte high-bit select), so it needs a
+        // fully-smeared per-lane mask, not just the sign bit. Arithmetic-shift smears the sign
+        // across the whole 64-bit lane.
+        arch::i64x2_shr(value, 63)
     }
 
     fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {

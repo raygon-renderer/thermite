@@ -2,23 +2,21 @@
 //! function is checked against `libm` (an independent, well-tested reference)
 //! over its valid domain.
 //!
-//! This is deliberately a *gross-correctness* gate, not a ULP audit: the
-//! default policy is `Performance`, which trades accuracy for speed, so the
-//! tolerance is a loose relative bound. It is here to catch structural bugs
-//! (wrong sign, wrong identity, NaN where a number is expected, a backend that
-//! diverges from the others) - the things that had **zero** test coverage
-//! before this file existed. Tighten `TOL_*` and switch to a `Reference`
-//! policy for a precision audit.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+//! This is deliberately a *gross-correctness* gate, not a ULP audit: the bare
+//! (no-policy) methods use `DefaultPolicy`, which trades accuracy for speed
+//! (`Performance` on x86/scalar, `Size` on WASM - both `Average` precision but
+//! WASM's `Size` flushes denormals via the `Crush` trick), so the tolerance is a
+//! loose relative bound. It is here to catch structural bugs (wrong sign, wrong
+//! identity, NaN where a number is expected, a backend that diverges from the
+//! others) - the things that had **zero** test coverage before this file
+//! existed. Tighten `TOL_*` and switch to a `Reference` policy for a precision
+//! audit.
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
 use thermite::Vector;
 use thermite::prelude::*;
-
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// Loose relative tolerance for the default (`Performance`) policy.
 const TOL_F32: f64 = 2.0e-3;
@@ -234,9 +232,25 @@ macro_rules! math_suite {
 
                 math_unary!($bl, R, f32, exp_m1, libm::expm1f, TOL_F32, small);
                 // 2^x - 1 == expm1(x * ln2); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f32, exp2_m1, |x: f32| libm::expm1(x as f64 * core::f64::consts::LN_2) as f32, TOL_F32, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    exp2_m1,
+                    |x: f32| libm::expm1(x as f64 * core::f64::consts::LN_2) as f32,
+                    TOL_F32,
+                    small
+                );
                 // 10^x - 1 == expm1(x * ln10)
-                math_unary!($bl, R, f32, exp10_m1, |x: f32| libm::expm1(x as f64 * core::f64::consts::LN_10) as f32, TOL_F32, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    exp10_m1,
+                    |x: f32| libm::expm1(x as f64 * core::f64::consts::LN_10) as f32,
+                    TOL_F32,
+                    small
+                );
                 math_unary!(
                     $bl,
                     R,
@@ -247,24 +261,88 @@ macro_rules! math_suite {
                     |x: f32| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
                 );
                 // log_b(1 + x) == log1p(x) * log_b(e)
-                math_unary!($bl, R, f32, log2_p1, |x: f32| (libm::log1p(x as f64) * core::f64::consts::LOG2_E) as f32, TOL_F32,
-                    |x: f32| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 });
-                math_unary!($bl, R, f32, log10_p1, |x: f32| (libm::log1p(x as f64) * core::f64::consts::LOG10_E) as f32, TOL_F32,
-                    |x: f32| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 });
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    log2_p1,
+                    |x: f32| (libm::log1p(x as f64) * core::f64::consts::LOG2_E) as f32,
+                    TOL_F32,
+                    |x: f32| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    log10_p1,
+                    |x: f32| (libm::log1p(x as f64) * core::f64::consts::LOG10_E) as f32,
+                    TOL_F32,
+                    |x: f32| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
+                );
                 // sqrt(1+x) - 1 == expm1(0.5 * log1p(x)); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f32, sqrt1pm1, |x: f32| libm::expm1(0.5 * libm::log1p(x as f64)) as f32, TOL_F32,
-                    |x: f32| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 });
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    sqrt1pm1,
+                    |x: f32| libm::expm1(0.5 * libm::log1p(x as f64)) as f32,
+                    TOL_F32,
+                    |x: f32| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 }
+                );
                 // cos(x) - 1 == -2 sin²(x/2); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f32, cos_m1, |x: f32| { let s = libm::sin(x as f64 * 0.5); (-2.0 * s * s) as f32 }, TOL_F32, small);
-                math_unary!($bl, R, f32, versin, |x: f32| { let s = libm::sin(x as f64 * 0.5); (2.0 * s * s) as f32 }, TOL_F32, small);
-                math_unary!($bl, R, f32, haversin, |x: f32| { let s = libm::sin(x as f64 * 0.5); (s * s) as f32 }, TOL_F32, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    cos_m1,
+                    |x: f32| {
+                        let s = libm::sin(x as f64 * 0.5);
+                        (-2.0 * s * s) as f32
+                    },
+                    TOL_F32,
+                    small
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    versin,
+                    |x: f32| {
+                        let s = libm::sin(x as f64 * 0.5);
+                        (2.0 * s * s) as f32
+                    },
+                    TOL_F32,
+                    small
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    haversin,
+                    |x: f32| {
+                        let s = libm::sin(x as f64 * 0.5);
+                        (s * s) as f32
+                    },
+                    TOL_F32,
+                    small
+                );
                 math_unary!($bl, R, f32, log10, libm::log10f, TOL_F32, pos);
                 math_unary!($bl, R, f32, atanh, libm::atanhf, TOL_F32, unit);
-                // `safe`: finite, normal, nonzero - dodges the denormal-flush
-                // divergence and the hypot(0,0)/atan2(0,0) special cases.
+                // `safe`: finite, normal, nonzero, and comfortably away from the
+                // subnormal boundary - dodges the denormal-flush divergence and the
+                // hypot(0,0)/atan2(0,0) special cases. The magnitude floor matters on
+                // WASM, whose default policy is `Size` (Crush denormals via the
+                // `dt - (dt - x)` trick); that trick's ULP (~2*MIN_POSITIVE) also
+                // quantizes *normal* values within a few ULPs of MIN_POSITIVE. atan2 is
+                // ratio-sensitive, so such tiny inputs flip the result by O(1) - outside
+                // this gross-correctness gate (sign is preserved for quadrant coverage).
                 let safe = |x: f32| {
                     let v = if x.is_finite() { x % 1e3 } else { 1.0 };
-                    if v.is_normal() { v } else { 1.0 }
+                    if v.is_normal() && v.abs() >= 1e-30 {
+                        v
+                    } else {
+                        1.0_f32.copysign(v)
+                    }
                 };
                 math_binary!($bl, R, f32, atan2, libm::atan2f, TOL_F32, safe, safe);
                 math_binary!($bl, R, f32, hypot, libm::hypotf, TOL_F32, safe, safe);
@@ -286,17 +364,42 @@ macro_rules! math_suite {
                     |_| 0.0
                 );
                 // compound(x, n) = (1+x)^n; oracle in f64 keeps x's low bits that (1+x)^n would lose
-                math_binary!($bl, R, f32, compound, |x: f32, n: f32| libm::pow(1.0 + x as f64, n as f64) as f32, TOL_F32,
+                math_binary!(
+                    $bl,
+                    R,
+                    f32,
+                    compound,
+                    |x: f32, n: f32| libm::pow(1.0 + x as f64, n as f64) as f32,
+                    TOL_F32,
                     |x: f32| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
-                    |n: f32| if n.is_finite() { n % 8.0 } else { 2.0 });
+                    |n: f32| if n.is_finite() { n % 8.0 } else { 2.0 }
+                );
                 // logaddexp(a, b) = ln(e^a + e^b); naive f64 oracle is safe over this domain
-                math_binary!($bl, R, f32, logaddexp, |a: f32, b: f32| libm::log(libm::exp(a as f64) + libm::exp(b as f64)) as f32, TOL_F32,
+                math_binary!(
+                    $bl,
+                    R,
+                    f32,
+                    logaddexp,
+                    |a: f32, b: f32| libm::log(libm::exp(a as f64) + libm::exp(b as f64)) as f32,
+                    TOL_F32,
                     |x: f32| if x.is_finite() { x % 20.0 } else { 1.0 },
-                    |x: f32| if x.is_finite() { x % 20.0 } else { -1.0 });
+                    |x: f32| if x.is_finite() { x % 20.0 } else { -1.0 }
+                );
                 // powf_m1(x, e) = x^e - 1 == expm1(e * ln x); accurate oracle in f64
-                math_binary!($bl, R, f32, powf_m1, |x: f32, e: f32| libm::expm1(e as f64 * libm::log(x as f64)) as f32, TOL_F32,
-                    |x: f32| if x.is_finite() { (x.abs() % 10.0) + 0.1 } else { 2.0 },
-                    |e: f32| if e.is_finite() { e % 4.0 } else { 2.0 });
+                math_binary!(
+                    $bl,
+                    R,
+                    f32,
+                    powf_m1,
+                    |x: f32, e: f32| libm::expm1(e as f64 * libm::log(x as f64)) as f32,
+                    TOL_F32,
+                    |x: f32| if x.is_finite() {
+                        (x.abs() % 10.0) + 0.1
+                    } else {
+                        2.0
+                    },
+                    |e: f32| if e.is_finite() { e % 4.0 } else { 2.0 }
+                );
 
                 // --- additional transcendentals (this session) ---
                 let pidom = |x: f32| if x.is_finite() { x % 30.0 } else { 1.0 };
@@ -517,9 +620,25 @@ macro_rules! math_suite {
 
                 math_unary!($bl, R, f64, exp_m1, libm::expm1, TOL_F64, small);
                 // 2^x - 1 == expm1(x * ln2); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f64, exp2_m1, |x: f64| libm::expm1(x * core::f64::consts::LN_2), TOL_F64, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    exp2_m1,
+                    |x: f64| libm::expm1(x * core::f64::consts::LN_2),
+                    TOL_F64,
+                    small
+                );
                 // 10^x - 1 == expm1(x * ln10)
-                math_unary!($bl, R, f64, exp10_m1, |x: f64| libm::expm1(x * core::f64::consts::LN_10), TOL_F64, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    exp10_m1,
+                    |x: f64| libm::expm1(x * core::f64::consts::LN_10),
+                    TOL_F64,
+                    small
+                );
                 math_unary!(
                     $bl,
                     R,
@@ -530,22 +649,82 @@ macro_rules! math_suite {
                     |x: f64| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
                 );
                 // log_b(1 + x) == log1p(x) * log_b(e)
-                math_unary!($bl, R, f64, log2_p1, |x: f64| libm::log1p(x) * core::f64::consts::LOG2_E, TOL_F64,
-                    |x: f64| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 });
-                math_unary!($bl, R, f64, log10_p1, |x: f64| libm::log1p(x) * core::f64::consts::LOG10_E, TOL_F64,
-                    |x: f64| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 });
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    log2_p1,
+                    |x: f64| libm::log1p(x) * core::f64::consts::LOG2_E,
+                    TOL_F64,
+                    |x: f64| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    log10_p1,
+                    |x: f64| libm::log1p(x) * core::f64::consts::LOG10_E,
+                    TOL_F64,
+                    |x: f64| if x.is_finite() { (x % 2.0).max(-0.9) } else { 0.5 }
+                );
                 // sqrt(1+x) - 1 == expm1(0.5 * log1p(x)); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f64, sqrt1pm1, |x: f64| libm::expm1(0.5 * libm::log1p(x)), TOL_F64,
-                    |x: f64| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 });
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    sqrt1pm1,
+                    |x: f64| libm::expm1(0.5 * libm::log1p(x)),
+                    TOL_F64,
+                    |x: f64| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 }
+                );
                 // cos(x) - 1 == -2 sin²(x/2); the latter is the accurate oracle near 0
-                math_unary!($bl, R, f64, cos_m1, |x: f64| { let s = libm::sin(x * 0.5); -2.0 * s * s }, TOL_F64, small);
-                math_unary!($bl, R, f64, versin, |x: f64| { let s = libm::sin(x * 0.5); 2.0 * s * s }, TOL_F64, small);
-                math_unary!($bl, R, f64, haversin, |x: f64| { let s = libm::sin(x * 0.5); s * s }, TOL_F64, small);
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    cos_m1,
+                    |x: f64| {
+                        let s = libm::sin(x * 0.5);
+                        -2.0 * s * s
+                    },
+                    TOL_F64,
+                    small
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    versin,
+                    |x: f64| {
+                        let s = libm::sin(x * 0.5);
+                        2.0 * s * s
+                    },
+                    TOL_F64,
+                    small
+                );
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    haversin,
+                    |x: f64| {
+                        let s = libm::sin(x * 0.5);
+                        s * s
+                    },
+                    TOL_F64,
+                    small
+                );
                 math_unary!($bl, R, f64, log10, libm::log10, TOL_F64, pos);
                 math_unary!($bl, R, f64, atanh, libm::atanh, TOL_F64, unit);
+                // See the f32 `safe` note: the magnitude floor keeps ratio-sensitive
+                // atan2 inputs out of the WASM `Size`/Crush denormal-quantization zone.
                 let safe = |x: f64| {
                     let v = if x.is_finite() { x % 1e3 } else { 1.0 };
-                    if v.is_normal() { v } else { 1.0 }
+                    if v.is_normal() && v.abs() >= 1e-30 {
+                        v
+                    } else {
+                        1.0_f64.copysign(v)
+                    }
                 };
                 math_binary!($bl, R, f64, atan2, libm::atan2, TOL_F64, safe, safe);
                 math_binary!($bl, R, f64, hypot, libm::hypot, TOL_F64, safe, safe);
@@ -566,17 +745,42 @@ macro_rules! math_suite {
                     |_| 0.0
                 );
                 // compound(x, n) = (1+x)^n
-                math_binary!($bl, R, f64, compound, |x: f64, n: f64| libm::pow(1.0 + x, n), TOL_F64,
+                math_binary!(
+                    $bl,
+                    R,
+                    f64,
+                    compound,
+                    |x: f64, n: f64| libm::pow(1.0 + x, n),
+                    TOL_F64,
                     |x: f64| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
-                    |n: f64| if n.is_finite() { n % 8.0 } else { 2.0 });
+                    |n: f64| if n.is_finite() { n % 8.0 } else { 2.0 }
+                );
                 // logaddexp(a, b) = ln(e^a + e^b)
-                math_binary!($bl, R, f64, logaddexp, |a: f64, b: f64| libm::log(libm::exp(a) + libm::exp(b)), TOL_F64,
+                math_binary!(
+                    $bl,
+                    R,
+                    f64,
+                    logaddexp,
+                    |a: f64, b: f64| libm::log(libm::exp(a) + libm::exp(b)),
+                    TOL_F64,
                     |x: f64| if x.is_finite() { x % 20.0 } else { 1.0 },
-                    |x: f64| if x.is_finite() { x % 20.0 } else { -1.0 });
+                    |x: f64| if x.is_finite() { x % 20.0 } else { -1.0 }
+                );
                 // powf_m1(x, e) = x^e - 1 == expm1(e * ln x)
-                math_binary!($bl, R, f64, powf_m1, |x: f64, e: f64| libm::expm1(e * libm::log(x)), TOL_F64,
-                    |x: f64| if x.is_finite() { (x.abs() % 10.0) + 0.1 } else { 2.0 },
-                    |e: f64| if e.is_finite() { e % 4.0 } else { 2.0 });
+                math_binary!(
+                    $bl,
+                    R,
+                    f64,
+                    powf_m1,
+                    |x: f64, e: f64| libm::expm1(e * libm::log(x)),
+                    TOL_F64,
+                    |x: f64| if x.is_finite() {
+                        (x.abs() % 10.0) + 0.1
+                    } else {
+                        2.0
+                    },
+                    |e: f64| if e.is_finite() { e % 4.0 } else { 2.0 }
+                );
 
                 // --- additional transcendentals (this session) ---
                 let pidom = |x: f64| if x.is_finite() { x % 30.0 } else { 1.0 };
@@ -747,9 +951,24 @@ macro_rules! math_suite {
     };
 }
 
-math_suite!(v3, X86V3, f32x8, f64x4, "x86_v3");
-math_suite!(v2, X86V2, f32x4, f64x2, "x86_v2");
-math_suite!(v1, X86V1, f32x4, f64x2, "x86_v1");
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    math_suite!(v3, X86V3, f32x8, f64x4, "x86_v3");
+    math_suite!(v2, X86V2, f32x4, f64x2, "x86_v2");
+    math_suite!(v1, X86V1, f32x4, f64x2, "x86_v1");
+}
+
+// WASM: native 128-bit f32x4 / f64x2 transcendental math vs libm.
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    math_suite!(wasm, Wasm, f32x4, f64x2, "wasm");
+}
 
 // ===========================================================================
 // Policy-variant coverage. The transcendental kernels in `ps.rs`/`pd.rs` branch
@@ -1268,6 +1487,20 @@ macro_rules! policy_suite {
     };
 }
 
-policy_suite!(pol_v3, X86V3, f32x8, f64x4, "x86_v3");
-policy_suite!(pol_v2, X86V2, f32x4, f64x2, "x86_v2");
-policy_suite!(pol_v1, X86V1, f32x4, f64x2, "x86_v1");
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_policy {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    policy_suite!(pol_v3, X86V3, f32x8, f64x4, "x86_v3");
+    policy_suite!(pol_v2, X86V2, f32x4, f64x2, "x86_v2");
+    policy_suite!(pol_v1, X86V1, f32x4, f64x2, "x86_v1");
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm_policy {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    policy_suite!(pol_wasm, Wasm, f32x4, f64x2, "wasm");
+}

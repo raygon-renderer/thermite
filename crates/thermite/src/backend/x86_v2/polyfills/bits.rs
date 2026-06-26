@@ -12,6 +12,12 @@ pub unsafe fn _mm_popcnt_epi8x_v2(v: __m128i) -> __m128i {
 }
 
 #[inline(always)]
+pub unsafe fn _mm_popcnt_epi16x_v2(v: __m128i) -> __m128i {
+    // Per-byte popcount, then sum adjacent byte pairs into 16-bit lanes via maddubs.
+    _mm_maddubs_epi16(_mm_popcnt_epi8x_v2(v), _mm_set1_epi8(1))
+}
+
+#[inline(always)]
 pub unsafe fn _mm_popcnt_epi32x_v2(v: __m128i) -> __m128i {
     // https://stackoverflow.com/a/51106873/2083075
     _mm_madd_epi16(

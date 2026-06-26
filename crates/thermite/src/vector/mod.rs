@@ -1209,6 +1209,40 @@ pub trait BitCastVector<FROM: Sized>: Sized {
     fn from_bits(bits: FROM) -> Self;
 }
 
+/// A `u16`/`u8` integer vector reinterpreted as a vector of *packed floats* (format `S`: fp16,
+/// bfloat16, the fp8 variants, ...), transcodable to and from the wider `f32` vector `F` of the
+/// same lane count.
+///
+/// This is the vector-layer mirror of
+/// [`PackedFloatRegister`](crate::register::PackedFloatRegister): `Self` is the `Vector<u16/u8
+/// register>` and `F` is the matching `Vector<f32 register>`. Both directions are exact for the
+/// decode (every value of these sub-`f32` formats is representable in `f32`) and round-to-nearest
+/// for the encode; backends use hardware (F16C `vcvtph2ps`) where available and a generic
+/// branchless fallback otherwise.
+///
+/// Blanket-implemented for every `Vector<R>` whose register implements `PackedFloatRegister<S,
+/// FR>`, so e.g. `u16x8<S>: PackedFloatVector<Fp16, f32x8<S>>` holds wherever the register does.
+///
+/// ```
+/// # use thermite::prelude::*;
+/// # use thermite::element::float::spec::Fp16;
+/// # use thermite::vector::PackedFloatVector;
+/// fn widen<U, F>(halves: U) -> F
+/// where
+///     U: PackedFloatVector<Fp16, F>,
+/// {
+///     halves.unpack()
+/// }
+/// ```
+pub trait PackedFloatVector<S: crate::element::float::spec::FloatSpec, F>: GenericVector {
+    /// Encode the `f32` vector `values` into this packed format (round to nearest, ties to even;
+    /// overflow / non-finite handled per the format `S`).
+    fn pack(values: F) -> Self;
+
+    /// Decode this packed-float vector into the `f32` vector it represents (exact).
+    fn unpack(self) -> F;
+}
+
 /// Per-lane comparison producing a [`Mask`](GenericVector::Mask).
 ///
 /// Each comparison returns a mask whose lanes are `true` where the predicate

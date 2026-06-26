@@ -4,7 +4,7 @@ use crate::{
     element::USize,
     isa::InstructionSet,
     register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister, reduced::ReducedRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, SimdExperimental},
 };
 
 cfg_if::cfg_if! {
@@ -106,6 +106,30 @@ impl Simd3 for Scalar {
     type f64x3 = ArrayRegister<f64, 3>;
     type i64x3 = ArrayRegister<i64, 3>;
     type u64x3 = ArrayRegister<u64, 3>;
+}
+
+impl SimdExperimental for Scalar {
+    type Native16Width = generic_array::typenum::U1;
+
+    type i16xN = i16;
+    type u16xN = u16;
+
+    type i16x2 = ArrayRegister<i16, 2>;
+    type u16x2 = ArrayRegister<u16, 2>;
+    type i16x4 = ArrayRegister<i16, 4>;
+    type u16x4 = ArrayRegister<u16, 4>;
+    type i16x8 = ArrayRegister<i16, 8>;
+    type u16x8 = ArrayRegister<u16, 8>;
+    type i16x16 = ArrayRegister<i16, 16>;
+    type u16x16 = ArrayRegister<u16, 16>;
+
+    type Native8Width = generic_array::typenum::U1;
+
+    type i8xN = i8;
+    type u8xN = u8;
+
+    type i8x16 = ArrayRegister<i8, 16>;
+    type u8x16 = ArrayRegister<u8, 16>;
 }
 
 decl_aliases!(Scalar);

@@ -52,6 +52,43 @@ pub unsafe fn _mm_permutevarx_epi64x_v2(value: __m128i, indices: __m128i) -> __m
     _mm_shuffle_epi8(value, _mm_add_epi8(shuffled_bases, _mm_set1_epi64x(0x0706050403020100)))
 }
 
+/// Variable within-register permute of 8x16-bit lanes: `result[i] = value[idx[i] & 7]`.
+///
+/// `idx_lo`/`idx_hi` are the 8 lane indices as two `u32x4` registers (the low and high four
+/// of a `GenericArray<u32, 8>`). The word indices are narrowed to `u16` and expanded into a
+/// byte-shuffle mask via the `w*0x0202 + 0x0100` identity (which places bytes `[2w, 2w+1]`
+/// per lane), then applied with a single `pshufb`.
+///
+/// Out-of-range indices are undefined per the `permutev` contract; they are not masked here.
+/// `pshufb` is still memory-safe (it clamps the byte index within the register), so an OOB
+/// lane just yields an unspecified value rather than UB.
+#[inline(always)]
+pub unsafe fn _mm_permutev_epi16x_v2(value: __m128i, idx_lo: __m128i, idx_hi: __m128i) -> __m128i {
+    let widx = _mm_packus_epi32(idx_lo, idx_hi); // narrow 8x u32 -> 8x u16
+    let byte_mask = _mm_add_epi16(
+        _mm_mullo_epi16(widx, _mm_set1_epi16(0x0202u16 as i16)),
+        _mm_set1_epi16(0x0100),
+    );
+    _mm_shuffle_epi8(value, byte_mask)
+}
+
+/// Variable within-register permute of 16x8-bit lanes: `result[i] = value[idx[i] & 15]`.
+///
+/// The 16 lane indices arrive as four `u32x4` registers (a `GenericArray<u32, 16>`). For
+/// 8-bit lanes the index *is* the byte index, so they are packed straight down to 16 `u8`
+/// (`packus_epi32` then `packus_epi16`) and applied with a single `pshufb`.
+///
+/// Out-of-range indices are undefined per the `permutev` contract; they are not masked here.
+/// `pshufb` remains memory-safe regardless (it uses only the low 4 bits when the high bit is
+/// clear, and yields 0 when set), so an OOB lane just produces an unspecified value, not UB.
+#[inline(always)]
+pub unsafe fn _mm_permutev_epi8x_v2(value: __m128i, i0: __m128i, i1: __m128i, i2: __m128i, i3: __m128i) -> __m128i {
+    let lo = _mm_packus_epi32(i0, i1); // 8x u16
+    let hi = _mm_packus_epi32(i2, i3); // 8x u16
+    let bytes = _mm_packus_epi16(lo, hi); // 16x u8 byte indices
+    _mm_shuffle_epi8(value, bytes)
+}
+
 #[inline(always)]
 pub unsafe fn _mm_permutevar_ps_v2(value: __m128, indices: __m128i) -> __m128 {
     _mm_castsi128_ps(_mm_permutevarx_epi32x_v2(_mm_castps_si128(value), indices))

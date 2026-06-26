@@ -7,16 +7,12 @@
 //!
 //! These had no coverage at all. Inputs are restricted to the well-behaved
 //! normal range (no denormals/inf/NaN) where the accuracy contract holds.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
 use thermite::Vector;
 use thermite::prelude::*;
-
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// Relative-error bound for the refined hardware estimates. Thermite refines
 /// the raw ~12-bit estimate, so this is comfortably loose but still catches a
@@ -129,6 +125,22 @@ macro_rules! recip_props {
     };
 }
 
-recip_props!(v3, X86V3, f32x8, f64x4);
-recip_props!(v2, X86V2, f32x4, f64x2);
-recip_props!(v1, X86V1, f32x4, f64x2);
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    recip_props!(v3, X86V3, f32x8, f64x4);
+    recip_props!(v2, X86V2, f32x4, f64x2);
+    recip_props!(v1, X86V1, f32x4, f64x2);
+}
+
+// On wasm rcp/rsqrt are exact (HAS_APPROX_RCP/RSQRT = false), which still
+// satisfies the loose accuracy bound. Native widths are f32x4/f64x2.
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    recip_props!(wasm, Wasm, f32x4, f64x2);
+}

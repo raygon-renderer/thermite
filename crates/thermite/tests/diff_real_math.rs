@@ -6,7 +6,7 @@
 //! Most are exact-ish arithmetic checked against an `f64` oracle. The angle
 //! wrappers are checked *by property* (result in range, and congruent mod 2π) to
 //! avoid floating-point boundary ambiguity at ±π.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -17,9 +17,6 @@ use thermite::prelude::*;
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 const TRIALS: usize = 400;
 const PI: f64 = core::f64::consts::PI;
@@ -244,11 +241,28 @@ macro_rules! real_suite {
     };
 }
 
-real_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-4);
-real_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-10);
-real_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-4);
-real_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-10);
-real_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-4);
-real_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-10);
+// scalar is the always-available oracle (runs on every target).
 real_suite!(scalar_f32, Scalar, f32x4, f32, 2.0e-4);
 real_suite!(scalar_f64, Scalar, f64x4, f64, 1.0e-10);
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    real_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-4);
+    real_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-10);
+    real_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-4);
+    real_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-10);
+    real_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-4);
+    real_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-10);
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    real_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-4);
+    real_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-10);
+}

@@ -174,8 +174,7 @@ pub mod sse42 {
 }
 
 pub mod f16c {
-    #[cfg(feature = "nightly")]
-    import_intrinsics! { _mm256_cvtph_ps, _mm256_cvtps_ph }
+    import_intrinsics! { _mm256_cvtph_ps, _mm256_cvtps_ph, _mm_cvtph_ps, _mm_cvtps_ph }
 }
 
 pub mod avx {

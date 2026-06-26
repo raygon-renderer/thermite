@@ -1,6 +1,18 @@
 use super::*;
 
 #[inline(always)]
+pub unsafe fn _mm256_cmpgt_epu8x_v3(a: __m256i, b: __m256i) -> __m256i {
+    let mask = _mm256_set1_epi8(i8::MIN); // 0x80
+    _mm256_cmpgt_epi8(_mm256_xor_si256(a, mask), _mm256_xor_si256(b, mask))
+}
+
+#[inline(always)]
+pub unsafe fn _mm256_cmpgt_epu16x_v3(a: __m256i, b: __m256i) -> __m256i {
+    let mask = _mm256_set1_epi16(i16::MIN); // 0x8000
+    _mm256_cmpgt_epi16(_mm256_xor_si256(a, mask), _mm256_xor_si256(b, mask))
+}
+
+#[inline(always)]
 pub unsafe fn _mm256_cmpgt_epu32x_v3(a: __m256i, b: __m256i) -> __m256i {
     let mask = _mm256_set1_epu32x(1u32 << 31);
     _mm256_cmpgt_epi32(_mm256_xor_si256(a, mask), _mm256_xor_si256(b, mask))

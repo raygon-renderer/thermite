@@ -17,6 +17,37 @@ macro_rules! _mm_reduce2_ps_v2 {
     }};
 }
 
+/// Reduces an 8-lane 16-bit integer SIMD vector to a single lane value using the specified
+/// lane-wise op (e.g. `_mm_min_epi16`, `_mm_add_epi16`). Log-tree fold: 8 -> 4 -> 2 -> 1 via
+/// successive byte-shift-down + op, then extract lane 0. Returns an `i16` (cast at the call
+/// site for unsigned). Only valid for commutative+associative ops; `add`/`mullo` wrap.
+#[rustfmt::skip]
+macro_rules! _mm_reduce_epi16_v2 {
+    ($value:expr; $op:ident) => {{#[allow(unused_unsafe)] unsafe {
+        let x = $value;
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 8)); // fold lanes 4..8 into 0..4
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 4)); // fold lanes 2..4 into 0..2
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 2)); // fold lane 1 into lane 0
+        arch::_mm_extract_epi16::<0>(x) as i16
+    }}};
+}
+
+/// Reduces a 16-lane 8-bit integer SIMD vector to a single lane value using the specified
+/// lane-wise op (e.g. `_mm_min_epi8`, `_mm_add_epi8`). Log-tree fold: 16 -> 8 -> 4 -> 2 -> 1
+/// via successive byte-shift-down + op, then extract lane 0. Returns an `i8` (cast at the call
+/// site for unsigned). Only valid for commutative+associative ops; `add` wraps.
+#[rustfmt::skip]
+macro_rules! _mm_reduce_epi8_v2 {
+    ($value:expr; $op:ident) => {{#[allow(unused_unsafe)] unsafe {
+        let x = $value;
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 8)); // fold lanes 8..16 into 0..8
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 4)); // fold lanes 4..8 into 0..4
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 2)); // fold lanes 2..4 into 0..2
+        let x = arch::$op(x, arch::_mm_bsrli_si128(x, 1)); // fold lane 1 into lane 0
+        arch::_mm_extract_epi8::<0>(x) as i8
+    }}};
+}
+
 /// Reduces a 4-lane `f32` SIMD vector to a single `f32` value using the specified operation.
 #[rustfmt::skip]
 macro_rules! _mm_reduce_ps_v2 {

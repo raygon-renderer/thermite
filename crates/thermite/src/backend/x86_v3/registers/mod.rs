@@ -15,8 +15,32 @@ pub mod u32x8;
 pub mod u64x2;
 pub mod u64x4;
 
-// pub mod i16x8;
-// pub mod u16x8;
+pub mod i16x16;
+pub mod i16x8;
+pub mod u16x16;
+pub mod u16x8;
+
+pub mod i8x16;
+pub mod i8x32;
+pub mod u8x16;
+pub mod u8x32;
+
+pub mod half16;
+
+// `PackedFloatRegister` for the native 16-bit registers: F16C hardware overrides for the binary16
+// formats when `avx2-f16c` is on (which also enables `f16c` in dispatched codegen), generic
+// branchless defaults otherwise and for bf16 always.
+pub mod packed;
+
+pub use i16x8::I16x8V3;
+pub use i16x16::I16x16V3;
+pub use u16x8::U16x8V3;
+pub use u16x16::U16x16V3;
+
+pub use i8x16::I8x16V3;
+pub use i8x32::I8x32V3;
+pub use u8x16::U8x16V3;
+pub use u8x32::U8x32V3;
 
 pub use f32x4::F32x4V3;
 pub use f32x8::F32x8V3;
@@ -36,15 +60,16 @@ pub mod half;
 pub use half::{F32x2V3, I32x2V3, U32x2V3};
 
 impl_newregister!(
-    F32x4V3, F32x8V3, F64x2V3, F64x4V3, I32x4V3, I32x8V3, I64x2V3, I64x4V3, U32x4V3, U32x8V3, U64x2V3, U64x4V3
+    F32x4V3, F32x8V3, F64x2V3, F64x4V3, I32x4V3, I32x8V3, I64x2V3, I64x4V3, U32x4V3, U32x8V3, U64x2V3, U64x4V3,
+    I16x8V3, U16x8V3, I16x16V3, U16x16V3, I8x16V3, U8x16V3, I8x32V3, U8x32V3
 );
 
 use crate::{
     backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{Storage, array::ArrayRegister, reduced::ReducedRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
+    register::{IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A, SimdExperimental},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -140,6 +165,53 @@ impl Simd3 for X86V3 {
     type u64x3 = <Self as Simd3A>::u64x3A;
 }
 
+impl SimdExperimental for X86V3 {
+    type Native16Width = generic_array::typenum::U16;
+
+    type i16xN = I16x16V3;
+    type u16xN = U16x16V3;
+
+    type i16x2 = ArrayRegister<i16, 2>;
+    type u16x2 = ArrayRegister<u16, 2>;
+
+    type i16x4 = half16::I16x4V3;
+    type u16x4 = half16::U16x4V3;
+
+    type i16x8 = I16x8V3;
+    type u16x8 = U16x8V3;
+
+    type i16x16 = I16x16V3;
+    type u16x16 = U16x16V3;
+
+    type Native8Width = generic_array::typenum::U32;
+    type i8xN = I8x32V3;
+    type u8xN = U8x32V3;
+
+    type i8x16 = I8x16V3;
+    type u8x16 = U8x16V3;
+}
+
+// 16-bit gather/scatter on x86v3 has no hardware support; mark scalar-fallback impls.
+macro_rules! impl_indexable16 {
+    ($idx:ty => $($ty:ty),* $(,)?) => {$( impl IndexableRegister<$idx> for $ty {} )*};
+}
+
+// native 8-lane indexed by same-width u16 and the 8-lane u32/u64 index types
+impl_indexable16!(U16x8V3 => I16x8V3, U16x8V3);
+impl_indexable16!(<X86V3 as Simd>::u32x8 => I16x8V3, U16x8V3);
+impl_indexable16!(<X86V3 as Simd>::u64x8 => I16x8V3, U16x8V3);
+// native 16-lane indexed by same-width u16 and the 16-lane u32/u64 index types
+impl_indexable16!(U16x16V3 => I16x16V3, U16x16V3);
+impl_indexable16!(<X86V3 as Simd>::u32x16 => I16x16V3, U16x16V3);
+impl_indexable16!(<X86V3 as Simd>::u64x16 => I16x16V3, U16x16V3);
+// 2-lane array indexed by the 2-lane u32/u64 index types
+impl_indexable16!(<X86V3 as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
+impl_indexable16!(<X86V3 as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
+// native 32-lane 8-bit: same-width self-indexing only (no hardware 8-bit gather)
+impl_indexable16!(U8x32V3 => I8x32V3, U8x32V3);
+// fixed 16-lane 8-bit: same-width self-indexing only
+impl_indexable16!(U8x16V3 => I8x16V3, U8x16V3);
+
 impl_concat_bool_register2!(f32, F32x2V3);
 impl_concat_bool_register2!(u32, U32x2V3);
 impl_concat_bool_register2!(i32, I32x2V3);
@@ -206,6 +278,18 @@ impl_bit_casts! {
     F64x4V3 as F64x4V3 => identity, // f64x4 -> f64x4
     U64x2V3 as U64x2V3 => identity, // u64x2 -> u64x2
     U64x4V3 as U64x4V3 => identity, // u64x4 -> u64x4
+
+    // 16-bit (same storage)
+    U16x8V3 as I16x8V3 => identity, U16x16V3 as I16x16V3 => identity,
+    I16x8V3 as U16x8V3 => identity, I16x16V3 as U16x16V3 => identity,
+    I16x8V3 as I16x8V3 => identity, I16x16V3 as I16x16V3 => identity,
+    U16x8V3 as U16x8V3 => identity, U16x16V3 as U16x16V3 => identity,
+
+    // 8-bit (same storage): native 256-bit + fixed 128-bit
+    U8x32V3 as I8x32V3 => identity, I8x32V3 as U8x32V3 => identity,
+    I8x32V3 as I8x32V3 => identity, U8x32V3 as U8x32V3 => identity,
+    U8x16V3 as I8x16V3 => identity, I8x16V3 as U8x16V3 => identity,
+    I8x16V3 as I8x16V3 => identity, U8x16V3 as U8x16V3 => identity,
 }
 
 impl_type_casts! {
@@ -266,6 +350,18 @@ impl_type_casts! {
     U64x4V3 as U32x4V3 => _mm256_cvtepi64_epi32_v3, // u64x4 -> u32x4
     I32x4V3 as I64x4V3 => _mm256_cvtepi32_epi64, // i32x4 -> i64x4
     I64x4V3 as I32x4V3 => _mm256_cvtepi64_epi32_v3, // i64x2 -> i32x4
+
+    // 16-bit self + sibling (i16<->u16). i16<->i32 widen/narrow live in-module.
+    I16x8V3 as I16x8V3 => identity, I16x16V3 as I16x16V3 => identity,
+    U16x8V3 as U16x8V3 => identity, U16x16V3 as U16x16V3 => identity,
+    I16x8V3 as U16x8V3 => identity, I16x16V3 as U16x16V3 => identity,
+    U16x8V3 as I16x8V3 => identity, U16x16V3 as I16x16V3 => identity,
+
+    // 8-bit self + sibling: native 256-bit + fixed 128-bit
+    I8x32V3 as I8x32V3 => identity, U8x32V3 as U8x32V3 => identity,
+    I8x32V3 as U8x32V3 => identity, U8x32V3 as I8x32V3 => identity,
+    I8x16V3 as I8x16V3 => identity, U8x16V3 as U8x16V3 => identity,
+    I8x16V3 as U8x16V3 => identity, U8x16V3 as I8x16V3 => identity,
 }
 
 impl_mask_casts! {
@@ -310,6 +406,18 @@ impl_mask_casts! {
     F64x2V3 as U64x2V3 => _mm_castpd_si128, // f64x2 -> u64x2
     F64x4V3 as I64x4V3 => _mm256_castpd_si256, // f64x4 -> i64x4
     F64x4V3 as U64x4V3 => _mm256_castpd_si256, // f64x4 -> u64x4
+
+    // 16-bit self + sibling
+    I16x8V3 as I16x8V3 => identity, I16x16V3 as I16x16V3 => identity,
+    U16x8V3 as U16x8V3 => identity, U16x16V3 as U16x16V3 => identity,
+    I16x8V3 as U16x8V3 => identity, I16x16V3 as U16x16V3 => identity,
+    U16x8V3 as I16x8V3 => identity, U16x16V3 as I16x16V3 => identity,
+
+    // 8-bit self + sibling: native 256-bit + fixed 128-bit
+    I8x32V3 as I8x32V3 => identity, U8x32V3 as U8x32V3 => identity,
+    I8x32V3 as U8x32V3 => identity, U8x32V3 as I8x32V3 => identity,
+    I8x16V3 as I8x16V3 => identity, U8x16V3 as U8x16V3 => identity,
+    I8x16V3 as U8x16V3 => identity, U8x16V3 as I8x16V3 => identity,
 }
 
 #[cfg(test)]

@@ -1,5 +1,24 @@
 use super::*;
 
+/// POLYFILL: per-byte unsigned greater-than via the `0x80` bias trick (no `cmpgt_epu8`).
+#[inline(always)]
+pub unsafe fn _mm_cmpgt_epu8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    let bias = _mm_set1_epi8(i8::MIN); // 0x80
+    _mm_cmpgt_epi8(_mm_xor_si128(a, bias), _mm_xor_si128(b, bias))
+}
+
+/// POLYFILL: per-byte signed min via cmpgt + bitwise select (no `min_epi8` pre-SSE4.1).
+#[inline(always)]
+pub unsafe fn _mm_min_epi8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(a, b, _mm_cmpgt_epi8(a, b)) // mask ? b : a => a > b ? b : a
+}
+
+/// POLYFILL: per-byte signed max via cmpgt + bitwise select (no `max_epi8` pre-SSE4.1).
+#[inline(always)]
+pub unsafe fn _mm_max_epi8x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_blendv_epi8x_v1(b, a, _mm_cmpgt_epi8(a, b)) // mask ? a : b => a > b ? a : b
+}
+
 #[inline(always)]
 pub unsafe fn _mm_max_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
     // 1. Sign bit mask
@@ -73,6 +92,26 @@ pub unsafe fn _mm_cmpgt_epi64x_v1(a: __m128i, b: __m128i) -> __m128i {
 pub unsafe fn _mm_cmpgt_epu32x_v1(a: __m128i, b: __m128i) -> __m128i {
     let mask = _mm_set1_epu32x(0x80000000);
     _mm_cmpgt_epi32(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))
+}
+
+/// POLYFILL: unsigned 16-bit `>` (no native unsigned compare on SSE2). Bias by 0x8000 so a
+/// signed `pcmpgtw` ranks the unsigned values.
+#[inline(always)]
+pub unsafe fn _mm_cmpgt_epu16x_v1(a: __m128i, b: __m128i) -> __m128i {
+    let bias = _mm_set1_epi16(i16::MIN); // 0x8000
+    _mm_cmpgt_epi16(_mm_xor_si128(a, bias), _mm_xor_si128(b, bias))
+}
+
+/// POLYFILL: `_mm_min_epu16` (SSE4.1). `subs_epu16(a,b) = max(a-b, 0)`, so `a - that = min(a,b)`.
+#[inline(always)]
+pub unsafe fn _mm_min_epu16x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_sub_epi16(a, _mm_subs_epu16(a, b))
+}
+
+/// POLYFILL: `_mm_max_epu16` (SSE4.1). `b + max(a-b, 0) = max(a,b)`.
+#[inline(always)]
+pub unsafe fn _mm_max_epu16x_v1(a: __m128i, b: __m128i) -> __m128i {
+    _mm_add_epi16(b, _mm_subs_epu16(a, b))
 }
 
 #[inline(always)]

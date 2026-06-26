@@ -20,7 +20,7 @@ features = ["document_registers", "std"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
-default = ["document_registers", "bitvec"]
+default = ["document_registers", "bitvec", "avx2-f16c"]
 bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
@@ -57,6 +57,13 @@ strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
 std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 neon = []
+
+# Assume the `f16c` CPU feature is available whenever AVX2 is (the x86-v3 backend).
+# F16C shipped one generation before AVX2 (Ivy Bridge vs. Haswell), so any AVX2-capable
+# CPU also has F16C. This adds `f16c` to the `#[target_feature(enable = ...)]` set the
+# dispatch macros emit for the AVX2 backend, so half-precision conversion intrinsics are
+# available in dispatched code without a separate runtime check. No effect off x86.
+avx2-f16c = ["thermite-macros/avx2-f16c"]
 
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
 wasm = []
@@ -108,4 +115,9 @@ spirv-std-macros.workspace = true
 glam = "0.33"
 rand = "0.10"
 num-traits = { version = "0.2.19", default-features = true }
+
+# Benchmark harness only. criterion pulls rayon, which refuses to build for wasi, so keep it
+# out of the wasm test build graph (benches are native-only). Run wasm tests with `--tests` so
+# the bench targets that `use criterion` are not selected.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

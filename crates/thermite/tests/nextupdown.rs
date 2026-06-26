@@ -11,7 +11,7 @@
 //! the IEEE-754 domain explicitly: NaNs (payloads and signs), both infinities,
 //! +/-MAX, exponent-rollover boundaries, the normal/subnormal boundary, the
 //! tiniest subnormals, and both zeros.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 mod harness;
 
@@ -21,9 +21,6 @@ use thermite::register::FloatRegister as _;
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 // ---------------------------------------------------------------------------
 // Random + standard-edge corpus (bit-exact, NaN-aware via Tol::Exact).
@@ -50,12 +47,6 @@ macro_rules! corpus_suite {
 }
 
 corpus_suite!(scalar, Scalar, [f32x4: f32, f64x2: f64], "scalar");
-// v1: the SSE2 polyfills natively, plus ArrayRegister delegation on the wide types
-corpus_suite!(v1, X86V1, [f32x4: f32, f64x2: f64, f32x8: f32, f64x4: f64], "x86_v1");
-// v2: the generic FloatRegister default implementation
-corpus_suite!(v2, X86V2, [f32x4: f32, f64x2: f64], "x86_v2");
-// v3: the AVX2 polyfills on native widths, generic default on the 128-bit types
-corpus_suite!(v3, X86V3, [f32x8: f32, f64x4: f64, f32x4: f32, f64x2: f64], "x86_v3");
 
 // ---------------------------------------------------------------------------
 // Explicit region walk: every value below is tested splatted across all lanes,
@@ -162,9 +153,6 @@ macro_rules! region_suite {
 }
 
 region_suite!(regions_scalar, Scalar, "scalar");
-region_suite!(regions_v1, X86V1, "x86_v1");
-region_suite!(regions_v2, X86V2, "x86_v2");
-region_suite!(regions_v3, X86V3, "x86_v3");
 
 // ---------------------------------------------------------------------------
 // Round-trip property: for finite values, next_down(next_up(x)) == x
@@ -203,10 +191,50 @@ macro_rules! roundtrip_check {
 #[test]
 fn roundtrip() {
     roundtrip_check!("scalar f32x4", <Scalar as Simd>::f32x4, f32, region_values!(f32, u32));
-    roundtrip_check!("x86_v1 f32x4", <X86V1 as Simd>::f32x4, f32, region_values!(f32, u32));
-    roundtrip_check!("x86_v1 f64x2", <X86V1 as Simd>::f64x2, f64, region_values!(f64, u64));
-    roundtrip_check!("x86_v2 f32x4", <X86V2 as Simd>::f32x4, f32, region_values!(f32, u32));
-    roundtrip_check!("x86_v2 f64x2", <X86V2 as Simd>::f64x2, f64, region_values!(f64, u64));
-    roundtrip_check!("x86_v3 f32x8", <X86V3 as Simd>::f32x8, f32, region_values!(f32, u32));
-    roundtrip_check!("x86_v3 f64x4", <X86V3 as Simd>::f64x4, f64, region_values!(f64, u64));
+}
+
+// x86 backends: native polyfills (v1/v3) and the generic default (v2).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+    use super::*;
+    use thermite::backend::{x86_v1::X86V1, x86_v2::X86V2, x86_v3::X86V3};
+
+    // v1: the SSE2 polyfills natively, plus ArrayRegister delegation on the wide types
+    corpus_suite!(v1, X86V1, [f32x4: f32, f64x2: f64, f32x8: f32, f64x4: f64], "x86_v1");
+    // v2: the generic FloatRegister default implementation
+    corpus_suite!(v2, X86V2, [f32x4: f32, f64x2: f64], "x86_v2");
+    // v3: the AVX2 polyfills on native widths, generic default on the 128-bit types
+    corpus_suite!(v3, X86V3, [f32x8: f32, f64x4: f64, f32x4: f32, f64x2: f64], "x86_v3");
+
+    region_suite!(regions_v1, X86V1, "x86_v1");
+    region_suite!(regions_v2, X86V2, "x86_v2");
+    region_suite!(regions_v3, X86V3, "x86_v3");
+
+    #[test]
+    fn roundtrip() {
+        roundtrip_check!("x86_v1 f32x4", <X86V1 as Simd>::f32x4, f32, region_values!(f32, u32));
+        roundtrip_check!("x86_v1 f64x2", <X86V1 as Simd>::f64x2, f64, region_values!(f64, u64));
+        roundtrip_check!("x86_v2 f32x4", <X86V2 as Simd>::f32x4, f32, region_values!(f32, u32));
+        roundtrip_check!("x86_v2 f64x2", <X86V2 as Simd>::f64x2, f64, region_values!(f64, u64));
+        roundtrip_check!("x86_v3 f32x8", <X86V3 as Simd>::f32x8, f32, region_values!(f32, u32));
+        roundtrip_check!("x86_v3 f64x4", <X86V3 as Simd>::f64x4, f64, region_values!(f64, u64));
+    }
+}
+
+// wasm: generic FloatRegister default on native f32x4/f64x2, ArrayRegister on the wide types.
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+
+    corpus_suite!(wasm, Wasm, [f32x4: f32, f64x2: f64, f32x8: f32, f64x4: f64], "wasm");
+    region_suite!(regions_wasm, Wasm, "wasm");
+
+    #[test]
+    fn roundtrip() {
+        roundtrip_check!("wasm f32x4", <Wasm as Simd>::f32x4, f32, region_values!(f32, u32));
+        roundtrip_check!("wasm f64x2", <Wasm as Simd>::f64x2, f64, region_values!(f64, u64));
+        roundtrip_check!("wasm f32x8", <Wasm as Simd>::f32x8, f32, region_values!(f32, u32));
+        roundtrip_check!("wasm f64x4", <Wasm as Simd>::f64x4, f64, region_values!(f64, u64));
+    }
 }

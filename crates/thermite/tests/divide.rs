@@ -1,4 +1,5 @@
 #![allow(clippy::unnecessary_cast)]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
 use thermite::{
     backend::x86_v3::prelude::*,

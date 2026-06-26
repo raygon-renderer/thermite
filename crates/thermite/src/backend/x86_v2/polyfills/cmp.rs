@@ -1,6 +1,12 @@
 use super::*;
 
 #[inline(always)]
+pub unsafe fn _mm_cmpgt_epu16x_v2(a: __m128i, b: __m128i) -> __m128i {
+    let mask = _mm_set1_epi16(i16::MIN); // 0x8000
+    _mm_cmpgt_epi16(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))
+}
+
+#[inline(always)]
 pub unsafe fn _mm_cmpgt_epu32x_v2(a: __m128i, b: __m128i) -> __m128i {
     let mask = _mm_set1_epu32x(1u32 << 31);
     _mm_cmpgt_epi32(_mm_xor_si128(a, mask), _mm_xor_si128(b, mask))

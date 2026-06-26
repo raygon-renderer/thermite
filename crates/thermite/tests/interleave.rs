@@ -1,3 +1,4 @@
+#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 // NOTE: Specifically using x86-v2 here so that i32x16 = ArrayRegister<i32x4, 4>
 use generic_array::{GenericArray, sequence::GenericSequence};
 use thermite::backend::x86_v2::prelude::*;

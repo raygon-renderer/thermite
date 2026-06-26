@@ -6,7 +6,7 @@
 //! Each of those branches gets a dedicated scenario, on Scalar + V2 + V3 for
 //! both `f32x4` and `f64x4`. Roots are known in closed form and checked against
 //! `f64` oracles.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
 use thermite::Vector;
 use thermite::math::algorithms::{newtons_method, prod_f, sum_f};
@@ -15,9 +15,6 @@ use thermite::prelude::*;
 use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
 
 /// All scenarios for one 4-lane float vector type.
 ///
@@ -201,10 +198,26 @@ macro_rules! newton_suite {
     };
 }
 
-newton_suite!(v3, X86V3);
-newton_suite!(v2, X86V2);
-newton_suite!(v1, X86V1);
+// scalar is the always-available oracle (runs on every target).
 newton_suite!(scalar, Scalar);
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    newton_suite!(v3, X86V3);
+    newton_suite!(v2, X86V2);
+    newton_suite!(v1, X86V1);
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    newton_suite!(wasm, Wasm);
+}
 
 /// `sum_f` / `prod_f` (`math/algorithms/mod.rs`). The compensated (`UseCompensation
 /// <_, true>`) variant exercises the Kahan path, which is the *only* place
@@ -212,7 +225,10 @@ newton_suite!(scalar, Scalar);
 /// reach it (`sum`/`prod` start at 0/1, so the first term always triggers a swap).
 #[test]
 fn series_sum_and_prod() {
-    type V = Vector<<X86V3 as Simd>::f64x4>;
+    // `sum_f`/`prod_f` are backend-agnostic; scalar `f64x4` (a real 4-lane
+    // ArrayRegister) exercises the same convergence/Kahan/swap paths and runs
+    // on every target.
+    type V = Vector<<Scalar as Simd>::f64x4>;
     let tol = V::splat(1e-15);
 
     // geometric series sum_{n>=0} 0.5^n = 2, converged (terms fall below tol).

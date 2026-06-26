@@ -1,0 +1,21 @@
+[package]
+name = "wasm-runner"
+version = "0.1.0"
+edition = "2024"
+publish = false      # dev tool: WASI runtime that runs thermite's libtest binaries on wasm
+
+[[bin]]
+name = "wasm-runner"
+path = "src/main.rs"
+
+[dependencies]
+# Lean runtime: just compile (cranelift) + execute (runtime) core wasm modules with std and
+# anyhow Error interop. SIMD/relaxed-SIMD are runtime `Config` toggles, not features. Everything
+# else the default set pulls in (component-model, gc, async, threads, cache, pooling, profiling,
+# wit-parser, stack-switching, ...) is dead weight for a wasip1 libtest runner.
+wasmtime = { version = "46", default-features = false, features = ["runtime", "cranelift", "std", "anyhow", "backtrace"] }
+# wasip1 only (`p1`). Note `p1` -> `p2` -> wasmtime/{component-model,async}, so those two are
+# unavoidable for preview1 here; but this still keeps gc, threads, cache, pooling, profiling,
+# wit-parser and stack-switching out of the wasmtime build.
+wasmtime-wasi = { version = "46", default-features = false, features = ["p1"] }
+anyhow = "1"

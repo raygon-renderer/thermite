@@ -58,7 +58,7 @@ use generic_array::{
 
 use crate::{
     divider::{BranchfreeDivider, Divider, vector::VectorDivider},
-    element::{FloatElementWithBits, IntegerElement},
+    element::{FloatElementWithBits, IntegerElement, float::spec, float::spec::FloatSpec},
     isa::InstructionSet,
     math::policy::Policy,
     vector::{NewConst, ops::MulAddExt},
@@ -1500,10 +1500,10 @@ pub trait UnsignedIntegerRegister:
     fn parity(mut value: Storage<Self>) -> Storage<Self> {
         let mut shift = size_of::<Self::Element>() as u32 * 4; // Start with half the bit width
 
-        if Self::HAS_HARDWARE_POPCNT {
+        if const { Self::HAS_HARDWARE_POPCNT } {
             // If we have a hardware popcnt, we can just use that.
             value = Self::count_ones(value);
-        } else if Self::HAS_TRUE_SHIFTV {
+        } else if const { Self::HAS_TRUE_SHIFTV } {
             // Slightly faster XOR reduction method that relies on variable shifts.
             // This is still O(log2(N)), but solves the last 4 bits with a lookup table.
             while shift >= 4 {
@@ -2062,4 +2062,205 @@ pub trait FloatRegister:
             Self::add(Self::mul(a, t0), Self::mul(b, t)) // a * (1 - t) + b * t
         }
     }
+}
+
+/// Generic branchless decode of a packed float format (`S`) into `f32`, operating entirely on
+/// the f32 register's `Bits` (a `u32` lane register). The container is zero-extended to `u32`,
+/// the fields are reconstructed with shifts/masks/selects, and the result is bit-cast back to
+/// `f32`. Subnormals are decoded denormal-safe (a normal f32 intermediate minus its bias, which
+/// is exact and independent of the FPU's flush-to-zero mode). This is the fallback every
+/// backend gets; hardware paths (F16C, AVX512-BF16, ...) override `unpack` directly.
+#[inline(always)]
+fn unpack_packed<S, C, F, B>(values: Storage<C>) -> Storage<F>
+where
+    S: FloatSpec,
+    C: UnsignedIntegerRegister,
+    F: FloatRegister<Element = f32, Lanes = C::Lanes, Bits = B> + BitCastRegister<B>,
+    B: UnsignedIntegerRegister<Lanes = C::Lanes, Unsigned = B, Element = u32>
+        + BitshiftRegister
+        + CastRegister<C>
+        + BitCastRegister<F>,
+{
+    type M<B> = <B as CoreRegister>::Mask;
+
+    // Zero-extend the container's bits into a u32 lane register, then split out the fields.
+    let h = <B as CastRegister<C>>::cast_from(values);
+    let e = B::bitand(B::shr(h, S::MANTISSA_BITS), B::splat(S::EXP_FIELD_MAX));
+    let m = B::bitand(h, B::splat(S::MANTISSA_MASK));
+    let mant = B::shl(m, S::MANTISSA_SHIFT); // mantissa aligned into f32's 23-bit field
+
+    // Normal: (e + (127 - BIAS)) << 23 | mant.
+    let normal = B::bitor(
+        B::shl(B::add(e, B::splat(S::EXP_REBIAS as u32)), spec::F32_MANTISSA_BITS),
+        mant,
+    );
+
+    // Subnormal / zero, denormal-safe: drop the aligned mantissa into a *normal* f32 with
+    // exponent field K = 128 - BIAS, then subtract 2^(K-127). Exact (Sterbenz) and never forms a
+    // denormal intermediate, so it is correct regardless of the FPU's flush-to-zero state.
+    let k = B::splat(((128 - S::EXP_BIAS) as u32) << spec::F32_MANTISSA_BITS);
+    let to_f = <F as BitCastRegister<B>>::from_bits;
+    let sub_f = F::sub(to_f(B::bitor(mant, k)), to_f(k));
+    let subnormal = <B as BitCastRegister<F>>::from_bits(sub_f);
+
+    let mut out = B::blendv(B::eq(e, B::ZERO), normal, subnormal);
+
+    // Non-finite code points. Only the schemes with an all-ones-exponent escape do anything here;
+    // `Finite` and `Unchecked` decode every code point as the finite value computed above (the
+    // latter deliberately, for speed - so `e_is_max` is never even computed for it).
+    if const { matches!(S::SPECIAL, spec::SpecialEncoding::Ieee) } {
+        let e_is_max = B::eq(e, B::splat(S::EXP_FIELD_MAX));
+        // inf when mantissa is zero, quiet NaN (payload carried up) otherwise.
+        let quiet = B::blendv(B::eq(m, B::ZERO), B::splat(spec::F32_IMPLICIT >> 1), B::ZERO);
+        let inf_nan = B::bitor(
+            B::bitor(B::splat(spec::F32_EXP_FIELD_MAX << spec::F32_MANTISSA_BITS), mant),
+            quiet,
+        );
+        out = B::blendv(e_is_max, out, inf_nan);
+    } else if const { matches!(S::SPECIAL, spec::SpecialEncoding::FiniteNanOnly) } {
+        // The single NaN code point is the all-ones exponent *and* all-ones mantissa.
+        let is_nan = M::<B>::bitand(
+            B::eq(e, B::splat(S::EXP_FIELD_MAX)),
+            B::eq(m, B::splat(S::MANTISSA_MASK)),
+        );
+        out = B::blendv(is_nan, out, B::splat(spec::F32_QUIET_NAN));
+    }
+
+    if const { S::HAS_SIGN } {
+        out = B::bitor(out, B::shl(B::shr(h, S::SIGN_SHIFT), 31));
+    }
+
+    <F as BitCastRegister<B>>::from_bits(out)
+}
+
+/// Generic branchless encode of an `f32` register into a packed float format (`S`),
+/// round-to-nearest-ties-to-even. The mantissa is rounded with a per-lane variable shift
+/// (`shlv`/`shrv`) so normal and subnormal results share one path; overflow / non-finite inputs
+/// become `±inf` (IEEE), saturate (no-inf schemes), or flush to signed zero
+/// ([`Unchecked`](spec::SpecialEncoding::Unchecked)) - all pre-resolved into `S::OVERFLOW_BITS` /
+/// `S::NAN_OUT_BITS` so the body has no per-scheme branch for them - and tiny values flush to
+/// signed zero. Mirrors the scalar [`FloatSpec::pack`] oracle. Hardware paths override `pack`.
+#[inline(always)]
+fn pack_packed<S, C, F, B>(values: Storage<F>) -> Storage<C>
+where
+    S: FloatSpec,
+    C: UnsignedIntegerRegister + CastRegister<B>,
+    F: FloatRegister<Element = f32, Lanes = C::Lanes, Bits = B> + BitCastRegister<B>,
+    B: UnsignedIntegerRegister<Lanes = C::Lanes, Unsigned = B, Element = u32>
+        + BitshiftRegister
+        + CastRegister<C>
+        + BitCastRegister<F>,
+{
+    type M<B> = <B as CoreRegister>::Mask;
+
+    let fb = <B as BitCastRegister<F>>::from_bits(values);
+    let abs = B::bitand(fb, B::splat(0x7FFF_FFFF));
+    let f32_exp = B::shr(abs, spec::F32_MANTISSA_BITS); // biased, 0..255
+    let f32_mant = B::bitand(abs, B::splat(spec::F32_IMPLICIT - 1));
+    let significand = B::bitor(B::splat(spec::F32_IMPLICIT), f32_mant); // 1.<23>, the implicit one set
+
+    let one = B::ONE;
+    let rebias = B::splat(S::EXP_REBIAS as u32); // 127 - BIAS, >= 0
+
+    // Target (biased) packed exponent, and how many low significand bits to discard. When the
+    // exponent would be <= 0 the result is subnormal: clamp `e` to 0 and discard `(1 - e)` extra
+    // bits so normal and subnormal share the single rounding path below.
+    let sub = B::le(f32_exp, rebias);
+    let extra = B::sub(B::add(rebias, one), f32_exp); // = 1 - e, valid (>= 1) only where `sub`
+    let shift = B::blendv(
+        sub,
+        B::splat(S::MANTISSA_SHIFT),
+        B::add(B::splat(S::MANTISSA_SHIFT), extra),
+    );
+    let e = B::blendv(sub, B::sub(f32_exp, rebias), B::ZERO);
+
+    // A shift of >= 32 discards the whole significand (input is below half the smallest
+    // subnormal): flush to zero. Clamp the shift so the variable-shift ops stay well-defined.
+    let tiny = B::ge(shift, B::splat(32));
+    let shift = B::min(shift, B::splat(31));
+
+    // Round to nearest, ties to even, on the discarded low `shift` bits.
+    let keep = B::shrv(significand, shift);
+    let rem = B::bitand(significand, B::sub(B::shlv(one, shift), one));
+    let halfway = B::shlv(one, B::sub(shift, one));
+    let tie_to_odd = M::<B>::bitand(B::eq(rem, halfway), B::eq(B::bitand(keep, one), one));
+    let round_up = M::<B>::bitor(B::gt(rem, halfway), tie_to_odd);
+    let q = B::add(keep, B::bitand(B::from_mask(round_up), one));
+
+    // Normal magnitude. A rounding carry out of the implicit-bit position bumps the exponent and
+    // clears the fraction. (Subnormal magnitude is just `q`: a carry there lands on the smallest
+    // normal's bit pattern automatically.)
+    let carry = B::ge(B::shr(q, S::MANTISSA_BITS), B::splat(2));
+    let e_carried = B::add(e, B::bitand(B::from_mask(carry), one));
+    let frac = B::nz(carry, B::bitand(q, B::splat(S::MANTISSA_MASK)));
+    let mag_normal = B::bitor(B::shl(e_carried, S::MANTISSA_BITS), frac);
+    let mut mag = B::blendv(sub, mag_normal, q);
+
+    // Overflow of a normal (subnormals can't overflow) -> inf / saturate.
+    let overflow = M::<B>::bitandnot(sub, B::gt(e_carried, B::splat(S::MAX_FINITE_EXP_FIELD)));
+    mag = B::blendv(overflow, mag, B::splat(S::OVERFLOW_BITS));
+    mag = B::blendv(tiny, mag, B::ZERO);
+
+    // For the no-infinity schemes, a finite input must never land on the reserved NaN code point
+    // (E4M3's S.1111.111); the saturation target is already the largest finite.
+    if const { matches!(S::SPECIAL, spec::SpecialEncoding::FiniteNanOnly) } {
+        mag = B::blendv(
+            B::gt(mag, B::splat(S::MAX_FINITE_BITS)),
+            mag,
+            B::splat(S::MAX_FINITE_BITS),
+        );
+    }
+
+    // f32 subnormals are below every target range -> signed zero.
+    mag = B::blendv(B::eq(f32_exp, B::ZERO), mag, B::ZERO);
+
+    // f32 inf / NaN. inf shares OVERFLOW_BITS with the overflow case; NaN uses NAN_OUT_BITS.
+    let special = B::eq(f32_exp, B::splat(spec::F32_EXP_FIELD_MAX));
+    let is_nan = M::<B>::bitandnot(B::eq(f32_mant, B::ZERO), special);
+    let is_inf = M::<B>::bitand(special, B::eq(f32_mant, B::ZERO));
+    mag = B::blendv(is_inf, mag, B::splat(S::OVERFLOW_BITS));
+    mag = B::blendv(is_nan, mag, B::splat(S::NAN_OUT_BITS));
+
+    if const { S::HAS_SIGN } {
+        mag = B::bitor(mag, B::shr(B::bitand(fb, B::splat(0x8000_0000)), 31 - S::SIGN_SHIFT));
+    }
+
+    <C as CastRegister<B>>::cast_from(mag)
+}
+
+/// A `u32`/`u16`/`u8` integer register reinterpreted as a vector of packed floats (`S`:
+/// fp16, bf16, fp8, ...), convertible to/from a wider `f32` register `F` of the same lane
+/// count. `pack`/`unpack` have generic branchless defaults (see [`unpack_packed`]/
+/// [`pack_packed`]); backends override them where hardware exists (e.g. F16C `vcvtph2ps`).
+pub trait PackedFloatRegister<
+    S: FloatSpec,
+    F: FloatRegister<Element = f32, Lanes = Self::Lanes, Bits: CastRegister<Self>>,
+>: UnsignedIntegerRegister<Unsigned = Self>
+{
+    #[inline(always)]
+    fn pack(values: Storage<F>) -> Storage<Self>
+    where
+        Self: CastRegister<F::Bits>,
+    {
+        pack_packed::<S, Self, F, F::Bits>(values)
+    }
+
+    #[inline(always)]
+    fn unpack(values: Storage<Self>) -> Storage<F> {
+        unpack_packed::<S, Self, F, F::Bits>(values)
+    }
+}
+
+// The emulated `ArrayRegister` container (`u16x8`, `u8x16`, ...) has no hardware transcoder, so
+// it just takes the generic branchless defaults - for every format `S` and every width `N` at
+// once. Native backends impl `PackedFloatRegister` for their own concrete register types (which
+// are distinct types, so this blanket does not conflict), overriding `pack`/`unpack` with F16C
+// etc. where the hardware exists.
+impl<S, C, const N: usize> PackedFloatRegister<S, array::ArrayRegister<f32, N>> for array::ArrayRegister<C, N>
+where
+    S: FloatSpec,
+    C: CoreRegister,
+    array::ArrayRegister<C, N>: UnsignedIntegerRegister<Unsigned = Self>,
+    array::ArrayRegister<f32, N>: FloatRegister<Element = f32, Lanes = Self::Lanes, Bits: CastRegister<Self>>,
+{
 }
