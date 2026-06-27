@@ -5,7 +5,7 @@ pub mod unsigned;
 
 use crate::{
     isa::InstructionSet,
-    register::{BitCastRegister, CastRegister, Storage},
+    register::{BitCastRegister, CastRegister, SaturatingCastRegister, Storage},
     simd::HasIsa,
 };
 
@@ -59,6 +59,33 @@ impl_easy_casts! {
     f64 as (f64, i64, u64),
     i64 as (f64, u64, i64),
     u64 as (f64, i64, u64),
+}
+
+// Reference oracle for `SaturatingCastRegister`: clamp the source value into the
+// destination element range, then convert. Narrowing, same-signedness only.
+// For unsigned destinations `<$to>::MIN` is 0, so only the high end clamps.
+macro_rules! impl_saturating_casts {
+    ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
+        $(
+            #[thermite_macros::inline_always]
+            impl SaturatingCastRegister<$from> for $to {
+                fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                    value.clamp(<$to>::MIN as $from, <$to>::MAX as $from) as $to
+                }
+            }
+        )+
+    )*};
+}
+
+impl_saturating_casts! {
+    // signed narrowing (incl. skip-level pairs)
+    i64 as (i32, i16, i8),
+    i32 as (i16, i8),
+    i16 as (i8),
+    // unsigned narrowing (incl. skip-level pairs)
+    u64 as (u32, u16, u8),
+    u32 as (u16, u8),
+    u16 as (u8),
 }
 
 // all different-sized casts

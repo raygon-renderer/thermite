@@ -26,6 +26,7 @@ pub mod u8x16;
 pub mod u8x32;
 
 pub mod half16;
+pub mod half8; // sub-native 8-bit ReducedRegister ladder (i8x4/x8) + u8<->u32 casts
 
 // `PackedFloatRegister` for the native 16-bit registers: F16C hardware overrides for the binary16
 // formats when `avx2-f16c` is on (which also enables `f16c` in dispatched codegen), generic
@@ -69,7 +70,7 @@ use crate::{
     element::FindUSize,
     isa::InstructionSet,
     register::{IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A, SimdExperimental},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,6 +86,8 @@ impl NativeIsa for X86V3 {
 
     type Native32Width = generic_array::typenum::U8;
     type Native64Width = generic_array::typenum::U4;
+    type Native16Width = generic_array::typenum::U16;
+    type Native8Width = generic_array::typenum::U32;
 
     type NativeAlignment = crate::simd::Align32; // 256-bit vectors = 32 bytes
 
@@ -112,6 +115,12 @@ impl NativeSimd for X86V3 {
     type f64xN = F64x4V3;
     type i64xN = I64x4V3;
     type u64xN = U64x4V3;
+
+    type i16xN = I16x16V3;
+    type u16xN = U16x16V3;
+
+    type i8xN = I8x32V3;
+    type u8xN = U8x32V3;
 }
 
 impl Simd for X86V3 {
@@ -151,6 +160,28 @@ impl Simd for X86V3 {
     type f64x16 = ArrayRegister<F64x4V3, 4>;
     type i64x16 = ArrayRegister<I64x4V3, 4>;
     type u64x16 = ArrayRegister<U64x4V3, 4>;
+
+    type i16x2 = ArrayRegister<i16, 2>;
+    type u16x2 = ArrayRegister<u16, 2>;
+
+    type i16x4 = half16::I16x4V3;
+    type u16x4 = half16::U16x4V3;
+
+    type i16x8 = I16x8V3;
+    type u16x8 = U16x8V3;
+
+    type i16x16 = I16x16V3;
+    type u16x16 = U16x16V3;
+
+    type i8x16 = I8x16V3;
+    type u8x16 = U8x16V3;
+
+    type i8x2 = ArrayRegister<i8, 2>;
+    type u8x2 = ArrayRegister<u8, 2>;
+    type i8x4 = half8::I8x4V3;
+    type u8x4 = half8::U8x4V3;
+    type i8x8 = half8::I8x8V3;
+    type u8x8 = half8::U8x8V3;
 }
 
 impl Simd3 for X86V3 {
@@ -165,31 +196,14 @@ impl Simd3 for X86V3 {
     type u64x3 = <Self as Simd3A>::u64x3A;
 }
 
-impl SimdExperimental for X86V3 {
-    type Native16Width = generic_array::typenum::U16;
-
-    type i16xN = I16x16V3;
-    type u16xN = U16x16V3;
-
-    type i16x2 = ArrayRegister<i16, 2>;
-    type u16x2 = ArrayRegister<u16, 2>;
-
-    type i16x4 = half16::I16x4V3;
-    type u16x4 = half16::U16x4V3;
-
-    type i16x8 = I16x8V3;
-    type u16x8 = U16x8V3;
-
-    type i16x16 = I16x16V3;
-    type u16x16 = U16x16V3;
-
-    type Native8Width = generic_array::typenum::U32;
-    type i8xN = I8x32V3;
-    type u8xN = U8x32V3;
-
-    type i8x16 = I8x16V3;
-    type u8x16 = U8x16V3;
-}
+// fp8 pack/unpack (generic branchless defaults) on the u8 ladder -> matching f32 widths
+// (v3's f32x8 is native, f32x16 = ArrayRegister<F32x8V3, 2>).
+impl_packed_fp8!(
+    ArrayRegister<u8, 2> => F32x2V3,
+    half8::U8x4V3 => F32x4V3,
+    half8::U8x8V3 => F32x8V3,
+    U8x16V3 => ArrayRegister<F32x8V3, 2>,
+);
 
 // 16-bit gather/scatter on x86v3 has no hardware support; mark scalar-fallback impls.
 macro_rules! impl_indexable16 {
@@ -205,12 +219,15 @@ impl_indexable16!(U16x16V3 => I16x16V3, U16x16V3);
 impl_indexable16!(<X86V3 as Simd>::u32x16 => I16x16V3, U16x16V3);
 impl_indexable16!(<X86V3 as Simd>::u64x16 => I16x16V3, U16x16V3);
 // 2-lane array indexed by the 2-lane u32/u64 index types
-impl_indexable16!(<X86V3 as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
-impl_indexable16!(<X86V3 as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
+impl_indexable16!(<X86V3 as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
+impl_indexable16!(<X86V3 as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
 // native 32-lane 8-bit: same-width self-indexing only (no hardware 8-bit gather)
 impl_indexable16!(U8x32V3 => I8x32V3, U8x32V3);
-// fixed 16-lane 8-bit: same-width self-indexing only
+// fixed 16-lane 8-bit: same-width self-indexing plus the 16-lane usize/u32/u64 index trio
+// (scalar-fallback markers, matching the sub-native i8x8/i8x4 ladder; usizex16 aliases u32x16/u64x16)
 impl_indexable16!(U8x16V3 => I8x16V3, U8x16V3);
+impl_indexable16!(<X86V3 as Simd>::u32x16 => I8x16V3, U8x16V3);
+impl_indexable16!(<X86V3 as Simd>::u64x16 => I8x16V3, U8x16V3);
 
 impl_concat_bool_register2!(f32, F32x2V3);
 impl_concat_bool_register2!(u32, U32x2V3);

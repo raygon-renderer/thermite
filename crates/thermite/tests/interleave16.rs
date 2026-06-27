@@ -9,13 +9,13 @@ mod harness;
 
 use generic_array::typenum::Unsigned;
 use thermite::register::{CoreRegister, InterleaveRegister as _};
-use thermite::simd::SimdExperimental;
+use thermite::simd::{NativeSimd, Simd};
 
 macro_rules! interleave_roundtrip {
     ($name:ident, $backend:ty, $reg:ident, $e:ty) => {
         #[test]
         fn $name() {
-            type UT = <$backend as SimdExperimental>::$reg;
+            type UT = <$backend as Simd>::$reg;
             let lanes = <<UT as CoreRegister>::Lanes as Unsigned>::USIZE;
             let half = lanes / 2;
 

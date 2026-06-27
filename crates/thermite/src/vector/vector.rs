@@ -16,8 +16,8 @@ use crate::{
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, SaturatingCastRegister,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
     },
 };
 
@@ -155,6 +155,17 @@ where
 {
     fn from_bits(bits: Vector<FROM>) -> Self {
         Vector(<INTO as BitCastRegister<FROM>>::from_bits(bits.0))
+    }
+}
+
+#[thermite_macros::inline_always]
+impl<FROM, INTO> SaturatingCastVector<Vector<FROM>> for Vector<INTO>
+where
+    FROM: Register,
+    INTO: Register + SaturatingCastRegister<FROM>,
+{
+    fn saturating_cast_from(from: Vector<FROM>) -> Self {
+        Vector(<INTO as SaturatingCastRegister<FROM>>::saturating_cast_from(from.0))
     }
 }
 

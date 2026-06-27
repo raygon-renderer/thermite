@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-        array::ArrayRegister, empty_reg, reg,
+        PermuteRegister, Register, SaturatingCastRegister, ShuffleRegister, Storage, SwizzleRegister,
+        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -445,5 +445,16 @@ impl CastRegister<U32x4V2> for ArrayRegister<super::U64x2V2, 2> {
 
             ArrayRegister([lo, hi])
         }
+    }
+}
+
+// Saturating narrow u64x4 -> u32x4: clamp the high end (polyfilled 64-bit min) + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x2V2, 2>> for U32x4V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2V2, 2>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2V2, 2>;
+        let hi = <Src as Register>::splat(u32::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

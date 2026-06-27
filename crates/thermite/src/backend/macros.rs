@@ -1,3 +1,15 @@
+/// Attach the generic-default `PackedFloatRegister` impls for the two fp8 formats
+/// ([`Fp8E4M3`](crate::element::float::spec::Fp8E4M3) /
+/// [`Fp8E5M2`](crate::element::float::spec::Fp8E5M2)) on one or more `(u8 register, f32 register)`
+/// pairs. No hardware transcodes fp8, so every backend just takes the branchless defaults; this
+/// macro is the per-backend wiring (invoked from each `registers/mod.rs`).
+macro_rules! impl_packed_fp8 {
+    ($($u8:ty => $f32:ty),* $(,)?) => {$(
+        impl $crate::register::PackedFloatRegister<$crate::element::float::spec::Fp8E4M3, $f32> for $u8 {}
+        impl $crate::register::PackedFloatRegister<$crate::element::float::spec::Fp8E5M2, $f32> for $u8 {}
+    )*};
+}
+
 macro_rules! impl_bit_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(

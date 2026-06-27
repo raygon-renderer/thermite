@@ -10,13 +10,13 @@ mod harness;
 
 use generic_array::typenum::Unsigned;
 use thermite::register::{CoreRegister, InterleaveRegister as _};
-use thermite::simd::SimdExperimental;
+use thermite::simd::{NativeSimd, Simd};
 
 macro_rules! interleave_roundtrip {
-    ($name:ident, $backend:ty, $reg:ident, $e:ty) => {
+    ($name:ident, $reg:ty, $e:ty) => {
         #[test]
         fn $name() {
-            type UT = <$backend as SimdExperimental>::$reg;
+            type UT = $reg;
             let lanes = <<UT as CoreRegister>::Lanes as Unsigned>::USIZE;
             let half = lanes / 2;
 
@@ -61,14 +61,14 @@ mod x86 {
     use thermite::backend::x86_v2::X86V2;
     use thermite::backend::x86_v3::X86V3;
 
-    interleave_roundtrip!(v1_i8x16, X86V1, i8xN, i8);
-    interleave_roundtrip!(v1_u8x16, X86V1, u8xN, u8);
-    interleave_roundtrip!(v2_i8x16, X86V2, i8xN, i8);
-    interleave_roundtrip!(v2_u8x16, X86V2, u8xN, u8);
-    interleave_roundtrip!(v3_i8x32, X86V3, i8xN, i8);
-    interleave_roundtrip!(v3_u8x32, X86V3, u8xN, u8);
-    interleave_roundtrip!(v3_i8x16, X86V3, i8x16, i8);
-    interleave_roundtrip!(v3_u8x16, X86V3, u8x16, u8);
+    interleave_roundtrip!(v1_i8x16, <X86V1 as NativeSimd>::i8xN, i8);
+    interleave_roundtrip!(v1_u8x16, <X86V1 as NativeSimd>::u8xN, u8);
+    interleave_roundtrip!(v2_i8x16, <X86V2 as NativeSimd>::i8xN, i8);
+    interleave_roundtrip!(v2_u8x16, <X86V2 as NativeSimd>::u8xN, u8);
+    interleave_roundtrip!(v3_i8x32, <X86V3 as NativeSimd>::i8xN, i8);
+    interleave_roundtrip!(v3_u8x32, <X86V3 as NativeSimd>::u8xN, u8);
+    interleave_roundtrip!(v3_i8x16, <X86V3 as Simd>::i8x16, i8);
+    interleave_roundtrip!(v3_u8x16, <X86V3 as Simd>::u8x16, u8);
 }
 
 // WASM: native 16-lane i8x16/u8x16 (= the fixed i8x16 slot).
@@ -77,6 +77,6 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
 
-    interleave_roundtrip!(i8x16, Wasm, i8xN, i8);
-    interleave_roundtrip!(u8x16, Wasm, u8xN, u8);
+    interleave_roundtrip!(i8x16, <Wasm as NativeSimd>::i8xN, i8);
+    interleave_roundtrip!(u8x16, <Wasm as NativeSimd>::u8xN, u8);
 }

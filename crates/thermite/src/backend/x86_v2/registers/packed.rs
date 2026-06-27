@@ -14,7 +14,7 @@ use super::{F32x4V2, U16x8V2};
 
 /// f32 partner per `u16` width - the backend's `Simd::f32xK` (native f32 is 4-wide on v2, so the
 /// wider ones are flat `ArrayRegister<f32x4, _>`). Each `F::Bits` is the matching `Simd::u32xK`,
-/// which already implements the `u16 <-> u32` widen cast required by `SimdExperimental`.
+/// which already implements the `u16 <-> u32` widen cast required by `Simd`.
 type F32x4 = F32x4V2;
 type F32x8 = ArrayRegister<F32x4V2, 2>;
 type F32x16 = ArrayRegister<F32x4V2, 4>;

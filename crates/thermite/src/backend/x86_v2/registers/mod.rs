@@ -16,6 +16,7 @@ pub mod u8x16;
 
 pub mod half;
 pub mod half16;
+pub mod half8; // sub-native 8-bit ReducedRegister ladder (i8x4/x8) + u8<->u32 casts
 pub mod packed; // PackedFloatRegister (16-bit float) generic-default impls for native u16 regs
 
 pub use f32x4::F32x4V2;
@@ -45,7 +46,7 @@ use crate::{
         array::ArrayRegister,
         reduced::{HalfRegister2, ReducedRegister},
     },
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A, SimdExperimental},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -60,6 +61,8 @@ impl NativeIsa for X86V2 {
 
     type Native32Width = generic_array::typenum::U4;
     type Native64Width = generic_array::typenum::U2;
+    type Native16Width = generic_array::typenum::U8;
+    type Native8Width = generic_array::typenum::U16;
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
 
@@ -81,6 +84,12 @@ impl NativeSimd for X86V2 {
     type f64xN = F64x2V2;
     type i64xN = I64x2V2;
     type u64xN = U64x2V2;
+
+    type i16xN = I16x8V2;
+    type u16xN = U16x8V2;
+
+    type i8xN = I8x16V2;
+    type u8xN = U8x16V2;
 }
 
 // Scatter/Gather is not available in x86v2, so we must use fallback impls
@@ -101,13 +110,16 @@ impl_indexable!(<X86V2 as Simd>::u64x8 => I16x8V2, U16x8V2);
 // 2-lane (ArrayRegister<_,2>) indexed by the 2-lane u32/u64 index types (the reduced/native
 // u32x2 and U64x2V2). The 16-lane array forms inherit u32x16 indexing from the array blanket,
 // but the 16-lane u64 index (ArrayRegister<U64x2V2, 8>) has a mismatched chunking, so mark it.
-impl_indexable!(<X86V2 as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
-impl_indexable!(<X86V2 as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
+impl_indexable!(<X86V2 as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
+impl_indexable!(<X86V2 as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
 impl_indexable!(<X86V2 as Simd>::u64x16 => ArrayRegister<I16x8V2, 2>, ArrayRegister<U16x8V2, 2>);
 
-// Native 8-bit (u8x16/i8x16) gather/scatter falls back to scalar; the native slot only needs
-// same-width self-indexing by u8x16.
+// Native 8-bit (u8x16/i8x16) gather/scatter falls back to scalar: same-width self-indexing by
+// u8x16, plus the 16-lane usize/u32/u64 index trio (scalar-fallback markers, matching the
+// sub-native i8x8/i8x4 ladder). usizex16 aliases u32x16 or u64x16, so those two cover it.
 impl_indexable!(U8x16V2 => I8x16V2, U8x16V2);
+impl_indexable!(<X86V2 as Simd>::u32x16 => I8x16V2, U8x16V2);
+impl_indexable!(<X86V2 as Simd>::u64x16 => I8x16V2, U8x16V2);
 
 impl Simd for X86V2 {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
@@ -146,6 +158,28 @@ impl Simd for X86V2 {
     type f64x16 = ArrayRegister<F64x2V2, 8>;
     type i64x16 = ArrayRegister<I64x2V2, 8>;
     type u64x16 = ArrayRegister<U64x2V2, 8>;
+
+    type i16x2 = ArrayRegister<i16, 2>;
+    type u16x2 = ArrayRegister<u16, 2>;
+
+    type i16x4 = half16::I16x4V2;
+    type u16x4 = half16::U16x4V2;
+
+    type i16x8 = I16x8V2;
+    type u16x8 = U16x8V2;
+
+    type i16x16 = ArrayRegister<I16x8V2, 2>;
+    type u16x16 = ArrayRegister<U16x8V2, 2>;
+
+    type i8x16 = I8x16V2;
+    type u8x16 = U8x16V2;
+
+    type i8x2 = ArrayRegister<i8, 2>;
+    type u8x2 = ArrayRegister<u8, 2>;
+    type i8x4 = half8::I8x4V2;
+    type u8x4 = half8::U8x4V2;
+    type i8x8 = half8::I8x8V2;
+    type u8x8 = half8::U8x8V2;
 }
 
 impl Simd3 for X86V2 {
@@ -160,31 +194,13 @@ impl Simd3 for X86V2 {
     type u64x3 = <Self as Simd3A>::u64x3A;
 }
 
-impl SimdExperimental for X86V2 {
-    type Native16Width = generic_array::typenum::U8;
-
-    type i16xN = I16x8V2;
-    type u16xN = U16x8V2;
-
-    type i16x2 = ArrayRegister<i16, 2>;
-    type u16x2 = ArrayRegister<u16, 2>;
-
-    type i16x4 = half16::I16x4V2;
-    type u16x4 = half16::U16x4V2;
-
-    type i16x8 = I16x8V2;
-    type u16x8 = U16x8V2;
-
-    type i16x16 = ArrayRegister<I16x8V2, 2>;
-    type u16x16 = ArrayRegister<U16x8V2, 2>;
-
-    type Native8Width = generic_array::typenum::U16;
-    type i8xN = I8x16V2;
-    type u8xN = U8x16V2;
-
-    type i8x16 = I8x16V2;
-    type u8x16 = U8x16V2;
-}
+// fp8 pack/unpack (generic branchless defaults) on the u8 ladder -> matching f32 widths.
+impl_packed_fp8!(
+    ArrayRegister<u8, 2> => half::F32x2V2,
+    half8::U8x4V2 => F32x4V2,
+    half8::U8x8V2 => ArrayRegister<F32x4V2, 2>,
+    U8x16V2 => ArrayRegister<F32x4V2, 4>,
+);
 
 impl_concat_bool_register2!(f32, half::F32x2V2);
 impl_concat_bool_register2!(u32, half::U32x2V2);

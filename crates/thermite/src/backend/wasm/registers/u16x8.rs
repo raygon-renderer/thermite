@@ -12,8 +12,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
+        empty_reg,
     },
 };
 
@@ -368,5 +369,27 @@ impl CastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
             0, 1, 4, 5, 8, 9, 12, 13,
             16, 17, 20, 21, 24, 25, 28, 29,
         >(value.0[0], value.0[1])
+    }
+}
+
+// Saturating narrow u32x8 -> u16x8: clamp each half (`u32x4.min`) then two-source `u16x8.narrow_i32x4_u`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 2>>) -> Storage<Self> {
+        let max = arch::u32x4_splat(0xFFFF);
+        let lo = arch::u32x4_min(value.0[0], max);
+        let hi = arch::u32x4_min(value.0[1], max);
+        arch::u16x8_narrow_i32x4(lo, hi)
+    }
+}
+
+// Saturating narrow u64x8 -> u16x8: clamp the high end + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x2Wasm, 4>> for U16x8Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 4>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2Wasm, 4>;
+        let hi = <Src as Register>::splat(u16::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

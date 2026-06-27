@@ -11,8 +11,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, empty_reg, reg,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, Storage,
+        SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -380,3 +380,34 @@ impl IntegerRegister for U8x16V3 {
 
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U8x16V3 {}
+
+// Saturating narrow u16x16 -> u8x16. `vpackuswb` reads a *signed* source, so clamp the
+// high end with `vpminuw` first (lanes are already >= 0); then pack and restitch lanes.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<super::U16x16V3> for U8x16V3 {
+    fn saturating_cast_from(value: Storage<super::U16x16V3>) -> Storage<Self> {
+        unsafe {
+            let clamped = arch::_mm256_min_epu16(value, arch::_mm256_set1_epi16(0xFF));
+            let packed = arch::_mm256_packus_epi16(clamped, clamped);
+            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+        }
+    }
+}
+
+// u32x16 -> u8x16: compose (u32x16 -> u16x16 -> u8x16).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U8x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x8V3, 2>>) -> Storage<Self> {
+        let words = <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::U16x16V3>>::saturating_cast_from(words)
+    }
+}
+
+// u64x16 -> u8x16: clamp down to u32x16, then the two packs above.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>> for U8x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 4>>) -> Storage<Self> {
+        let words = <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::U16x16V3>>::saturating_cast_from(words)
+    }
+}

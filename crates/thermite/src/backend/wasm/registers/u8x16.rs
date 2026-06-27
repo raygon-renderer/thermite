@@ -10,9 +10,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CoreRegister, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, ZeroUpper, empty_reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
+        empty_reg,
     },
 };
 
@@ -329,3 +330,37 @@ impl IntegerRegister for U8x16Wasm {
 
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U8x16Wasm {}
+
+// Saturating narrow u16x16 -> u8x16: clamp each half (`u16x8.min`) then two-source `u8x16.narrow_i16x8_u`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U16x8Wasm, 2>> for U8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8Wasm, 2>>) -> Storage<Self> {
+        let max = arch::u16x8_splat(0xFF);
+        let lo = arch::u16x8_min(value.0[0], max);
+        let hi = arch::u16x8_min(value.0[1], max);
+        arch::u8x16_narrow_i16x8(lo, hi)
+    }
+}
+
+// Saturating narrow u32x16 -> u8x16: clamp + `u16x8.narrow_i32x4_u` to u16, then clamp + `u8x16.narrow_i16x8_u`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 4>> for U8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 4>>) -> Storage<Self> {
+        let m32 = arch::u32x4_splat(0xFFFF);
+        let w0 = arch::u16x8_narrow_i32x4(arch::u32x4_min(value.0[0], m32), arch::u32x4_min(value.0[1], m32));
+        let w1 = arch::u16x8_narrow_i32x4(arch::u32x4_min(value.0[2], m32), arch::u32x4_min(value.0[3], m32));
+        let m16 = arch::u16x8_splat(0xFF);
+        arch::u8x16_narrow_i16x8(arch::u16x8_min(w0, m16), arch::u16x8_min(w1, m16))
+    }
+}
+
+// Saturating narrow u64x16 -> u8x16: clamp the high end + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x2Wasm, 8>> for U8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 8>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2Wasm, 8>;
+        let hi = <Src as Register>::splat(u8::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+}

@@ -10,8 +10,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -371,5 +371,27 @@ impl CastRegister<super::U32x8V3> for U16x8V3 {
             let hi = arch::_mm_shuffle_epi8(hi, pick);
             arch::_mm_unpacklo_epi64(lo, hi)
         }
+    }
+}
+
+// Saturating narrow u32x8 -> u16x8. `vpackusdw` reads a *signed* source, so first clamp
+// the high end with `vpminud` (lanes are already >= 0); then pack and restitch lanes.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<super::U32x8V3> for U16x8V3 {
+    fn saturating_cast_from(value: Storage<super::U32x8V3>) -> Storage<Self> {
+        unsafe {
+            let clamped = arch::_mm256_min_epu32(value, arch::_mm256_set1_epi32(0xFFFF));
+            let packed = arch::_mm256_packus_epi32(clamped, clamped);
+            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+        }
+    }
+}
+
+// u64x8 -> u16x8: clamp down to u32x8, then `vpackusdw`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 2>> for U16x8V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 2>>) -> Storage<Self> {
+        let words = <super::U32x8V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 2>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::U32x8V3>>::saturating_cast_from(words)
     }
 }

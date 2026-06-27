@@ -11,7 +11,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -394,5 +394,28 @@ impl CastRegister<ArrayRegister<super::U32x8V3, 2>> for U16x16V3 {
         let lo = <super::U16x8V3 as CastRegister<super::U32x8V3>>::cast_from(value.0[0]);
         let hi = <super::U16x8V3 as CastRegister<super::U32x8V3>>::cast_from(value.0[1]);
         <Self as ConcatRegister<super::U16x8V3>>::concat(lo, hi)
+    }
+}
+
+// Saturating narrow u32x16 -> u16x16: clamp each half (`vpminud`) then a two-source `vpackusdw` +
+// `vpermq` restitch (the `_u` pack reads a signed source, so the clamp keeps lanes in range).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U16x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x8V3, 2>>) -> Storage<Self> {
+        unsafe {
+            let max = arch::_mm256_set1_epi32(0xFFFF);
+            let a = arch::_mm256_min_epu32(value.0[0], max);
+            let b = arch::_mm256_min_epu32(value.0[1], max);
+            arch::_mm256_permute4x64_epi64(arch::_mm256_packus_epi32(a, b), 0b11_01_10_00)
+        }
+    }
+}
+
+// Saturating narrow u64x16 -> u16x16: clamp down to u32x16 then the pack above.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>> for U16x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 4>>) -> Storage<Self> {
+        let words = <ArrayRegister<super::U32x8V3, 2> as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(words)
     }
 }

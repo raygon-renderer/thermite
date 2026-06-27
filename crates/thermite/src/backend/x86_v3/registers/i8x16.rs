@@ -12,8 +12,9 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, empty_reg, reg, reg_splat,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister,
+        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg,
+        reg, reg_splat,
     },
 };
 
@@ -446,5 +447,35 @@ impl SignedIntegerRegister for I8x16V3 {
 
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sra_epi8x_v1(value, shift) }
+    }
+}
+
+// Saturating narrow i16x16 -> i8x16 via `vpacksswb`. Pack `(v, v)` and restitch the
+// two populated 64-bit groups with `vpermq` (see `i16x8.rs` for the lane-crossing note).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<super::I16x16V3> for I8x16V3 {
+    fn saturating_cast_from(value: Storage<super::I16x16V3>) -> Storage<Self> {
+        unsafe {
+            let packed = arch::_mm256_packs_epi16(value, value);
+            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+        }
+    }
+}
+
+// i32x16 -> i8x16: compose two packs (i32x16 -> i16x16 -> i8x16).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>> for I8x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
+        let words = <super::I16x16V3 as SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::I16x16V3>>::saturating_cast_from(words)
+    }
+}
+
+// i64x16 -> i8x16: clamp down to i32x16, then the two packs above.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>> for I8x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
+        let words = <super::I16x16V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::I16x16V3>>::saturating_cast_from(words)
     }
 }

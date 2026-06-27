@@ -232,36 +232,12 @@ impl SwizzleRegister for U64x2Wasm {
     }
 
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-        match (I::INDICES[0], I::INDICES[1]) {
-            (0, 0) => arch::i64x2_shuffle::<0, 0>(value, value),
-            (0, 1) => arch::i64x2_shuffle::<0, 1>(value, value),
-            (1, 0) => arch::i64x2_shuffle::<1, 0>(value, value),
-            (1, 1) => arch::i64x2_shuffle::<1, 1>(value, value),
-            _ => unreachable!(),
-        }
+        super::I64x2Wasm::permutev_const::<I>(value)
     }
 
     #[rustfmt::skip]
     fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        match (I::INDICES[0], I::INDICES[1]) {
-            (0, 0) => arch::i64x2_shuffle::<0, 0>(a, b),
-            (0, 1) => arch::i64x2_shuffle::<0, 1>(a, b),
-            (0, 2) => arch::i64x2_shuffle::<0, 2>(a, b),
-            (0, 3) => arch::i64x2_shuffle::<0, 3>(a, b),
-            (1, 0) => arch::i64x2_shuffle::<1, 0>(a, b),
-            (1, 1) => arch::i64x2_shuffle::<1, 1>(a, b),
-            (1, 2) => arch::i64x2_shuffle::<1, 2>(a, b),
-            (1, 3) => arch::i64x2_shuffle::<1, 3>(a, b),
-            (2, 0) => arch::i64x2_shuffle::<2, 0>(a, b),
-            (2, 1) => arch::i64x2_shuffle::<2, 1>(a, b),
-            (2, 2) => arch::i64x2_shuffle::<2, 2>(a, b),
-            (2, 3) => arch::i64x2_shuffle::<2, 3>(a, b),
-            (3, 0) => arch::i64x2_shuffle::<3, 0>(a, b),
-            (3, 1) => arch::i64x2_shuffle::<3, 1>(a, b),
-            (3, 2) => arch::i64x2_shuffle::<3, 2>(a, b),
-            (3, 3) => arch::i64x2_shuffle::<3, 3>(a, b),
-            _ => unreachable!(),
-        }
+        super::I64x2Wasm::swizzle_const::<I>(a, b)
     }
 }
 

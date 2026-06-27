@@ -13,7 +13,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, empty_reg, reg, reg_splat,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
+        array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -434,6 +435,28 @@ impl CastRegister<super::I32x8V3> for I16x8V3 {
             let hi = arch::_mm_shuffle_epi8(hi, pick);
             arch::_mm_unpacklo_epi64(lo, hi)
         }
+    }
+}
+
+// Saturating narrow i32x8 -> i16x8 via `vpackssdw`. AVX2 packs interleave the two
+// 128-bit lanes, so pack `(v, v)` and pull the populated 64-bit groups (positions 0
+// and 2) back into sequence with `vpermq` before truncating to 128 bits.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<super::I32x8V3> for I16x8V3 {
+    fn saturating_cast_from(value: Storage<super::I32x8V3>) -> Storage<Self> {
+        unsafe {
+            let packed = arch::_mm256_packs_epi32(value, value);
+            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+        }
+    }
+}
+
+// i64x8 -> i16x8: clamp down to i32x8 (no 64-bit pack), then `vpackssdw`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>> for I16x8V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 2>>) -> Storage<Self> {
+        let words = <super::I32x8V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<super::I32x8V3>>::saturating_cast_from(words)
     }
 }
 

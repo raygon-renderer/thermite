@@ -15,8 +15,8 @@ use crate::{
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
     FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, MaskRegister,
-    NativeCapability, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
-    SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
+    NativeCapability, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister,
+    SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -701,6 +701,17 @@ where
     #[inline(always)]
     fn fast_cast_from(value: Storage<ReducedRegister<FROM, N>>) -> Storage<Self> {
         Self(TO::fast_cast_from(value.0), PhantomData)
+    }
+}
+
+impl<FROM, TO, N: Unsigned> SaturatingCastRegister<ReducedRegister<FROM, N>> for ReducedRegister<TO, N>
+where
+    TO: CoreReducible<N> + SaturatingCastRegister<FROM>,
+    FROM: CoreReducible<N>,
+{
+    #[inline(always)]
+    fn saturating_cast_from(value: Storage<ReducedRegister<FROM, N>>) -> Storage<Self> {
+        Self(TO::saturating_cast_from(value.0), PhantomData)
     }
 }
 

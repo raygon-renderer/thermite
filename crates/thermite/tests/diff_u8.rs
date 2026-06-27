@@ -1,4 +1,4 @@
-//! Differential tests for the native-width 8-bit integer families (`SimdExperimental`):
+//! Differential tests for the native-width 8-bit integer families (`Simd`):
 //! every backend register op vs. an element-wise scalar oracle, for i8/u8.
 //!
 //! The 8-bit families exist only at native width (`i8xN`/`u8xN`) - there is no fixed-width
@@ -16,7 +16,7 @@ use thermite::register::{
     BitshiftRegister as _, BitwiseRegister as _, IntegerRegister as _, NumericRegister as _,
     SignedIntegerRegister as _, SignedRegister as _,
 };
-use thermite::simd::SimdExperimental;
+use thermite::simd::{NativeSimd, Simd};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use thermite::backend::x86_v1::X86V1;
@@ -100,8 +100,8 @@ macro_rules! int8_tests {
 mod v2 {
     use super::*;
 
-    int8_tests!(i8x16, <X86V2 as SimdExperimental>::i8xN, ArrayRegister<i8, 16>, "x86_v2 i8x16", signed);
-    int8_tests!(u8x16, <X86V2 as SimdExperimental>::u8xN, ArrayRegister<u8, 16>, "x86_v2 u8x16", unsigned);
+    int8_tests!(i8x16, <X86V2 as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "x86_v2 i8x16", signed);
+    int8_tests!(u8x16, <X86V2 as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "x86_v2 u8x16", unsigned);
 }
 
 // --- X86V1 (SSE2): native 16-lane; many ops use SSE2 polyfills / scalar fallbacks ---
@@ -109,8 +109,8 @@ mod v2 {
 mod v1 {
     use super::*;
 
-    int8_tests!(i8x16, <X86V1 as SimdExperimental>::i8xN, ArrayRegister<i8, 16>, "x86_v1 i8x16", signed);
-    int8_tests!(u8x16, <X86V1 as SimdExperimental>::u8xN, ArrayRegister<u8, 16>, "x86_v1 u8x16", unsigned);
+    int8_tests!(i8x16, <X86V1 as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "x86_v1 i8x16", signed);
+    int8_tests!(u8x16, <X86V1 as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "x86_v1 u8x16", unsigned);
 }
 
 // --- X86V3 (AVX2): native 32-lane i8x32/u8x32 (256-bit) + the fixed 128-bit i8x16 half ---
@@ -118,12 +118,12 @@ mod v1 {
 mod v3 {
     use super::*;
 
-    int8_tests!(i8x32, <X86V3 as SimdExperimental>::i8xN, ArrayRegister<i8, 32>, "x86_v3 i8x32", signed);
-    int8_tests!(u8x32, <X86V3 as SimdExperimental>::u8xN, ArrayRegister<u8, 32>, "x86_v3 u8x32", unsigned);
+    int8_tests!(i8x32, <X86V3 as NativeSimd>::i8xN, ArrayRegister<i8, 32>, "x86_v3 i8x32", signed);
+    int8_tests!(u8x32, <X86V3 as NativeSimd>::u8xN, ArrayRegister<u8, 32>, "x86_v3 u8x32", unsigned);
 
     // The fixed 128-bit i8x16/u8x16 slot (its own register on v3, distinct from the 256-bit native).
-    int8_tests!(i8x16, <X86V3 as SimdExperimental>::i8x16, ArrayRegister<i8, 16>, "x86_v3 i8x16", signed);
-    int8_tests!(u8x16, <X86V3 as SimdExperimental>::u8x16, ArrayRegister<u8, 16>, "x86_v3 u8x16", unsigned);
+    int8_tests!(i8x16, <X86V3 as Simd>::i8x16, ArrayRegister<i8, 16>, "x86_v3 i8x16", signed);
+    int8_tests!(u8x16, <X86V3 as Simd>::u8x16, ArrayRegister<u8, 16>, "x86_v3 u8x16", unsigned);
 }
 
 // --- WASM (SIMD128): native 16-lane i8x16/u8x16 (= the fixed i8x16 slot too) ---
@@ -132,6 +132,6 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
 
-    int8_tests!(i8x16, <Wasm as SimdExperimental>::i8xN, ArrayRegister<i8, 16>, "wasm i8x16", signed);
-    int8_tests!(u8x16, <Wasm as SimdExperimental>::u8xN, ArrayRegister<u8, 16>, "wasm u8x16", unsigned);
+    int8_tests!(i8x16, <Wasm as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "wasm i8x16", signed);
+    int8_tests!(u8x16, <Wasm as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "wasm u8x16", unsigned);
 }

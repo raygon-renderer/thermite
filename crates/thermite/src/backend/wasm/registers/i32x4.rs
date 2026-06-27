@@ -9,8 +9,8 @@ use crate::{
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg,
+        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister,
+        ZeroUpper, array::ArrayRegister, empty_reg,
     },
 };
 
@@ -461,5 +461,17 @@ impl CastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I32x4Wasm {
             16, 17, 18, 19, // Hi Vec, Lane 0 (Low bits)
             24, 25, 26, 27  // Hi Vec, Lane 1 (Low bits)
         >(value.0[0], value.0[1])
+    }
+}
+
+// Saturating narrow i64x4 -> i32x4: no 64-bit narrow on WASM, so clamp + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I32x4Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2Wasm, 2>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::I64x2Wasm, 2>;
+        let lo = <Src as Register>::splat(i32::MIN as i64);
+        let hi = <Src as Register>::splat(i32::MAX as i64);
+        let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

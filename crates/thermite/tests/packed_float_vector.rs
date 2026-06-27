@@ -2,7 +2,7 @@
 //! `Vector<u16 register>::{pack, unpack}` API (the wrapper over `PackedFloatRegister`) and diffs
 //! against the scalar `FloatSpec` oracle. The register layer is already exhaustively covered by
 //! `packed_float{,_native,_f16c}.rs`; this confirms the `Vector` wrapper delegates correctly and
-//! the `SimdExperimentalVectors` bound resolves through real backend types.
+//! the `SimdVectors` bound resolves through real backend types.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
 use thermite::element::float::spec::{Bf16, FloatSpec, Fp16, Fp16Fast};

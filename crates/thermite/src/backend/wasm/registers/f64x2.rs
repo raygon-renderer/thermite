@@ -215,7 +215,9 @@ impl SwizzleRegister for F64x2Wasm {
     /// index combinations for 2 lanes, so this match collapses to one arm at
     /// monomorphization time without needing `generic_const_exprs`.
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-        match (I::INDICES[0], I::INDICES[1]) {
+        // Mask the indices to the 2 in-register lanes so an out-of-range index wraps instead of
+        // falling through to `unreachable!()` (which is UB in release).
+        match (I::INDICES[0] & 1, I::INDICES[1] & 1) {
             (0, 0) => arch::i64x2_shuffle::<0, 0>(value, value),
             (0, 1) => arch::i64x2_shuffle::<0, 1>(value, value),
             (1, 0) => arch::i64x2_shuffle::<1, 0>(value, value),
@@ -228,7 +230,8 @@ impl SwizzleRegister for F64x2Wasm {
     /// Indices 0-1 select from `a`, 2-3 from `b`. Only 16 cases for 2-lane registers.
     #[rustfmt::skip]
     fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        match (I::INDICES[0], I::INDICES[1]) {
+        // Mask to the 4 source lanes (2 from `a`, 2 from `b`) so out-of-range indices wrap.
+        match (I::INDICES[0] & 3, I::INDICES[1] & 3) {
             (0, 0) => arch::i64x2_shuffle::<0, 0>(a, b),
             (0, 1) => arch::i64x2_shuffle::<0, 1>(a, b),
             (0, 2) => arch::i64x2_shuffle::<0, 2>(a, b),

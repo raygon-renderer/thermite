@@ -11,8 +11,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -368,4 +368,23 @@ impl CastRegister<ArrayRegister<super::U32x4V1, 2>> for U16x8V1 {
         let words: [u16; 8] = core::array::from_fn(|i| lanes[i] as u16);
         unsafe { arch::_mm_loadu_si128(words.as_ptr() as *const _) }
     }
+}
+
+// SSE2 has no `packusdw`, so u32x8 -> u16x8 and u64x8 -> u16x8 clamp into range (the register
+// `min` uses the v1 unsigned-min polyfills) then reuse the truncating narrow.
+macro_rules! sat_clamp_narrow {
+    ($(($from:ty, $fe:ty, $ie:ty)),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl SaturatingCastRegister<$from> for U16x8V1 {
+            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
+                let clamped = <$from as NumericRegister>::min(value, hi);
+                <Self as CastRegister<$from>>::cast_from(clamped)
+            }
+        }
+    )*};
+}
+sat_clamp_narrow! {
+    (ArrayRegister<super::U32x4V1, 2>, u32, u16),
+    (ArrayRegister<super::U64x2V1, 4>, u64, u16),
 }

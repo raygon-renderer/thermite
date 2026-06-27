@@ -1,8 +1,8 @@
-//! Differential tests for the 16-bit integer families (`SimdExperimental`): every backend
+//! Differential tests for the 16-bit integer families (`Simd`): every backend
 //! register op vs. the `Scalar` reference, across the i16/u16 width matrix.
 //!
 //! Only built where the x86 SIMD backends exist. The 16-bit slots live on
-//! `SimdExperimental` (a staging trait), so register types are resolved through it rather
+//! `Simd` (a staging trait), so register types are resolved through it rather
 //! than `Simd`.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
 
@@ -14,7 +14,7 @@ use thermite::register::{
     BitshiftRegister as _, BitwiseRegister as _, IntegerRegister as _, NumericRegister as _,
     SignedIntegerRegister as _, SignedRegister as _,
 };
-use thermite::simd::SimdExperimental;
+use thermite::simd::{NativeSimd, Simd};
 
 use thermite::backend::scalar::Scalar;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -80,8 +80,8 @@ macro_rules! int16_tests {
     ($modname:ident, $backend:ty, $reg:ident, $label:expr, signed) => {
         #[test]
         fn $modname() {
-            type UT = <$backend as SimdExperimental>::$reg;
-            type RF = <Scalar as SimdExperimental>::$reg;
+            type UT = <$backend as Simd>::$reg;
+            type RF = <Scalar as Simd>::$reg;
             int16_common!(UT, RF, $label);
             diff_unary!($label, UT, RF, neg, Tol::Exact);
             diff_unary!($label, UT, RF, abs, Tol::Exact);
@@ -91,8 +91,8 @@ macro_rules! int16_tests {
     ($modname:ident, $backend:ty, $reg:ident, $label:expr, unsigned) => {
         #[test]
         fn $modname() {
-            type UT = <$backend as SimdExperimental>::$reg;
-            type RF = <Scalar as SimdExperimental>::$reg;
+            type UT = <$backend as Simd>::$reg;
+            type RF = <Scalar as Simd>::$reg;
             int16_common!(UT, RF, $label);
         }
     };
@@ -161,9 +161,9 @@ mod v2_cast {
                 // widen 16 -> 32
                 cast_diff!(
                     concat!("x86_v2 ", stringify!($w16), "->", stringify!($w32)),
-                    <X86V2 as SimdExperimental>::$w16,
+                    <X86V2 as Simd>::$w16,
                     <X86V2 as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     <Scalar as Simd>::$w32,
                     $se16,
                     |x| x,
@@ -173,9 +173,9 @@ mod v2_cast {
                 cast_diff!(
                     concat!("x86_v2 ", stringify!($w32), "->", stringify!($w16)),
                     <X86V2 as Simd>::$w32,
-                    <X86V2 as SimdExperimental>::$w16,
+                    <X86V2 as Simd>::$w16,
                     <Scalar as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     $se32,
                     |x| x,
                     Tol::Exact
@@ -190,6 +190,16 @@ mod v2_cast {
     cast16!(u16_u32_x2, u16x2, u32x2, u16, u32);
     cast16!(u16_u32_x4, u16x4, u32x4, u16, u32);
     cast16!(u16_u32_x8, u16x8, u32x8, u16, u32);
+
+    // 16<->64 (reuse cast16! with i64/u64 as the wide side)
+    cast16!(i16_i64_x2, i16x2, i64x2, i16, i64);
+    cast16!(i16_i64_x4, i16x4, i64x4, i16, i64);
+    cast16!(i16_i64_x8, i16x8, i64x8, i16, i64);
+    cast16!(i16_i64_x16, i16x16, i64x16, i16, i64);
+    cast16!(u16_u64_x2, u16x2, u64x2, u16, u64);
+    cast16!(u16_u64_x4, u16x4, u64x4, u16, u64);
+    cast16!(u16_u64_x8, u16x8, u64x8, u16, u64);
+    cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -203,9 +213,9 @@ mod v3_cast {
             fn $name() {
                 cast_diff!(
                     concat!("x86_v3 ", stringify!($w16), "->", stringify!($w32)),
-                    <X86V3 as SimdExperimental>::$w16,
+                    <X86V3 as Simd>::$w16,
                     <X86V3 as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     <Scalar as Simd>::$w32,
                     $se16,
                     |x| x,
@@ -214,9 +224,9 @@ mod v3_cast {
                 cast_diff!(
                     concat!("x86_v3 ", stringify!($w32), "->", stringify!($w16)),
                     <X86V3 as Simd>::$w32,
-                    <X86V3 as SimdExperimental>::$w16,
+                    <X86V3 as Simd>::$w16,
                     <Scalar as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     $se32,
                     |x| x,
                     Tol::Exact
@@ -233,6 +243,15 @@ mod v3_cast {
     cast16!(u16_u32_x4, u16x4, u32x4, u16, u32);
     cast16!(u16_u32_x8, u16x8, u32x8, u16, u32);
     cast16!(u16_u32_x16, u16x16, u32x16, u16, u32);
+
+    cast16!(i16_i64_x2, i16x2, i64x2, i16, i64);
+    cast16!(i16_i64_x4, i16x4, i64x4, i16, i64);
+    cast16!(i16_i64_x8, i16x8, i64x8, i16, i64);
+    cast16!(i16_i64_x16, i16x16, i64x16, i16, i64);
+    cast16!(u16_u64_x2, u16x2, u64x2, u16, u64);
+    cast16!(u16_u64_x4, u16x4, u64x4, u16, u64);
+    cast16!(u16_u64_x8, u16x8, u64x8, u16, u64);
+    cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -246,9 +265,9 @@ mod v1_cast {
             fn $name() {
                 cast_diff!(
                     concat!("x86_v1 ", stringify!($w16), "->", stringify!($w32)),
-                    <X86V1 as SimdExperimental>::$w16,
+                    <X86V1 as Simd>::$w16,
                     <X86V1 as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     <Scalar as Simd>::$w32,
                     $se16,
                     |x| x,
@@ -257,9 +276,9 @@ mod v1_cast {
                 cast_diff!(
                     concat!("x86_v1 ", stringify!($w32), "->", stringify!($w16)),
                     <X86V1 as Simd>::$w32,
-                    <X86V1 as SimdExperimental>::$w16,
+                    <X86V1 as Simd>::$w16,
                     <Scalar as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     $se32,
                     |x| x,
                     Tol::Exact
@@ -276,6 +295,15 @@ mod v1_cast {
     cast16!(u16_u32_x4, u16x4, u32x4, u16, u32);
     cast16!(u16_u32_x8, u16x8, u32x8, u16, u32);
     cast16!(u16_u32_x16, u16x16, u32x16, u16, u32);
+
+    cast16!(i16_i64_x2, i16x2, i64x2, i16, i64);
+    cast16!(i16_i64_x4, i16x4, i64x4, i16, i64);
+    cast16!(i16_i64_x8, i16x8, i64x8, i16, i64);
+    cast16!(i16_i64_x16, i16x16, i64x16, i16, i64);
+    cast16!(u16_u64_x2, u16x2, u64x2, u16, u64);
+    cast16!(u16_u64_x4, u16x4, u64x4, u16, u64);
+    cast16!(u16_u64_x8, u16x8, u64x8, u16, u64);
+    cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
 }
 
 // --- WASM (SIMD128): native 8-lane i16x8 (= i16xN), reduced i16x4, array i16x2/x16 ---
@@ -307,9 +335,9 @@ mod wasm_cast {
             fn $name() {
                 cast_diff!(
                     concat!("wasm ", stringify!($w16), "->", stringify!($w32)),
-                    <Wasm as SimdExperimental>::$w16,
+                    <Wasm as Simd>::$w16,
                     <Wasm as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     <Scalar as Simd>::$w32,
                     $se16,
                     |x| x,
@@ -318,9 +346,9 @@ mod wasm_cast {
                 cast_diff!(
                     concat!("wasm ", stringify!($w32), "->", stringify!($w16)),
                     <Wasm as Simd>::$w32,
-                    <Wasm as SimdExperimental>::$w16,
+                    <Wasm as Simd>::$w16,
                     <Scalar as Simd>::$w32,
-                    <Scalar as SimdExperimental>::$w16,
+                    <Scalar as Simd>::$w16,
                     $se32,
                     |x| x,
                     Tol::Exact
@@ -335,4 +363,13 @@ mod wasm_cast {
     cast16!(u16_u32_x2, u16x2, u32x2, u16, u32);
     cast16!(u16_u32_x4, u16x4, u32x4, u16, u32);
     cast16!(u16_u32_x8, u16x8, u32x8, u16, u32);
+
+    cast16!(i16_i64_x2, i16x2, i64x2, i16, i64);
+    cast16!(i16_i64_x4, i16x4, i64x4, i16, i64);
+    cast16!(i16_i64_x8, i16x8, i64x8, i16, i64);
+    cast16!(i16_i64_x16, i16x16, i64x16, i16, i64);
+    cast16!(u16_u64_x2, u16x2, u64x2, u16, u64);
+    cast16!(u16_u64_x4, u16x4, u64x4, u16, u64);
+    cast16!(u16_u64_x8, u16x8, u64x8, u16, u64);
+    cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
 }

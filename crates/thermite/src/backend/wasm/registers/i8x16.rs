@@ -11,9 +11,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CoreRegister, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, empty_reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
+        array::ArrayRegister, empty_reg,
     },
 };
 
@@ -372,5 +373,35 @@ impl SignedIntegerRegister for I8x16Wasm {
     }
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         arch::i8x16_shr(value, shift) // arithmetic
+    }
+}
+
+// Saturating narrow i16x16 -> i8x16 via a single two-source `i8x16.narrow_i16x8_s`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I16x8Wasm, 2>> for I8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I16x8Wasm, 2>>) -> Storage<Self> {
+        arch::i8x16_narrow_i16x8(value.0[0], value.0[1])
+    }
+}
+
+// Saturating narrow i32x16 -> i8x16: three narrows (two `i16x8.narrow_i32x4_s`, one `i8x16.narrow_i16x8_s`).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I32x4Wasm, 4>> for I8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4Wasm, 4>>) -> Storage<Self> {
+        let w0 = arch::i16x8_narrow_i32x4(value.0[0], value.0[1]);
+        let w1 = arch::i16x8_narrow_i32x4(value.0[2], value.0[3]);
+        arch::i8x16_narrow_i16x8(w0, w1)
+    }
+}
+
+// Saturating narrow i64x16 -> i8x16: no 64-bit narrow, so clamp + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I64x2Wasm, 8>> for I8x16Wasm {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2Wasm, 8>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::I64x2Wasm, 8>;
+        let lo = <Src as Register>::splat(i8::MIN as i64);
+        let hi = <Src as Register>::splat(i8::MAX as i64);
+        let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

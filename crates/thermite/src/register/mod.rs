@@ -1241,6 +1241,29 @@ pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     }
 }
 
+/// A narrowing cast that clamps (saturates) out-of-range source values to the
+/// destination element's representable range, instead of the wrapping
+/// truncation [`CastRegister`] performs.
+///
+/// Implemented only in the **narrowing, same-signedness** direction
+/// (`i64 -> i32 -> i16 -> i8`, `u64 -> u32 -> u16 -> u8`, including skip-level
+/// pairs such as `i64 -> i8`). Widening conversions lose nothing and go through
+/// [`CastRegister`]; sign-changing conversions are intentionally out of scope
+/// (use [`CastRegister`], which wraps).
+///
+/// # Reference semantics
+///
+/// Defined by the scalar backend and matched lane-for-lane by every
+/// hardware (`pack*`-based) implementation: clamp the source value into
+/// `[INTO::MIN, INTO::MAX]`, then convert. For unsigned destinations
+/// `INTO::MIN` is `0`, so only the high end is clamped. Saturation is
+/// idempotent across nested ranges, so a direct `i64 -> i8` is bit-identical
+/// to chaining `i64 -> i32 -> i16 -> i8`.
+pub trait SaturatingCastRegister<FROM: CoreRegister>: CoreRegister {
+    /// Narrow `value` into `Self`, clamping each lane to `Self`'s element range.
+    fn saturating_cast_from(value: Storage<FROM>) -> Storage<Self>;
+}
+
 /// A trait for registers that can be reinterpreted as other registers,
 /// though this is not a safe operation. This is only available for registers
 /// of the same size in bytes. This is enforced simply by the fact that

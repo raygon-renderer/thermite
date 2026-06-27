@@ -43,6 +43,20 @@ macro_rules! cpair {
     };
 }
 
+/// One same-size `BitCastRegister` (byte reinterpret) pair, backend vs scalar.
+macro_rules! bitpair {
+    ($l:expr, $b:ty, $src:ident, $dst:ident, $se:ty) => {
+        bitcast_diff!(
+            $l,
+            <$b as Simd>::$src,
+            <$b as Simd>::$dst,
+            <Scalar as Simd>::$src,
+            <Scalar as Simd>::$dst,
+            $se
+        );
+    };
+}
+
 // Float→int domain guards: keep strictly in-range & finite so truncation is
 // unambiguous and matches `as` on both backends.
 fn to_i32_dom(x: f32) -> f32 {
@@ -53,6 +67,34 @@ fn to_u32_dom(x: f32) -> f32 {
 }
 fn to_i64_dom(x: f64) -> f64 {
     if x.is_finite() { x.clamp(-9.0e18, 9.0e18) } else { 0.0 }
+}
+
+// Float->8/16-bit-int domain guards. The narrow path is `float -> i32 (trunc) -> low
+// byte/word`, so it only matches scalar `as` (which saturates to the *target* int bounds)
+// when the input already lies within the target type's range. Clamp into that range.
+fn f32_to_i8_dom(x: f32) -> f32 {
+    if x.is_finite() { x.clamp(-128.0, 127.0) } else { 0.0 }
+}
+fn f32_to_u8_dom(x: f32) -> f32 {
+    if x.is_finite() { x.clamp(0.0, 255.0) } else { 0.0 }
+}
+fn f32_to_i16_dom(x: f32) -> f32 {
+    if x.is_finite() { x.clamp(-32768.0, 32767.0) } else { 0.0 }
+}
+fn f32_to_u16_dom(x: f32) -> f32 {
+    if x.is_finite() { x.clamp(0.0, 65535.0) } else { 0.0 }
+}
+fn f64_to_i8_dom(x: f64) -> f64 {
+    if x.is_finite() { x.clamp(-128.0, 127.0) } else { 0.0 }
+}
+fn f64_to_u8_dom(x: f64) -> f64 {
+    if x.is_finite() { x.clamp(0.0, 255.0) } else { 0.0 }
+}
+fn f64_to_i16_dom(x: f64) -> f64 {
+    if x.is_finite() { x.clamp(-32768.0, 32767.0) } else { 0.0 }
+}
+fn f64_to_u16_dom(x: f64) -> f64 {
+    if x.is_finite() { x.clamp(0.0, 65535.0) } else { 0.0 }
 }
 
 macro_rules! cast_suite {
@@ -107,8 +149,140 @@ macro_rules! cast_suite {
             // polyfill, which both (a) only works on [0, 2^52) and (b) *rounds*
             // (adds 2^52 to force integer rounding) rather than truncating like
             // `as`. Fully captured in `mod divergence`.
+
+            // --- rung 3: 8/16-bit int <-> f32/f64 direct casts ---
+            // widen int -> float is value-preserving and exact (every i8/u8/i16/u16 is
+            // exactly representable in f32 and f64); identity prep, Tol::Exact.
+            #[test]
+            fn int8_to_f32_widen() {
+                cpair!($tag, $b, i8x2, f32x2, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x2, f32x2, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x4, f32x4, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x4, f32x4, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x8, f32x8, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x8, f32x8, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x16, f32x16, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x16, f32x16, u8, id!(u8), Tol::Exact);
+            }
+            #[test]
+            fn int8_to_f64_widen() {
+                cpair!($tag, $b, i8x2, f64x2, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x2, f64x2, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x4, f64x4, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x4, f64x4, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x8, f64x8, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x8, f64x8, u8, id!(u8), Tol::Exact);
+                cpair!($tag, $b, i8x16, f64x16, i8, id!(i8), Tol::Exact);
+                cpair!($tag, $b, u8x16, f64x16, u8, id!(u8), Tol::Exact);
+            }
+            #[test]
+            fn int16_to_f32_widen() {
+                cpair!($tag, $b, i16x2, f32x2, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x2, f32x2, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x4, f32x4, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x4, f32x4, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x8, f32x8, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x8, f32x8, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x16, f32x16, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x16, f32x16, u16, id!(u16), Tol::Exact);
+            }
+            #[test]
+            fn int16_to_f64_widen() {
+                cpair!($tag, $b, i16x2, f64x2, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x2, f64x2, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x4, f64x4, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x4, f64x4, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x8, f64x8, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x8, f64x8, u16, id!(u16), Tol::Exact);
+                cpair!($tag, $b, i16x16, f64x16, i16, id!(i16), Tol::Exact);
+                cpair!($tag, $b, u16x16, f64x16, u16, id!(u16), Tol::Exact);
+            }
+
+            // narrow float -> 8/16-bit int, kept strictly in the target type's range
+            // (the contract is 'like as' only in-range; out-of-range/NaN diverges).
+            #[test]
+            fn f32_to_int8_inrange() {
+                cpair!($tag, $b, f32x2, i8x2, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x2, u8x2, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x4, i8x4, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x4, u8x4, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x8, i8x8, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x8, u8x8, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x16, i8x16, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x16, u8x16, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
+            }
+            #[test]
+            fn f64_to_int8_inrange() {
+                cpair!($tag, $b, f64x2, i8x2, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x2, u8x2, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x4, i8x4, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x4, u8x4, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x8, i8x8, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x8, u8x8, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x16, i8x16, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x16, u8x16, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
+            }
+            #[test]
+            fn f32_to_int16_inrange() {
+                cpair!($tag, $b, f32x2, i16x2, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x2, u16x2, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x4, i16x4, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x4, u16x4, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x8, i16x8, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x8, u16x8, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x16, i16x16, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!($tag, $b, f32x16, u16x16, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
+            }
+            #[test]
+            fn f64_to_int16_inrange() {
+                cpair!($tag, $b, f64x2, i16x2, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x2, u16x2, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x4, i16x4, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x4, u16x4, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x8, i16x8, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x8, u16x8, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x16, i16x16, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!($tag, $b, f64x16, u16x16, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
+            }
+
+            // --- same-size i <-> u bitcasts (byte reinterpret) for the 8/16-bit slots ---
+            #[test]
+            fn bitcast_int8() {
+                bitpair!($tag, $b, i8x2, u8x2, i8);
+                bitpair!($tag, $b, u8x2, i8x2, u8);
+                bitpair!($tag, $b, i8x4, u8x4, i8);
+                bitpair!($tag, $b, u8x4, i8x4, u8);
+                bitpair!($tag, $b, i8x8, u8x8, i8);
+                bitpair!($tag, $b, u8x8, i8x8, u8);
+                bitpair!($tag, $b, i8x16, u8x16, i8);
+                bitpair!($tag, $b, u8x16, i8x16, u8);
+            }
+            #[test]
+            fn bitcast_int16() {
+                bitpair!($tag, $b, i16x2, u16x2, i16);
+                bitpair!($tag, $b, u16x2, i16x2, u16);
+                bitpair!($tag, $b, i16x4, u16x4, i16);
+                bitpair!($tag, $b, u16x4, i16x4, u16);
+                bitpair!($tag, $b, i16x8, u16x8, i16);
+                bitpair!($tag, $b, u16x8, i16x8, u16);
+                bitpair!($tag, $b, i16x16, u16x16, i16);
+                bitpair!($tag, $b, u16x16, i16x16, u16);
+            }
         }
     };
+}
+
+// Generic reachability: confirms the `Simd` trait itself carries the cross-slot
+// `BitCastRegister<sibling>` bound for the 8/16-bit families (so generic `S: Simd` code can
+// name the i <-> u bitcast without pinning a concrete backend or going through `Register::Unsigned`).
+#[allow(dead_code)]
+fn assert_generic_bitcast_bounds<S: Simd>() {
+    fn needs<A: thermite::register::CoreRegister, B: thermite::register::BitCastRegister<A>>() {}
+    needs::<S::i8x4, S::u8x4>();
+    needs::<S::u8x4, S::i8x4>();
+    needs::<S::i8x16, S::u8x16>();
+    needs::<S::i16x8, S::u16x8>();
+    needs::<S::u16x16, S::i16x16>();
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

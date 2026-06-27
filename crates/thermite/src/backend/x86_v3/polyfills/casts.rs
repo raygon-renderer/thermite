@@ -190,3 +190,119 @@ pub unsafe fn _mm256_cvtepi64_epi32_v3(x: __m256i) -> __m128i {
         _mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0),
     ))
 }
+
+// ===========================================================================================
+// Cross-family integer narrow/widen "instructions" that x86 lacks at this level (no `as`-style
+// truncating int narrow). These are the register-level polyfills behind the 8/16 <-> 16/32/64
+// and 8/16 <-> f64 casts in `registers/half8.rs` / `half16.rs`. v3 is AVX2, so some forms operate
+// on 256-bit `__m256i`/`__m256d` sources; multi-input (`[__m256i; N]`) forms are treated as
+// instructions that read more than one register.
+// ===========================================================================================
+
+// The pshufb masks that gather lane 0 (or word 0) of each wide lane into the contiguous low
+// bytes/words are identical at this level to v2's, so they are inherited from
+// `x86_v2::polyfills` (re-exported in `mod.rs`): `_mm_narrow_word_to_byte_maskx_v2`,
+// `_mm_narrow_dword_to_byte_maskx_v2`, `_mm_narrow_dword_to_word_maskx_v2`,
+// `_mm_narrow_qword_to_byte_maskx_v2`, `_mm_narrow_qword_to_word_maskx_v2`.
+
+// Narrow 16x i16 (256-bit) -> 16 i8 (`as`-style truncation), low byte of each lane. Split the
+// 256-bit source into two 128-bit halves, pshufb each to pack its 8 low bytes into the low 64
+// bits, then merge: a "cvtepi16_epi8" over a 256-bit register.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepi16_epi8x_v3(value: __m256i) -> __m128i {
+    let lo = _mm256_castsi256_si128(value); // lanes 0..8
+    let hi = _mm256_extracti128_si256(value, 1); // lanes 8..16
+    let mask = _mm_narrow_word_to_byte_maskx_v2();
+    let lo = _mm_shuffle_epi8(lo, mask); // 8 bytes in low 64 bits
+    let hi = _mm_shuffle_epi8(hi, mask);
+    _mm_unpacklo_epi64(lo, hi) // 16 bytes
+}
+
+// Narrow 8x i32 (256-bit) -> 8 i8 (low byte of each lane) into the low 8 bytes of a __m128i:
+// a "cvtepi32_epi8" over a 256-bit register.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepi32_epi8x_v3(value: __m256i) -> __m128i {
+    let lo = _mm256_castsi256_si128(value); // lanes 0..4
+    let hi = _mm256_extracti128_si256(value, 1); // lanes 4..8
+    let mask = _mm_narrow_dword_to_byte_maskx_v2();
+    let lo = _mm_shuffle_epi8(lo, mask); // 4 bytes in low 32 bits
+    let hi = _mm_shuffle_epi8(hi, mask);
+    _mm_unpacklo_epi32(lo, hi) // 8 bytes in low 64 bits
+}
+
+// Narrow 2x i32x8 (16 i32) -> 16 i8: each half narrows to 8 bytes in the low 64 bits; merge into
+// 16 bytes. A "cvtepi32_epi8" over two 256-bit registers.
+#[inline(always)]
+pub unsafe fn _mm_cvt2epi32x8_epi8x_v3(v: [__m256i; 2]) -> __m128i {
+    _mm_unpacklo_epi64(_mm256_cvtepi32_epi8x_v3(v[0]), _mm256_cvtepi32_epi8x_v3(v[1]))
+}
+
+// Pack the 4 i64 lanes of a 256-bit register into the low 4 bytes of a __m128i (byte 0 of each):
+// a "cvtepi64_epi8" over a 256-bit register.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepi64_epi8x_v3(value: __m256i) -> __m128i {
+    let lo = _mm256_castsi256_si128(value); // lanes 0..2
+    let hi = _mm256_extracti128_si256(value, 1); // lanes 2..4
+    let mask = _mm_narrow_qword_to_byte_maskx_v2();
+    let lo = _mm_shuffle_epi8(lo, mask); // 2 bytes in low 16 bits
+    let hi = _mm_shuffle_epi8(hi, mask);
+    _mm_unpacklo_epi16(lo, hi) // 4 bytes in low 32 bits
+}
+
+// Narrow 2x i64x4 (8 i64) -> 8 i8: each half narrows to 4 bytes in the low 32 bits; merge into 8
+// bytes. A "cvtepi64_epi8" over two 256-bit registers.
+#[inline(always)]
+pub unsafe fn _mm_cvt2epi64x4_epi8x_v3(v: [__m256i; 2]) -> __m128i {
+    _mm_unpacklo_epi32(_mm256_cvtepi64_epi8x_v3(v[0]), _mm256_cvtepi64_epi8x_v3(v[1]))
+}
+
+// Narrow 2x f64x4 (8 f64) -> 8 i8: truncate each lane to i32x4, pshufb each to 4 bytes, merge into
+// the low 64 bits. A truncating "cvtt2pd_epi8" over two 256-bit registers.
+#[inline(always)]
+pub unsafe fn _mm_cvt2pd4_epi8x_v3(v: [__m256d; 2]) -> __m128i {
+    let mask = _mm_narrow_dword_to_byte_maskx_v2();
+    let lo = _mm_shuffle_epi8(_mm256_cvttpd_epi32(v[0]), mask); // 4 bytes in low 32 bits
+    let hi = _mm_shuffle_epi8(_mm256_cvttpd_epi32(v[1]), mask);
+    _mm_unpacklo_epi32(lo, hi) // 8 bytes in low 64 bits
+}
+
+// Pack the 4 i64 lanes of a 256-bit register into the low 4 words of a __m128i (word 0 of each):
+// a "cvtepi64_epi16" over a 256-bit register.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepi64_epi16x_v3(value: __m256i) -> __m128i {
+    let lo = _mm256_castsi256_si128(value); // lanes 0..2
+    let hi = _mm256_extracti128_si256(value, 1); // lanes 2..4
+    let mask = _mm_narrow_qword_to_word_maskx_v2();
+    let lo = _mm_shuffle_epi8(lo, mask); // 2 words in low 32 bits
+    let hi = _mm_shuffle_epi8(hi, mask);
+    _mm_unpacklo_epi32(lo, hi) // 4 words in low 64 bits
+}
+
+// Narrow 2x i64x4 (8 i64) -> 8 i16: each half narrows to 4 words in the low 64 bits; merge into 8
+// words. A "cvtepi64_epi16" over two 256-bit registers.
+#[inline(always)]
+pub unsafe fn _mm_cvt2epi64x4_epi16x_v3(v: [__m256i; 2]) -> __m128i {
+    _mm_unpacklo_epi64(_mm256_cvtepi64_epi16x_v3(v[0]), _mm256_cvtepi64_epi16x_v3(v[1]))
+}
+
+// Pack the low word of each of 8 i32 lanes (256-bit) into the low 8 words of a __m128i: a
+// "cvtepi32_epi16" over a 256-bit register.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepi32_epi16x_v3(value: __m256i) -> __m128i {
+    let lo = _mm256_castsi256_si128(value); // lanes 0..4
+    let hi = _mm256_extracti128_si256(value, 1); // lanes 4..8
+    let mask = _mm_narrow_dword_to_word_maskx_v2();
+    let lo = _mm_shuffle_epi8(lo, mask); // 4 words in low 64 bits
+    let hi = _mm_shuffle_epi8(hi, mask);
+    _mm_unpacklo_epi64(lo, hi) // 8 words
+}
+
+// Narrow 2x f64x4 (8 f64) -> 8 i16: truncate each lane to i32x4, pshufb each to 4 words, merge
+// into the low 128 bits. A truncating "cvtt2pd_epi16" over two 256-bit registers.
+#[inline(always)]
+pub unsafe fn _mm_cvt2pd4_epi16x_v3(v: [__m256d; 2]) -> __m128i {
+    let mask = _mm_narrow_dword_to_word_maskx_v2();
+    let lo = _mm_shuffle_epi8(_mm256_cvttpd_epi32(v[0]), mask); // 4 words in low 64 bits
+    let hi = _mm_shuffle_epi8(_mm256_cvttpd_epi32(v[1]), mask);
+    _mm_unpacklo_epi64(lo, hi) // 8 words
+}

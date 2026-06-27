@@ -12,8 +12,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg,
-        reg, reg_splat,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
+        array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -468,5 +468,26 @@ impl CastRegister<ArrayRegister<super::I32x8V3, 2>> for I16x16V3 {
         let lo = <super::I16x8V3 as CastRegister<super::I32x8V3>>::cast_from(value.0[0]);
         let hi = <super::I16x8V3 as CastRegister<super::I32x8V3>>::cast_from(value.0[1]);
         <Self as ConcatRegister<super::I16x8V3>>::concat(lo, hi)
+    }
+}
+
+// Saturating narrow i32x16 -> i16x16 via a two-source `vpackssdw` over the two 256-bit halves,
+// then `vpermq` to restitch the interleaved 64-bit groups ([a.lo, b.lo, a.hi, b.hi] -> sequence).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>> for I16x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
+        unsafe {
+            let packed = arch::_mm256_packs_epi32(value.0[0], value.0[1]);
+            arch::_mm256_permute4x64_epi64(packed, 0b11_01_10_00)
+        }
+    }
+}
+
+// Saturating narrow i64x16 -> i16x16: clamp down to i32x16 (no 64-bit pack) then the pack above.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>> for I16x16V3 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
+        let words = <ArrayRegister<super::I32x8V3, 2> as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(value);
+        <Self as SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(words)
     }
 }

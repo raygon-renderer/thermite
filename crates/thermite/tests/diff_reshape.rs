@@ -93,6 +93,46 @@ macro_rules! reshape_half {
     };
 }
 
+// Reshape pair where both widths are `Simd` slots (the 8-bit ladder).
+macro_rules! reshape_exp {
+    ($name:ident, $backend:ty, $narrow:ident, $wide:ident, $label:expr) => {
+        #[test]
+        fn $name() {
+            check_reshape::<
+                Vector<<$backend as Simd>::$narrow>,
+                Vector<<$backend as Simd>::$wide>,
+            >($label);
+        }
+    };
+}
+
+// scalar-element <-> x2 reshape for an experimental (8-bit) x2 slot.
+macro_rules! reshape_exp_half {
+    ($name:ident, $backend:ty, $elem:ty, $wide:ident, $label:expr) => {
+        #[test]
+        fn $name() {
+            check_reshape::<Vector<$elem>, Vector<<$backend as Simd>::$wide>>($label);
+        }
+    };
+}
+
+// The 8-bit ReducedRegister ladder: scalar<->x2, x2<->x4, x4<->x8, x8<->x16.
+macro_rules! reshape8_suite {
+    ($modname:ident, $backend:ty, $bl:expr) => {
+        mod $modname {
+            use super::*;
+            reshape_exp_half!(i8_x2, $backend, i8, i8x2, concat!($bl, " i8|i8x2"));
+            reshape_exp_half!(u8_x2, $backend, u8, u8x2, concat!($bl, " u8|u8x2"));
+            reshape_exp!(i8x2_x4, $backend, i8x2, i8x4, concat!($bl, " i8x2|i8x4"));
+            reshape_exp!(u8x2_x4, $backend, u8x2, u8x4, concat!($bl, " u8x2|u8x4"));
+            reshape_exp!(i8x4_x8, $backend, i8x4, i8x8, concat!($bl, " i8x4|i8x8"));
+            reshape_exp!(u8x4_x8, $backend, u8x4, u8x8, concat!($bl, " u8x4|u8x8"));
+            reshape_exp!(i8x8_x16, $backend, i8x8, i8x16, concat!($bl, " i8x8|i8x16"));
+            reshape_exp!(u8x8_x16, $backend, u8x8, u8x16, concat!($bl, " u8x8|u8x16"));
+        }
+    };
+}
+
 macro_rules! reshape_suite {
     ($modname:ident, $backend:ty, $bl:expr) => {
         mod $modname {
@@ -114,6 +154,7 @@ macro_rules! reshape_suite {
 }
 
 reshape_suite!(scalar, Scalar, "scalar");
+reshape8_suite!(scalar8, Scalar, "scalar");
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
@@ -124,6 +165,9 @@ use thermite::backend::x86_v3::X86V3;
 reshape_suite!(v3, X86V3, "x86_v3");
 reshape_suite!(v2, X86V2, "x86_v2");
 reshape_suite!(v1, X86V1, "x86_v1");
+reshape8_suite!(v3_8, X86V3, "x86_v3");
+reshape8_suite!(v2_8, X86V2, "x86_v2");
+reshape8_suite!(v1_8, X86V1, "x86_v1");
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -131,4 +175,5 @@ mod wasm {
 use super::*;
 use thermite::backend::wasm::Wasm;
 reshape_suite!(wasm, Wasm, "wasm");
+reshape8_suite!(wasm8, Wasm, "wasm");
 }

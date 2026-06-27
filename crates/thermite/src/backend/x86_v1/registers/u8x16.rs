@@ -11,9 +11,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -345,3 +345,34 @@ impl IntegerRegister for U8x16V1 {
 
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U8x16V1 {}
+
+// Saturating narrow u16x16 -> u8x16: clamp each half (`min_epu16x_v1`) then two-source `packuswb`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U16x8V1, 2>> for U8x16V1 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8V1, 2>>) -> Storage<Self> {
+        unsafe {
+            let max = arch::_mm_set1_epi16(0xFF);
+            let lo = arch::_mm_min_epu16x_v1(value.0[0], max);
+            let hi = arch::_mm_min_epu16x_v1(value.0[1], max);
+            arch::_mm_packus_epi16(lo, hi)
+        }
+    }
+}
+
+// SSE2 has no `packusdw`, so u32x16 -> u8x16 and u64x16 -> u8x16 clamp into range + truncating narrow.
+macro_rules! sat_clamp_narrow {
+    ($(($from:ty, $fe:ty)),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl SaturatingCastRegister<$from> for U8x16V1 {
+            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                let hi = <$from as Register>::splat(u8::MAX as $fe);
+                let clamped = <$from as NumericRegister>::min(value, hi);
+                <Self as CastRegister<$from>>::cast_from(clamped)
+            }
+        }
+    )*};
+}
+sat_clamp_narrow! {
+    (ArrayRegister<super::U32x4V1, 4>, u32),
+    (ArrayRegister<super::U64x2V1, 8>, u64),
+}

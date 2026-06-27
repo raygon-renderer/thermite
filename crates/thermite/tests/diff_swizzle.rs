@@ -17,10 +17,9 @@ use rand::RngExt;
 use thermite::Vector;
 use thermite::register::array::ArrayRegister;
 use thermite::register::{NumericRegister, Register, Storage, SwizzleRegister};
-use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
-use thermite::simd::SimdExperimental;
+use thermite::simd::{NativeSimd, Simd};
 
 /// `permute_const` (single-register, indices `0..LANES`) vs `scalar_permutev`.
 macro_rules! perm {
@@ -300,32 +299,32 @@ mod x86_rt {
     rt!(rt_v1_f32x8, <X86V1 as Simd>::f32x8);
 
     // Native 16-bit pshufb permute paths: 128-bit (single pshufb) and 256-bit (cross-lane).
-    rt!(rt_v2_i16x8, <X86V2 as SimdExperimental>::i16x8);
-    rt!(rt_v2_u16x8, <X86V2 as SimdExperimental>::u16x8);
-    rt!(rt_v3_i16x8, <X86V3 as SimdExperimental>::i16x8);
-    rt!(rt_v3_u16x8, <X86V3 as SimdExperimental>::u16x8);
-    rt!(rt_v3_i16x16, <X86V3 as SimdExperimental>::i16x16);
-    rt!(rt_v3_u16x16, <X86V3 as SimdExperimental>::u16x16);
+    rt!(rt_v2_i16x8, <X86V2 as Simd>::i16x8);
+    rt!(rt_v2_u16x8, <X86V2 as Simd>::u16x8);
+    rt!(rt_v3_i16x8, <X86V3 as Simd>::i16x8);
+    rt!(rt_v3_u16x8, <X86V3 as Simd>::u16x8);
+    rt!(rt_v3_i16x16, <X86V3 as Simd>::i16x16);
+    rt!(rt_v3_u16x16, <X86V3 as Simd>::u16x16);
     // Reduced (i16x4) and ArrayRegister (i16x2/i16x16-on-v2) forms route through the native permutev.
-    rt!(rt_v3_i16x4, <X86V3 as SimdExperimental>::i16x4);
-    rt!(rt_v2_i16x4, <X86V2 as SimdExperimental>::i16x4);
-    rt!(rt_v2_i16x16, <X86V2 as SimdExperimental>::i16x16);
+    rt!(rt_v3_i16x4, <X86V3 as Simd>::i16x4);
+    rt!(rt_v2_i16x4, <X86V2 as Simd>::i16x4);
+    rt!(rt_v2_i16x16, <X86V2 as Simd>::i16x16);
     // v1 (SSE2): no pshufb, so 16-bit permutes take the scalar SwizzleRegister fallback.
-    rt!(rt_v1_i16x8, <X86V1 as SimdExperimental>::i16x8);
-    rt!(rt_v1_u16x8, <X86V1 as SimdExperimental>::u16x8);
+    rt!(rt_v1_i16x8, <X86V1 as Simd>::i16x8);
+    rt!(rt_v1_u16x8, <X86V1 as Simd>::u16x8);
 
     // Native 8-bit pshufb permute paths (the byte index IS the pshufb control): 128-bit on v2.
-    rt!(rt_v2_i8x16, <X86V2 as SimdExperimental>::i8xN);
-    rt!(rt_v2_u8x16, <X86V2 as SimdExperimental>::u8xN);
+    rt!(rt_v2_i8x16, <X86V2 as NativeSimd>::i8xN);
+    rt!(rt_v2_u8x16, <X86V2 as NativeSimd>::u8xN);
     // v1 (SSE2): no pshufb, so 8-bit permutes take the scalar SwizzleRegister fallback.
-    rt!(rt_v1_i8x16, <X86V1 as SimdExperimental>::i8xN);
-    rt!(rt_v1_u8x16, <X86V1 as SimdExperimental>::u8xN);
+    rt!(rt_v1_i8x16, <X86V1 as NativeSimd>::i8xN);
+    rt!(rt_v1_u8x16, <X86V1 as NativeSimd>::u8xN);
     // v3 (AVX2): native 256-bit, cross-lane byte permute (pshufb x2 + blend by bit4).
-    rt!(rt_v3_i8x32, <X86V3 as SimdExperimental>::i8xN);
-    rt!(rt_v3_u8x32, <X86V3 as SimdExperimental>::u8xN);
+    rt!(rt_v3_i8x32, <X86V3 as NativeSimd>::i8xN);
+    rt!(rt_v3_u8x32, <X86V3 as NativeSimd>::u8xN);
     // v3 fixed 128-bit i8x16 (single pshufb permute, distinct register from the 256-bit native).
-    rt!(rt_v3_i8x16, <X86V3 as SimdExperimental>::i8x16);
-    rt!(rt_v3_u8x16, <X86V3 as SimdExperimental>::u8x16);
+    rt!(rt_v3_i8x16, <X86V3 as Simd>::i8x16);
+    rt!(rt_v3_u8x16, <X86V3 as Simd>::u8x16);
 }
 
 // WASM: runtime permute/swizzle via `i8x16`/`u8x16_relaxed_swizzle` (and the scalar/array glue).
@@ -341,11 +340,11 @@ mod wasm_rt {
     rt!(rt_wasm_f32x16, <Wasm as Simd>::f32x16); // ArrayRegister-emulated
     rt!(rt_wasm_arr_f32x4x4, ArrayRegister<<Wasm as Simd>::f32x4, 4>);
     // 16-bit: native i16x8 (byte-doubled relaxed_swizzle), reduced i16x4, array i16x16.
-    rt!(rt_wasm_i16x8, <Wasm as SimdExperimental>::i16x8);
-    rt!(rt_wasm_u16x8, <Wasm as SimdExperimental>::u16x8);
-    rt!(rt_wasm_i16x4, <Wasm as SimdExperimental>::i16x4);
-    rt!(rt_wasm_i16x16, <Wasm as SimdExperimental>::i16x16);
+    rt!(rt_wasm_i16x8, <Wasm as Simd>::i16x8);
+    rt!(rt_wasm_u16x8, <Wasm as Simd>::u16x8);
+    rt!(rt_wasm_i16x4, <Wasm as Simd>::i16x4);
+    rt!(rt_wasm_i16x16, <Wasm as Simd>::i16x16);
     // 8-bit: native i8x16 relaxed_swizzle (byte index is the control directly).
-    rt!(rt_wasm_i8x16, <Wasm as SimdExperimental>::i8xN);
-    rt!(rt_wasm_u8x16, <Wasm as SimdExperimental>::u8xN);
+    rt!(rt_wasm_i8x16, <Wasm as NativeSimd>::i8xN);
+    rt!(rt_wasm_u8x16, <Wasm as NativeSimd>::u8xN);
 }

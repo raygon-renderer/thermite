@@ -140,6 +140,134 @@ pub unsafe fn _mm_cvtepi64_epi32x_v2(a: __m128i, b: __m128i) -> __m128i {
     _mm_blend_epi16(a_shuffled, b_shuffled, 0xF0)
 }
 
+// ===========================================================================================
+// Cross-family integer narrow/widen "instructions" that x86 lacks at this level (no `as`-style
+// truncating int narrow; the widens beyond 2 output lanes need several `cvtep*`). These are the
+// register-level polyfills behind the 8/16 <-> 16/32/64 and 8/16 <-> f64 casts in
+// `registers/half8.rs` / `half16.rs`. The multi-output (`[__m128i; N]`) forms are treated as
+// instructions that write more than one register.
+// ===========================================================================================
+
+// pshufb masks that gather lane 0 of each wide lane into the contiguous low bytes/words.
+#[inline(always)]
+pub unsafe fn _mm_narrow_word_to_byte_maskx_v2() -> __m128i {
+    // byte 0 of each of 8 i16 lanes (positions 0,2,...,14) -> low 8 bytes.
+    _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1)
+}
+#[inline(always)]
+pub unsafe fn _mm_narrow_dword_to_byte_maskx_v2() -> __m128i {
+    // byte 0 of each of 4 i32 lanes (positions 0,4,8,12) -> low 4 bytes.
+    _mm_setr_epi8(0, 4, 8, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1)
+}
+#[inline(always)]
+pub unsafe fn _mm_narrow_dword_to_word_maskx_v2() -> __m128i {
+    // bytes 0,1 of each of 4 i32 lanes -> low 4 words.
+    _mm_setr_epi8(0, 1, 4, 5, 8, 9, 12, 13, -1, -1, -1, -1, -1, -1, -1, -1)
+}
+#[inline(always)]
+pub unsafe fn _mm_narrow_qword_to_byte_maskx_v2() -> __m128i {
+    // byte 0 of each of 2 i64 lanes (positions 0,8) -> low 2 bytes.
+    _mm_setr_epi8(0, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1)
+}
+#[inline(always)]
+pub unsafe fn _mm_narrow_qword_to_word_maskx_v2() -> __m128i {
+    // bytes 0,1 of each of 2 i64 lanes (positions 0,1,8,9) -> low 4 bytes (2 words).
+    _mm_setr_epi8(0, 1, 8, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1)
+}
+
+// Narrow 2x i16x8 (16 i16) -> 16 i8 (`as`-style truncation): a "cvtepi16_epi8" over two regs.
+#[inline(always)]
+pub unsafe fn _mm_cvt2epi16_epi8x_v2(v: [__m128i; 2]) -> __m128i {
+    let mask = _mm_narrow_word_to_byte_maskx_v2();
+    let lo = _mm_shuffle_epi8(v[0], mask); // 8 bytes in low 64 bits
+    let hi = _mm_shuffle_epi8(v[1], mask);
+    _mm_unpacklo_epi64(lo, hi) // 16 bytes
+}
+
+// Narrow 4x i32x4 (16 i32) -> 16 i8 (low byte of each lane): a "cvtepi32_epi8" over four regs.
+#[inline(always)]
+pub unsafe fn _mm_cvt4epi32_epi8x_v2(v: [__m128i; 4]) -> __m128i {
+    let mask = _mm_narrow_dword_to_byte_maskx_v2();
+    let a = _mm_shuffle_epi8(v[0], mask);
+    let b = _mm_shuffle_epi8(v[1], mask);
+    let c = _mm_shuffle_epi8(v[2], mask);
+    let d = _mm_shuffle_epi8(v[3], mask);
+    let ab = _mm_unpacklo_epi32(a, b); // 8 bytes in low 64 bits
+    let cd = _mm_unpacklo_epi32(c, d);
+    _mm_unpacklo_epi64(ab, cd) // 16 bytes
+}
+
+// Narrow 4x i64x2 (8 i64) -> 8 i8 (byte 0 of each lane): a "cvtepi64_epi8" over four regs.
+#[inline(always)]
+pub unsafe fn _mm_cvt4epi64_epi8x_v2(v: [__m128i; 4]) -> __m128i {
+    let mask = _mm_narrow_qword_to_byte_maskx_v2();
+    let a = _mm_shuffle_epi8(v[0], mask); // 2 bytes in low 16 bits
+    let b = _mm_shuffle_epi8(v[1], mask);
+    let c = _mm_shuffle_epi8(v[2], mask);
+    let d = _mm_shuffle_epi8(v[3], mask);
+    let ab = _mm_unpacklo_epi16(a, b); // 4 bytes in low 32 bits
+    let cd = _mm_unpacklo_epi16(c, d);
+    _mm_unpacklo_epi32(ab, cd) // 8 bytes in low 64 bits
+}
+
+// Narrow 8x i64x2 (16 i64) -> 16 i8 (byte 0 of each lane): a "cvtepi64_epi8" over eight regs.
+#[inline(always)]
+pub unsafe fn _mm_cvt8epi64_epi8x_v2(v: [__m128i; 8]) -> __m128i {
+    let lo = _mm_cvt4epi64_epi8x_v2([v[0], v[1], v[2], v[3]]); // 8 bytes in low 64 bits
+    let hi = _mm_cvt4epi64_epi8x_v2([v[4], v[5], v[6], v[7]]);
+    _mm_unpacklo_epi64(lo, hi) // 16 bytes
+}
+
+// Narrow 4x i64x2 (8 i64) -> 8 i16 (word 0 of each lane): a "cvtepi64_epi16" over four regs.
+#[inline(always)]
+pub unsafe fn _mm_cvt4epi64_epi16x_v2(v: [__m128i; 4]) -> __m128i {
+    let mask = _mm_narrow_qword_to_word_maskx_v2();
+    let a = _mm_shuffle_epi8(v[0], mask); // 2 words in low 32 bits
+    let b = _mm_shuffle_epi8(v[1], mask);
+    let c = _mm_shuffle_epi8(v[2], mask);
+    let d = _mm_shuffle_epi8(v[3], mask);
+    let ab = _mm_unpacklo_epi32(a, b); // 4 words in low 64 bits
+    let cd = _mm_unpacklo_epi32(c, d);
+    _mm_unpacklo_epi64(ab, cd) // 8 words
+}
+
+// Widen i16x8 (8 i16) -> 8 i64 across four __m128i: a "cvtepi16_epi64" writing four regs.
+#[inline(always)]
+pub unsafe fn _mm_cvtepi16_4epi64x_v2(v: __m128i) -> [__m128i; 4] {
+    [
+        _mm_cvtepi16_epi64(v),
+        _mm_cvtepi16_epi64(_mm_srli_si128(v, 4)),
+        _mm_cvtepi16_epi64(_mm_srli_si128(v, 8)),
+        _mm_cvtepi16_epi64(_mm_srli_si128(v, 12)),
+    ]
+}
+#[inline(always)]
+pub unsafe fn _mm_cvtepu16_4epi64x_v2(v: __m128i) -> [__m128i; 4] {
+    [
+        _mm_cvtepu16_epi64(v),
+        _mm_cvtepu16_epi64(_mm_srli_si128(v, 4)),
+        _mm_cvtepu16_epi64(_mm_srli_si128(v, 8)),
+        _mm_cvtepu16_epi64(_mm_srli_si128(v, 12)),
+    ]
+}
+
+// Widen the low 4 i32 lanes of a __m128i into 4 f64 (two __m128d): "cvtepi32_pd" writing two regs.
+#[inline(always)]
+pub unsafe fn _mm_cvtepi32_2pdx_v2(v: __m128i) -> [__m128d; 2] {
+    let lo = _mm_cvtepi32_pd(v); // low 2 i32 -> 2 f64
+    let hi = _mm_cvtepi32_pd(_mm_srli_si128(v, 8)); // next 2 i32 -> 2 f64
+    [lo, hi]
+}
+
+// Narrow 4 f64 (two __m128d) into the low 4 i32 lanes of a __m128i (truncating): "cvttpd_epi32"
+// over two regs.
+#[inline(always)]
+pub unsafe fn _mm_cvtt2pd_epi32x_v2(v: [__m128d; 2]) -> __m128i {
+    let lo = _mm_cvttpd_epi32(v[0]); // 2 i32 in low 64 bits
+    let hi = _mm_cvttpd_epi32(v[1]);
+    _mm_unpacklo_epi64(lo, hi) // 4 i32
+}
+
 #[inline(always)]
 pub unsafe fn _mm_cvtpd_epu32x_v2(xmm0: __m128d) -> __m128i {
     // 1. Threshold: 2^31

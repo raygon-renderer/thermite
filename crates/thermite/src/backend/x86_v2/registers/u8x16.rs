@@ -7,9 +7,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, empty_reg, reg,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -379,3 +379,41 @@ impl IntegerRegister for U8x16V2 {
 
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U8x16V2 {}
+
+// Saturating narrow u16x16 -> u8x16: clamp each half (`pminuw`) then two-source `packuswb`.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U16x8V2, 2>> for U8x16V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8V2, 2>>) -> Storage<Self> {
+        unsafe {
+            let max = arch::_mm_set1_epi16(0xFF);
+            let lo = arch::_mm_min_epu16(value.0[0], max);
+            let hi = arch::_mm_min_epu16(value.0[1], max);
+            arch::_mm_packus_epi16(lo, hi)
+        }
+    }
+}
+
+// Saturating narrow u32x16 -> u8x16: clamp + `packusdw` to u16, then clamp + `packuswb` to u8.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x4V2, 4>> for U8x16V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4V2, 4>>) -> Storage<Self> {
+        unsafe {
+            let m32 = arch::_mm_set1_epi32(0xFFFF);
+            let w0 = arch::_mm_packus_epi32(arch::_mm_min_epu32(value.0[0], m32), arch::_mm_min_epu32(value.0[1], m32));
+            let w1 = arch::_mm_packus_epi32(arch::_mm_min_epu32(value.0[2], m32), arch::_mm_min_epu32(value.0[3], m32));
+            let m16 = arch::_mm_set1_epi16(0xFF);
+            arch::_mm_packus_epi16(arch::_mm_min_epu16(w0, m16), arch::_mm_min_epu16(w1, m16))
+        }
+    }
+}
+
+// Saturating narrow u64x16 -> u8x16: clamp the high end (polyfilled 64-bit min) + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x2V2, 8>> for U8x16V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2V2, 8>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2V2, 8>;
+        let hi = <Src as Register>::splat(u8::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+}

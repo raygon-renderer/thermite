@@ -16,6 +16,7 @@ pub mod u8x16;
 
 pub mod half;
 pub mod half16;
+pub mod half8; // sub-native 8-bit ReducedRegister ladder (i8x4/x8) + u8<->u32 casts
 pub mod packed; // PackedFloatRegister (16-bit float) generic-default impls for native u16 regs
 
 pub use f32x4::F32x4Wasm;
@@ -38,7 +39,7 @@ use crate::{
     element::FindUSize,
     isa::InstructionSet,
     register::{BitCastRegister, IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A, SimdExperimental},
+    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +58,8 @@ impl NativeIsa for Wasm {
 
     type Native32Width = generic_array::typenum::U4;
     type Native64Width = generic_array::typenum::U2;
+    type Native16Width = generic_array::typenum::U8;
+    type Native8Width = generic_array::typenum::U16;
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
 }
@@ -70,6 +73,12 @@ impl NativeSimd for Wasm {
     type f64xN = F64x2Wasm;
     type i64xN = I64x2Wasm;
     type u64xN = U64x2Wasm;
+
+    type i16xN = I16x8Wasm;
+    type u16xN = U16x8Wasm;
+
+    type i8xN = I8x16Wasm;
+    type u8xN = U8x16Wasm;
 }
 
 // Scatter/Gather is not available on WASM, so we use fallback scalar impls.
@@ -92,12 +101,15 @@ impl_indexable!(<Wasm as Simd>::u64x4 => F32x4Wasm, I32x4Wasm, U32x4Wasm);
 impl_indexable!(U16x8Wasm => I16x8Wasm, U16x8Wasm);
 impl_indexable!(<Wasm as Simd>::u32x8 => I16x8Wasm, U16x8Wasm);
 impl_indexable!(<Wasm as Simd>::u64x8 => I16x8Wasm, U16x8Wasm);
-impl_indexable!(<Wasm as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
-impl_indexable!(<Wasm as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>);
+impl_indexable!(<Wasm as Simd>::u32x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
+impl_indexable!(<Wasm as Simd>::u64x2 => ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>);
 impl_indexable!(<Wasm as Simd>::u64x16 => ArrayRegister<I16x8Wasm, 2>, ArrayRegister<U16x8Wasm, 2>);
 
-// 8-bit: same-width self-indexing only.
+// 8-bit: same-width self-indexing plus the 16-lane usize/u32/u64 index trio (scalar-fallback
+// markers, matching the sub-native i8x8/i8x4 ladder; usizex16 aliases u32x16/u64x16).
 impl_indexable!(U8x16Wasm => I8x16Wasm, U8x16Wasm);
+impl_indexable!(<Wasm as Simd>::u32x16 => I8x16Wasm, U8x16Wasm);
+impl_indexable!(<Wasm as Simd>::u64x16 => I8x16Wasm, U8x16Wasm);
 
 impl Simd for Wasm {
     type usizex2 = <() as FindUSize<(), Self::u32x2, Self::u64x2>>::Output;
@@ -136,13 +148,6 @@ impl Simd for Wasm {
     type f64x16 = ArrayRegister<F64x2Wasm, 8>;
     type i64x16 = ArrayRegister<I64x2Wasm, 8>;
     type u64x16 = ArrayRegister<U64x2Wasm, 8>;
-}
-
-impl SimdExperimental for Wasm {
-    type Native16Width = generic_array::typenum::U8;
-
-    type i16xN = I16x8Wasm;
-    type u16xN = U16x8Wasm;
 
     type i16x2 = ArrayRegister<i16, 2>;
     type u16x2 = ArrayRegister<u16, 2>;
@@ -156,13 +161,23 @@ impl SimdExperimental for Wasm {
     type i16x16 = ArrayRegister<I16x8Wasm, 2>;
     type u16x16 = ArrayRegister<U16x8Wasm, 2>;
 
-    type Native8Width = generic_array::typenum::U16;
-
-    type i8xN = I8x16Wasm;
-    type u8xN = U8x16Wasm;
-
     type i8x16 = I8x16Wasm;
     type u8x16 = U8x16Wasm;
+
+    type i8x2 = ArrayRegister<i8, 2>;
+    type u8x2 = ArrayRegister<u8, 2>;
+    type i8x4 = half8::I8x4Wasm;
+    type u8x4 = half8::U8x4Wasm;
+    type i8x8 = half8::I8x8Wasm;
+    type u8x8 = half8::U8x8Wasm;
+}
+
+// fp8 pack/unpack (generic branchless defaults) on the u8 ladder -> matching f32 widths.
+impl_packed_fp8! {
+    ArrayRegister<u8, 2> => F32x2Wasm,
+    half8::U8x4Wasm => F32x4Wasm,
+    half8::U8x8Wasm => ArrayRegister<F32x4Wasm, 2>,
+    U8x16Wasm => ArrayRegister<F32x4Wasm, 4>,
 }
 
 impl Simd3 for Wasm {

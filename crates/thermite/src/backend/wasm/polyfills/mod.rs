@@ -1,6 +1,6 @@
-#![allow(clippy::identity_op)]
+#![allow(clippy::identity_op, unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 
-pub use core::arch::wasm32::*;
+pub use super::arch::*;
 
 pub mod bits;
 pub mod casts;

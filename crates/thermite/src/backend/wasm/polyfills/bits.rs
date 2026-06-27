@@ -1,4 +1,4 @@
-use core::arch::wasm32::*;
+use super::*;
 
 /// Shift the entire 128-bit register left by `IMM8` bytes, filling vacated
 /// low bytes with zeros. Equivalent to x86 `PSLLDQ` / `_mm_bslli_si128`.

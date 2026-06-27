@@ -942,6 +942,40 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Similar to a `!mask & self` operation.
     fn nz(self, mask: Self::Mask) -> Self;
 
+    /// Construct a mask whose first `n` lanes are `true` and the remaining
+    /// lanes `false`.
+    ///
+    /// `n` is clamped to [`LANES`](Self::LANES): `n >= LANES` yields an
+    /// all-`true` mask and `n == 0` an all-`false` mask. This is the canonical
+    /// tail-handling helper - given a remainder of `k < LANES` elements,
+    /// `Self::prefix_mask(k)` selects exactly those lanes for a masked store,
+    /// [`select`](crate::mask::GenericMask::select), or `_c`/`_m`/`_z`
+    /// operation.
+    ///
+    /// Semantically `Self::indexed() < n` lifted into the mask domain, but
+    /// available on any [`GenericVector`] (the predicate is built on
+    /// [`Unsigned`](Self::Unsigned), so it does not require `Self: NumericVector`).
+    #[inline(always)]
+    fn prefix_mask(n: usize) -> Self::Mask {
+        let n = if n > Self::LANES { Self::LANES } else { n };
+        let limit = Self::len_to_indices::<Self::Unsigned>(n);
+        Self::Unsigned::indexed().cmp_lt(limit).cast::<Self::Mask>()
+    }
+
+    /// Construct a mask whose last `n` lanes are `true` and the remaining
+    /// lanes `false`.
+    ///
+    /// `n` is clamped to [`LANES`](Self::LANES). This is the high-lane
+    /// companion to [`prefix_mask`](Self::prefix_mask); for example
+    /// `Self::suffix_mask(2)` on a 4-lane vector selects lanes 2 and 3.
+    #[inline(always)]
+    fn suffix_mask(n: usize) -> Self::Mask {
+        let n = if n > Self::LANES { Self::LANES } else { n };
+        let start = Self::len_to_indices::<Self::Unsigned>(Self::LANES - n);
+        Self::Unsigned::indexed().cmp_ge(start).cast::<Self::Mask>()
+    }
+
+
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
@@ -1003,6 +1037,20 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         INTO: BitCastVector<Self>,
     {
         INTO::from_bits(self)
+    }
+
+    /// Narrowing cast that saturates (clamps) out-of-range values to the
+    /// destination element range, rather than wrapping like [`cast`](Self::cast).
+    ///
+    /// Only resolves for narrowing, same-signedness integer conversions
+    /// (`i64 -> ... -> i8`, `u64 -> ... -> u8`); widening or sign-changing
+    /// casts have no `SaturatingCastVector` impl and must use [`cast`](Self::cast).
+    /// See [`SaturatingCastVector`].
+    #[inline(always)] fn saturating_cast<INTO>(self) -> INTO
+    where
+        INTO: SaturatingCastVector<Self>,
+    {
+        INTO::saturating_cast_from(self)
     }
 }
 
@@ -1207,6 +1255,23 @@ pub trait CastVector<FROM: Sized>: Sized {
 pub trait BitCastVector<FROM: Sized>: Sized {
     /// Reinterpret the bit pattern of `bits` as a value of `Self`.
     fn from_bits(bits: FROM) -> Self;
+}
+
+/// Vector-layer mirror of [`SaturatingCastRegister`](crate::register::SaturatingCastRegister):
+/// a narrowing, same-signedness cast that clamps out-of-range values to the
+/// destination element range instead of wrapping like [`CastVector`].
+///
+/// Implemented only for narrowing same-sign integer pairs (`i64 -> ... -> i8`,
+/// `u64 -> ... -> u8`, including skip-level pairs). Widening and sign-changing
+/// conversions are not saturating and go through [`CastVector`]. Most users
+/// reach this through [`GenericVector::saturating_cast`] rather than naming the
+/// trait directly.
+///
+/// Blanket-implemented for every `Vector<INTO>` whose register implements
+/// [`SaturatingCastRegister<FROM>`](crate::register::SaturatingCastRegister).
+pub trait SaturatingCastVector<FROM: Sized>: Sized {
+    /// Narrow `from` into `Self`, clamping each lane to `Self`'s element range.
+    fn saturating_cast_from(from: FROM) -> Self;
 }
 
 /// A `u16`/`u8` integer vector reinterpreted as a vector of *packed floats* (format `S`: fp16,

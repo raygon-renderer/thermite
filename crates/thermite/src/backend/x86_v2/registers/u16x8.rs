@@ -8,8 +8,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -402,5 +402,30 @@ impl CastRegister<ArrayRegister<super::U32x4V2, 2>> for U16x8V2 {
             let hi = arch::_mm_shuffle_epi8(value.0[1], pick_lo16);
             arch::_mm_unpacklo_epi64(lo, hi)
         }
+    }
+}
+
+// Saturating narrow u32x8 -> u16x8: clamp each half's high end (`pminud`) then a single
+// two-source `packusdw` (signed-source pack, so the clamp keeps lanes in [0, 0xFFFF]).
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>> for U16x8V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4V2, 2>>) -> Storage<Self> {
+        unsafe {
+            let max = arch::_mm_set1_epi32(0xFFFF);
+            let lo = arch::_mm_min_epu32(value.0[0], max);
+            let hi = arch::_mm_min_epu32(value.0[1], max);
+            arch::_mm_packus_epi32(lo, hi)
+        }
+    }
+}
+
+// Saturating narrow u64x8 -> u16x8: clamp the high end (polyfilled 64-bit min) + truncating narrow.
+#[thermite_macros::inline_always]
+impl SaturatingCastRegister<ArrayRegister<super::U64x2V2, 4>> for U16x8V2 {
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2V2, 4>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2V2, 4>;
+        let hi = <Src as Register>::splat(u16::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

@@ -553,3 +553,26 @@ macro_rules! cast_diff {
         }
     }};
 }
+
+/// Stamp a differential test for a same-size `BitCastRegister::from_bits` (a byte
+/// reinterpret, e.g. `i8 <-> u8`). The SIMD `from_bits` is compared against the scalar
+/// backend's, which is the same byte reinterpret, so the result is bit-exact. `$se` is the
+/// SOURCE element type the corpus is generated over.
+#[macro_export]
+macro_rules! bitcast_diff {
+    ($label:expr, $src_ut:ty, $dst_ut:ty, $src_rf:ty, $dst_rf:ty, $se:ty) => {{
+        use ::thermite::register::BitCastRegister;
+        let mut rng = $crate::harness::rng();
+        let lanes =
+            <<$src_ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
+        for input in $crate::harness::corpus::<$se>(lanes, &mut rng) {
+            let got = $crate::harness::read::<$dst_ut>(&<$dst_ut as BitCastRegister<$src_ut>>::from_bits(
+                $crate::harness::make_array::<$src_ut>(&input),
+            ));
+            let want = $crate::harness::read::<$dst_rf>(&<$dst_rf as BitCastRegister<$src_rf>>::from_bits(
+                $crate::harness::make_array::<$src_rf>(&input),
+            ));
+            $crate::harness::assert_lanes_eq(concat!($label, " [bitcast vs scalar]"), &[], &got, &want, Tol::Exact);
+        }
+    }};
+}
