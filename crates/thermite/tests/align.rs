@@ -65,6 +65,12 @@ macro_rules! suite {
             check!(i32x8, thermite::simd::i32x8<$backend>, i32, 8, [0, 1, 4, 7, 8]);
             check!(i64x4, thermite::simd::i64x4<$backend>, i64, 4, [0, 1, 2, 3, 4]);
             check!(u64x4, thermite::simd::u64x4<$backend>, u64, 4, [0, 1, 2, 4]);
+            // Float widths: align is on GenericVector now, so it works for any
+            // element type. f32x8/f64x4 are native 256 on v3, ArrayRegister on
+            // v1/v2, 1-lane-chunk array on scalar. Values are exact integers, so
+            // the lane-movement result compares exactly.
+            check!(f32x8, thermite::simd::f32x8<$backend>, f32, 8, [0, 1, 5, 8]);
+            check!(f64x4, thermite::simd::f64x4<$backend>, f64, 4, [0, 1, 2, 4]);
         }
     };
 }

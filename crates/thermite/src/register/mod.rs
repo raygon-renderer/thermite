@@ -945,6 +945,24 @@ pub trait Register:
         Self::swizzle(a, b, I::INDICES)
     }
 
+    /// Two-register element align (the `palignr` family): the window of
+    /// `Self::Lanes` lanes starting at lane `OFFSET` of the concatenation
+    /// `[a, b]` (`a`'s lanes first, then `b`'s). `OFFSET == 0` returns `a`,
+    /// `OFFSET == LANES` returns `b`; in between, lanes spill from the tail of
+    /// `a` into the head of `b`.
+    ///
+    /// The cross-register sliding window used for multi-byte delimiter /
+    /// substring scanning across a load boundary - the cross-register companion
+    /// to the single-register [`bshli`](BitshiftRegister::bshli)/[`bshri`](BitshiftRegister::bshri).
+    /// The default routes through [`swizzle_const`](Self::swizzle_const) with a
+    /// compile-time [`AlignIndices`](crate::swizzle::AlignIndices) pattern, so it
+    /// is correct on every backend, element type, and lane count. Integer
+    /// backends override it with native byte aligns (`palignr`, whole-register
+    /// byte shifts, or the AVX2 256-bit sequence).
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b)
+    }
+
     /// Runtime permute of an `N`-chunk [`ArrayRegister<Self, N>`](array::ArrayRegister)
     /// by a full-width index slice (`idxs.len() == N * Self::LANES`).
     ///
@@ -1688,65 +1706,6 @@ use num_traits::{WrappingAdd, WrappingMul};
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {
     #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-
-    /// Two-register element align (the `palignr` family): the window of
-    /// `Self::Lanes` lanes starting at lane `OFFSET` of the concatenation
-    /// `[a, b]` (`a`'s lanes first, then `b`'s). `OFFSET == 0` returns `a`,
-    /// `OFFSET == LANES` returns `b`; in between, lanes spill from the tail of
-    /// `a` into the head of `b`.
-    ///
-    /// This is the cross-register sliding window used for multi-byte delimiter /
-    /// substring scanning across a load boundary - the cross-register companion
-    /// to the single-register [`bshli`](BitshiftRegister::bshli)/[`bshri`](BitshiftRegister::bshri).
-    ///
-    /// Full, unpadded 128-bit registers with native whole-register byte shifts
-    /// take a fast path: `align` is `(a >> ob) | (b << (16 - ob))` in bytes
-    /// (`ob = OFFSET * size_of::<Element>()`), built from
-    /// [`bshri`](BitshiftRegister::bshri)/[`bshli`](BitshiftRegister::bshli). The
-    /// match is keyed on `ob` (not `OFFSET`) so the shift immediates are literals
-    /// rather than const expressions of `OFFSET` (which stable rejects), and `ob`
-    /// const-folds to a single arm. Everything else (256-bit - where the byte
-    /// shifts are per-128-lane - reduced/padded registers, the scalar backend)
-    /// falls back to [`swizzle_const`](Register::swizzle_const) with a
-    /// compile-time [`AlignIndices`](crate::swizzle::AlignIndices) pattern, which
-    /// is correct on every backend and lane count. Byte/128-bit registers may
-    /// further override this with a single native `palignr`.
-    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        // Gate: only full, unpadded 128-bit registers whose `bshli`/`bshri` are
-        // genuine full-width byte shifts. `HAS_WIDE_BYTE_SHIFTS` alone is not
-        // enough - it is also `true` for 256-bit registers, where the byte shifts
-        // act per 128-bit lane and would not carry bytes across the boundary.
-        if const {
-            Self::HAS_WIDE_BYTE_SHIFTS
-                && size_of::<Storage<Self>>() == 16
-                && <Self::Lanes as Unsigned>::USIZE * size_of::<Self::Element>() == 16
-        } {
-            // `ob` folds the element size in, so each arm's shift counts are plain
-            // literals. `ob > 16` means `OFFSET > LANES` (out of range) -> fall back.
-            match const { OFFSET * size_of::<Self::Element>() } {
-                0  => Self::bitor(Self::bshri::<0>(a),  Self::bshli::<16>(b)),
-                1  => Self::bitor(Self::bshri::<1>(a),  Self::bshli::<15>(b)),
-                2  => Self::bitor(Self::bshri::<2>(a),  Self::bshli::<14>(b)),
-                3  => Self::bitor(Self::bshri::<3>(a),  Self::bshli::<13>(b)),
-                4  => Self::bitor(Self::bshri::<4>(a),  Self::bshli::<12>(b)),
-                5  => Self::bitor(Self::bshri::<5>(a),  Self::bshli::<11>(b)),
-                6  => Self::bitor(Self::bshri::<6>(a),  Self::bshli::<10>(b)),
-                7  => Self::bitor(Self::bshri::<7>(a),  Self::bshli::<9>(b)),
-                8  => Self::bitor(Self::bshri::<8>(a),  Self::bshli::<8>(b)),
-                9  => Self::bitor(Self::bshri::<9>(a),  Self::bshli::<7>(b)),
-                10 => Self::bitor(Self::bshri::<10>(a), Self::bshli::<6>(b)),
-                11 => Self::bitor(Self::bshri::<11>(a), Self::bshli::<5>(b)),
-                12 => Self::bitor(Self::bshri::<12>(a), Self::bshli::<4>(b)),
-                13 => Self::bitor(Self::bshri::<13>(a), Self::bshli::<3>(b)),
-                14 => Self::bitor(Self::bshri::<14>(a), Self::bshli::<2>(b)),
-                15 => Self::bitor(Self::bshri::<15>(a), Self::bshli::<1>(b)),
-                16 => Self::bitor(Self::bshri::<16>(a), Self::bshli::<0>(b)),
-                _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
-            }
-        } else {
-            Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b)
-        }
-    }
 
     #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;

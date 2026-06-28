@@ -235,6 +235,8 @@ impl Register for I16x16V3 {
     }
 
     compress_via_wide!();
+
+    impl_byte_align_alignr256!();
 }
 
 #[thermite_macros::inline_always]
@@ -396,8 +398,6 @@ impl SignedRegister for I16x16V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for I16x16V3 {
-    impl_byte_align_alignr256!();
-
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mulhi_epi16(lhs, rhs) }
     }

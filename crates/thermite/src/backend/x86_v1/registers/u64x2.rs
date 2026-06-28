@@ -233,6 +233,8 @@ impl Register for U64x2V1 {
     }
 
     const HAS_PERMUTEV: bool = false;
+
+    impl_byteshift_align!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]

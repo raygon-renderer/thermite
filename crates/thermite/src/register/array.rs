@@ -317,6 +317,33 @@ where
     };
 }
 
+// Dispatch a runtime within-chunk offset (`off < R::Lanes <= 16`) to a
+// const-generic `R::align`. `OFFSET % L` is a const expr of the generic `OFFSET`,
+// which stable rejects in const-generic position - the match turns it into a
+// literal. Arms above the chunk's lane count are dead.
+macro_rules! chunk_align {
+    ($off:expr, $lo:expr, $hi:expr) => {
+        match $off {
+            0 => R::align::<0>($lo, $hi),
+            1 => R::align::<1>($lo, $hi),
+            2 => R::align::<2>($lo, $hi),
+            3 => R::align::<3>($lo, $hi),
+            4 => R::align::<4>($lo, $hi),
+            5 => R::align::<5>($lo, $hi),
+            6 => R::align::<6>($lo, $hi),
+            7 => R::align::<7>($lo, $hi),
+            8 => R::align::<8>($lo, $hi),
+            9 => R::align::<9>($lo, $hi),
+            10 => R::align::<10>($lo, $hi),
+            11 => R::align::<11>($lo, $hi),
+            12 => R::align::<12>($lo, $hi),
+            13 => R::align::<13>($lo, $hi),
+            14 => R::align::<14>($lo, $hi),
+            _ => R::align::<15>($lo, $hi),
+        }
+    };
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: Register, const N: usize> Register for ArrayRegister<R, N>
 where
@@ -532,6 +559,29 @@ where
 
         Self(R::array_permutev::<N>(value.0, I::INDICES.as_slice()))
     }
+
+    // Cross-chunk element align: each output chunk is a window between two
+    // adjacent source chunks of the concatenation [a.0 .., b.0 ..], so it reduces
+    // to a per-chunk `R::align` (which itself uses the native fast path). For
+    // `OFFSET = base*L + off`, output chunk `c` aligns source chunks `c+base` and
+    // `c+base+1` by `off`. The second chunk is unused when `off == 0`.
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        let l = R::Lanes::USIZE;
+        let base = OFFSET / l;
+        let off = OFFSET % l;
+
+        let src = |q: usize| -> Storage<R> {
+            if q < N { a.0[q] } else if q < 2 * N { b.0[q - N] } else { R::EMPTY }
+        };
+
+        let mut result = [R::EMPTY; N];
+        let mut c = 0;
+        while c < N {
+            result[c] = chunk_align!(off, src(c + base), src(c + base + 1));
+            c += 1;
+        }
+        Self(result)
+    }
 }
 
 #[rustfmt::skip]
@@ -676,29 +726,6 @@ where
 // const-generic `R::align`. The product `OFFSET % L` is a const expr of the
 // generic `OFFSET`, which stable rejects in const-generic position - the match
 // turns it into a literal. Arms above the chunk's lane count are dead.
-macro_rules! chunk_align {
-    ($off:expr, $lo:expr, $hi:expr) => {
-        match $off {
-            0 => R::align::<0>($lo, $hi),
-            1 => R::align::<1>($lo, $hi),
-            2 => R::align::<2>($lo, $hi),
-            3 => R::align::<3>($lo, $hi),
-            4 => R::align::<4>($lo, $hi),
-            5 => R::align::<5>($lo, $hi),
-            6 => R::align::<6>($lo, $hi),
-            7 => R::align::<7>($lo, $hi),
-            8 => R::align::<8>($lo, $hi),
-            9 => R::align::<9>($lo, $hi),
-            10 => R::align::<10>($lo, $hi),
-            11 => R::align::<11>($lo, $hi),
-            12 => R::align::<12>($lo, $hi),
-            13 => R::align::<13>($lo, $hi),
-            14 => R::align::<14>($lo, $hi),
-            _ => R::align::<15>($lo, $hi),
-        }
-    };
-}
-
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: IntegerRegister, const N: usize> IntegerRegister for ArrayRegister<R, N>
 where
@@ -706,29 +733,6 @@ where
 {
     #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
-
-    // Cross-chunk element align: each output chunk is a window between two
-    // adjacent source chunks of the concatenation [a.0 .., b.0 ..], so it reduces
-    // to a per-chunk `R::align` (which itself uses the native fast path). For
-    // `OFFSET = base*L + off`, output chunk `c` aligns source chunks `c+base` and
-    // `c+base+1` by `off`. The second chunk is unused when `off == 0`.
-    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        let l = R::Lanes::USIZE;
-        let base = OFFSET / l;
-        let off = OFFSET % l;
-
-        let src = |q: usize| -> Storage<R> {
-            if q < N { a.0[q] } else if q < 2 * N { b.0[q - N] } else { R::EMPTY }
-        };
-
-        let mut result = [R::EMPTY; N];
-        let mut c = 0;
-        while c < N {
-            result[c] = chunk_align!(off, src(c + base), src(c + base + 1));
-            c += 1;
-        }
-        Self(result)
-    }
     #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 

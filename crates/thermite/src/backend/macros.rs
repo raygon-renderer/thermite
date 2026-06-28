@@ -99,6 +99,45 @@ macro_rules! impl_byte_align_alignr256 {
     };
 }
 
+/// Whole-register byte-shift `align` override (`Register::align`) for a full,
+/// unpadded 128-bit integer register with native full-width byte shifts
+/// (`bshli`/`bshri` = `pslldq`/`psrldq`), e.g. SSE2 where there is no `palignr`.
+/// Drop into an `impl Register` block.
+///
+/// `align::<OFFSET>(a, b)` is `(a >> ob) | (b << (16 - ob))` in bytes, where
+/// `ob = OFFSET * size_of::<Element>()`. The match is keyed on `ob` so each
+/// arm's shift counts are literals (stable rejects a const expr of `OFFSET` in
+/// const-generic position); `ob` const-folds to one arm. `ob > 16` means
+/// `OFFSET > LANES` (out of range) and falls back to the generic default.
+///
+/// NOTE: 128-bit only - AVX2 `_mm256_bslli/bsrli_epi128` shift per 128-bit lane.
+macro_rules! impl_byteshift_align {
+    () => {
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            match const { OFFSET * core::mem::size_of::<Self::Element>() } {
+                0  => Self::bitor(Self::bshri::<0>(a),  Self::bshli::<16>(b)),
+                1  => Self::bitor(Self::bshri::<1>(a),  Self::bshli::<15>(b)),
+                2  => Self::bitor(Self::bshri::<2>(a),  Self::bshli::<14>(b)),
+                3  => Self::bitor(Self::bshri::<3>(a),  Self::bshli::<13>(b)),
+                4  => Self::bitor(Self::bshri::<4>(a),  Self::bshli::<12>(b)),
+                5  => Self::bitor(Self::bshri::<5>(a),  Self::bshli::<11>(b)),
+                6  => Self::bitor(Self::bshri::<6>(a),  Self::bshli::<10>(b)),
+                7  => Self::bitor(Self::bshri::<7>(a),  Self::bshli::<9>(b)),
+                8  => Self::bitor(Self::bshri::<8>(a),  Self::bshli::<8>(b)),
+                9  => Self::bitor(Self::bshri::<9>(a),  Self::bshli::<7>(b)),
+                10 => Self::bitor(Self::bshri::<10>(a), Self::bshli::<6>(b)),
+                11 => Self::bitor(Self::bshri::<11>(a), Self::bshli::<5>(b)),
+                12 => Self::bitor(Self::bshri::<12>(a), Self::bshli::<4>(b)),
+                13 => Self::bitor(Self::bshri::<13>(a), Self::bshli::<3>(b)),
+                14 => Self::bitor(Self::bshri::<14>(a), Self::bshli::<2>(b)),
+                15 => Self::bitor(Self::bshri::<15>(a), Self::bshli::<1>(b)),
+                16 => Self::bitor(Self::bshri::<16>(a), Self::bshli::<0>(b)),
+                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+            }
+        }
+    };
+}
+
 macro_rules! impl_bit_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(

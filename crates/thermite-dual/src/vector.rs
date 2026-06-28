@@ -592,6 +592,14 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
+    #[inline(always)]
+    fn align<const OFFSET: usize>(self, other: Self) -> Self {
+        Self {
+            re: self.re.align::<OFFSET>(other.re),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].align::<OFFSET>(other.dual[j])),
+        }
+    }
+
     #[inline(always)] fn map<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::Element) -> Self::Element,

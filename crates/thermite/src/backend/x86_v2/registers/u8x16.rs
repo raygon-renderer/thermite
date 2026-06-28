@@ -214,6 +214,11 @@ impl Register for U8x16V2 {
     }
 
     compress_via_wide!();
+
+    // Byte-identical to the signed register (both are raw `__m128i`); reuse it.
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        super::I8x16V2::align::<OFFSET>(a, b)
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -339,11 +344,6 @@ impl IntegerRegister for U8x16V2 {
 
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullo_epi8x_v1(lhs, rhs) }
-    }
-
-    // Byte-identical to the signed register (both are raw `__m128i`); reuse it.
-    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        super::I8x16V2::align::<OFFSET>(a, b)
     }
 
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

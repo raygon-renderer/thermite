@@ -299,6 +299,7 @@ impl<R: Register> GenericVector for Vector<R> {
 
     fn compress(self, mask: Self::Mask) -> Self { Vector(R::compress(self.0, mask.0)) }
     fn compress_z(self, mask: Self::Mask) -> Self { Vector(R::compress_z(self.0, mask.0)) }
+    fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
 
     // The arguments of these are reversed for the register
     fn zz(self, mask: Self::Mask) -> Self { Vector(R::zz(mask.0, self.0)) }
@@ -496,8 +497,6 @@ where
 
     #[conditional] fn mulhi(self, other: Self) -> Self {}
     #[conditional] fn mullo(self, other: Self) -> Self {}
-
-    fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
 
     // fn wrapping_add(self, other: Self) -> Self {}
     // fn wrapping_sub(self, other: Self) -> Self {}

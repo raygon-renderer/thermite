@@ -239,6 +239,8 @@ impl Register for I64x2V1 {
     }
 
     const HAS_PERMUTEV: bool = false;
+
+    impl_byteshift_align!();
 }
 
 #[thermite_macros::inline_always]

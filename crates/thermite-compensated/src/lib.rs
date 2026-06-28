@@ -1424,6 +1424,14 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
+    #[inline(always)]
+    fn align<const OFFSET: usize>(self, other: Self) -> Self {
+        Self {
+            value: self.value.align::<OFFSET>(other.value),
+            error: self.error.align::<OFFSET>(other.error),
+        }
+    }
+
 
     fn map<F>(mut self, f: F) -> Self
     where

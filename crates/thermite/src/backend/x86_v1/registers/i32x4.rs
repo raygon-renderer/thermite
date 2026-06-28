@@ -223,6 +223,8 @@ impl Register for I32x4V1 {
 
     // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
     const HAS_PERMUTEV: bool = false;
+
+    impl_byteshift_align!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]

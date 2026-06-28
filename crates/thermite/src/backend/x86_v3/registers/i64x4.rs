@@ -222,6 +222,8 @@ impl Register for I64x4V3 {
     const HAS_PERMUTEV: bool = false;
 
     compress_via_table!();
+
+    impl_byte_align_alignr256!();
 }
 
 #[thermite_macros::inline_always]
@@ -482,8 +484,6 @@ impl SignedRegister for I64x4V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for I64x4V3 {
-    impl_byte_align_alignr256!();
-
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mullhi_epi64x_v3(lhs, rhs) }
     }

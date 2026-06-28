@@ -221,6 +221,11 @@ impl Register for U64x4V3 {
     const HAS_PERMUTEV: bool = false;
 
     compress_via_table!();
+
+    // Byte-identical to the signed register (both raw `__m256i`); reuse it.
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        super::I64x4V3::align::<OFFSET>(a, b)
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -413,10 +418,6 @@ impl NumericRegister for U64x4V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for U64x4V3 {
-    // Byte-identical to the signed register (both raw `__m256i`); reuse it.
-    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        super::I64x4V3::align::<OFFSET>(a, b)
-    }
 
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mullhi_epu64x_v3(lhs, rhs) }

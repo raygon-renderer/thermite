@@ -998,6 +998,18 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `[a, c, 0, 0]`.
     fn compress_z(self, mask: Self::Mask) -> Self;
 
+    /// Two-register element align (the `palignr` family): the window of `LANES`
+    /// lanes starting at lane `OFFSET` of the concatenation `[self, other]`
+    /// (`self`'s lanes first, then `other`'s). `OFFSET == 0` returns `self`,
+    /// `OFFSET == LANES` returns `other`; in between, lanes spill from the tail
+    /// of `self` into the head of `other`.
+    ///
+    /// The cross-register sliding window used for scanning multi-byte
+    /// delimiters / substrings across a load boundary. Works for any element
+    /// type (it is pure lane movement); integer backends accelerate it with
+    /// native byte aligns.
+    fn align<const OFFSET: usize>(self, other: Self) -> Self;
+
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
@@ -1603,16 +1615,6 @@ pub trait IntegerVector:
     /// dedicated method exists because some ISAs have specialized
     /// low-half-only multiply instructions worth emitting directly.
     #[conditional] fn mullo(self, other: Self) -> Self;
-
-    /// Two-register element align (the `palignr` family): the window of `LANES`
-    /// lanes starting at lane `OFFSET` of the concatenation `[self, other]`
-    /// (`self`'s lanes first, then `other`'s). `OFFSET == 0` returns `self`,
-    /// `OFFSET == LANES` returns `other`; in between, lanes spill from the tail
-    /// of `self` into the head of `other`.
-    ///
-    /// The cross-register sliding window used for scanning multi-byte
-    /// delimiters / substrings across a load boundary.
-    fn align<const OFFSET: usize>(self, other: Self) -> Self;
 
     // fn wrapping_add(self, other: Self) -> Self;
     // fn wrapping_sub(self, other: Self) -> Self;

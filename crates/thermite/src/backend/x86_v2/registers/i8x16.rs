@@ -246,6 +246,8 @@ impl Register for I8x16V2 {
     }
 
     compress_via_wide!();
+
+    impl_byte_align_alignr!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -395,8 +397,6 @@ impl IntegerRegister for I8x16V2 {
     fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_mullo_epi8x_v1(lhs, rhs) }
     }
-
-    impl_byte_align_alignr!();
 
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_adds_epi8(lhs, rhs) }
