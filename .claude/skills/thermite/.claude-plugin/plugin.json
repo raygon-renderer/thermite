@@ -1,0 +1,11 @@
+{
+  "name": "thermite",
+  "description": "Usage guide for the Thermite generic ISA-portable SIMD library and its companion crates (special functions, autodiff Dual, Compensated double-double, SDF, geometry, FFI). Write functions once over the GenericVector/FloatVector trait hierarchy and run them on any backend or composite vector type.",
+  "version": "0.1.0",
+  "author": {
+    "name": "novacrazy"
+  },
+  "homepage": "https://github.com/raygon-renderer/thermite",
+  "repository": "https://github.com/raygon-renderer/thermite",
+  "license": "MIT OR Apache-2.0"
+}

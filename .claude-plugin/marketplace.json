@@ -1,0 +1,20 @@
+{
+  "name": "thermite",
+  "owner": {
+    "name": "novacrazy"
+  },
+  "description": "Skills for working with the Thermite SIMD library.",
+  "plugins": [
+    {
+      "name": "thermite",
+      "source": "./.claude/skills/thermite",
+      "description": "Usage guide for the Thermite generic SIMD library and its companion crates (special functions, autodiff Dual, Compensated double-double, SDF, geometry, FFI).",
+      "version": "0.1.0",
+      "author": {
+        "name": "novacrazy"
+      },
+      "homepage": "https://github.com/raygon-renderer/thermite",
+      "license": "MIT OR Apache-2.0"
+    }
+  ]
+}
