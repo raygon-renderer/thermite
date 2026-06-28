@@ -11,8 +11,8 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
         Element, ExtendRegister, FloatRegister, IndexableRegister, InterleaveRegister, LinAlg3Register,
         LinAlg4Register, MaskElement, MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleIndices, SwizzleRegister,
-        WideRegister, ZeroUpper, empty_reg, reg,
+        PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleIndices, WideRegister, ZeroUpper,
+        empty_reg, reg,
     },
     simd::Simd,
 };
@@ -297,6 +297,19 @@ macro_rules! decl_f32xN {
                 }
                 result
             }
+
+            // No single SPIR-V instruction for runtime-index permute; scalar fallback is used.
+            const HAS_PERMUTEV: bool = false;
+
+            // Compile-time permute: single OpVectorShuffle with literal indices.
+            fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+                unsafe { arch::[<spirv_permute $N>]::<Self, I>(value) }
+            }
+
+            // Compile-time two-source swizzle: single OpVectorShuffle with literal indices.
+            fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+                unsafe { arch::[<spirv_swizzle $N>]::<Self, I>(a, b) }
+            }
         }
 
         #[thermite_macros::inline_always]
@@ -386,22 +399,6 @@ macro_rules! decl_f32xN {
 
         impl BitCastRegister<$name> for $name {
             fn from_bits(value: Storage<Self>) -> Storage<Self> { value }
-        }
-
-        #[thermite_macros::inline_always]
-        impl SwizzleRegister for $name {
-            // No single SPIR-V instruction for runtime-index permute; scalar fallback is used.
-            const HAS_PERMUTEV: bool = false;
-
-            // Compile-time permute: single OpVectorShuffle with literal indices.
-            fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-                unsafe { arch::[<spirv_permute $N>]::<Self, I>(value) }
-            }
-
-            // Compile-time two-source swizzle: single OpVectorShuffle with literal indices.
-            fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-                unsafe { arch::[<spirv_swizzle $N>]::<Self, I>(a, b) }
-            }
         }
 
         #[thermite_macros::inline_always]

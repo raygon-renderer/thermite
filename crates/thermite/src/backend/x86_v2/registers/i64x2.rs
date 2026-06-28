@@ -11,7 +11,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };
@@ -236,6 +236,10 @@ impl Register for I64x2V2 {
 
         f(arr[0], arr[1])
     }
+
+    const HAS_PERMUTEV: bool = false;
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -287,11 +291,6 @@ impl ShuffleRegister for I64x2V2 {
             ))
         }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I64x2V2 {
-    const HAS_PERMUTEV: bool = false;
 }
 
 impl PartialOrdRegister for I64x2V2 {

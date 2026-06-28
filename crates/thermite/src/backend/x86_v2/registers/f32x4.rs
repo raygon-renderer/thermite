@@ -11,7 +11,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
         Element, ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
         MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -220,31 +220,7 @@ impl Register for F32x4V2 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_psx_v2(value) }
     }
-}
 
-#[thermite_macros::inline_always]
-impl ShuffleRegister for F32x4V2 {
-    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_shuffle_ps(lhs, rhs, IMM8) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl PermuteRegister for F32x4V2 {
-    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_shuffle_ps(value, value, IMM8) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl BlendRegister for F32x4V2 {
-    fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_blend_ps::<IMM8>(lhs, rhs) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F32x4V2 {
     const HAS_PERMUTEV: bool = true;
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
@@ -268,6 +244,29 @@ impl SwizzleRegister for F32x4V2 {
             // NOTE: Again, reversed
             arch::_mm_blendv_ps(tmp_b, tmp_a, arch::_mm_castsi128_ps(blend))
         }
+    }
+
+    compress_via_table!();
+}
+
+#[thermite_macros::inline_always]
+impl ShuffleRegister for F32x4V2 {
+    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_shuffle_ps(lhs, rhs, IMM8) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl PermuteRegister for F32x4V2 {
+    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_shuffle_ps(value, value, IMM8) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl BlendRegister for F32x4V2 {
+    fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_blend_ps::<IMM8>(lhs, rhs) }
     }
 }
 

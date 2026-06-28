@@ -388,7 +388,10 @@ impl CastRegister<ArrayRegister<super::U64x2V2, 4>> for super::U16x8V2 {
 impl CastRegister<ArrayRegister<super::I16x8V2, 2>> for ArrayRegister<super::I64x2V2, 8> {
     fn cast_from(value: Storage<ArrayRegister<super::I16x8V2, 2>>) -> Storage<Self> {
         let (lo, hi) = unsafe {
-            (arch::_mm_cvtepi16_4epi64x_v2(value.0[0]), arch::_mm_cvtepi16_4epi64x_v2(value.0[1]))
+            (
+                arch::_mm_cvtepi16_4epi64x_v2(value.0[0]),
+                arch::_mm_cvtepi16_4epi64x_v2(value.0[1]),
+            )
         };
         ArrayRegister([lo[0], lo[1], lo[2], lo[3], hi[0], hi[1], hi[2], hi[3]])
     }
@@ -397,7 +400,10 @@ impl CastRegister<ArrayRegister<super::I16x8V2, 2>> for ArrayRegister<super::I64
 impl CastRegister<ArrayRegister<super::U16x8V2, 2>> for ArrayRegister<super::U64x2V2, 8> {
     fn cast_from(value: Storage<ArrayRegister<super::U16x8V2, 2>>) -> Storage<Self> {
         let (lo, hi) = unsafe {
-            (arch::_mm_cvtepu16_4epi64x_v2(value.0[0]), arch::_mm_cvtepu16_4epi64x_v2(value.0[1]))
+            (
+                arch::_mm_cvtepu16_4epi64x_v2(value.0[0]),
+                arch::_mm_cvtepu16_4epi64x_v2(value.0[1]),
+            )
         };
         ArrayRegister([lo[0], lo[1], lo[2], lo[3], hi[0], hi[1], hi[2], hi[3]])
     }

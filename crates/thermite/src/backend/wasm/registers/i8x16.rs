@@ -13,8 +13,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
+        empty_reg,
     },
 };
 
@@ -190,6 +190,22 @@ impl Register for I8x16Wasm {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value // one byte per lane
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // For 8-bit lanes the index IS the byte index; pack to bytes and swizzle.
+        let mut bytes = [0u8; 16];
+        let mut i = 0;
+        while i < 16 {
+            bytes[i] = idxs[i] as u8;
+            i += 1;
+        }
+        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
+        arch::u8x16_relaxed_swizzle(value, ctrl)
+    }
+
+    compress_via_wide!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -214,23 +230,6 @@ impl BitshiftRegister for I8x16Wasm {
     }
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_shr(value, IMM8 as u32) // logical
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I8x16Wasm {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // For 8-bit lanes the index IS the byte index; pack to bytes and swizzle.
-        let mut bytes = [0u8; 16];
-        let mut i = 0;
-        while i < 16 {
-            bytes[i] = idxs[i] as u8;
-            i += 1;
-        }
-        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
-        arch::u8x16_relaxed_swizzle(value, ctrl)
     }
 }
 

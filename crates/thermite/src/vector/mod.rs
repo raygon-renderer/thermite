@@ -975,6 +975,28 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         Self::Unsigned::indexed().cmp_ge(start).cast::<Self::Mask>()
     }
 
+    /// Left-pack (a.k.a. `compress`): gather the lanes where `mask` is `true`
+    /// into the low lanes, preserving their relative order. The unselected lanes
+    /// are *kept* (not zeroed) and packed into the high lanes, also in order - a
+    /// stable partition of the vector by `mask`.
+    ///
+    /// For `[a, b, c, d]` with `mask = [true, false, true, false]` this returns
+    /// `[a, c, b, d]`. Combined with a masked store of the leading `mask`-count
+    /// lanes, this is the building block for stream compaction - whitespace
+    /// stripping, filtering, JSON minification, and similar. For the zero-filled
+    /// tail variant, see [`compress_z`](Self::compress_z).
+    ///
+    /// Lowers to AVX-512 `vpcompress*` where available; otherwise a portable
+    /// scalar partition (some backends accelerate it with a permute table).
+    fn compress(self, mask: Self::Mask) -> Self;
+
+    /// Zero-filling left-pack: like [`compress`](Self::compress), but the lanes
+    /// beyond the `mask` population count are zeroed instead of holding the
+    /// unselected elements. Matches AVX-512 zero-masking `vpcompress*`.
+    ///
+    /// For `[a, b, c, d]` with `mask = [true, false, true, false]` this returns
+    /// `[a, c, 0, 0]`.
+    fn compress_z(self, mask: Self::Mask) -> Self;
 
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///

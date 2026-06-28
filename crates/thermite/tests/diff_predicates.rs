@@ -165,23 +165,23 @@ int_suite!(scalar_int, Scalar, [i32x4, i32x8, i64x2, i64x4], "scalar");
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-float_suite!(v3_float, X86V3, [f32x4, f32x8, f32x16, f64x2, f64x4, f64x8], "x86_v3");
-float_suite!(v2_float, X86V2, [f32x4, f32x8, f64x2, f64x4], "x86_v2");
-float_suite!(v1_float, X86V1, [f32x4, f32x8, f64x2, f64x4], "x86_v1");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    float_suite!(v3_float, X86V3, [f32x4, f32x8, f32x16, f64x2, f64x4, f64x8], "x86_v3");
+    float_suite!(v2_float, X86V2, [f32x4, f32x8, f64x2, f64x4], "x86_v2");
+    float_suite!(v1_float, X86V1, [f32x4, f32x8, f64x2, f64x4], "x86_v1");
 
-int_suite!(v3_int, X86V3, [i32x4, i32x8, i64x2, i64x4], "x86_v3");
-int_suite!(v2_int, X86V2, [i32x4, i32x8, i64x2], "x86_v2");
-int_suite!(v1_int, X86V1, [i32x4, i32x8, i64x2], "x86_v1");
+    int_suite!(v3_int, X86V3, [i32x4, i32x8, i64x2, i64x4], "x86_v3");
+    int_suite!(v2_int, X86V2, [i32x4, i32x8, i64x2], "x86_v2");
+    int_suite!(v1_int, X86V1, [i32x4, i32x8, i64x2], "x86_v1");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-float_suite!(wasm_float, Wasm, [f32x4, f32x8, f64x2, f64x4], "wasm");
-int_suite!(wasm_int, Wasm, [i32x4, i32x8, i64x2, i64x4], "wasm");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    float_suite!(wasm_float, Wasm, [f32x4, f32x8, f64x2, f64x4], "wasm");
+    int_suite!(wasm_int, Wasm, [i32x4, i32x8, i64x2, i64x4], "wasm");
 }

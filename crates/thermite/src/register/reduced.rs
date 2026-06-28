@@ -16,7 +16,7 @@ use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
     FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, MaskRegister,
     NativeCapability, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister,
-    SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
+    SignedRegister, Storage, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -477,99 +477,7 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
     #[inline(always)] fn swap_bytes_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> { Self(R::swap_bytes_c(mask.0, value.0), PhantomData) }
     #[inline(always)] fn swap_bytes_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> { Self(R::swap_bytes_m(src.0, mask.0, value.0), PhantomData) }
     #[inline(always)] fn swap_bytes_z(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> { Self(R::swap_bytes_z(mask.0, value.0), PhantomData) }
-}
 
-impl<IDX, R: IndexableRegister<IDX>, N: Unsigned> IndexableRegister<ReducedRegister<IDX, N>> for ReducedRegister<R, N>
-where
-    R: Reducible<N>,
-    IDX: UnsignedIntegerRegister<Lanes = R::Lanes>,
-{
-    #[inline(always)]
-    unsafe fn gather(ptr: *const Self::Element, indices: Storage<ReducedRegister<IDX, N>>) -> Storage<Self> {
-        unsafe { Self(R::gather_z(Self::mask(), ptr, indices.0), PhantomData) }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_m(
-        src: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<ReducedRegister<IDX, N>>,
-    ) -> Storage<Self> {
-        unsafe {
-            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
-            Self(R::gather_m(src.0, mask, ptr, indices.0), PhantomData)
-        }
-    }
-
-    #[inline(always)]
-    unsafe fn gather_z(
-        mask: Storage<Self::Mask>,
-        ptr: *const Self::Element,
-        indices: Storage<ReducedRegister<IDX, N>>,
-    ) -> Storage<Self> {
-        unsafe {
-            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
-            Self(R::gather_z(mask, ptr, indices.0), PhantomData)
-        }
-    }
-
-    #[inline(always)]
-    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<ReducedRegister<IDX, N>>) {
-        unsafe { R::scatter_m(value.0, Self::mask(), ptr, indices.0) }
-    }
-
-    #[inline(always)]
-    unsafe fn scatter_m(
-        value: Storage<Self>,
-        mask: Storage<Self::Mask>,
-        ptr: *mut Self::Element,
-        indices: Storage<ReducedRegister<IDX, N>>,
-    ) {
-        unsafe {
-            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
-            R::scatter_m(value.0, mask, ptr, indices.0)
-        }
-    }
-}
-
-struct AdjustedIndices<N: Lanes, M: Lanes, I: SwizzleIndices<N>>(PhantomData<(N, M, I)>);
-
-// M is always larger, so M - N is always the Reduced N, which is how much we need to shift indices that reference `b` by
-impl<N: Lanes, M: Lanes, I: SwizzleIndices<N>> SwizzleIndices<M> for AdjustedIndices<N, M, I> {
-    const INDICES: GenericArray<u32, M> = const {
-        let mut indices: GenericArray<u32, M> = unsafe { core::mem::zeroed() };
-        let old = I::INDICES;
-
-        let new_idxs = indices.as_mut_slice();
-        let old_idxs = old.as_slice();
-
-        let mut i = 0;
-
-        while i < N::USIZE {
-            let idx = old_idxs[i];
-
-            new_idxs[i] = if idx < N::U32 { idx } else { idx + (M::U32 - N::U32) };
-
-            i += 1;
-        }
-
-        // copy over padding lanes exactly
-        while i < M::USIZE {
-            new_idxs[i] = i as u32;
-            i += 1;
-        }
-
-        core::mem::forget(old);
-
-        indices
-    };
-}
-
-impl<R: SwizzleRegister, N: Unsigned> SwizzleRegister for ReducedRegister<R, N>
-where
-    R: Reducible<N>,
-{
     const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
 
     #[inline(always)]
@@ -647,6 +555,93 @@ where
             R::swizzle_const::<AdjustedIndices<Self::Lanes, R::Lanes, I>>(a.0, b.0),
             PhantomData,
         )
+    }
+}
+
+struct AdjustedIndices<N: Lanes, M: Lanes, I: SwizzleIndices<N>>(PhantomData<(N, M, I)>);
+
+// M is always larger, so M - N is always the Reduced N, which is how much we need to shift indices that reference `b` by
+impl<N: Lanes, M: Lanes, I: SwizzleIndices<N>> SwizzleIndices<M> for AdjustedIndices<N, M, I> {
+    const INDICES: GenericArray<u32, M> = const {
+        let mut indices: GenericArray<u32, M> = unsafe { core::mem::zeroed() };
+        let old = I::INDICES;
+
+        let new_idxs = indices.as_mut_slice();
+        let old_idxs = old.as_slice();
+
+        let mut i = 0;
+
+        while i < N::USIZE {
+            let idx = old_idxs[i];
+
+            new_idxs[i] = if idx < N::U32 { idx } else { idx + (M::U32 - N::U32) };
+
+            i += 1;
+        }
+
+        // copy over padding lanes exactly
+        while i < M::USIZE {
+            new_idxs[i] = i as u32;
+            i += 1;
+        }
+
+        core::mem::forget(old);
+
+        indices
+    };
+}
+
+impl<IDX, R: IndexableRegister<IDX>, N: Unsigned> IndexableRegister<ReducedRegister<IDX, N>> for ReducedRegister<R, N>
+where
+    R: Reducible<N>,
+    IDX: UnsignedIntegerRegister<Lanes = R::Lanes>,
+{
+    #[inline(always)]
+    unsafe fn gather(ptr: *const Self::Element, indices: Storage<ReducedRegister<IDX, N>>) -> Storage<Self> {
+        unsafe { Self(R::gather_z(Self::mask(), ptr, indices.0), PhantomData) }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_m(
+        src: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<ReducedRegister<IDX, N>>,
+    ) -> Storage<Self> {
+        unsafe {
+            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
+            Self(R::gather_m(src.0, mask, ptr, indices.0), PhantomData)
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn gather_z(
+        mask: Storage<Self::Mask>,
+        ptr: *const Self::Element,
+        indices: Storage<ReducedRegister<IDX, N>>,
+    ) -> Storage<Self> {
+        unsafe {
+            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
+            Self(R::gather_z(mask, ptr, indices.0), PhantomData)
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<ReducedRegister<IDX, N>>) {
+        unsafe { R::scatter_m(value.0, Self::mask(), ptr, indices.0) }
+    }
+
+    #[inline(always)]
+    unsafe fn scatter_m(
+        value: Storage<Self>,
+        mask: Storage<Self::Mask>,
+        ptr: *mut Self::Element,
+        indices: Storage<ReducedRegister<IDX, N>>,
+    ) {
+        unsafe {
+            let mask = <R::Mask as BitwiseRegister>::bitand(mask.0, Self::mask());
+            R::scatter_m(value.0, mask, ptr, indices.0)
+        }
     }
 }
 

@@ -202,47 +202,303 @@ macro_rules! cast_suite {
             // (the contract is 'like as' only in-range; out-of-range/NaN diverges).
             #[test]
             fn f32_to_int8_inrange() {
-                cpair!($tag, $b, f32x2, i8x2, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x2, u8x2, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x4, i8x4, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x4, u8x4, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x8, i8x8, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x8, u8x8, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x16, i8x16, f32, f32_to_i8_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x16, u8x16, f32, f32_to_u8_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x2,
+                    i8x2,
+                    f32,
+                    f32_to_i8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x2,
+                    u8x2,
+                    f32,
+                    f32_to_u8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x4,
+                    i8x4,
+                    f32,
+                    f32_to_i8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x4,
+                    u8x4,
+                    f32,
+                    f32_to_u8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x8,
+                    i8x8,
+                    f32,
+                    f32_to_i8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x8,
+                    u8x8,
+                    f32,
+                    f32_to_u8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x16,
+                    i8x16,
+                    f32,
+                    f32_to_i8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x16,
+                    u8x16,
+                    f32,
+                    f32_to_u8_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
             }
             #[test]
             fn f64_to_int8_inrange() {
-                cpair!($tag, $b, f64x2, i8x2, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x2, u8x2, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x4, i8x4, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x4, u8x4, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x8, i8x8, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x8, u8x8, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x16, i8x16, f64, f64_to_i8_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x16, u8x16, f64, f64_to_u8_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x2,
+                    i8x2,
+                    f64,
+                    f64_to_i8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x2,
+                    u8x2,
+                    f64,
+                    f64_to_u8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x4,
+                    i8x4,
+                    f64,
+                    f64_to_i8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x4,
+                    u8x4,
+                    f64,
+                    f64_to_u8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x8,
+                    i8x8,
+                    f64,
+                    f64_to_i8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x8,
+                    u8x8,
+                    f64,
+                    f64_to_u8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x16,
+                    i8x16,
+                    f64,
+                    f64_to_i8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x16,
+                    u8x16,
+                    f64,
+                    f64_to_u8_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
             }
             #[test]
             fn f32_to_int16_inrange() {
-                cpair!($tag, $b, f32x2, i16x2, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x2, u16x2, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x4, i16x4, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x4, u16x4, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x8, i16x8, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x8, u16x8, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x16, i16x16, f32, f32_to_i16_dom as fn(f32) -> f32, Tol::Exact);
-                cpair!($tag, $b, f32x16, u16x16, f32, f32_to_u16_dom as fn(f32) -> f32, Tol::Exact);
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x2,
+                    i16x2,
+                    f32,
+                    f32_to_i16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x2,
+                    u16x2,
+                    f32,
+                    f32_to_u16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x4,
+                    i16x4,
+                    f32,
+                    f32_to_i16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x4,
+                    u16x4,
+                    f32,
+                    f32_to_u16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x8,
+                    i16x8,
+                    f32,
+                    f32_to_i16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x8,
+                    u16x8,
+                    f32,
+                    f32_to_u16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x16,
+                    i16x16,
+                    f32,
+                    f32_to_i16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f32x16,
+                    u16x16,
+                    f32,
+                    f32_to_u16_dom as fn(f32) -> f32,
+                    Tol::Exact
+                );
             }
             #[test]
             fn f64_to_int16_inrange() {
-                cpair!($tag, $b, f64x2, i16x2, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x2, u16x2, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x4, i16x4, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x4, u16x4, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x8, i16x8, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x8, u16x8, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x16, i16x16, f64, f64_to_i16_dom as fn(f64) -> f64, Tol::Exact);
-                cpair!($tag, $b, f64x16, u16x16, f64, f64_to_u16_dom as fn(f64) -> f64, Tol::Exact);
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x2,
+                    i16x2,
+                    f64,
+                    f64_to_i16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x2,
+                    u16x2,
+                    f64,
+                    f64_to_u16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x4,
+                    i16x4,
+                    f64,
+                    f64_to_i16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x4,
+                    u16x4,
+                    f64,
+                    f64_to_u16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x8,
+                    i16x8,
+                    f64,
+                    f64_to_i16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x8,
+                    u16x8,
+                    f64,
+                    f64_to_u16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x16,
+                    i16x16,
+                    f64,
+                    f64_to_i16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
+                cpair!(
+                    $tag,
+                    $b,
+                    f64x16,
+                    u16x16,
+                    f64,
+                    f64_to_u16_dom as fn(f64) -> f64,
+                    Tol::Exact
+                );
             }
 
             // --- same-size i <-> u bitcasts (byte reinterpret) for the 8/16-bit slots ---
@@ -287,138 +543,138 @@ fn assert_generic_bitcast_bounds<S: Simd>() {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-
-mod gate {
     use super::*;
-    cast_suite!(v3, X86V3, "x86_v3");
-    cast_suite!(v2, X86V2, "x86_v2");
-    cast_suite!(v1, X86V1, "x86_v1");
-}
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
 
-// Out-of-range / NaN float→int: scalar saturates (Rust `as`), the x86 hardware
-// path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
-// divergence, not auto-failed - see TESTING.md.
-mod divergence {
-    use super::*;
+    mod gate {
+        use super::*;
+        cast_suite!(v3, X86V3, "x86_v3");
+        cast_suite!(v2, X86V2, "x86_v2");
+        cast_suite!(v1, X86V1, "x86_v1");
+    }
 
-    #[test]
-    #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
+    // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the x86 hardware
+    // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
+    // divergence, not auto-failed - see TESTING.md.
+    mod divergence {
+        use super::*;
+
+        #[test]
+        #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
                 indefinite integer instead of saturating like `as` (scalar). \
                 The general `cast` contract is 'like as'; x86 needs a clamp or \
                 the `_limited` precondition must be documented."]
-    fn float_to_int_out_of_range() {
-        cast_diff!(
-            "x86_v3 f64x4->i64x4 OOR",
-            <X86V3 as Simd>::f64x4,
-            <X86V3 as Simd>::i64x4,
-            <Scalar as Simd>::f64x4,
-            <Scalar as Simd>::i64x4,
-            f64,
-            |x| x,
-            Tol::Exact
-        );
-        cast_diff!(
-            "x86_v3 f32x4->i32x4 OOR",
-            <X86V3 as Simd>::f32x4,
-            <X86V3 as Simd>::i32x4,
-            <Scalar as Simd>::f32x4,
-            <Scalar as Simd>::i32x4,
-            f32,
-            |x| x,
-            Tol::Exact
-        );
-    }
+        fn float_to_int_out_of_range() {
+            cast_diff!(
+                "x86_v3 f64x4->i64x4 OOR",
+                <X86V3 as Simd>::f64x4,
+                <X86V3 as Simd>::i64x4,
+                <Scalar as Simd>::f64x4,
+                <Scalar as Simd>::i64x4,
+                f64,
+                |x| x,
+                Tol::Exact
+            );
+            cast_diff!(
+                "x86_v3 f32x4->i32x4 OOR",
+                <X86V3 as Simd>::f32x4,
+                <X86V3 as Simd>::i32x4,
+                <Scalar as Simd>::f32x4,
+                <Scalar as Simd>::i32x4,
+                f32,
+                |x| x,
+                Tol::Exact
+            );
+        }
 
-    #[test]
-    #[ignore = "DIVERGENCE: f64→u64 `cast` routes to `_mm*_cvtpd_epu64x_limited_*` \
+        #[test]
+        #[ignore = "DIVERGENCE: f64→u64 `cast` routes to `_mm*_cvtpd_epu64x_limited_*` \
                 which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
                 instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
                 but the cast yields 3, and values ≥ 2^52 are corrupted. \
                 f64→i64 is full-range-correct and truncating; f64→u64 needs an \
                 equivalent path or a documented precondition."]
-    fn f64_to_u64_nonconforming() {
-        // (b) rounds vs truncates, even for tiny in-range values.
-        cast_diff!(
-            "x86_v3 f64x4->u64x4 frac",
-            <X86V3 as Simd>::f64x4,
-            <X86V3 as Simd>::u64x4,
-            <Scalar as Simd>::f64x4,
-            <Scalar as Simd>::u64x4,
-            f64,
-            |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
-            Tol::Exact
-        );
+        fn f64_to_u64_nonconforming() {
+            // (b) rounds vs truncates, even for tiny in-range values.
+            cast_diff!(
+                "x86_v3 f64x4->u64x4 frac",
+                <X86V3 as Simd>::f64x4,
+                <X86V3 as Simd>::u64x4,
+                <Scalar as Simd>::f64x4,
+                <Scalar as Simd>::u64x4,
+                f64,
+                |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
+                Tol::Exact
+            );
+        }
     }
-}
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-
-mod gate {
     use super::*;
-    cast_suite!(wasm, Wasm, "wasm");
-}
+    use thermite::backend::wasm::Wasm;
 
-// Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
-// path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
-// divergence, not auto-failed - see TESTING.md.
-mod divergence {
-    use super::*;
+    mod gate {
+        use super::*;
+        cast_suite!(wasm, Wasm, "wasm");
+    }
 
-    #[test]
-    #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
+    // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
+    // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
+    // divergence, not auto-failed - see TESTING.md.
+    mod divergence {
+        use super::*;
+
+        #[test]
+        #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
                 indefinite integer instead of saturating like `as` (scalar). \
                 The general `cast` contract is 'like as'; backend needs a clamp or \
                 the `_limited` precondition must be documented."]
-    fn float_to_int_out_of_range() {
-        cast_diff!(
-            "wasm f64x4->i64x4 OOR",
-            <Wasm as Simd>::f64x4,
-            <Wasm as Simd>::i64x4,
-            <Scalar as Simd>::f64x4,
-            <Scalar as Simd>::i64x4,
-            f64,
-            |x| x,
-            Tol::Exact
-        );
-        cast_diff!(
-            "wasm f32x4->i32x4 OOR",
-            <Wasm as Simd>::f32x4,
-            <Wasm as Simd>::i32x4,
-            <Scalar as Simd>::f32x4,
-            <Scalar as Simd>::i32x4,
-            f32,
-            |x| x,
-            Tol::Exact
-        );
-    }
+        fn float_to_int_out_of_range() {
+            cast_diff!(
+                "wasm f64x4->i64x4 OOR",
+                <Wasm as Simd>::f64x4,
+                <Wasm as Simd>::i64x4,
+                <Scalar as Simd>::f64x4,
+                <Scalar as Simd>::i64x4,
+                f64,
+                |x| x,
+                Tol::Exact
+            );
+            cast_diff!(
+                "wasm f32x4->i32x4 OOR",
+                <Wasm as Simd>::f32x4,
+                <Wasm as Simd>::i32x4,
+                <Scalar as Simd>::f32x4,
+                <Scalar as Simd>::i32x4,
+                f32,
+                |x| x,
+                Tol::Exact
+            );
+        }
 
-    #[test]
-    #[ignore = "DIVERGENCE: f64→u64 `cast` routes to a `_limited` polyfill \
+        #[test]
+        #[ignore = "DIVERGENCE: f64→u64 `cast` routes to a `_limited` polyfill \
                 which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
                 instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
                 but the cast yields 3, and values ≥ 2^52 are corrupted. \
                 f64→i64 is full-range-correct and truncating; f64→u64 needs an \
                 equivalent path or a documented precondition."]
-    fn f64_to_u64_nonconforming() {
-        // (b) rounds vs truncates, even for tiny in-range values.
-        cast_diff!(
-            "wasm f64x4->u64x4 frac",
-            <Wasm as Simd>::f64x4,
-            <Wasm as Simd>::u64x4,
-            <Scalar as Simd>::f64x4,
-            <Scalar as Simd>::u64x4,
-            f64,
-            |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
-            Tol::Exact
-        );
+        fn f64_to_u64_nonconforming() {
+            // (b) rounds vs truncates, even for tiny in-range values.
+            cast_diff!(
+                "wasm f64x4->u64x4 frac",
+                <Wasm as Simd>::f64x4,
+                <Wasm as Simd>::u64x4,
+                <Scalar as Simd>::f64x4,
+                <Scalar as Simd>::u64x4,
+                f64,
+                |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
+                Tol::Exact
+            );
+        }
     }
-}
 }

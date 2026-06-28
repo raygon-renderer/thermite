@@ -162,22 +162,22 @@ use thermite::backend::scalar::Scalar;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-linalg_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-3, "x86_v3 f32x4");
-linalg_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-9, "x86_v3 f64x4");
-linalg_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-3, "x86_v2 f32x4");
-linalg_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-9, "x86_v2 f64x4");
-linalg_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-3, "x86_v1 f32x4");
-linalg_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-9, "x86_v1 f64x4");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    linalg_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-3, "x86_v3 f32x4");
+    linalg_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-9, "x86_v3 f64x4");
+    linalg_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-3, "x86_v2 f32x4");
+    linalg_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-9, "x86_v2 f64x4");
+    linalg_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-3, "x86_v1 f32x4");
+    linalg_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-9, "x86_v1 f64x4");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-linalg_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-3, "wasm f32x4");
-linalg_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-9, "wasm f64x4");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    linalg_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-3, "wasm f32x4");
+    linalg_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-9, "wasm f64x4");
 }

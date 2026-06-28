@@ -11,7 +11,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, ConcatRegister, CoreRegister, Element,
         FloatRegister, IndexableRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
         MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, WideRegister, ZeroUpper, empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, WideRegister, ZeroUpper, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -225,6 +225,33 @@ impl Register for F32x4V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_psx_v2(value) }
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs)) }
+    }
+
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let idxs: arch::__m128i = core::mem::transmute(idxs);
+
+            let four = arch::_mm_set1_epi32(4);
+
+            // NOTE: Because of lt, this is reversed
+            let blend = arch::_mm_cmplt_epi32(idxs, four);
+            let a_idxs = arch::_mm_and_si128(idxs, arch::_mm_set1_epi32(0b11));
+            let b_idxs = arch::_mm_sub_epi32(idxs, four);
+
+            let tmp_a = arch::_mm_permutevar_ps(a, a_idxs);
+            let tmp_b = arch::_mm_permutevar_ps(b, b_idxs);
+
+            // NOTE: Again, reversed
+            arch::_mm_blendv_ps(tmp_b, tmp_a, arch::_mm_castsi128_ps(blend))
+        }
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -296,43 +323,15 @@ impl BlendRegister for F32x4V3 {
     }
 }
 
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F32x4V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm_permutevar_ps(value, core::mem::transmute(idxs)) }
-    }
-
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs);
-
-            let four = arch::_mm_set1_epi32(4);
-
-            // NOTE: Because of lt, this is reversed
-            let blend = arch::_mm_cmplt_epi32(idxs, four);
-            let a_idxs = arch::_mm_and_si128(idxs, arch::_mm_set1_epi32(0b11));
-            let b_idxs = arch::_mm_sub_epi32(idxs, four);
-
-            let tmp_a = arch::_mm_permutevar_ps(a, a_idxs);
-            let tmp_b = arch::_mm_permutevar_ps(b, b_idxs);
-
-            // NOTE: Again, reversed
-            arch::_mm_blendv_ps(tmp_b, tmp_a, arch::_mm_castsi128_ps(blend))
-        }
-    }
-}
-
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl PartialOrdRegister for F32x4V3 {
- fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmplt_ps(lhs, rhs) } }
- fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmple_ps(lhs, rhs) } }
- fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpgt_ps(lhs, rhs) } }
- fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpge_ps(lhs, rhs) } }
- fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpeq_ps(lhs, rhs) } }
- fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpneq_ps(lhs, rhs) } }
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmplt_ps(lhs, rhs) } }
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmple_ps(lhs, rhs) } }
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpgt_ps(lhs, rhs) } }
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpge_ps(lhs, rhs) } }
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpeq_ps(lhs, rhs) } }
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { unsafe { arch::_mm_cmpneq_ps(lhs, rhs) } }
 }
 
 #[thermite_macros::inline_always]

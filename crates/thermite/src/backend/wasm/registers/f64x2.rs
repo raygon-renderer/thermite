@@ -10,7 +10,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
         FloatRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability,
         NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg,
+        ZeroUpper, array::ArrayRegister, empty_reg,
     },
     swizzle::SwizzleIndices,
 };
@@ -187,24 +187,7 @@ impl Register for F64x2Wasm {
     fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
         arch::f64x2_replace_lane::<I>(value, element)
     }
-}
 
-#[thermite_macros::inline_always]
-impl ShuffleRegister for F64x2Wasm {
-    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
-    }
-}
-
-#[thermite_macros::inline_always]
-impl PermuteRegister for F64x2Wasm {
-    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F64x2Wasm {
     const HAS_PERMUTEV: bool = true;
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
@@ -250,6 +233,22 @@ impl SwizzleRegister for F64x2Wasm {
             (3, 3) => arch::i64x2_shuffle::<3, 3>(a, b),
             _ => unreachable!(),
         }
+    }
+
+    compress_via_table!();
+}
+
+#[thermite_macros::inline_always]
+impl ShuffleRegister for F64x2Wasm {
+    fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self::blendv(const { arch::imm8x2_to_mask::<IMM8>() }, lhs, rhs)
+    }
+}
+
+#[thermite_macros::inline_always]
+impl PermuteRegister for F64x2Wasm {
+    fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(value, const { arch::imm8x2_to_indices::<IMM8>() })
     }
 }
 

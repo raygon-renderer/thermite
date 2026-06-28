@@ -3,7 +3,7 @@
 macro_rules! s {
     ($ty:ty: $a:expr, [$($idx:literal),* $(,)?]) => {{
         #[inline(always)]
-        fn __do_permutev<R: SwizzleRegister>(a: Storage<R>) -> Storage<R> {
+        fn __do_permutev<R: Register>(a: Storage<R>) -> Storage<R> {
             struct Indices<N: generic_array::ArrayLength>(core::marker::PhantomData<N>);
 
             impl<N: generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
@@ -22,7 +22,7 @@ macro_rules! s {
 
     ($ty:ty: $a:expr, $b:expr, [$($idx:literal),* $(,)?]) => {{
         #[inline(always)]
-        fn __do_swizzle<R: SwizzleRegister>(a: Storage<R>, b: Storage<R>) -> Storage<R> {
+        fn __do_swizzle<R: Register>(a: Storage<R>, b: Storage<R>) -> Storage<R> {
             struct Indices<N: generic_array::ArrayLength>(core::marker::PhantomData<N>);
 
             impl<N: generic_array::ArrayLength> SwizzleIndices<N> for Indices<N> {
@@ -714,6 +714,290 @@ pub trait Register:
 
     /// Swap the byte order of each element in the register.
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self>;
+
+    /// Left-pack (a.k.a. `compress`): gather the lanes where `mask` is set into
+    /// the low lanes, preserving their relative order. The unselected lanes are
+    /// *kept* (not zeroed) and packed into the high lanes, also in order - i.e. a
+    /// stable partition of the register by `mask`.
+    ///
+    /// The number of low lanes that came from `mask` equals its population
+    /// count. For `value = [a, b, c, d]` and `mask = [T, F, T, F]` the result is
+    /// `[a, c, b, d]` (selected `a, c` first, then unselected `b, d`).
+    ///
+    /// This maps to AVX-512 `vpcompress*` (merge form). The default is a portable
+    /// scalar stable partition that every register inherits; concrete backend
+    /// registers override it with the table / wide / merge polyfills where those
+    /// are a win. For the zero-filled tail variant matching AVX-512 zero-masking,
+    /// see [`compress_z`](Self::compress_z).
+    fn compress(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        let n = <Self::Lanes as Unsigned>::USIZE;
+
+        let src = Self::as_array(&value);
+        let mut result = value;
+        let dst = Self::as_array_mut(&mut result);
+
+        let mut pos = 0;
+
+        // Selected lanes first, in order.
+        for i in 0..n {
+            if <Self::Mask as MaskRegister>::test(mask, i) {
+                dst[pos] = src[i];
+                pos += 1;
+            }
+        }
+
+        // Unselected lanes after, in order.
+        for i in 0..n {
+            if !<Self::Mask as MaskRegister>::test(mask, i) {
+                dst[pos] = src[i];
+                pos += 1;
+            }
+        }
+
+        result
+    }
+
+    /// Zero-filling left-pack: like [`compress`](Self::compress), but the lanes
+    /// beyond the population count are zeroed instead of holding the unselected
+    /// elements. Matches AVX-512 zero-masking `vpcompress*`.
+    ///
+    /// For `value = [a, b, c, d]` and `mask = [T, F, T, F]` the result is
+    /// `[a, c, 0, 0]`.
+    ///
+    /// The default is a single scalar pass - selected lanes to the front, the
+    /// rest left zero - skipping the unselected-lane bookkeeping that
+    /// [`compress`](Self::compress) needs. Concrete backend registers override
+    /// it (the macros do so alongside `compress`) for the table / wide paths.
+    fn compress_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        let n = <Self::Lanes as Unsigned>::USIZE;
+        let src = Self::as_array(&value);
+
+        // `EMPTY` is zero, so the tail is already filled - only place selected.
+        let mut result = Self::EMPTY;
+        let dst = Self::as_array_mut(&mut result);
+
+        let mut pos = 0;
+        for i in 0..n {
+            if <Self::Mask as MaskRegister>::test(mask, i) {
+                dst[pos] = src[i];
+                pos += 1;
+            }
+        }
+
+        result
+    }
+
+    const HAS_PERMUTEV: bool;
+
+    fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        let mut result = Self::EMPTY;
+
+        let value_array = Self::as_array(&value);
+        let result_array = Self::as_array_mut(&mut result);
+
+        let mask = Self::Lanes::U32 - 1;
+
+        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+            let idx = if const { is_power_of_2(Self::Lanes::U32) } {
+                idx & mask // we can AND with the mask if power-of-two lane count
+            } else {
+                idx.min(mask) // otherwise clamp to the max index
+            } as usize;
+
+            unsafe { core::hint::assert_unchecked(idx < value_array.len()) };
+
+            *dst = value_array[idx];
+        }
+
+        result
+    }
+
+    #[masked]
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        Self::scalar_permutev(value, idxs)
+    }
+
+    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+        Self::permutev(value, I::INDICES)
+    }
+
+    fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        let mut result = Self::EMPTY;
+
+        let a_array = Self::as_array(&a);
+        let b_array = Self::as_array(&b);
+        let result_array = Self::as_array_mut(&mut result);
+
+        let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
+
+        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+            // NOTE: If Self is power of two, so is 2 * Self
+            let mut idx = if const { is_power_of_2(Self::Lanes::U32) } {
+                idx & mask // we can AND with the mask if power-of-two lane count
+            } else {
+                idx.min(mask) // otherwise clamp to the max index
+            } as usize;
+
+            *dst = if idx < Self::Lanes::USIZE {
+                unsafe { core::hint::assert_unchecked(idx < a_array.len()) };
+
+                a_array[idx]
+            } else {
+                idx -= Self::Lanes::USIZE;
+
+                unsafe { core::hint::assert_unchecked(idx < b_array.len()) };
+
+                b_array[idx]
+            };
+        }
+
+        result
+    }
+
+    #[masked]
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        use typenum::Unsigned;
+
+        if const { !Self::HAS_PERMUTEV } {
+            return Self::scalar_swizzle(a, b, idxs);
+        }
+
+        let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
+        let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
+
+        let mut blend_mask = <Self::Mask as MaskRegister>::FALSY;
+
+        for (i, &idx) in idxs.iter().enumerate() {
+            if idx < Self::Lanes::U32 {
+                a_idxs[i] = idx;
+                b_idxs[i] = i as u32;
+            } else {
+                a_idxs[i] = i as u32;
+                b_idxs[i] = idx - Self::Lanes::U32;
+                blend_mask = <Self::Mask as MaskRegister>::set(blend_mask, i, true);
+            }
+        }
+
+        let tmp_a = Self::permutev(a, a_idxs);
+        let tmp_b = Self::permutev(b, b_idxs);
+
+        Self::blendv(blend_mask, tmp_a, tmp_b)
+    }
+
+    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::swizzle(a, b, I::INDICES)
+    }
+
+    /// Runtime permute of an `N`-chunk [`ArrayRegister<Self, N>`](array::ArrayRegister)
+    /// by a full-width index slice (`idxs.len() == N * Self::LANES`).
+    ///
+    /// `ArrayRegister`'s `permutev` delegates here so a specific backend register
+    /// can override the cross-chunk routing with a faster sequence. The default
+    /// is branchless: for each output chunk it splits each global index into a
+    /// local index (`idx % LANES`) and a source-chunk id (`idx / LANES`), then
+    /// for each input chunk builds the blend mask with a single vector compare
+    /// (`chunk_id == j`) rather than per-lane mask inserts.
+    ///
+    /// `#[inline(always)]` so that when called with compile-time-constant indices
+    /// (via [`permutev_const`](Self::permutev_const)) the whole routing -
+    /// local/chunk split and blend selectors - constant-folds.
+    #[inline(always)]
+    fn array_permutev<const N: usize>(value: [Storage<Self>; N], idxs: &[u32]) -> [Storage<Self>; N] {
+        let l = <Self::Lanes as Unsigned>::USIZE;
+        let total = N * l;
+
+        let mut result = [Self::EMPTY; N];
+
+        for i in 0..N {
+            let base = i * l;
+
+            // Branchless split of this output chunk's indices into local offsets
+            // (for the per-chunk permute) and source-chunk ids (for the blend).
+            let mut local: GenericArray<u32, Self::Lanes> = GenericArray::default();
+            let mut chunk_ids: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
+
+            for lane in 0..l {
+                let g = idxs[base + lane] as usize;
+                let g = if const { (N * <Self::Lanes as Unsigned>::USIZE).is_power_of_two() } {
+                    g & (total - 1)
+                } else {
+                    g.min(total - 1)
+                };
+                local[lane] = (g % l) as u32;
+                chunk_ids[lane] = Element::from_u16((g / l) as u16);
+            }
+
+            let chunk_reg = Self::Unsigned::new(chunk_ids);
+
+            let mut out = Self::EMPTY;
+            for j in 0..N {
+                let j_splat = Self::Unsigned::splat(Element::from_u16(j as u16));
+                let eq = Self::Unsigned::eq(chunk_reg, j_splat);
+                let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(eq);
+                let permuted = Self::permutev(value[j], local.clone());
+                out = Self::blendv(blend, out, permuted);
+            }
+
+            result[i] = out;
+        }
+
+        result
+    }
+
+    /// Runtime swizzle of two `N`-chunk [`ArrayRegister<Self, N>`](array::ArrayRegister)
+    /// values by a full-width index slice selecting across all `2N` input chunks
+    /// (`a` then `b`). The two-source companion to [`array_permutev`](Self::array_permutev);
+    /// same branchless default, overridable per register.
+    #[inline(always)]
+    fn array_swizzle<const N: usize>(a: [Storage<Self>; N], b: [Storage<Self>; N], idxs: &[u32]) -> [Storage<Self>; N] {
+        let l = <Self::Lanes as Unsigned>::USIZE;
+        let total = N * l;
+        let span = 2 * total;
+
+        let mut result = [Self::EMPTY; N];
+
+        for i in 0..N {
+            let base = i * l;
+
+            let mut local: GenericArray<u32, Self::Lanes> = GenericArray::default();
+            let mut chunk_ids: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
+
+            for lane in 0..l {
+                let g = idxs[base + lane] as usize;
+                let g = if const { (2 * N * <Self::Lanes as Unsigned>::USIZE).is_power_of_two() } {
+                    g & (span - 1)
+                } else {
+                    g.min(span - 1)
+                };
+                local[lane] = (g % l) as u32;
+                chunk_ids[lane] = Element::from_u16((g / l) as u16);
+            }
+
+            let chunk_reg = Self::Unsigned::new(chunk_ids);
+
+            let mut out = Self::EMPTY;
+            for j in 0..(2 * N) {
+                let src = if j < N { a[j] } else { b[j - N] };
+                let j_splat = Self::Unsigned::splat(Element::from_u16(j as u16));
+                let eq = Self::Unsigned::eq(chunk_reg, j_splat);
+                let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(eq);
+                let permuted = Self::permutev(src, local.clone());
+                out = Self::blendv(blend, out, permuted);
+            }
+
+            result[i] = out;
+        }
+
+        result
+    }
+}
+
+const fn is_power_of_2(n: u32) -> bool {
+    (n & (n - 1)) == 0
+}
+
+pub trait SwizzleIndices<N: ArrayLength> {
+    const INDICES: GenericArray<u32, N>;
 }
 
 /// Combine and split registers.
@@ -884,118 +1168,6 @@ pub trait PermuteRegister: Register {
 
 pub trait BlendRegister: Register {
     fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
-}
-
-const fn is_power_of_2(n: u32) -> bool {
-    (n & (n - 1)) == 0
-}
-
-pub trait SwizzleIndices<N: ArrayLength> {
-    const INDICES: GenericArray<u32, N>;
-}
-
-#[thermite_macros::register_trait]
-pub trait SwizzleRegister: Register {
-    const HAS_PERMUTEV: bool;
-
-    fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        let mut result = Self::EMPTY;
-
-        let value_array = Self::as_array(&value);
-        let result_array = Self::as_array_mut(&mut result);
-
-        let mask = Self::Lanes::U32 - 1;
-
-        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
-            let idx = if const { is_power_of_2(Self::Lanes::U32) } {
-                idx & mask // we can AND with the mask if power-of-two lane count
-            } else {
-                idx.min(mask) // otherwise clamp to the max index
-            } as usize;
-
-            unsafe { core::hint::assert_unchecked(idx < value_array.len()) };
-
-            *dst = value_array[idx];
-        }
-
-        result
-    }
-
-    #[masked]
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        Self::scalar_permutev(value, idxs)
-    }
-
-    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-        Self::permutev(value, I::INDICES)
-    }
-
-    fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        let mut result = Self::EMPTY;
-
-        let a_array = Self::as_array(&a);
-        let b_array = Self::as_array(&b);
-        let result_array = Self::as_array_mut(&mut result);
-
-        let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
-
-        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
-            // NOTE: If Self is power of two, so is 2 * Self
-            let mut idx = if const { is_power_of_2(Self::Lanes::U32) } {
-                idx & mask // we can AND with the mask if power-of-two lane count
-            } else {
-                idx.min(mask) // otherwise clamp to the max index
-            } as usize;
-
-            *dst = if idx < Self::Lanes::USIZE {
-                unsafe { core::hint::assert_unchecked(idx < a_array.len()) };
-
-                a_array[idx]
-            } else {
-                idx -= Self::Lanes::USIZE;
-
-                unsafe { core::hint::assert_unchecked(idx < b_array.len()) };
-
-                b_array[idx]
-            };
-        }
-
-        result
-    }
-
-    #[masked]
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        use typenum::Unsigned;
-
-        if const { !Self::HAS_PERMUTEV } {
-            return Self::scalar_swizzle(a, b, idxs);
-        }
-
-        let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
-        let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
-
-        let mut blend_mask = <Self::Mask as MaskRegister>::FALSY;
-
-        for (i, &idx) in idxs.iter().enumerate() {
-            if idx < Self::Lanes::U32 {
-                a_idxs[i] = idx;
-                b_idxs[i] = i as u32;
-            } else {
-                a_idxs[i] = i as u32;
-                b_idxs[i] = idx - Self::Lanes::U32;
-                blend_mask = <Self::Mask as MaskRegister>::set(blend_mask, i, true);
-            }
-        }
-
-        let tmp_a = Self::permutev(a, a_idxs);
-        let tmp_b = Self::permutev(b, b_idxs);
-
-        Self::blendv(blend_mask, tmp_a, tmp_b)
-    }
-
-    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        Self::swizzle(a, b, I::INDICES)
-    }
 }
 
 #[rustfmt::skip]

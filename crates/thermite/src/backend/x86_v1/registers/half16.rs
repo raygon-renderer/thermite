@@ -601,7 +601,14 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 2>> for I16x4V1 {
             let lo = arch::_mm_cvttpd_2i32x_v1(value.0[0]);
             let hi = arch::_mm_cvttpd_2i32x_v1(value.0[1]);
             ReducedRegister::new(arch::_mm_setr_epi16(
-                lo[0] as i16, lo[1] as i16, hi[0] as i16, hi[1] as i16, 0, 0, 0, 0,
+                lo[0] as i16,
+                lo[1] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -613,7 +620,14 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 2>> for U16x4V1 {
             let lo = arch::_mm_cvttpd_2i32x_v1(value.0[0]);
             let hi = arch::_mm_cvttpd_2i32x_v1(value.0[1]);
             ReducedRegister::new(arch::_mm_setr_epi16(
-                lo[0] as i16, lo[1] as i16, hi[0] as i16, hi[1] as i16, 0, 0, 0, 0,
+                lo[0] as i16,
+                lo[1] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -647,8 +661,14 @@ impl CastRegister<ArrayRegister<super::F32x4V1, 2>> for super::I16x8V1 {
         let hi = store_dwords(unsafe { arch::_mm_cvttps_epi32(value.0[1]) });
         unsafe {
             arch::_mm_setr_epi16(
-                lo[0] as i16, lo[1] as i16, lo[2] as i16, lo[3] as i16,
-                hi[0] as i16, hi[1] as i16, hi[2] as i16, hi[3] as i16,
+                lo[0] as i16,
+                lo[1] as i16,
+                lo[2] as i16,
+                lo[3] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                hi[2] as i16,
+                hi[3] as i16,
             )
         }
     }
@@ -660,8 +680,14 @@ impl CastRegister<ArrayRegister<super::F32x4V1, 2>> for super::U16x8V1 {
         let hi = store_dwords(unsafe { arch::_mm_cvttps_epi32(value.0[1]) });
         unsafe {
             arch::_mm_setr_epi16(
-                lo[0] as i16, lo[1] as i16, lo[2] as i16, lo[3] as i16,
-                hi[0] as i16, hi[1] as i16, hi[2] as i16, hi[3] as i16,
+                lo[0] as i16,
+                lo[1] as i16,
+                lo[2] as i16,
+                lo[3] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                hi[2] as i16,
+                hi[3] as i16,
             )
         }
     }
@@ -697,8 +723,14 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 4>> for super::I16x8V1 {
             let c = arch::_mm_cvttpd_2i32x_v1(value.0[2]);
             let d = arch::_mm_cvttpd_2i32x_v1(value.0[3]);
             arch::_mm_setr_epi16(
-                a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                a[0] as i16,
+                a[1] as i16,
+                b[0] as i16,
+                b[1] as i16,
+                c[0] as i16,
+                c[1] as i16,
+                d[0] as i16,
+                d[1] as i16,
             )
         }
     }
@@ -712,8 +744,14 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 4>> for super::U16x8V1 {
             let c = arch::_mm_cvttpd_2i32x_v1(value.0[2]);
             let d = arch::_mm_cvttpd_2i32x_v1(value.0[3]);
             arch::_mm_setr_epi16(
-                a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                a[0] as i16,
+                a[1] as i16,
+                b[0] as i16,
+                b[1] as i16,
+                c[0] as i16,
+                c[1] as i16,
+                d[0] as i16,
+                d[1] as i16,
             )
         }
     }
@@ -772,12 +810,24 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 8>> for ArrayRegister<super::I16
             let h = arch::_mm_cvttpd_2i32x_v1(v[7]);
             ArrayRegister([
                 arch::_mm_setr_epi16(
-                    a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                    c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                    a[0] as i16,
+                    a[1] as i16,
+                    b[0] as i16,
+                    b[1] as i16,
+                    c[0] as i16,
+                    c[1] as i16,
+                    d[0] as i16,
+                    d[1] as i16,
                 ),
                 arch::_mm_setr_epi16(
-                    e[0] as i16, e[1] as i16, f[0] as i16, f[1] as i16,
-                    g[0] as i16, g[1] as i16, h[0] as i16, h[1] as i16,
+                    e[0] as i16,
+                    e[1] as i16,
+                    f[0] as i16,
+                    f[1] as i16,
+                    g[0] as i16,
+                    g[1] as i16,
+                    h[0] as i16,
+                    h[1] as i16,
                 ),
             ])
         }
@@ -798,12 +848,24 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 8>> for ArrayRegister<super::U16
             let h = arch::_mm_cvttpd_2i32x_v1(v[7]);
             ArrayRegister([
                 arch::_mm_setr_epi16(
-                    a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                    c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                    a[0] as i16,
+                    a[1] as i16,
+                    b[0] as i16,
+                    b[1] as i16,
+                    c[0] as i16,
+                    c[1] as i16,
+                    d[0] as i16,
+                    d[1] as i16,
                 ),
                 arch::_mm_setr_epi16(
-                    e[0] as i16, e[1] as i16, f[0] as i16, f[1] as i16,
-                    g[0] as i16, g[1] as i16, h[0] as i16, h[1] as i16,
+                    e[0] as i16,
+                    e[1] as i16,
+                    f[0] as i16,
+                    f[1] as i16,
+                    g[0] as i16,
+                    g[1] as i16,
+                    h[0] as i16,
+                    h[1] as i16,
                 ),
             ])
         }

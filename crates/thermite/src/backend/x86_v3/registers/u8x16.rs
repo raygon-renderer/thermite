@@ -12,7 +12,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
         MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, Storage,
-        SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -207,6 +207,14 @@ impl Register for U8x16V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value
     }
+
+    const HAS_PERMUTEV: bool = <super::I8x16V3 as Register>::HAS_PERMUTEV;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        super::I8x16V3::permutev(value, idxs)
+    }
+
+    compress_via_wide!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -236,15 +244,6 @@ impl BitshiftRegister for U8x16V3 {
 
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi8x_v1::<IMM8>(value) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U8x16V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        super::I8x16V3::permutev(value, idxs)
     }
 }
 
@@ -398,7 +397,8 @@ impl SaturatingCastRegister<super::U16x16V3> for U8x16V3 {
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U8x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x8V3, 2>>) -> Storage<Self> {
-        let words = <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(value);
+        let words =
+            <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::U16x16V3>>::saturating_cast_from(words)
     }
 }
@@ -407,7 +407,8 @@ impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U8x16V3 {
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>> for U8x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 4>>) -> Storage<Self> {
-        let words = <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(value);
+        let words =
+            <super::U16x16V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::U16x16V3>>::saturating_cast_from(words)
     }
 }

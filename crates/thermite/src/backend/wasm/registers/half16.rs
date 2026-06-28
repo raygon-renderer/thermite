@@ -312,7 +312,14 @@ impl CastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I16x4Wasm {
         let a = store_qwords(value.0[0]);
         let b = store_qwords(value.0[1]);
         ReducedRegister::new(arch::i16x8(
-            a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16, 0, 0, 0, 0,
+            a[0] as i16,
+            a[1] as i16,
+            b[0] as i16,
+            b[1] as i16,
+            0,
+            0,
+            0,
+            0,
         ))
     }
 }
@@ -322,7 +329,14 @@ impl CastRegister<ArrayRegister<super::U64x2Wasm, 2>> for U16x4Wasm {
         let a = store_qwords(value.0[0]);
         let b = store_qwords(value.0[1]);
         ReducedRegister::new(arch::i16x8(
-            a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16, 0, 0, 0, 0,
+            a[0] as i16,
+            a[1] as i16,
+            b[0] as i16,
+            b[1] as i16,
+            0,
+            0,
+            0,
+            0,
         ))
     }
 }
@@ -510,7 +524,14 @@ impl CastRegister<super::F32x4Wasm> for I16x4Wasm {
     fn cast_from(value: Storage<super::F32x4Wasm>) -> Storage<Self> {
         let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value));
         ReducedRegister::new(arch::i16x8(
-            a[0] as i16, a[1] as i16, a[2] as i16, a[3] as i16, 0, 0, 0, 0,
+            a[0] as i16,
+            a[1] as i16,
+            a[2] as i16,
+            a[3] as i16,
+            0,
+            0,
+            0,
+            0,
         ))
     }
 }
@@ -519,7 +540,14 @@ impl CastRegister<super::F32x4Wasm> for U16x4Wasm {
     fn cast_from(value: Storage<super::F32x4Wasm>) -> Storage<Self> {
         let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value));
         ReducedRegister::new(arch::i16x8(
-            a[0] as i16, a[1] as i16, a[2] as i16, a[3] as i16, 0, 0, 0, 0,
+            a[0] as i16,
+            a[1] as i16,
+            a[2] as i16,
+            a[3] as i16,
+            0,
+            0,
+            0,
+            0,
         ))
     }
 }
@@ -544,7 +572,14 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 2>> for I16x4Wasm {
             let lo = arch::f64x2_to_2xi32(value.0[0]);
             let hi = arch::f64x2_to_2xi32(value.0[1]);
             ReducedRegister::new(arch::i16x8(
-                lo[0] as i16, lo[1] as i16, hi[0] as i16, hi[1] as i16, 0, 0, 0, 0,
+                lo[0] as i16,
+                lo[1] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -556,7 +591,14 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 2>> for U16x4Wasm {
             let lo = arch::f64x2_to_2xi32(value.0[0]);
             let hi = arch::f64x2_to_2xi32(value.0[1]);
             ReducedRegister::new(arch::i16x8(
-                lo[0] as i16, lo[1] as i16, hi[0] as i16, hi[1] as i16, 0, 0, 0, 0,
+                lo[0] as i16,
+                lo[1] as i16,
+                hi[0] as i16,
+                hi[1] as i16,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -585,8 +627,14 @@ impl CastRegister<ArrayRegister<super::F32x4Wasm, 2>> for super::I16x8Wasm {
         let lo = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[0]));
         let hi = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[1]));
         arch::i16x8(
-            lo[0] as i16, lo[1] as i16, lo[2] as i16, lo[3] as i16,
-            hi[0] as i16, hi[1] as i16, hi[2] as i16, hi[3] as i16,
+            lo[0] as i16,
+            lo[1] as i16,
+            lo[2] as i16,
+            lo[3] as i16,
+            hi[0] as i16,
+            hi[1] as i16,
+            hi[2] as i16,
+            hi[3] as i16,
         )
     }
 }
@@ -596,8 +644,14 @@ impl CastRegister<ArrayRegister<super::F32x4Wasm, 2>> for super::U16x8Wasm {
         let lo = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[0]));
         let hi = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[1]));
         arch::i16x8(
-            lo[0] as i16, lo[1] as i16, lo[2] as i16, lo[3] as i16,
-            hi[0] as i16, hi[1] as i16, hi[2] as i16, hi[3] as i16,
+            lo[0] as i16,
+            lo[1] as i16,
+            lo[2] as i16,
+            lo[3] as i16,
+            hi[0] as i16,
+            hi[1] as i16,
+            hi[2] as i16,
+            hi[3] as i16,
         )
     }
 }
@@ -636,8 +690,14 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 4>> for super::I16x8Wasm {
             let c = arch::f64x2_to_2xi32(value.0[2]);
             let d = arch::f64x2_to_2xi32(value.0[3]);
             arch::i16x8(
-                a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                a[0] as i16,
+                a[1] as i16,
+                b[0] as i16,
+                b[1] as i16,
+                c[0] as i16,
+                c[1] as i16,
+                d[0] as i16,
+                d[1] as i16,
             )
         }
     }
@@ -651,8 +711,14 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 4>> for super::U16x8Wasm {
             let c = arch::f64x2_to_2xi32(value.0[2]);
             let d = arch::f64x2_to_2xi32(value.0[3]);
             arch::i16x8(
-                a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                a[0] as i16,
+                a[1] as i16,
+                b[0] as i16,
+                b[1] as i16,
+                c[0] as i16,
+                c[1] as i16,
+                d[0] as i16,
+                d[1] as i16,
             )
         }
     }
@@ -711,12 +777,24 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 8>> for ArrayRegister<super::I
             let h = arch::f64x2_to_2xi32(v[7]);
             ArrayRegister([
                 arch::i16x8(
-                    a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                    c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                    a[0] as i16,
+                    a[1] as i16,
+                    b[0] as i16,
+                    b[1] as i16,
+                    c[0] as i16,
+                    c[1] as i16,
+                    d[0] as i16,
+                    d[1] as i16,
                 ),
                 arch::i16x8(
-                    e[0] as i16, e[1] as i16, f[0] as i16, f[1] as i16,
-                    g[0] as i16, g[1] as i16, h[0] as i16, h[1] as i16,
+                    e[0] as i16,
+                    e[1] as i16,
+                    f[0] as i16,
+                    f[1] as i16,
+                    g[0] as i16,
+                    g[1] as i16,
+                    h[0] as i16,
+                    h[1] as i16,
                 ),
             ])
         }
@@ -737,12 +815,24 @@ impl CastRegister<ArrayRegister<super::F64x2Wasm, 8>> for ArrayRegister<super::U
             let h = arch::f64x2_to_2xi32(v[7]);
             ArrayRegister([
                 arch::i16x8(
-                    a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-                    c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+                    a[0] as i16,
+                    a[1] as i16,
+                    b[0] as i16,
+                    b[1] as i16,
+                    c[0] as i16,
+                    c[1] as i16,
+                    d[0] as i16,
+                    d[1] as i16,
                 ),
                 arch::i16x8(
-                    e[0] as i16, e[1] as i16, f[0] as i16, f[1] as i16,
-                    g[0] as i16, g[1] as i16, h[0] as i16, h[1] as i16,
+                    e[0] as i16,
+                    e[1] as i16,
+                    f[0] as i16,
+                    f[1] as i16,
+                    g[0] as i16,
+                    g[1] as i16,
+                    h[0] as i16,
+                    h[1] as i16,
                 ),
             ])
         }

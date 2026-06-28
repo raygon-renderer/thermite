@@ -9,7 +9,7 @@ use crate::register::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IndexableRegister,
     IntegerRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-    SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
+    UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -83,6 +83,16 @@ impl Register for [<i $width>] {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value.swap_bytes()
     }
+
+    const HAS_PERMUTEV: bool = false;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        value
+    }
+
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        if idxs[0] & 0b1 == 0 { a } else { b }
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -126,19 +136,6 @@ impl ShuffleRegister for [<i $width>] {
 impl PermuteRegister for [<i $width>] {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         value
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for [<i $width>] {
-    const HAS_PERMUTEV: bool = false;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        value
-    }
-
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
 

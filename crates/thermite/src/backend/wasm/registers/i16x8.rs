@@ -13,8 +13,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
+        empty_reg,
     },
 };
 
@@ -187,6 +187,23 @@ impl Register for I16x8Wasm {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, arch::u8x16(1, 0, 3, 2, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 15, 14))
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // Build a per-byte swizzle control: lane w -> bytes [2w, 2w+1].
+        let mut bytes = [0u8; 16];
+        let mut i = 0;
+        while i < 8 {
+            bytes[2 * i] = (idxs[i] as u8).wrapping_mul(2);
+            bytes[2 * i + 1] = (idxs[i] as u8).wrapping_mul(2).wrapping_add(1);
+            i += 1;
+        }
+        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
+        arch::u8x16_relaxed_swizzle(value, ctrl)
+    }
+
+    compress_via_table!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -211,24 +228,6 @@ impl BitshiftRegister for I16x8Wasm {
     }
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u16x8_shr(value, IMM8 as u32) // logical
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I16x8Wasm {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // Build a per-byte swizzle control: lane w -> bytes [2w, 2w+1].
-        let mut bytes = [0u8; 16];
-        let mut i = 0;
-        while i < 8 {
-            bytes[2 * i] = (idxs[i] as u8).wrapping_mul(2);
-            bytes[2 * i + 1] = (idxs[i] as u8).wrapping_mul(2).wrapping_add(1);
-            i += 1;
-        }
-        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
-        arch::u8x16_relaxed_swizzle(value, ctrl)
     }
 }
 

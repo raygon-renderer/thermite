@@ -486,64 +486,64 @@ macro_rules! int_mask_tests {
 // --- X86V3 (AVX2 + FMA) ----------------------------------------------------
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-mod v3_float {
     use super::*;
-    float_mask_tests!(f32x4, X86V3, f32x4, "x86_v3 f32x4");
-    float_mask_tests!(f32x8, X86V3, f32x8, "x86_v3 f32x8");
-    float_mask_tests!(f32x16, X86V3, f32x16, "x86_v3 f32x16");
-    float_mask_tests!(f64x2, X86V3, f64x2, "x86_v3 f64x2");
-    float_mask_tests!(f64x4, X86V3, f64x4, "x86_v3 f64x4");
-    float_mask_tests!(f64x8, X86V3, f64x8, "x86_v3 f64x8");
-}
-mod v3_int {
-    use super::*;
-    int_mask_tests!(i32x4, X86V3, i32x4, "x86_v3 i32x4", signed);
-    int_mask_tests!(i32x8, X86V3, i32x8, "x86_v3 i32x8", signed);
-    int_mask_tests!(i64x2, X86V3, i64x2, "x86_v3 i64x2", signed);
-    int_mask_tests!(i64x4, X86V3, i64x4, "x86_v3 i64x4", signed);
-    int_mask_tests!(u32x4, X86V3, u32x4, "x86_v3 u32x4", unsigned);
-    int_mask_tests!(u32x8, X86V3, u32x8, "x86_v3 u32x8", unsigned);
-    int_mask_tests!(u64x2, X86V3, u64x2, "x86_v3 u64x2", unsigned);
-    int_mask_tests!(u64x4, X86V3, u64x4, "x86_v3 u64x4", unsigned);
-}
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    mod v3_float {
+        use super::*;
+        float_mask_tests!(f32x4, X86V3, f32x4, "x86_v3 f32x4");
+        float_mask_tests!(f32x8, X86V3, f32x8, "x86_v3 f32x8");
+        float_mask_tests!(f32x16, X86V3, f32x16, "x86_v3 f32x16");
+        float_mask_tests!(f64x2, X86V3, f64x2, "x86_v3 f64x2");
+        float_mask_tests!(f64x4, X86V3, f64x4, "x86_v3 f64x4");
+        float_mask_tests!(f64x8, X86V3, f64x8, "x86_v3 f64x8");
+    }
+    mod v3_int {
+        use super::*;
+        int_mask_tests!(i32x4, X86V3, i32x4, "x86_v3 i32x4", signed);
+        int_mask_tests!(i32x8, X86V3, i32x8, "x86_v3 i32x8", signed);
+        int_mask_tests!(i64x2, X86V3, i64x2, "x86_v3 i64x2", signed);
+        int_mask_tests!(i64x4, X86V3, i64x4, "x86_v3 i64x4", signed);
+        int_mask_tests!(u32x4, X86V3, u32x4, "x86_v3 u32x4", unsigned);
+        int_mask_tests!(u32x8, X86V3, u32x8, "x86_v3 u32x8", unsigned);
+        int_mask_tests!(u64x2, X86V3, u64x2, "x86_v3 u64x2", unsigned);
+        int_mask_tests!(u64x4, X86V3, u64x4, "x86_v3 u64x4", unsigned);
+    }
 
-// --- X86V2 (SSE4.2) --------------------------------------------------------
-mod v2_float {
-    use super::*;
-    float_mask_tests!(f32x4, X86V2, f32x4, "x86_v2 f32x4");
-    float_mask_tests!(f32x8, X86V2, f32x8, "x86_v2 f32x8");
-    float_mask_tests!(f64x2, X86V2, f64x2, "x86_v2 f64x2");
-    float_mask_tests!(f64x4, X86V2, f64x4, "x86_v2 f64x4");
-}
-mod v2_int {
-    use super::*;
-    int_mask_tests!(i32x4, X86V2, i32x4, "x86_v2 i32x4", signed);
-    int_mask_tests!(i32x8, X86V2, i32x8, "x86_v2 i32x8", signed);
-    int_mask_tests!(i64x2, X86V2, i64x2, "x86_v2 i64x2", signed);
-    int_mask_tests!(u32x4, X86V2, u32x4, "x86_v2 u32x4", unsigned);
-    int_mask_tests!(u64x2, X86V2, u64x2, "x86_v2 u64x2", unsigned);
-}
+    // --- X86V2 (SSE4.2) --------------------------------------------------------
+    mod v2_float {
+        use super::*;
+        float_mask_tests!(f32x4, X86V2, f32x4, "x86_v2 f32x4");
+        float_mask_tests!(f32x8, X86V2, f32x8, "x86_v2 f32x8");
+        float_mask_tests!(f64x2, X86V2, f64x2, "x86_v2 f64x2");
+        float_mask_tests!(f64x4, X86V2, f64x4, "x86_v2 f64x4");
+    }
+    mod v2_int {
+        use super::*;
+        int_mask_tests!(i32x4, X86V2, i32x4, "x86_v2 i32x4", signed);
+        int_mask_tests!(i32x8, X86V2, i32x8, "x86_v2 i32x8", signed);
+        int_mask_tests!(i64x2, X86V2, i64x2, "x86_v2 i64x2", signed);
+        int_mask_tests!(u32x4, X86V2, u32x4, "x86_v2 u32x4", unsigned);
+        int_mask_tests!(u64x2, X86V2, u64x2, "x86_v2 u64x2", unsigned);
+    }
 
-// --- X86V1 (SSE2) -----------------------------------------------------------
-mod v1_float {
-    use super::*;
-    float_mask_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
-    float_mask_tests!(f32x8, X86V1, f32x8, "x86_v1 f32x8");
-    float_mask_tests!(f64x2, X86V1, f64x2, "x86_v1 f64x2");
-    float_mask_tests!(f64x4, X86V1, f64x4, "x86_v1 f64x4");
-}
-mod v1_int {
-    use super::*;
-    int_mask_tests!(i32x4, X86V1, i32x4, "x86_v1 i32x4", signed);
-    int_mask_tests!(i32x8, X86V1, i32x8, "x86_v1 i32x8", signed);
-    int_mask_tests!(i64x2, X86V1, i64x2, "x86_v1 i64x2", signed);
-    int_mask_tests!(u32x4, X86V1, u32x4, "x86_v1 u32x4", unsigned);
-    int_mask_tests!(u64x2, X86V1, u64x2, "x86_v1 u64x2", unsigned);
-}
+    // --- X86V1 (SSE2) -----------------------------------------------------------
+    mod v1_float {
+        use super::*;
+        float_mask_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
+        float_mask_tests!(f32x8, X86V1, f32x8, "x86_v1 f32x8");
+        float_mask_tests!(f64x2, X86V1, f64x2, "x86_v1 f64x2");
+        float_mask_tests!(f64x4, X86V1, f64x4, "x86_v1 f64x4");
+    }
+    mod v1_int {
+        use super::*;
+        int_mask_tests!(i32x4, X86V1, i32x4, "x86_v1 i32x4", signed);
+        int_mask_tests!(i32x8, X86V1, i32x8, "x86_v1 i32x8", signed);
+        int_mask_tests!(i64x2, X86V1, i64x2, "x86_v1 i64x2", signed);
+        int_mask_tests!(u32x4, X86V1, u32x4, "x86_v1 u32x4", unsigned);
+        int_mask_tests!(u64x2, X86V1, u64x2, "x86_v1 u64x2", unsigned);
+    }
 }
 
 // --- Scalar (reference backend as the *subject*, vs the same Rust oracle) ---
@@ -567,21 +567,21 @@ mod scalar_int {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-mod wasm_float {
     use super::*;
-    float_mask_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
-    float_mask_tests!(f32x8, Wasm, f32x8, "wasm f32x8");
-    float_mask_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
-    float_mask_tests!(f64x4, Wasm, f64x4, "wasm f64x4");
-}
-mod wasm_int {
-    use super::*;
-    int_mask_tests!(i32x4, Wasm, i32x4, "wasm i32x4", signed);
-    int_mask_tests!(i32x8, Wasm, i32x8, "wasm i32x8", signed);
-    int_mask_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
-    int_mask_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
-    int_mask_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
-}
+    use thermite::backend::wasm::Wasm;
+    mod wasm_float {
+        use super::*;
+        float_mask_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
+        float_mask_tests!(f32x8, Wasm, f32x8, "wasm f32x8");
+        float_mask_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
+        float_mask_tests!(f64x4, Wasm, f64x4, "wasm f64x4");
+    }
+    mod wasm_int {
+        use super::*;
+        int_mask_tests!(i32x4, Wasm, i32x4, "wasm i32x4", signed);
+        int_mask_tests!(i32x8, Wasm, i32x8, "wasm i32x8", signed);
+        int_mask_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
+        int_mask_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
+        int_mask_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
+    }
 }

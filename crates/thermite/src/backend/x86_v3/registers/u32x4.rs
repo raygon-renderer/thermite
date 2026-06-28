@@ -10,7 +10,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, Element, IndexableRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, WideRegister, empty_reg, reg,
+        ShuffleRegister, Storage, UnsignedIntegerRegister, WideRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -200,6 +200,33 @@ impl Register for U32x4V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_epi32x_v2(value) }
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            arch::_mm_castps_si128(arch::_mm_permutevar_ps(
+                arch::_mm_castsi128_ps(value),
+                core::mem::transmute(idxs),
+            ))
+        }
+    }
+
+    //
+    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
+    //     a: Storage<Self>,
+    //     b: Storage<Self>,
+    // ) -> Storage<Self> {
+    //     unsafe {
+    //         arch::_mm_blend_epi16(
+    //             arch::_mm_shuffle_epi32(a, AIMM8),
+    //             arch::_mm_shuffle_epi32(b, BIMM8),
+    //             BLEND,
+    //         )
+    //     }
+    // }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -263,34 +290,6 @@ impl PermuteRegister for U32x4V3 {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32(value, IMM8) }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U32x4V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            arch::_mm_castps_si128(arch::_mm_permutevar_ps(
-                arch::_mm_castsi128_ps(value),
-                core::mem::transmute(idxs),
-            ))
-        }
-    }
-
-    //
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     a: Storage<Self>,
-    //     b: Storage<Self>,
-    // ) -> Storage<Self> {
-    //     unsafe {
-    //         arch::_mm_blend_epi16(
-    //             arch::_mm_shuffle_epi32(a, AIMM8),
-    //             arch::_mm_shuffle_epi32(b, BIMM8),
-    //             BLEND,
-    //         )
-    //     }
-    // }
 }
 
 #[thermite_macros::inline_always]

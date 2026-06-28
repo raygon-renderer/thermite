@@ -67,7 +67,7 @@ where
 #[inline(always)]
 pub fn sort_8<R>(v: Storage<R>) -> Storage<R>
 where
-    R: NumericRegister<Lanes = typenum::U8> + BlendRegister + PermuteRegister + SwizzleRegister,
+    R: NumericRegister<Lanes = typenum::U8> + BlendRegister + PermuteRegister,
 {
     // --- PHASE 1: Independent Local Sorts (ILP) ---
     // We sort the lower 4 lanes and upper 4 lanes independently.

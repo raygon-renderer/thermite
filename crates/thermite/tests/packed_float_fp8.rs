@@ -43,8 +43,22 @@ fn packed_eq<S: FloatSpec>(got: u8, want: u8) -> bool {
 
 fn pack_inputs() -> Vec<f32> {
     let mut v = vec![
-        0.0, -0.0, 1.0, -1.0, 2.0, 0.5, -0.5, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, -f32::NAN,
-        f32::MIN_POSITIVE, f32::MAX, 1e-30, 1e30, -1e30,
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        2.0,
+        0.5,
+        -0.5,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NAN,
+        -f32::NAN,
+        f32::MIN_POSITIVE,
+        f32::MAX,
+        1e-30,
+        1e30,
+        -1e30,
         448.0,   // e4m3 max finite
         449.0,   // e4m3 saturates
         57344.0, // e5m2 max finite
@@ -79,7 +93,10 @@ macro_rules! reg_unpack {
                 assert!(
                     f32_eq(got[k], want),
                     "{} unpack({:#04x}): got {:#010x}, want {:#010x}",
-                    stringify!($spec), chunk[k], got[k].to_bits(), want.to_bits()
+                    stringify!($spec),
+                    chunk[k],
+                    got[k].to_bits(),
+                    want.to_bits()
                 );
             }
             code += l as u32;
@@ -100,7 +117,11 @@ macro_rules! reg_pack {
                 assert!(
                     packed_eq::<$spec>(got[k], want),
                     "{} pack({} = {:#010x}): got {:#04x}, want {:#04x}",
-                    stringify!($spec), buf[k], buf[k].to_bits(), got[k], want
+                    stringify!($spec),
+                    buf[k],
+                    buf[k].to_bits(),
+                    got[k],
+                    want
                 );
             }
         }
@@ -122,7 +143,12 @@ macro_rules! vec_roundtrip {
             let got = fv.to_array();
             for k in 0..l {
                 let want = <$spec>::unpack(chunk[k] as u32);
-                assert!(f32_eq(got[k], want), "{} vec unpack({:#04x})", stringify!($spec), chunk[k]);
+                assert!(
+                    f32_eq(got[k], want),
+                    "{} vec unpack({:#04x})",
+                    stringify!($spec),
+                    chunk[k]
+                );
             }
             code += l as u32;
         }
@@ -136,7 +162,12 @@ macro_rules! vec_roundtrip {
             let got = uv.to_array();
             for k in 0..l {
                 let want = <$spec>::pack(buf[k]) as u8;
-                assert!(packed_eq::<$spec>(got[k], want), "{} vec pack({})", stringify!($spec), buf[k]);
+                assert!(
+                    packed_eq::<$spec>(got[k], want),
+                    "{} vec pack({})",
+                    stringify!($spec),
+                    buf[k]
+                );
             }
         }
     }};

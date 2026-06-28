@@ -16,8 +16,9 @@ use crate::{
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, SaturatingCastRegister,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
+        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
+        UnsignedIntegerRegister,
     },
 };
 
@@ -295,6 +296,9 @@ impl<R: Register> GenericVector for Vector<R> {
 
     #[conditional] fn reverse(self) -> Self {}
     #[conditional] fn swap_bytes(self) -> Self {}
+
+    fn compress(self, mask: Self::Mask) -> Self { Vector(R::compress(self.0, mask.0)) }
+    fn compress_z(self, mask: Self::Mask) -> Self { Vector(R::compress_z(self.0, mask.0)) }
 
     // The arguments of these are reversed for the register
     fn zz(self, mask: Self::Mask) -> Self { Vector(R::zz(mask.0, self.0)) }

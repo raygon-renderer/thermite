@@ -16,7 +16,7 @@ use generic_array::{GenericArray, arr, typenum::Unsigned};
 use rand::RngExt;
 use thermite::Vector;
 use thermite::register::array::ArrayRegister;
-use thermite::register::{NumericRegister, Register, Storage, SwizzleRegister};
+use thermite::register::{NumericRegister, Register, Storage};
 
 use thermite::backend::scalar::Scalar;
 use thermite::simd::{NativeSimd, Simd};
@@ -129,7 +129,7 @@ mod x86_const {
     reg4!(v3_i32x4, X86V3, i32x4);
 
     // v1 (SSE2): no pshufb, so variable permutes/swizzles take the scalar
-    // SwizzleRegister default - a distinct code path from v2/v3.
+    // Register default - a distinct code path from v2/v3.
     reg4!(v1_f32x4, X86V1, f32x4);
     reg4!(v1_i32x4, X86V1, i32x4);
     reg4!(v1_u32x4, X86V1, u32x4);
@@ -177,7 +177,7 @@ mod wasm_const {
 // paths (`pshufb` on v2, `vpermps` on v3) and the v1 scalar fallback all run.
 // ===========================================================================
 
-fn rt_permutev<R: SwizzleRegister>(input: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
+fn rt_permutev<R: Register>(input: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
 where
     R::Element: PartialEq + core::fmt::Debug,
 {
@@ -189,10 +189,14 @@ where
     // seteq"); `black_box` on opaque slices forces a scalar compare. (Floats lower
     // via `f32x4.eq`, so this only bit the int register types.)
     let (wa, ga) = (R::as_array(&want), R::as_array(&got));
-    assert_eq!(core::hint::black_box(wa.as_slice()), core::hint::black_box(ga.as_slice()), "permutev {idxs:?} vs scalar");
+    assert_eq!(
+        core::hint::black_box(wa.as_slice()),
+        core::hint::black_box(ga.as_slice()),
+        "permutev {idxs:?} vs scalar"
+    );
 }
 
-fn rt_swizzle<R: SwizzleRegister>(a: Storage<R>, b: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
+fn rt_swizzle<R: Register>(a: Storage<R>, b: Storage<R>, idxs: &GenericArray<u32, R::Lanes>)
 where
     R::Element: PartialEq + core::fmt::Debug,
 {
@@ -200,12 +204,16 @@ where
     let got = R::swizzle(a, b, idxs.clone());
     // See rt_permutev: black-boxed slice compare avoids the int -O3 wasm "Cannot select".
     let (wa, ga) = (R::as_array(&want), R::as_array(&got));
-    assert_eq!(core::hint::black_box(wa.as_slice()), core::hint::black_box(ga.as_slice()), "swizzle {idxs:?} vs scalar");
+    assert_eq!(
+        core::hint::black_box(wa.as_slice()),
+        core::hint::black_box(ga.as_slice()),
+        "swizzle {idxs:?} vs scalar"
+    );
 }
 
 fn run_runtime<R>()
 where
-    R: SwizzleRegister + NumericRegister,
+    R: Register + NumericRegister,
     R::Element: PartialEq + core::fmt::Debug,
 {
     let lanes = <R::Lanes as Unsigned>::USIZE;
@@ -309,14 +317,14 @@ mod x86_rt {
     rt!(rt_v3_i16x4, <X86V3 as Simd>::i16x4);
     rt!(rt_v2_i16x4, <X86V2 as Simd>::i16x4);
     rt!(rt_v2_i16x16, <X86V2 as Simd>::i16x16);
-    // v1 (SSE2): no pshufb, so 16-bit permutes take the scalar SwizzleRegister fallback.
+    // v1 (SSE2): no pshufb, so 16-bit permutes take the scalar Register fallback.
     rt!(rt_v1_i16x8, <X86V1 as Simd>::i16x8);
     rt!(rt_v1_u16x8, <X86V1 as Simd>::u16x8);
 
     // Native 8-bit pshufb permute paths (the byte index IS the pshufb control): 128-bit on v2.
     rt!(rt_v2_i8x16, <X86V2 as NativeSimd>::i8xN);
     rt!(rt_v2_u8x16, <X86V2 as NativeSimd>::u8xN);
-    // v1 (SSE2): no pshufb, so 8-bit permutes take the scalar SwizzleRegister fallback.
+    // v1 (SSE2): no pshufb, so 8-bit permutes take the scalar Register fallback.
     rt!(rt_v1_i8x16, <X86V1 as NativeSimd>::i8xN);
     rt!(rt_v1_u8x16, <X86V1 as NativeSimd>::u8xN);
     // v3 (AVX2): native 256-bit, cross-lane byte permute (pshufb x2 + blend by bit4).

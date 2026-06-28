@@ -9,8 +9,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg, reg, reg_splat,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
+        empty_reg, reg, reg_splat,
     },
 };
 
@@ -229,6 +229,23 @@ impl Register for I8x16V2 {
         // One byte per lane, so byte-swap within a lane is the identity.
         value
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let p = idxs.as_ptr() as *const arch::__m128i;
+            arch::_mm_permutev_epi8x_v2(
+                value,
+                arch::_mm_loadu_si128(p),
+                arch::_mm_loadu_si128(p.add(1)),
+                arch::_mm_loadu_si128(p.add(2)),
+                arch::_mm_loadu_si128(p.add(3)),
+            )
+        }
+    }
+
+    compress_via_wide!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -258,24 +275,6 @@ impl BitshiftRegister for I8x16V2 {
 
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi8x_v1::<IMM8>(value) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I8x16V2 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let p = idxs.as_ptr() as *const arch::__m128i;
-            arch::_mm_permutev_epi8x_v2(
-                value,
-                arch::_mm_loadu_si128(p),
-                arch::_mm_loadu_si128(p.add(1)),
-                arch::_mm_loadu_si128(p.add(2)),
-                arch::_mm_loadu_si128(p.add(3)),
-            )
-        }
     }
 }
 

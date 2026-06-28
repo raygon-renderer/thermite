@@ -11,7 +11,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
         Element, ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
         MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -224,6 +224,9 @@ impl Register for F32x4V1 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_psx_v1(value) }
     }
+
+    // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
+    const HAS_PERMUTEV: bool = false;
 }
 
 #[thermite_macros::inline_always]
@@ -245,12 +248,6 @@ impl BlendRegister for F32x4V1 {
     fn blend<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_blend_psx_v1::<IMM8>(lhs, rhs) }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F32x4V1 {
-    // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
-    const HAS_PERMUTEV: bool = false;
 }
 
 #[thermite_macros::inline_always]

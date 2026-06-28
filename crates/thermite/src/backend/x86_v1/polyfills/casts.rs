@@ -237,8 +237,8 @@ pub unsafe fn _mm_cvtepi16_epi8x_v1(v: __m128i) -> __m128i {
     let mut a = [0i16; 8];
     _mm_storeu_si128(a.as_mut_ptr() as *mut _, v);
     _mm_setr_epi8(
-        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8, a[4] as i8, a[5] as i8, a[6] as i8, a[7] as i8,
-        0, 0, 0, 0, 0, 0, 0, 0,
+        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8, a[4] as i8, a[5] as i8, a[6] as i8, a[7] as i8, 0, 0, 0, 0, 0,
+        0, 0, 0,
     )
 }
 // Narrow 2x i16x8 (16 i16) -> 16 i8 (low byte of each lane; store-and-rebuild).
@@ -249,8 +249,22 @@ pub unsafe fn _mm_cvt2epi16_epi8x_v1(v: [__m128i; 2]) -> __m128i {
     _mm_storeu_si128(lo.as_mut_ptr() as *mut _, v[0]);
     _mm_storeu_si128(hi.as_mut_ptr() as *mut _, v[1]);
     _mm_setr_epi8(
-        lo[0] as i8, lo[1] as i8, lo[2] as i8, lo[3] as i8, lo[4] as i8, lo[5] as i8, lo[6] as i8, lo[7] as i8,
-        hi[0] as i8, hi[1] as i8, hi[2] as i8, hi[3] as i8, hi[4] as i8, hi[5] as i8, hi[6] as i8, hi[7] as i8,
+        lo[0] as i8,
+        lo[1] as i8,
+        lo[2] as i8,
+        lo[3] as i8,
+        lo[4] as i8,
+        lo[5] as i8,
+        lo[6] as i8,
+        lo[7] as i8,
+        hi[0] as i8,
+        hi[1] as i8,
+        hi[2] as i8,
+        hi[3] as i8,
+        hi[4] as i8,
+        hi[5] as i8,
+        hi[6] as i8,
+        hi[7] as i8,
     )
 }
 
@@ -280,10 +294,8 @@ pub unsafe fn _mm_cvt4epi32_epi8x_v1(v: [__m128i; 4]) -> __m128i {
     _mm_storeu_si128(c.as_mut_ptr() as *mut _, v[2]);
     _mm_storeu_si128(d.as_mut_ptr() as *mut _, v[3]);
     _mm_setr_epi8(
-        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8,
-        b[0] as i8, b[1] as i8, b[2] as i8, b[3] as i8,
-        c[0] as i8, c[1] as i8, c[2] as i8, c[3] as i8,
-        d[0] as i8, d[1] as i8, d[2] as i8, d[3] as i8,
+        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8, b[0] as i8, b[1] as i8, b[2] as i8, b[3] as i8, c[0] as i8,
+        c[1] as i8, c[2] as i8, c[3] as i8, d[0] as i8, d[1] as i8, d[2] as i8, d[3] as i8,
     )
 }
 // Widen the low 16 bytes of `v` to 4x i32x4 (sign-extend; writes four regs).
@@ -331,9 +343,8 @@ pub unsafe fn _mm_cvt4epi64_epi8x_v1(v: [__m128i; 4]) -> __m128i {
     _mm_storeu_si128(c.as_mut_ptr() as *mut _, v[2]);
     _mm_storeu_si128(d.as_mut_ptr() as *mut _, v[3]);
     _mm_setr_epi8(
-        a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-        c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-        0, 0, 0, 0, 0, 0, 0, 0,
+        a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8, 0, 0, 0, 0, 0,
+        0, 0, 0,
     )
 }
 // Narrow 8x i64x2 (16 i64) -> 16 bytes (byte 0 of each lane; store-and-rebuild).
@@ -356,10 +367,8 @@ pub unsafe fn _mm_cvt8epi64_epi8x_v1(v: [__m128i; 8]) -> __m128i {
     _mm_storeu_si128(g.as_mut_ptr() as *mut _, v[6]);
     _mm_storeu_si128(h.as_mut_ptr() as *mut _, v[7]);
     _mm_setr_epi8(
-        a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-        c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-        e[0] as i8, e[1] as i8, f[0] as i8, f[1] as i8,
-        g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
+        a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8, e[0] as i8,
+        e[1] as i8, f[0] as i8, f[1] as i8, g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
     )
 }
 
@@ -400,8 +409,14 @@ pub unsafe fn _mm_cvt4epi64_epi16x_v1(v: [__m128i; 4]) -> __m128i {
     _mm_storeu_si128(c.as_mut_ptr() as *mut _, v[2]);
     _mm_storeu_si128(d.as_mut_ptr() as *mut _, v[3]);
     _mm_setr_epi16(
-        a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-        c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+        a[0] as i16,
+        a[1] as i16,
+        b[0] as i16,
+        b[1] as i16,
+        c[0] as i16,
+        c[1] as i16,
+        d[0] as i16,
+        d[1] as i16,
     )
 }
 // Widen the low 8 i16 lanes of `v` to 4x i64x2 (sign-extend; writes four regs).
@@ -441,8 +456,5 @@ pub unsafe fn _mm_cvttpd_2i32x_v1(v: __m128d) -> [i32; 2] {
 // Convert one i32x4 into 2 F64x2V1 (low 2 lanes, high 2 lanes).
 #[inline(always)]
 pub unsafe fn _mm_cvtepi32_2pdx_v1(ints: __m128i) -> [__m128d; 2] {
-    [
-        _mm_cvtepi32_pd(ints),
-        _mm_cvtepi32_pd(_mm_srli_si128(ints, 8)),
-    ]
+    [_mm_cvtepi32_pd(ints), _mm_cvtepi32_pd(_mm_srli_si128(ints, 8))]
 }

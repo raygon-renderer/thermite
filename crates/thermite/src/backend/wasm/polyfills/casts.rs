@@ -155,10 +155,8 @@ pub unsafe fn narrow_4xi32x4_to_bytes(v: [v128; 4]) -> v128 {
     let c = store_dwords(v[2]);
     let d = store_dwords(v[3]);
     i8x16(
-        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8,
-        b[0] as i8, b[1] as i8, b[2] as i8, b[3] as i8,
-        c[0] as i8, c[1] as i8, c[2] as i8, c[3] as i8,
-        d[0] as i8, d[1] as i8, d[2] as i8, d[3] as i8,
+        a[0] as i8, a[1] as i8, a[2] as i8, a[3] as i8, b[0] as i8, b[1] as i8, b[2] as i8, b[3] as i8, c[0] as i8,
+        c[1] as i8, c[2] as i8, c[3] as i8, d[0] as i8, d[1] as i8, d[2] as i8, d[3] as i8,
     )
 }
 
@@ -192,8 +190,14 @@ pub unsafe fn narrow_4xi64x2_to_words(v: [v128; 4]) -> v128 {
     let c = store_qwords(v[2]);
     let d = store_qwords(v[3]);
     i16x8(
-        a[0] as i16, a[1] as i16, b[0] as i16, b[1] as i16,
-        c[0] as i16, c[1] as i16, d[0] as i16, d[1] as i16,
+        a[0] as i16,
+        a[1] as i16,
+        b[0] as i16,
+        b[1] as i16,
+        c[0] as i16,
+        c[1] as i16,
+        d[0] as i16,
+        d[1] as i16,
     )
 }
 

@@ -12,7 +12,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        SaturatingCastRegister, Storage, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -196,6 +196,8 @@ impl Register for U16x8V1 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_epi16x_v1(value) }
     }
+
+    const HAS_PERMUTEV: bool = false;
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -221,11 +223,6 @@ impl BitshiftRegister for U16x8V1 {
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi16(value, IMM8) }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U16x8V1 {
-    const HAS_PERMUTEV: bool = false;
 }
 
 #[thermite_macros::inline_always]

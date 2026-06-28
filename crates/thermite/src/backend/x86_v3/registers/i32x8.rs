@@ -10,7 +10,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -233,6 +233,31 @@ impl Register for I32x8V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_epi32x_v3(value) }
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // `_mm256_permutevar_ps` only permutes *within* each 128-bit lane, so it
+        // cannot express cross-lane routing (e.g. a full 8-lane reverse). Use the
+        // true cross-lane `_mm256_permutevar8x32_epi32` (result[i] = value[idx[i] & 7]).
+        unsafe { arch::_mm256_permutevar8x32_epi32(value, core::mem::transmute(idxs)) }
+    }
+
+    //
+    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
+    //     a: Storage<Self>,
+    //     b: Storage<Self>,
+    // ) -> Storage<Self> {
+    //     unsafe {
+    //         arch::_mm256_blend_epi16(
+    //             arch::_mm256_shuffle_epi32(a, AIMM8),
+    //             arch::_mm256_shuffle_epi32(b, BIMM8),
+    //             BLEND,
+    //         )
+    //     }
+    // }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -372,32 +397,6 @@ impl PermuteRegister for I32x8V3 {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_shuffle_epi32(value, IMM8) }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I32x8V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // `_mm256_permutevar_ps` only permutes *within* each 128-bit lane, so it
-        // cannot express cross-lane routing (e.g. a full 8-lane reverse). Use the
-        // true cross-lane `_mm256_permutevar8x32_epi32` (result[i] = value[idx[i] & 7]).
-        unsafe { arch::_mm256_permutevar8x32_epi32(value, core::mem::transmute(idxs)) }
-    }
-
-    //
-    // fn swizzle_i<const AIMM8: i32, const BIMM8: i32, const BLEND: i32>(
-    //     a: Storage<Self>,
-    //     b: Storage<Self>,
-    // ) -> Storage<Self> {
-    //     unsafe {
-    //         arch::_mm256_blend_epi16(
-    //             arch::_mm256_shuffle_epi32(a, AIMM8),
-    //             arch::_mm256_shuffle_epi32(b, BIMM8),
-    //             BLEND,
-    //         )
-    //     }
-    // }
 }
 
 #[thermite_macros::inline_always]

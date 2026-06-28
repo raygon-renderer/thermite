@@ -10,7 +10,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
-        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, SwizzleRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
         UnsignedIntegerRegister, WideRegister, array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
@@ -231,6 +231,18 @@ impl Register for U64x2V3 {
 
         f(arr[0], arr[1])
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
+            let idxs = arch::_mm_cvtepu32_epi64(idxs);
+            arch::_mm_permutevarx_epi64x_v2(value, idxs)
+        }
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -315,19 +327,6 @@ impl ShuffleRegister for U64x2V3 {
                 arch::_mm_castsi128_pd(rhs),
                 IMM8,
             ))
-        }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U64x2V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
-            let idxs = arch::_mm_cvtepu32_epi64(idxs);
-            arch::_mm_permutevarx_epi64x_v2(value, idxs)
         }
     }
 }

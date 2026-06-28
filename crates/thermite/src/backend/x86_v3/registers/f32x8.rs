@@ -6,7 +6,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, InterleaveRegister, MaskElement, MaskRegister, NativeCapability,
         NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -241,6 +241,29 @@ impl Register for F32x8V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_psx_v3(value) }
     }
+
+    compress_via_table!();
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }
+    }
+
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let idxs: arch::__m256i = core::mem::transmute(idxs);
+
+            let blend = arch::_mm256_cmpgt_epi32(idxs, arch::_mm256_set1_epi32(7));
+            let a_idxs = arch::_mm256_and_si256(idxs, arch::_mm256_set1_epi32(0b111));
+            let b_idxs = arch::_mm256_sub_epi32(idxs, arch::_mm256_set1_epi32(8));
+
+            let tmp_a = arch::_mm256_permutevar8x32_ps(a, a_idxs);
+            let tmp_b = arch::_mm256_permutevar8x32_ps(b, b_idxs);
+
+            arch::_mm256_blendv_ps(tmp_a, tmp_b, arch::_mm256_castsi256_ps(blend))
+        }
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -331,30 +354,6 @@ impl ShuffleRegister for F32x8V3 {
 impl PermuteRegister for F32x8V3 {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_permutevar8x32_ps(value, const { super::shuffle_to_m256i(IMM8) }) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F32x8V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }
-    }
-
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let idxs: arch::__m256i = core::mem::transmute(idxs);
-
-            let blend = arch::_mm256_cmpgt_epi32(idxs, arch::_mm256_set1_epi32(7));
-            let a_idxs = arch::_mm256_and_si256(idxs, arch::_mm256_set1_epi32(0b111));
-            let b_idxs = arch::_mm256_sub_epi32(idxs, arch::_mm256_set1_epi32(8));
-
-            let tmp_a = arch::_mm256_permutevar8x32_ps(a, a_idxs);
-            let tmp_b = arch::_mm256_permutevar8x32_ps(b, b_idxs);
-
-            arch::_mm256_blendv_ps(tmp_a, tmp_b, arch::_mm256_castsi256_ps(blend))
-        }
     }
 }
 

@@ -110,21 +110,21 @@ macro_rules! reg_mask_suite {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86_reg {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-reg_mask_suite!(reg_v3, X86V3, "x86_v3");
-reg_mask_suite!(reg_v2, X86V2, "x86_v2");
-reg_mask_suite!(reg_v1, X86V1, "x86_v1");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    reg_mask_suite!(reg_v3, X86V3, "x86_v3");
+    reg_mask_suite!(reg_v2, X86V2, "x86_v2");
+    reg_mask_suite!(reg_v1, X86V1, "x86_v1");
 }
 reg_mask_suite!(reg_scalar, Scalar, "scalar");
 
 #[cfg(target_arch = "wasm32")]
 mod wasm_reg {
-use super::*;
-use thermite::backend::wasm::Wasm;
-reg_mask_suite!(reg_wasm, Wasm, "wasm");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    reg_mask_suite!(reg_wasm, Wasm, "wasm");
 }
 
 /// The same `MaskRegister` primitives on the 3-lane `ReducedRegister` mask types
@@ -312,17 +312,17 @@ macro_rules! mask_suite {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-mask_suite!(v3, X86V3);
-mask_suite!(v2, X86V2);
+    use super::*;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    mask_suite!(v3, X86V3);
+    mask_suite!(v2, X86V2);
 }
 mask_suite!(scalar, Scalar);
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-mask_suite!(wasm, Wasm);
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    mask_suite!(wasm, Wasm);
 }

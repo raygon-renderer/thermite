@@ -9,8 +9,8 @@ use crate::{
     register::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        SaturatingCastRegister, ShuffleRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg,
+        SaturatingCastRegister, ShuffleRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
+        empty_reg,
     },
 };
 
@@ -212,6 +212,17 @@ impl Register for U32x4Wasm {
     fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
         arch::u32x4_replace_lane::<I>(value, element)
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(
+            value,
+            arch::x4indices(idxs[0] as u8, idxs[1] as u8, idxs[2] as u8, idxs[3] as u8),
+        )
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -228,26 +239,14 @@ impl PermuteRegister for U32x4Wasm {
     }
 }
 
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U32x4Wasm {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(
-            value,
-            arch::x4indices(idxs[0] as u8, idxs[1] as u8, idxs[2] as u8, idxs[3] as u8),
-        )
-    }
-}
-
 #[rustfmt::skip] #[thermite_macros::inline_always]
 impl PartialOrdRegister for U32x4Wasm {
- fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_ge(lhs, rhs) }
- fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_lt(lhs, rhs) }
- fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_le(lhs, rhs) }
- fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_ne(lhs, rhs) }
- fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_gt(lhs, rhs) }
- fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_eq(lhs, rhs) }
+    fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_ge(lhs, rhs) }
+    fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_lt(lhs, rhs) }
+    fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_le(lhs, rhs) }
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_ne(lhs, rhs) }
+    fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_gt(lhs, rhs) }
+    fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { arch::u32x4_eq(lhs, rhs) }
 }
 
 #[thermite_macros::inline_always]

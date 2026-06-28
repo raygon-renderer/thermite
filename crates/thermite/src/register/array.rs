@@ -462,6 +462,47 @@ where
     }
 
     #[conditional] fn swap_bytes(value: Storage<Self>) -> Storage<Self> {}
+
+    const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        if const { !Self::HAS_PERMUTEV } {
+            return Self::scalar_permutev(value, idxs);
+        }
+
+        // Delegate the cross-chunk routing to the inner register, which can
+        // override it with a faster per-register sequence.
+        Self(R::array_permutev::<N>(value.0, idxs.as_slice()))
+    }
+
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        if const { !Self::HAS_PERMUTEV } {
+            return Self::scalar_swizzle(a, b, idxs);
+        }
+
+        Self(R::array_swizzle::<N>(a.0, b.0, idxs.as_slice()))
+    }
+
+    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        if const { !Self::HAS_PERMUTEV } {
+            // Forward the compile-time indices to the scalar fallback
+            return Self::scalar_swizzle(a, b, I::INDICES);
+        }
+
+        // Same delegation as the runtime path, but with compile-time indices:
+        // `array_swizzle` is `#[inline(always)]`, so the constant indices fold
+        // the local/chunk split and blend selectors into immediates.
+        Self(R::array_swizzle::<N>(a.0, b.0, I::INDICES.as_slice()))
+    }
+
+    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
+        if const { !Self::HAS_PERMUTEV } {
+            // Forward the compile-time indices to the scalar fallback
+            return Self::scalar_permutev(value, I::INDICES);
+        }
+
+        Self(R::array_permutev::<N>(value.0, I::INDICES.as_slice()))
+    }
 }
 
 #[rustfmt::skip]
@@ -925,302 +966,10 @@ where
     }
 }
 
-pub trait PrecomputedSwizzleIndices<TotalLanes: ArrayLength, Lanes: ArrayLength, Chunks: ArrayLength>:
-    SwizzleIndices<TotalLanes>
-{
-    const PRECOMPUTED: GenericArray<PrecomputedChunk<Lanes, Chunks>, Chunks>;
-}
-
-// --- Precomputed Data Structures ---
-
-/// Holds the exact routing instructions for a SINGLE output chunk.
-pub struct PrecomputedChunk<Lanes: ArrayLength, Chunks: ArrayLength> {
-    /// The local indices to pass to the hardware `permutev`
-    pub indices: GenericArray<u32, Lanes>,
-
-    /// Flags to instantly skip input chunks if they aren't needed.
-    pub has_any_lo: GenericArray<bool, Chunks>,
-    pub has_any_hi: GenericArray<bool, Chunks>,
-
-    /// The exact boolean blend masks for each input chunk.
-    pub blend_mask_lo: GenericArray<GenericArray<bool, Lanes>, Chunks>,
-    pub blend_mask_hi: GenericArray<GenericArray<bool, Lanes>, Chunks>,
-}
-
-impl<Lanes: ArrayLength, Chunks: ArrayLength> PrecomputedChunk<Lanes, Chunks> {
-    #[inline(always)]
-    pub const fn has_any(&self, idx: usize) -> bool {
-        if idx < Chunks::USIZE {
-            self.has_any_lo.as_slice()[idx]
-        } else {
-            self.has_any_hi.as_slice()[idx - Chunks::USIZE]
-        }
-    }
-
-    #[inline(always)]
-    pub const fn blend_mask(&self, idx: usize) -> &GenericArray<bool, Lanes> {
-        if idx < Chunks::USIZE {
-            &self.blend_mask_lo.as_slice()[idx]
-        } else {
-            &self.blend_mask_hi.as_slice()[idx - Chunks::USIZE]
-        }
-    }
-}
-
-// --- Blanket Implementation ---
-// This executes the O(N^2) routing algorithm entirely at compile time for ANY given index array.
-
-impl<T, TotalLanes, Lanes, Chunks> PrecomputedSwizzleIndices<TotalLanes, Lanes, Chunks> for T
-where
-    T: SwizzleIndices<TotalLanes>,
-    TotalLanes: ArrayLength,
-    Lanes: ArrayLength,
-    Chunks: ArrayLength,
-{
-    const PRECOMPUTED: GenericArray<PrecomputedChunk<Lanes, Chunks>, Chunks> = {
-        // Start with a fully zeroed nested array. (bools default to false, u32s to 0)
-        let mut result: GenericArray<PrecomputedChunk<Lanes, Chunks>, Chunks> =
-            unsafe { MaybeUninit::zeroed().assume_init() };
-
-        let indices = T::INDICES;
-
-        let total_lanes = TotalLanes::USIZE;
-        let chunks = Chunks::USIZE;
-        let lanes = Lanes::USIZE;
-
-        let total_input_lanes = 2 * total_lanes; // Double bound for Swizzle
-        let max_idx = total_input_lanes - 1;
-        let is_pow2 = (total_input_lanes & (total_input_lanes - 1)) == 0;
-
-        let result_slice = result.as_mut_slice();
-
-        let mut i = 0; // Evaluate for each output chunk
-        while i < chunks {
-            let chunk_data = &mut result_slice[i];
-
-            let local_idxs_slice = chunk_data.indices.as_mut_slice();
-            let has_any_lo_slice = chunk_data.has_any_lo.as_mut_slice();
-            let has_any_hi_slice = chunk_data.has_any_hi.as_mut_slice();
-            let mask_lo_slice = chunk_data.blend_mask_lo.as_mut_slice();
-            let mask_hi_slice = chunk_data.blend_mask_hi.as_mut_slice();
-
-            let mut lane = 0;
-            while lane < lanes {
-                let mut global_idx = indices.as_slice()[i * lanes + lane] as usize;
-
-                global_idx = if is_pow2 {
-                    global_idx & max_idx
-                } else if global_idx > max_idx {
-                    max_idx
-                } else {
-                    global_idx
-                };
-
-                let target_chunk = global_idx / lanes;
-                let local_idx = (global_idx % lanes) as u32;
-
-                // 1. Assign local permute index
-                local_idxs_slice[lane] = local_idx;
-
-                // 2. Mark chunk routing masks
-                if target_chunk < chunks {
-                    has_any_lo_slice[target_chunk] = true;
-                    mask_lo_slice[target_chunk].as_mut_slice()[lane] = true;
-                } else {
-                    let hi_chunk = target_chunk - chunks;
-                    has_any_hi_slice[hi_chunk] = true;
-                    mask_hi_slice[hi_chunk].as_mut_slice()[lane] = true;
-                }
-
-                lane += 1;
-            }
-
-            i += 1;
-        }
-
-        core::mem::forget(indices);
-
-        result
-    };
-}
-
-impl<R: SwizzleRegister, const N: usize> SwizzleRegister for ArrayRegister<R, N>
-where
-    Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
-{
-    const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
-
-    #[inline(always)]
-    fn permutev(value: Storage<Self>, mut idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        if const { !Self::HAS_PERMUTEV } {
-            return Self::scalar_permutev(value, idxs);
-        }
-
-        let mut result = [R::EMPTY; N];
-
-        let max_idx = Self::Lanes::U32 * 2 - 1;
-
-        for idx in idxs.iter_mut() {
-            *idx = if const { Self::Lanes::IS_POWER_OF_TWO } {
-                *idx & max_idx
-            } else {
-                (*idx).min(max_idx)
-            };
-        }
-
-        for i in 0..N {
-            let mut out_reg = R::EMPTY;
-
-            for j in 0..N {
-                let mut blend_mask = <R::Mask as MaskRegister>::FALSY;
-                let mut local_idxs: GenericArray<u32, R::Lanes> = Default::default();
-                let mut has_any = false;
-
-                for lane in 0..<R::Lanes as Unsigned>::USIZE {
-                    let mut global_idx = idxs[i * <R::Lanes as Unsigned>::USIZE + lane] as usize;
-
-                    let target_chunk = global_idx / <R::Lanes as Unsigned>::USIZE;
-                    let local_idx = (global_idx % <R::Lanes as Unsigned>::USIZE) as u32;
-
-                    local_idxs[lane] = local_idx;
-
-                    if target_chunk == j {
-                        blend_mask = <R::Mask as MaskRegister>::set(blend_mask, lane, true);
-                        has_any = true;
-                    }
-                }
-
-                // Compile-time branching eliminates unused permute/blend calls
-                if has_any {
-                    let permuted = R::permutev(value.0[j], local_idxs);
-                    out_reg = R::blendv(blend_mask, out_reg, permuted);
-                }
-            }
-
-            result[i] = out_reg;
-        }
-
-        Self(result)
-    }
-
-    #[inline(always)]
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, mut idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        if const { !Self::HAS_PERMUTEV } {
-            return Self::scalar_swizzle(a, b, idxs);
-        }
-
-        let mut result = [R::EMPTY; N];
-
-        let max_idx = Self::Lanes::U32 * 2 - 1;
-
-        for idx in idxs.iter_mut() {
-            *idx = if const { Self::Lanes::IS_POWER_OF_TWO } {
-                *idx & max_idx
-            } else {
-                (*idx).min(max_idx)
-            };
-        }
-
-        for i in 0..N {
-            let mut out_reg = R::EMPTY;
-
-            // Check across all 2N input registers
-            for j in 0..(2 * N) {
-                let mut blend_mask = <R::Mask as MaskRegister>::FALSY;
-                let mut local_idxs: GenericArray<u32, R::Lanes> = Default::default();
-                let mut has_any = false;
-
-                for lane in 0..<R::Lanes as Unsigned>::USIZE {
-                    let mut global_idx = idxs[i * <R::Lanes as Unsigned>::USIZE + lane] as usize;
-
-                    let target_chunk = global_idx / <R::Lanes as Unsigned>::USIZE;
-                    local_idxs[lane] = (global_idx % <R::Lanes as Unsigned>::USIZE) as u32;
-
-                    if target_chunk == j {
-                        blend_mask = <R::Mask as MaskRegister>::set(blend_mask, lane, true);
-                        has_any = true;
-                    }
-                }
-
-                if has_any {
-                    // Route to array `a` or `b` depending on chunk location
-                    let src_reg = if j < N { a.0[j] } else { b.0[j - N] };
-                    let permuted = R::permutev(src_reg, local_idxs);
-                    out_reg = R::blendv(blend_mask, out_reg, permuted);
-                }
-            }
-
-            result[i] = out_reg;
-        }
-
-        Self(result)
-    }
-
-    #[inline(always)]
-    fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        if const { !Self::HAS_PERMUTEV } {
-            // Forward the compile-time indices to the scalar fallback
-            return Self::scalar_swizzle(a, b, I::INDICES);
-        }
-
-        let mut result = [R::EMPTY; N];
-        let precomputed = <I as PrecomputedSwizzleIndices<Self::Lanes, R::Lanes, typenum::U<N>>>::PRECOMPUTED;
-
-        for i in 0..N {
-            let mut out_reg = R::EMPTY;
-            let chunk_data = &precomputed[i];
-
-            // Scan all 2N input chunks
-            for j in 0..(2 * N) {
-                if chunk_data.has_any(j) {
-                    let mut blend_mask = <R::Mask as MaskRegister>::new_mask(chunk_data.blend_mask(j).clone());
-
-                    // Route to `a` or `b` appropriately
-                    let src_reg = if j < N { a.0[j] } else { b.0[j - N] };
-                    let permuted = R::permutev(src_reg, chunk_data.indices.clone());
-                    out_reg = R::blendv(blend_mask, out_reg, permuted);
-                }
-            }
-
-            result[i] = out_reg;
-        }
-
-        Self(result)
-    }
-
-    #[inline(always)]
-    fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-        if const { !Self::HAS_PERMUTEV } {
-            // Forward the compile-time indices to the scalar fallback
-            return Self::scalar_permutev(value, I::INDICES);
-        }
-
-        let mut result = [R::EMPTY; N];
-        let precomputed = <I as PrecomputedSwizzleIndices<Self::Lanes, R::Lanes, typenum::U<N>>>::PRECOMPUTED;
-
-        for i in 0..N {
-            let mut out_reg = R::EMPTY;
-            let chunk_data = &precomputed[i];
-
-            for j in 0..N {
-                if chunk_data.has_any(j) {
-                    let blend_mask = <R::Mask as MaskRegister>::new_mask(chunk_data.blend_mask(j).clone());
-                    let permuted = R::permutev(value.0[j], chunk_data.indices.clone());
-                    out_reg = R::blendv(blend_mask, out_reg, permuted);
-                }
-            }
-
-            result[i] = out_reg;
-        }
-
-        Self(result)
-    }
-}
-
 impl<R: FloatRegister, const N: usize> LinAlg4Register for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
-    Self: LinAlg3Register + FloatRegister<Lanes = typenum::U4> + SwizzleRegister,
+    Self: LinAlg3Register + FloatRegister<Lanes = typenum::U4>,
 {
     // default implementations are fine
 }
@@ -1228,7 +977,7 @@ where
 impl<R: FloatRegister, const N: usize> LinAlg3Register for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
-    Self: FloatRegister<Lanes: ValidLinAlg3Length<Self>, Storage = Self, Element = R::Element> + SwizzleRegister,
+    Self: FloatRegister<Lanes: ValidLinAlg3Length<Self>, Storage = Self, Element = R::Element>,
 {
     #[inline(always)]
     fn min_element3(value: Storage<Self>) -> Self::Element {

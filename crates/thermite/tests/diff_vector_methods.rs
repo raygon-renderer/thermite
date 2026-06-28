@@ -125,81 +125,81 @@ macro_rules! ilv {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
 
-methods_suite!(v3, X86V3);
-methods_suite!(v2, X86V2);
-methods_suite!(v1, X86V1);
+    methods_suite!(v3, X86V3);
+    methods_suite!(v2, X86V2);
+    methods_suite!(v1, X86V1);
 
-#[test]
-fn interleave_roundtrip() {
-    ilv!(<X86V3 as Simd>::f32x4);
-    ilv!(<X86V3 as Simd>::f32x8);
-    ilv!(<X86V3 as Simd>::f64x2);
-    ilv!(<X86V3 as Simd>::f64x4);
-    ilv!(<X86V3 as Simd>::i32x4);
-    ilv!(<X86V3 as Simd>::i32x8);
-    ilv!(<X86V3 as Simd>::u32x4);
-    ilv!(<X86V3 as Simd>::i64x2);
-    ilv!(<X86V2 as Simd>::f32x4);
-    ilv!(<X86V2 as Simd>::f64x2);
-    ilv!(<X86V2 as Simd>::i32x4);
-    ilv!(<X86V2 as Simd>::i64x2);
-    ilv!(<X86V1 as Simd>::f32x4);
-    ilv!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
-    ilv!(<X86V1 as Simd>::f64x2);
-    ilv!(<X86V1 as Simd>::i32x4);
-    ilv!(<X86V1 as Simd>::i64x2);
-}
+    #[test]
+    fn interleave_roundtrip() {
+        ilv!(<X86V3 as Simd>::f32x4);
+        ilv!(<X86V3 as Simd>::f32x8);
+        ilv!(<X86V3 as Simd>::f64x2);
+        ilv!(<X86V3 as Simd>::f64x4);
+        ilv!(<X86V3 as Simd>::i32x4);
+        ilv!(<X86V3 as Simd>::i32x8);
+        ilv!(<X86V3 as Simd>::u32x4);
+        ilv!(<X86V3 as Simd>::i64x2);
+        ilv!(<X86V2 as Simd>::f32x4);
+        ilv!(<X86V2 as Simd>::f64x2);
+        ilv!(<X86V2 as Simd>::i32x4);
+        ilv!(<X86V2 as Simd>::i64x2);
+        ilv!(<X86V1 as Simd>::f32x4);
+        ilv!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
+        ilv!(<X86V1 as Simd>::f64x2);
+        ilv!(<X86V1 as Simd>::i32x4);
+        ilv!(<X86V1 as Simd>::i64x2);
+    }
 
-#[test]
-fn reverse_widths() {
-    rev!(<X86V3 as Simd>::f32x4);
-    rev!(<X86V3 as Simd>::f32x8);
-    rev!(<X86V3 as Simd>::f64x2);
-    rev!(<X86V3 as Simd>::f64x4);
-    rev!(<X86V3 as Simd>::i32x8);
-    rev!(<X86V3 as Simd>::i64x4);
-    rev!(<X86V2 as Simd>::f32x4);
-    rev!(<X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
-    rev!(<X86V2 as Simd>::f64x2);
-    rev!(<X86V2 as Simd>::i64x2);
-    rev!(<X86V1 as Simd>::f32x4);
-    rev!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
-    rev!(<X86V1 as Simd>::f64x2);
-    rev!(<X86V1 as Simd>::i64x2);
-}
+    #[test]
+    fn reverse_widths() {
+        rev!(<X86V3 as Simd>::f32x4);
+        rev!(<X86V3 as Simd>::f32x8);
+        rev!(<X86V3 as Simd>::f64x2);
+        rev!(<X86V3 as Simd>::f64x4);
+        rev!(<X86V3 as Simd>::i32x8);
+        rev!(<X86V3 as Simd>::i64x4);
+        rev!(<X86V2 as Simd>::f32x4);
+        rev!(<X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
+        rev!(<X86V2 as Simd>::f64x2);
+        rev!(<X86V2 as Simd>::i64x2);
+        rev!(<X86V1 as Simd>::f32x4);
+        rev!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
+        rev!(<X86V1 as Simd>::f64x2);
+        rev!(<X86V1 as Simd>::i64x2);
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
+    use super::*;
+    use thermite::backend::wasm::Wasm;
 
-methods_suite!(wasm, Wasm);
+    methods_suite!(wasm, Wasm);
 
-#[test]
-fn interleave_roundtrip() {
-    ilv!(<Wasm as Simd>::f32x4);
-    ilv!(<Wasm as Simd>::f32x8);
-    ilv!(<Wasm as Simd>::f64x2);
-    ilv!(<Wasm as Simd>::f64x4);
-    ilv!(<Wasm as Simd>::i32x4);
-    ilv!(<Wasm as Simd>::i32x8);
-    ilv!(<Wasm as Simd>::u32x4);
-    ilv!(<Wasm as Simd>::i64x2);
-}
+    #[test]
+    fn interleave_roundtrip() {
+        ilv!(<Wasm as Simd>::f32x4);
+        ilv!(<Wasm as Simd>::f32x8);
+        ilv!(<Wasm as Simd>::f64x2);
+        ilv!(<Wasm as Simd>::f64x4);
+        ilv!(<Wasm as Simd>::i32x4);
+        ilv!(<Wasm as Simd>::i32x8);
+        ilv!(<Wasm as Simd>::u32x4);
+        ilv!(<Wasm as Simd>::i64x2);
+    }
 
-#[test]
-fn reverse_widths() {
-    rev!(<Wasm as Simd>::f32x4);
-    rev!(<Wasm as Simd>::f32x8);
-    rev!(<Wasm as Simd>::f64x2);
-    rev!(<Wasm as Simd>::f64x4);
-    rev!(<Wasm as Simd>::i32x8);
-    rev!(<Wasm as Simd>::i64x4);
-}
+    #[test]
+    fn reverse_widths() {
+        rev!(<Wasm as Simd>::f32x4);
+        rev!(<Wasm as Simd>::f32x8);
+        rev!(<Wasm as Simd>::f64x2);
+        rev!(<Wasm as Simd>::f64x4);
+        rev!(<Wasm as Simd>::i32x8);
+        rev!(<Wasm as Simd>::i64x4);
+    }
 }

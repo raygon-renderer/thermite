@@ -11,8 +11,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, UnsignedIntegerRegister,
+        ZeroUpper, empty_reg, reg,
     },
 };
 
@@ -197,6 +197,14 @@ impl Register for U8x32V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value
     }
+
+    const HAS_PERMUTEV: bool = <super::I8x32V3 as Register>::HAS_PERMUTEV;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        super::I8x32V3::permutev(value, idxs)
+    }
+
+    compress_via_wide!();
 }
 
 #[thermite_macros::inline_always]
@@ -232,15 +240,6 @@ impl BitshiftRegister for U8x32V3 {
     }
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_srli_epi8x_v3::<IMM8>(value) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U8x32V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        super::I8x32V3::permutev(value, idxs)
     }
 }
 

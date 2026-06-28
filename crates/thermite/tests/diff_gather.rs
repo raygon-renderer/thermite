@@ -147,18 +147,18 @@ gather_suite!(scalar, Scalar, "scalar");
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-gather_suite!(v3, X86V3, "x86_v3");
-gather_suite!(v2, X86V2, "x86_v2");
-gather_suite!(v1, X86V1, "x86_v1");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    gather_suite!(v3, X86V3, "x86_v3");
+    gather_suite!(v2, X86V2, "x86_v2");
+    gather_suite!(v1, X86V1, "x86_v1");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-gather_suite!(wasm, Wasm, "wasm");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    gather_suite!(wasm, Wasm, "wasm");
 }

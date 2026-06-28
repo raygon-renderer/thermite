@@ -10,7 +10,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
         PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -218,6 +218,10 @@ impl Register for I64x4V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_epi64x_v3(value) }
     }
+
+    const HAS_PERMUTEV: bool = false;
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -245,11 +249,6 @@ impl InterleaveRegister for I64x4V3 {
             (a, b)
         }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I64x4V3 {
-    const HAS_PERMUTEV: bool = false;
 }
 
 impl IndexableRegister<super::U64x4V3> for I64x4V3 {

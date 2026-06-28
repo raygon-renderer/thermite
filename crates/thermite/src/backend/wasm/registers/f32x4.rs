@@ -10,7 +10,7 @@ use crate::{
         BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, FloatRegister,
         InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister, NativeCapability,
         NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -204,6 +204,17 @@ impl Register for F32x4Wasm {
     fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
         arch::f32x4_replace_lane::<I>(value, element)
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(
+            value,
+            arch::x4indices(idxs[0] as u8, idxs[1] as u8, idxs[2] as u8, idxs[3] as u8),
+        )
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -217,18 +228,6 @@ impl ShuffleRegister for F32x4Wasm {
 impl PermuteRegister for F32x4Wasm {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_relaxed_swizzle(value, const { arch::imm8x4_to_indices::<IMM8>() })
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F32x4Wasm {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(
-            value,
-            arch::x4indices(idxs[0] as u8, idxs[1] as u8, idxs[2] as u8, idxs[3] as u8),
-        )
     }
 }
 

@@ -616,18 +616,18 @@ ops_suite!(scalar, Scalar, f32x4, i32x4);
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-ops_suite!(v3, X86V3, f32x8, i32x8);
-ops_suite!(v2, X86V2, f32x4, i32x4);
-ops_suite!(v1, X86V1, f32x4, i32x4);
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    ops_suite!(v3, X86V3, f32x8, i32x8);
+    ops_suite!(v2, X86V2, f32x4, i32x4);
+    ops_suite!(v1, X86V1, f32x4, i32x4);
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-ops_suite!(wasm, Wasm, f32x4, i32x4);
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    ops_suite!(wasm, Wasm, f32x4, i32x4);
 }

@@ -66,14 +66,25 @@ macro_rules! impl_concat_x4_from_x2 {
     ($red:ty, $elem:ty) => {
         #[thermite_macros::inline_always]
         impl ConcatRegister<ArrayRegister<$elem, 2>> for $red {
-            fn concat(
-                lo: Storage<ArrayRegister<$elem, 2>>,
-                hi: Storage<ArrayRegister<$elem, 2>>,
-            ) -> Storage<Self> {
+            fn concat(lo: Storage<ArrayRegister<$elem, 2>>, hi: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        lo.0[0] as i8, lo.0[1] as i8, hi.0[0] as i8, hi.0[1] as i8,
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        lo.0[0] as i8,
+                        lo.0[1] as i8,
+                        hi.0[0] as i8,
+                        hi.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
@@ -92,7 +103,22 @@ macro_rules! impl_concat_x4_from_x2 {
             fn extend(value: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        value.0[0] as i8, value.0[1] as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        value.0[0] as i8,
+                        value.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
@@ -133,9 +159,7 @@ macro_rules! impl_concat_x8_from_x4 {
         impl ConcatRegister<$x4> for $x8 {
             fn concat(lo: Storage<$x4>, hi: Storage<$x4>) -> Storage<Self> {
                 // Each x4 holds its data in the low 4 bytes; interleave the low 32 bits of each.
-                ReducedRegister::new(unsafe {
-                    arch::_mm_unpacklo_epi32(lo.0, hi.0)
-                })
+                ReducedRegister::new(unsafe { arch::_mm_unpacklo_epi32(lo.0, hi.0) })
             }
 
             fn split(value: Storage<Self>) -> (Storage<$x4>, Storage<$x4>) {
@@ -292,14 +316,16 @@ impl SaturatingCastRegister<super::U32x4V2> for U8x4V2 {
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>> for I8x8V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
-        let w = <super::I16x8V2 as SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>>>::saturating_cast_from(value);
+        let w =
+            <super::I16x8V2 as SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::I16x8V2>>::saturating_cast_from(w)
     }
 }
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>> for U8x8V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4V2, 2>>) -> Storage<Self> {
-        let w = <super::U16x8V2 as SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>>>::saturating_cast_from(value);
+        let w =
+            <super::U16x8V2 as SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::U16x8V2>>::saturating_cast_from(w)
     }
 }
@@ -367,17 +393,13 @@ impl CastRegister<U8x4V2> for super::U32x4V2 {
 #[thermite_macros::inline_always]
 impl CastRegister<super::I32x4V2> for I8x4V2 {
     fn cast_from(value: Storage<super::I32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U32x4V2> for U8x4V2 {
     fn cast_from(value: Storage<super::U32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 
@@ -787,10 +809,7 @@ impl CastRegister<U8x4V2> for super::F32x4V2 {
 impl CastRegister<super::F32x4V2> for I8x4V2 {
     fn cast_from(value: Storage<super::F32x4V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(
-                arch::_mm_cvttps_epi32(value),
-                arch::_mm_narrow_dword_to_byte_maskx_v2(),
-            )
+            arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value), arch::_mm_narrow_dword_to_byte_maskx_v2())
         })
     }
 }
@@ -798,10 +817,7 @@ impl CastRegister<super::F32x4V2> for I8x4V2 {
 impl CastRegister<super::F32x4V2> for U8x4V2 {
     fn cast_from(value: Storage<super::F32x4V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(
-                arch::_mm_cvttps_epi32(value),
-                arch::_mm_narrow_dword_to_byte_maskx_v2(),
-            )
+            arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value), arch::_mm_narrow_dword_to_byte_maskx_v2())
         })
     }
 }
@@ -1060,16 +1076,32 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn concat(lo: Storage<ArrayRegister<bool, 2>>, hi: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(lo.0[0]), bool_to_i8_mask(lo.0[1]),
-                        bool_to_i8_mask(hi.0[0]), bool_to_i8_mask(hi.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(lo.0[0]),
+                        bool_to_i8_mask(lo.0[1]),
+                        bool_to_i8_mask(hi.0[0]),
+                        bool_to_i8_mask(hi.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
 
             fn split(value: Storage<Self>) -> (Storage<ArrayRegister<bool, 2>>, Storage<ArrayRegister<bool, 2>>) {
                 let a = store_bytes(value.0);
-                (ArrayRegister([a[0] != 0, a[1] != 0]), ArrayRegister([a[2] != 0, a[3] != 0]))
+                (
+                    ArrayRegister([a[0] != 0, a[1] != 0]),
+                    ArrayRegister([a[2] != 0, a[3] != 0]),
+                )
             }
         }
 
@@ -1078,8 +1110,22 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn extend(value: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(value.0[0]), bool_to_i8_mask(value.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(value.0[0]),
+                        bool_to_i8_mask(value.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }

@@ -54,7 +54,8 @@ impl SaturatingCastRegister<super::I32x4V1> for I8x4V1 {
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::I32x4V1, 2>> for I8x8V1 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4V1, 2>>) -> Storage<Self> {
-        let w = <super::I16x8V1 as SaturatingCastRegister<ArrayRegister<super::I32x4V1, 2>>>::saturating_cast_from(value);
+        let w =
+            <super::I16x8V1 as SaturatingCastRegister<ArrayRegister<super::I32x4V1, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::I16x8V1>>::saturating_cast_from(w)
     }
 }
@@ -124,14 +125,31 @@ macro_rules! impl_concat_x4_from_x2 {
             fn concat(lo: Storage<ArrayRegister<$elem, 2>>, hi: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        lo.0[0] as i8, lo.0[1] as i8, hi.0[0] as i8, hi.0[1] as i8,
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        lo.0[0] as i8,
+                        lo.0[1] as i8,
+                        hi.0[0] as i8,
+                        hi.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
             fn split(value: Storage<Self>) -> (Storage<ArrayRegister<$elem, 2>>, Storage<ArrayRegister<$elem, 2>>) {
                 let a = store_bytes(value.0);
-                (ArrayRegister([a[0] as $elem, a[1] as $elem]), ArrayRegister([a[2] as $elem, a[3] as $elem]))
+                (
+                    ArrayRegister([a[0] as $elem, a[1] as $elem]),
+                    ArrayRegister([a[2] as $elem, a[3] as $elem]),
+                )
             }
         }
 
@@ -139,7 +157,24 @@ macro_rules! impl_concat_x4_from_x2 {
         impl ExtendRegister<ArrayRegister<$elem, 2>> for $red {
             fn extend(value: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
-                    arch::_mm_setr_epi8(value.0[0] as i8, value.0[1] as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    arch::_mm_setr_epi8(
+                        value.0[0] as i8,
+                        value.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    )
                 })
             }
             fn narrow(value: Storage<Self>) -> Storage<ArrayRegister<$elem, 2>> {
@@ -374,9 +409,22 @@ impl CastRegister<ArrayRegister<super::I32x4V1, 2>> for I8x8V1 {
         let hi = store_dwords(value.0[1]);
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, lo[2] as i8, lo[3] as i8,
-                hi[0] as i8, hi[1] as i8, hi[2] as i8, hi[3] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                lo[2] as i8,
+                lo[3] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                hi[2] as i8,
+                hi[3] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -388,9 +436,22 @@ impl CastRegister<ArrayRegister<super::U32x4V1, 2>> for U8x8V1 {
         let hi = store_dwords(value.0[1]);
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, lo[2] as i8, lo[3] as i8,
-                hi[0] as i8, hi[1] as i8, hi[2] as i8, hi[3] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                lo[2] as i8,
+                lo[3] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                hi[2] as i8,
+                hi[3] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -533,8 +594,22 @@ impl CastRegister<ArrayRegister<super::I64x2V1, 2>> for I8x4V1 {
         let hi = store_qwords(value.0[1]);
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, hi[0] as i8, hi[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -546,8 +621,22 @@ impl CastRegister<ArrayRegister<super::U64x2V1, 2>> for U8x4V1 {
         let hi = store_qwords(value.0[1]);
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, hi[0] as i8, hi[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -782,8 +871,22 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 2>> for I8x4V1 {
             let lo = arch::_mm_cvttpd_2i32x_v1(value.0[0]);
             let hi = arch::_mm_cvttpd_2i32x_v1(value.0[1]);
             ReducedRegister::new(arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, hi[0] as i8, hi[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -795,8 +898,22 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 2>> for U8x4V1 {
             let lo = arch::_mm_cvttpd_2i32x_v1(value.0[0]);
             let hi = arch::_mm_cvttpd_2i32x_v1(value.0[1]);
             ReducedRegister::new(arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, hi[0] as i8, hi[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ))
         }
     }
@@ -830,9 +947,22 @@ impl CastRegister<ArrayRegister<super::F32x4V1, 2>> for I8x8V1 {
         let hi = store_dwords(unsafe { arch::_mm_cvttps_epi32(value.0[1]) });
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, lo[2] as i8, lo[3] as i8,
-                hi[0] as i8, hi[1] as i8, hi[2] as i8, hi[3] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                lo[2] as i8,
+                lo[3] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                hi[2] as i8,
+                hi[3] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -844,9 +974,22 @@ impl CastRegister<ArrayRegister<super::F32x4V1, 2>> for U8x8V1 {
         let hi = store_dwords(unsafe { arch::_mm_cvttps_epi32(value.0[1]) });
         ReducedRegister::new(unsafe {
             arch::_mm_setr_epi8(
-                lo[0] as i8, lo[1] as i8, lo[2] as i8, lo[3] as i8,
-                hi[0] as i8, hi[1] as i8, hi[2] as i8, hi[3] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                lo[0] as i8,
+                lo[1] as i8,
+                lo[2] as i8,
+                lo[3] as i8,
+                hi[0] as i8,
+                hi[1] as i8,
+                hi[2] as i8,
+                hi[3] as i8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             )
         })
     }
@@ -882,9 +1025,8 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 4>> for I8x8V1 {
             let c = arch::_mm_cvttpd_2i32x_v1(value.0[2]);
             let d = arch::_mm_cvttpd_2i32x_v1(value.0[3]);
             ReducedRegister::new(arch::_mm_setr_epi8(
-                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-                c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8, 0, 0,
+                0, 0, 0, 0, 0, 0,
             ))
         }
     }
@@ -898,9 +1040,8 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 4>> for U8x8V1 {
             let c = arch::_mm_cvttpd_2i32x_v1(value.0[2]);
             let d = arch::_mm_cvttpd_2i32x_v1(value.0[3]);
             ReducedRegister::new(arch::_mm_setr_epi8(
-                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-                c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-                0, 0, 0, 0, 0, 0, 0, 0,
+                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8, 0, 0,
+                0, 0, 0, 0, 0, 0,
             ))
         }
     }
@@ -1005,10 +1146,8 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 8>> for super::I8x16V1 {
             let g = arch::_mm_cvttpd_2i32x_v1(v[6]);
             let h = arch::_mm_cvttpd_2i32x_v1(v[7]);
             arch::_mm_setr_epi8(
-                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-                c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-                e[0] as i8, e[1] as i8, f[0] as i8, f[1] as i8,
-                g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
+                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
+                e[0] as i8, e[1] as i8, f[0] as i8, f[1] as i8, g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
             )
         }
     }
@@ -1027,10 +1166,8 @@ impl CastRegister<ArrayRegister<super::F64x2V1, 8>> for super::U8x16V1 {
             let g = arch::_mm_cvttpd_2i32x_v1(v[6]);
             let h = arch::_mm_cvttpd_2i32x_v1(v[7]);
             arch::_mm_setr_epi8(
-                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8,
-                c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
-                e[0] as i8, e[1] as i8, f[0] as i8, f[1] as i8,
-                g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
+                a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8,
+                e[0] as i8, e[1] as i8, f[0] as i8, f[1] as i8, g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
             )
         }
     }
@@ -1052,15 +1189,31 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn concat(lo: Storage<ArrayRegister<bool, 2>>, hi: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(lo.0[0]), bool_to_i8_mask(lo.0[1]),
-                        bool_to_i8_mask(hi.0[0]), bool_to_i8_mask(hi.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(lo.0[0]),
+                        bool_to_i8_mask(lo.0[1]),
+                        bool_to_i8_mask(hi.0[0]),
+                        bool_to_i8_mask(hi.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
             fn split(value: Storage<Self>) -> (Storage<ArrayRegister<bool, 2>>, Storage<ArrayRegister<bool, 2>>) {
                 let a = store_bytes(value.0);
-                (ArrayRegister([a[0] != 0, a[1] != 0]), ArrayRegister([a[2] != 0, a[3] != 0]))
+                (
+                    ArrayRegister([a[0] != 0, a[1] != 0]),
+                    ArrayRegister([a[2] != 0, a[3] != 0]),
+                )
             }
         }
 
@@ -1069,8 +1222,22 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn extend(value: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(value.0[0]), bool_to_i8_mask(value.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(value.0[0]),
+                        bool_to_i8_mask(value.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }

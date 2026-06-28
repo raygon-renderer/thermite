@@ -98,10 +98,7 @@ macro_rules! reshape_exp {
     ($name:ident, $backend:ty, $narrow:ident, $wide:ident, $label:expr) => {
         #[test]
         fn $name() {
-            check_reshape::<
-                Vector<<$backend as Simd>::$narrow>,
-                Vector<<$backend as Simd>::$wide>,
-            >($label);
+            check_reshape::<Vector<<$backend as Simd>::$narrow>, Vector<<$backend as Simd>::$wide>>($label);
         }
     };
 }
@@ -158,22 +155,22 @@ reshape8_suite!(scalar8, Scalar, "scalar");
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-reshape_suite!(v3, X86V3, "x86_v3");
-reshape_suite!(v2, X86V2, "x86_v2");
-reshape_suite!(v1, X86V1, "x86_v1");
-reshape8_suite!(v3_8, X86V3, "x86_v3");
-reshape8_suite!(v2_8, X86V2, "x86_v2");
-reshape8_suite!(v1_8, X86V1, "x86_v1");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    reshape_suite!(v3, X86V3, "x86_v3");
+    reshape_suite!(v2, X86V2, "x86_v2");
+    reshape_suite!(v1, X86V1, "x86_v1");
+    reshape8_suite!(v3_8, X86V3, "x86_v3");
+    reshape8_suite!(v2_8, X86V2, "x86_v2");
+    reshape8_suite!(v1_8, X86V1, "x86_v1");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-reshape_suite!(wasm, Wasm, "wasm");
-reshape8_suite!(wasm8, Wasm, "wasm");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    reshape_suite!(wasm, Wasm, "wasm");
+    reshape8_suite!(wasm8, Wasm, "wasm");
 }

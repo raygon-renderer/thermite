@@ -280,7 +280,7 @@ macro_rules! reduced_suite {
 
             #[test]
             fn swizzle_ops() {
-                // SwizzleRegister: runtime permute (vs Rust oracle) and the
+                // Register: runtime permute (vs Rust oracle) and the
                 // two-input swizzle (vs the scalar reduced backend, so the exact
                 // index contract need not be restated here).
                 sw_permute!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
@@ -954,7 +954,7 @@ macro_rules! numx {
     }};
 }
 
-/// Runtime `permute` (`SwizzleRegister::permutev`): result[i] = input[idx[i]],
+/// Runtime `permute` (`Register::permutev`): result[i] = input[idx[i]],
 /// checked against a Rust oracle over a few index patterns.
 macro_rules! sw_permute {
     ($reg:ty, $e:ty, $l:expr) => {{
@@ -971,7 +971,7 @@ macro_rules! sw_permute {
     }};
 }
 
-/// Two-input `swizzle` (`SwizzleRegister::swizzle`), differenced against the
+/// Two-input `swizzle` (`Register::swizzle`), differenced against the
 /// scalar reduced register so the index contract is whatever the trait defines.
 macro_rules! sw_swizzle {
     ($reg_ut:ty, $reg_sc:ty, $e:ty, $l:expr) => {{
@@ -992,18 +992,18 @@ macro_rules! sw_swizzle {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-reduced_suite!(v3, X86V3, "x86_v3");
-reduced_suite!(v2, X86V2, "x86_v2");
-reduced_suite!(v1, X86V1, "x86_v1");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    reduced_suite!(v3, X86V3, "x86_v3");
+    reduced_suite!(v2, X86V2, "x86_v2");
+    reduced_suite!(v1, X86V1, "x86_v1");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-reduced_suite!(wasm, Wasm, "wasm");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    reduced_suite!(wasm, Wasm, "wasm");
 }

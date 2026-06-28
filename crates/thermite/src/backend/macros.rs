@@ -110,3 +110,58 @@ macro_rules! impl_newregister {
         }
     )*};
 }
+
+/// Add `Register::compress` + `compress_z` overrides to a register `impl` block
+/// that delegate to the `<= 8`-lane table polyfill ([`compress_permute`]).
+/// Invoke inside `impl Register for <Reg> { ... }` for any `Register` with at
+/// most 8 lanes.
+macro_rules! compress_via_table {
+    () => {
+        #[inline(always)]
+        fn compress(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::compress_permute::<Self>(value, mask)
+        }
+
+        #[inline(always)]
+        fn compress_z(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            // Zero the unselected lanes, then compact: they carry into the tail.
+            $crate::backend::generic::polyfills::compress_permute::<Self>(
+                <Self as $crate::register::CoreRegister>::zz(mask, value),
+                mask,
+            )
+        }
+    };
+}
+
+/// Add `Register::compress` + `compress_z` overrides that delegate to the wide
+/// polyfill ([`compress_permute_wide`]). Invoke inside `impl Register for <Reg>
+/// { ... }` for any `Register` whose lane count is a multiple of 8 in `8..=64`
+/// (the 16/32-lane byte and short vectors).
+macro_rules! compress_via_wide {
+    () => {
+        #[inline(always)]
+        fn compress(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::compress_permute_wide::<Self>(value, mask)
+        }
+
+        #[inline(always)]
+        fn compress_z(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::compress_permute_wide::<Self>(
+                <Self as $crate::register::CoreRegister>::zz(mask, value),
+                mask,
+            )
+        }
+    };
+}

@@ -1,9 +1,6 @@
 use generic_array::{ArrayLength, GenericArray};
 
-use crate::{
-    Vector,
-    register::{Register, SwizzleRegister},
-};
+use crate::{Vector, register::Register};
 
 #[doc(hidden)]
 pub use crate::register::SwizzleIndices;
@@ -70,7 +67,7 @@ pub trait Swizzle<N: ArrayLength>: Sized {
 
 impl<R: Register> Swizzle<R::Lanes> for Vector<R>
 where
-    R: SwizzleRegister,
+    R: Register,
 {
     #[inline(always)]
     fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self {

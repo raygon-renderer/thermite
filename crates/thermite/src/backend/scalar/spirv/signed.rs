@@ -10,8 +10,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, IndexableRegister, IntegerRegister,
         InterleaveRegister, MaskElement, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, UnsignedIntegerRegister,
-        ZeroUpper,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, UnsignedIntegerRegister, ZeroUpper,
     },
 };
 
@@ -32,50 +31,57 @@ impl CoreRegister for [<i $width>] {
     fn blendv(mask: bool, lhs: Self, rhs: Self) -> Self {
         unsafe { arch::op_opselect::<Self, bool>(mask, rhs, lhs) }
     }
- fn z (mask: bool, value: Self) -> Self { unsafe { arch::op_opselect::<Self, bool>(mask, value, 0) } }
- fn nz(mask: bool, value: Self) -> Self { unsafe { arch::op_opselect::<Self, bool>(mask, 0, value) } }
- fn zeroupper_z<Z: ZeroUpper>(value: Self) -> Self {
+    fn z (mask: bool, value: Self) -> Self { unsafe { arch::op_opselect::<Self, bool>(mask, value, 0) } }
+    fn nz(mask: bool, value: Self) -> Self { unsafe { arch::op_opselect::<Self, bool>(mask, 0, value) } }
+    fn zeroupper_z<Z: ZeroUpper>(value: Self) -> Self {
         if const { Z::N >= 1 } { value } else { Self::EMPTY }
     }
 
- fn from_mask(mask: bool) -> Self { Self::from_bool(mask) }
+    fn from_mask(mask: bool) -> Self { Self::from_bool(mask) }
 }
 
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl BitwiseRegister for [<i $width>] {
- fn bitxor(lhs: Self, rhs: Self) -> Self { lhs ^ rhs }
- fn bitand(lhs: Self, rhs: Self) -> Self { lhs & rhs }
- fn bitor (lhs: Self, rhs: Self) -> Self { lhs | rhs }
- fn not(value: Self) -> Self { !value }
+    fn bitxor(lhs: Self, rhs: Self) -> Self { lhs ^ rhs }
+    fn bitand(lhs: Self, rhs: Self) -> Self { lhs & rhs }
+    fn bitor (lhs: Self, rhs: Self) -> Self { lhs | rhs }
+    fn not(value: Self) -> Self { !value }
 }
 
 #[rustfmt::skip]
 #[thermite_macros::inline_always]
 impl InterleaveRegister for [<i $width>] {
- fn interleave (a: Self, b: Self) -> (Self, Self) { (a, b) }
- fn deinterleave(a: Self, b: Self) -> (Self, Self) { (a, b) }
+    fn interleave (a: Self, b: Self) -> (Self, Self) { (a, b) }
+    fn deinterleave(a: Self, b: Self) -> (Self, Self) { (a, b) }
 }
 
+#[thermite_macros::inline_always]
 impl Register for [<i $width>] {
     type Element  = $i;
     type Signed   = [<i $width>];
     type Unsigned = [<u $width>];
 
- fn into_mask(value: Self) -> bool { value.to_bool() }
- fn msb_to_mask(value: Self) -> bool {
+    fn into_mask(value: Self) -> bool { value.to_bool() }
+    fn msb_to_mask(value: Self) -> bool {
         // Arithmetic shift-right propagates sign bit to all positions
         Self::into_mask(value >> (<$i>::BITS - 1))
     }
 
- fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self { value[0] }
- fn single(value: Self::Element) -> Self { value }
- fn splat (value: Self::Element) -> Self { value }
- fn broadcast<const I: usize>(value: Self) -> Self { value }
- fn reverse(value: Self) -> Self { value }
+    fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Self { value[0] }
+    fn single(value: Self::Element) -> Self { value }
+    fn splat (value: Self::Element) -> Self { value }
+    fn broadcast<const I: usize>(value: Self) -> Self { value }
+    fn reverse(value: Self) -> Self { value }
 
     fn swap_bytes(value: Self) -> Self {
         [<spirv_swap_bytes_u $width>](value as $u) as $i
+    }
+
+    const HAS_PERMUTEV: bool = false;
+    fn permutev(value: Self, _idxs: GenericArray<u32, Self::Lanes>) -> Self { value }
+    fn swizzle(a: Self, b: Self, idxs: GenericArray<u32, Self::Lanes>) -> Self {
+        if idxs[0] & 0b1 == 0 { a } else { b }
     }
 }
 
@@ -117,14 +123,6 @@ impl ShuffleRegister for [<i $width>] {
 #[thermite_macros::inline_always]
 impl PermuteRegister for [<i $width>] {
     fn permute<const IMM8: i32>(value: Self) -> Self { value }
-}
-
-impl SwizzleRegister for [<i $width>] {
-    const HAS_PERMUTEV: bool = false;
-    fn permutev(value: Self, _idxs: GenericArray<u32, Self::Lanes>) -> Self { value }
-    fn swizzle(a: Self, b: Self, idxs: GenericArray<u32, Self::Lanes>) -> Self {
-        if idxs[0] & 0b1 == 0 { a } else { b }
-    }
 }
 
 #[rustfmt::skip]

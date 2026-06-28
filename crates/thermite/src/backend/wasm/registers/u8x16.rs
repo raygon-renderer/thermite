@@ -12,8 +12,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, SwizzleRegister, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
-        empty_reg,
+        SaturatingCastRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
     },
 };
 
@@ -182,6 +181,14 @@ impl Register for U8x16Wasm {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         value
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        super::I8x16Wasm::permutev(value, idxs)
+    }
+
+    compress_via_wide!();
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -206,15 +213,6 @@ impl BitshiftRegister for U8x16Wasm {
     }
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_shr(value, IMM8 as u32)
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U8x16Wasm {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        super::I8x16Wasm::permutev(value, idxs)
     }
 }
 

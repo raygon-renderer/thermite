@@ -13,7 +13,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CoreRegister, Element, ExtendRegister, IntegerRegister, InterleaveRegister,
         MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister,
-        SignedRegister, Storage, SwizzleRegister, ZeroUpper, empty_reg, reg, reg_splat,
+        SignedRegister, Storage, ZeroUpper, empty_reg, reg, reg_splat,
     },
 };
 
@@ -212,6 +212,23 @@ impl Register for I8x32V3 {
         // One byte per lane, so byte-swap within a lane is the identity.
         value
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let p = idxs.as_ptr() as *const arch::__m256i;
+            arch::_mm256_permutev_epi8x_v3(
+                value,
+                arch::_mm256_loadu_si256(p),
+                arch::_mm256_loadu_si256(p.add(1)),
+                arch::_mm256_loadu_si256(p.add(2)),
+                arch::_mm256_loadu_si256(p.add(3)),
+            )
+        }
+    }
+
+    compress_via_wide!();
 }
 
 #[thermite_macros::inline_always]
@@ -271,24 +288,6 @@ impl BitshiftRegister for I8x32V3 {
     }
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_srli_epi8x_v3::<IMM8>(value) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I8x32V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let p = idxs.as_ptr() as *const arch::__m256i;
-            arch::_mm256_permutev_epi8x_v3(
-                value,
-                arch::_mm256_loadu_si256(p),
-                arch::_mm256_loadu_si256(p.add(1)),
-                arch::_mm256_loadu_si256(p.add(2)),
-                arch::_mm256_loadu_si256(p.add(3)),
-            )
-        }
     }
 }
 

@@ -55,7 +55,7 @@ where
 /// Extensions to the `FloatRegister` trait for the most common 3D linear algebra operations.
 ///
 /// This is only available on 3 or 4-lane registers.
-pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> + SwizzleRegister {
+pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
     #[inline(always)]
     fn dot3(lhs: Storage<Self>, rhs: Storage<Self>) -> Self::Element {
         Self::sum_elements3(Self::mul(lhs, rhs))

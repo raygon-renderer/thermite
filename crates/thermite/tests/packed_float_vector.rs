@@ -23,7 +23,9 @@ where
     R::Element: Copy,
 {
     use generic_array::sequence::GenericSequence;
-    Vector::from_array(generic_array::GenericArray::<R::Element, R::Lanes>::generate(|i| vals[i]))
+    Vector::from_array(generic_array::GenericArray::<R::Element, R::Lanes>::generate(|i| {
+        vals[i]
+    }))
 }
 
 /// unpack (all code points) + pack (a structured sweep) of `U` <-> `F` through the *vector* API,
@@ -54,8 +56,22 @@ macro_rules! check_vector {
 
         // pack: a structured + random sweep.
         let mut inputs: Vec<f32> = vec![
-            0.0, -0.0, 1.0, -1.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, f32::MAX, 1e30, -1e30, 65504.0, 65520.0,
-            448.0, 57344.0, 6.1e-5, 5.96e-8,
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            f32::MAX,
+            1e30,
+            -1e30,
+            65504.0,
+            65520.0,
+            448.0,
+            57344.0,
+            6.1e-5,
+            5.96e-8,
         ];
         let mut bits: u32 = 0x9E37_79B9;
         for _ in 0..60_000 {

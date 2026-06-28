@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, SaturatingCastRegister, ShuffleRegister, Storage, SwizzleRegister,
-        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        PermuteRegister, Register, SaturatingCastRegister, ShuffleRegister, Storage, UnsignedIntegerRegister,
+        array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };
@@ -206,6 +206,14 @@ impl Register for U32x4V2 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bswap_epi32x_v2(value) }
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe { arch::_mm_permutevarx_epi32x_v2(value, core::mem::transmute(idxs)) }
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -233,15 +241,6 @@ impl ShuffleRegister for U32x4V2 {
 impl PermuteRegister for U32x4V2 {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32(value, IMM8) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for U32x4V2 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm_permutevarx_epi32x_v2(value, core::mem::transmute(idxs)) }
     }
 }
 

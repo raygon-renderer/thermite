@@ -66,9 +66,9 @@ use crate::{
     element::{FloatElementWithBits, USize},
     isa::InstructionSet,
     register::{
-        BitCastRegister, CastRegister, ConcatRegister, ExtendRegister, FloatRegister, FullyInteroperable, IndexableRegister, Lanes,
-        LinAlg3Register, LinAlg4Register, PackedFloatRegister, Register, SaturatingCastRegister, SignedIntegerRegister, SwizzleRegister,
-        UnsignedIntegerRegister,
+        BitCastRegister, CastRegister, ConcatRegister, ExtendRegister, FloatRegister, FullyInteroperable,
+        IndexableRegister, Lanes, LinAlg3Register, LinAlg4Register, PackedFloatRegister, Register,
+        SaturatingCastRegister, SignedIntegerRegister, UnsignedIntegerRegister,
         reduced::ReducedRegister,
         well_formed::{
             WellFormedFloatElement, WellFormedFloatRegister, WellFormedSignedIntegerElement,
@@ -266,40 +266,40 @@ impl<S: NativeIsa> Drop for DisableDenormals<S> {
 pub trait NativeSimd: NativeIsa {
     /// Native-width `f32` register. Lanes = [`Native32Width`](NativeIsa::Native32Width).
     type f32xN: FullyInteroperable<Self::i32xN, Self::u32xN, Lanes = Self::Native32Width, Element = f32, Unsigned = Self::u32xN, Signed = Self::i32xN>
-        + WellFormedFloatRegister<Bits = Self::u32xN, SignedBits = Self::i32xN> + IndexableRegister<Self::u32xN> + SwizzleRegister;
+        + WellFormedFloatRegister<Bits = Self::u32xN, SignedBits = Self::i32xN> + IndexableRegister<Self::u32xN>;
     /// Native-width signed 32-bit integer register. Same lane count as `f32xN`.
     type i32xN: FullyInteroperable<Self::f32xN, Self::u32xN, Lanes = Self::Native32Width, Element = i32, Unsigned = Self::u32xN, Signed = Self::i32xN>
-        + WellFormedSignedIntegerRegister + IndexableRegister<Self::u32xN> + SwizzleRegister;
+        + WellFormedSignedIntegerRegister + IndexableRegister<Self::u32xN>;
     /// Native-width unsigned 32-bit integer register. Same lane count as `f32xN`.
     type u32xN: FullyInteroperable<Self::f32xN, Self::i32xN, Lanes = Self::Native32Width, Element = u32, Unsigned = Self::u32xN, Signed = Self::i32xN>
-        + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u32xN> + SwizzleRegister;
+        + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u32xN>;
 
     /// Native-width `f64` register. Lanes = [`Native64Width`](NativeIsa::Native64Width),
     /// typically half of [`Native32Width`](NativeIsa::Native32Width).
     type f64xN: FullyInteroperable<Self::i64xN, Self::u64xN, Lanes = Self::Native64Width, Element = f64, Unsigned = Self::u64xN, Signed = Self::i64xN>
-        + WellFormedFloatRegister<Bits = Self::u64xN, SignedBits = Self::i64xN> + IndexableRegister<Self::u64xN> + SwizzleRegister;
+        + WellFormedFloatRegister<Bits = Self::u64xN, SignedBits = Self::i64xN> + IndexableRegister<Self::u64xN>;
     /// Native-width signed 64-bit integer register. Same lane count as `f64xN`.
     type i64xN: FullyInteroperable<Self::f64xN, Self::u64xN, Lanes = Self::Native64Width, Element = i64, Unsigned = Self::u64xN, Signed = Self::i64xN>
-        + WellFormedSignedIntegerRegister + IndexableRegister<Self::u64xN> + SwizzleRegister;
+        + WellFormedSignedIntegerRegister + IndexableRegister<Self::u64xN>;
     /// Native-width unsigned 64-bit integer register. Same lane count as `f64xN`.
     type u64xN: FullyInteroperable<Self::f64xN, Self::i64xN, Lanes = Self::Native64Width, Element = u64, Unsigned = Self::u64xN, Signed = Self::i64xN>
-        + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u64xN> + SwizzleRegister;
+        + WellFormedUnsignedIntegerRegister + IndexableRegister<Self::u64xN>;
 
     /// Native-width signed 16-bit register. Lanes = [`Native16Width`](NativeIsa::Native16Width).
     /// The 16-bit families have no floating-point partner (there is no `f16`), so these are
     /// modeled on the float-free `usize`/integer slots rather than the float-coupled ones.
     type i16xN: WellFormedSignedIntegerRegister<Element = i16, Lanes = Self::Native16Width>
-        + SwizzleRegister + IndexableRegister<Self::u16xN>;
+        + IndexableRegister<Self::u16xN>;
     /// Native-width unsigned 16-bit register. Same lane count as `i16xN`.
     type u16xN: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = Self::Native16Width>
-        + SwizzleRegister + IndexableRegister<Self::u16xN>;
+        + IndexableRegister<Self::u16xN>;
 
     /// Native-width signed 8-bit register. Lanes = [`Native8Width`](NativeIsa::Native8Width).
     type i8xN: WellFormedSignedIntegerRegister<Element = i8, Lanes = Self::Native8Width>
-        + SwizzleRegister + IndexableRegister<Self::u8xN>;
+        + IndexableRegister<Self::u8xN>;
     /// Native-width unsigned 8-bit register. Same lane count as `i8xN`.
     type u8xN: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = Self::Native8Width>
-        + SwizzleRegister + IndexableRegister<Self::u8xN>;
+        + IndexableRegister<Self::u8xN>;
 }
 
 /// Helper traits bundling several register / vector relationships into one
@@ -362,7 +362,7 @@ pub mod helpers {
     {
     }
 
-    use crate::element::float::spec::{Bf16, Fp16, Fp16Fast, Fp8E4M3, Fp8E5M2};
+    use crate::element::float::spec::{Bf16, Fp8E4M3, Fp8E5M2, Fp16, Fp16Fast};
 
     /// Bundle: a `u16` register that transcodes all three 16-bit float formats - [`Fp16`],
     /// [`Fp16Fast`], and [`Bf16`] - to and from the `f32` register `F` (same lane count). A single
@@ -403,8 +403,7 @@ pub mod helpers {
     /// bound on a `u8xK` slot replaces two `PackedFloatRegister<{Fp8E4M3,Fp8E5M2}, ...>` bounds.
     /// Blanket-implemented; fp8 has no hardware transcoder, so every backend's `u8` registers
     /// satisfy it via the generic branchless defaults.
-    pub trait PackedF8Register<F>:
-        PackedFloatRegister<Fp8E4M3, F> + PackedFloatRegister<Fp8E5M2, F>
+    pub trait PackedF8Register<F>: PackedFloatRegister<Fp8E4M3, F> + PackedFloatRegister<Fp8E5M2, F>
     where
         F: FloatRegister<Element = f32, Lanes = Self::Lanes, Bits: CastRegister<Self>>,
     {
@@ -419,15 +418,9 @@ pub mod helpers {
 
     /// Vector-level mirror of [`PackedF8Register`]: a `u8` vector that transcodes both fp8 formats
     /// to and from the `f32` vector `F`. Blanket-implemented.
-    pub trait PackedF8Vector<F>:
-        PackedFloatVector<Fp8E4M3, F> + PackedFloatVector<Fp8E5M2, F>
-    {
-    }
+    pub trait PackedF8Vector<F>: PackedFloatVector<Fp8E4M3, F> + PackedFloatVector<Fp8E5M2, F> {}
 
-    impl<V, F> PackedF8Vector<F> for V where
-        V: PackedFloatVector<Fp8E4M3, F> + PackedFloatVector<Fp8E5M2, F>
-    {
-    }
+    impl<V, F> PackedF8Vector<F> for V where V: PackedFloatVector<Fp8E4M3, F> + PackedFloatVector<Fp8E5M2, F> {}
 
     /// Vector-level mirror of [`IndexedBy`]: a vector that accepts `usize`-,
     /// `u32`- and `u64`-typed index vectors of the same lane count for
@@ -470,108 +463,108 @@ use self::helpers::*;
 /// can be more convenient in different contexts.
 #[rustfmt::skip]
 pub trait Simd: NativeSimd {
-    type usizex2: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U2> + SwizzleRegister
+    type usizex2: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U2>
         + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2> + FullConcatRegister<USize>;
-    type usizex4: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U4> + SwizzleRegister
+    type usizex4: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U4>
         + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4> + FullConcatRegister<Self::usizex2>;
-    type usizex8: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U8> + SwizzleRegister
+    type usizex8: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U8>
         + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8> + FullConcatRegister<Self::usizex4>;
-    type usizex16: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U16> + SwizzleRegister
+    type usizex16: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U16>
         + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16> + FullConcatRegister<Self::usizex8>;
 
     // 64/32-bit SIMD types, almost always composite of scalar types
-    type f32x2: WellFormedFloatRegister<Bits = Self::u32x2, SignedBits = Self::i32x2> + SwizzleRegister
+    type f32x2: WellFormedFloatRegister<Bits = Self::u32x2, SignedBits = Self::i32x2>
         + FullyInteroperable<Self::i32x2, Self::u32x2, Lanes = U2, Element = f32, Unsigned = Self::u32x2, Signed = Self::i32x2>
         + CastRegister<Self::f64x2> + CastRegister<Self::i16x2> + CastRegister<Self::u16x2> + CastRegister<Self::i8x2> + CastRegister<Self::u8x2>
         + FullConcatRegister<f32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type i32x2: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x2: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x2, Self::u32x2, Lanes = U2, Element = i32, Unsigned = Self::u32x2, Signed = Self::i32x2>
         + CastRegister<Self::i64x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + SaturatingCastRegister<Self::i64x2> + FullConcatRegister<i32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type u32x2: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x2: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x2, Self::i32x2, Lanes = U2, Element = u32, Unsigned = Self::u32x2, Signed = Self::i32x2>
         + CastRegister<Self::u64x2> + CastRegister<Self::u16x2> + CastRegister<Self::u8x2> + SaturatingCastRegister<Self::u64x2> + FullConcatRegister<u32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
 
     // 128/32-bit SIMD types
-    type f32x4: WellFormedFloatRegister<Bits = Self::u32x4, SignedBits = Self::i32x4> + LinAlg4Register + SwizzleRegister
+    type f32x4: WellFormedFloatRegister<Bits = Self::u32x4, SignedBits = Self::i32x4> + LinAlg4Register
         + FullyInteroperable<Self::i32x4, Self::u32x4, Lanes = U4, Element = f32, Unsigned = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::f64x4> + CastRegister<Self::i16x4> + CastRegister<Self::u16x4> + CastRegister<Self::i8x4> + CastRegister<Self::u8x4>
         + FullConcatRegister<Self::f32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type i32x4: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x4: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x4, Self::u32x4, Lanes = U4, Element = i32, Unsigned = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::i64x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + SaturatingCastRegister<Self::i64x4> + FullConcatRegister<Self::i32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type u32x4: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x4: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x4, Self::i32x4, Lanes = U4, Element = u32, Unsigned = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::u64x4> + CastRegister<Self::u16x4> + CastRegister<Self::u8x4> + SaturatingCastRegister<Self::u64x4> + FullConcatRegister<Self::u32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
 
     // 256/32-bit SIMD types
-    type f32x8: WellFormedFloatRegister<Bits = Self::u32x8, SignedBits = Self::i32x8> + SwizzleRegister
+    type f32x8: WellFormedFloatRegister<Bits = Self::u32x8, SignedBits = Self::i32x8>
         + FullyInteroperable<Self::i32x8, Self::u32x8, Lanes = U8, Element = f32, Unsigned = Self::u32x8, Signed = Self::i32x8>
         + CastRegister<Self::f64x8> + CastRegister<Self::i16x8> + CastRegister<Self::u16x8> + CastRegister<Self::i8x8> + CastRegister<Self::u8x8>
         + FullConcatRegister<Self::f32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type i32x8: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x8: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x8, Self::u32x8, Lanes = U8, Element = i32, Unsigned = Self::u32x8, Signed = Self::i32x8>
         + CastRegister<Self::i64x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + SaturatingCastRegister<Self::i64x8> + FullConcatRegister<Self::i32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type u32x8: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x8: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x8, Self::i32x8, Lanes = U8, Element = u32, Unsigned = Self::u32x8, Signed = Self::i32x8>
         + CastRegister<Self::u64x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + SaturatingCastRegister<Self::u64x8> + FullConcatRegister<Self::u32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
 
     // 128/64-bit SIMD types
-    type f64x2: WellFormedFloatRegister<Bits = Self::u64x2, SignedBits = Self::i64x2> + SwizzleRegister
+    type f64x2: WellFormedFloatRegister<Bits = Self::u64x2, SignedBits = Self::i64x2>
         + FullyInteroperable<Self::i64x2, Self::u64x2, Lanes = U2, Element = f64, Unsigned = Self::u64x2, Signed = Self::i64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::i16x2> + CastRegister<Self::u16x2> + CastRegister<Self::i8x2> + CastRegister<Self::u8x2>
         + FullConcatRegister<f64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type i64x2: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x2: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x2, Self::u64x2, Lanes = U2, Element = i64, Unsigned = Self::u64x2, Signed = Self::i64x2>
         + CastRegister<Self::i32x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + FullConcatRegister<i64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type u64x2: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x2: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x2, Self::i64x2, Lanes = U2, Element = u64, Unsigned = Self::u64x2, Signed = Self::i64x2>
         + CastRegister<Self::u32x2> + CastRegister<Self::u16x2> + CastRegister<Self::u8x2> + FullConcatRegister<u64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
 
     // 256/64-bit SIMD types
-    type f64x4: WellFormedFloatRegister<Bits = Self::u64x4, SignedBits = Self::i64x4> + LinAlg4Register + SwizzleRegister
+    type f64x4: WellFormedFloatRegister<Bits = Self::u64x4, SignedBits = Self::i64x4> + LinAlg4Register
         + FullyInteroperable<Self::i64x4, Self::u64x4, Lanes = U4, Element = f64, Unsigned = Self::u64x4, Signed = Self::i64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::i16x4> + CastRegister<Self::u16x4> + CastRegister<Self::i8x4> + CastRegister<Self::u8x4>
         + FullConcatRegister<Self::f64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type i64x4: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x4: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x4, Self::u64x4, Lanes = U4, Element = i64, Unsigned = Self::u64x4, Signed = Self::i64x4>
         + CastRegister<Self::i32x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + FullConcatRegister<Self::i64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type u64x4: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x4: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x4, Self::i64x4, Lanes = U4, Element = u64, Unsigned = Self::u64x4, Signed = Self::i64x4>
         + CastRegister<Self::u32x4> + CastRegister<Self::u16x4> + CastRegister<Self::u8x4> + FullConcatRegister<Self::u64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
 
     // 512/64-bit SIMD types
-    type f64x8: WellFormedFloatRegister<Bits = Self::u64x8, SignedBits = Self::i64x8> + SwizzleRegister
+    type f64x8: WellFormedFloatRegister<Bits = Self::u64x8, SignedBits = Self::i64x8>
         + FullyInteroperable<Self::i64x8, Self::u64x8, Lanes = U8, Element = f64, Unsigned = Self::u64x8, Signed = Self::i64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::i16x8> + CastRegister<Self::u16x8> + CastRegister<Self::i8x8> + CastRegister<Self::u8x8>
         + FullConcatRegister<Self::f64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type i64x8: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x8: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x8, Self::u64x8, Lanes = U8, Element = i64, Unsigned = Self::u64x8, Signed = Self::i64x8>
         + CastRegister<Self::i32x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + FullConcatRegister<Self::i64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type u64x8: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x8: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x8, Self::i64x8, Lanes = U8, Element = u64, Unsigned = Self::u64x8, Signed = Self::i64x8>
         + CastRegister<Self::u32x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + FullConcatRegister<Self::u64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
 
     // 512/32-bit SIMD types
-    type f32x16: WellFormedFloatRegister<Bits = Self::u32x16, SignedBits = Self::i32x16> + SwizzleRegister
+    type f32x16: WellFormedFloatRegister<Bits = Self::u32x16, SignedBits = Self::i32x16>
         + FullyInteroperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32, Unsigned = Self::u32x16, Signed = Self::i32x16>
         + CastRegister<Self::f64x16> + CastRegister<Self::i16x16> + CastRegister<Self::u16x16> + CastRegister<Self::i8x16> + CastRegister<Self::u8x16>
         + FullConcatRegister<Self::f32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type i32x16: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x16: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32, Unsigned = Self::u32x16, Signed = Self::i32x16>
         + CastRegister<Self::i64x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + SaturatingCastRegister<Self::i64x16> + FullConcatRegister<Self::i32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type u32x16: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x16: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x16, Self::i32x16, Lanes = U16, Element = u32, Unsigned = Self::u32x16, Signed = Self::i32x16>
         + CastRegister<Self::u64x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + SaturatingCastRegister<Self::u64x16> + FullConcatRegister<Self::u32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
 
     // 1024/64-bit SIMD types
-    type f64x16: WellFormedFloatRegister<Bits = Self::u64x16, SignedBits = Self::i64x16> + SwizzleRegister
+    type f64x16: WellFormedFloatRegister<Bits = Self::u64x16, SignedBits = Self::i64x16>
         + FullyInteroperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64, Unsigned = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::i16x16> + CastRegister<Self::u16x16> + CastRegister<Self::i8x16> + CastRegister<Self::u8x16>
         + FullConcatRegister<Self::f64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type i64x16: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x16: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64, Unsigned = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::i32x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + FullConcatRegister<Self::i64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type u64x16: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x16: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x16, Self::i64x16, Lanes = U16, Element = u64, Unsigned = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::u32x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + FullConcatRegister<Self::u64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
 
@@ -586,13 +579,13 @@ pub trait Simd: NativeSimd {
     /// backend). The natural width for byte/text work. Carries the concat-to-half ladder and the
     /// `usize`/`u32`/`u64` gather index trio like the rest of the 8-bit ladder; the fp8 transcode
     /// lives on the unsigned form (`u8x16` carries [`PackedF8Register`] / the `u8 <-> u32` widen).
-    type i8x16: WellFormedSignedIntegerRegister<Element = i8, Lanes = U16, Unsigned = Self::u8x16, Signed = Self::i8x16> + SwizzleRegister
+    type i8x16: WellFormedSignedIntegerRegister<Element = i8, Lanes = U16, Unsigned = Self::u8x16, Signed = Self::i8x16>
         + IndexableRegister<Self::u8x16> + CastRegister<Self::i32x16> + CastRegister<Self::i16x16> + CastRegister<Self::i64x16>
         + SaturatingCastRegister<Self::i16x16> + SaturatingCastRegister<Self::i32x16> + SaturatingCastRegister<Self::i64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + BitCastRegister<Self::u8x16>
         + FullConcatRegister<Self::i8x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
     /// Fixed 16-lane (128-bit) unsigned 8-bit register. See [`i8x16`](Self::i8x16).
-    type u8x16: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U16, Unsigned = Self::u8x16, Signed = Self::i8x16> + SwizzleRegister
+    type u8x16: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U16, Unsigned = Self::u8x16, Signed = Self::i8x16>
         + IndexableRegister<Self::u8x16> + CastRegister<Self::u32x16> + CastRegister<Self::u16x16> + CastRegister<Self::u64x16>
         + SaturatingCastRegister<Self::u16x16> + SaturatingCastRegister<Self::u32x16> + SaturatingCastRegister<Self::u64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + BitCastRegister<Self::i8x16>
@@ -601,31 +594,31 @@ pub trait Simd: NativeSimd {
     // Sub-native 8-bit ladder (x2 = ArrayRegister, x4/x8 = ReducedRegister over the native 128-bit
     // register). `CastRegister<Self::i16xK>` is the 16 -> 8 narrow; `CastRegister<Self::i32xK>` the
     // 32 -> 8 narrow; the 8 -> 16 / 8 -> 32 widens live on the wider slots.
-    type i8x2: WellFormedSignedIntegerRegister<Element = i8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2> + SwizzleRegister
+    type i8x2: WellFormedSignedIntegerRegister<Element = i8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2>
         + CastRegister<Self::i32x2> + CastRegister<Self::i16x2> + CastRegister<Self::i64x2>
         + SaturatingCastRegister<Self::i16x2> + SaturatingCastRegister<Self::i32x2> + SaturatingCastRegister<Self::i64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + BitCastRegister<Self::u8x2> + FullConcatRegister<i8> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type u8x2: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2> + SwizzleRegister
+    type u8x2: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2>
         + CastRegister<Self::u32x2> + CastRegister<Self::u16x2> + CastRegister<Self::u64x2>
         + SaturatingCastRegister<Self::u16x2> + SaturatingCastRegister<Self::u32x2> + SaturatingCastRegister<Self::u64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + BitCastRegister<Self::i8x2> + FullConcatRegister<u8> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
         + PackedF8Register<Self::f32x2>;
 
-    type i8x4: WellFormedSignedIntegerRegister<Element = i8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4> + SwizzleRegister
+    type i8x4: WellFormedSignedIntegerRegister<Element = i8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4>
         + CastRegister<Self::i32x4> + CastRegister<Self::i16x4> + CastRegister<Self::i64x4>
         + SaturatingCastRegister<Self::i16x4> + SaturatingCastRegister<Self::i32x4> + SaturatingCastRegister<Self::i64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + BitCastRegister<Self::u8x4> + FullConcatRegister<Self::i8x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type u8x4: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4> + SwizzleRegister
+    type u8x4: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4>
         + CastRegister<Self::u32x4> + CastRegister<Self::u16x4> + CastRegister<Self::u64x4>
         + SaturatingCastRegister<Self::u16x4> + SaturatingCastRegister<Self::u32x4> + SaturatingCastRegister<Self::u64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + BitCastRegister<Self::i8x4> + FullConcatRegister<Self::u8x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
         + PackedF8Register<Self::f32x4>;
 
-    type i8x8: WellFormedSignedIntegerRegister<Element = i8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8> + SwizzleRegister
+    type i8x8: WellFormedSignedIntegerRegister<Element = i8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8>
         + CastRegister<Self::i32x8> + CastRegister<Self::i16x8> + CastRegister<Self::i64x8>
         + SaturatingCastRegister<Self::i16x8> + SaturatingCastRegister<Self::i32x8> + SaturatingCastRegister<Self::i64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + BitCastRegister<Self::u8x8> + FullConcatRegister<Self::i8x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type u8x8: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8> + SwizzleRegister
+    type u8x8: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8>
         + CastRegister<Self::u32x8> + CastRegister<Self::u16x8> + CastRegister<Self::u64x8>
         + SaturatingCastRegister<Self::u16x8> + SaturatingCastRegister<Self::u32x8> + SaturatingCastRegister<Self::u64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + BitCastRegister<Self::i8x8> + FullConcatRegister<Self::u8x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
@@ -633,40 +626,40 @@ pub trait Simd: NativeSimd {
 
     // 16-bit ladder. `CastRegister<Self::i8xK>` is the 8 -> 16 widen; `CastRegister<Self::i32xK>`
     // the 16 -> 32 narrow.
-    type i16x2: WellFormedSignedIntegerRegister<Element = i16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2> + SwizzleRegister
+    type i16x2: WellFormedSignedIntegerRegister<Element = i16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2>
         + CastRegister<Self::i32x2> + CastRegister<Self::i8x2> + CastRegister<Self::i64x2>
         + SaturatingCastRegister<Self::i32x2> + SaturatingCastRegister<Self::i64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + BitCastRegister<Self::u16x2> + FullConcatRegister<i16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type u16x2: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2> + SwizzleRegister
+    type u16x2: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2>
         + CastRegister<Self::u32x2> + CastRegister<Self::u8x2> + CastRegister<Self::u64x2>
         + SaturatingCastRegister<Self::u32x2> + SaturatingCastRegister<Self::u64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + BitCastRegister<Self::i16x2> + FullConcatRegister<u16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
 
-    type i16x4: WellFormedSignedIntegerRegister<Element = i16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4> + SwizzleRegister
+    type i16x4: WellFormedSignedIntegerRegister<Element = i16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4>
         + CastRegister<Self::i32x4> + CastRegister<Self::i8x4> + CastRegister<Self::i64x4>
         + SaturatingCastRegister<Self::i32x4> + SaturatingCastRegister<Self::i64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + BitCastRegister<Self::u16x4> + FullConcatRegister<Self::i16x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type u16x4: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4> + SwizzleRegister
+    type u16x4: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4>
         + CastRegister<Self::u32x4> + CastRegister<Self::u8x4> + CastRegister<Self::u64x4>
         + SaturatingCastRegister<Self::u32x4> + SaturatingCastRegister<Self::u64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + BitCastRegister<Self::i16x4> + FullConcatRegister<Self::u16x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
         + PackedF16Register<Self::f32x4>;
 
-    type i16x8: WellFormedSignedIntegerRegister<Element = i16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8> + SwizzleRegister
+    type i16x8: WellFormedSignedIntegerRegister<Element = i16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8>
         + CastRegister<Self::i32x8> + CastRegister<Self::i8x8> + CastRegister<Self::i64x8>
         + SaturatingCastRegister<Self::i32x8> + SaturatingCastRegister<Self::i64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + BitCastRegister<Self::u16x8> + FullConcatRegister<Self::i16x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type u16x8: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8> + SwizzleRegister
+    type u16x8: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8>
         + CastRegister<Self::u32x8> + CastRegister<Self::u8x8> + CastRegister<Self::u64x8>
         + SaturatingCastRegister<Self::u32x8> + SaturatingCastRegister<Self::u64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + BitCastRegister<Self::i16x8> + FullConcatRegister<Self::u16x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
         + PackedF16Register<Self::f32x8>;
 
-    type i16x16: WellFormedSignedIntegerRegister<Element = i16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16> + SwizzleRegister
+    type i16x16: WellFormedSignedIntegerRegister<Element = i16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16>
         + CastRegister<Self::i32x16> + CastRegister<Self::i8x16> + CastRegister<Self::i64x16>
         + SaturatingCastRegister<Self::i32x16> + SaturatingCastRegister<Self::i64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + BitCastRegister<Self::u16x16> + FullConcatRegister<Self::i16x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type u16x16: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16> + SwizzleRegister
+    type u16x16: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16>
         + CastRegister<Self::u32x16> + CastRegister<Self::u8x16> + CastRegister<Self::u64x16>
         + SaturatingCastRegister<Self::u32x16> + SaturatingCastRegister<Self::u64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + BitCastRegister<Self::i16x16> + FullConcatRegister<Self::u16x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
@@ -687,25 +680,25 @@ pub trait Simd3A: Simd<
     u64x4: FullExtendRegister<Self::u64x3A>,
 > {
     type usizex3A: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U3>
-        + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A> + SwizzleRegister;
+        + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
 
-    type f32x3A: WellFormedFloatRegister<Bits = Self::u32x3A, SignedBits = Self::i32x3A> + LinAlg3Register + SwizzleRegister
+    type f32x3A: WellFormedFloatRegister<Bits = Self::u32x3A, SignedBits = Self::i32x3A> + LinAlg3Register
         + FullyInteroperable<Self::i32x3A, Self::u32x3A, Lanes = U3, Element = f32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
         + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
-    type i32x3A: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x3A: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x3A, Self::u32x3A, Lanes = U3, Element = i32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
         + CastRegister<Self::i64x3A> + SaturatingCastRegister<Self::i64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
-    type u32x3A: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x3A: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x3A, Self::i32x3A, Lanes = U3, Element = u32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
         + CastRegister<Self::u64x3A> + SaturatingCastRegister<Self::u64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
 
-    type f64x3A: WellFormedFloatRegister<Bits = Self::u64x3A, SignedBits = Self::i64x3A> + LinAlg3Register + SwizzleRegister
+    type f64x3A: WellFormedFloatRegister<Bits = Self::u64x3A, SignedBits = Self::i64x3A> + LinAlg3Register
         + FullyInteroperable<Self::i64x3A, Self::u64x3A, Lanes = U3, Element = f64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
         + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
-    type i64x3A: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x3A: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x3A, Self::u64x3A, Lanes = U3, Element = i64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
         + CastRegister<Self::i32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
-    type u64x3A: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x3A: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x3A, Self::i64x3A, Lanes = U3, Element = u64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
         + CastRegister<Self::u32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
 }
@@ -745,25 +738,25 @@ pub trait Simd3: Simd3A<
     u64x4: FullExtendRegister<Self::u64x3>,
 > {
     type usizex3: WellFormedUnsignedIntegerRegister<Element = crate::element::USize, Lanes = U3>
-        + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3> + SwizzleRegister;
+        + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
 
-    type f32x3: WellFormedFloatRegister<Bits = Self::u32x3, SignedBits = Self::i32x3> + LinAlg3Register + SwizzleRegister
+    type f32x3: WellFormedFloatRegister<Bits = Self::u32x3, SignedBits = Self::i32x3> + LinAlg3Register
         + FullyInteroperable<Self::i32x3, Self::u32x3, Lanes = U3, Element = f32, Unsigned = Self::u32x3, Signed = Self::i32x3>
         + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
-    type i32x3: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i32x3: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x3, Self::u32x3, Lanes = U3, Element = i32, Unsigned = Self::u32x3, Signed = Self::i32x3>
         + CastRegister<Self::i64x3> + SaturatingCastRegister<Self::i64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
-    type u32x3: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u32x3: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x3, Self::i32x3, Lanes = U3, Element = u32, Unsigned = Self::u32x3, Signed = Self::i32x3>
         + CastRegister<Self::u64x3> + SaturatingCastRegister<Self::u64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
 
-    type f64x3: WellFormedFloatRegister<Bits = Self::u64x3, SignedBits = Self::i64x3> + LinAlg3Register + SwizzleRegister
+    type f64x3: WellFormedFloatRegister<Bits = Self::u64x3, SignedBits = Self::i64x3> + LinAlg3Register
         + FullyInteroperable<Self::i64x3, Self::u64x3, Lanes = U3, Element = f64, Unsigned = Self::u64x3, Signed = Self::i64x3>
         + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
-    type i64x3: WellFormedSignedIntegerRegister + SwizzleRegister
+    type i64x3: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x3, Self::u64x3, Lanes = U3, Element = i64, Unsigned = Self::u64x3, Signed = Self::i64x3>
         + CastRegister<Self::i32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
-    type u64x3: WellFormedUnsignedIntegerRegister + SwizzleRegister
+    type u64x3: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x3, Self::i64x3, Lanes = U3, Element = u64, Unsigned = Self::u64x3, Signed = Self::i64x3>
         + CastRegister<Self::u32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
 }
@@ -799,8 +792,7 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
     type f32xN: WellFormedFloatRegister<
             Bits = <Self as FixedWidthSimd<Width>>::u32xN,
             SignedBits = <Self as FixedWidthSimd<Width>>::i32xN,
-        > + SwizzleRegister
-        + FullyInteroperable<
+        > + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::i32xN,
             <Self as FixedWidthSimd<Width>>::u32xN,
             Lanes = Width,
@@ -813,7 +805,6 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
             <Self as FixedWidthSimd<Width>>::u64xN,
         > + CastRegister<<Self as FixedWidthSimd<Width>>::f64xN>;
     type i32xN: WellFormedSignedIntegerRegister
-        + SwizzleRegister
         + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::f32xN,
             <Self as FixedWidthSimd<Width>>::u32xN,
@@ -827,7 +818,6 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
             <Self as FixedWidthSimd<Width>>::u64xN,
         > + CastRegister<<Self as FixedWidthSimd<Width>>::i64xN>;
     type u32xN: WellFormedUnsignedIntegerRegister
-        + SwizzleRegister
         + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::f32xN,
             <Self as FixedWidthSimd<Width>>::i32xN,
@@ -844,8 +834,7 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
     type f64xN: WellFormedFloatRegister<
             Bits = <Self as FixedWidthSimd<Width>>::u64xN,
             SignedBits = <Self as FixedWidthSimd<Width>>::i64xN,
-        > + SwizzleRegister
-        + FullyInteroperable<
+        > + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::i64xN,
             <Self as FixedWidthSimd<Width>>::u64xN,
             Lanes = Width,
@@ -858,7 +847,6 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
             <Self as FixedWidthSimd<Width>>::u64xN,
         > + CastRegister<<Self as FixedWidthSimd<Width>>::f32xN>;
     type i64xN: WellFormedSignedIntegerRegister
-        + SwizzleRegister
         + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::f64xN,
             <Self as FixedWidthSimd<Width>>::u64xN,
@@ -872,7 +860,6 @@ pub trait FixedWidthSimd<Width: Lanes>: Simd {
             <Self as FixedWidthSimd<Width>>::u64xN,
         > + CastRegister<<Self as FixedWidthSimd<Width>>::i32xN>;
     type u64xN: WellFormedUnsignedIntegerRegister
-        + SwizzleRegister
         + FullyInteroperable<
             <Self as FixedWidthSimd<Width>>::f64xN,
             <Self as FixedWidthSimd<Width>>::i64xN,
@@ -960,40 +947,40 @@ pub trait SizedSimd<
     // between the expected inner Element type and what is provided via the generic parameters. Specifying them
     // is weird/difficult.
 
-    type fxN: FullyInteroperable<Self::ixN, Self::uxN, Lanes = Self::NativeWidth, Element = F, Unsigned = Self::uxN, Signed = Self::ixN> + SwizzleRegister
+    type fxN: FullyInteroperable<Self::ixN, Self::uxN, Lanes = Self::NativeWidth, Element = F, Unsigned = Self::uxN, Signed = Self::ixN>
         + FloatRegister<Bits = Self::uxN, SignedBits = Self::ixN> + IndexableRegister<Self::uxN>;
-    type ixN: FullyInteroperable<Self::fxN, Self::uxN, Lanes = Self::NativeWidth, Element = I, Unsigned = Self::uxN, Signed = Self::ixN> + SwizzleRegister
+    type ixN: FullyInteroperable<Self::fxN, Self::uxN, Lanes = Self::NativeWidth, Element = I, Unsigned = Self::uxN, Signed = Self::ixN>
         + SignedIntegerRegister<Element = <F as FloatElementWithBits>::SignedBits> + IndexableRegister<Self::uxN>;
-    type uxN: FullyInteroperable<Self::fxN, Self::ixN, Lanes = Self::NativeWidth, Element = U, Unsigned = Self::uxN, Signed = Self::ixN> + SwizzleRegister
+    type uxN: FullyInteroperable<Self::fxN, Self::ixN, Lanes = Self::NativeWidth, Element = U, Unsigned = Self::uxN, Signed = Self::ixN>
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + IndexableRegister<Self::uxN>;
 
-    type fx2: FullyInteroperable<Self::ix2, Self::ux2, Lanes = U2, Element = F, Unsigned = Self::ux2, Signed = Self::ix2> + SwizzleRegister
+    type fx2: FullyInteroperable<Self::ix2, Self::ux2, Lanes = U2, Element = F, Unsigned = Self::ux2, Signed = Self::ix2>
         + FloatRegister<Bits = Self::ux2, SignedBits = Self::ix2> + FullConcatRegister<F> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type ix2: FullyInteroperable<Self::fx2, Self::ux2, Lanes = U2, Element = I, Unsigned = Self::ux2, Signed = Self::ix2> + SwizzleRegister
+    type ix2: FullyInteroperable<Self::fx2, Self::ux2, Lanes = U2, Element = I, Unsigned = Self::ux2, Signed = Self::ix2>
         + SignedIntegerRegister<Element = <F as FloatElementWithBits>::SignedBits> + FullConcatRegister<I> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
-    type ux2: FullyInteroperable<Self::fx2, Self::ix2, Lanes = U2, Element = U, Unsigned = Self::ux2, Signed = Self::ix2> + SwizzleRegister
+    type ux2: FullyInteroperable<Self::fx2, Self::ix2, Lanes = U2, Element = U, Unsigned = Self::ux2, Signed = Self::ix2>
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + FullConcatRegister<U> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
 
-    type fx4: FullyInteroperable<Self::ix4, Self::ux4, Lanes = U4, Element = F, Unsigned = Self::ux4, Signed = Self::ix4> + SwizzleRegister
+    type fx4: FullyInteroperable<Self::ix4, Self::ux4, Lanes = U4, Element = F, Unsigned = Self::ux4, Signed = Self::ix4>
         + FloatRegister<Bits = Self::ux4, SignedBits = Self::ix4> + LinAlg4Register
         + FullConcatRegister<Self::fx2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type ix4: FullyInteroperable<Self::fx4, Self::ux4, Lanes = U4, Element = I, Unsigned = Self::ux4, Signed = Self::ix4> + SwizzleRegister
+    type ix4: FullyInteroperable<Self::fx4, Self::ux4, Lanes = U4, Element = I, Unsigned = Self::ux4, Signed = Self::ix4>
         + SignedIntegerRegister<Element = <F as FloatElementWithBits>::SignedBits> + FullConcatRegister<Self::ix2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
-    type ux4: FullyInteroperable<Self::fx4, Self::ix4, Lanes = U4, Element = U, Unsigned = Self::ux4, Signed = Self::ix4> + SwizzleRegister
+    type ux4: FullyInteroperable<Self::fx4, Self::ix4, Lanes = U4, Element = U, Unsigned = Self::ux4, Signed = Self::ix4>
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + FullConcatRegister<Self::ux2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
 
-    type fx8: FullyInteroperable<Self::ix8, Self::ux8, Lanes = U8, Element = F, Unsigned = Self::ux8, Signed = Self::ix8> + SwizzleRegister
+    type fx8: FullyInteroperable<Self::ix8, Self::ux8, Lanes = U8, Element = F, Unsigned = Self::ux8, Signed = Self::ix8>
         + FloatRegister<Bits = Self::ux8, SignedBits = Self::ix8> + FullConcatRegister<Self::fx4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type ix8: FullyInteroperable<Self::fx8, Self::ux8, Lanes = U8, Element = I, Unsigned = Self::ux8, Signed = Self::ix8> + SwizzleRegister
+    type ix8: FullyInteroperable<Self::fx8, Self::ux8, Lanes = U8, Element = I, Unsigned = Self::ux8, Signed = Self::ix8>
         + SignedIntegerRegister<Element = <F as FloatElementWithBits>::SignedBits> + FullConcatRegister<Self::ix4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
-    type ux8: FullyInteroperable<Self::fx8, Self::ix8, Lanes = U8, Element = U, Unsigned = Self::ux8, Signed = Self::ix8> + SwizzleRegister
+    type ux8: FullyInteroperable<Self::fx8, Self::ix8, Lanes = U8, Element = U, Unsigned = Self::ux8, Signed = Self::ix8>
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + FullConcatRegister<Self::ux4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
 
-    type fx16: FullyInteroperable<Self::ix16, Self::ux16, Lanes = U16, Element = F, Unsigned = Self::ux16, Signed = Self::ix16> + SwizzleRegister
+    type fx16: FullyInteroperable<Self::ix16, Self::ux16, Lanes = U16, Element = F, Unsigned = Self::ux16, Signed = Self::ix16>
         + FloatRegister<Bits = Self::ux16, SignedBits = Self::ix16> + FullConcatRegister<Self::fx8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type ix16: FullyInteroperable<Self::fx16, Self::ux16, Lanes = U16, Element = I, Unsigned = Self::ux16, Signed = Self::ix16> + SwizzleRegister
+    type ix16: FullyInteroperable<Self::fx16, Self::ux16, Lanes = U16, Element = I, Unsigned = Self::ux16, Signed = Self::ix16>
         + SignedIntegerRegister<Element = <F as FloatElementWithBits>::SignedBits> + FullConcatRegister<Self::ix8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
-    type ux16: FullyInteroperable<Self::fx16, Self::ix16, Lanes = U16, Element = U, Unsigned = Self::ux16, Signed = Self::ix16> + SwizzleRegister
+    type ux16: FullyInteroperable<Self::fx16, Self::ix16, Lanes = U16, Element = U, Unsigned = Self::ux16, Signed = Self::ix16>
         + UnsignedIntegerRegister<Element = <F as FloatElementWithBits>::Bits> + FullConcatRegister<Self::ux8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
 }
 

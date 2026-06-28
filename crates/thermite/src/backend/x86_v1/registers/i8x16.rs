@@ -15,8 +15,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, Element, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper,
-        array::ArrayRegister, empty_reg, reg, reg_splat,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
+        empty_reg, reg, reg_splat,
     },
 };
 
@@ -232,6 +232,9 @@ impl Register for I8x16V1 {
         // One byte per lane, so byte-swap within a lane is the identity.
         value
     }
+
+    // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
+    const HAS_PERMUTEV: bool = false;
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
@@ -257,12 +260,6 @@ impl BitshiftRegister for I8x16V1 {
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi8x_v1::<IMM8>(value) }
     }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for I8x16V1 {
-    // no `pshufb` on SSE2, so variable permutes fall back to the scalar defaults
-    const HAS_PERMUTEV: bool = false;
 }
 
 #[thermite_macros::inline_always]

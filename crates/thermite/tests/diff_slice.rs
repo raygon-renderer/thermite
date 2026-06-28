@@ -248,28 +248,28 @@ slice_suite!(scalar_f32, Scalar, f32x4, f32, "scalar f32x4");
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-slice_suite!(v3_f32, X86V3, f32x8, f32, "x86_v3 f32x8");
-slice_suite!(v3_i32, X86V3, i32x8, i32, "x86_v3 i32x8");
-slice_suite!(v3_f64, X86V3, f64x4, f64, "x86_v3 f64x4");
-slice_suite!(v3_i64, X86V3, i64x4, i64, "x86_v3 i64x4");
-slice_suite!(v3_u64, X86V3, u64x4, u64, "x86_v3 u64x4");
-slice_suite!(v2_f32, X86V2, f32x4, f32, "x86_v2 f32x4");
-slice_suite!(v2_f64, X86V2, f64x2, f64, "x86_v2 f64x2");
-slice_suite!(v2_i64, X86V2, i64x2, i64, "x86_v2 i64x2");
-slice_suite!(v2_u64, X86V2, u64x2, u64, "x86_v2 u64x2");
-slice_suite!(v1_f32, X86V1, f32x4, f32, "x86_v1 f32x4");
-slice_suite!(v1_f64, X86V1, f64x2, f64, "x86_v1 f64x2");
-slice_suite!(v1_i64, X86V1, i64x2, i64, "x86_v1 i64x2");
-slice_suite!(v1_u64, X86V1, u64x2, u64, "x86_v1 u64x2");
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+    slice_suite!(v3_f32, X86V3, f32x8, f32, "x86_v3 f32x8");
+    slice_suite!(v3_i32, X86V3, i32x8, i32, "x86_v3 i32x8");
+    slice_suite!(v3_f64, X86V3, f64x4, f64, "x86_v3 f64x4");
+    slice_suite!(v3_i64, X86V3, i64x4, i64, "x86_v3 i64x4");
+    slice_suite!(v3_u64, X86V3, u64x4, u64, "x86_v3 u64x4");
+    slice_suite!(v2_f32, X86V2, f32x4, f32, "x86_v2 f32x4");
+    slice_suite!(v2_f64, X86V2, f64x2, f64, "x86_v2 f64x2");
+    slice_suite!(v2_i64, X86V2, i64x2, i64, "x86_v2 i64x2");
+    slice_suite!(v2_u64, X86V2, u64x2, u64, "x86_v2 u64x2");
+    slice_suite!(v1_f32, X86V1, f32x4, f32, "x86_v1 f32x4");
+    slice_suite!(v1_f64, X86V1, f64x2, f64, "x86_v1 f64x2");
+    slice_suite!(v1_i64, X86V1, i64x2, i64, "x86_v1 i64x2");
+    slice_suite!(v1_u64, X86V1, u64x2, u64, "x86_v1 u64x2");
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
-slice_suite!(wasm_f32, Wasm, f32x4, f32, "wasm f32x4");
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+    slice_suite!(wasm_f32, Wasm, f32x4, f32, "wasm f32x4");
 }

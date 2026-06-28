@@ -17,7 +17,6 @@ use thermite::simd::Simd;
 use thermite::vector::ops::DivMasked;
 use thermite::{BranchfreeDivider, Divider, Vector};
 
-
 macro_rules! div_check {
     ($t:ty, $signed:literal) => {{
         let mut rng = harness::rng();
@@ -199,51 +198,51 @@ macro_rules! vdiv_check {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
-use super::*;
-use thermite::backend::x86_v1::X86V1;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
 
-#[test]
-fn vector_div_v3() {
-    vdiv_check!(<X86V3 as Simd>::u32x8, u32, false);
-    vdiv_check!(<X86V3 as Simd>::i32x8, i32, true);
-    vdiv_check!(<X86V3 as Simd>::u64x4, u64, false);
-    vdiv_check!(<X86V3 as Simd>::i64x4, i64, true);
-}
+    #[test]
+    fn vector_div_v3() {
+        vdiv_check!(<X86V3 as Simd>::u32x8, u32, false);
+        vdiv_check!(<X86V3 as Simd>::i32x8, i32, true);
+        vdiv_check!(<X86V3 as Simd>::u64x4, u64, false);
+        vdiv_check!(<X86V3 as Simd>::i64x4, i64, true);
+    }
 
-#[test]
-fn vector_div_v2() {
-    vdiv_check!(<X86V2 as Simd>::u32x4, u32, false);
-    vdiv_check!(<X86V2 as Simd>::i32x4, i32, true);
-    // 64-bit native VectorDivider exercises the SSE variable-shift polyfill
-    // (the lane-swap bug fixed in _mm_s{ll,rl}v_epi64x_v1).
-    vdiv_check!(<X86V2 as Simd>::u64x2, u64, false);
-    vdiv_check!(<X86V2 as Simd>::i64x2, i64, true);
-}
+    #[test]
+    fn vector_div_v2() {
+        vdiv_check!(<X86V2 as Simd>::u32x4, u32, false);
+        vdiv_check!(<X86V2 as Simd>::i32x4, i32, true);
+        // 64-bit native VectorDivider exercises the SSE variable-shift polyfill
+        // (the lane-swap bug fixed in _mm_s{ll,rl}v_epi64x_v1).
+        vdiv_check!(<X86V2 as Simd>::u64x2, u64, false);
+        vdiv_check!(<X86V2 as Simd>::i64x2, i64, true);
+    }
 
-#[test]
-fn vector_div_v1() {
-    vdiv_check!(<X86V1 as Simd>::u32x4, u32, false);
-    vdiv_check!(<X86V1 as Simd>::i32x4, i32, true);
-    vdiv_check!(<X86V1 as Simd>::u64x2, u64, false);
-    vdiv_check!(<X86V1 as Simd>::i64x2, i64, true);
-}
+    #[test]
+    fn vector_div_v1() {
+        vdiv_check!(<X86V1 as Simd>::u32x4, u32, false);
+        vdiv_check!(<X86V1 as Simd>::i32x4, i32, true);
+        vdiv_check!(<X86V1 as Simd>::u64x2, u64, false);
+        vdiv_check!(<X86V1 as Simd>::i64x2, i64, true);
+    }
 }
 
 // wasm: native 128-bit u32x4/i32x4/u64x2/i64x2 divider path (libdivide polyfills).
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-use super::*;
-use thermite::backend::wasm::Wasm;
+    use super::*;
+    use thermite::backend::wasm::Wasm;
 
-#[test]
-fn vector_div_wasm() {
-    vdiv_check!(<Wasm as Simd>::u32x4, u32, false);
-    vdiv_check!(<Wasm as Simd>::i32x4, i32, true);
-    vdiv_check!(<Wasm as Simd>::u64x2, u64, false);
-    vdiv_check!(<Wasm as Simd>::i64x2, i64, true);
-}
+    #[test]
+    fn vector_div_wasm() {
+        vdiv_check!(<Wasm as Simd>::u32x4, u32, false);
+        vdiv_check!(<Wasm as Simd>::i32x4, i32, true);
+        vdiv_check!(<Wasm as Simd>::u64x2, u64, false);
+        vdiv_check!(<Wasm as Simd>::i64x2, i64, true);
+    }
 }
 
 #[test]

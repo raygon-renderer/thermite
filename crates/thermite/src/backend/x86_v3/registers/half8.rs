@@ -68,14 +68,31 @@ macro_rules! impl_concat_x4_from_x2 {
             fn concat(lo: Storage<ArrayRegister<$elem, 2>>, hi: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        lo.0[0] as i8, lo.0[1] as i8, hi.0[0] as i8, hi.0[1] as i8,
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        lo.0[0] as i8,
+                        lo.0[1] as i8,
+                        hi.0[0] as i8,
+                        hi.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
             fn split(value: Storage<Self>) -> (Storage<ArrayRegister<$elem, 2>>, Storage<ArrayRegister<$elem, 2>>) {
                 let a = store_bytes(value.0);
-                (ArrayRegister([a[0] as $elem, a[1] as $elem]), ArrayRegister([a[2] as $elem, a[3] as $elem]))
+                (
+                    ArrayRegister([a[0] as $elem, a[1] as $elem]),
+                    ArrayRegister([a[2] as $elem, a[3] as $elem]),
+                )
             }
         }
 
@@ -83,7 +100,24 @@ macro_rules! impl_concat_x4_from_x2 {
         impl ExtendRegister<ArrayRegister<$elem, 2>> for $red {
             fn extend(value: Storage<ArrayRegister<$elem, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
-                    arch::_mm_setr_epi8(value.0[0] as i8, value.0[1] as i8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    arch::_mm_setr_epi8(
+                        value.0[0] as i8,
+                        value.0[1] as i8,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    )
                 })
             }
             fn narrow(value: Storage<Self>) -> Storage<ArrayRegister<$elem, 2>> {
@@ -338,17 +372,13 @@ impl CastRegister<U8x4V3> for super::U32x4V3 {
 #[thermite_macros::inline_always]
 impl CastRegister<super::I32x4V3> for I8x4V3 {
     fn cast_from(value: Storage<super::I32x4V3>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U32x4V3> for U8x4V3 {
     fn cast_from(value: Storage<super::U32x4V3>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 
@@ -956,15 +986,31 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn concat(lo: Storage<ArrayRegister<bool, 2>>, hi: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(lo.0[0]), bool_to_i8_mask(lo.0[1]),
-                        bool_to_i8_mask(hi.0[0]), bool_to_i8_mask(hi.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(lo.0[0]),
+                        bool_to_i8_mask(lo.0[1]),
+                        bool_to_i8_mask(hi.0[0]),
+                        bool_to_i8_mask(hi.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
             fn split(value: Storage<Self>) -> (Storage<ArrayRegister<bool, 2>>, Storage<ArrayRegister<bool, 2>>) {
                 let a = store_bytes(value.0);
-                (ArrayRegister([a[0] != 0, a[1] != 0]), ArrayRegister([a[2] != 0, a[3] != 0]))
+                (
+                    ArrayRegister([a[0] != 0, a[1] != 0]),
+                    ArrayRegister([a[2] != 0, a[3] != 0]),
+                )
             }
         }
 
@@ -973,8 +1019,22 @@ macro_rules! impl_mask_concat_x4_from_bool2 {
             fn extend(value: Storage<ArrayRegister<bool, 2>>) -> Storage<Self> {
                 ReducedRegister::new(unsafe {
                     arch::_mm_setr_epi8(
-                        bool_to_i8_mask(value.0[0]), bool_to_i8_mask(value.0[1]),
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        bool_to_i8_mask(value.0[0]),
+                        bool_to_i8_mask(value.0[1]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     )
                 })
             }
@@ -1006,14 +1066,16 @@ impl_indexable8!(<super::super::X86V3 as crate::simd::Simd>::u64x8 => I8x8V3, U8
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>> for I8x8V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 2>>) -> Storage<Self> {
-        let words = <super::I16x8V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>>>::saturating_cast_from(value);
+        let words =
+            <super::I16x8V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::I16x8V3>>::saturating_cast_from(words)
     }
 }
 #[thermite_macros::inline_always]
 impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 2>> for U8x8V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 2>>) -> Storage<Self> {
-        let words = <super::U16x8V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 2>>>::saturating_cast_from(value);
+        let words =
+            <super::U16x8V3 as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 2>>>::saturating_cast_from(value);
         <Self as SaturatingCastRegister<super::U16x8V3>>::saturating_cast_from(words)
     }
 }

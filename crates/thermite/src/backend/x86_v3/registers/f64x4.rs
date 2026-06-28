@@ -10,7 +10,7 @@ use crate::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
         FloatRegister, IndexableRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
         MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, SwizzleRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        ShuffleRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -232,6 +232,21 @@ impl Register for F64x4V3 {
     fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_bswap_pdx_v3(value) }
     }
+
+    const HAS_PERMUTEV: bool = true;
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        unsafe {
+            let idxs: arch::__m128i = core::mem::transmute(idxs); // [i0, i1, i2, i3]
+            let even = arch::_mm_slli_epi32(idxs, 1); // [2i0, 2i1, 2i2, 2i3]
+            let odd = arch::_mm_add_epi32(even, arch::_mm_set1_epi32(1)); // [2i0+1, ...]
+            // interleave -> [2i0,2i0+1, 2i1,2i1+1 | 2i2,2i2+1, 2i3,2i3+1]
+            let idx8 = arch::_mm256_set_m128i(arch::_mm_unpackhi_epi32(even, odd), arch::_mm_unpacklo_epi32(even, odd));
+            arch::_mm256_castps_pd(arch::_mm256_permutevar8x32_ps(arch::_mm256_castpd_ps(value), idx8))
+        }
+    }
+
+    compress_via_table!();
 }
 
 #[thermite_macros::inline_always]
@@ -334,22 +349,6 @@ impl ShuffleRegister for F64x4V3 {
 impl PermuteRegister for F64x4V3 {
     fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_permute4x64_pd(value, IMM8) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SwizzleRegister for F64x4V3 {
-    const HAS_PERMUTEV: bool = true;
-
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs); // [i0, i1, i2, i3]
-            let even = arch::_mm_slli_epi32(idxs, 1); // [2i0, 2i1, 2i2, 2i3]
-            let odd = arch::_mm_add_epi32(even, arch::_mm_set1_epi32(1)); // [2i0+1, ...]
-            // interleave -> [2i0,2i0+1, 2i1,2i1+1 | 2i2,2i2+1, 2i3,2i3+1]
-            let idx8 = arch::_mm256_set_m128i(arch::_mm_unpackhi_epi32(even, odd), arch::_mm_unpacklo_epi32(even, odd));
-            arch::_mm256_castps_pd(arch::_mm256_permutevar8x32_ps(arch::_mm256_castpd_ps(value), idx8))
-        }
     }
 }
 

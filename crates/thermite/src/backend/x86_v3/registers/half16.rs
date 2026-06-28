@@ -616,7 +616,10 @@ impl CastRegister<U16x4V3> for super::F64x4V3 {
 impl CastRegister<super::F64x4V3> for I16x4V3 {
     fn cast_from(value: Storage<super::F64x4V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(arch::_mm256_cvttpd_epi32(value), arch::_mm_narrow_dword_to_word_maskx_v2())
+            arch::_mm_shuffle_epi8(
+                arch::_mm256_cvttpd_epi32(value),
+                arch::_mm_narrow_dword_to_word_maskx_v2(),
+            )
         })
     }
 }
@@ -624,7 +627,10 @@ impl CastRegister<super::F64x4V3> for I16x4V3 {
 impl CastRegister<super::F64x4V3> for U16x4V3 {
     fn cast_from(value: Storage<super::F64x4V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(arch::_mm256_cvttpd_epi32(value), arch::_mm_narrow_dword_to_word_maskx_v2())
+            arch::_mm_shuffle_epi8(
+                arch::_mm256_cvttpd_epi32(value),
+                arch::_mm_narrow_dword_to_word_maskx_v2(),
+            )
         })
     }
 }
