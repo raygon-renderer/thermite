@@ -576,6 +576,22 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
+    #[inline(always)]
+    fn compress(self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.compress(mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].compress(mask)),
+        }
+    }
+
+    #[inline(always)]
+    fn compress_z(self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.compress_z(mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].compress_z(mask)),
+        }
+    }
+
     #[inline(always)] fn map<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::Element) -> Self::Element,

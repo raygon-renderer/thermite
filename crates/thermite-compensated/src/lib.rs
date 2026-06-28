@@ -1408,6 +1408,22 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
+    #[inline(always)]
+    fn compress(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.compress(mask),
+            error: self.error.compress(mask),
+        }
+    }
+
+    #[inline(always)]
+    fn compress_z(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.compress_z(mask),
+            error: self.error.compress_z(mask),
+        }
+    }
+
 
     fn map<F>(mut self, f: F) -> Self
     where
