@@ -45,6 +45,10 @@ let (lo, hi) = a.interleave(b)      let (a, b)    = lo.deinterleave(hi)
 v.compress(mask)    // stable left-pack of true lanes (AVX-512 vpcompress; portable fallback)
 v.compress_z(mask)  // left-pack true lanes, zero the rest
 
+// Two-vector element align (palignr family; any element type): the window of
+// LANES lanes starting at lane OFFSET of [a, b]. OFFSET=0 -> a, OFFSET=LANES -> b.
+a.align::<OFFSET>(b)   // sliding window across a load boundary; int backends use native byte aligns
+
 // Casting
 v.cast::<W>()         // numeric cast, like `as`
 v.fast_cast::<W>()    // faster, may skip edge cases
@@ -112,8 +116,11 @@ v.wrapping_sum()  v.wrapping_prod()   v.count_ones()  v.count_zeros()
 v.leading_ones()  v.leading_zeros()
 // SignedIntegerVector
 v.srai::<I>()  v.sra(n)  v.srav(unsigned)   a.avg_floor(b)  a.avg_ceil(b)
+a.mulhrs(b)    // rounded Q(W-1) fixed-point multiply (i16: Q15, x86 PMULHRSW); rounds, not truncates
 // UnsignedIntegerVector
 v.is_power_of_two() -> M   a.avg(b)   v.parity()   v.ilog2p1()   v.next_power_of_two_m1()
+a.abs_diff(b)              // |a - b| without overflow (saturating-sub form)
+x.in_range(lo, hi) -> M    // mask of lo <= x <= hi, inclusive (branchless, one compare)
 
 // Division by a precomputed divisor (constant-time, branchfree). See `divider` module.
 use thermite::{BranchfreeDivider, Divider};

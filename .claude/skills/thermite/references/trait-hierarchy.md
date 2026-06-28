@@ -80,8 +80,8 @@ instruction sequences per backend at zero runtime cost
 
 - **GenericVector**: construction, lane access, load/store, gather/scatter, lookup,
   widen/narrow (`extend`/`narrow`/`concat`/`split`), interleave/deinterleave,
-  reverse/swap_bytes/compress, cast/into_bits, `zz`/`nz`, prefix/suffix mask,
-  map/fold/reduce. -> [vector-api.md](vector-api.md) section 1.
+  reverse/swap_bytes/compress, `align::<OFFSET>` (two-vector lane window), cast/into_bits,
+  `zz`/`nz`, prefix/suffix mask, map/fold/reduce. -> [vector-api.md](vector-api.md) section 1.
 - **BitwiseVector / BitshiftVector**: `&` `|` `^` `!`, `bitandnot`, `ternlog`/`bilog`;
   `shl`/`shr`/`shlv`/`shrv`/`shli`/`shri`, byte shifts, rotates, `reverse_bits`.
   -> section 2.
@@ -94,7 +94,8 @@ instruction sequences per backend at zero runtime cost
   `NEG_ONE`, `MIN_POSITIVE`. -> section 5.
 - **IntegerVector family**: `mulhi`/`mullo`, `saturating_add/sub`, `wrapping_sum/prod`,
   dividers, `count_ones/zeros`, `leading_ones/zeros`; signed `srai/sra/srav`,
-  `avg_floor/ceil`; unsigned `is_power_of_two`, `avg`, `parity`, `ilog2p1`. -> section 6.
+  `avg_floor/ceil`, `mulhrs` (rounded Q-format multiply); unsigned `is_power_of_two`,
+  `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`. -> section 6.
 - **FloatVector**: `sqrt`, `rcp`, `rsqrt`, `floor/ceil/round/trunc/fract`, `mix`,
   `next_up/down`, `mul_sign`, `signed_zero`, `one_minus_sq`, classification
   (`is_nan/finite/infinite/normal/subnormal`), constants

@@ -1731,6 +1731,13 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
     ///
     /// Matches x86 `PAVGB`/`PAVGW` and ARM `vrhadd` semantics.
     #[conditional] fn avg(self, other: Self) -> Self;
+
+    /// Per-lane unsigned absolute difference `|self - other|`, without overflow.
+    ///
+    /// Computed branchlessly as `(self -| other) | (other -| self)` with
+    /// saturating subtraction. The per-lane building block of sum-of-absolute-
+    /// differences (block matching, motion estimation).
+    #[conditional] fn abs_diff(self, other: Self) -> Self;
 }
 
 /// Escape hatch tying a [`Vector`] to its specific underlying

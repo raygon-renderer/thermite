@@ -1828,6 +1828,18 @@ pub trait UnsignedIntegerRegister:
         Self::sub(Self::bitor(a, b), Self::shri::<1>(Self::bitxor(a, b)))
     }
 
+    /// Per-lane unsigned absolute difference `|a - b|`, without overflow.
+    ///
+    /// Computed as `(a -| b) | (b -| a)` with saturating subtraction: exactly
+    /// one of the two saturating subtractions is nonzero (whichever operand is
+    /// larger wins), so the `OR` yields `|a - b|` for any unsigned width. On x86
+    /// this lowers to the canonical `psubus`/`psubus`/`por` sequence, so no
+    /// native override is needed.
+    #[conditional]
+    fn abs_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::bitor(Self::saturating_sub(a, b), Self::saturating_sub(b, a))
+    }
+
     // TODO: Interleave bits?
 }
 

@@ -18,6 +18,11 @@ m.all()  -> bool          // every lane true
 m.any()  -> bool          // some lane true
 m.none() -> bool          // no lane true  (== !any)
 
+// scanning: turn a mask into find/count primitives (build on native_bitmask)
+m.first_set() -> Option<usize>   // index of lowest true lane; with cmp_eq this is a SIMD memchr
+m.last_set()  -> Option<usize>   // index of highest true lane
+m.count_set() -> usize           // number of true lanes (popcount)
+
 m.select(t, f) -> S       // per-lane: mask ? t : f   (one instruction; S: GenericSelectable)
 
 // bitwise combine

@@ -625,6 +625,7 @@ where
     #[conditional] fn ilog2p1(self) -> Self {}
     #[conditional] fn parity(self) -> Self {}
     #[conditional] fn avg(self, other: Self) -> Self {}
+    #[conditional] fn abs_diff(self, other: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
