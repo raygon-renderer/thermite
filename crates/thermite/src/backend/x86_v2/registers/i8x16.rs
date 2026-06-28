@@ -396,6 +396,8 @@ impl IntegerRegister for I8x16V2 {
         unsafe { arch::_mm_mullo_epi8x_v1(lhs, rhs) }
     }
 
+    impl_byte_align_alignr!();
+
     fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_adds_epi8(lhs, rhs) }
     }

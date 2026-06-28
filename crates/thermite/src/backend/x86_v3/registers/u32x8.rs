@@ -439,6 +439,11 @@ impl NumericRegister for U32x8V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for U32x8V3 {
+    // Byte-identical to the signed register (both raw `__m256i`); reuse it.
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        super::I32x8V3::align::<OFFSET>(a, b)
+    }
+
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mullhi_epu32x_v3(lhs, rhs) }
     }

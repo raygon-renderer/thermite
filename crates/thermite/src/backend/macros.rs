@@ -10,6 +10,95 @@ macro_rules! impl_packed_fp8 {
     )*};
 }
 
+/// Native two-register byte align (`IntegerRegister::align`) for a 128-bit byte
+/// register, via `_mm_alignr_epi8` (SSSE3+). Drop into an `impl IntegerRegister`
+/// block for an i8x16/u8x16-shaped register.
+///
+/// `align::<OFFSET>(a, b)` is the 16-byte window at byte `OFFSET` of the
+/// concatenation `[a, b]` with `a` as the low half. `_mm_alignr_epi8::<n>(hi, lo)`
+/// yields `concat(lo:hi)[n..]`, so we pass `(b, a)`. The immediate cannot be a
+/// const expression of `OFFSET` on stable, hence the (verbose) match supplying
+/// each literal; `OFFSET > 16` falls back to the generic `swizzle_const` default.
+macro_rules! impl_byte_align_alignr {
+    () => {
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            match OFFSET {
+                0  => unsafe { arch::_mm_alignr_epi8::<0>(b, a) },
+                1  => unsafe { arch::_mm_alignr_epi8::<1>(b, a) },
+                2  => unsafe { arch::_mm_alignr_epi8::<2>(b, a) },
+                3  => unsafe { arch::_mm_alignr_epi8::<3>(b, a) },
+                4  => unsafe { arch::_mm_alignr_epi8::<4>(b, a) },
+                5  => unsafe { arch::_mm_alignr_epi8::<5>(b, a) },
+                6  => unsafe { arch::_mm_alignr_epi8::<6>(b, a) },
+                7  => unsafe { arch::_mm_alignr_epi8::<7>(b, a) },
+                8  => unsafe { arch::_mm_alignr_epi8::<8>(b, a) },
+                9  => unsafe { arch::_mm_alignr_epi8::<9>(b, a) },
+                10 => unsafe { arch::_mm_alignr_epi8::<10>(b, a) },
+                11 => unsafe { arch::_mm_alignr_epi8::<11>(b, a) },
+                12 => unsafe { arch::_mm_alignr_epi8::<12>(b, a) },
+                13 => unsafe { arch::_mm_alignr_epi8::<13>(b, a) },
+                14 => unsafe { arch::_mm_alignr_epi8::<14>(b, a) },
+                15 => unsafe { arch::_mm_alignr_epi8::<15>(b, a) },
+                16 => unsafe { arch::_mm_alignr_epi8::<16>(b, a) },
+                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+            }
+        }
+    };
+}
+
+/// Native two-register element align for a 256-bit register (AVX2). Drop into an
+/// `impl IntegerRegister` block for an i8x32/i16x16/i32x8/i64x4-shaped register.
+///
+/// A full 256-bit align is two instructions: `mid = permute2x128(a, b, 0x21)`
+/// (`[a.hi, b.lo]`), then a single `_mm256_alignr_epi8` (which aligns per
+/// 128-bit lane). For byte offset `ob = OFFSET * size_of::<Element>()` in
+/// `0..=16` the window is `alignr::<ob>(mid, a)`; in `16..=32` it is
+/// `alignr::<ob-16>(b, mid)`. The match is keyed on `ob` so the immediate is a
+/// literal (stable rejects a const expr of `OFFSET`); `ob` const-folds to one arm.
+macro_rules! impl_byte_align_alignr256 {
+    () => {
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            let mid = unsafe { arch::_mm256_permute2x128_si256::<0x21>(a, b) };
+            match OFFSET * core::mem::size_of::<Self::Element>() {
+                0  => unsafe { arch::_mm256_alignr_epi8::<0>(mid, a) },
+                1  => unsafe { arch::_mm256_alignr_epi8::<1>(mid, a) },
+                2  => unsafe { arch::_mm256_alignr_epi8::<2>(mid, a) },
+                3  => unsafe { arch::_mm256_alignr_epi8::<3>(mid, a) },
+                4  => unsafe { arch::_mm256_alignr_epi8::<4>(mid, a) },
+                5  => unsafe { arch::_mm256_alignr_epi8::<5>(mid, a) },
+                6  => unsafe { arch::_mm256_alignr_epi8::<6>(mid, a) },
+                7  => unsafe { arch::_mm256_alignr_epi8::<7>(mid, a) },
+                8  => unsafe { arch::_mm256_alignr_epi8::<8>(mid, a) },
+                9  => unsafe { arch::_mm256_alignr_epi8::<9>(mid, a) },
+                10 => unsafe { arch::_mm256_alignr_epi8::<10>(mid, a) },
+                11 => unsafe { arch::_mm256_alignr_epi8::<11>(mid, a) },
+                12 => unsafe { arch::_mm256_alignr_epi8::<12>(mid, a) },
+                13 => unsafe { arch::_mm256_alignr_epi8::<13>(mid, a) },
+                14 => unsafe { arch::_mm256_alignr_epi8::<14>(mid, a) },
+                15 => unsafe { arch::_mm256_alignr_epi8::<15>(mid, a) },
+                16 => unsafe { arch::_mm256_alignr_epi8::<16>(mid, a) },
+                17 => unsafe { arch::_mm256_alignr_epi8::<1>(b, mid) },
+                18 => unsafe { arch::_mm256_alignr_epi8::<2>(b, mid) },
+                19 => unsafe { arch::_mm256_alignr_epi8::<3>(b, mid) },
+                20 => unsafe { arch::_mm256_alignr_epi8::<4>(b, mid) },
+                21 => unsafe { arch::_mm256_alignr_epi8::<5>(b, mid) },
+                22 => unsafe { arch::_mm256_alignr_epi8::<6>(b, mid) },
+                23 => unsafe { arch::_mm256_alignr_epi8::<7>(b, mid) },
+                24 => unsafe { arch::_mm256_alignr_epi8::<8>(b, mid) },
+                25 => unsafe { arch::_mm256_alignr_epi8::<9>(b, mid) },
+                26 => unsafe { arch::_mm256_alignr_epi8::<10>(b, mid) },
+                27 => unsafe { arch::_mm256_alignr_epi8::<11>(b, mid) },
+                28 => unsafe { arch::_mm256_alignr_epi8::<12>(b, mid) },
+                29 => unsafe { arch::_mm256_alignr_epi8::<13>(b, mid) },
+                30 => unsafe { arch::_mm256_alignr_epi8::<14>(b, mid) },
+                31 => unsafe { arch::_mm256_alignr_epi8::<15>(b, mid) },
+                32 => unsafe { arch::_mm256_alignr_epi8::<16>(b, mid) },
+                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+            }
+        }
+    };
+}
+
 macro_rules! impl_bit_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(

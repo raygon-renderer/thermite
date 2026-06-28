@@ -336,6 +336,13 @@ pub trait InterleaveRegister: CoreRegister {
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>);
 }
 
+/// Bitmask of the low `lanes` bits set (the valid-lane window of a packed
+/// bitmask). `lanes >= 64` yields all ones.
+#[inline(always)]
+const fn lane_bitmask(lanes: usize) -> u64 {
+    if lanes >= 64 { u64::MAX } else { (1u64 << lanes) - 1 }
+}
+
 /// Mask registers, which operate on boolean values, though not necessarily
 /// with `bool` storage.
 ///
@@ -397,6 +404,56 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
         }
 
         bitmask
+    }
+
+    // The `else` arms below are only reached by masks whose `native_bitmask`
+    // returns `None` (wider than 64 lanes). The only such type today,
+    // `ArrayRegister`, overrides all three with a sub-register scan, so these
+    // fall back to the canonical `bitmask()` word-scan (the same packing
+    // `bitmask()` itself uses) rather than poking one lane at a time - dropping
+    // to the per-lane `test` loop only when `bitvec` is unavailable.
+
+    /// Index of the lowest lane set to `true`, or `None` if every lane is
+    /// `false`. A SIMD find-first: combined with a comparison this is `memchr`.
+    fn first_set(value: Storage<Self>) -> Option<usize> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+        if let Some(bm) = Self::native_bitmask(value) {
+            let bm = bm & lane_bitmask(lanes);
+            (bm != 0).then(|| bm.trailing_zeros() as usize)
+        } else {
+            #[cfg(feature = "bitvec")]
+            { Self::bitmask(value).first_one() }
+            #[cfg(not(feature = "bitvec"))]
+            { (0..lanes).find(|&i| Self::test(value, i)) }
+        }
+    }
+
+    /// Index of the highest lane set to `true`, or `None` if every lane is
+    /// `false` (a find-last).
+    fn last_set(value: Storage<Self>) -> Option<usize> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+        if let Some(bm) = Self::native_bitmask(value) {
+            let bm = bm & lane_bitmask(lanes);
+            (bm != 0).then(|| 63 - bm.leading_zeros() as usize)
+        } else {
+            #[cfg(feature = "bitvec")]
+            { Self::bitmask(value).last_one() }
+            #[cfg(not(feature = "bitvec"))]
+            { (0..lanes).rev().find(|&i| Self::test(value, i)) }
+        }
+    }
+
+    /// Number of lanes set to `true` (population count of the mask).
+    fn count_set(value: Storage<Self>) -> usize {
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+        if let Some(bm) = Self::native_bitmask(value) {
+            (bm & lane_bitmask(lanes)).count_ones() as usize
+        } else {
+            #[cfg(feature = "bitvec")]
+            { Self::bitmask(value).count_ones() }
+            #[cfg(not(feature = "bitvec"))]
+            { (0..lanes).filter(|&i| Self::test(value, i)).count() }
+        }
     }
 }
 
@@ -1632,6 +1689,65 @@ pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRe
     #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
+    /// Two-register element align (the `palignr` family): the window of
+    /// `Self::Lanes` lanes starting at lane `OFFSET` of the concatenation
+    /// `[a, b]` (`a`'s lanes first, then `b`'s). `OFFSET == 0` returns `a`,
+    /// `OFFSET == LANES` returns `b`; in between, lanes spill from the tail of
+    /// `a` into the head of `b`.
+    ///
+    /// This is the cross-register sliding window used for multi-byte delimiter /
+    /// substring scanning across a load boundary - the cross-register companion
+    /// to the single-register [`bshli`](BitshiftRegister::bshli)/[`bshri`](BitshiftRegister::bshri).
+    ///
+    /// Full, unpadded 128-bit registers with native whole-register byte shifts
+    /// take a fast path: `align` is `(a >> ob) | (b << (16 - ob))` in bytes
+    /// (`ob = OFFSET * size_of::<Element>()`), built from
+    /// [`bshri`](BitshiftRegister::bshri)/[`bshli`](BitshiftRegister::bshli). The
+    /// match is keyed on `ob` (not `OFFSET`) so the shift immediates are literals
+    /// rather than const expressions of `OFFSET` (which stable rejects), and `ob`
+    /// const-folds to a single arm. Everything else (256-bit - where the byte
+    /// shifts are per-128-lane - reduced/padded registers, the scalar backend)
+    /// falls back to [`swizzle_const`](Register::swizzle_const) with a
+    /// compile-time [`AlignIndices`](crate::swizzle::AlignIndices) pattern, which
+    /// is correct on every backend and lane count. Byte/128-bit registers may
+    /// further override this with a single native `palignr`.
+    fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        // Gate: only full, unpadded 128-bit registers whose `bshli`/`bshri` are
+        // genuine full-width byte shifts. `HAS_WIDE_BYTE_SHIFTS` alone is not
+        // enough - it is also `true` for 256-bit registers, where the byte shifts
+        // act per 128-bit lane and would not carry bytes across the boundary.
+        if const {
+            Self::HAS_WIDE_BYTE_SHIFTS
+                && size_of::<Storage<Self>>() == 16
+                && <Self::Lanes as Unsigned>::USIZE * size_of::<Self::Element>() == 16
+        } {
+            // `ob` folds the element size in, so each arm's shift counts are plain
+            // literals. `ob > 16` means `OFFSET > LANES` (out of range) -> fall back.
+            match const { OFFSET * size_of::<Self::Element>() } {
+                0  => Self::bitor(Self::bshri::<0>(a),  Self::bshli::<16>(b)),
+                1  => Self::bitor(Self::bshri::<1>(a),  Self::bshli::<15>(b)),
+                2  => Self::bitor(Self::bshri::<2>(a),  Self::bshli::<14>(b)),
+                3  => Self::bitor(Self::bshri::<3>(a),  Self::bshli::<13>(b)),
+                4  => Self::bitor(Self::bshri::<4>(a),  Self::bshli::<12>(b)),
+                5  => Self::bitor(Self::bshri::<5>(a),  Self::bshli::<11>(b)),
+                6  => Self::bitor(Self::bshri::<6>(a),  Self::bshli::<10>(b)),
+                7  => Self::bitor(Self::bshri::<7>(a),  Self::bshli::<9>(b)),
+                8  => Self::bitor(Self::bshri::<8>(a),  Self::bshli::<8>(b)),
+                9  => Self::bitor(Self::bshri::<9>(a),  Self::bshli::<7>(b)),
+                10 => Self::bitor(Self::bshri::<10>(a), Self::bshli::<6>(b)),
+                11 => Self::bitor(Self::bshri::<11>(a), Self::bshli::<5>(b)),
+                12 => Self::bitor(Self::bshri::<12>(a), Self::bshli::<4>(b)),
+                13 => Self::bitor(Self::bshri::<13>(a), Self::bshli::<3>(b)),
+                14 => Self::bitor(Self::bshri::<14>(a), Self::bshli::<2>(b)),
+                15 => Self::bitor(Self::bshri::<15>(a), Self::bshli::<1>(b)),
+                16 => Self::bitor(Self::bshri::<16>(a), Self::bshli::<0>(b)),
+                _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+            }
+        } else {
+            Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b)
+        }
+    }
+
     #[conditional] fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
@@ -1695,6 +1811,24 @@ pub trait UnsignedIntegerRegister:
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {
         // f = (v & (v - 1)) == 0
         Self::eq(Self::ZERO, Self::bitand(value, Self::sub(value, Self::ONE)))
+    }
+
+    /// Per-lane inclusive unsigned range test: a mask of `lo <= value <= hi`,
+    /// assuming `lo <= hi`.
+    ///
+    /// Uses the branchless `(value - lo) <= (hi - lo)` trick with *wrapping*
+    /// subtraction: when `value < lo` the subtraction wraps to a large value
+    /// that fails the `<=` test. The win over the naive `value >= lo & value
+    /// <= hi` is a single unsigned compare instead of two (plus an `and`) -
+    /// which matters on ISAs that lack a native unsigned compare. It is two
+    /// subtracts and one compare in general; when `lo`/`hi` are constants
+    /// `hi - lo` folds away, leaving one subtract and one compare - the usual
+    /// byte-classification case (digit/alpha/whitespace ranges).
+    ///
+    /// (Note: this needs wrapping, not saturating, sub - with saturating sub
+    /// `value < lo` would give `0 <= hi - lo` and wrongly test true.)
+    fn in_range(value: Storage<Self>, lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self::Mask> {
+        Self::le(Self::sub(value, lo), Self::sub(hi, lo))
     }
 
     #[conditional]
@@ -1773,6 +1907,33 @@ pub trait SignedIntegerRegister:
     #[conditional]
     fn avg_ceil(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         Self::sub(Self::bitor(a, b), Self::srai::<1>(Self::bitxor(a, b)))
+    }
+
+    /// Rounded high-half signed multiply: the fixed-point `Q(W-1)` product
+    /// `(a * b + 2^(W-2)) >> (W-1)` keeping the low `W` bits, where `W` is the
+    /// element bit width.
+    ///
+    /// For `i16` lanes this is the Q15 rounded multiply (x86 `PMULHRSW` /
+    /// `_mm_mulhrs_epi16`), the workhorse for gain, fades, and window functions
+    /// in fixed-point DSP. Unlike [`mulhi`](IntegerRegister::mulhi) it rounds to
+    /// nearest rather than truncating, so it avoids the DC bias truncation
+    /// introduces. The `MIN * MIN` corner wraps rather than saturating, matching
+    /// `PMULHRSW`.
+    ///
+    /// The default reconstructs the double-width product from
+    /// [`mulhi`](IntegerRegister::mulhi)/[`mullo`](IntegerRegister::mullo); ISAs
+    /// with a native instruction (SSSE3+) override it for `i16`.
+    #[conditional]
+    fn mulhrs(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        let w = (size_of::<Self::Element>() * 8) as u32;
+        let lo = Self::mullo(a, b);
+        let hi = Self::mulhi(a, b);
+        // (hi:lo) is the 2W-bit product P. `(hi << 1) | (lo >>u (W-1))` is
+        // floor(P / 2^(W-1)) keeping the low W bits (note: shr is logical here).
+        let shifted = Self::bitor(Self::shli::<1>(hi), Self::shr(lo, w - 1));
+        // Round to nearest by adding the highest dropped bit (bit W-2 of P).
+        let round = Self::bitand(Self::shr(lo, w - 2), Self::ONE);
+        Self::add(shifted, round)
     }
 }
 

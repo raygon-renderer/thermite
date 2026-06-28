@@ -396,6 +396,8 @@ impl SignedRegister for I16x16V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for I16x16V3 {
+    impl_byte_align_alignr256!();
+
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mulhi_epi16(lhs, rhs) }
     }
@@ -448,6 +450,9 @@ impl SignedIntegerRegister for I16x16V3 {
     }
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm256_sra_epi16(value, arch::_mm_cvtsi32_si128(shift as i32)) }
+    }
+    fn mulhrs(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_mulhrs_epi16(a, b) }
     }
 }
 

@@ -86,6 +86,21 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     /// Returns `true` if every lane is `false`. Equivalent to `!self.any()`.
     fn none(self) -> bool;
 
+    /// Index of the lowest lane set to `true`, or `None` if every lane is
+    /// `false`.
+    ///
+    /// A SIMD find-first: combined with a comparison this is a vectorized
+    /// `memchr`, e.g. `v.cmp_eq(Vector::splat(byte)).first_set()` gives the
+    /// index of the first matching lane.
+    fn first_set(self) -> Option<usize>;
+
+    /// Index of the highest lane set to `true`, or `None` if every lane is
+    /// `false` (a find-last).
+    fn last_set(self) -> Option<usize>;
+
+    /// Number of lanes set to `true` (population count of the mask).
+    fn count_set(self) -> usize;
+
     /// Extract the mask as a packed integer bitmask, one bit per lane (lane 0 in
     /// the least-significant bit), if the backend can produce one directly.
     ///
@@ -264,6 +279,21 @@ impl<R: Register> GenericMask for Mask<R> {
     #[inline(always)]
     fn none(self) -> bool {
         <R::Mask as MaskRegister>::none(self.0)
+    }
+
+    #[inline(always)]
+    fn first_set(self) -> Option<usize> {
+        <R::Mask as MaskRegister>::first_set(self.0)
+    }
+
+    #[inline(always)]
+    fn last_set(self) -> Option<usize> {
+        <R::Mask as MaskRegister>::last_set(self.0)
+    }
+
+    #[inline(always)]
+    fn count_set(self) -> usize {
+        <R::Mask as MaskRegister>::count_set(self.0)
     }
 
     #[inline(always)]

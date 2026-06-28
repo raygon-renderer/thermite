@@ -497,6 +497,8 @@ where
     #[conditional] fn mulhi(self, other: Self) -> Self {}
     #[conditional] fn mullo(self, other: Self) -> Self {}
 
+    fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
+
     // fn wrapping_add(self, other: Self) -> Self {}
     // fn wrapping_sub(self, other: Self) -> Self {}
     // fn wrapping_mul(self, other: Self) -> Self {}
@@ -609,6 +611,7 @@ where
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self {}
     #[conditional] fn avg_floor(self, other: Self) -> Self {}
     #[conditional] fn avg_ceil(self, other: Self) -> Self {}
+    #[conditional] fn mulhrs(self, other: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
@@ -617,6 +620,7 @@ where
     R::Element: Denominator,
 {
     fn is_power_of_two(self) -> Self::Mask { Mask(R::is_power_of_two(self.0)) }
+    fn in_range(self, lo: Self, hi: Self) -> Self::Mask { Mask(R::in_range(self.0, lo.0, hi.0)) }
 
     #[conditional] fn next_power_of_two_m1(self) -> Self {}
     #[conditional] fn ilog2p1(self) -> Self {}

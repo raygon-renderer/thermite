@@ -450,6 +450,10 @@ impl SignedIntegerRegister for I16x8V2 {
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm_sra_epi16(value, arch::_mm_cvtsi32_si128(shift as i32)) }
     }
+
+    fn mulhrs(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_mulhrs_epi16(a, b) }
+    }
 }
 
 // Widen i16x8 -> i32x8 (= ArrayRegister<I32x4V2, 2>): sign-extend the low/high 4 lanes.

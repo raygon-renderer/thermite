@@ -1604,6 +1604,16 @@ pub trait IntegerVector:
     /// low-half-only multiply instructions worth emitting directly.
     #[conditional] fn mullo(self, other: Self) -> Self;
 
+    /// Two-register element align (the `palignr` family): the window of `LANES`
+    /// lanes starting at lane `OFFSET` of the concatenation `[self, other]`
+    /// (`self`'s lanes first, then `other`'s). `OFFSET == 0` returns `self`,
+    /// `OFFSET == LANES` returns `other`; in between, lanes spill from the tail
+    /// of `self` into the head of `other`.
+    ///
+    /// The cross-register sliding window used for scanning multi-byte
+    /// delimiters / substrings across a load boundary.
+    fn align<const OFFSET: usize>(self, other: Self) -> Self;
+
     // fn wrapping_add(self, other: Self) -> Self;
     // fn wrapping_sub(self, other: Self) -> Self;
     // fn wrapping_mul(self, other: Self) -> Self;
@@ -1680,6 +1690,15 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     #[conditional] fn avg_floor(self, other: Self) -> Self;
     /// Ceiling average: `(a + b + 1) >> 1` rounded toward +∞, computed without overflow.
     #[conditional] fn avg_ceil(self, other: Self) -> Self;
+
+    /// Rounded high-half signed multiply: the fixed-point `Q(W-1)` product
+    /// `(self * other + 2^(W-2)) >> (W-1)`, where `W` is the element bit width.
+    ///
+    /// For `i16` this is the Q15 rounded multiply (x86 `PMULHRSW`), the
+    /// fixed-point DSP primitive for gain/volume, fades, and window functions.
+    /// Unlike [`mulhi`](IntegerVector::mulhi) it rounds to nearest instead of
+    /// truncating, avoiding a DC bias.
+    #[conditional] fn mulhrs(self, other: Self) -> Self;
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
@@ -1687,6 +1706,15 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
     /// Determines if each unsigned integer element in the vector is a
     /// power of two, returning a mask indicating whether or not it is.
     fn is_power_of_two(self) -> Self::Mask;
+
+    /// Per-lane inclusive unsigned range test: a mask of `lo <= self <= hi`,
+    /// assuming `lo <= hi`.
+    ///
+    /// Computed branchlessly as `(self - lo) <= (hi - lo)` with wrapping
+    /// subtraction: a single unsigned compare instead of the two an explicit
+    /// `self >= lo & self <= hi` would need. The workhorse of byte
+    /// classification - testing digit/alpha/whitespace ranges.
+    fn in_range(self, lo: Self, hi: Self) -> Self::Mask;
 
     /// Returns the next power of two minus one for each unsigned integer
     /// element in the vector.

@@ -1,9 +1,38 @@
-use generic_array::{ArrayLength, GenericArray};
+use core::marker::PhantomData;
+
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 use crate::{Vector, register::Register};
 
 #[doc(hidden)]
 pub use crate::register::SwizzleIndices;
+
+/// Compile-time [`SwizzleIndices`] for a two-register element align: lane `i`
+/// maps to index `i + OFFSET` of the concatenation `[a, b]` (`a`'s lanes first,
+/// then `b`'s).
+///
+/// Fed to [`swizzle_const`](Swizzle::swizzle_const) this produces a
+/// `palignr`-style sliding window - `Self::Lanes` lanes starting `OFFSET` lanes
+/// into `a` and spilling into `b`. `OFFSET == 0` yields `a`; `OFFSET == LANES`
+/// yields `b`.
+pub(crate) struct AlignIndices<const OFFSET: usize, N>(PhantomData<N>);
+
+impl<const OFFSET: usize, N: ArrayLength> SwizzleIndices<N> for AlignIndices<OFFSET, N> {
+    const INDICES: GenericArray<u32, N> = const {
+        // `GenericArray<u32, N>` has no const literal constructor for a generic
+        // `N`, so zero-initialize (an all-zero `u32` array is valid) and fill it
+        // in place. Writing through a raw pointer avoids needing a const `IndexMut`
+        // or `DerefMut` on `GenericArray`.
+        let mut idxs: GenericArray<u32, N> = unsafe { core::mem::zeroed() };
+        let ptr = &mut idxs as *mut GenericArray<u32, N> as *mut u32;
+        let mut i = 0;
+        while i < N::USIZE {
+            unsafe { *ptr.add(i) = (i + OFFSET) as u32 };
+            i += 1;
+        }
+        idxs
+    };
+}
 
 /*
 /// Generates the imm8 constants for shuffling together two vectors

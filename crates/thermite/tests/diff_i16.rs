@@ -85,6 +85,7 @@ macro_rules! int16_tests {
             int16_common!(UT, RF, $label);
             diff_unary!($label, UT, RF, neg, Tol::Exact);
             diff_unary!($label, UT, RF, abs, Tol::Exact);
+            diff_binary!($label, UT, RF, mulhrs, Tol::Exact); // native PMULHRSW vs scalar polyfill
             diff_shift!($label, UT, RF, sra); // arithmetic (sign-extending) shift
         }
     };
