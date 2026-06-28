@@ -483,7 +483,18 @@ impl IntegerRegister for U64x2V3 {
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U64x2V3 {}
+impl UnsignedIntegerRegister for U64x2V3 {
+    /// 2D Morton via carry-less multiply (each 64-bit lane interleaves two 32-bit
+    /// coords); every other `N` delegates to the generic shift/mask cascade.
+    #[cfg(feature = "avx2-pclmul")]
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        if const { N == 2 } {
+            unsafe { arch::_mm_morton2_epu64x_v3(values[0], values[1]) }
+        } else {
+            crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+        }
+    }
+}
 
 impl CastRegister<<Scalar as Simd>::u32x2> for U64x2V3 {
     fn cast_from(value: Storage<<Scalar as Simd>::u32x2>) -> Storage<Self> {

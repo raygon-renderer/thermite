@@ -45,10 +45,15 @@ static BACKENDS: &[Backend] = cfg_select! {
         // AVX2 backend is selected and unconditionally enable the half-precision conversion
         // intrinsics in dispatched code without a separate runtime check. However, there are
         // some AVX2-capable CPUs that do not have F16C, so this remains optional.
+        // `avx2-pclmul` additionally assumes PCLMULQDQ (present on every AVX2 CPU - it
+        // shipped with Westmere, three years before Haswell), enabling the CLMUL-based 2D
+        // Morton fast path on u64-lane registers.
         Backend {
             isa: "X86V3",
             target_feature: cfg_select! {
+                all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,f16c,pclmulqdq",
                 feature = "avx2-f16c" => "avx2,fma,f16c",
+                feature = "avx2-pclmul" => "avx2,fma,pclmulqdq",
                 _ => "avx2,fma",
             },
             simd_type: Some("backend::x86_v3::X86V3")

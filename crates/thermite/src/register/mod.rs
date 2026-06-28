@@ -1840,7 +1840,51 @@ pub trait UnsignedIntegerRegister:
         Self::bitor(Self::saturating_sub(a, b), Self::saturating_sub(b, a))
     }
 
-    // TODO: Interleave bits?
+    /// Per-lane `N`-dimensional Morton code (Z-order curve index): interleave
+    /// the low bits of `N` coordinate vectors into a single value, placing the
+    /// bits of `values[d]` at output positions `d, d + N, d + 2N, ...`.
+    ///
+    /// Each coordinate contributes its low `floor(W / N)` bits, where `W` is the
+    /// element bit width; higher input bits are discarded. `N = 2` is the
+    /// classic 2D code, `N = 3` the 3D (voxel/octree) code; `N = 1` is the
+    /// identity.
+    ///
+    /// ```math
+    /// \mathrm{morton}(v_0, \dots, v_{N-1}) = \bigvee_{d=0}^{N-1} \mathrm{spread}_N(v_d) \ll d
+    /// ```
+    ///
+    /// where `$\mathrm{spread}_N$` sends input bit `i` to output bit `N i`. The
+    /// default is a portable `O(log W)` shift/mask bit-spread (the generalized
+    /// "magic number" cascade); backends override with hardware bit-deposit
+    /// (BMI2 `PDEP`), carryless multiply (`spread_2(x) = clmul(x, x)`), or GFNI
+    /// affine transforms where available.
+    ///
+    /// [`reverse_morton`](Self::reverse_morton) is the inverse.
+    ///
+    /// The default delegates to the generic
+    /// [`morton_cascade`](crate::backend::generic::polyfills::morton_cascade)
+    /// bit-spread. A backend override should accelerate the dimensions it has
+    /// hardware for (e.g. `N == 2` via carryless multiply) and delegate every
+    /// other `N` back to `morton_cascade`, since there is no `super` for a trait
+    /// default.
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+    }
+
+    /// Per-lane inverse of [`morton`](Self::morton): de-interleave an
+    /// `N`-dimensional Morton code back into its `N` coordinate vectors, where
+    /// `out[d]` gathers output bits `d, d + N, d + 2N, ...` back into the low
+    /// `floor(W / N)` bits.
+    ///
+    /// The default delegates to
+    /// [`reverse_morton_cascade`](crate::backend::generic::polyfills::reverse_morton_cascade);
+    /// backends override with hardware bit-extract (BMI2 `PEXT`) or GFNI where
+    /// available. Note carryless multiply does *not* invert, so the CLMUL
+    /// `morton` fast path has no `reverse_morton` counterpart - de-interleaving
+    /// stays on the cascade.
+    fn reverse_morton<const N: usize>(code: Storage<Self>) -> [Storage<Self>; N] {
+        crate::backend::generic::polyfills::reverse_morton_cascade::<Self, N>(code)
+    }
 }
 
 #[thermite_macros::register_trait]

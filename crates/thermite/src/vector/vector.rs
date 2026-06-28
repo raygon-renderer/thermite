@@ -626,6 +626,15 @@ where
     #[conditional] fn parity(self) -> Self {}
     #[conditional] fn avg(self, other: Self) -> Self {}
     #[conditional] fn abs_diff(self, other: Self) -> Self {}
+
+    fn morton<const N: usize>(values: [Self; N]) -> Self {
+        Vector(R::morton::<N>(unsafe { core::mem::transmute_copy(&values) }))
+    }
+
+    fn reverse_morton<const N: usize>(self) -> [Self; N] {
+        let regs = R::reverse_morton::<N>(self.0);
+        unsafe { core::mem::transmute_copy(&regs) }
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]

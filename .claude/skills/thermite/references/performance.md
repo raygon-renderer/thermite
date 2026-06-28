@@ -12,13 +12,21 @@ once, in generic code, and every backend benefits.**
 | Variant | Meaning | Use when |
 |---|---|---|
 | `mul_adde` / `mul_sube` / `nmul_adde` / `nmul_sube` | **Estimating**: real FMA if HW has it, else `mul`+`add`. | **Default. Almost everything.** |
-| `mul_add` / `mul_sub` / `nmul_add` / `nmul_sub` | **Always fused**: real FMA, else `libm::fma` (exact but very slow). | Only when you need exact single-rounding, inside a `HAS_TRUE_FMA` gate. |
+| `mul_add` / `mul_sub` / `nmul_add` / `nmul_sub` | **Always single-rounded**: real FMA if HW has it; else a *vectorized emulated FMA* (compensated split) by default, or exact scalar `libm::fma` under `disable_fast_fma`. | When you want FMA-quality single-rounding even on non-FMA hardware and can accept the emulation cost. |
 
 Signs: `mul_adde(a,b,c)=a*b+c`, `mul_sube=a*b-c`, `nmul_adde=c-a*b`, `nmul_sube=-a*b-c`.
 
-The non-`e` forms drag `libm::fma` into every non-FMA backend (pre-Haswell, much of
-WASM) -- dozens of times slower than `mul`+`add`. **Reach for the `e` variants by
-default.**
+On a non-FMA backend (pre-Haswell x86, much of WASM) the `e` variants are just
+`mul`+`add` (two roundings, fastest). The non-`e` variants do **not** fall straight to
+`libm::fma`: by default they lower to a SIMD **emulated FMA** (a Dekker/Veltkamp
+compensated split) that is single-rounding-accurate, slower than true FMA but far
+cheaper than `libm`, and **not bit-identical** to true FMA. Only the `disable_fast_fma`
+feature (implied by `strict_ieee754`) swaps in the exact scalar `libm::fma`, which *is*
+dozens of times slower. So: **reach for the `e` variants by default for speed**, but
+`mul_add` is a legitimate *accuracy* choice on non-FMA hardware when a modest slowdown is
+fine -- you don't have to gate it behind `HAS_TRUE_FMA` just to dodge `libm`. Gate it only
+to avoid the emulation cost. If you truly need extra precision, pulling in
+`thermite-compensated` directly is often cleaner than relying on emulated FMA.
 
 ## 2. Fold negations into constants
 

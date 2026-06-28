@@ -2,6 +2,142 @@ use crate::register::ZeroUpper;
 
 use super::*;
 
+// ===========================================================================
+// CLMUL-based 2D Morton (Z-order) encode.
+//
+// The carry-less self-square identity `clmul(x, x) == spread1(x)` interleaves a
+// value's bits with zeros (bit `i` -> bit `2i`): the diagonal terms land at the
+// even positions and every off-diagonal pair `(i, j) + (j, i)` cancels mod 2, so
+// the odd positions are zero. That makes a single PCLMULQDQ the whole 2D bit
+// spread. Only 2D falls out of CLMUL - composing self-squares doubles the gap,
+// so it yields 2^k-way interleaves (2D, 4D, ...), never the factor-of-3 of 3D.
+//
+// PCLMULQDQ is 64-bit-granular (one 64x64 -> 128 product, selecting one qword
+// from each operand via the imm), so a 128-bit register's two lanes are squared
+// separately and recombined. Gated on `avx2-pclmul`, which adds `pclmulqdq` to
+// the dispatched target-feature set (every AVX2 CPU has it).
+// ===========================================================================
+
+/// Spread the low 32 bits of each 64-bit lane by one (bit `i` -> bit `2i`) via
+/// carry-less self-multiply. Input lanes are masked to 32 bits so each 64-bit
+/// spread cannot overflow its lane.
+#[cfg(feature = "avx2-pclmul")]
+#[inline(always)]
+pub unsafe fn _mm_morton2_spread_epu64x_v3(v: __m128i) -> __m128i {
+    let v = _mm_and_si128(v, _mm_set1_epi64x(0xFFFF_FFFF));
+    _mm_unpacklo_epi64(
+        _mm_clmulepi64_si128(v, v, 0x00), // spread of lane 0 in low 64
+        _mm_clmulepi64_si128(v, v, 0x11), // spread of lane 1 in low 64
+    )
+}
+
+/// Per-64-bit-lane 2D Morton encode (two 32-bit coords -> one 64-bit code per
+/// lane): interleave the low 32 bits of `x` (even output bits) with the low 32
+/// bits of `y` (odd output bits).
+#[cfg(feature = "avx2-pclmul")]
+#[inline(always)]
+pub unsafe fn _mm_morton2_epu64x_v3(x: __m128i, y: __m128i) -> __m128i {
+    _mm_or_si128(
+        _mm_morton2_spread_epu64x_v3(x),
+        _mm_slli_epi64(_mm_morton2_spread_epu64x_v3(y), 1),
+    )
+}
+
+/// 256-bit (`u64x4`) form of [`_mm_morton2_epu64x_v3`]: PCLMULQDQ has no 256-bit
+/// form (that needs VPCLMULQDQ), so the two 128-bit halves are encoded separately
+/// and reassembled.
+#[cfg(feature = "avx2-pclmul")]
+#[inline(always)]
+pub unsafe fn _mm256_morton2_epu64x_v3(x: __m256i, y: __m256i) -> __m256i {
+    let lo = _mm_morton2_epu64x_v3(_mm256_castsi256_si128(x), _mm256_castsi256_si128(y));
+    let hi = _mm_morton2_epu64x_v3(_mm256_extracti128_si256(x, 1), _mm256_extracti128_si256(y, 1));
+    _mm256_inserti128_si256(_mm256_castsi128_si256(lo), hi, 1)
+}
+
+// 256-bit PSHUFB-based 2D Morton: the per-128-bit-lane nibble LUT (see the v2
+// `_mm_morton2_*` helpers for the method) replicated across both halves. The
+// nibble-isolate and shifts are per-element, so widening to 256 is mechanical.
+
+/// Spread the low 8 bits of each 16-bit lane by one (2D Morton), via the nibble LUT.
+#[inline(always)]
+pub unsafe fn _mm256_morton2_spread_epu16x_v3(v: __m256i) -> __m256i {
+    let lut = _mm256_setr_epi8(
+        0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15, 0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55, //
+        0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15, 0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55,
+    );
+    let c = _mm256_and_si256(v, _mm256_set1_epi16(0x00FF));
+    let n = _mm256_and_si256(_mm256_or_si256(c, _mm256_slli_epi16(c, 4)), _mm256_set1_epi16(0x0F0F));
+    _mm256_shuffle_epi8(lut, n)
+}
+
+/// Spread the low 16 bits of each 32-bit lane by one (2D Morton), via the nibble LUT.
+#[inline(always)]
+pub unsafe fn _mm256_morton2_spread_epu32x_v3(v: __m256i) -> __m256i {
+    let lut = _mm256_setr_epi8(
+        0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15, 0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55, //
+        0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15, 0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55,
+    );
+    let c = _mm256_and_si256(v, _mm256_set1_epi32(0x0000_FFFF));
+    let c = _mm256_and_si256(_mm256_or_si256(c, _mm256_slli_epi32(c, 8)), _mm256_set1_epi32(0x00FF_00FF));
+    let n = _mm256_and_si256(_mm256_or_si256(c, _mm256_slli_epi32(c, 4)), _mm256_set1_epi32(0x0F0F_0F0F));
+    _mm256_shuffle_epi8(lut, n)
+}
+
+/// Per-16-bit-lane 2D Morton encode: low 8 bits of `x` (even) interleaved with
+/// low 8 bits of `y` (odd).
+#[inline(always)]
+pub unsafe fn _mm256_morton2_epu16x_v3(x: __m256i, y: __m256i) -> __m256i {
+    _mm256_or_si256(
+        _mm256_morton2_spread_epu16x_v3(x),
+        _mm256_slli_epi16(_mm256_morton2_spread_epu16x_v3(y), 1),
+    )
+}
+
+/// Per-32-bit-lane 2D Morton encode: low 16 bits of `x` (even) interleaved with
+/// low 16 bits of `y` (odd).
+#[inline(always)]
+pub unsafe fn _mm256_morton2_epu32x_v3(x: __m256i, y: __m256i) -> __m256i {
+    _mm256_or_si256(
+        _mm256_morton2_spread_epu32x_v3(x),
+        _mm256_slli_epi32(_mm256_morton2_spread_epu32x_v3(y), 1),
+    )
+}
+
+// 256-bit PSHUFB-based 2D Morton DECODE (inverse spread / compress): the v2
+// two-nibble-LUT compress (see `_mm_morton2_compress_*`) widened to 256, with the
+// byte->2-bit compress LUT replicated across both 128-bit halves.
+
+/// Compress the even bits of each 16-bit lane back into a contiguous low 8 bits -
+/// the inverse of [`_mm256_morton2_spread_epu16x_v3`].
+#[inline(always)]
+pub unsafe fn _mm256_morton2_compress_epu16x_v3(v: __m256i) -> __m256i {
+    let lut = _mm256_setr_epi8(
+        0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3, //
+        0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3,
+    );
+    let e = _mm256_and_si256(v, _mm256_set1_epi16(0x5555));
+    let lo = _mm256_shuffle_epi8(lut, e);
+    let hi = _mm256_shuffle_epi8(lut, _mm256_srli_epi16(e, 4));
+    let n = _mm256_and_si256(_mm256_or_si256(lo, _mm256_slli_epi16(hi, 2)), _mm256_set1_epi16(0x0F0F));
+    _mm256_and_si256(_mm256_or_si256(n, _mm256_srli_epi16(n, 4)), _mm256_set1_epi16(0x00FF))
+}
+
+/// Compress the even bits of each 32-bit lane back into a contiguous low 16 bits -
+/// the inverse of [`_mm256_morton2_spread_epu32x_v3`].
+#[inline(always)]
+pub unsafe fn _mm256_morton2_compress_epu32x_v3(v: __m256i) -> __m256i {
+    let lut = _mm256_setr_epi8(
+        0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3, //
+        0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3,
+    );
+    let e = _mm256_and_si256(v, _mm256_set1_epi32(0x5555_5555));
+    let lo = _mm256_shuffle_epi8(lut, e);
+    let hi = _mm256_shuffle_epi8(lut, _mm256_srli_epi32(e, 4));
+    let n = _mm256_and_si256(_mm256_or_si256(lo, _mm256_slli_epi32(hi, 2)), _mm256_set1_epi32(0x0F0F_0F0F));
+    let c = _mm256_and_si256(_mm256_or_si256(n, _mm256_srli_epi32(n, 4)), _mm256_set1_epi32(0x00FF_00FF));
+    _mm256_and_si256(_mm256_or_si256(c, _mm256_srli_epi32(c, 8)), _mm256_set1_epi32(0x0000_FFFF))
+}
+
 // https://arxiv.org/pdf/1611.07612.pdf
 #[inline(always)] #[rustfmt::skip]
 pub unsafe fn _mm256_popcnt_epi8x_v3(v: __m256i) -> __m256i {

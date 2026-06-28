@@ -1738,6 +1738,21 @@ pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::Unsigned
     /// saturating subtraction. The per-lane building block of sum-of-absolute-
     /// differences (block matching, motion estimation).
     #[conditional] fn abs_diff(self, other: Self) -> Self;
+
+    /// Per-lane `N`-dimensional Morton code (Z-order curve index): interleave the
+    /// low `floor(W / N)` bits of each of the `N` coordinate vectors into one,
+    /// placing bit `i` of `values[d]` at output position `i * N + d`. `N = 2` is
+    /// the classic 2D code, `N = 3` the 3D (voxel/octree) code.
+    ///
+    /// The workhorse for spatial sorting (BVH/octree builds, grid binning,
+    /// nearest-neighbour broad-phase): compute a whole vector of codes at once,
+    /// then sort. [`reverse_morton`](Self::reverse_morton) inverts it.
+    fn morton<const N: usize>(values: [Self; N]) -> Self;
+
+    /// Inverse of [`morton`](Self::morton): de-interleave a Morton code back into
+    /// its `N` coordinate vectors, where `out[d]` gathers output bits
+    /// `d, d + N, d + 2N, ...` into the low `floor(W / N)` bits.
+    fn reverse_morton<const N: usize>(self) -> [Self; N];
 }
 
 /// Escape hatch tying a [`Vector`] to its specific underlying

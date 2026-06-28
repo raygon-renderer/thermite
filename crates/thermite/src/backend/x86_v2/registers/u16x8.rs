@@ -377,7 +377,30 @@ impl IntegerRegister for U16x8V2 {
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U16x8V2 {}
+impl UnsignedIntegerRegister for U16x8V2 {
+    /// 2D Morton via a PSHUFB nibble-LUT; every other `N` uses the generic cascade.
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        if const { N == 2 } {
+            unsafe { arch::_mm_morton2_epu16x_v2(values[0], values[1]) }
+        } else {
+            crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+        }
+    }
+
+    /// 2D Morton decode via the PSHUFB compress; every other `N` uses the cascade.
+    fn reverse_morton<const N: usize>(code: Storage<Self>) -> [Storage<Self>; N] {
+        if const { N == 2 } {
+            unsafe {
+                crate::backend::generic::polyfills::morton_pack2::<Self, N>(
+                    arch::_mm_morton2_compress_epu16x_v2(code),
+                    arch::_mm_morton2_compress_epu16x_v2(arch::_mm_srli_epi16(code, 1)),
+                )
+            }
+        } else {
+            crate::backend::generic::polyfills::reverse_morton_cascade::<Self, N>(code)
+        }
+    }
+}
 
 // Widen u16x8 -> u32x8 (= ArrayRegister<U32x4V2, 2>): zero-extend the low/high 4 lanes.
 #[thermite_macros::inline_always]

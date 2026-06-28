@@ -275,6 +275,13 @@ pub mod avx2 {
         _mm256_unpackhi_epi16, _mm256_unpackhi_epi32, _mm256_unpackhi_epi64, _mm256_unpackhi_epi8, _mm256_unpacklo_epi16,
         _mm256_unpacklo_epi32, _mm256_unpacklo_epi64, _mm256_unpacklo_epi8, _mm256_xor_si256, _mm256_stream_load_si256
     }
+
+    // 128-bit carry-less multiply (PCLMULQDQ). Strictly a separate CPU feature from AVX2,
+    // but present on every AVX2 CPU (it shipped with Westmere, 2010). The `avx2-pclmul`
+    // feature adds `pclmulqdq` to the dispatched `#[target_feature]` set so this is callable;
+    // it powers the CLMUL-based 2D Morton fast path.
+    #[cfg(feature = "avx2-pclmul")]
+    import_intrinsics! { _mm_clmulepi64_si128 }
 }
 
 /// AVX-512 Foundation (F)

@@ -97,9 +97,13 @@ Two families, four signs each:
 
 - **Estimating (`*e`)**: real FMA if the hardware has it, else separate `mul`+`add`.
   Use these by default -- they are fast everywhere.
-- **Always-fused (no `e`)**: real FMA if available, else `libm::fma` (exact single
-  rounding, but *dozens of times slower* per lane). Only use inside a block already
-  gated on `V::HAS_TRUE_FMA`, or when you genuinely need exact single-rounding.
+- **Always single-rounded (no `e`)**: real FMA if available; otherwise, **by default**,
+  a *vectorized emulated FMA* (a compensated split -- single-rounding accuracy, slower
+  than true FMA but still SIMD and far cheaper than `libm`, and not bit-identical to true
+  FMA). Only the `disable_fast_fma` feature (implied by `strict_ieee754`) makes the
+  fallback the exact scalar `libm::fma` that is *dozens of times slower*. So the non-`e`
+  forms are a valid **accuracy** choice even without hardware FMA; gate them behind
+  `V::HAS_TRUE_FMA` to avoid the *emulation* cost, not merely to avoid `libm`.
 
 Detail and ILP techniques in [performance.md](performance.md).
 

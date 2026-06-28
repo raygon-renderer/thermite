@@ -474,4 +474,28 @@ impl IntegerRegister for U32x4V3 {
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U32x4V3 {}
+impl UnsignedIntegerRegister for U32x4V3 {
+    /// 2D Morton via a PSHUFB nibble-LUT (the 128-bit v2 helper); every other `N`
+    /// uses the generic cascade.
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        if const { N == 2 } {
+            unsafe { arch::_mm_morton2_epu32x_v2(values[0], values[1]) }
+        } else {
+            crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+        }
+    }
+
+    /// 2D Morton decode via the 128-bit PSHUFB compress; other `N` use the cascade.
+    fn reverse_morton<const N: usize>(code: Storage<Self>) -> [Storage<Self>; N] {
+        if const { N == 2 } {
+            unsafe {
+                crate::backend::generic::polyfills::morton_pack2::<Self, N>(
+                    arch::_mm_morton2_compress_epu32x_v2(code),
+                    arch::_mm_morton2_compress_epu32x_v2(arch::_mm_srli_epi32(code, 1)),
+                )
+            }
+        } else {
+            crate::backend::generic::polyfills::reverse_morton_cascade::<Self, N>(code)
+        }
+    }
+}

@@ -346,7 +346,28 @@ impl IntegerRegister for U16x8Wasm {
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U16x8Wasm {}
+impl UnsignedIntegerRegister for U16x8Wasm {
+    /// 2D Morton via an `i8x16.swizzle` nibble-LUT; every other `N` uses the cascade.
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        if const { N == 2 } {
+            arch::wasm_morton2_epu16x(values[0], values[1])
+        } else {
+            crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+        }
+    }
+
+    /// 2D Morton decode via the swizzle compress; every other `N` uses the cascade.
+    fn reverse_morton<const N: usize>(code: Storage<Self>) -> [Storage<Self>; N] {
+        if const { N == 2 } {
+            crate::backend::generic::polyfills::morton_pack2::<Self, N>(
+                arch::wasm_morton2_compress_epu16x(code),
+                arch::wasm_morton2_compress_epu16x(arch::u16x8_shr(code, 1)),
+            )
+        } else {
+            crate::backend::generic::polyfills::reverse_morton_cascade::<Self, N>(code)
+        }
+    }
+}
 
 // Widen u16x8 -> u32x8 (= ArrayRegister<U32x4Wasm, 2>): zero-extend the low/high 4 lanes.
 #[thermite_macros::inline_always]

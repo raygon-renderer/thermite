@@ -381,7 +381,31 @@ impl IntegerRegister for U16x16V3 {
 }
 
 #[thermite_macros::inline_always]
-impl UnsignedIntegerRegister for U16x16V3 {}
+impl UnsignedIntegerRegister for U16x16V3 {
+    /// 2D Morton via a 256-bit PSHUFB nibble-LUT; every other `N` uses the
+    /// generic cascade.
+    fn morton<const N: usize>(values: [Storage<Self>; N]) -> Storage<Self> {
+        if const { N == 2 } {
+            unsafe { arch::_mm256_morton2_epu16x_v3(values[0], values[1]) }
+        } else {
+            crate::backend::generic::polyfills::morton_cascade::<Self, N>(values)
+        }
+    }
+
+    /// 2D Morton decode via the 256-bit PSHUFB compress; other `N` use the cascade.
+    fn reverse_morton<const N: usize>(code: Storage<Self>) -> [Storage<Self>; N] {
+        if const { N == 2 } {
+            unsafe {
+                crate::backend::generic::polyfills::morton_pack2::<Self, N>(
+                    arch::_mm256_morton2_compress_epu16x_v3(code),
+                    arch::_mm256_morton2_compress_epu16x_v3(arch::_mm256_srli_epi16(code, 1)),
+                )
+            }
+        } else {
+            crate::backend::generic::polyfills::reverse_morton_cascade::<Self, N>(code)
+        }
+    }
+}
 
 // Widen u16x16 -> u32x16 (= ArrayRegister<U32x8V3, 2>): zero-extend the two 128-bit halves.
 #[thermite_macros::inline_always]

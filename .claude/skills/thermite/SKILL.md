@@ -1,6 +1,6 @@
 ---
 name: thermite
-description: Use Thermite, the generic ISA-portable Rust SIMD library, and its companion crates (special functions, autodiff Dual, Compensated double-double, SDF, geometry, FFI). Load when writing, reviewing, or debugging code that uses thermite/thermite-* crates, GenericVector/FloatVector/NumericVector trait bounds, the policy-based math library, masks, dispatch, slice iteration, or composite vector types. Triggers: "write a SIMD kernel", "make this generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", thermite build/test errors.
+description: Use Thermite, the generic ISA-portable Rust SIMD library, and its companion crates (special functions, autodiff Dual, Compensated double-double, SDF, geometry, FFI). Load when writing, reviewing, or debugging code that uses thermite/thermite-* crates, GenericVector/FloatVector/NumericVector trait bounds, the policy-based math library, masks, dispatch, slice iteration, or composite vector types. ALWAYS load this skill before working on Thermite's OWN source (contributing to / modifying the thermite/thermite-* crates themselves -- adding or changing a register op, backend, math kernel, polyfill, macro, or trait), and read references/development.md first in that case. Triggers: "write a SIMD kernel", "make this generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", thermite build/test errors, and any edit under crates/thermite*/src (register/vector/backend/math/element/macros).
 ---
 
 # Thermite
@@ -22,6 +22,19 @@ they are references, not files in your own project.
 > This skill is the source of truth for *using* Thermite, second only to the code
 > itself. Everything in it was verified against the current source. If any prose
 > ever disagrees with the code, trust the code (and fix the skill).
+
+> [!IMPORTANT]
+> **Working on Thermite's own source (adding an op, a math function, a backend,
+> fixing internals)? Read [references/development.md](references/development.md)
+> first -- before touching any file.** Most of this skill is written for people
+> who *depend on* Thermite, but development.md is the contributor map: the
+> repository/crate layout, the proc-macro toolbox, a full worked example of
+> adding a new primitive across every backend, the checklists for a register
+> primitive vs a precision-tunable math function, and the build/test/verify loop.
+> Do **not** skip the skill just because the rest of it reads as user-facing --
+> development.md is the one file that makes the internals tractable, and the
+> user-facing references (architecture, trait-hierarchy, math, performance) are
+> still load-bearing context when you change the code that backs them.
 
 ## Add Thermite to your project
 
@@ -187,6 +200,7 @@ Cross-cutting:
 
 - [references/performance.md](references/performance.md) -- FMA-variant choice, `if const` capability gating, ILP/critical-path tricks, cancellation-avoidance, `scale` for SPIR-V, and `target_feature` codegen gotchas.
 - [references/architecture.md](references/architecture.md) -- **worth reading even as a user**: the Element -> Register -> Vector layering, backends and ISA levels, the `Simd` type hierarchy, and how composites slot in. It explains *why* the API is shaped this way and demystifies the trickier type errors. Only the lowest level (per-ISA register impls) is contributor-only.
+- [references/development.md](references/development.md) -- **contributor-only; skip if you are just using Thermite.** How to *modify Thermite's own source*: the repository/crate map, the proc-macro toolbox, a full worked example of adding a new primitive (accelerated Morton-code interleave) across every backend, the generalized checklists for a register primitive vs a precision-tunable math function, and the build/test/verify loop (`just` recipes, the differential harness, wasm/spirv/asm verification, CI).
 
 ## Gotchas that bite (full list in the sub-files)
 
@@ -199,8 +213,12 @@ Cross-cutting:
 - **Math trait names are imported anonymously by the prelude** (`as _`): their
   methods work, but to write `<V: TranscendentalMath>` you must
   `use thermite::math::TranscendentalMath;` explicitly.
-- **Prefer `mul_adde` (estimating FMA), not `mul_add`.** The non-`e` form drags in
-  `libm::fma` (very slow) on non-FMA backends. See [references/performance.md](references/performance.md).
+- **Prefer `mul_adde` (estimating FMA), not `mul_add`, for speed.** On a non-FMA
+  backend the non-`e` form lowers to a *vectorized emulated FMA* (compensated split) by
+  default -- slower than true FMA but single-rounding-accurate and still SIMD; it only
+  becomes the very slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So
+  `mul_add` is a valid accuracy choice when a slight slowdown is fine. See
+  [references/performance.md](references/performance.md).
 - **`thermite-dual` / `thermite-compensated` / `thermite-special` are `publish = false`**
   (pre-release). `Compensated`'s `FloatVector` masked variants are partly `todo!()`.
   Treat them as solid-but-WIP.

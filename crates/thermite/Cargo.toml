@@ -20,7 +20,7 @@ features = ["document_registers", "std"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
-default = ["document_registers", "bitvec", "avx2-f16c"]
+default = ["document_registers", "bitvec", "avx2-f16c", "avx2-pclmul"]
 bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
@@ -64,6 +64,14 @@ neon = []
 # dispatch macros emit for the AVX2 backend, so half-precision conversion intrinsics are
 # available in dispatched code without a separate runtime check. No effect off x86.
 avx2-f16c = ["thermite-macros/avx2-f16c"]
+
+# Assume the `pclmulqdq` (carry-less multiply) CPU feature is available whenever AVX2 is
+# (the x86-v3 backend). PCLMULQDQ shipped with Westmere (2010), well before AVX2 (Haswell,
+# 2013), so any AVX2-capable CPU also has it. This adds `pclmulqdq` to the
+# `#[target_feature(enable = ...)]` set the dispatch macros emit for the AVX2 backend, and
+# enables the CLMUL-based 2D Morton (`morton::<2>`) fast path on u64-lane registers. No
+# effect off x86.
+avx2-pclmul = ["thermite-macros/avx2-pclmul"]
 
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
 wasm = []

@@ -28,3 +28,9 @@ spirv = []
 # by both `#[dispatch]` and `dispatch_dyn!`, enabling half-precision conversion
 # intrinsics in dispatched code without a separate runtime detection step.
 avx2-f16c = []
+
+# Assume the `pclmulqdq` (carry-less multiply) CPU feature is available whenever AVX2 is.
+# PCLMULQDQ shipped with Westmere (2010), three years before AVX2 (Haswell), so every
+# AVX2-capable CPU has it. Adds `pclmulqdq` to the `#[target_feature(enable = ...)]` set
+# emitted for the AVX2 backend, enabling the CLMUL-based 2D Morton fast path.
+avx2-pclmul = []
