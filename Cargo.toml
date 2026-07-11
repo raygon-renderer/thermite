@@ -1,7 +1,6 @@
 [workspace]
 members = ["bin/*", "crates/*", "tests/*"]
 default-members = [
-    "crates/testing",
     "crates/thermite",
     "crates/thermite-blas",
     "crates/thermite-compensated",
