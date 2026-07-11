@@ -387,6 +387,27 @@ decl_math! {
         /// negative numbers for odd N.
         fn nth_root[const N: usize][N](self: Self) -> Self;
         /// Returns the natural logarithm of `self`.
+        ///
+        /// # Examples
+        ///
+        /// Every math function takes a precision policy via its `_p` variant; a quick
+        /// sweep against a scalar reference is the cheapest way to validate that a
+        /// policy choice is accurate enough for your domain:
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        /// use thermite::math::policy::policies::Precision;
+        ///
+        /// type V = Vector<f64>;
+        ///
+        /// let mut max_err = 0.0f64;
+        /// for i in 1..=1000 {
+        ///     let x = i as f64 * 0.05;
+        ///     let y = V::splat(x).ln_p::<Precision>().extract::<0>();
+        ///     max_err = max_err.max((y - x.ln()).abs() / x.ln().abs().max(1.0));
+        /// }
+        /// assert!(max_err < 1e-14, "max relative error {max_err}");
+        /// ```
         fn ln[][](self: Self) -> Self;
         /// Returns `$\ln(1 + x)$` of `self`.
         fn ln_1p[][](self: Self) -> Self;
@@ -529,12 +550,41 @@ decl_math! {
         ///
         /// See [`smooth_interpolator`](RealMath::smooth_interpolator) for a more advanced interpolator with
         /// infinite differentiability.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        ///
+        /// type V = Vector<f64>;
+        ///
+        /// // Standard 3rd-order smoothstep (N = 2) over the default [0, 1] edges:
+        /// // 3t^2 - 2t^3
+        /// let y = V::splat(0.25).smoothstep::<2>(None);
+        /// assert!((y.extract::<0>() - 0.15625).abs() < 1e-15);
+        /// ```
         fn smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
 
         /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
         ///
         /// N from 0..=2 have fast closed-form solutions, while higher N use numerical root-finding methods, which will inherently
         /// be much slower.
+        ///
+        /// # Examples
+        ///
+        /// Round-trips [`smoothstep`](RealMath::smoothstep), even at high orders where
+        /// the inverse must be found numerically:
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        ///
+        /// type V = Vector<f64>;
+        ///
+        /// let x = V::splat(1.0 / 16.0);
+        /// let y = x.smoothstep::<12>(None);
+        /// let x_back = y.inverse_smoothstep::<12>(None);
+        /// assert!((x_back.extract::<0>() - x.extract::<0>()).abs() < 1e-9);
+        /// ```
         fn inverse_smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
 
         /// Derivative of the `smoothstep` function of order `2N-1`, at the given point.

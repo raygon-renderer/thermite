@@ -1,5 +1,19 @@
 [workspace]
 members = ["bin/*", "crates/*", "tests/*"]
+default-members = [
+    "crates/testing",
+    "crates/thermite",
+    "crates/thermite-blas",
+    "crates/thermite-compensated",
+    "crates/thermite-complex",
+    "crates/thermite-dual",
+    "crates/thermite-geometry",
+    "crates/thermite-macros",
+    "crates/thermite-sdf",
+    "crates/thermite-special",
+    "tests/dispatch_dyn",
+    "tests/wasm-runner",
+]
 resolver = "3"
 
 # Shared package metadata inherited by members via `field.workspace = true`.
@@ -40,7 +54,9 @@ strip = true
 panic = "abort"
 
 [workspace.dependencies]
-thermite-macros = { path = "crates/thermite-macros", version = "0.2.0-beta.0" }
+# Exact pin: the macros emit code that references thermite internals, so the
+# published pair must stay in lockstep (same reason serde pins serde_derive).
+thermite-macros = { path = "crates/thermite-macros", version = "=0.2.0-beta.0" }
 
 thermite = { path = "crates/thermite", version = "0.2.0-beta.0", default-features = false }
 thermite-special = { path = "crates/thermite-special", version = "0.2.0-beta.0", default-features = false }

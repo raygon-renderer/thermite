@@ -1,8 +1,7 @@
 //! Generic stream-compaction (`compress` / left-pack) polyfills.
 //!
 //! "Better than scalar" generic implementations of
-//! [`Register::compress`](crate::register::Register::compress) /
-//! [`compress_z`](crate::register::Register::compress_z) that a backend can
+//! [`Register::compress`]/[`compress_z`](Register::compress_z) that a backend can
 //! delegate to when its registers satisfy the extra trait bounds. The base trait
 //! default is a scalar element-by-element compaction (correct for every
 //! register, no bounds); these resolve the permutation from compile-time tables
@@ -124,7 +123,7 @@ const fn build_table8() -> GenericArray<CompressRow, U256> {
 /// selected lanes are packed to the front in order; the unselected lanes keep
 /// their values in the tail (also in order). The zero-filling variant composes a
 /// [`zz`](CoreRegister::zz) beforehand (see
-/// [`Register::compress_z`](crate::register::Register::compress_z)).
+/// [`Register::compress_z`]).
 ///
 /// On a backend with hardware permute this lowers to `movemask` + a table load +
 /// `vpermps`/`pshufb`/`i8x16.swizzle`. For an emulated-wide
@@ -168,7 +167,7 @@ where
 /// index writes (8 indices resolved per table lookup).
 ///
 /// The zero-filling variant composes a [`zz`](CoreRegister::zz) beforehand (see
-/// [`Register::compress_z`](crate::register::Register::compress_z)): zeroing the
+/// [`Register::compress_z`]): zeroing the
 /// unselected lanes first makes their values fall out as zeros in the tail.
 ///
 /// Result for `value = [a, b, c, d, e, f, g, h, ...]` is the selected lanes in

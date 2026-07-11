@@ -330,8 +330,12 @@ where
         x.normalize()
     }
 
+    // Exact identity: probit(p) = sqrt(2) * erfinv(2p - 1), with every step in
+    // compensated arithmetic (2p - 1 is an error-free transform here, and erfinv
+    // refines to full double-double precision via Halley's method).
+    #[inline(always)]
     fn probit<P: Policy>(self) -> Self {
-        todo!()
+        Self::erfinv::<P>(self + self - Self::ONE) * Self::SQRT_2
     }
 
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {

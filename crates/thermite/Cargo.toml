@@ -11,6 +11,9 @@ description = "High-performance, generic, ISA-portable SIMD library with a polic
 readme = "README.md"
 keywords = ["simd", "vector", "math", "no-std", "performance"]
 categories = ["no-std", "mathematics", "hardware-support"]
+# Explicit allowlist so local scratch (examples/, benches/, test dumps) can
+# never leak into the published .crate regardless of working-tree state.
+include = ["/src", "/README.md", "/GUIDE.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
 
 [lints]
 workspace = true
@@ -129,3 +132,11 @@ num-traits = { version = "0.2.19", default-features = true }
 # the bench targets that `use criterion` are not selected.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "compress"
+harness = false
+
+[[bench]]
+name = "math"
+harness = false

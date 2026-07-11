@@ -49,14 +49,17 @@ use thermite::{
 };
 use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
-trait IntoArray<T, const N: usize> {
-    fn into_array(self) -> [T; N];
+// The method deliberately isn't named `into_array`: on a generic `V` receiver,
+// method resolution prefers where-clause candidates, so a name shared with
+// `GenericVector::into_array` resolves to that trait method instead of this shim.
+trait IntoOutputs<T, const N: usize> {
+    fn into_outputs(self) -> [T; N];
 }
 
 #[rustfmt::skip]
 const _: () = {
-    impl<T> IntoArray<T, 1> for T { #[inline(always)] fn into_array(self) -> [T; 1] { [self] } }
-    impl<T> IntoArray<T, 2> for (T, T) { #[inline(always)] fn into_array(self) -> [T; 2] { [self.0, self.1] } }
+    impl<T> IntoOutputs<T, 1> for T { #[inline(always)] fn into_outputs(self) -> [T; 1] { [self] } }
+    impl<T> IntoOutputs<T, 2> for (T, T) { #[inline(always)] fn into_outputs(self) -> [T; 2] { [self.0, self.1] } }
 };
 
 /// Forms of RealMath methods with explicit generic parameters,
@@ -296,13 +299,13 @@ macro_rules! decl_methods {
 
                 impl<V: $trait<Element = f64>> thermite::transform::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper Kernel>] {
                     #[inline(always)] fn map(&self, [$($input),+]: [V; I]) -> [V; O] {
-                        <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_array()
+                        <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_outputs()
                     }
                 }
 
                 impl<V: $trait<Element = f32>> thermite::transform::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper KernelF>] {
                     #[inline(always)] fn map(&self, [$($input),+]: [V; I]) -> [V; O] {
-                        <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_array()
+                        <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_outputs()
                     }
                 }
             };

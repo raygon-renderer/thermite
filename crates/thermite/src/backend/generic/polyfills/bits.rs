@@ -2,7 +2,7 @@
 //!
 //! "Better than scalar" generic implementations that a backend can delegate to.
 //! Currently: the portable Morton-code (Z-order curve) bit-interleave cascade
-//! used by [`UnsignedIntegerRegister::morton`](crate::register::UnsignedIntegerRegister::morton)
+//! used by [`UnsignedIntegerRegister::morton`]
 //! / [`reverse_morton`](crate::register::UnsignedIntegerRegister::reverse_morton)
 //! and by backend overrides for the dimensions they do not specialize.
 
@@ -14,7 +14,7 @@ use super::*;
 /// Interleaves the low `floor(W / N)` bits of each of the `N` coordinates,
 /// placing bit `i` of `values[d]` at output position `i * N + d`. This is the
 /// fallback used by
-/// [`UnsignedIntegerRegister::morton`](crate::register::UnsignedIntegerRegister::morton)
+/// [`UnsignedIntegerRegister::morton`]
 /// and by backend overrides for the dimensions they do not specialize (e.g. a
 /// CLMUL `N == 2` path delegates every other `N` here).
 ///
@@ -105,7 +105,11 @@ pub fn reverse_morton_cascade<R: UnsignedIntegerRegister, const N: usize>(code: 
             let shift = (N as u32 - 1) << k; // (N - 1) * 2^k
             // mask after this step: the next-coarser block layout, or the
             // final low-`bits` mask on the last pass
-            let mask = if k + 1 >= passes { low } else { morton_block_mask::<R>(k + 1, N) };
+            let mask = if k + 1 >= passes {
+                low
+            } else {
+                morton_block_mask::<R>(k + 1, N)
+            };
             x = R::bitand(R::bitor(x, R::shr(x, shift)), mask);
             k += 1;
         }
@@ -127,7 +131,11 @@ pub const fn morton_bits_per_lane(width: u32, dims: usize) -> u32 {
 
 /// Number of shift/mask passes in the generic Morton bit-spread: `ceil(log2(bits))`.
 pub const fn morton_passes(bits: u32) -> u32 {
-    if bits <= 1 { 0 } else { u32::BITS - (bits - 1).leading_zeros() }
+    if bits <= 1 {
+        0
+    } else {
+        u32::BITS - (bits - 1).leading_zeros()
+    }
 }
 
 /// Builds the pass-`block_log2` cascade mask for an `N`-dimensional Morton

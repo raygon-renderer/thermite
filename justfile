@@ -158,3 +158,12 @@ bundle-skill:
     if (Test-Path '{{skill_zip}}') { Remove-Item '{{skill_zip}}' -Force }
     Compress-Archive -Path '{{skill_dir}}' -DestinationPath '{{skill_zip}}'
     Write-Host "bundled {{skill_dir}} -> {{skill_zip}} ($([math]::Round((Get-Item '{{skill_zip}}').Length / 1KB, 1)) KB)"
+
+# Copy the local thermite skill into the global ~/.claude/skills/ directory,
+# overwriting the installed copy in place. Run after editing skill files to
+# make changes available to the current Claude Code session immediately.
+sync-skill:
+    if (-not (Test-Path '{{skill_dir}}/SKILL.md')) { throw 'skill not found at {{skill_dir}}' }
+    New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills\thermite" | Out-Null
+    Copy-Item -Path '{{skill_dir}}/*' -Destination "$env:USERPROFILE\.claude\skills\thermite" -Recurse -Force
+    Write-Host "synced {{skill_dir}} -> $env:USERPROFILE\.claude\skills\thermite"

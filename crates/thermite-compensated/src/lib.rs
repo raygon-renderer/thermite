@@ -1078,6 +1078,27 @@ impl_masked!(Mul::mul);
 impl_masked!(Div::div);
 impl_masked!(Rem::rem);
 
+// `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
+// binary (`fn m(self, Self) -> Self`) vector ops, as plain select blends -- the
+// same pattern `impl_masked!` uses for the `core::ops` methods above. Invoked
+// inside the relevant trait impls below.
+macro_rules! compensated_masked {
+    (unary: $($m:ident),* $(,)?) => { paste::paste! {
+        $(
+            #[inline(always)] fn [<$m _c>](self, mask: Self::Mask) -> Self { mask.select(self.$m(), self) }
+            #[inline(always)] fn [<$m _m>](self, src: Self, mask: Self::Mask) -> Self { mask.select(self.$m(), src) }
+            #[inline(always)] fn [<$m _z>](self, mask: Self::Mask) -> Self { mask.select(self.$m(), Self::EMPTY) }
+        )*
+    }};
+    (binary: $($m:ident),* $(,)?) => { paste::paste! {
+        $(
+            #[inline(always)] fn [<$m _c>](self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), self) }
+            #[inline(always)] fn [<$m _m>](self, src: Self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), src) }
+            #[inline(always)] fn [<$m _z>](self, mask: Self::Mask, rhs: Self) -> Self { mask.select(self.$m(rhs), Self::EMPTY) }
+        )*
+    }};
+}
+
 impl<V: CompensatedFloatVector> GenericSelectable for Compensated<V> {
     type SelectableMask = <V as GenericSelectable>::SelectableMask;
 
@@ -1687,60 +1708,54 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
         Self::new(V::indexed())
     }
 
-    fn min_c(self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
+    compensated_masked!(binary: min, max);
+
+    // Semantically `self * Self::splat(factor)`; the error term participates in the
+    // double-double product, so there is no cheaper compensated form to specialize.
+    #[inline(always)]
+    fn scale(self, factor: Self::Element) -> Self {
+        self * Self::splat(factor)
     }
 
-    fn min_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
+    #[inline(always)]
+    fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(self.scale(factor), self)
     }
 
-    fn min_z(self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
+    #[inline(always)]
+    fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(self.scale(factor), src)
     }
 
-    fn max_c(self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
+    #[inline(always)]
+    fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(self.scale(factor), Self::EMPTY)
     }
 
-    fn max_m(self, _src: Self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
+    // Deinterleaving `(lo, hi)` yields the even- and odd-indexed elements already in
+    // pairwise order (`[lo0, lo2, hi0, hi2...]` / `[lo1, lo3, hi1, hi3...]`), so the
+    // pair sums reduce to a single compensated (two-sum) add.
+    #[inline(always)]
+    fn pairwise_sum(lo: Self, hi: Self) -> Self {
+        let (even, odd) = lo.deinterleave(hi);
+        even + odd
     }
 
-    fn max_z(self, _mask: Self::Mask, _other: Self) -> Self {
-        todo!()
-    }
-
-    fn scale(self, _factor: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn scale_c(self, _mask: Self::Mask, _factor: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn scale_m(self, _src: Self, _mask: Self::Mask, _factor: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn scale_z(self, _mask: Self::Mask, _factor: Self::Element) -> Self {
-        todo!()
-    }
-
-    fn pairwise_sum(_lo: Self, _hi: Self) -> Self {
-        todo!()
-    }
-
-    fn relaxed_pairwise_sum(_lo: Self, _hi: Self) -> Self {
-        todo!()
+    // The compensated add dominates the cost and the shuffle has no cheaper
+    // relaxed form, so the strictly-ordered result is returned as-is.
+    #[inline(always)]
+    fn relaxed_pairwise_sum(lo: Self, hi: Self) -> Self {
+        Self::pairwise_sum(lo, hi)
     }
 
     fn min_max_element(self) -> (Self::Element, Self::Element) {
         (self.min_element(), self.max_element())
     }
 
+    // Ordering is by the folded value+error, consistent with min/max_element.
+    #[inline(always)]
     fn arg_minmax(self) -> (usize, usize) {
-        todo!()
+        self.value().arg_minmax()
     }
 }
 
@@ -1807,25 +1822,37 @@ impl<V: CompensatedFloatVector> SignedVector for Compensated<V> {
         self.neg_c(self_is_neg ^ sign_is_neg)
     }
 
-    fn abs_c(self, _mask: Self::Mask) -> Self {
-        todo!()
+    // `abs` is a negation of the negative lanes, so the conditional form just
+    // restricts that negation to the masked lanes -- one blend instead of
+    // computing a full `abs` and re-blending it. Same for `copysign`.
+    #[inline(always)]
+    fn abs_c(self, mask: Self::Mask) -> Self {
+        self.neg_c(mask & self.value().cmp_lt(V::ZERO))
     }
 
-    fn abs_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
+    #[inline(always)]
+    fn abs_m(self, src: Self, mask: Self::Mask) -> Self {
+        mask.select(self.abs(), src)
     }
 
-    fn abs_z(self, _mask: Self::Mask) -> Self {
-        todo!()
+    #[inline(always)]
+    fn abs_z(self, mask: Self::Mask) -> Self {
+        mask.select(self.abs(), Self::EMPTY)
     }
-    fn copysign_c(self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
+
+    #[inline(always)]
+    fn copysign_c(self, mask: Self::Mask, sign: Self) -> Self {
+        self.neg_c(mask & (self.is_negative() ^ sign.is_negative()))
     }
-    fn copysign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
+
+    #[inline(always)]
+    fn copysign_m(self, src: Self, mask: Self::Mask, sign: Self) -> Self {
+        mask.select(self.copysign(sign), src)
     }
-    fn copysign_z(self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
+
+    #[inline(always)]
+    fn copysign_z(self, mask: Self::Mask, sign: Self) -> Self {
+        mask.select(self.copysign(sign), Self::EMPTY)
     }
 }
 
@@ -1963,152 +1990,14 @@ impl<V: CompensatedFloatVector> FloatVector for Compensated<V> {
         }
     }
 
-    fn sqrt_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
+    compensated_masked!(unary: sqrt, rsqrt, rcp, floor, ceil, round, trunc, fract, signed_zero, next_up, next_down);
+    compensated_masked!(binary: mul_sign);
 
-    fn sqrt_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn sqrt_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rsqrt_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rsqrt_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rsqrt_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rcp_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rcp_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn rcp_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn floor_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn floor_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn floor_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn ceil_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn ceil_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn ceil_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn round_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn round_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn round_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn trunc_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn trunc_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn trunc_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn fract_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn fract_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn fract_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn mul_sign_c(self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
-    }
-
-    fn mul_sign_m(self, _src: Self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
-    }
-
-    fn mul_sign_z(self, _mask: Self::Mask, _sign: Self) -> Self {
-        todo!()
-    }
-
-    fn signed_zero_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn signed_zero_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn signed_zero_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_up_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_up_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_up_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_down_c(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_down_m(self, _src: Self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
-    fn next_down_z(self, _mask: Self::Mask) -> Self {
-        todo!()
-    }
-
+    // mix(t) = a*(1 - t) + b*t = a + (b - a)*t, composed through compensated
+    // arithmetic (same rearrangement thermite-dual uses).
+    #[inline(always)]
     fn mix(self, a: Self, b: Self) -> Self {
-        todo!()
+        a + (b - a) * self
     }
 }
 

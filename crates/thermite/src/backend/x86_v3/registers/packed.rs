@@ -1,15 +1,17 @@
 //! [`PackedFloatRegister`] for the native 16-bit registers on x86-v3.
 //!
-//! The binary16 formats ([`Fp16`] / [`Fp16Fast`]) get an **F16C hardware override** when the
+//! The binary16 formats ([`Fp16`](crate::element::float::spec::Fp16) /
+//! [`Fp16Fast`](crate::element::float::spec::Fp16Fast)) get an **F16C hardware override** when the
 //! `avx2-f16c` crate feature is on - `vcvtph2ps` / `vcvtps2ph`, one instruction per 128-bit half
 //! - and the **generic branchless defaults** otherwise. bfloat16 ([`Bf16`]) always uses the
 //! generic default (F16C is a binary16<->binary32 converter only). The two are `#[cfg]`-exclusive
 //! per `(format, register)` so they never collide.
 //!
 //! `avx2-f16c` also adds `f16c` to the `#[target_feature]` set the dispatch macros emit for this
-//! backend (see [`X86V3_TARGET_FEATURE`] in `thermite-macros`); every AVX2 CPU also has F16C (it
+//! backend (see `X86V3_TARGET_FEATURE` in `thermite-macros`); every AVX2 CPU also has F16C (it
 //! shipped one generation earlier, on Ivy Bridge), so assuming it is safe. The F16C `vcvtph2ps`
-//! decodes exactly and `vcvtps2ph` (round-to-nearest-ties-to-even) matches the [`Fp16`] oracle
+//! decodes exactly and `vcvtps2ph` (round-to-nearest-ties-to-even) matches the
+//! [`Fp16`](crate::element::float::spec::Fp16) oracle
 //! bit-for-bit, validated in `tests/packed_float_f16c.rs`; the generic defaults are validated on
 //! the native registers in `tests/packed_float_native.rs`.
 

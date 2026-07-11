@@ -955,7 +955,7 @@ pub trait Register:
     /// substring scanning across a load boundary - the cross-register companion
     /// to the single-register [`bshli`](BitshiftRegister::bshli)/[`bshri`](BitshiftRegister::bshri).
     /// The default routes through [`swizzle_const`](Self::swizzle_const) with a
-    /// compile-time [`AlignIndices`](crate::swizzle::AlignIndices) pattern, so it
+    /// compile-time `AlignIndices` pattern (in `crate::swizzle`), so it
     /// is correct on every backend, element type, and lane count. Integer
     /// backends override it with native byte aligns (`palignr`, whole-register
     /// byte shifts, or the AVX2 256-bit sequence).
@@ -2607,8 +2607,9 @@ where
 
 /// A `u32`/`u16`/`u8` integer register reinterpreted as a vector of packed floats (`S`:
 /// fp16, bf16, fp8, ...), convertible to/from a wider `f32` register `F` of the same lane
-/// count. `pack`/`unpack` have generic branchless defaults (see [`unpack_packed`]/
-/// [`pack_packed`]); backends override them where hardware exists (e.g. F16C `vcvtph2ps`).
+/// count. `pack`/`unpack` have generic branchless defaults (the private `unpack_packed` /
+/// `pack_packed` in this module); backends override them where hardware exists (e.g. F16C
+/// `vcvtph2ps`).
 pub trait PackedFloatRegister<
     S: FloatSpec,
     F: FloatRegister<Element = f32, Lanes = Self::Lanes, Bits: CastRegister<Self>>,

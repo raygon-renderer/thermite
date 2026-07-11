@@ -237,6 +237,30 @@ where
 ///
 /// If the policy enables compensation (`use_compensation`), Kahan summation is used
 /// for the underlying partial sum accumulation.
+///
+/// # Examples
+///
+/// Accelerating the slowly-converging Leibniz series
+/// `$\frac{\pi}{4} = \sum_{n=0}^{\infty} \frac{(-1)^n}{2n+1}$`,
+/// which needs on the order of `1/tolerance` terms when summed naively:
+///
+/// ```
+/// use thermite::prelude::*;
+/// use thermite::math::algorithms::aitken_sum;
+/// use thermite::math::policy::policies::Precision;
+///
+/// type V = Vector<f64>;
+///
+/// let leibniz = |n: i64| {
+///     let sign = if n % 2 == 0 { 1.0 } else { -1.0 };
+///     V::splat(sign / (2 * n + 1) as f64)
+/// };
+///
+/// let sum = match aitken_sum::<V, Precision, _>(V::splat(1e-12), 0, 100_000, leibniz) {
+///     Ok(v) | Err(v) => v.extract::<0>(),
+/// };
+/// assert!((sum - core::f64::consts::FRAC_PI_4).abs() < 1e-10);
+/// ```
 #[inline(always)]
 pub fn aitken_sum<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
 where

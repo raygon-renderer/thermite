@@ -7,7 +7,13 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
-description = "Procedural codegen macros for the Thermite SIMD library"
+description = "Procedural codegen macros for the Thermite SIMD library (use via the thermite crate)"
+readme = "README.md"
+keywords = ["simd", "target-feature", "dispatch", "codegen", "proc-macro"]
+categories = ["development-tools::procedural-macro-helpers", "hardware-support", "no-std"]
+
+[lints]
+workspace = true
 
 [lib]
 proc-macro = true
