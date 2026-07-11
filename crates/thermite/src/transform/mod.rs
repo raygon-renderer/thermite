@@ -33,7 +33,7 @@ where
         return;
     }
 
-    let n = Vector::<S::fxN>::LANES;
+    let n = Vector::<S::fxN>::lanes();
     let len = data.len();
 
     // data is large enough to be worth using aligned loads of the native vector size,
@@ -177,7 +177,7 @@ pub unsafe fn map_overlapping<S, F, K, const I: usize, const O: usize>(
         + MapKernel2<Vector<S::fx2>, I, O>
         + MapKernel2<Vector<F>, I, O>,
 {
-    let n = Vector::<S::fxN>::LANES;
+    let n = Vector::<S::fxN>::lanes();
 
     if len < n || const { matches!(S::ISA, crate::isa::InstructionSet::Scalar) } {
         unsafe { map_overlapping_scalar(inputs, outputs, len, kernel) };

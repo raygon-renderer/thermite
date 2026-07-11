@@ -529,6 +529,15 @@ pub trait Register:
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
+        // The default reads size_of::<Storage>() bytes, but the safety contract only
+        // promises Lanes * size_of::<Element>() -- padded storage must override.
+        const {
+            assert!(
+                size_of::<Storage<Self>>() == (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Size mismatch between register storage and array of elements"
+            );
+        }
+
         // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
         unsafe { core::ptr::read(ptr as *const Storage<Self>) }
     }
@@ -595,6 +604,15 @@ pub trait Register:
     /// The pointer must be valid, aligned, and point to a memory location
     /// of at least length `Self::Lanes::USIZE * size_of::<Self::Element>()`.
     unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
+        // The default writes size_of::<Storage>() bytes, but the safety contract only
+        // promises Lanes * size_of::<Element>() -- padded storage must override.
+        const {
+            assert!(
+                size_of::<Storage<Self>>() == (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Size mismatch between register storage and array of elements"
+            );
+        }
+
         // SAFETY: This is safe as long as the pointer is valid, aligned, and of the correct length.
         unsafe { core::ptr::write(ptr as *mut Storage<Self>, value) }
     }

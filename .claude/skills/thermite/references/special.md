@@ -35,7 +35,8 @@ v.legendre(n, m)            v.jacobi(alpha, beta, n, m)
 v.chebyshev::<K, N>(&coeffs)// Clenshaw eval of an N-term series; K = kind 1..=4 (T/U/V/W)
 v.lambert_w()  -> (V, V)    // (W_0(x), W_{-1}(x)), both branches at once
 v.expint::<N>()            // exponential integral E_n(x)
-v.bessel_j::<N>()          // J_N(x)  -- WIP, minimal (f32, J_0); see src/specialized/j0f.rs
+v.bessel_j::<N>()          // J_N(x)  -- WIP: ONLY f32 J_0 works; f32 N>0 and ALL
+                           // f64 orders are todo!() and PANIC (ps.rs / pd.rs)
 ```
 
 ## `RealSpecialMath` (real vectors only; uses ordering/sign/|x|)
@@ -78,9 +79,11 @@ let f  = phi.ellint(EllintF { phi, k });                         // incomplete F
 
 Carlson kinds: `CarlsonRf`, `CarlsonRc`, `CarlsonRd`, `CarlsonRj`, `CarlsonRg`.
 Legendre kinds: complete `EllintK`, `EllintE`, `EllintD`, `EllintPi`; incomplete
-`EllintF`, `EllintEInc`, `EllintDInc`, `EllintPiInc`. (Elliptic integrals are still
-being polished -- e.g. no special handling for the `k -> +/-1` poles, and phi-range
-reduction is still in progress.)
+`EllintF`, `EllintEInc`, `EllintDInc`, `EllintPiInc`. All forms (including
+phi-range reduction for the incomplete integrals and `R_J` with `p < 0`) are
+implemented and tested against reference values in `tests/special_vs_libm.rs`;
+remaining work is optimization-grade (f32 sweep validation, large-|phi|
+accuracy), not correctness.
 
 ## Scalar surface
 
@@ -94,5 +97,6 @@ let (y, _dy) = 1.0_f64.scalar_swish(1.0_f64);
 
 ## WIP flags
 
-- `bessel_j` is minimal (f32, mostly `J_0`); not production-ready.
-- Elliptic integral edge cases (pole singularities) are unfinished.
+- `bessel_j` PANICS via `todo!()` except for f32 `J_0` (all f64 orders and f32
+  `N > 0` are unimplemented -- `src/specialized/pd.rs` / `ps.rs`). Do not call
+  it in generic code that may instantiate at f64.

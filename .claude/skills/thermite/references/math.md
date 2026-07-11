@@ -57,15 +57,15 @@ pub struct PolicyParameters {
 
 Preset policies (in `thermite::math::policy::policies`, also re-exported):
 
-| Preset | precision | overflow | branchless | denormals | use when |
-|---|---|---|---|---|---|
-| `UltraPerformance` | Worst | no | yes | Crush | fastest, sloppy |
-| `HighPerformance` | Medium | no | no | Crush | fast |
-| `Performance` | Average | yes | no | FlushToZero | **CPU default** |
-| `Precision` | Best | yes | no (compensated) | FlushToZero | accuracy |
-| `Size` | Average | yes | no | Crush | **WASM default**, small code |
-| `Reference` | Reference | yes | no (compensated) | FlushToZero | validation only (slow) |
-| `GpuDefault` | Average | yes | yes | Crush | SPIR-V default |
+| Preset | precision | overflow | branchless | compensated | denormals | use when |
+|---|---|---|---|---|---|---|
+| `UltraPerformance` | Worst | no | yes | no | Crush | fastest, sloppy |
+| `HighPerformance` | Medium | no | no | no | Crush | fast |
+| `Performance` | Average | yes | no | no | FlushToZero | **CPU default** |
+| `Precision` | Best | yes | no | yes | FlushToZero | accuracy |
+| `Size` | Average | yes | no | no | Crush | **WASM default**, small code |
+| `Reference` | Reference | yes | no | yes | FlushToZero | validation only (slow) |
+| `GpuDefault` | Average | yes | yes | no | Crush | SPIR-V default |
 
 `DefaultPolicy` is `Performance` on CPU, `Size` on WASM, `GpuDefault` on SPIR-V
 (selected by `cfg`).

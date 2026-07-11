@@ -526,6 +526,17 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Number of lanes in the vector.
     const LANES: usize;
 
+    /// Number of lanes in the vector, as a runtime value.
+    ///
+    /// Today this is always [`LANES`](Self::LANES), but prefer it over the constant in
+    /// loop bounds and address arithmetic: a future scalable-vector backend (SVE /
+    /// RISC-V V) can only report its lane count at runtime, and code written against
+    /// `lanes()` will carry over unchanged.
+    #[inline(always)]
+    fn lanes() -> usize {
+        Self::LANES
+    }
+
     /// Number of lanes in the vector, as a typenum.
     type Lanes: Lanes;
 
@@ -647,7 +658,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// If you're looking for masked variants of this, those typically only exist for aligned inputs,
     /// so you'll need an aligned pointer and use [`load_m`](Self::load_m) or [`load_z`](Self::load_z).
     fn from_slice(slice: &[Self::Element]) -> Self {
-        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to create a vector", Self::LANES);
+        assert!(slice.len() >= Self::lanes(), "Slice must have at least {} elements to create a vector", Self::lanes());
 
         unsafe { Self::load_unaligned(slice.as_ptr()) }
     }
@@ -656,7 +667,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     ///
     /// This will emit an unaligned store.
     fn copy_to_slice(self, slice: &mut [Self::Element]) {
-        assert!(slice.len() >= Self::LANES, "Slice must have at least {} elements to copy from a vector", Self::LANES);
+        assert!(slice.len() >= Self::lanes(), "Slice must have at least {} elements to copy from a vector", Self::lanes());
 
         unsafe { self.store_unaligned(slice.as_mut_ptr()) }
     }
@@ -664,8 +675,8 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Transform a slice of element values into an unaligned iterator of vectors,
     /// returning any remaining elements as a suffix slice.
     fn iter_unaligned<'a>(values: &'a [Self::Element]) -> (unaligned::Unaligned<'a, Self>, &'a [Self::Element]) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = num_vectors * Self::LANES;
+        let num_vectors = values.len() / Self::lanes();
+        let offset = num_vectors * Self::lanes();
 
         let head = &values[..offset];
         let tail = &values[offset..];
@@ -676,8 +687,8 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Transform a mutable slice of element values into an unaligned iterator of vectors,
     /// returning any remaining elements as a suffix slice.
     fn iter_mut_unaligned<'a>(values: &'a mut [Self::Element]) -> (unaligned::UnalignedMut<'a, Self>, &'a mut [Self::Element]) {
-        let num_vectors = values.len() / Self::LANES;
-        let offset = num_vectors * Self::LANES;
+        let num_vectors = values.len() / Self::lanes();
+        let offset = num_vectors * Self::lanes();
 
         let (head, tail) = values.split_at_mut(offset);
 
@@ -957,7 +968,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// [`Unsigned`](Self::Unsigned), so it does not require `Self: NumericVector`).
     #[inline(always)]
     fn prefix_mask(n: usize) -> Self::Mask {
-        let n = if n > Self::LANES { Self::LANES } else { n };
+        let n = if n > Self::lanes() { Self::lanes() } else { n };
         let limit = Self::len_to_indices::<Self::Unsigned>(n);
         Self::Unsigned::indexed().cmp_lt(limit).cast::<Self::Mask>()
     }
@@ -970,8 +981,8 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `Self::suffix_mask(2)` on a 4-lane vector selects lanes 2 and 3.
     #[inline(always)]
     fn suffix_mask(n: usize) -> Self::Mask {
-        let n = if n > Self::LANES { Self::LANES } else { n };
-        let start = Self::len_to_indices::<Self::Unsigned>(Self::LANES - n);
+        let n = if n > Self::lanes() { Self::lanes() } else { n };
+        let start = Self::len_to_indices::<Self::Unsigned>(Self::lanes() - n);
         Self::Unsigned::indexed().cmp_ge(start).cast::<Self::Mask>()
     }
 

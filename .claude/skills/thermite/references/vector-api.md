@@ -5,7 +5,9 @@ them. `V` denotes the vector type, `E = V::Element`, `M = V::Mask`. Defined in
 `crates/thermite/src/vector/mod.rs` and `vector/ops.rs`.
 
 > Masked variants: every method tagged `[masked]` automatically gets `_c`/`_m`/`_z`
-> siblings -- see the last section. The **mask is always the first extra argument**.
+> siblings -- see the last section. In `_c`/`_z` forms the **mask is the first
+> extra argument**; the `_m` (merge) form takes `src` first, then the mask:
+> `a.op_m(src, mask, rhs)`.
 
 ## 1. GenericVector
 
@@ -122,6 +124,11 @@ v.is_power_of_two() -> M   a.avg(b)   v.parity()   v.ilog2p1()   v.next_power_of
 a.abs_diff(b)              // |a - b| without overflow (saturating-sub form)
 x.in_range(lo, hi) -> M    // mask of lo <= x <= hi, inclusive (branchless, one compare)
 
+// Morton codes (Z-order curve): bit-interleave N coordinate vectors into one
+// code and back. N = 2 or 3 typically (BVH/octree keys, grid binning).
+// With `avx2-pclmul` (default) the 2D path uses CLMUL on u64 lanes.
+let code = V::morton::<N>([x, y, ...]);   let [x, y, ...] = code.reverse_morton::<N>();
+
 // Division by a precomputed divisor (constant-time, branchfree). See `divider` module.
 use thermite::{BranchfreeDivider, Divider};
 let d = BranchfreeDivider::u32(7);   let q = my_u32_vec / d;   // BranchfreeDivider::u32(1) unsupported
@@ -181,8 +188,9 @@ Note (known issue): `mat4_inverse` only catches exactly-singular
 
 ## Masked variants: `_c` / `_m` / `_z`
 
-Generated for every `[masked]`/`[conditional]` method. **Mask is the first extra
-argument.** For a binary op `op(self, rhs)`:
+Generated for every `[masked]`/`[conditional]` method. **In `_c`/`_z` the mask is
+the first extra argument; `_m` takes `src` first, then the mask.** For a binary
+op `op(self, rhs)`:
 
 ```rust
 a.op_c(mask, rhs)        // mask ? op(a, rhs) : a          (conditional: keep self where false)

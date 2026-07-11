@@ -113,7 +113,11 @@ default `special` feature it also covers `thermite-special` functions.
 ### Optional `special` feature
 
 `thermite-dual`'s `special` feature (on by default) pulls in `thermite-special` so
-`Dual` also differentiates `erf`, `gelu`, etc.
+`Dual` also differentiates `erf`, `gelu`, etc. -- but not all of it: the gamma
+family (`tgamma`/`lgamma`/`lgamma_r`/`digamma`/`beta`) and `bessel_j` are
+`todo!()` in `src/special.rs` because their derivatives need primitives
+`thermite-special` doesn't provide yet (digamma/trigamma; adjacent Bessel
+orders). Calling those on a `Dual` panics.
 
 ---
 
@@ -161,15 +165,23 @@ left-to-right gives `0.0` in naive f64 (the `1.0` is lost) but `1.0` with
 
 ### Status
 
-Core arithmetic (`+ - *`, the operators), `value()`/`error()`, and
-`SpecializedTranscendentalMath` (high-precision compensated series, e.g. a ~20-term
-reduced-argument Taylor `sin_cos`) are implemented. But the trait impls are **not
-fully filled in**: scattered `todo!()` remain across `NumericVector`
-(`min`/`max`/`scale` and their masked forms, `pairwise_sum`, `relaxed_pairwise_sum`,
-`arg_minmax`), `SignedVector` (`abs`/`copysign` masked forms), and `FloatVector`
-(many `_c`/`_m`/`_z` variants) -- on the order of dozens. Treat as solid-but-WIP:
-prefer plain arithmetic and the implemented transcendentals; expect a `todo!()`
-panic if you hit an unfinished masked/reduction op.
+The full vector-trait surface (`NumericVector`/`SignedVector`/`FloatVector`,
+including every masked `_c`/`_m`/`_z` variant, `scale`, `pairwise_sum`,
+`arg_minmax`, `mix`) is implemented and covered by
+`crates/thermite-compensated/tests/ops.rs`, alongside core arithmetic,
+`value()`/`error()`, and `SpecializedTranscendentalMath` (high-precision
+compensated series, e.g. a ~20-term reduced-argument Taylor `sin_cos`).
+What still `todo!()`-panics is a slice of the special functions in
+`src/special.rs` -- the gamma family (`lgamma_r`/`lgamma`/`tgamma`/`beta`),
+`digamma`, and `bessel_j` -- which need genuine double-double algorithms.
+Grep `todo!` in the crate for the current list before relying on a special
+function.
+
+Two representation gotchas worth knowing (both intended semantics): `value()`
+folds `value + error`, so it normalizes `-0.0 + 0.0` to `+0.0` -- read
+`uncompensated()` when the sign of zero matters; and `next_up`/`next_down`
+step the *error* term by one ulp, far below what the folded `value()` can
+resolve -- observe the step via a compensated difference.
 
 ---
 

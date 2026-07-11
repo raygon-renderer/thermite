@@ -53,10 +53,10 @@ macro_rules! math_kernels {
             pub unsafe fn exp(data: &[$E]) -> V {
                 let mut acc = V::ZERO;
                 let mut i = 0;
-                while i + V::LANES <= data.len() {
+                while i + V::lanes() <= data.len() {
                     let v = unsafe { V::load_unaligned(data.as_ptr().add(i)) };
                     acc += v.exp_p::<$P>();
-                    i += V::LANES;
+                    i += V::lanes();
                 }
                 acc
             }
@@ -65,10 +65,10 @@ macro_rules! math_kernels {
             pub unsafe fn ln(data: &[$E]) -> V {
                 let mut acc = V::ZERO;
                 let mut i = 0;
-                while i + V::LANES <= data.len() {
+                while i + V::lanes() <= data.len() {
                     let v = unsafe { V::load_unaligned(data.as_ptr().add(i)) };
                     acc += v.ln_p::<$P>();
-                    i += V::LANES;
+                    i += V::lanes();
                 }
                 acc
             }
@@ -77,10 +77,10 @@ macro_rules! math_kernels {
             pub unsafe fn tanh(data: &[$E]) -> V {
                 let mut acc = V::ZERO;
                 let mut i = 0;
-                while i + V::LANES <= data.len() {
+                while i + V::lanes() <= data.len() {
                     let v = unsafe { V::load_unaligned(data.as_ptr().add(i)) };
                     acc += v.tanh_p::<$P>();
-                    i += V::LANES;
+                    i += V::lanes();
                 }
                 acc
             }
@@ -90,12 +90,12 @@ macro_rules! math_kernels {
                 let mut s_acc = V::ZERO;
                 let mut c_acc = V::ZERO;
                 let mut i = 0;
-                while i + V::LANES <= data.len() {
+                while i + V::lanes() <= data.len() {
                     let v = unsafe { V::load_unaligned(data.as_ptr().add(i)) };
                     let (s, c) = v.sin_cos_p::<$P>();
                     s_acc += s;
                     c_acc += c;
-                    i += V::LANES;
+                    i += V::lanes();
                 }
                 (s_acc, c_acc)
             }
@@ -104,11 +104,11 @@ macro_rules! math_kernels {
             pub unsafe fn atan2(y: &[$E], x: &[$E]) -> V {
                 let mut acc = V::ZERO;
                 let mut i = 0;
-                while i + V::LANES <= y.len() {
+                while i + V::lanes() <= y.len() {
                     let vy = unsafe { V::load_unaligned(y.as_ptr().add(i)) };
                     let vx = unsafe { V::load_unaligned(x.as_ptr().add(i)) };
                     acc += vy.atan2_p::<$P>(vx);
-                    i += V::LANES;
+                    i += V::lanes();
                 }
                 acc
             }

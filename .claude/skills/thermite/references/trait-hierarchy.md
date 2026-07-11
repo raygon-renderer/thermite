@@ -6,22 +6,25 @@ weakest trait that supplies what you call ([generic-programming.md](generic-prog
 
 ```
 GenericVector                         (mod.rs:512)
-  |- BitwiseVector                    (1080)
-  |    |- BitshiftVector              (1170)
-  |- PartialOrdVector                 (1344)
-       |- NumericVector               (1389)
-            |- SignedVector           (1511)
-            |    |- FloatVector       (1745)
-            |    |    |- FloatVectorWithBits   (2002)
+  |- BitwiseVector                    (1092)
+  |    |- BitshiftVector              (1182)
+  |- PartialOrdVector                 (1356)
+       |- NumericVector               (1401)
+            |- SignedVector           (1523)
+            |    |- FloatVector       (1797)
+            |    |    |- FloatVectorWithBits   (2054)
             |    |- (SignedIntegerVector also here)
-            |- IntegerVector          (1568)
-                 |- SignedIntegerVector    (1671)
-                 |- UnsignedIntegerVector  (1686)
+            |- IntegerVector          (1580)
+                 |- SignedIntegerVector    (1683)
+                 |- UnsignedIntegerVector  (1707)
 
-LinAlg3Vector : FloatVector           (2331)   3D/quaternion/mat3 helpers
-LinAlg4Vector : LinAlg3Vector         (2447)   4D/mat4 helpers
-GenericVector2/3/4                    (2148+)  named-lane accessors x()/y()/z()/w()
+LinAlg3Vector : FloatVector           (2383)   3D/quaternion/mat3 helpers
+LinAlg4Vector : LinAlg3Vector         (2499)   4D/mat4 helpers
+GenericVector2/3/4                    (2200+)  named-lane accessors x()/y()/z()/w()
 ```
+
+(Line numbers drift as the file grows; when one misses, grep
+`^pub trait <Name>` in `vector/mod.rs` -- the trait names are stable.)
 
 Exact supertrait declarations (quoted from source):
 
@@ -95,7 +98,8 @@ instruction sequences per backend at zero runtime cost
 - **IntegerVector family**: `mulhi`/`mullo`, `saturating_add/sub`, `wrapping_sum/prod`,
   dividers, `count_ones/zeros`, `leading_ones/zeros`; signed `srai/sra/srav`,
   `avg_floor/ceil`, `mulhrs` (rounded Q-format multiply); unsigned `is_power_of_two`,
-  `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`. -> section 6.
+  `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`, and Morton-code
+  (Z-order) interleave: `morton::<N>([Self; N])` / `reverse_morton::<N>()`. -> section 6.
 - **FloatVector**: `sqrt`, `rcp`, `rsqrt`, `floor/ceil/round/trunc/fract`, `mix`,
   `next_up/down`, `mul_sign`, `signed_zero`, `one_minus_sq`, classification
   (`is_nan/finite/infinite/normal/subnormal`), constants

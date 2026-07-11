@@ -29,6 +29,37 @@ jobs:
           rustup target add wasm32-unknown-unknown
           cargo check -p thermite --target wasm32-unknown-unknown --no-default-features --features wasm
 
+      # Compile-gate the companion crates (they are publish=false, but silent
+      # rot is how the FFI crate once broke unnoticed) and the bench suite
+      # (x86-only kernels; not run here, just kept compiling).
+      - name: Check companion crates
+        run: >
+          cargo check -p thermite-special -p thermite-sdf
+          -p thermite-geometry -p thermite-dual -p thermite-compensated
+          -p thermite-complex -p thermite-blas
+      - name: Check benches build
+        run: cargo check -p thermite --benches
+
+  # thermite-ffi needs nightly and must be built in isolation (its
+  # #[panic_handler] conflicts with any sibling that links std), so it gets
+  # its own job. This is the compile-gate that would have caught the
+  # decl_methods!/into_array regression; artifact builds stay in
+  # ffi_artifacts.yaml.
+  ffi:
+    name: Check FFI (nightly)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Check thermite-ffi
+        run: cargo check --profile release-ffi -p thermite-ffi
+        env:
+          RUSTUP_TOOLCHAIN: nightly
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

@@ -99,11 +99,12 @@ names include:
 - **Arithmetic / rounding**: add, sub, mul, div, rem, min, max, abs, signum, round,
   floor, ceil, trunc, fract, next_up, next_down, mul_add/mul_sub/nmul_add/nmul_sub.
 - **Core/transcendental**: inverse_sqrt, reciprocal, sin, cos, tan, sin_cos (2 out),
-  sinh, cosh, tanh, sinh_cosh, asin, acos, atan, asinh, acosh, atanh, exp, exp2,
-  exp10, exp_m1, ln, ln_1p, log2, log10, log (base), cbrt, powf, atan2, hypot,
-  sin_pi/cos_pi/tan_pi/sinc.
+  sin_cos_pi (2 out), sinh, cosh, tanh, sinh_cosh (2 out), asin, acos, atan, asinh,
+  acosh, atanh, exp, exph, exp2, exp10, exp_m1, ln, ln_1p, log2, log10, log (base),
+  cbrt, powf, atan2, hypot, sin_pi/cos_pi/tan_pi/sinc/sinc_pi.
 - **Real math**: wrap_angle, angle_diff, to_degrees, to_radians, lerp, smoothstep,
-  smootherstep, inverse_smoothstep, step, clamp, gaussian, powi.
+  smootherstep, inverse_smoothstep, inverse_smootherstep, smooth_interpolator,
+  smooth_interpolator_inverse, step, clamp, gaussian, powi.
 - **Special**: erf, erfc, logistic_sigmoid, tgamma, lgamma, beta, erfinv.
 
 The shape suffix encodes the argument arity: `_v` (one vector), `_vv` (two

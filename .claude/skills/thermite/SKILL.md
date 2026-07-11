@@ -67,7 +67,7 @@ that needs nightly -- see [references/ffi.md](references/ffi.md).
 
 ### Feature flags (`thermite`)
 
-Default features are `document_registers`, `bitvec`, `avx2-f16c`. The crate is
+Default features are `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`. The crate is
 `no_std` by default. User-relevant flags:
 
 | Feature | Default | What it does |
@@ -75,6 +75,7 @@ Default features are `document_registers`, `bitvec`, `avx2-f16c`. The crate is
 | `std` | off | Enables `std` (e.g. fmt in panicking paths, `num-traits/std`). Turn on if you build for a std target and want those; leave off for `no_std`. |
 | `bitvec` | **on** | Enables `bitvec` integration for masks (`dep:bitvec`). |
 | `avx2-f16c` | **on** | Assume `f16c` whenever AVX2 is present (true for all AVX2 CPUs); enables half-precision conversion intrinsics in the AVX2 backend with no extra runtime check. x86 only. |
+| `avx2-pclmul` | **on** | Assume `pclmulqdq` whenever AVX2 is present (PCLMULQDQ predates AVX2 by three years); enables the CLMUL-based 2D Morton-code fast path on u64-lane registers. x86 only. |
 | `partial-ord` | off | Implements `PartialOrd` for `Vector` (only meaningful when all lanes share the order). |
 | `strict_ieee754` | off | Follow IEEE-754 as closely as possible: implies `preserve_denormals` + `disable_fast_fma`. Significantly slower; only if you need spec-exact denormals/NaN/min-max behavior. |
 | `preserve_denormals` | off | Keep denormals (required for strict IEEE-754); slower on denormal-heavy data. |
@@ -220,5 +221,9 @@ Cross-cutting:
   `mul_add` is a valid accuracy choice when a slight slowdown is fine. See
   [references/performance.md](references/performance.md).
 - **`thermite-dual` / `thermite-compensated` / `thermite-special` are `publish = false`**
-  (pre-release). `Compensated`'s `FloatVector` masked variants are partly `todo!()`.
-  Treat them as solid-but-WIP.
+  (pre-release). Their vector-trait surfaces are complete, but a few special
+  functions still `todo!()`-panic: `bessel_j` beyond f32 `J_0` in
+  `thermite-special`, and the gamma family (`tgamma`/`lgamma`/`digamma`/`beta`)
+  plus `bessel_j` on `Dual` and `Compensated` (blocked on those upstream
+  primitives). Treat them as solid-but-WIP and grep for `todo!` before relying
+  on a special function.
