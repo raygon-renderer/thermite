@@ -72,6 +72,7 @@ Every `V: GenericVector` exposes these. Use them instead of hard-coding types:
 ```rust
 V::Element        // scalar element type (f32, i32, ...)
 V::LANES          // lane count, a usize const
+V::lanes()        // lane count as a value; prefer in loop bounds / address math
 V::Lanes          // lane count as a typenum type
 V::Unsigned       // unsigned int vector, same lane count & bit width
 V::Signed         // signed int vector, same lane count & bit width

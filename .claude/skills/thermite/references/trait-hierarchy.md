@@ -48,6 +48,7 @@ On `GenericVector`:
 |---|---|
 | `Element` | scalar element type |
 | `LANES: usize` | lane count (const) |
+| `lanes() -> usize` | lane count as a value; prefer in loop bounds (today always `LANES`) |
 | `Lanes` | lane count as a typenum |
 | `Unsigned` | unsigned int vector, same lanes & bit width |
 | `Signed` | signed int vector, same lanes & bit width |

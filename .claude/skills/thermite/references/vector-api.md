@@ -17,6 +17,10 @@ V::new([e0, e1, ...])        V::splat(e)         V::single(e)   // single: lane 
 V::EMPTY                                              // all-zero (also ZERO/ONE/... on NumericVector)
 const X: V = thermite::const_new!(f32: [1.0, 0.0, 0.0]);  // const vector value (usable in const fn / assoc consts)
 v.into_array() -> GenericArray<E, V::Lanes>          V::from_slice(&[E])     v.copy_to_slice(&mut [E])
+v.as_slice() -> &[E]         v.as_mut_slice() -> &mut [E]   // borrow lanes as a slice (VectorWithRegister
+                                                            // trait; the prelude imports it)
+V::LANES -> usize (const)    V::lanes() -> usize            // prefer lanes() in loop bounds/address math
+                                                            // (forward-compatible with runtime-length backends)
 
 // Lane access
 v.extract::<I>() -> E        v.insert::<I>(e) -> V   v.broadcast::<I>() -> V     // compile-time index
@@ -153,7 +157,8 @@ a.mul_adde(b, c)   // a*b + c   <-- PREFER the `e` (estimating) forms by default
 a.mul_sube(b, c)   // a*b - c
 a.nmul_adde(b, c)  // c - a*b
 a.nmul_sube(b, c)  // -a*b - c
-a.mul_add(b, c)    // a*b + c, ALWAYS fused (libm::fma if no hardware -- slow). Only inside HAS_TRUE_FMA gate.
+a.mul_add(b, c)    // a*b + c, always single-rounded: real FMA, else vectorized compensated
+                   // emulation (scalar libm::fma only under disable_fast_fma). See math.md.
 ```
 
 See [performance.md](performance.md) for which FMA variant to use -- this is the

@@ -104,7 +104,7 @@ branch coverage, spirv, and the FFI crate.
 
 | Path | Purpose |
 |---|---|
-| `register/mod.rs` | The `*Register` trait hierarchy: `CoreRegister` (233) -> `BitwiseRegister` (281) -> `Register` -> `NumericRegister` -> `FloatRegister`; also `BitshiftRegister` (1250, `Element: IntegerElement`), `IntegerRegister`, `MaskRegister` (354), and the swizzle/concat/extend/blend traits. Methods are `fn(Storage<Self>, ...) -> Storage<Self>` -- no `&self`, no operators. |
+| `register/mod.rs` | The `*Register` trait hierarchy: `CoreRegister` (233) -> `BitwiseRegister` (291) -> `Register` (488) -> `NumericRegister` (1623) -> `FloatRegister` (2084); also `BitshiftRegister` (1325, `Element: IntegerElement`), `IntegerRegister`, `MaskRegister` (364), and the swizzle/concat/extend/blend traits. Methods are `fn(Storage<Self>, ...) -> Storage<Self>` -- no `&self`, no operators. Lane-wise defaults borrow storage via `Register::as_slice`/`as_mut_slice` (runtime-length slices; there is no array-typed borrow) and loop `0..Self::lanes()`. |
 | `register/well_formed.rs`, `register/linalg.rs` | well-formedness bounds; linalg register ops. |
 | `register/array.rs` | `ArrayRegister<R,N>` -- packs `[R; N]` to emulate a wider width. |
 | `register/reduced.rs` | `ReducedRegister<R,N>` -- masks upper lanes to emulate a narrower width. |
@@ -403,7 +403,7 @@ generalizes it.
 
 It produces a value per lane from integer lanes, with no precision/policy
 dimension, so it is a **register primitive**, not a math function. `BitshiftRegister`
-is bounded `Register<Element: IntegerElement>` (`register/mod.rs:1250`) and already
+is bounded `Register<Element: IntegerElement>` (`register/mod.rs:1325`) and already
 hosts the bit-twiddling family (`reverse_bits`, `bshli`/`bshri`, rotates) -- put
 `morton_interleave` there. The inverse `morton_deinterleave` returns *two* lanes
 (`(Storage<Self>, Storage<Self>)`); a tuple return is mask-ineligible (section 2a),
