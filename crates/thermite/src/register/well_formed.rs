@@ -13,6 +13,25 @@ use crate::element::FloatElementWithBits;
 
 use super::*;
 
+// pub trait WellFormedElement:
+//     Element<Unsigned: WellFormedUnsignedIntegerElement, Signed: WellFormedSignedIntegerElement>
+//     + Register<Element = Self, Unsigned = <Self as Element>::Unsigned, Signed = <Self as Element>::Signed>
+// {
+//     type Float: WellFormedFloatElement<
+//             Element = Self,
+//             Unsigned = <Self as Element>::Unsigned,
+//             Signed = <Self as Element>::Signed,
+//         >;
+//     type Signed: WellFormedSignedIntegerElement<Element = Self::Signed, Unsigned = <Self as Element>::Unsigned>;
+//     type Unsigned: WellFormedUnsignedIntegerElement<Element = Self::Unsigned, Signed = <Self as Element>::Signed>;
+// }
+
+// impl<E> WellFormedElement for E where
+//     E: Element<Unsigned: WellFormedUnsignedIntegerElement, Signed: WellFormedSignedIntegerElement>
+//         + Register<Element = E, Unsigned = <E as Element>::Unsigned, Signed = <E as Element>::Signed>
+// {
+// }
+
 /// A FloatElement type that can itself be used as a FloatRegister,
 /// with its associated SignedBits and Bits types also being fully formed.
 pub trait WellFormedFloatElement:
