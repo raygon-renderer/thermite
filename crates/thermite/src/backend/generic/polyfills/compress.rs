@@ -533,7 +533,7 @@ mod tests {
             }
 
             let got = compress_permute::<R<N>>(value, mask);
-            let got = <R<N>>::as_array(&got);
+            let got = <R<N>>::as_slice(&got);
             for lane in 0..N {
                 assert_eq!(got[lane], expected[lane], "N={N} bits={bits:b} lane={lane}");
             }
@@ -586,7 +586,7 @@ mod tests {
             }
 
             let got = compress_permute_wide::<R<N>>(value, mask);
-            let got = <R<N>>::as_array(&got);
+            let got = <R<N>>::as_slice(&got);
             for lane in 0..N {
                 assert_eq!(got[lane], expected[lane], "N={N} bits={bits:b} lane={lane}");
             }
@@ -657,7 +657,7 @@ mod tests {
             let expected = zeroing_oracle::<N>(&data, bits);
 
             let got = compress_z_wide::<R<N>>(value, mask);
-            let got = <R<N>>::as_array(&got);
+            let got = <R<N>>::as_slice(&got);
             for lane in 0..N {
                 assert_eq!(got[lane], expected[lane], "N={N} bits={bits:b} lane={lane}");
             }
@@ -719,8 +719,8 @@ mod tests {
             }
 
             let got = compress_z_merge2::<B>([v0, v1], [m0, m1]);
-            let g0 = <B>::as_array(&got[0]);
-            let g1 = <B>::as_array(&got[1]);
+            let g0 = <B>::as_slice(&got[0]);
+            let g1 = <B>::as_slice(&got[1]);
             for lane in 0..16 {
                 let val = if lane < 8 { g0[lane] } else { g1[lane - 8] };
                 assert_eq!(val, expected[lane], "bits={bits:b} lane={lane}");
@@ -779,7 +779,7 @@ mod tests {
             let got = compress_z_merge4::<B>(v, m);
             for lane in 0..32 {
                 assert_eq!(
-                    <B>::as_array(&got[lane / 8])[lane % 8],
+                    <B>::as_slice(&got[lane / 8])[lane % 8],
                     expected[lane],
                     "bits={bits:b} lane={lane}"
                 );
@@ -824,7 +824,7 @@ mod tests {
             let got = compress_z_merge8::<B>(v, m);
             for lane in 0..64 {
                 assert_eq!(
-                    <B>::as_array(&got[lane / 8])[lane % 8],
+                    <B>::as_slice(&got[lane / 8])[lane % 8],
                     expected[lane],
                     "bits={bits:b} lane={lane}"
                 );

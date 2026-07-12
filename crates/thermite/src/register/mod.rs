@@ -235,6 +235,16 @@ pub trait CoreRegister: 'static + Sized {
     type Storage: Sized + Copy + core::fmt::Debug;
     type Mask: MaskRegister<Lanes = Self::Lanes>;
 
+    /// Number of lanes in the register, as a runtime value.
+    ///
+    /// Today this is always `Self::Lanes::USIZE`; prefer it in slice lengths and
+    /// loop bounds for the same forward-compatibility reasons as
+    /// `GenericVector::lanes()`.
+    #[inline(always)]
+    fn lanes() -> usize {
+        <Self::Lanes as Unsigned>::USIZE
+    }
+
     /// Indicates if the register is emulated in software.
     const IS_EMULATED: bool;
 
@@ -367,7 +377,7 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
         let mut result = Self::FALSY;
 
         {
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 if value[i] {
                     result = Self::set(result, i, true);
                 }
@@ -422,9 +432,13 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
             (bm != 0).then(|| bm.trailing_zeros() as usize)
         } else {
             #[cfg(feature = "bitvec")]
-            { Self::bitmask(value).first_one() }
+            {
+                Self::bitmask(value).first_one()
+            }
             #[cfg(not(feature = "bitvec"))]
-            { (0..lanes).find(|&i| Self::test(value, i)) }
+            {
+                (0..lanes).find(|&i| Self::test(value, i))
+            }
         }
     }
 
@@ -437,9 +451,13 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
             (bm != 0).then(|| 63 - bm.leading_zeros() as usize)
         } else {
             #[cfg(feature = "bitvec")]
-            { Self::bitmask(value).last_one() }
+            {
+                Self::bitmask(value).last_one()
+            }
             #[cfg(not(feature = "bitvec"))]
-            { (0..lanes).rev().find(|&i| Self::test(value, i)) }
+            {
+                (0..lanes).rev().find(|&i| Self::test(value, i))
+            }
         }
     }
 
@@ -450,9 +468,13 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
             (bm & lane_bitmask(lanes)).count_ones() as usize
         } else {
             #[cfg(feature = "bitvec")]
-            { Self::bitmask(value).count_ones() }
+            {
+                Self::bitmask(value).count_ones()
+            }
             #[cfg(not(feature = "bitvec"))]
-            { (0..lanes).filter(|&i| Self::test(value, i)).count() }
+            {
+                (0..lanes).filter(|&i| Self::test(value, i)).count()
+            }
         }
     }
 }
@@ -521,7 +543,7 @@ pub trait Register:
     #[conditional]
     fn broadcastv(value: Storage<Self>, idx: usize) -> Storage<Self> {
         // NOTE: Slice indexing checks bounds, so this is safe.
-        Self::splat(Self::as_array(&value)[idx])
+        Self::splat(Self::as_slice(&value)[idx])
     }
 
     /// # SAFETY
@@ -549,9 +571,9 @@ pub trait Register:
     unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
         unsafe {
             let mut result = src;
-            let res = Self::as_array_mut(&mut result);
+            let res = Self::as_mut_slice(&mut result);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 if !<Self::Mask as MaskRegister>::test(mask, i) {
                     continue;
                 }
@@ -625,9 +647,9 @@ pub trait Register:
     /// The memory locations where the mask is false are not accessed.
     unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
         unsafe {
-            let res = Self::as_array(&value);
+            let res = Self::as_slice(&value);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 if !<Self::Mask as MaskRegister>::test(mask, i) {
                     continue;
                 }
@@ -669,12 +691,12 @@ pub trait Register:
     /// hardware-gather overrides (e.g. `_mm256_permutevar8x32_ps`, `vpgatherdd`) do not -
     /// passing an out-of-range index there is undefined behavior.
     unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
-        let indices = <Self::Unsigned as Register>::as_array(&indices);
+        let indices = <Self::Unsigned as Register>::as_slice(&indices);
 
         let mut res = Self::EMPTY;
-        let mut resa = Self::as_array_mut(&mut res);
+        let mut resa = Self::as_mut_slice(&mut res);
 
-        for i in 0..Self::Lanes::USIZE {
+        for i in 0..Self::lanes() {
             let idx: usize = indices[i].try_into().unwrap_or_else(#[cold] |_| panic!("Invalid index given for lookup"));
 
             resa[i] = values[idx];
@@ -683,20 +705,55 @@ pub trait Register:
         res
     }
 
-    fn as_array(storage: &Storage<Self>) -> &GenericArray<Self::Element, Self::Lanes> {
-        unsafe { &*(storage as *const Storage<Self> as *const GenericArray<Self::Element, Self::Lanes>) }
+    /// Borrow the register's storage as a slice of elements.
+    ///
+    /// The lane count travels as the slice length rather than in the type, which a
+    /// future runtime-length backend can implement, while an array-typed borrow
+    /// cannot. The length is constructed directly from [`lanes()`](Self::lanes), so
+    /// LLVM sees it as a constant on fixed-width backends.
+    #[inline(always)]
+    fn as_slice(storage: &Storage<Self>) -> &[Self::Element] {
+        // The default borrows the first `lanes()` elements of storage. Unlike the
+        // whole-storage load/store defaults this only needs the elements to be a
+        // contiguous PREFIX, so wider-than-lanes storage is fine (ReducedRegister
+        // is a lanes-prefix view of a wider register); smaller is never sound.
+        const {
+            assert!(
+                size_of::<Storage<Self>>() >= (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Register storage is smaller than its lane count implies"
+            );
+        }
+
+        // SAFETY: asserted above; storage is exactly `lanes()` elements.
+        unsafe { core::slice::from_raw_parts(storage as *const Storage<Self> as *const Self::Element, Self::lanes()) }
     }
 
-    fn as_array_mut(storage: &mut Storage<Self>) -> &mut GenericArray<Self::Element, Self::Lanes> {
-        unsafe { &mut *(storage as *mut Storage<Self> as *mut GenericArray<Self::Element, Self::Lanes>) }
+    /// Mutably borrow the register's storage as a slice of elements.
+    ///
+    /// See [`as_slice`](Self::as_slice).
+    #[inline(always)]
+    fn as_mut_slice(storage: &mut Storage<Self>) -> &mut [Self::Element] {
+        // The default borrows the first `lanes()` elements of storage. Unlike the
+        // whole-storage load/store defaults this only needs the elements to be a
+        // contiguous PREFIX, so wider-than-lanes storage is fine (ReducedRegister
+        // is a lanes-prefix view of a wider register); smaller is never sound.
+        const {
+            assert!(
+                size_of::<Storage<Self>>() >= (size_of::<Self::Element>() * <Self::Lanes as Unsigned>::USIZE),
+                "Register storage is smaller than its lane count implies"
+            );
+        }
+
+        // SAFETY: asserted above; storage is exactly `lanes()` elements.
+        unsafe { core::slice::from_raw_parts_mut(storage as *mut Storage<Self> as *mut Self::Element, Self::lanes()) }
     }
 
     fn iter(storage: &Storage<Self>) -> core::slice::Iter<'_, Self::Element> {
-        Self::as_array(storage).iter()
+        Self::as_slice(storage).iter()
     }
 
     fn iter_mut(storage: &mut Storage<Self>) -> core::slice::IterMut<'_, Self::Element> {
-        Self::as_array_mut(storage).iter_mut()
+        Self::as_mut_slice(storage).iter_mut()
     }
 
     fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
@@ -707,7 +764,7 @@ pub trait Register:
             );
         }
 
-        Self::as_array(&value)[I]
+        Self::as_slice(&value)[I]
     }
 
     fn insert<const I: usize>(mut value: Storage<Self>, element: Self::Element) -> Storage<Self> {
@@ -718,7 +775,7 @@ pub trait Register:
             );
         }
 
-        Self::as_array_mut(&mut value)[I] = element;
+        Self::as_mut_slice(&mut value)[I] = element;
         value
     }
 
@@ -726,7 +783,7 @@ pub trait Register:
     where
         F: FnMut(Self::Element) -> Self::Element,
     {
-        for v in Self::as_array_mut(&mut value) {
+        for v in Self::as_mut_slice(&mut value) {
             *v = f(*v);
         }
 
@@ -737,7 +794,7 @@ pub trait Register:
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
-        for (a, b) in Self::as_array_mut(&mut lhs).iter_mut().zip(Self::as_array(&rhs)) {
+        for (a, b) in Self::as_mut_slice(&mut lhs).iter_mut().zip(Self::as_slice(&rhs)) {
             *a = f(*a, *b);
         }
 
@@ -748,14 +805,14 @@ pub trait Register:
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
-        Self::as_array(&value).iter().fold(first, |acc, &v| f(acc, v))
+        Self::as_slice(&value).iter().fold(first, |acc, &v| f(acc, v))
     }
 
     fn reduce<F>(value: Storage<Self>, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
-        Self::as_array(&value)
+        Self::as_slice(&value)
             .iter()
             .skip(1)
             .fold(Self::extract::<0>(value), |acc, &v| f(acc, v))
@@ -783,7 +840,7 @@ pub trait Register:
 
     #[conditional]
     fn reverse(mut value: Storage<Self>) -> Storage<Self> {
-        Self::as_array_mut(&mut value).reverse();
+        Self::as_mut_slice(&mut value).reverse();
         value
     }
 
@@ -807,9 +864,9 @@ pub trait Register:
     fn compress(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
         let n = <Self::Lanes as Unsigned>::USIZE;
 
-        let src = Self::as_array(&value);
+        let src = Self::as_slice(&value);
         let mut result = value;
-        let dst = Self::as_array_mut(&mut result);
+        let dst = Self::as_mut_slice(&mut result);
 
         let mut pos = 0;
 
@@ -845,11 +902,11 @@ pub trait Register:
     /// it (the macros do so alongside `compress`) for the table / wide paths.
     fn compress_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
         let n = <Self::Lanes as Unsigned>::USIZE;
-        let src = Self::as_array(&value);
+        let src = Self::as_slice(&value);
 
         // `EMPTY` is zero, so the tail is already filled - only place selected.
         let mut result = Self::EMPTY;
-        let dst = Self::as_array_mut(&mut result);
+        let dst = Self::as_mut_slice(&mut result);
 
         let mut pos = 0;
         for i in 0..n {
@@ -867,8 +924,8 @@ pub trait Register:
     fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
-        let value_array = Self::as_array(&value);
-        let result_array = Self::as_array_mut(&mut result);
+        let value_array = Self::as_slice(&value);
+        let result_array = Self::as_mut_slice(&mut result);
 
         let mask = Self::Lanes::U32 - 1;
 
@@ -899,9 +956,9 @@ pub trait Register:
     fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
-        let a_array = Self::as_array(&a);
-        let b_array = Self::as_array(&b);
-        let result_array = Self::as_array_mut(&mut result);
+        let a_array = Self::as_slice(&a);
+        let b_array = Self::as_slice(&b);
+        let result_array = Self::as_mut_slice(&mut result);
 
         let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
 
@@ -1147,10 +1204,10 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
         unsafe {
             let mut result = Self::EMPTY;
 
-            let res = Self::as_array_mut(&mut result);
-            let indices = IDX::as_array(&indices);
+            let res = Self::as_mut_slice(&mut result);
+            let indices = IDX::as_slice(&indices);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 res[i] = ptr.add(indices[i].try_into().unwrap_unchecked()).read();
             }
 
@@ -1174,11 +1231,11 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
         unsafe {
             let mut result = src;
 
-            let res = Self::as_array_mut(&mut result);
-            let src = Self::as_array(&src);
-            let indices = IDX::as_array(&indices);
+            let res = Self::as_mut_slice(&mut result);
+            let src = Self::as_slice(&src);
+            let indices = IDX::as_slice(&indices);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 if !<Self::Mask as MaskRegister>::test(mask, i) {
                     continue;
                 }
@@ -1206,10 +1263,10 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
     #[inline(always)]
     unsafe fn scatter(value: Storage<Self>, ptr: *mut Self::Element, indices: Storage<IDX>) {
         unsafe {
-            let value = Self::as_array(&value);
-            let indices = IDX::as_array(&indices);
+            let value = Self::as_slice(&value);
+            let indices = IDX::as_slice(&indices);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 ptr.add(indices[i].try_into().unwrap_unchecked()).write(value[i]);
             }
         }
@@ -1227,10 +1284,10 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
         indices: Storage<IDX>,
     ) {
         unsafe {
-            let value = Self::as_array(&value);
-            let indices = IDX::as_array(&indices);
+            let value = Self::as_slice(&value);
+            let indices = IDX::as_slice(&indices);
 
-            for i in 0..<Self::Lanes as Unsigned>::USIZE {
+            for i in 0..Self::lanes() {
                 if !<Self::Mask as MaskRegister>::test(mask, i) {
                     continue;
                 }
@@ -1279,7 +1336,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// filling with zeros. This is different from lane-wise shifts, and effectively
     /// treats the register as one large integer.
     #[conditional] fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
-        let arr = Self::as_array_mut(&mut value);
+        let arr = Self::as_mut_slice(&mut value);
         let lane_width = core::mem::size_of::<Self::Element>() * 8;
         let lanes = <Self::Lanes as Unsigned>::USIZE;
 
@@ -1325,7 +1382,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// filling with zeros. This is different from lane-wise shifts, and effectively
     /// treats the register as one large integer.
     #[conditional] fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
-        let arr = Self::as_array_mut(&mut value);
+        let arr = Self::as_mut_slice(&mut value);
         let lane_width = core::mem::size_of::<Self::Element>() * 8;
         let lanes = <Self::Lanes as Unsigned>::USIZE;
 
@@ -1375,9 +1432,9 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
         // Scalar fallback. `shrv` is a *logical* (zero-fill) shift, so use
         // `unsigned_shr`: a plain `>>` on a signed element arithmetic-shifts, which
         // is `srav`, not `shrv`. (Backends with a hardware variable shift override this.)
-        for (r, s) in Self::as_array_mut(&mut value)
+        for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
-            .zip(<Self::Unsigned as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
             *r = r.logical_shr(*s);
         }
@@ -1387,9 +1444,9 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
 
     #[conditional] fn shlv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback
-        for (r, s) in Self::as_array_mut(&mut value)
+        for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
-            .zip(<Self::Unsigned as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
             *r = *r << *s;
         }
@@ -1645,12 +1702,12 @@ pub trait NumericRegister:
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
         let half = const { <Self::Lanes as Unsigned>::USIZE / 2 };
 
-        let lo = Self::as_array(&lo);
-        let hi = Self::as_array(&hi);
+        let lo = Self::as_slice(&lo);
+        let hi = Self::as_slice(&hi);
 
         let mut result = Self::EMPTY;
 
-        let out = Self::as_array_mut(&mut result);
+        let out = Self::as_mut_slice(&mut result);
         for i in 0..half {
             out[i] = lo[2 * i] + lo[2 * i + 1];
             out[i + half] = hi[2 * i] + hi[2 * i + 1];
@@ -1920,9 +1977,9 @@ pub trait SignedIntegerRegister:
     #[conditional]
     fn srav(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback
-        for (r, s) in Self::as_array_mut(&mut value)
+        for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
-            .zip(<Self::Unsigned as Register>::as_array(&shifts))
+            .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
             *r = *r >> *s; // r in this context is signed, so this is an arithmetic shift
         }

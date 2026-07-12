@@ -17,7 +17,7 @@ type Backend = thermite::backend::wasm::Wasm;
 fn u8x16_add() {
     type R = <Backend as Simd>::u8x16;
     let c = R::add(R::splat(200), R::splat(7));
-    assert_eq!(R::as_array(&c).as_slice(), &[207u8; 16]);
+    assert_eq!(R::as_slice(&c), &[207u8; 16]);
 }
 
 #[test]
@@ -25,14 +25,14 @@ fn u8x16_wrapping_add() {
     type R = <Backend as Simd>::u8x16;
     // 200 + 100 wraps to 44 in u8.
     let c = R::add(R::splat(200), R::splat(100));
-    assert_eq!(R::as_array(&c).as_slice(), &[44u8; 16]);
+    assert_eq!(R::as_slice(&c), &[44u8; 16]);
 }
 
 #[test]
 fn u8x16_popcnt() {
     type R = <Backend as Simd>::u8x16;
     let c = R::count_ones(R::splat(0b1011_0001));
-    assert_eq!(R::as_array(&c).as_slice(), &[4u8; 16]);
+    assert_eq!(R::as_slice(&c), &[4u8; 16]);
 }
 
 #[test]
@@ -41,12 +41,12 @@ fn u8x16_reverse() {
     let v = R::indexed(); // [0, 1, ..., 15]
     let r = R::reverse(v);
     let want: [u8; 16] = core::array::from_fn(|i| (15 - i) as u8);
-    assert_eq!(R::as_array(&r).as_slice(), &want);
+    assert_eq!(R::as_slice(&r), &want);
 }
 
 #[test]
 fn i16x8_mul() {
     type R = <Backend as Simd>::i16x8;
     let c = R::mul(R::splat(300), R::splat(3));
-    assert_eq!(R::as_array(&c).as_slice(), &[900i16; 8]);
+    assert_eq!(R::as_slice(&c), &[900i16; 8]);
 }

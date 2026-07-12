@@ -72,12 +72,12 @@ impl InterleaveRegister for U16x8Wasm {
 #[thermite_macros::inline_always]
 impl MaskRegister for U16x8Wasm {
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     const FALSY: Storage<Self> = arch::u16x8(0, 0, 0, 0, 0, 0, 0, 0);
@@ -255,16 +255,16 @@ impl NumericRegister for U16x8Wasm {
     );
 
     fn min_element(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().min().unwrap()
+        Self::as_slice(&value).iter().copied().min().unwrap()
     }
     fn max_element(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().max().unwrap()
+        Self::as_slice(&value).iter().copied().max().unwrap()
     }
     fn sum_elements(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().fold(0u16, u16::wrapping_add)
+        Self::as_slice(&value).iter().copied().fold(0u16, u16::wrapping_add)
     }
     fn prod_elements(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().fold(1u16, u16::wrapping_mul)
+        Self::as_slice(&value).iter().copied().fold(1u16, u16::wrapping_mul)
     }
 
     fn offset() -> Storage<Self> {

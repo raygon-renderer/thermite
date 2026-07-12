@@ -98,12 +98,12 @@ impl InterleaveRegister for I8x16V1 {
 #[thermite_macros::inline_always]
 impl MaskRegister for I8x16V1 {
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     const FALSY: Storage<Self> = reg::<Self, 16>([0; 16]);
@@ -160,7 +160,7 @@ impl ExtendRegister<i8> for I8x16V1 {
 
     fn narrow(value: Storage<Self>) -> Storage<i8> {
         // no `_mm_extract_epi8` before SSE4.1; read lane 0 from the stored array.
-        Self::as_array(&value)[0]
+        Self::as_slice(&value)[0]
     }
 }
 
@@ -285,16 +285,16 @@ impl NumericRegister for I8x16V1 {
     const MAX: Storage<Self> = reg::<Self, 16>([i8::MAX; 16]);
 
     fn min_element(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().min().unwrap()
+        Self::as_slice(&value).iter().copied().min().unwrap()
     }
     fn max_element(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().max().unwrap()
+        Self::as_slice(&value).iter().copied().max().unwrap()
     }
     fn sum_elements(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().fold(0i8, i8::wrapping_add)
+        Self::as_slice(&value).iter().copied().fold(0i8, i8::wrapping_add)
     }
     fn prod_elements(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().fold(1i8, i8::wrapping_mul)
+        Self::as_slice(&value).iter().copied().fold(1i8, i8::wrapping_mul)
     }
 
     fn offset() -> Storage<Self> {

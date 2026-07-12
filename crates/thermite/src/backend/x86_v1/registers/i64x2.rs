@@ -66,12 +66,12 @@ impl CoreRegister for I64x2V1 {
 #[thermite_macros::inline_always]
 impl MaskRegister for I64x2V1 {
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     const FALSY: Storage<Self> = reg::<Self, 2>([0; 2]);
@@ -233,7 +233,7 @@ impl Register for I64x2V1 {
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
-        let arr = Self::as_array(&value);
+        let arr = Self::as_slice(&value);
 
         f(arr[0], arr[1])
     }

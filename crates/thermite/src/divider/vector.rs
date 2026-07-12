@@ -4,7 +4,7 @@ use crate::{
     Vector,
     divider::Denominator,
     register::{Element, IntegerRegister, Lanes, Register},
-    vector::GenericVector as _,
+    vector::{GenericVector as _, VectorWithRegister as _},
 };
 
 /// Precomputed multipliers and shifts for branchless vectorized division

@@ -1781,6 +1781,18 @@ pub trait VectorWithRegister<R: crate::register::Register>: GenericVector {
 
     /// Wrap a raw register storage value back into a `Vector`.
     fn from_register(reg: crate::register::Storage<R>) -> Self;
+
+    /// Borrow the vector's elements as a slice.
+    ///
+    /// The lane count travels as the slice length (always
+    /// [`lanes()`](GenericVector::lanes)) rather than in the type, so this is the
+    /// preferred read accessor over array-typed borrows.
+    fn as_slice(&self) -> &[Self::Element];
+
+    /// Mutably borrow the vector's elements as a slice.
+    ///
+    /// See [`as_slice`](Self::as_slice).
+    fn as_mut_slice(&mut self) -> &mut [Self::Element];
 }
 
 /// Float vector types which have an associated hardware register type.

@@ -6,12 +6,12 @@ use thermite::backend::x86_v2::prelude::*;
 #[test]
 fn test_array_register_interleave() {
     // A = [0, 1, 2, ..., 15]
-    let a_arr = GenericArray::generate(|i| i as i32);
+    let a_arr: GenericArray<i32, generic_array::typenum::U16> = GenericArray::generate(|i| i as i32);
     // B = [100, 101, 102, ..., 115]
-    let b_arr = GenericArray::generate(|i| (i + 100) as i32);
+    let b_arr: GenericArray<i32, generic_array::typenum::U16> = GenericArray::generate(|i| (i + 100) as i32);
 
-    let a = i32x16::from_array(a_arr);
-    let b = i32x16::from_array(b_arr);
+    let a = i32x16::from_slice(&a_arr);
+    let b = i32x16::from_slice(&b_arr);
 
     // 1. Test Interleave
     let (lo, hi) = i32x16::interleave(a, b);

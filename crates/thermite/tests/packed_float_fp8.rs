@@ -12,7 +12,7 @@
 
 use thermite::element::float::spec::{FloatSpec, Fp8E4M3, Fp8E5M2};
 use thermite::register::{CoreRegister, PackedFloatRegister, Register, Storage};
-use thermite::vector::{PackedFloatVector, Vector};
+use thermite::vector::{GenericVector, PackedFloatVector, Vector};
 
 fn make<R: Register>(vals: &[R::Element]) -> Storage<R>
 where
@@ -26,7 +26,7 @@ fn read<R: Register>(s: &Storage<R>) -> Vec<R::Element>
 where
     R::Element: Copy,
 {
-    R::as_array(s).as_slice().to_vec()
+    R::as_slice(s).to_vec()
 }
 
 fn lanes<R: CoreRegister>() -> usize {
@@ -138,9 +138,9 @@ macro_rules! vec_roundtrip {
         let mut code: u32 = 0;
         while code < 0x100 {
             let chunk: Vec<u8> = (0..l).map(|i| (code + i as u32) as u8).collect();
-            let uv: Vector<$u8> = Vector::from_array(GenericArray::generate(|i| chunk[i]));
+            let uv: Vector<$u8> = Vector::from_slice(&chunk);
             let fv = <Vector<$u8> as PackedFloatVector<$spec, Vector<$f32>>>::unpack(uv);
-            let got = fv.to_array();
+            let got = fv.into_array();
             for k in 0..l {
                 let want = <$spec>::unpack(chunk[k] as u32);
                 assert!(
@@ -157,9 +157,9 @@ macro_rules! vec_roundtrip {
         for chunk in inputs.chunks(l) {
             let mut buf = vec![0.0f32; l];
             buf[..chunk.len()].copy_from_slice(chunk);
-            let fv: Vector<$f32> = Vector::from_array(GenericArray::generate(|i| buf[i]));
+            let fv: Vector<$f32> = Vector::from_slice(&buf);
             let uv = <Vector<$u8> as PackedFloatVector<$spec, Vector<$f32>>>::pack(fv);
-            let got = uv.to_array();
+            let got = uv.into_array();
             for k in 0..l {
                 let want = <$spec>::pack(buf[k]) as u8;
                 assert!(

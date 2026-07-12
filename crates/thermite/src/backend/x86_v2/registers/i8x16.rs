@@ -88,12 +88,12 @@ impl InterleaveRegister for I8x16V2 {
 #[thermite_macros::inline_always]
 impl MaskRegister for I8x16V2 {
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     const FALSY: Storage<Self> = reg::<Self, 16>([0; 16]);
@@ -314,7 +314,7 @@ impl NumericRegister for I8x16V2 {
 
     fn prod_elements(value: Storage<Self>) -> Self::Element {
         // No `_mm_mullo_epi8`; reduce via scalar fold (rarely used at byte width).
-        Self::as_array(&value).iter().copied().fold(1i8, i8::wrapping_mul)
+        Self::as_slice(&value).iter().copied().fold(1i8, i8::wrapping_mul)
     }
 
     fn offset() -> Storage<Self> {

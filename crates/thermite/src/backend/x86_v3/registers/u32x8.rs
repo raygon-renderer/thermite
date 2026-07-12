@@ -58,12 +58,12 @@ impl MaskRegister for U32x8V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 8>([!0; 8]);
 
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {

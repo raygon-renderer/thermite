@@ -127,7 +127,7 @@ where
 
 #[inline(always)]
 pub fn sort_any<R: NumericRegister>(mut value: Storage<R>) -> Storage<R> {
-    let s = R::as_array_mut(&mut value);
+    let s = R::as_mut_slice(&mut value);
 
     /// Compare-and-Swap: The atomic primitive of sorting networks.
     /// LLVM optimizes this to `cmp` + `cmov` (Conditional Move), which is branchless.

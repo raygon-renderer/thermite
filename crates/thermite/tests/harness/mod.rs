@@ -230,7 +230,7 @@ where
     R: Register,
     R::Element: Copy,
 {
-    R::as_array(storage).as_slice().to_vec()
+    R::as_slice(storage).to_vec()
 }
 
 /// Build a mask register from a known boolean pattern (`bools.len()` must be

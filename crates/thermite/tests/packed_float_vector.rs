@@ -7,7 +7,7 @@
 
 use thermite::element::float::spec::{Bf16, FloatSpec, Fp16, Fp16Fast};
 use thermite::register::{CoreRegister, Register};
-use thermite::vector::{PackedFloatVector, Vector};
+use thermite::vector::{GenericVector, PackedFloatVector, Vector};
 
 fn f32_eq(a: f32, b: f32) -> bool {
     (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits()
@@ -22,10 +22,7 @@ fn vec_of<R: Register>(vals: &[R::Element]) -> Vector<R>
 where
     R::Element: Copy,
 {
-    use generic_array::sequence::GenericSequence;
-    Vector::from_array(generic_array::GenericArray::<R::Element, R::Lanes>::generate(|i| {
-        vals[i]
-    }))
+    Vector::from_slice(vals)
 }
 
 /// unpack (all code points) + pack (a structured sweep) of `U` <-> `F` through the *vector* API,
@@ -39,7 +36,7 @@ macro_rules! check_vector {
         while code < 0x1_0000 {
             let chunk: Vec<u16> = (0..l).map(|i| (code + i as u32) as u16).collect();
             let unpacked = <Vector<$u> as PackedFloatVector<$spec, Vector<$f>>>::unpack(vec_of::<$u>(&chunk));
-            let got = unpacked.to_array();
+            let got = unpacked.into_array();
             for k in 0..l {
                 let want = <$spec>::unpack(chunk[k] as u32);
                 assert!(
@@ -82,7 +79,7 @@ macro_rules! check_vector {
             let mut buf = vec![0.0f32; l];
             buf[..chunk.len()].copy_from_slice(chunk);
             let packed: Vector<$u> = <Vector<$u> as PackedFloatVector<$spec, Vector<$f>>>::pack(vec_of::<$f>(&buf));
-            let got = packed.to_array();
+            let got = packed.into_array();
             for k in 0..l {
                 let want = <$spec>::pack(buf[k]) as u16;
                 assert!(

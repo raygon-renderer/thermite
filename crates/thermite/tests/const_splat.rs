@@ -28,17 +28,17 @@ fn ratio_splat<V: FloatVector>() -> V {
 
 #[test]
 fn const_splat_int_ratio_arms() {
-    assert_eq!(int_splat::<VF32>().to_array(), [7.0f32; 4].into());
-    assert_eq!(int_splat::<VF64>().to_array(), [7.0f64; 2].into());
-    assert_eq!(ratio_splat::<VF32>().to_array(), [0.25f32; 4].into());
-    assert_eq!(ratio_splat::<VF64>().to_array(), [0.25f64; 2].into());
+    assert_eq!(int_splat::<VF32>().into_array(), [7.0f32; 4].into());
+    assert_eq!(int_splat::<VF64>().into_array(), [7.0f64; 2].into());
+    assert_eq!(ratio_splat::<VF32>().into_array(), [0.25f32; 4].into());
+    assert_eq!(ratio_splat::<VF64>().into_array(), [0.25f64; 2].into());
 }
 
 #[test]
 fn const_splat_static_and_assoc_arms() {
     let v: VF32 = thermite::const_splat!(f32: 1.5);
-    assert_eq!(v.to_array(), [1.5f32; 4].into());
+    assert_eq!(v.into_array(), [1.5f32; 4].into());
 
     let v: VF32 = thermite::const_splat!(<f32>::INFINITY);
-    assert!(v.to_array().iter().all(|x| x.is_infinite() && x.is_sign_positive()));
+    assert!(v.into_array().iter().all(|x| x.is_infinite() && x.is_sign_positive()));
 }

@@ -60,7 +60,7 @@ const _: () = {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let mut t = f.debug_tuple("Vector");
 
-            for v in R::as_array(&self.0) {
+            for v in R::as_slice(&self.0) {
                 t.field(&v);
             }
 
@@ -89,39 +89,6 @@ impl<R: Register> Vector<R> {
     #[inline(never)]
     pub const fn splat_const(value: R::Element) -> Self {
         Vector(register::reg_splat::<R>(value))
-    }
-}
-
-#[thermite_macros::inline_always]
-impl<R: Register> Vector<R> {
-    /// Create a new vector from an array of elements.
-    pub fn from_array(values: impl Into<GenericArray<R::Element, R::Lanes>>) -> Self {
-        Self(R::new(values.into()))
-    }
-
-    /// Returns a reference to the vector's elements as an array.
-    pub fn as_array(&self) -> &GenericArray<R::Element, R::Lanes> {
-        R::as_array(&self.0)
-    }
-
-    /// Returns a mutable reference to the vector's elements as an array.
-    pub fn as_array_mut(&mut self) -> &mut GenericArray<R::Element, R::Lanes> {
-        R::as_array_mut(&mut self.0)
-    }
-
-    /// Returns a slice of the vector's elements.
-    pub fn as_slice(&self) -> &[R::Element] {
-        R::as_array(&self.0).as_slice()
-    }
-
-    /// Returns a mutable slice of the vector's elements.
-    pub fn as_mut_slice(&mut self) -> &mut [R::Element] {
-        R::as_array_mut(&mut self.0).as_mut_slice()
-    }
-
-    /// Convert the vector to an array of elements.
-    pub fn to_array(self) -> GenericArray<R::Element, R::Lanes> {
-        R::as_array(&self.0).clone()
     }
 }
 
@@ -270,7 +237,14 @@ impl<R: Register> GenericVector for Vector<R> {
     }
 
     fn into_array(self) -> GenericArray<R::Element, R::Lanes> {
-        R::as_array(&self.0).clone()
+        // Spill through the store machinery rather than borrowing the storage as
+        // an array, so a future runtime-length backend can write `lanes()`
+        // elements into the (max-sized) buffer. The unaligned store is required:
+        // GenericArray has element alignment, not register alignment.
+        let mut arr: GenericArray<R::Element, R::Lanes> = unsafe { core::mem::zeroed() };
+        // SAFETY: `arr` is exactly `Lanes` elements of `Element`.
+        unsafe { R::store_unaligned(arr.as_mut_slice().as_mut_ptr(), self.0) };
+        arr
     }
 
     #[masked] fn splat(value: Self::Element) -> Self { Vector(R::splat(value)) }
@@ -281,12 +255,12 @@ impl<R: Register> GenericVector for Vector<R> {
     #[conditional] fn broadcastv(self, idx: usize) -> Self {}
 
     fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
-    fn extractv(self, idx: usize) -> Self::Element { R::as_array(&self.0)[idx] }
+    fn extractv(self, idx: usize) -> Self::Element { R::as_slice(&self.0)[idx] }
 
     fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
 
     fn insertv(mut self, idx: usize, value: Self::Element) -> Self {
-        R::as_array_mut(&mut self.0)[idx] = value;
+        R::as_mut_slice(&mut self.0)[idx] = value;
         self
     }
 
@@ -873,6 +847,14 @@ impl<R: Register> VectorWithRegister<R> for Vector<R> {
     fn from_register(reg: Storage<R>) -> Self {
         Vector(reg)
     }
+
+    fn as_slice(&self) -> &[R::Element] {
+        R::as_slice(&self.0)
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [R::Element] {
+        R::as_mut_slice(&mut self.0)
+    }
 }
 
 impl<R> FloatVectorWithRegister for Vector<R>
@@ -973,14 +955,14 @@ impl<R: Register> Index<usize> for Vector<R> {
     type Output = R::Element;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &R::as_array(&self.0)[index]
+        &R::as_slice(&self.0)[index]
     }
 }
 
 #[thermite_macros::inline_always]
 impl<R: Register> IndexMut<usize> for Vector<R> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut R::as_array_mut(&mut self.0)[index]
+        &mut R::as_mut_slice(&mut self.0)[index]
     }
 }
 
@@ -1236,7 +1218,7 @@ const _: () = {
     {
         #[inline(always)]
         fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
-            Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
+            Vector(R::new(GenericArray::generate(|_| self.sample(rng))))
         }
     }
 
@@ -1248,7 +1230,7 @@ const _: () = {
             {
                 #[inline(always)]
                 fn sample<Rng: rand::Rng + ?Sized>(&self, rng: &mut Rng) -> Vector<R> {
-                    Vector::from_array(GenericArray::generate(|_| self.sample(rng)))
+                    Vector(R::new(GenericArray::generate(|_| self.sample(rng))))
                 }
             }
         )*};

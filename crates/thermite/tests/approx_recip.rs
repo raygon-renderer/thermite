@@ -42,8 +42,8 @@ macro_rules! recip_props {
                         })
                         .collect();
                     let v = Vector::<R>(harness::make_array::<R>(&x));
-                    let rcp = v.rcp().to_array();
-                    let rsqrt = v.rsqrt().to_array();
+                    let rcp = v.rcp().into_array();
+                    let rsqrt = v.rsqrt().into_array();
                     for (i, &xi) in x.iter().enumerate() {
                         let want_rcp = 1.0 / xi as f64;
                         assert!(
@@ -78,8 +78,8 @@ macro_rules! recip_props {
                         })
                         .collect();
                     let v = Vector::<R>(harness::make_array::<R>(&x));
-                    let rcp = v.rcp().to_array();
-                    let rsqrt = v.rsqrt().to_array();
+                    let rcp = v.rcp().into_array();
+                    let rsqrt = v.rsqrt().into_array();
                     for (i, &xi) in x.iter().enumerate() {
                         let want_rcp = 1.0 / xi;
                         assert!(

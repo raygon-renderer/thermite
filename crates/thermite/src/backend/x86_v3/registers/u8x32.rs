@@ -63,7 +63,7 @@ impl ExtendRegister<u8> for U8x32V3 {
     }
 
     fn narrow(value: Storage<Self>) -> Storage<u8> {
-        Self::as_array(&value)[0]
+        Self::as_slice(&value)[0]
     }
 }
 
@@ -73,12 +73,12 @@ impl MaskRegister for U8x32V3 {
     const TRUTHY: Storage<Self> = reg::<Self, 32>([!0; 32]);
 
     fn set(mut mask: Storage<Self::Mask>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self::Mask>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     fn all(value: Storage<Self>) -> bool {
@@ -282,7 +282,7 @@ impl NumericRegister for U8x32V3 {
         _mm256_reduce_epi8_v3!(value; _mm_add_epi8) as u8
     }
     fn prod_elements(value: Storage<Self>) -> Self::Element {
-        Self::as_array(&value).iter().copied().fold(1u8, u8::wrapping_mul)
+        Self::as_slice(&value).iter().copied().fold(1u8, u8::wrapping_mul)
     }
 
     fn offset() -> Storage<Self> {

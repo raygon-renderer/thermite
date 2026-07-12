@@ -383,44 +383,44 @@ where
     fn splat_z(mask: Storage<Self::Mask>, value: Self::Element) -> Storage<Self> {}
 
     fn broadcast<const I: usize>(mut value: Storage<Self>) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[I]);
+        let e = R::splat(Self::as_slice(&value)[I]);
         value.0.fill(e);
         value
     }
 
     fn broadcast_c<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[I]);
+        let e = R::splat(Self::as_slice(&value)[I]);
         Self(core::array::from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
     }
 
     fn broadcast_m<const I: usize>(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[I]);
+        let e = R::splat(Self::as_slice(&value)[I]);
         Self(core::array::from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
     }
 
     fn broadcast_z<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[I]);
+        let e = R::splat(Self::as_slice(&value)[I]);
         Self(mask.0.map(|mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
     }
 
     fn broadcastv(mut value: Storage<Self>, idx: usize) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[idx]);
+        let e = R::splat(Self::as_slice(&value)[idx]);
         value.0.fill(e);
         value
     }
 
     fn broadcastv_c(mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[idx]);
+        let e = R::splat(Self::as_slice(&value)[idx]);
         Self(core::array::from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
     }
 
     fn broadcastv_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[idx]);
+        let e = R::splat(Self::as_slice(&value)[idx]);
         Self(core::array::from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
     }
 
     fn broadcastv_z(mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
-        let e = R::splat(Self::as_array(&value)[idx]);
+        let e = R::splat(Self::as_slice(&value)[idx]);
         Self(mask.0.map(|mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
     }
 

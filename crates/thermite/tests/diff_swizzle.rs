@@ -27,7 +27,7 @@ macro_rules! perm {
         let got = thermite::swizzle!(Vector::<$R>($a), [$($i),*]).0;
         let want = <$R>::scalar_permutev($a, arr![$($i as u32),*]);
         assert_eq!(
-            <$R>::as_array(&got), <$R>::as_array(&want),
+            <$R>::as_slice(&got), <$R>::as_slice(&want),
             "permute_const{:?} mismatch", [$($i),*]
         );
     }};
@@ -39,7 +39,7 @@ macro_rules! swz {
         let got = thermite::swizzle!(Vector::<$R>($a), Vector::<$R>($b), [$($i),*]).0;
         let want = <$R>::scalar_swizzle($a, $b, arr![$($i as u32),*]);
         assert_eq!(
-            <$R>::as_array(&got), <$R>::as_array(&want),
+            <$R>::as_slice(&got), <$R>::as_slice(&want),
             "swizzle_const{:?} mismatch", [$($i),*]
         );
     }};
@@ -188,10 +188,10 @@ where
     // equal reduction that array equality lowers to (LLVM "Cannot select ... setcc
     // seteq"); `black_box` on opaque slices forces a scalar compare. (Floats lower
     // via `f32x4.eq`, so this only bit the int register types.)
-    let (wa, ga) = (R::as_array(&want), R::as_array(&got));
+    let (wa, ga) = (R::as_slice(&want), R::as_slice(&got));
     assert_eq!(
-        core::hint::black_box(wa.as_slice()),
-        core::hint::black_box(ga.as_slice()),
+        core::hint::black_box(wa),
+        core::hint::black_box(ga),
         "permutev {idxs:?} vs scalar"
     );
 }
@@ -203,10 +203,10 @@ where
     let want = R::scalar_swizzle(a, b, idxs.clone());
     let got = R::swizzle(a, b, idxs.clone());
     // See rt_permutev: black-boxed slice compare avoids the int -O3 wasm "Cannot select".
-    let (wa, ga) = (R::as_array(&want), R::as_array(&got));
+    let (wa, ga) = (R::as_slice(&want), R::as_slice(&got));
     assert_eq!(
-        core::hint::black_box(wa.as_slice()),
-        core::hint::black_box(ga.as_slice()),
+        core::hint::black_box(wa),
+        core::hint::black_box(ga),
         "swizzle {idxs:?} vs scalar"
     );
 }

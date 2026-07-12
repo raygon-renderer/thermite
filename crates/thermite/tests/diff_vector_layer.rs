@@ -43,11 +43,11 @@ mod x86 {
         let v = VI::new([3, 1, 4, 1]);
 
         // accessors
-        assert_eq!(v.as_array().as_slice(), &[3, 1, 4, 1]);
         assert_eq!(v.as_slice(), &[3, 1, 4, 1]);
-        assert_eq!(v.to_array().as_slice(), &[3, 1, 4, 1]);
+        assert_eq!(v.as_slice(), &[3, 1, 4, 1]);
+        assert_eq!(v.into_array().as_slice(), &[3, 1, 4, 1]);
         let mut m = v;
-        m.as_array_mut()[0] = 9;
+        m.as_mut_slice()[0] = 9;
         m.as_mut_slice()[1] = 8;
         assert_eq!(m.as_slice(), &[9, 8, 4, 1]);
 
@@ -281,11 +281,11 @@ mod wasm {
         let v = VI::new([3, 1, 4, 1]);
 
         // accessors
-        assert_eq!(v.as_array().as_slice(), &[3, 1, 4, 1]);
         assert_eq!(v.as_slice(), &[3, 1, 4, 1]);
-        assert_eq!(v.to_array().as_slice(), &[3, 1, 4, 1]);
+        assert_eq!(v.as_slice(), &[3, 1, 4, 1]);
+        assert_eq!(v.into_array().as_slice(), &[3, 1, 4, 1]);
         let mut m = v;
-        m.as_array_mut()[0] = 9;
+        m.as_mut_slice()[0] = 9;
         m.as_mut_slice()[1] = 8;
         assert_eq!(m.as_slice(), &[9, 8, 4, 1]);
 

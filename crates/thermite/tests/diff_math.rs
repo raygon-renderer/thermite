@@ -46,7 +46,7 @@ macro_rules! math_unary {
         let oracle: fn($elem) -> $elem = $oracle;
         for raw in harness::corpus::<$elem>(lanes, &mut rng) {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
-            let got = Vector::<$reg>(harness::make_array::<$reg>(&input)).$method().to_array();
+            let got = Vector::<$reg>(harness::make_array::<$reg>(&input)).$method().into_array();
             for (lane, (&g, &x)) in got.iter().zip(input.iter()).enumerate() {
                 let want = oracle(x);
                 if !close(g as f64, want as f64, $tol) {
@@ -76,7 +76,7 @@ macro_rules! math_binary {
             let b: Vec<$elem> = ry.iter().map(|&y| db(y)).collect();
             let got = Vector::<$reg>(harness::make_array::<$reg>(&a))
                 .$method(Vector::<$reg>(harness::make_array::<$reg>(&b)))
-                .to_array();
+                .into_array();
             for ((&g, &x), &y) in got.iter().zip(a.iter()).zip(b.iter()) {
                 let want = oracle(x, y);
                 if !close(g as f64, want as f64, $tol) {
@@ -102,7 +102,7 @@ macro_rules! math_tuple {
         for raw in harness::corpus::<$elem>(lanes, &mut rng) {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
             let (ra, rb) = Vector::<$reg>(harness::make_array::<$reg>(&input)).$method();
-            let (ga, gb) = (ra.to_array(), rb.to_array());
+            let (ga, gb) = (ra.into_array(), rb.into_array());
             for (lane, &x) in input.iter().enumerate() {
                 let (wa, wb) = (o0(x), o1(x));
                 if !close(ga[lane] as f64, wa as f64, $tol) {
@@ -137,7 +137,7 @@ macro_rules! math_unary_cg {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
             let got = Vector::<$reg>(harness::make_array::<$reg>(&input))
                 .$method::<$n>()
-                .to_array();
+                .into_array();
             for (lane, (&g, &x)) in got.iter().zip(input.iter()).enumerate() {
                 let want = oracle(x);
                 if !close(g as f64, want as f64, $tol) {
@@ -163,7 +163,7 @@ macro_rules! math_powi {
         let e: i32 = $e;
         for raw in harness::corpus::<$elem>(lanes, &mut rng) {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
-            let got = Vector::<$reg>(harness::make_array::<$reg>(&input)).powi(e).to_array();
+            let got = Vector::<$reg>(harness::make_array::<$reg>(&input)).powi(e).into_array();
             for (lane, (&g, &x)) in got.iter().zip(input.iter()).enumerate() {
                 let want = pf(x, e as $elem);
                 if !close(g as f64, want as f64, $tol) {
@@ -992,7 +992,7 @@ macro_rules! math_unary_p {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
             let got = Vector::<$reg>(harness::make_array::<$reg>(&input))
                 .$pm::<$policy>()
-                .to_array();
+                .into_array();
             for (lane, (&g, &x)) in got.iter().zip(input.iter()).enumerate() {
                 let want = oracle(x);
                 if !close(g as f64, want as f64, $tol) {
@@ -1019,7 +1019,7 @@ macro_rules! math_tuple_p {
         for raw in harness::corpus::<$elem>(lanes, &mut rng) {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
             let (ra, rb) = Vector::<$reg>(harness::make_array::<$reg>(&input)).$pm::<$policy>();
-            let (ga, gb) = (ra.to_array(), rb.to_array());
+            let (ga, gb) = (ra.into_array(), rb.into_array());
             for (lane, &x) in input.iter().enumerate() {
                 let (wa, wb) = (o0(x), o1(x));
                 if !close(ga[lane] as f64, wa as f64, $tol) {
@@ -1057,7 +1057,7 @@ macro_rules! math_unary_cg_p {
             let input: Vec<$elem> = raw.iter().map(|&x| dom(x)).collect();
             let got = Vector::<$reg>(harness::make_array::<$reg>(&input))
                 .$pm::<$policy, $n>()
-                .to_array();
+                .into_array();
             for (lane, (&g, &x)) in got.iter().zip(input.iter()).enumerate() {
                 let want = oracle(x);
                 if !close(g as f64, want as f64, $tol) {

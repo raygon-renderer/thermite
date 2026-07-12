@@ -47,7 +47,7 @@ where
     R: CoreReducible<N>,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // Can't use `as_array` here to trim the underlying register, so just zero the
+        // Can't use `as_slice` here to trim the underlying register, so just zero the
         // trailing lanes for more ergonomics Debug views.
         let cleaned = R::zz(Self::mask(), self.0);
         f.debug_tuple("ReducedRegister").field(&cleaned).finish()
@@ -236,7 +236,7 @@ where
     //
     // Only `InterleaveRegister` + flat lane storage are required, which keeps
     // this implementation valid for mask registers (which are not `Register`,
-    // so no `as_array`/swizzle access exists here).
+    // so no `as_slice`/swizzle access exists here).
 
     #[inline(always)]
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
@@ -443,8 +443,8 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         let mut res = Self::EMPTY;
 
         // SAFETY: This is safe as long as the pointer is valid and of the correct length.
-        for i in 0..<Self::Lanes as Unsigned>::USIZE {
-            Self::as_array_mut(&mut res)[i] = unsafe { ptr.add(i).read_unaligned() };
+        for i in 0..Self::lanes() {
+            Self::as_mut_slice(&mut res)[i] = unsafe { ptr.add(i).read_unaligned() };
         }
 
         res
@@ -468,8 +468,8 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
     #[inline(always)]
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         // SAFETY: This is safe as long as the pointer is valid and of the correct length.
-        for i in 0..<Self::Lanes as Unsigned>::USIZE {
-            unsafe { ptr.add(i).write_unaligned(Self::as_array(&value)[i]) };
+        for i in 0..Self::lanes() {
+            unsafe { ptr.add(i).write_unaligned(Self::as_slice(&value)[i]) };
         }
     }
 

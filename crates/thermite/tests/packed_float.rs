@@ -39,7 +39,7 @@ fn read<R: Register>(s: &Storage<R>) -> Vec<R::Element>
 where
     R::Element: Copy,
 {
-    R::as_array(s).as_slice().to_vec()
+    R::as_slice(s).to_vec()
 }
 
 /// f32 bit-equality with NaN-insensitive payload.

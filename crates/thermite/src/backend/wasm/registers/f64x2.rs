@@ -94,12 +94,12 @@ impl MaskRegister for F64x2Wasm {
     const TRUTHY: Storage<Self> = arch::f64x2(f64::from_bits(!0), f64::from_bits(!0));
 
     fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
-        Self::as_array_mut(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+        Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
         mask
     }
 
     fn test(mask: Storage<Self>, lane: usize) -> bool {
-        Self::as_array(&mask)[lane].to_bool()
+        Self::as_slice(&mask)[lane].to_bool()
     }
 
     fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {

@@ -19,7 +19,7 @@ fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
     let v: Storage<R> = R::new(GenericArray::generate(|i| {
         <R::Element as Element>::from_u8((i + 1) as u8)
     }));
-    let vals: Vec<R::Element> = R::as_array(&v).to_vec();
+    let vals: Vec<R::Element> = R::as_slice(&v).to_vec();
 
     for bits in patterns {
         let sel: GenericArray<R::Element, R::Lanes> =
@@ -47,9 +47,9 @@ fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
 
         let got = R::compress(v, mask);
         let got_z = R::compress_z(v, mask);
-        assert_eq!(R::as_array(&got).as_slice(), &part[..], "compress n={n} bits={bits:b}");
+        assert_eq!(R::as_slice(&got), &part[..], "compress n={n} bits={bits:b}");
         assert_eq!(
-            R::as_array(&got_z).as_slice(),
+            R::as_slice(&got_z),
             &zero[..],
             "compress_z n={n} bits={bits:b}"
         );
