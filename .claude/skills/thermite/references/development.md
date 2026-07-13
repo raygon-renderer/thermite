@@ -139,7 +139,7 @@ boilerplate by hand. Know which macro owns which generation step.
 | `#[thermite_macros::inline_always]` | any impl block | `#[inline(always)]` on every method (the universal tag on backend impls). |
 | `#[thermite_macros::double_pump_impl]` | `impl ... for DoublePumpRegister<R>` | Legacy double-pump delegation (the pattern is mostly superseded by `ArrayRegister`). |
 | `#[thermite::dispatch(S)]` / `(Self)` | fn / impl / mod generic over `S: HasIsa` | Per-backend `#[target_feature]` trampolines + a `match <S as HasIsa>::ISA` that folds at monomorphization. `#[skip_dispatch]` opts a method out. |
-| `thermite::dispatch_dyn!(for<S> ...)` | an expression | Runtime `InstructionSet::get()` selection; rewrites bare `f32xN`/`f32x4`/... to `Vector<S::...>` inside the body. Signature must be ISA-agnostic. |
+| `thermite::dispatch_dyn!(for<S> ...)` | an expression | Runtime `InstructionSet::get()` selection; rewrites bare `f32xN`/`f32x4`/... to `Vector<S::...>` inside the body. Signature must be ISA-agnostic. Call form: `dispatch_dyn!(func(args))` / `dispatch_dyn!(for<S> expr)` dispatches a `#[dispatch]` fn directly (match only, no trampolines). |
 | `decl_math! { ... }` (in `math/mod.rs`) | a list of math signatures | The `*MathWithPolicy` trait (`_p::<P>()`), the default-policy `*Math` trait, the `scalar_*` surface on `f32`/`f64`, and the blanket impl delegating to `Specialized*Math<E>`. |
 | `const_splat!` / `const_new!` (`vector/splat.rs`) | a const expr | Compile-time splat / per-lane const vector. **Use these for bitwise/coefficient constants** (e.g. `const_splat!(u32: 0x5555_5555)`), never a bare `const`. |
 
@@ -207,6 +207,20 @@ the body, bare width names (`f32xN`, `f32x4`, `i32x8`, `usizex4`, ... -- every
 multi-segment paths are left alone. The signature must be ISA-agnostic (scalars,
 slices, `Vec`); a SIMD type there has nowhere to come from. See
 [slices-and-dispatch.md](slices-and-dispatch.md) for the user-facing contract.
+
+`dispatch_dyn!` also has a **call form** for invoking a `#[dispatch]` function
+directly: `dispatch_dyn!(dot(a, b))` (backend injected as the callee's only generic
+argument) or `dispatch_dyn!(for<S> dot::<S, f32>(a, b))` (token-level substitution
+of `S` in the call expression). It expands to just the runtime
+`InstructionSet::get()` match -- no trampolines, no inner fn -- because a
+`#[dispatch]` callee already carries its own `#[target_feature]` codegen. The
+supported shape is a single dispatched call, including method calls on a receiver
+(`for<S> kernel.run::<S>(&data)` against a `#[dispatch(S)] impl` block): the
+substitution technically accepts any expression, but that is deliberately
+undocumented (non-callee code inside the macro compiles without target
+features). Both forms are parsed in
+`DispatchDynInput`; codegen is `dispatch_dyn_call` vs `dispatch_dyn_closure` in
+`thermite-macros/src/dispatch.rs`.
 
 ### 2c. What `decl_math!` generates
 

@@ -74,7 +74,7 @@ pub trait FloatConsts {
     /// `$\ln \pi$`
     const LN_PI: Self;
 
-    /// `$	frac{1}{2}\ln \pi$`
+    /// `$frac{1}{2}\ln \pi$`
     const FRAC_LN_PI_2: Self;
 
     /// `$\log_2 10$`

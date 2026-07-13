@@ -98,12 +98,17 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
 
 /// Runtime ISA-dispatched expression.
 ///
-/// Wraps the body in an `#[inline(always)]` inner function generic over `S: Simd` (plus
-/// any caller-supplied extra generics), creates `#[target_feature]`-annotated wrappers
-/// for each backend that has a complete [`Simd`] implementation, then dispatches at
-/// runtime via `InstructionSet::get()`.
+/// Comes in two forms:
 ///
-/// The syntax is similar to closures, but captures are done via arguments, and must be typed.
+/// - **Closure form** - wraps an arbitrary body in an `#[inline(always)]` inner function
+///   generic over `S: Simd` (plus any caller-supplied extra generics), creates
+///   `#[target_feature]`-annotated wrappers for each backend that has a complete
+///   `Simd` implementation, then dispatches at runtime via `InstructionSet::get()`.
+///   The syntax is similar to closures, but captures are done via arguments, and must
+///   be typed.
+/// - **Call form** - runtime-dispatches a single call to a `#[dispatch]` function
+///   without any closure-like syntax: `dispatch_dyn!(my_kernel(a, b))`. See
+///   *"The call form"* below.
 ///
 /// # The dispatch boundary hides the chosen backend
 ///
@@ -161,6 +166,64 @@ pub fn dispatch(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) ->
 /// When `for<Ident>` is present, `Ident` is in scope inside `body` as a generic type
 /// satisfying the stated bound (or `Simd3` by default).  When omitted, no explicit
 /// dispatch binding is in scope - rely on the automatic SIMD type rewriting below.
+///
+/// # The call form
+///
+/// When the work is already packaged as a `#[dispatch]` function, the closure form's
+/// machinery is redundant: the callee carries its own per-backend `#[target_feature]`
+/// trampolines internally, so all that's needed at the call site is the runtime
+/// backend selection. The call form provides exactly that:
+///
+/// ```rust,ignore
+/// #[dispatch(S)]
+/// fn dot<S: Simd>(a: &[f32], b: &[f32]) -> f32 { /* ... */ }
+///
+/// // Bare form: the selected backend is injected as the callee's ONLY generic
+/// // argument. Expands to (roughly):
+/// //   match InstructionSet::get() {
+/// //       InstructionSet::X86V3 => dot::<X86V3>(&a, &b),
+/// //       /* ...one arm per backend... */
+/// //       _ => dot::<Scalar>(&a, &b),
+/// //   }
+/// let r = dispatch_dyn!(dot(&a, &b));
+///
+/// // `for<Ident>` form: `Ident` marks where the backend type goes, so callees
+/// // with extra generic parameters work too:
+/// let r = dispatch_dyn!(for<S> dot::<S>(&a, &b));
+/// let r = dispatch_dyn!(for<S> scale::<S, f32>(&a, factor));
+///
+/// // The `for<Ident>` form also dispatches METHOD calls on a receiver, when the
+/// // method itself is generic over the backend (a `#[dispatch(S)] impl` block):
+/// #[dispatch(S)]
+/// impl Kernel {
+///     fn run<S: Simd>(&self, data: &[f32]) -> f32 { /* ... */ }
+/// }
+/// let r = dispatch_dyn!(for<S> kernel.run::<S>(&data));
+/// ```
+///
+/// Rules and caveats:
+///
+/// - **The bare form requires the SIMD parameter to be the callee's only generic
+///   parameter** (partial turbofish is not allowed in Rust). For callees with extra
+///   type/const parameters, and for method calls, use the `for<Ident>` form and
+///   write the turbofish yourself.
+/// - **Keep the call form to a single dispatched call** (free function or method).
+///   Do all other work outside the macro (`dispatch_dyn!(dot(&a, &b)).sqrt()`, not
+///   the other way around): any code inside the macro that isn't the `#[dispatch]`
+///   callee is compiled without target features.
+/// - **Arguments are ordinary expressions**, evaluated in the selected arm - no
+///   capture-by-name or reborrow rules apply, unlike the closure form. `dot(&data[..n])`
+///   works directly.
+/// - **The callee should be a `#[dispatch]` function.** The call form emits no
+///   `#[target_feature]` wrappers of its own; calling a plain generic function through
+///   it is still correct, but the body will be compiled without target features
+///   (i.e. with scalar-quality codegen). Wrap arbitrary code in the closure form
+///   instead.
+/// - Trait bounds on the binder (`for<S: Bound>`) are rejected: the binder is replaced
+///   by concrete backend types, so the callee's own bounds are what's checked.
+/// - No automatic SIMD type rewriting is performed in the call form; `f32xN` etc. are
+///   only rewritten inside closure-form bodies.
+/// - The `thermite = "path";` prefix works the same as in the closure form.
 ///
 /// Any extra generic parameters from `<...>` are assumed to be in scope at the macro call
 /// site; the macro passes them through as explicit turbofish arguments.

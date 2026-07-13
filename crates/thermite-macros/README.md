@@ -15,7 +15,11 @@ The macros users interact with (via `thermite`):
   `#[target_feature]` statically across call boundaries, so runtime-dispatched
   SIMD code stays fully optimized without forcing everything to inline.
 - `dispatch_dyn!` - the runtime dispatch boundary: picks the best available
-  ISA on the current CPU and monomorphizes the given closure for it.
+  ISA on the current CPU and monomorphizes the given closure for it. Also has
+  a call form for invoking a `#[dispatch]` function directly:
+  `dispatch_dyn!(my_kernel(a, b))`, or `dispatch_dyn!(for<S> my_kernel::<S, f32>(a, b))`
+  when the callee has extra generics or is a method on a receiver
+  (`for<S> kernel.run::<S>(&data)`).
 - `#[derive(HasIsa)]` - derives `thermite::simd::HasIsa` for types generic
   over a `Simd` ISA parameter, forwarding the `ISA` constant from that
   parameter (first type parameter by default; override with `#[isa = S]`).

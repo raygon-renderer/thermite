@@ -5,6 +5,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //
 #![allow(clippy::missing_transmute_annotations, clippy::let_and_return, unused_braces, unused)]
+#![deny(rustdoc::invalid_rust_codeblocks)]
 // used for more intelligent const splat
 #![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]
 #![cfg_attr(

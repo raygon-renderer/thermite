@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Group, TokenStream, TokenTree};
 use quote::{ToTokens, quote};
 
 use syn::{
@@ -854,9 +854,10 @@ impl VisitMut for SimdTypeReplacer<'_> {
     }
 }
 
-/// Input syntax for `dispatch_dyn!`:
+/// Input syntax for `dispatch_dyn!` - two forms sharing an optional prefix:
 ///
 /// ```text
+/// // Closure form: wraps an arbitrary body in per-backend #[target_feature] trampolines.
 /// dispatch_dyn!(
 ///     [thermite = "path";]
 ///     [for<Ident [: Bound [+ Bound]*]>]
@@ -866,12 +867,24 @@ impl VisitMut for SimdTypeReplacer<'_> {
 ///     [where ExtraWherePredicates]
 ///     { body }
 /// )
+///
+/// // Call form: runtime-dispatches a call to a #[dispatch] function, which carries
+/// // its own trampolines. Bare form injects the backend as the sole generic argument;
+/// // the for<Ident> form substitutes `Ident` in the call expression.
+/// dispatch_dyn!([thermite = "path";] func(args...))
+/// dispatch_dyn!([thermite = "path";] for<Ident> expr)
 /// ```
+enum DispatchDynInput {
+    Closure(DispatchDynClosure),
+    Call(DispatchDynCall),
+}
+
+/// The closure form of `dispatch_dyn!`.
 ///
 /// `body` may reference the `for<Ident>` binding as a generic type satisfying the stated
 /// bound (default `Simd3`), as well as any extra generic parameters listed in
 /// `<ExtraGenericParams>` (assumed to be in scope at the call site).
-struct DispatchDynInput {
+struct DispatchDynClosure {
     /// Path to the thermite crate root (defaults to `::thermite`).
     thermite: TokenStream,
     /// The identifier bound to the runtime-dispatched `Simd` type (from `for<S>`).
@@ -889,13 +902,35 @@ struct DispatchDynInput {
     body: syn::Block,
 }
 
+/// The call form of `dispatch_dyn!`.
+///
+/// Unlike the closure form, no `#[target_feature]` trampolines are generated: the
+/// expansion is a plain `match InstructionSet::get()` whose arms instantiate the
+/// expression at each backend's concrete `Simd` type. Correct per-backend codegen
+/// therefore relies on the callee being a `#[dispatch]` function (or method), which
+/// already carries its own trampolines internally.
+///
+/// The supported shape is a single dispatched call. The `for<Ident>` substitution is
+/// token-level and thus technically works on any expression, but that is deliberately
+/// undocumented: code inside the macro that isn't the `#[dispatch]` callee compiles
+/// without target features, so anything beyond the call belongs outside the macro.
+struct DispatchDynCall {
+    /// Path to the thermite crate root (defaults to `::thermite`).
+    thermite: TokenStream,
+    /// `Some` for the `for<Ident> expr` form: every bare `Ident` token in `expr` is
+    /// replaced with the backend type in each arm. `None` for the bare `func(args)`
+    /// form, where the backend type is injected as the callee's sole generic argument.
+    binder: Option<Ident>,
+    expr: Expr,
+}
+
 impl Parse for DispatchDynInput {
     fn parse(stream: ParseStream) -> syn::Result<Self> {
         let mut thermite = quote! { ::thermite };
 
         // Optional `thermite = "some::path";` prefix.
-        // Detected unambiguously: if the stream starts with `Ident` then `=`, it must
-        // be the config prefix because the only other valid first token is `|` or `<`.
+        // The `Ident =` lookahead cannot be confused with a call-form expression:
+        // `ident = ...` is an assignment, which is not a meaningful dispatch target.
         if stream.peek(syn::Ident) && stream.peek2(Token![=]) {
             let id: syn::Ident = stream.parse()?;
             if id != "thermite" {
@@ -913,8 +948,8 @@ impl Parse for DispatchDynInput {
 
         // Optional `for<S>` or `for<S: Bound + Bound2>` - the dispatch type binding.
         // Detected unambiguously: `for` keyword followed by `<`.
-        // Defaults to the identifier `S` with no explicit bounds (-> `Simd3` at codegen time).
-        let (dispatch_ident, dispatch_bounds) = if stream.peek(Token![for]) && stream.peek2(Token![<]) {
+        let mut explicit_binder = None;
+        if stream.peek(Token![for]) && stream.peek2(Token![<]) {
             stream.parse::<Token![for]>()?;
             stream.parse::<Token![<]>()?;
             let ty_param: syn::TypeParam = stream.parse()?;
@@ -925,10 +960,43 @@ impl Parse for DispatchDynInput {
                 ));
             }
             stream.parse::<Token![>]>()?;
-            (ty_param.ident, ty_param.bounds)
-        } else {
-            (Ident::new("S", proc_macro2::Span::call_site()), Punctuated::new())
-        };
+            explicit_binder = Some((ty_param.ident, ty_param.bounds));
+        }
+
+        // Distinguish the closure form from the call form. The closure form continues
+        // with `|args|` or `<ExtraGenerics> |args|`; anything else is an expression
+        // (call form). A leading `<` is ambiguous between extra generics and a
+        // qualified-path expression (`<Foo as Bar>::baz(..)`), so speculatively parse
+        // generics and require the `|` that must follow them.
+        let is_closure = stream.peek(Token![|])
+            || (stream.peek(Token![<]) && {
+                let fork = stream.fork();
+                fork.parse::<syn::Generics>().is_ok() && fork.peek(Token![|])
+            });
+
+        if !is_closure {
+            let binder = match explicit_binder {
+                Some((ident, bounds)) => {
+                    if !bounds.is_empty() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "trait bounds on `for<...>` are not supported in the call form: the \
+                             binder is substituted with concrete backend types, so the called \
+                             function's own bounds apply. Remove the bounds, or use the closure \
+                             form (`for<S: Bound> |args| { ... }`)",
+                        ));
+                    }
+                    Some(ident)
+                }
+                None => None,
+            };
+            let expr: Expr = stream.parse()?;
+            return Ok(DispatchDynInput::Call(DispatchDynCall { thermite, binder, expr }));
+        }
+
+        // Defaults to the identifier `S` with no explicit bounds (-> `Simd3` at codegen time).
+        let (dispatch_ident, dispatch_bounds) =
+            explicit_binder.unwrap_or_else(|| (Ident::new("S", proc_macro2::Span::call_site()), Punctuated::new()));
 
         // Optional `<ExtraGenericParams>`.
         let mut extra_generics: syn::Generics = if stream.peek(Token![<]) {
@@ -960,7 +1028,7 @@ impl Parse for DispatchDynInput {
         // `{ body }`
         let body: syn::Block = stream.parse()?;
 
-        Ok(Self {
+        Ok(DispatchDynInput::Closure(DispatchDynClosure {
             thermite,
             dispatch_ident,
             dispatch_bounds,
@@ -968,7 +1036,7 @@ impl Parse for DispatchDynInput {
             inputs,
             output,
             body,
-        })
+        }))
     }
 }
 
@@ -980,7 +1048,152 @@ fn backend_type_path(thermite: &TokenStream, path_str: &str) -> TokenStream {
 }
 
 pub fn dispatch_dyn_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let DispatchDynInput {
+    match syn::parse_macro_input!(input as DispatchDynInput) {
+        DispatchDynInput::Closure(closure) => dispatch_dyn_closure(closure),
+        DispatchDynInput::Call(call) => dispatch_dyn_call(call),
+    }
+}
+
+/// Recursively replaces every occurrence of the bare ident `target` in `ts` with the
+/// `replacement` tokens, descending into groups. Bumps `count` once per replacement.
+fn substitute_ident(ts: TokenStream, target: &str, replacement: &TokenStream, count: &mut usize) -> TokenStream {
+    let mut out = TokenStream::new();
+    for tt in ts {
+        match tt {
+            TokenTree::Ident(ref i) if *i == target => {
+                *count += 1;
+                out.extend(replacement.clone());
+            }
+            TokenTree::Group(g) => {
+                let mut inner = Group::new(g.delimiter(), substitute_ident(g.stream(), target, replacement, count));
+                inner.set_span(g.span());
+                out.extend([TokenTree::Group(inner)]);
+            }
+            other => out.extend([other]),
+        }
+    }
+    out
+}
+
+/// Builds one match arm's expression for the call form: the input expression
+/// instantiated at the given concrete backend type.
+fn call_form_arm(binder: Option<&Ident>, expr: &Expr, simd_ty: &TokenStream) -> TokenStream {
+    match binder {
+        // `for<S> expr`: substitute every bare `S` token with the backend type.
+        Some(ident) => {
+            let mut count = 0;
+            substitute_ident(expr.to_token_stream(), &ident.to_string(), simd_ty, &mut count)
+        }
+        // Bare `func(args)`: inject the backend type as the callee's sole generic
+        // argument (validated in `dispatch_dyn_call`).
+        None => {
+            let mut call = expr.clone();
+            if let Expr::Call(c) = &mut call
+                && let Expr::Path(p) = &mut *c.func
+                && let Some(last) = p.path.segments.last_mut()
+            {
+                last.arguments = PathArguments::AngleBracketed(syn::parse_quote! { ::<#simd_ty> });
+            }
+            call.into_token_stream()
+        }
+    }
+}
+
+/// Expands the call form of `dispatch_dyn!`.
+///
+/// Emits a `match InstructionSet::get()` whose arms instantiate the expression at each
+/// backend's concrete `Simd` type. No `#[target_feature]` wrappers are generated here:
+/// a `#[dispatch]` callee already contains its own per-backend trampolines, and the
+/// runtime match discharges their feature preconditions. (Calling a non-`#[dispatch]`
+/// generic function this way is still *correct*, but its body is compiled without
+/// target features - use the closure form to wrap arbitrary code.)
+fn dispatch_dyn_call(input: DispatchDynCall) -> proc_macro::TokenStream {
+    let DispatchDynCall { thermite, binder, expr } = input;
+
+    // Validate up front so errors surface once, with spans on the user's tokens.
+    match &binder {
+        Some(ident) => {
+            let mut count = 0;
+            substitute_ident(expr.to_token_stream(), &ident.to_string(), &TokenStream::new(), &mut count);
+            if count == 0 {
+                return syn::Error::new(
+                    ident.span(),
+                    format!("the dispatch binder `{ident}` does not appear in the expression"),
+                )
+                .into_compile_error()
+                .into();
+            }
+        }
+        None => {
+            let err = |tokens: &dyn ToTokens, msg: &str| -> proc_macro::TokenStream {
+                syn::Error::new_spanned(tokens, msg).into_compile_error().into()
+            };
+            let Expr::Call(call) = &expr else {
+                return err(
+                    &expr,
+                    "expected a plain `function(args)` call; for method calls, mark where the \
+                     SIMD type goes with a `for<...>` binder: \
+                     `dispatch_dyn!(for<S> receiver.method::<S>(args))`",
+                );
+            };
+            let Expr::Path(path) = &*call.func else {
+                return err(
+                    &call.func,
+                    "the called function must be a plain path; use a `for<...>` binder and \
+                     write the SIMD type explicitly: `dispatch_dyn!(for<S> callee::<S>(args))`",
+                );
+            };
+            // A `<T as Trait>::f(..)` callee has explicit generics on the qself, and
+            // appending `::<Backend>` to the method segment would misplace them.
+            if path.qself.is_some()
+                || !matches!(
+                    path.path.segments.last().map(|s| &s.arguments),
+                    Some(PathArguments::None)
+                )
+            {
+                return err(
+                    &call.func,
+                    "this callee already has explicit generic arguments; write the SIMD \
+                     parameter explicitly with a `for<...>` binder: \
+                     `dispatch_dyn!(for<S> func::<S, ...>(args))`",
+                );
+            }
+        }
+    }
+
+    // One arm per backend with a concrete, runtime-dispatchable Simd type. The scalar
+    // backend (empty target-feature string) becomes the `_ =>` fallback arm.
+    let branches = BACKENDS.iter().filter_map(|b| {
+        let simd_path_str = b.simd_type?;
+        if b.target_feature.is_empty() {
+            return None;
+        }
+        let isa_ident = quote::format_ident!("{}", b.isa);
+        let simd_ty = backend_type_path(&thermite, simd_path_str);
+        let arm = call_form_arm(binder.as_ref(), &expr, &simd_ty);
+        Some(quote! { #thermite::isa::InstructionSet::#isa_ident => #arm })
+    });
+
+    let scalar_ty = BACKENDS
+        .iter()
+        .find(|b| b.target_feature.is_empty() && b.simd_type.is_some())
+        .and_then(|b| b.simd_type)
+        .unwrap_or("backend::scalar::Scalar");
+    let fallback_ty = backend_type_path(&thermite, scalar_ty);
+    let fallback = call_form_arm(binder.as_ref(), &expr, &fallback_ty);
+
+    quote! {{
+        match #thermite::isa::InstructionSet::get() {
+            #(#branches,)*
+            _ => #fallback
+        }
+    }}
+    .into()
+}
+
+/// Expands the closure form of `dispatch_dyn!`.
+fn dispatch_dyn_closure(input: DispatchDynClosure) -> proc_macro::TokenStream {
+    let DispatchDynClosure {
         thermite,
         dispatch_ident,
         dispatch_bounds,
@@ -988,7 +1201,7 @@ pub fn dispatch_dyn_inner(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         inputs,
         output,
         mut body,
-    } = syn::parse_macro_input!(input as DispatchDynInput);
+    } = input;
 
     // Rewrite bare SIMD type names (e.g. `f32x4`) in the body to their fully-qualified
     // `Vector<dispatch_ident::...>` form before any code generation happens.

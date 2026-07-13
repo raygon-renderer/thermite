@@ -90,6 +90,41 @@ signature -- the caller can't know which backend was chosen, so a SIMD-typed
 parameter or return would have nowhere to come from. All SIMD work happens inside
 the body: load from slices, process, store back.
 
+#### The call form -- dispatch a `#[dispatch]` function without closure syntax
+
+When the SIMD work is already a `#[dispatch]` function, skip the closure syntax
+entirely -- the callee carries its own per-backend `#[target_feature]` trampolines,
+so the macro only emits the runtime `InstructionSet::get()` match:
+
+```rust
+#[thermite::dispatch(S)]
+fn dot<S: Simd>(a: &[f32], b: &[f32]) -> f32 { /* ... */ }
+
+// Bare form: backend injected as the callee's ONLY generic argument.
+let r = thermite::dispatch_dyn!(dot(&a, &b));
+
+// for<S> form: S marks where the backend type goes -- required when the callee
+// has extra generics (partial turbofish is not legal Rust):
+let r = thermite::dispatch_dyn!(for<S> scale::<S, f32>(&a, factor));
+
+// The for<S> form also dispatches METHOD calls on a receiver, when the method
+// itself is generic over the backend (a `#[dispatch(S)] impl` block):
+#[thermite::dispatch(S)]
+impl Kernel {
+    fn run<S: Simd>(&self, data: &[f32]) -> f32 { /* ... */ }
+}
+let r = thermite::dispatch_dyn!(for<S> kernel.run::<S>(&data));
+```
+
+Arguments are ordinary expressions evaluated in the selected arm -- none of the
+closure form's capture-by-name/reborrow rules apply. Caveats: keep it to a single
+dispatched call (free fn or method) and do everything else outside the macro (any
+code inside that isn't the callee compiles without target features); the callee
+must be a `#[dispatch]` function (a plain generic fn still runs *correctly* but
+with scalar-quality codegen); and no bare-`f32xN` type rewriting happens in the
+call form. Bounds on the binder (`for<S: Bound>`) are rejected; the callee's own
+bounds apply.
+
 ### `#[thermite::dispatch(...)]` -- per-backend codegen for library code (an attribute)
 
 `dispatch` is a `#[proc_macro_attribute]`, not a bang macro. Put it on a `fn`,
