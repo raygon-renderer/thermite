@@ -37,7 +37,7 @@ neon_float_register!(
     F64x2Neon, elem: f64, lanes: 2, suffix: f64, from_u: vreinterpretq_f64_u64,
     bits: super::U64x2Neon, signed_bits: super::I64x2Neon,
     extended: Self,
-    exp_mask: 0x7FF0_0000_0000_0000
+    exp_mask: 0x7FF0_0000_0000_0000, approx: no
 );
 
 neon_concat_scalar2!(F64x2Neon, elem: f64, suffix: f64);

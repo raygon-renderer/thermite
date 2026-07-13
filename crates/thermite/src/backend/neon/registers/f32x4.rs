@@ -38,7 +38,7 @@ neon_float_register!(
     F32x4Neon, elem: f32, lanes: 4, suffix: f32, from_u: vreinterpretq_f32_u32,
     bits: super::U32x4Neon, signed_bits: super::I32x4Neon,
     extended: ArrayRegister<super::F64x2Neon, 2>,
-    exp_mask: 0x7F80_0000
+    exp_mask: 0x7F80_0000, approx: yes
 );
 
 // f32x4 -> f64x4 (ExtendedPrecision): promote each half with `vcvt`.

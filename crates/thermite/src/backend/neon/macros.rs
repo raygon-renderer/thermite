@@ -682,7 +682,7 @@ macro_rules! neon_float_register {
     (
         $reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident, from_u: $from_u:ident,
         bits: $bits:ty, signed_bits: $sbits:ty, extended: $ext:ty,
-        exp_mask: $exp_mask:expr
+        exp_mask: $exp_mask:expr, approx: $approx:tt
     ) => {
         paste::paste! {
             #[thermite_macros::inline_always]
@@ -880,18 +880,7 @@ macro_rules! neon_float_register {
                     unsafe { arch::$from_u(arch::[<vcaltq_ $s>](value, Self::INFINITY)) }
                 }
 
-                const HAS_APPROX_RCP: bool = true;
-                const HAS_APPROX_RSQRT: bool = true;
-
-                // `vrecpe`/`vrsqrte` + one fused Newton step (see polyfills/math.rs
-                // for why the step is included).
-                fn rcp(value: Storage<Self>) -> Storage<Self> {
-                    arch::[<neon_rcp_ $s>](value)
-                }
-
-                fn rsqrt(value: Storage<Self>) -> Storage<Self> {
-                    arch::[<neon_rsqrt_ $s>](value)
-                }
+                neon_approx_recip!($approx, $s);
 
                 fn floor(value: Storage<Self>) -> Storage<Self> {
                     unsafe { arch::[<vrndmq_ $s>](value) }
@@ -1365,5 +1354,57 @@ macro_rules! neon_broadcast_align {
                 }
             }
         }
+    };
+}
+
+
+/// `rcp`/`rsqrt` + their capability flags.
+///
+/// The trait's contract is that `HAS_APPROX_RCP == false` means `rcp()` is
+/// EXACT - generic code (`SpecializedCoreMath::reciprocal`) skips its
+/// Newton-refinement step when the flag is false, and applies exactly ONE step
+/// when it is true. That single step is calibrated for f32: an ~8-bit
+/// `FRECPE` estimate plus our baked step gives ~16 bits, and one more Newton
+/// doubling reaches ~32 - enough for f32's 24-bit mantissa, but 19 bits SHORT
+/// of f64's 53.
+///
+/// So only the f32 registers advertise the approximation (`approx: yes`); the
+/// f64 ones (`approx: no`) leave `rcp`/`rsqrt` at their exact trait defaults
+/// (`1/x`, `1/sqrt(x)`), exactly as every x86 and wasm f64 register does -
+/// none of those ISAs even has a packed-f64 reciprocal estimate. NEON does
+/// (`FRECPE.2D`), and wiring it in naively silently cost 19 bits of f64
+/// precision that the differential suite's 1e-6 tolerance could not see.
+///
+/// `strict_ieee754` disables the approximation entirely, matching x86.
+macro_rules! neon_approx_recip {
+    (yes, $s:ident) => {
+        paste::paste! {
+            const HAS_APPROX_RCP: bool = cfg!(not(feature = "strict_ieee754"));
+            const HAS_APPROX_RSQRT: bool = cfg!(not(feature = "strict_ieee754"));
+
+            // `vrecpe`/`vrsqrte` + one fused Newton step (see polyfills/math.rs).
+            fn rcp(value: Storage<Self>) -> Storage<Self> {
+                cfg_select! {
+                    feature = "strict_ieee754" => {
+                        Self::div(Self::ONE, value)
+                    }
+                    _ => arch::[<neon_rcp_ $s>](value),
+                }
+            }
+
+            fn rsqrt(value: Storage<Self>) -> Storage<Self> {
+                cfg_select! {
+                    feature = "strict_ieee754" => {
+                        Self::rcp(Self::sqrt(value))
+                    }
+                    _ => arch::[<neon_rsqrt_ $s>](value),
+                }
+            }
+        }
+    };
+    (no, $s:ident) => {
+        // No override: `rcp`/`rsqrt` keep the exact trait defaults.
+        const HAS_APPROX_RCP: bool = false;
+        const HAS_APPROX_RSQRT: bool = false;
     };
 }
