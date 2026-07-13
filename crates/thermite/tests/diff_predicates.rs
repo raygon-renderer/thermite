@@ -13,7 +13,7 @@
 //! differ from the sign-bit ones for ±0.0:
 //!   - `is_negative(x) == (x < 0)`   → `is_negative(-0.0)` is `false`
 //!   - `is_positive(x) == (x >= 0)`  → `is_positive(-0.0)` is `true`
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -184,4 +184,12 @@ mod wasm {
     use thermite::backend::wasm::Wasm;
     float_suite!(wasm_float, Wasm, [f32x4, f32x8, f64x2, f64x4], "wasm");
     int_suite!(wasm_int, Wasm, [i32x4, i32x8, i64x2, i64x4], "wasm");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    float_suite!(neon_float, Neon, [f32x4, f32x8, f64x2, f64x4], "neon");
+    int_suite!(neon_int, Neon, [i32x4, i32x8, i64x2, i64x4], "neon");
 }

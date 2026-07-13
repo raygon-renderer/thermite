@@ -11,7 +11,7 @@
 //!
 //! Inputs are finite and small (no NaN/Inf, no overflow even under debug
 //! overflow checks), and f32 `==` treats ±0 as equal, so exact comparison is safe.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use core::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign, ShrAssign,
@@ -630,4 +630,11 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
     ops_suite!(wasm, Wasm, f32x4, i32x4);
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    ops_suite!(neon, Neon, f32x4, i32x4);
 }

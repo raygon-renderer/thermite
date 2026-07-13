@@ -61,7 +61,11 @@ static BACKENDS: &[Backend] = cfg_select! {
     ],
     feature = "neon" => &[
         Backend { isa: "Scalar", target_feature: "",     simd_type: Some("backend::scalar::Scalar") },
-        Backend { isa: "NEON",   target_feature: "neon", simd_type: None                            },
+        // NEON/AdvSIMD is mandatory on aarch64 (the only ARM target the backend
+        // supports), so `InstructionSet::get()` is constant and the `neon`
+        // target feature is already in the target baseline - the trampoline
+        // attribute is a stable no-op.
+        Backend { isa: "NEON",   target_feature: "neon", simd_type: Some("backend::neon::Neon")     },
     ],
     feature = "wasm" => &[
         Backend { isa: "Scalar", target_feature: "",        simd_type: Some("backend::scalar::Scalar") },

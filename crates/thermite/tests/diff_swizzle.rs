@@ -10,7 +10,7 @@
 //!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
 //!    random fuzzing - the coverage formerly in `array_swizzle.rs`, broadened
 //!    here from V3-emulated-only to native registers across v1/v2/v3.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use generic_array::{GenericArray, arr, typenum::Unsigned};
 use rand::RngExt;
@@ -161,6 +161,19 @@ mod wasm_const {
     reg4!(wasm_u32x4, Wasm, u32x4);
     reg4!(wasm_f64x4, Wasm, f64x4); // ArrayRegister-emulated
     reg8!(wasm_f32x8, Wasm, f32x8); // ArrayRegister-emulated
+}
+
+// NEON: native 128-bit const-index swizzle paths.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon_const {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    reg4!(neon_f32x4, Neon, f32x4);
+    reg4!(neon_i32x4, Neon, i32x4);
+    reg4!(neon_u32x4, Neon, u32x4);
+    reg4!(neon_f64x4, Neon, f64x4); // ArrayRegister-emulated
+    reg8!(neon_f32x8, Neon, f32x8); // ArrayRegister-emulated
 }
 
 // ===========================================================================
@@ -355,4 +368,28 @@ mod wasm_rt {
     // 8-bit: native i8x16 relaxed_swizzle (byte index is the control directly).
     rt!(rt_wasm_i8x16, <Wasm as NativeSimd>::i8xN);
     rt!(rt_wasm_u8x16, <Wasm as NativeSimd>::u8xN);
+}
+
+// NEON: runtime permute/swizzle on the native 128-bit registers (and the scalar/array glue).
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon_rt {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    // native 128-bit + emulated array forms
+    rt!(rt_neon_f32x4, <Neon as Simd>::f32x4);
+    rt!(rt_neon_i32x4, <Neon as Simd>::i32x4);
+    rt!(rt_neon_f32x8, <Neon as Simd>::f32x8); // ArrayRegister-emulated
+    rt!(rt_neon_f32x16, <Neon as Simd>::f32x16); // ArrayRegister-emulated
+    rt!(rt_neon_arr_f32x4x4, ArrayRegister<<Neon as Simd>::f32x4, 4>);
+    // 16-bit: native i16x8 (byte-doubled relaxed_swizzle), reduced i16x4, array i16x16.
+    // (inherited from the wasm section; revisit for NEON)
+    rt!(rt_neon_i16x8, <Neon as Simd>::i16x8);
+    rt!(rt_neon_u16x8, <Neon as Simd>::u16x8);
+    rt!(rt_neon_i16x4, <Neon as Simd>::i16x4);
+    rt!(rt_neon_i16x16, <Neon as Simd>::i16x16);
+    // 8-bit: native i8x16 relaxed_swizzle (byte index is the control directly).
+    // (inherited from the wasm section; revisit for NEON)
+    rt!(rt_neon_i8x16, <Neon as NativeSimd>::i8xN);
+    rt!(rt_neon_u8x16, <Neon as NativeSimd>::u8xN);
 }

@@ -4,7 +4,7 @@
 //! Only built where the x86 SIMD backends exist. The 16-bit slots live on
 //! `Simd` (a staging trait), so register types are resolved through it rather
 //! than `Simd`.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -324,6 +324,23 @@ mod wasm {
     int16_tests!(u16x16, Wasm, u16x16, "wasm u16x16", unsigned);
 }
 
+// --- NEON: native 8-lane i16x8 (= i16xN); sub-native reduced, wider via ArrayRegister ---
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    int16_tests!(i16x2, Neon, i16x2, "neon i16x2", signed);
+    int16_tests!(i16x4, Neon, i16x4, "neon i16x4", signed);
+    int16_tests!(i16x8, Neon, i16x8, "neon i16x8", signed);
+    int16_tests!(i16x16, Neon, i16x16, "neon i16x16", signed);
+
+    int16_tests!(u16x2, Neon, u16x2, "neon u16x2", unsigned);
+    int16_tests!(u16x4, Neon, u16x4, "neon u16x4", unsigned);
+    int16_tests!(u16x8, Neon, u16x8, "neon u16x8", unsigned);
+    int16_tests!(u16x16, Neon, u16x16, "neon u16x16", unsigned);
+}
+
 #[cfg(target_arch = "wasm32")]
 mod wasm_cast {
     use super::*;
@@ -348,6 +365,57 @@ mod wasm_cast {
                     concat!("wasm ", stringify!($w32), "->", stringify!($w16)),
                     <Wasm as Simd>::$w32,
                     <Wasm as Simd>::$w16,
+                    <Scalar as Simd>::$w32,
+                    <Scalar as Simd>::$w16,
+                    $se32,
+                    |x| x,
+                    Tol::Exact
+                );
+            }
+        };
+    }
+
+    cast16!(i16_i32_x2, i16x2, i32x2, i16, i32);
+    cast16!(i16_i32_x4, i16x4, i32x4, i16, i32);
+    cast16!(i16_i32_x8, i16x8, i32x8, i16, i32);
+    cast16!(u16_u32_x2, u16x2, u32x2, u16, u32);
+    cast16!(u16_u32_x4, u16x4, u32x4, u16, u32);
+    cast16!(u16_u32_x8, u16x8, u32x8, u16, u32);
+
+    cast16!(i16_i64_x2, i16x2, i64x2, i16, i64);
+    cast16!(i16_i64_x4, i16x4, i64x4, i16, i64);
+    cast16!(i16_i64_x8, i16x8, i64x8, i16, i64);
+    cast16!(i16_i64_x16, i16x16, i64x16, i16, i64);
+    cast16!(u16_u64_x2, u16x2, u64x2, u16, u64);
+    cast16!(u16_u64_x4, u16x4, u64x4, u16, u64);
+    cast16!(u16_u64_x8, u16x8, u64x8, u16, u64);
+    cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon_cast {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    use thermite::simd::Simd;
+
+    macro_rules! cast16 {
+        ($name:ident, $w16:ident, $w32:ident, $se16:ty, $se32:ty) => {
+            #[test]
+            fn $name() {
+                cast_diff!(
+                    concat!("neon ", stringify!($w16), "->", stringify!($w32)),
+                    <Neon as Simd>::$w16,
+                    <Neon as Simd>::$w32,
+                    <Scalar as Simd>::$w16,
+                    <Scalar as Simd>::$w32,
+                    $se16,
+                    |x| x,
+                    Tol::Exact
+                );
+                cast_diff!(
+                    concat!("neon ", stringify!($w32), "->", stringify!($w16)),
+                    <Neon as Simd>::$w32,
+                    <Neon as Simd>::$w16,
                     <Scalar as Simd>::$w32,
                     <Scalar as Simd>::$w16,
                     $se32,

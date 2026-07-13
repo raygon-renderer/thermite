@@ -13,7 +13,7 @@
 //!
 //! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
 //! in both; the regression tests cover both backends.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -811,5 +811,39 @@ mod wasm {
         for_signed!("wasm i64x2", <Wasm as Simd>::i64x2, i64, i128);
         for_float!("wasm f32x4", <Wasm as Simd>::f32x4, f32);
         for_float!("wasm f64x2", <Wasm as Simd>::f64x2, f64);
+    }
+}
+
+// neon: exercise the same backend-generic polyfill macros on Neon's native types
+// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2) - validates neon's count_ones/leading_zeros/
+// swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    mullo_for! {
+        i32x4: Neon, i32, "neon i32x4"; i64x2: Neon, i64, "neon i64x2";
+        u32x4: Neon, u32, "neon u32x4"; u64x2: Neon, u64, "neon u64x2";
+    }
+    popcount_for! {
+        i32x4: Neon, i32, "neon i32x4"; u32x4: Neon, u32, "neon u32x4";
+        i64x2: Neon, i64, "neon i64x2"; u64x2: Neon, u64, "neon u64x2";
+    }
+    bitperm_for! {
+        i32x4: Neon, i32, "neon i32x4"; u32x4: Neon, u32, "neon u32x4";
+        i64x2: Neon, i64, "neon i64x2"; u64x2: Neon, u64, "neon u64x2";
+    }
+
+    #[test]
+    fn lztz_signed_float() {
+        for_lztz!("neon i32x4", <Neon as Simd>::i32x4, i32);
+        for_lztz!("neon u32x4", <Neon as Simd>::u32x4, u32);
+        for_lztz!("neon i64x2", <Neon as Simd>::i64x2, i64);
+        for_lztz!("neon u64x2", <Neon as Simd>::u64x2, u64);
+        for_signed!("neon i32x4", <Neon as Simd>::i32x4, i32, i64);
+        for_signed!("neon i64x2", <Neon as Simd>::i64x2, i64, i128);
+        for_float!("neon f32x4", <Neon as Simd>::f32x4, f32);
+        for_float!("neon f64x2", <Neon as Simd>::f64x2, f64);
     }
 }

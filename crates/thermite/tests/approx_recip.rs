@@ -7,7 +7,7 @@
 //!
 //! These had no coverage at all. Inputs are restricted to the well-behaved
 //! normal range (no denormals/inf/NaN) where the accuracy contract holds.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -143,4 +143,13 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
     recip_props!(wasm, Wasm, f32x4, f64x2);
+}
+
+// NEON: native widths are f32x4/f64x2. Whatever HAS_APPROX_RCP/RSQRT is for this
+// backend, the results must satisfy the same loose accuracy bound.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    recip_props!(neon, Neon, f32x4, f64x2);
 }

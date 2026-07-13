@@ -16,7 +16,7 @@
 //! The masks themselves are built from known boolean patterns via
 //! `MaskRegister::new_mask` and read back with `MaskRegister::test`, so those
 //! primitives are exercised too. Only built where the x86 SIMD backends exist.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -583,5 +583,26 @@ mod wasm {
         int_mask_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
         int_mask_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
         int_mask_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
+    }
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    mod neon_float {
+        use super::*;
+        float_mask_tests!(f32x4, Neon, f32x4, "neon f32x4");
+        float_mask_tests!(f32x8, Neon, f32x8, "neon f32x8");
+        float_mask_tests!(f64x2, Neon, f64x2, "neon f64x2");
+        float_mask_tests!(f64x4, Neon, f64x4, "neon f64x4");
+    }
+    mod neon_int {
+        use super::*;
+        int_mask_tests!(i32x4, Neon, i32x4, "neon i32x4", signed);
+        int_mask_tests!(i32x8, Neon, i32x8, "neon i32x8", signed);
+        int_mask_tests!(i64x2, Neon, i64x2, "neon i64x2", signed);
+        int_mask_tests!(u32x4, Neon, u32x4, "neon u32x4", unsigned);
+        int_mask_tests!(u64x2, Neon, u64x2, "neon u64x2", unsigned);
     }
 }

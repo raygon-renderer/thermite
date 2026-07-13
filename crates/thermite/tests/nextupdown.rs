@@ -11,7 +11,7 @@
 //! the IEEE-754 domain explicitly: NaNs (payloads and signs), both infinities,
 //! +/-MAX, exponent-rollover boundaries, the normal/subnormal boundary, the
 //! tiniest subnormals, and both zeros.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -236,5 +236,23 @@ mod wasm {
         roundtrip_check!("wasm f64x2", <Wasm as Simd>::f64x2, f64, region_values!(f64, u64));
         roundtrip_check!("wasm f32x8", <Wasm as Simd>::f32x8, f32, region_values!(f32, u32));
         roundtrip_check!("wasm f64x4", <Wasm as Simd>::f64x4, f64, region_values!(f64, u64));
+    }
+}
+
+// neon: generic FloatRegister default on native f32x4/f64x2, ArrayRegister on the wide types.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    corpus_suite!(neon, Neon, [f32x4: f32, f64x2: f64, f32x8: f32, f64x4: f64], "neon");
+    region_suite!(regions_neon, Neon, "neon");
+
+    #[test]
+    fn roundtrip() {
+        roundtrip_check!("neon f32x4", <Neon as Simd>::f32x4, f32, region_values!(f32, u32));
+        roundtrip_check!("neon f64x2", <Neon as Simd>::f64x2, f64, region_values!(f64, u64));
+        roundtrip_check!("neon f32x8", <Neon as Simd>::f32x8, f32, region_values!(f32, u32));
+        roundtrip_check!("neon f64x4", <Neon as Simd>::f64x4, f64, region_values!(f64, u64));
     }
 }

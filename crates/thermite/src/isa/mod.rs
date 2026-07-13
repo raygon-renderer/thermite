@@ -35,7 +35,7 @@ pub enum InstructionSet {
     X86V4,
 
     /// ARM Neon SIMD instruction set
-    #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+    #[cfg(all(feature = "neon", target_arch = "aarch64"))]
     NEON,
 
     /// WebAssembly SIMD instruction set (32-bit)
@@ -61,6 +61,15 @@ impl InstructionSet {
         static DETECTOR: x86_detector::DetectInstructionSet = x86_detector::DetectInstructionSet::new();
 
         DETECTOR.get_or_init()
+    }
+
+    /// Detect the current instruction set at runtime. This result is cached for future calls.
+    ///
+    /// NEON (AdvSIMD) is a mandatory part of AArch64, so no actual runtime
+    /// detection is needed.
+    #[cfg(all(feature = "neon", target_arch = "aarch64"))]
+    pub fn get() -> InstructionSet {
+        InstructionSet::NEON
     }
 
     /// Detect the current instruction set at runtime. This result is cached for future calls.
@@ -90,7 +99,7 @@ impl InstructionSet {
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             InstructionSet::X86V4 => 32,
 
-            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            #[cfg(all(feature = "neon", target_arch = "aarch64"))]
             InstructionSet::NEON => 32,
 
             #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
@@ -116,7 +125,7 @@ impl InstructionSet {
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             InstructionSet::X86V3 | InstructionSet::X86V4 => true,
 
-            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            #[cfg(all(feature = "neon", target_arch = "aarch64"))]
             InstructionSet::NEON => true,
 
             // SPIR-V supports FMA via OpFma
@@ -170,7 +179,7 @@ impl InstructionSet {
             InstructionSet::X86V3 | InstructionSet::X86V4 => true,
 
             // Neon generally has efficient unaligned loads/stores
-            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            #[cfg(all(feature = "neon", target_arch = "aarch64"))]
             InstructionSet::NEON => true,
 
             // WASM is uncertain, so assume not cheap
@@ -199,7 +208,7 @@ impl InstructionSet {
             InstructionSet::X86V4 => 8, // twice as many registers
 
             // Neon generally has efficient unaligned loads/stores
-            #[cfg(all(feature = "neon", any(target_arch = "arm", target_arch = "aarch64")))]
+            #[cfg(all(feature = "neon", target_arch = "aarch64"))]
             InstructionSet::NEON => 4,
 
             // WASM is uncertain, so assume not cheap

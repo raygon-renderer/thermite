@@ -3,7 +3,7 @@
 //! Checks (1) the interleave lane layout, (2) that deinterleave inverts interleave, and
 //! (3) deinterleave directly against a scalar even/odd oracle. This is what guards the
 //! AVX2 `pshufb`/`unpack`/`permute` deinterleave sequences.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -75,4 +75,16 @@ mod wasm {
     interleave_roundtrip!(u16x8, Wasm, u16x8, u16);
     interleave_roundtrip!(i16x16, Wasm, i16x16, i16);
     interleave_roundtrip!(u16x16, Wasm, u16x16, u16);
+}
+
+// NEON: native 8-lane i16x8 (= i16xN) + the emulated 16-lane i16x16 (ArrayRegister).
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    interleave_roundtrip!(i16x8, Neon, i16x8, i16);
+    interleave_roundtrip!(u16x8, Neon, u16x8, u16);
+    interleave_roundtrip!(i16x16, Neon, i16x16, i16);
+    interleave_roundtrip!(u16x16, Neon, u16x16, u16);
 }

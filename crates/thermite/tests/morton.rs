@@ -6,7 +6,7 @@
 //! exercises the generic shift/mask cascade, the CLMUL `N == 2` fast path on
 //! u64-lane v3 registers (default `avx2-pclmul`), the x86 `pshufb` and wasm
 //! `i8x16.swizzle` nibble-LUT paths on u16/u32 lanes.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -108,6 +108,18 @@ mod wasm {
     morton_suite!(wasm_u16x8, <Wasm as Simd>::u16x8, u16, "wasm u16x8");
     morton_suite!(wasm_u32x4, <Wasm as Simd>::u32x4, u32, "wasm u32x4");
     morton_suite!(wasm_u64x2, <Wasm as Simd>::u64x2, u64, "wasm u64x2");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    // u16/u32 use the `i8x16.swizzle` LUT; u64x2 and all N != 2 use the cascade.
+    // (inherited from the wasm section; revisit for NEON)
+    morton_suite!(neon_u16x8, <Neon as Simd>::u16x8, u16, "neon u16x8");
+    morton_suite!(neon_u32x4, <Neon as Simd>::u32x4, u32, "neon u32x4");
+    morton_suite!(neon_u64x2, <Neon as Simd>::u64x2, u64, "neon u64x2");
 }
 
 /// Exercise the user-facing `Vector<R>` layer (the `transmute_copy` delegation to

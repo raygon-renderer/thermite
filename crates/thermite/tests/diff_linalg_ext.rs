@@ -17,7 +17,7 @@
 //! documented behaviour rather than an independent textbook convention.
 //! Tested at the `Vector` layer on Scalar + V2 + V3, `Vector<f32x4>` /
 //! `Vector<f64x4>`.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -421,4 +421,12 @@ mod wasm {
     use thermite::backend::wasm::Wasm;
     linalg_ext_suite!(wasm_f32, Wasm, f32x4, f32, 3.0e-3, "wasm f32x4");
     linalg_ext_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-9, "wasm f64x4");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    linalg_ext_suite!(neon_f32, Neon, f32x4, f32, 3.0e-3, "neon f32x4");
+    linalg_ext_suite!(neon_f64, Neon, f64x4, f64, 1.0e-9, "neon f64x4");
 }

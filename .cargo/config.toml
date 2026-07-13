@@ -10,3 +10,12 @@
 # no machine-specific path is committed.
 [target.wasm32-wasip1]
 rustflags = ["-Ctarget-feature=+simd128,+relaxed-simd"]
+
+# Cross-compiling the NEON test suite for ARM hardware (Raspberry Pi 3 B+ and
+# any other 64-bit ARM Linux box). musl + rust-lld needs no external GNU
+# cross-toolchain on the Windows host, and the fully static binaries run on
+# any 64-bit distro regardless of its glibc. Built by `just pi-build`, pushed
+# to the device manually (see that recipe's notes).
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-Ctarget-feature=+crt-static"]

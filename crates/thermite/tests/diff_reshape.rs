@@ -11,7 +11,7 @@
 //! Oracles are trivial and exact (bit-preserving, so NaN lanes must match too):
 //!   concat(lo, hi) == lo ++ hi          split(concat(lo,hi)) == (lo, hi)
 //!   extend(lo)     == lo ++ [0; HALF]   narrow(concat(lo,hi)) == lo
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -173,4 +173,12 @@ mod wasm {
     use thermite::backend::wasm::Wasm;
     reshape_suite!(wasm, Wasm, "wasm");
     reshape8_suite!(wasm8, Wasm, "wasm");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    reshape_suite!(neon, Neon, "neon");
+    reshape8_suite!(neon8, Neon, "neon");
 }

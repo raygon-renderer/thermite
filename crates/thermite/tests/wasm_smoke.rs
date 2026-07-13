@@ -3,15 +3,20 @@
 //!
 //! Backend-generic: exercises the native SIMD backend for the target (`Wasm` on wasm, `X86V3`
 //! on x86) so it both validates the wasm `u8x16`/`i16x8` registers and confirms the harness runs.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use thermite::register::{IntegerRegister, NumericRegister, Register};
+// Which of these are used varies by backend cfg (x86 / wasm / neon).
+#[allow(unused_imports)]
 use thermite::simd::{NativeSimd, Simd};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 type Backend = thermite::backend::x86_v3::X86V3;
 #[cfg(target_arch = "wasm32")]
 type Backend = thermite::backend::wasm::Wasm;
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+type Backend = thermite::backend::neon::Neon;
 
 #[test]
 fn u8x16_add() {

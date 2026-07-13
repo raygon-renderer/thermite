@@ -5,7 +5,7 @@
 //!
 //! Spot-checked against `libm` (loose `Performance`-policy tolerance); the rest
 //! just need to execute. `ScalarMath` is implemented directly on the scalar types.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use thermite::math::policy::policies::Performance;
 use thermite::math::{ScalarMath, ScalarMathWithPolicy};

@@ -7,7 +7,7 @@
 //!
 //! Deterministic distinct-value inputs (no ties), values exactly representable in
 //! f32/i32, so comparisons are exact.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use thermite::Vector;
 use thermite::prelude::*;
@@ -201,5 +201,35 @@ mod wasm {
         rev!(<Wasm as Simd>::f64x4);
         rev!(<Wasm as Simd>::i32x8);
         rev!(<Wasm as Simd>::i64x4);
+    }
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    methods_suite!(neon, Neon);
+
+    #[test]
+    fn interleave_roundtrip() {
+        ilv!(<Neon as Simd>::f32x4);
+        ilv!(<Neon as Simd>::f32x8);
+        ilv!(<Neon as Simd>::f64x2);
+        ilv!(<Neon as Simd>::f64x4);
+        ilv!(<Neon as Simd>::i32x4);
+        ilv!(<Neon as Simd>::i32x8);
+        ilv!(<Neon as Simd>::u32x4);
+        ilv!(<Neon as Simd>::i64x2);
+    }
+
+    #[test]
+    fn reverse_widths() {
+        rev!(<Neon as Simd>::f32x4);
+        rev!(<Neon as Simd>::f32x8);
+        rev!(<Neon as Simd>::f64x2);
+        rev!(<Neon as Simd>::f64x4);
+        rev!(<Neon as Simd>::i32x8);
+        rev!(<Neon as Simd>::i64x4);
     }
 }

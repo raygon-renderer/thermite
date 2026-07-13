@@ -5,7 +5,7 @@
 //! random `(divisor, x)` pairs through both the branching `Divider` and the
 //! `BranchfreeDivider`, hitting the power-of-two (`multiplier == 0`) path, the
 //! general `mullhi` + `ADD_MARKER` path, and (for signed) the `NEG_DIVISOR` path.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -242,6 +242,21 @@ mod wasm {
         vdiv_check!(<Wasm as Simd>::i32x4, i32, true);
         vdiv_check!(<Wasm as Simd>::u64x2, u64, false);
         vdiv_check!(<Wasm as Simd>::i64x2, i64, true);
+    }
+}
+
+// neon: native 128-bit u32x4/i32x4/u64x2/i64x2 divider path (libdivide polyfills).
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    #[test]
+    fn vector_div_neon() {
+        vdiv_check!(<Neon as Simd>::u32x4, u32, false);
+        vdiv_check!(<Neon as Simd>::i32x4, i32, true);
+        vdiv_check!(<Neon as Simd>::u64x2, u64, false);
+        vdiv_check!(<Neon as Simd>::i64x2, i64, true);
     }
 }
 

@@ -3,7 +3,7 @@
 //!
 //! See `harness/mod.rs` for the methodology. Only built where the x86 SIMD
 //! backends exist; elsewhere there is nothing to differentiate against.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -267,5 +267,33 @@ mod wasm {
         int_reg_tests!(u32x8, Wasm, u32x8, "wasm u32x8", unsigned);
         int_reg_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
         int_reg_tests!(u64x4, Wasm, u64x4, "wasm u64x4", unsigned);
+    }
+}
+
+// neon: native f32x4/f64x2/i32x4/i64x2/u32x4/u64x2 (128-bit), wider via ArrayRegister.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    mod neon_float {
+        use super::*;
+        float_reg_tests!(f32x4, Neon, f32x4, "neon f32x4");
+        float_reg_tests!(f32x8, Neon, f32x8, "neon f32x8");
+        float_reg_tests!(f32x16, Neon, f32x16, "neon f32x16");
+        float_reg_tests!(f64x2, Neon, f64x2, "neon f64x2");
+        float_reg_tests!(f64x4, Neon, f64x4, "neon f64x4");
+        float_reg_tests!(f64x8, Neon, f64x8, "neon f64x8");
+    }
+    mod neon_int {
+        use super::*;
+        int_reg_tests!(i32x4, Neon, i32x4, "neon i32x4", signed);
+        int_reg_tests!(i32x8, Neon, i32x8, "neon i32x8", signed);
+        int_reg_tests!(i64x2, Neon, i64x2, "neon i64x2", signed);
+        int_reg_tests!(i64x4, Neon, i64x4, "neon i64x4", signed);
+        int_reg_tests!(u32x4, Neon, u32x4, "neon u32x4", unsigned);
+        int_reg_tests!(u32x8, Neon, u32x8, "neon u32x8", unsigned);
+        int_reg_tests!(u64x2, Neon, u64x2, "neon u64x2", unsigned);
+        int_reg_tests!(u64x4, Neon, u64x4, "neon u64x4", unsigned);
     }
 }

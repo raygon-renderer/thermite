@@ -5,7 +5,7 @@
 //! ladder. The scalar backend's native 8-bit slot is 1-lane, so the differential reference is
 //! an `ArrayRegister<{i8,u8}, N>` (N = the backend's native byte width: 16 on SSE, 32 on
 //! AVX2), which is a pure element-wise scalar register of matching lane count.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -16,6 +16,8 @@ use thermite::register::{
     BitshiftRegister as _, BitwiseRegister as _, IntegerRegister as _, NumericRegister as _,
     SignedIntegerRegister as _, SignedRegister as _,
 };
+// Which of these are used varies by backend cfg (x86 / wasm / neon).
+#[allow(unused_imports)]
 use thermite::simd::{NativeSimd, Simd};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -134,4 +136,14 @@ mod wasm {
 
     int8_tests!(i8x16, <Wasm as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "wasm i8x16", signed);
     int8_tests!(u8x16, <Wasm as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "wasm u8x16", unsigned);
+}
+
+// --- NEON: native 16-lane i8x16/u8x16 (= the fixed i8x16 slot too) ---
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    int8_tests!(i8x16, <Neon as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "neon i8x16", signed);
+    int8_tests!(u8x16, <Neon as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "neon u8x16", unsigned);
 }

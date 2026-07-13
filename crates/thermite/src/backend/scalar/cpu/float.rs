@@ -238,9 +238,12 @@ impl FloatRegister for [<f $width>] {
                 options(nomem, nostack, preserves_flags)
             );
 
+            // `:v` names the whole vector register; the template is only a
+            // comment (this is a pure compiler barrier), so the formatting is
+            // cosmetic - the modifier just silences `asm_sub_register`.
             #[cfg(target_arch = "aarch64")]
             core::arch::asm!(
-                "/* {0} */",
+                "/* {0:v} */",
                 inout(vreg) *value,
                 options(nomem, nostack, preserves_flags)
             );

@@ -11,7 +11,7 @@
 //! others) - the things that had **zero** test coverage before this file
 //! existed. Tighten `TOL_*` and switch to a `Reference` policy for a precision
 //! audit.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -970,6 +970,14 @@ mod wasm {
     math_suite!(wasm, Wasm, f32x4, f64x2, "wasm");
 }
 
+// NEON: native 128-bit f32x4 / f64x2 transcendental math vs libm.
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    math_suite!(neon, Neon, f32x4, f64x2, "neon");
+}
+
 // ===========================================================================
 // Policy-variant coverage. The transcendental kernels in `ps.rs`/`pd.rs` branch
 // heavily on the precision tier (`if const { P::PRECISION ... }`), and the
@@ -1503,4 +1511,11 @@ mod wasm_policy {
     use super::*;
     use thermite::backend::wasm::Wasm;
     policy_suite!(pol_wasm, Wasm, f32x4, f64x2, "wasm");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon_policy {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    policy_suite!(pol_neon, Neon, f32x4, f64x2, "neon");
 }

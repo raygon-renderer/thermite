@@ -6,7 +6,7 @@
 //! Each of those branches gets a dedicated scenario, on Scalar + V2 + V3 for
 //! both `f32x4` and `f64x4`. Roots are known in closed form and checked against
 //! `f64` oracles.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 use thermite::Vector;
 use thermite::math::algorithms::{newtons_method, prod_f, sum_f};
@@ -217,6 +217,13 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
     newton_suite!(wasm, Wasm);
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    newton_suite!(neon, Neon);
 }
 
 /// `sum_f` / `prod_f` (`math/algorithms/mod.rs`). The compensated (`UseCompensation

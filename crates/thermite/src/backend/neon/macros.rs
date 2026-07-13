@@ -1,0 +1,1369 @@
+//! Trait-impl stamping macros for the NEON register files.
+//!
+//! NEON intrinsic names are perfectly regular (`vaddq_f32` / `vaddq_s16` /
+//! ...), so the bulk of every register's trait surface is generated here from
+//! a type-suffix parameter, calling through the `polyfills` normalization
+//! layer (`neon_and_f32`, `neon_movemask_u32`, ...) where NEON needs plumbing
+//! or lacks an instruction. Register files invoke these macros and then write
+//! only their genuinely type-specific impls (casts, LinAlg, 64-bit gaps).
+
+/// `extract`/`insert` lane accessors: NEON `vgetq_lane`/`vsetq_lane` take an
+/// `i32` const generic, while the trait's `I` is a `usize` const generic, so a
+/// `match` (collapsed at monomorphization) bridges them.
+macro_rules! neon_lane_accessors {
+    ($get:ident, $set:ident; 2) => {
+        fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+            unsafe {
+                match I {
+                    0 => arch::$get::<0>(value),
+                    _ => arch::$get::<1>(value),
+                }
+            }
+        }
+
+        fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$set::<0>(element, value),
+                    _ => arch::$set::<1>(element, value),
+                }
+            }
+        }
+    };
+    ($get:ident, $set:ident; 4) => {
+        fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+            unsafe {
+                match I {
+                    0 => arch::$get::<0>(value),
+                    1 => arch::$get::<1>(value),
+                    2 => arch::$get::<2>(value),
+                    _ => arch::$get::<3>(value),
+                }
+            }
+        }
+
+        fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$set::<0>(element, value),
+                    1 => arch::$set::<1>(element, value),
+                    2 => arch::$set::<2>(element, value),
+                    _ => arch::$set::<3>(element, value),
+                }
+            }
+        }
+    };
+    ($get:ident, $set:ident; 8) => {
+        fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+            unsafe {
+                match I {
+                    0 => arch::$get::<0>(value),
+                    1 => arch::$get::<1>(value),
+                    2 => arch::$get::<2>(value),
+                    3 => arch::$get::<3>(value),
+                    4 => arch::$get::<4>(value),
+                    5 => arch::$get::<5>(value),
+                    6 => arch::$get::<6>(value),
+                    _ => arch::$get::<7>(value),
+                }
+            }
+        }
+
+        fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$set::<0>(element, value),
+                    1 => arch::$set::<1>(element, value),
+                    2 => arch::$set::<2>(element, value),
+                    3 => arch::$set::<3>(element, value),
+                    4 => arch::$set::<4>(element, value),
+                    5 => arch::$set::<5>(element, value),
+                    6 => arch::$set::<6>(element, value),
+                    _ => arch::$set::<7>(element, value),
+                }
+            }
+        }
+    };
+    ($get:ident, $set:ident; 16) => {
+        fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
+            unsafe {
+                match I {
+                    0 => arch::$get::<0>(value),
+                    1 => arch::$get::<1>(value),
+                    2 => arch::$get::<2>(value),
+                    3 => arch::$get::<3>(value),
+                    4 => arch::$get::<4>(value),
+                    5 => arch::$get::<5>(value),
+                    6 => arch::$get::<6>(value),
+                    7 => arch::$get::<7>(value),
+                    8 => arch::$get::<8>(value),
+                    9 => arch::$get::<9>(value),
+                    10 => arch::$get::<10>(value),
+                    11 => arch::$get::<11>(value),
+                    12 => arch::$get::<12>(value),
+                    13 => arch::$get::<13>(value),
+                    14 => arch::$get::<14>(value),
+                    _ => arch::$get::<15>(value),
+                }
+            }
+        }
+
+        fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$set::<0>(element, value),
+                    1 => arch::$set::<1>(element, value),
+                    2 => arch::$set::<2>(element, value),
+                    3 => arch::$set::<3>(element, value),
+                    4 => arch::$set::<4>(element, value),
+                    5 => arch::$set::<5>(element, value),
+                    6 => arch::$set::<6>(element, value),
+                    7 => arch::$set::<7>(element, value),
+                    8 => arch::$set::<8>(element, value),
+                    9 => arch::$set::<9>(element, value),
+                    10 => arch::$set::<10>(element, value),
+                    11 => arch::$set::<11>(element, value),
+                    12 => arch::$set::<12>(element, value),
+                    13 => arch::$set::<13>(element, value),
+                    14 => arch::$set::<14>(element, value),
+                    _ => arch::$set::<15>(element, value),
+                }
+            }
+        }
+    };
+}
+
+/// Multiplicative lane reduction (no NEON instruction exists): log2 fold via
+/// `vextq` rotations, ending in a lane-0 extract.
+macro_rules! neon_mul_reduce {
+    ($mul:ident, $ext:ident, $get:ident, $v:expr; 2) => {{
+        let v = $v;
+        unsafe { arch::$get::<0>(arch::$mul(v, arch::$ext::<1>(v, v))) }
+    }};
+    ($mul:ident, $ext:ident, $get:ident, $v:expr; 4) => {{
+        let v = $v;
+        unsafe {
+            let t = arch::$mul(v, arch::$ext::<2>(v, v));
+            arch::$get::<0>(arch::$mul(t, arch::$ext::<1>(t, t)))
+        }
+    }};
+    ($mul:ident, $ext:ident, $get:ident, $v:expr; 8) => {{
+        let v = $v;
+        unsafe {
+            let t = arch::$mul(v, arch::$ext::<4>(v, v));
+            let t = arch::$mul(t, arch::$ext::<2>(t, t));
+            arch::$get::<0>(arch::$mul(t, arch::$ext::<1>(t, t)))
+        }
+    }};
+    ($mul:ident, $ext:ident, $get:ident, $v:expr; 16) => {{
+        let v = $v;
+        unsafe {
+            let t = arch::$mul(v, arch::$ext::<8>(v, v));
+            let t = arch::$mul(t, arch::$ext::<4>(t, t));
+            let t = arch::$mul(t, arch::$ext::<2>(t, t));
+            arch::$get::<0>(arch::$mul(t, arch::$ext::<1>(t, t)))
+        }
+    }};
+}
+
+/// CoreRegister + BitwiseRegister + InterleaveRegister + MaskRegister +
+/// self-identity mask/bit casts - the mask-capable core shared by every
+/// native NEON register (`Mask = Self`, full-width lane masks).
+macro_rules! neon_mask_core {
+    (
+        $reg:ty, lanes: $n:tt($lt:ty), storage: $st:ident, suffix: $s:ident,
+        truthy: $truthy:expr, from_u: $from_u:ident
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl CoreRegister for $reg {
+                type Lanes = $lt;
+                type Storage = arch::$st;
+                type Mask = Self;
+
+                const IS_EMULATED: bool = false;
+                const ISA: InstructionSet = InstructionSet::NEON;
+                const HAS_EQUAL_SIZE_MASK: bool = true;
+                const EMPTY: Storage<Self> = empty_reg::<Self>();
+
+                fn blendv(mask: Storage<Self::Mask>, on_false: Storage<Self>, on_true: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_bsl_ $s>](mask, on_true, on_false)
+                }
+
+                fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_and_ $s>](value, mask)
+                }
+
+                fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+                    // keep value where mask is false: !mask & value
+                    arch::[<neon_andnot_ $s>](mask, value)
+                }
+
+                fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+                    if const { Z::N >= $n } {
+                        value
+                    } else {
+                        arch::[<neon_and_ $s>](value, const { arch::[<neon_keep_mask_ $s>](Z::N) })
+                    }
+                }
+
+                fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {
+                    mask
+                }
+            }
+
+            #[rustfmt::skip] #[thermite_macros::inline_always]
+            impl BitwiseRegister for $reg {
+                fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_xor_ $s>](lhs, rhs)
+                }
+
+                fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_and_ $s>](lhs, rhs)
+                }
+
+                fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_andnot_ $s>](lhs, rhs)
+                }
+
+                fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_or_ $s>](lhs, rhs)
+                }
+
+                fn not(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_not_ $s>](value)
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl InterleaveRegister for $reg {
+                fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+                    unsafe { (arch::[<vzip1q_ $s>](a, b), arch::[<vzip2q_ $s>](a, b)) }
+                }
+
+                fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+                    unsafe { (arch::[<vuzp1q_ $s>](a, b), arch::[<vuzp2q_ $s>](a, b)) }
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl MaskRegister for $reg {
+                const FALSY: Storage<Self> = empty_reg::<Self>();
+                const TRUTHY: Storage<Self> = reg::<Self, $n>([$truthy; $n]);
+
+                fn set(mut mask: Storage<Self>, lane: usize, value: bool) -> Storage<Self> {
+                    Self::as_mut_slice(&mut mask)[lane] = if value { MaskElement::TRUTHY } else { MaskElement::FALSY };
+                    mask
+                }
+
+                fn test(mask: Storage<Self>, lane: usize) -> bool {
+                    Self::as_slice(&mask)[lane].to_bool()
+                }
+
+                fn new_mask(value: GenericArray<bool, Self::Lanes>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_bools_to_mask_x $n>](value)) }
+                }
+
+                fn all(value: Storage<Self>) -> bool {
+                    arch::[<neon_mask_all_ $s>](value)
+                }
+
+                fn any(value: Storage<Self>) -> bool {
+                    arch::[<neon_mask_any_ $s>](value)
+                }
+
+                fn native_bitmask(value: Storage<Self>) -> Option<u64> {
+                    Some(arch::[<neon_movemask_ $s>](value))
+                }
+
+                #[cfg(feature = "bitvec")]
+                fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
+                    let mask = arch::[<neon_movemask_ $s>](value) as u32;
+                    let mask = bitvec::slice::BitSlice::from_slice(core::slice::from_ref(&mask));
+                    view.copy_from_bitslice(&mask[..<Self::Lanes as Unsigned>::USIZE]);
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl CastMaskRegister<$reg> for $reg {
+                fn mask_from(value: Storage<Self>) -> Storage<Self> {
+                    value
+                }
+            }
+        }
+    };
+}
+
+/// The `Register` impl: memory ops, lane accessors, splats, permutes.
+macro_rules! neon_register {
+    (
+        $reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident,
+        signed: $sg:ty, unsigned: $un:ty,
+        compress: $compress:tt
+        $(, extras: { $($extras:tt)* })?
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl Register for $reg {
+                type Element = $e;
+                type Signed = $sg;
+                type Unsigned = $un;
+
+                fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+                    arch::[<neon_nonzero_mask_ $s>](value)
+                }
+
+                fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {
+                    value
+                }
+
+                fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {
+                    arch::[<neon_msb_mask_ $s>](value)
+                }
+
+                fn new(value: GenericArray<Self::Element, Self::Lanes>) -> Storage<Self> {
+                    unsafe { arch::[<vld1q_ $s>](value.as_slice().as_ptr()) }
+                }
+
+                fn single(value: Self::Element) -> Storage<Self> {
+                    unsafe { arch::[<vsetq_lane_ $s>]::<0>(value, Self::EMPTY) }
+                }
+
+                fn splat(value: Self::Element) -> Storage<Self> {
+                    unsafe { arch::[<vdupq_n_ $s>](value) }
+                }
+
+                unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
+                    unsafe { arch::[<vld1q_ $s>](ptr) }
+                }
+
+                unsafe fn store(ptr: *mut Self::Element, value: Storage<Self>) {
+                    unsafe { arch::[<vst1q_ $s>](ptr, value) }
+                }
+
+                fn reverse(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_reverse_ $s>](value)
+                }
+
+                fn swap_bytes(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_swap_bytes_ $s>](value)
+                }
+
+                neon_lane_accessors!([<vgetq_lane_ $s>], [<vsetq_lane_ $s>]; $n);
+
+                neon_broadcast_align!([<vdupq_laneq_ $s>], [<vextq_ $s>]; $n);
+
+                const HAS_PERMUTEV: bool = true;
+
+                fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+                    let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
+                    arch::[<neon_tbl_ $s>](value, arch::neon_lane_table::<$n>(16 / $n, idxs))
+                }
+
+                // One TBL2 replaces the default's two-permute + blend lowering.
+                // Byte indices >= 32 (lane index >= 2 * LANES) yield zero, matching
+                // the permutev-based default's out-of-range behavior.
+                fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+                    let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
+                    arch::[<neon_tbl2_ $s>](a, b, arch::neon_lane_table::<$n>(16 / $n, idxs))
+                }
+
+                fn swizzle_const<I: crate::swizzle::SwizzleIndices<Self::Lanes>>(
+                    a: Storage<Self>,
+                    b: Storage<Self>,
+                ) -> Storage<Self> {
+                    arch::[<neon_tbl2_ $s>](a, b, const {
+                        arch::neon_lane_table::<$n>(16 / $n, unsafe {
+                            crate::generic_array::const_transmute(I::INDICES)
+                        })
+                    })
+                }
+
+                neon_compress_sel!($compress);
+
+                $($($extras)*)?
+            }
+        }
+    };
+}
+
+macro_rules! neon_compress_sel {
+    (table) => {
+        compress_via_table!();
+    };
+    (wide) => {
+        compress_via_wide!();
+    };
+}
+
+/// PartialOrdRegister via native compares (all element types, including the
+/// 64-bit ones SSE2/wasm have to emulate).
+macro_rules! neon_partial_ord {
+    ($reg:ty, suffix: $s:ident, from_u: $from_u:ident) => {
+        paste::paste! {
+            #[rustfmt::skip] #[thermite_macros::inline_always]
+            impl PartialOrdRegister for $reg {
+                fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<vceqq_ $s>](lhs, rhs)) }
+                }
+
+                fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<vcgtq_ $s>](lhs, rhs)) }
+                }
+
+                fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<vcgeq_ $s>](lhs, rhs)) }
+                }
+
+                fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<vcltq_ $s>](lhs, rhs)) }
+                }
+
+                fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<vcleq_ $s>](lhs, rhs)) }
+                }
+            }
+        }
+    };
+}
+
+/// x86-IMM8-encoded `ShuffleRegister` (per-lane blend) + `PermuteRegister`
+/// (2-bit lane indices) for 4- and 2-lane registers.
+macro_rules! neon_shuffle_permute {
+    ($reg:ty, suffix: $s:ident, from_u: $from_u:ident; 4) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl ShuffleRegister for $reg {
+                fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::blendv(
+                        unsafe { arch::$from_u(const { arch::neon_imm8x4_to_mask::<IMM8>() }) },
+                        lhs,
+                        rhs,
+                    )
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl PermuteRegister for $reg {
+                fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_tbl_ $s>](value, const { arch::neon_imm8x4_to_table::<IMM8>() })
+                }
+            }
+        }
+    };
+    ($reg:ty, suffix: $s:ident, from_u: $from_u:ident; 2) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl ShuffleRegister for $reg {
+                fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::blendv(
+                        unsafe { arch::$from_u(const { arch::neon_imm8x2_to_mask::<IMM8>() }) },
+                        lhs,
+                        rhs,
+                    )
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl PermuteRegister for $reg {
+                fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_tbl_ $s>](value, const { arch::neon_imm8x2_to_table::<IMM8>() })
+                }
+            }
+        }
+    };
+}
+
+/// NumericRegister for integer registers with native multiply and min/max
+/// (8/16/32-bit lanes; the 64-bit registers hand-write their gaps).
+macro_rules! neon_int_numeric {
+    ($reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl NumericRegister for $reg {
+                const ZERO: Storage<Self> = reg::<Self, $n>([0 as $e; $n]);
+                const ONE: Storage<Self> = reg::<Self, $n>([1 as $e; $n]);
+                const TWO: Storage<Self> = reg::<Self, $n>([2 as $e; $n]);
+
+                const MIN: Storage<Self> = reg::<Self, $n>([<$e>::MIN; $n]);
+                const MAX: Storage<Self> = reg::<Self, $n>([<$e>::MAX; $n]);
+
+                // One across-vector reduce + scalar compare; the default is
+                // all(eq(v, ZERO)) = CMEQ + UMINV. Exact for integers (every
+                // zero lane is all-zero bits; floats cannot do this: -0.0).
+                fn is_all_zero(value: Storage<Self>) -> bool {
+                    !arch::[<neon_mask_any_ $s>](value)
+                }
+
+                fn min_element(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vminvq_ $s>](value) }
+                }
+
+                fn max_element(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vmaxvq_ $s>](value) }
+                }
+
+                fn sum_elements(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vaddvq_ $s>](value) }
+                }
+
+                fn prod_elements(value: Storage<Self>) -> Self::Element {
+                    neon_mul_reduce!([<vmulq_ $s>], [<vextq_ $s>], [<vgetq_lane_ $s>], value; $n)
+                }
+
+                fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vpaddq_ $s>](lo, hi) }
+                }
+
+                fn offset() -> Storage<Self> {
+                    Self::splat(<Self::Lanes as Unsigned>::USIZE as $e)
+                }
+
+                fn indexed() -> Storage<Self> {
+                    const INDEXED: Storage<$reg> = {
+                        let mut a = [0 as $e; $n];
+                        let mut i = 0;
+                        while i < $n {
+                            a[i] = i as $e;
+                            i += 1;
+                        }
+                        reg::<$reg, $n>(a)
+                    };
+                    INDEXED
+                }
+
+                fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vaddq_ $s>](lhs, rhs) }
+                }
+
+                fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vsubq_ $s>](lhs, rhs) }
+                }
+
+                fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vmulq_ $s>](lhs, rhs) }
+                }
+
+                fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a.wrapping_div(b) })
+                }
+
+                fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a.wrapping_rem(b) })
+                }
+
+                fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vminq_ $s>](lhs, rhs) }
+                }
+
+                fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vmaxq_ $s>](lhs, rhs) }
+                }
+            }
+        }
+    };
+}
+
+/// BitshiftRegister: NEON's `vshlq` takes per-lane *signed* counts (negative
+/// shifts right), giving native uniform and per-lane shifts in one
+/// instruction. Logical right shifts run on the unsigned view, arithmetic on
+/// the signed view; `$cs`/`$cu` name those views' suffixes and `$ce` the
+/// count element type.
+macro_rules! neon_bitshift {
+    (
+        $reg:ty, suffix: $s:ident, unsigned: $us:ident, count: ($ce:ty, $cs:ident),
+        to_u: $to_u:ident, from_u: $from_u:ident, to_c: $to_c:ident,
+        bytes: ($to_b:ident, $from_b:ident)
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl BitshiftRegister for $reg {
+                const HAS_TRUE_SHIFTV: bool = true;
+                const HAS_WIDE_BYTE_SHIFTS: bool = true;
+
+                fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {
+                    unsafe { arch::[<vshlq_ $s>](value, arch::[<vdupq_n_ $cs>](shift as $ce)) }
+                }
+
+                fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {
+                    // logical: unsigned view, negated count
+                    unsafe {
+                        arch::$from_u(arch::[<vshlq_ $us>](
+                            arch::$to_u(value),
+                            arch::[<vdupq_n_ $cs>](-(shift as $ce)),
+                        ))
+                    }
+                }
+
+                fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+                    unsafe { arch::[<vshlq_ $s>](value, arch::$to_c(shifts)) }
+                }
+
+                fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+                    unsafe {
+                        arch::$from_u(arch::[<vshlq_ $us>](
+                            arch::$to_u(value),
+                            arch::[<vnegq_ $cs>](arch::$to_c(shifts)),
+                        ))
+                    }
+                }
+
+                fn bshli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_b(arch::neon_bshli_u8x16::<IMM8>(arch::$to_b(value))) }
+                }
+
+                fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_b(arch::neon_bshri_u8x16::<IMM8>(arch::$to_b(value))) }
+                }
+
+                fn reverse_bits(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_bitrev_ $us>](arch::$to_u(value))) }
+                }
+            }
+        }
+    };
+}
+
+/// IntegerRegister for 8/16/32-bit lanes (native mul, saturating ops, popcnt,
+/// clz; ctz via `rbit`).
+macro_rules! neon_int_register {
+    ($reg:ty, suffix: $s:ident, unsigned: $us:ident, to_u: $to_u:ident, from_u: $from_u:ident, div: $div:ident) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl IntegerRegister for $reg {
+                fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_mulhi_ $s>](lhs, rhs)
+                }
+
+                fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vmulq_ $s>](lhs, rhs) }
+                }
+
+                fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vqaddq_ $s>](lhs, rhs) }
+                }
+
+                fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vqsubq_ $s>](lhs, rhs) }
+                }
+
+                fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
+                    arch::[<div_ $div>]::<Self>(value, divider.multiplier(), divider.shift())
+                }
+
+                fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
+                    arch::[<div_ $div _bf>]::<Self>(value, divider.multiplier(), divider.shift())
+                }
+
+                fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
+                    arch::[<divv_ $div _bf>]::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
+                }
+
+                const HAS_HARDWARE_POPCNT: bool = true;
+
+                fn count_ones(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_popcnt_ $us>](arch::$to_u(value))) }
+                }
+
+                fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_clz_ $us>](arch::$to_u(value))) }
+                }
+
+                fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_ctz_ $us>](arch::$to_u(value))) }
+                }
+            }
+        }
+    };
+}
+
+/// NumericRegister + SignedRegister + FloatRegister for the float registers.
+macro_rules! neon_float_register {
+    (
+        $reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident, from_u: $from_u:ident,
+        bits: $bits:ty, signed_bits: $sbits:ty, extended: $ext:ty,
+        exp_mask: $exp_mask:expr
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl NumericRegister for $reg {
+                const ZERO: Storage<Self> = reg::<Self, $n>([0.0; $n]);
+                const ONE: Storage<Self> = reg::<Self, $n>([1.0; $n]);
+                const TWO: Storage<Self> = reg::<Self, $n>([2.0; $n]);
+
+                const MIN: Storage<Self> = reg::<Self, $n>([<$e>::MIN; $n]);
+                const MAX: Storage<Self> = reg::<Self, $n>([<$e>::MAX; $n]);
+
+                fn min_element(value: Storage<Self>) -> Self::Element {
+                    cfg_select! {
+                        feature = "strict_ieee754" => {
+                            unsafe { arch::[<vminnmvq_ $s>](value) }
+                        }
+                        _ => unsafe { arch::[<vminvq_ $s>](value) },
+                    }
+                }
+
+                fn max_element(value: Storage<Self>) -> Self::Element {
+                    cfg_select! {
+                        feature = "strict_ieee754" => {
+                            unsafe { arch::[<vmaxnmvq_ $s>](value) }
+                        }
+                        _ => unsafe { arch::[<vmaxvq_ $s>](value) },
+                    }
+                }
+
+                fn sum_elements(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vaddvq_ $s>](value) }
+                }
+
+                fn prod_elements(value: Storage<Self>) -> Self::Element {
+                    neon_mul_reduce!([<vmulq_ $s>], [<vextq_ $s>], [<vgetq_lane_ $s>], value; $n)
+                }
+
+                fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vpaddq_ $s>](lo, hi) }
+                }
+
+                fn offset() -> Storage<Self> {
+                    Self::splat(<Self::Lanes as Unsigned>::USIZE as $e)
+                }
+
+                fn indexed() -> Storage<Self> {
+                    const INDEXED: Storage<$reg> = {
+                        let mut a = [0.0 as $e; $n];
+                        let mut i = 0;
+                        while i < $n {
+                            a[i] = i as $e;
+                            i += 1;
+                        }
+                        reg::<$reg, $n>(a)
+                    };
+                    INDEXED
+                }
+
+                fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vaddq_ $s>](lhs, rhs) }
+                }
+
+                fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vsubq_ $s>](lhs, rhs) }
+                }
+
+                fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vmulq_ $s>](lhs, rhs) }
+                }
+
+                fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vdivq_ $s>](lhs, rhs) }
+                }
+
+                fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::nmul_adde(Self::trunc(Self::div(lhs, rhs)), rhs, lhs)
+                }
+
+                fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    cfg_select! {
+                        // IEEE 754 minimumNumber (NaN yields the other operand),
+                        // matching the scalar oracle's `f32::min`.
+                        feature = "strict_ieee754" => {
+                            unsafe { arch::[<vminnmq_ $s>](lhs, rhs) }
+                        }
+                        _ => unsafe { arch::[<vminq_ $s>](lhs, rhs) },
+                    }
+                }
+
+                fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    cfg_select! {
+                        feature = "strict_ieee754" => {
+                            unsafe { arch::[<vmaxnmq_ $s>](lhs, rhs) }
+                        }
+                        _ => unsafe { arch::[<vmaxq_ $s>](lhs, rhs) },
+                    }
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl SignedRegister for $reg {
+                const NEG_ONE: Storage<Self> = reg::<Self, $n>([-1.0; $n]);
+                const MIN_POSITIVE: Storage<Self> = reg::<Self, $n>([<$e>::MIN_POSITIVE; $n]);
+
+                fn neg(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vnegq_ $s>](value) }
+                }
+
+                fn abs(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vabsq_ $s>](value) }
+                }
+
+                fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    // (!(-0.0) & lhs) | (-0.0 & rhs): lhs's magnitude, rhs's sign
+                    Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
+                }
+
+                fn signum(value: Storage<Self>) -> Storage<Self> {
+                    Self::bitor(Self::ONE, Self::bitand(value, Self::NEG_ZERO))
+                }
+
+                fn neg_c(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+                    Self::bitxor(value, Self::bitand(Self::NEG_ZERO, mask))
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl FloatRegister for $reg {
+                // AdvSIMD FMLA is a true fused multiply-add.
+                const HAS_TRUE_FMA: bool = true;
+
+                type Bits = $bits;
+                type SignedBits = $sbits;
+                type ExtendedPrecision = $ext;
+
+                const HALF: Storage<Self> = reg::<Self, $n>([0.5; $n]);
+                const NEG_ZERO: Storage<Self> = reg::<Self, $n>([-0.0; $n]);
+                const EPSILON: Storage<Self> = reg::<Self, $n>([<$e>::EPSILON; $n]);
+                const INFINITY: Storage<Self> = reg::<Self, $n>([<$e>::INFINITY; $n]);
+                const NEG_INFINITY: Storage<Self> = reg::<Self, $n>([<$e>::NEG_INFINITY; $n]);
+                const NAN: Storage<Self> = reg::<Self, $n>([<$e>::NAN; $n]);
+
+                const EXP_MASK: Storage<Self::Bits> = reg::<$bits, $n>([$exp_mask; $n]);
+
+                // vfmaq(acc, a, b) = acc + a * b; vfmsq(acc, a, b) = acc - a * b.
+                fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vfmaq_ $s>](acc, lhs, rhs) }
+                }
+
+                fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    // lhs * rhs - acc = -(acc - lhs * rhs)
+                    unsafe { arch::[<vnegq_ $s>](arch::[<vfmsq_ $s>](acc, lhs, rhs)) }
+                }
+
+                fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vfmsq_ $s>](acc, lhs, rhs) }
+                }
+
+                fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    // -(lhs * rhs) - acc = -(acc + lhs * rhs)
+                    unsafe { arch::[<vnegq_ $s>](arch::[<vfmaq_ $s>](acc, lhs, rhs)) }
+                }
+
+                // With true FMA the estimating forms are the fused forms.
+                fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    Self::mul_add(lhs, rhs, acc)
+                }
+
+                fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    Self::mul_sub(lhs, rhs, acc)
+                }
+
+                fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    Self::nmul_add(lhs, rhs, acc)
+                }
+
+                fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
+                    Self::nmul_sub(lhs, rhs, acc)
+                }
+
+                fn sqrt(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vsqrtq_ $s>](value) }
+                }
+
+                // Absolute-compare instructions do classify in ONE op (the
+                // defaults are abs + compare). FACGE/FACLT are IEEE unordered
+                // compares: NaN operands yield false, exactly matching
+                // is_infinite(NaN) = false / is_finite(NaN) = false.
+                fn is_infinite(value: Storage<Self>) -> Storage<Self::Mask> {
+                    // |v| >= inf can only hold for |v| == inf
+                    unsafe { arch::$from_u(arch::[<vcageq_ $s>](value, Self::INFINITY)) }
+                }
+
+                fn is_finite(value: Storage<Self>) -> Storage<Self::Mask> {
+                    unsafe { arch::$from_u(arch::[<vcaltq_ $s>](value, Self::INFINITY)) }
+                }
+
+                const HAS_APPROX_RCP: bool = true;
+                const HAS_APPROX_RSQRT: bool = true;
+
+                // `vrecpe`/`vrsqrte` + one fused Newton step (see polyfills/math.rs
+                // for why the step is included).
+                fn rcp(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_rcp_ $s>](value)
+                }
+
+                fn rsqrt(value: Storage<Self>) -> Storage<Self> {
+                    arch::[<neon_rsqrt_ $s>](value)
+                }
+
+                fn floor(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vrndmq_ $s>](value) }
+                }
+
+                fn ceil(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vrndpq_ $s>](value) }
+                }
+
+                fn round(value: Storage<Self>) -> Storage<Self> {
+                    // round-half-to-even, matching x86 `roundps` / wasm `nearest`
+                    unsafe { arch::[<vrndnq_ $s>](value) }
+                }
+
+                fn trunc(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vrndq_ $s>](value) }
+                }
+
+                const NATIVE_CAP: NativeCapability = NativeCapability::NONE;
+            }
+        }
+    };
+}
+
+/// SignedRegister + SignedIntegerRegister for the signed integer registers
+/// (native `vnegq`/`vabsq` on all four widths - aarch64 includes the 64-bit
+/// forms - and `vcltzq`/`vcgezq` sign tests).
+macro_rules! neon_signed_int {
+    (
+        $reg:ty, lanes: $n:tt, suffix: $s:ident, count: $ce:ty, from_u: $from_u:ident, to_c: $to_c:ident
+        $(, signed_extras: { $($sx:tt)* })?
+        $(, extras: { $($extras:tt)* })?
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl SignedRegister for $reg {
+                const NEG_ONE: Storage<Self> = reg::<Self, $n>([-1; $n]);
+                const MIN_POSITIVE: Storage<Self> = reg::<Self, $n>([1; $n]);
+
+                fn neg(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vnegq_ $s>](value) }
+                }
+
+                fn abs(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vabsq_ $s>](value) }
+                }
+
+                fn is_negative(value: Storage<Self>) -> Storage<Self::Mask> {
+                    unsafe { arch::$from_u(arch::[<vcltzq_ $s>](value)) }
+                }
+
+                fn is_positive(value: Storage<Self>) -> Storage<Self::Mask> {
+                    unsafe { arch::$from_u(arch::[<vcgezq_ $s>](value)) }
+                }
+
+                $($($sx)*)?
+            }
+
+            #[thermite_macros::inline_always]
+            impl SignedIntegerRegister for $reg {
+                fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
+                    unsafe { arch::[<vshlq_ $s>](value, arch::[<vdupq_n_ $s>](-(shift as $ce))) }
+                }
+
+                fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+                    unsafe { arch::[<vshlq_ $s>](value, arch::[<vnegq_ $s>](arch::$to_c(shifts))) }
+                }
+
+                $($($extras)*)?
+            }
+        }
+    };
+}
+
+/// UnsignedIntegerRegister for 8/16/32-bit lanes: native rounding/truncating
+/// halving adds (`vrhaddq`/`vhaddq`) and absolute difference (`vabdq`), each a
+/// single instruction where the defaults take three ops.
+macro_rules! neon_unsigned_int {
+    (
+        $reg:ty, suffix: $s:ident, neg: ($ss:ident, $to_s:ident)
+        $(, extras: { $($extras:tt)* })?
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl UnsignedIntegerRegister for $reg {
+                fn avg(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vrhaddq_ $s>](a, b) }
+                }
+
+                fn abs_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vabdq_ $s>](a, b) }
+                }
+
+                // `!0 >> clz(v)`: 3 instructions (CLZ, NEG, USHL) vs the
+                // default's log2(W)-step shift-or cascade. `v == 0` falls out
+                // naturally: clz = W, and NEON logical shifts by >= W yield 0.
+                fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {
+                    unsafe {
+                        let clz = arch::[<neon_clz_ $s>](value);
+                        arch::[<vshlq_ $s>](Self::MAX, arch::[<vnegq_ $ss>](arch::$to_s(clz)))
+                    }
+                }
+
+                // Per-lane bit width: `W - clz(v)`, 2 instructions (the default
+                // composes popcount(next_power_of_two_m1(v)), ~7). `v == 0`
+                // falls out: clz = W, so W - W = 0.
+                fn ilog2p1(value: Storage<Self>) -> Storage<Self> {
+                    unsafe {
+                        let w = Self::splat((core::mem::size_of::<<Self as Register>::Element>() * 8) as _);
+                        arch::[<vsubq_ $s>](w, arch::[<neon_clz_ $s>](value))
+                    }
+                }
+
+                $($($extras)*)?
+            }
+        }
+    };
+}
+
+/// NumericRegister + IntegerRegister for the 64-bit integer registers. NEON
+/// has no 64-bit lane multiply or min/max: multiply decomposes into 32x32
+/// partials (`neon_mullo_u64`), min/max are compare+select (native 64-bit
+/// compares exist on aarch64), `mulhi` is scalar 128-bit math on two lanes,
+/// and the element reductions are two-lane extracts.
+macro_rules! neon_int64_register {
+    (
+        $reg:ty, elem: $e:ty, suffix: $s:ident, wide: $w:ty,
+        minmax: ($min:ident, $max:ident), to_u: $to_u:ident, from_u: $from_u:ident, div: $div:ident
+    ) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl NumericRegister for $reg {
+                const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
+                const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
+                const TWO: Storage<Self> = reg::<Self, 2>([2; 2]);
+
+                const MIN: Storage<Self> = reg::<Self, 2>([<$e>::MIN; 2]);
+                const MAX: Storage<Self> = reg::<Self, 2>([<$e>::MAX; 2]);
+
+                fn is_all_zero(value: Storage<Self>) -> bool {
+                    !arch::[<neon_mask_any_ $s>](value)
+                }
+
+                fn min_element(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vgetq_lane_ $s>]::<0>(value).min(arch::[<vgetq_lane_ $s>]::<1>(value)) }
+                }
+
+                fn max_element(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vgetq_lane_ $s>]::<0>(value).max(arch::[<vgetq_lane_ $s>]::<1>(value)) }
+                }
+
+                fn sum_elements(value: Storage<Self>) -> Self::Element {
+                    unsafe { arch::[<vaddvq_ $s>](value) }
+                }
+
+                fn prod_elements(value: Storage<Self>) -> Self::Element {
+                    unsafe {
+                        arch::[<vgetq_lane_ $s>]::<0>(value).wrapping_mul(arch::[<vgetq_lane_ $s>]::<1>(value))
+                    }
+                }
+
+                fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vpaddq_ $s>](lo, hi) }
+                }
+
+                fn offset() -> Storage<Self> {
+                    Self::splat(<Self::Lanes as Unsigned>::USIZE as $e)
+                }
+
+                fn indexed() -> Storage<Self> {
+                    const INDEXED: Storage<$reg> = reg::<$reg, 2>([0, 1]);
+                    INDEXED
+                }
+
+                fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vaddq_ $s>](lhs, rhs) }
+                }
+
+                fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vsubq_ $s>](lhs, rhs) }
+                }
+
+                fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    // sign-agnostic 32x32 partial-product decomposition
+                    unsafe { arch::$from_u(arch::neon_mullo_u64(arch::$to_u(lhs), arch::$to_u(rhs))) }
+                }
+
+                fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a.wrapping_div(b) })
+                }
+
+                fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    Self::zip(lhs, rhs, |a, b| if b == 0 { 0 } else { a.wrapping_rem(b) })
+                }
+
+                fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::$min(lhs, rhs)
+                }
+
+                fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    arch::$max(lhs, rhs)
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl IntegerRegister for $reg {
+                fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe {
+                        let a0 = arch::[<vgetq_lane_ $s>]::<0>(lhs);
+                        let a1 = arch::[<vgetq_lane_ $s>]::<1>(lhs);
+                        let b0 = arch::[<vgetq_lane_ $s>]::<0>(rhs);
+                        let b1 = arch::[<vgetq_lane_ $s>]::<1>(rhs);
+
+                        let r = [
+                            (((a0 as $w) * (b0 as $w)) >> 64) as $e,
+                            (((a1 as $w) * (b1 as $w)) >> 64) as $e,
+                        ];
+                        arch::[<vld1q_ $s>](r.as_ptr())
+                    }
+                }
+
+                fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    <Self as NumericRegister>::mul(lhs, rhs)
+                }
+
+                fn saturating_add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vqaddq_ $s>](lhs, rhs) }
+                }
+
+                fn saturating_sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::[<vqsubq_ $s>](lhs, rhs) }
+                }
+
+                fn div_branched(value: Storage<Self>, divider: crate::Divider<Self::Element>) -> Storage<Self> {
+                    arch::[<div_ $div>]::<Self>(value, divider.multiplier(), divider.shift())
+                }
+
+                fn div_branchfree(value: Storage<Self>, divider: crate::BranchfreeDivider<Self::Element>) -> Storage<Self> {
+                    arch::[<div_ $div _bf>]::<Self>(value, divider.multiplier(), divider.shift())
+                }
+
+                fn divv_branchfree(value: Storage<Self>, dividers: crate::divider::vector::VectorDivider<Self>) -> Storage<Self> {
+                    arch::[<divv_ $div _bf>]::<Self>(value, dividers.multipliers.0, dividers.shifts.0)
+                }
+
+                const HAS_HARDWARE_POPCNT: bool = true;
+
+                fn count_ones(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::neon_popcnt_u64(arch::$to_u(value))) }
+                }
+
+                fn leading_zeros(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::neon_clz_u64(arch::$to_u(value))) }
+                }
+
+                fn trailing_zeros(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::neon_ctz_u64(arch::$to_u(value))) }
+                }
+            }
+        }
+    };
+}
+
+/// `ExtendRegister<scalar>` - the bottom rung of the sub-native width ladder:
+/// a 1-lane scalar "register" extends into lane 0.
+macro_rules! neon_extend_scalar {
+    ($reg:ty, elem: $e:ty) => {
+        #[thermite_macros::inline_always]
+        impl crate::register::ExtendRegister<$e> for $reg {
+            fn extend(value: Storage<$e>) -> Storage<Self> {
+                Self::single(value)
+            }
+
+            fn narrow(value: Storage<Self>) -> Storage<$e> {
+                Self::extract::<0>(value)
+            }
+        }
+    };
+}
+
+/// Widen/narrow casts between a native register and the double-width
+/// `ArrayRegister` pair: `vmovl`/`vmovl_high` widen, `vmovn` truncates
+/// (wrapping, Rust `as`), `vqmovn` saturates.
+macro_rules! neon_widen_casts {
+    ($narrow_reg:ty => [$wide_reg:ty; 2], suffixes: $s:ident/$w:ident) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl crate::register::CastRegister<$narrow_reg> for ArrayRegister<$wide_reg, 2> {
+                fn cast_from(value: Storage<$narrow_reg>) -> Storage<Self> {
+                    unsafe {
+                        ArrayRegister([
+                            arch::[<vmovl_ $s>](arch::[<vget_low_ $s>](value)),
+                            arch::[<vmovl_high_ $s>](value),
+                        ])
+                    }
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl crate::register::CastRegister<ArrayRegister<$wide_reg, 2>> for $narrow_reg {
+                fn cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
+                    unsafe { arch::[<vmovn_high_ $w>](arch::[<vmovn_ $w>](value.0[0]), value.0[1]) }
+                }
+            }
+
+            #[thermite_macros::inline_always]
+            impl crate::register::SaturatingCastRegister<ArrayRegister<$wide_reg, 2>> for $narrow_reg {
+                fn saturating_cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
+                    unsafe { arch::[<vqmovn_high_ $w>](arch::[<vqmovn_ $w>](value.0[0]), value.0[1]) }
+                }
+            }
+        }
+    };
+}
+
+/// `ConcatRegister<scalar>` for the 2-lane registers: a q-register is the
+/// concatenation of two scalar "1-lane registers".
+macro_rules! neon_concat_scalar2 {
+    ($reg:ty, elem: $e:ty, suffix: $s:ident) => {
+        paste::paste! {
+            #[thermite_macros::inline_always]
+            impl crate::register::ConcatRegister<$e> for $reg {
+                fn concat(lo: Storage<$e>, hi: Storage<$e>) -> Storage<Self> {
+                    unsafe {
+                        arch::[<vsetq_lane_ $s>]::<1>(hi, arch::[<vsetq_lane_ $s>]::<0>(lo, Self::EMPTY))
+                    }
+                }
+
+                fn split(value: Storage<Self>) -> (Storage<$e>, Storage<$e>) {
+                    unsafe {
+                        (
+                            arch::[<vgetq_lane_ $s>]::<0>(value),
+                            arch::[<vgetq_lane_ $s>]::<1>(value),
+                        )
+                    }
+                }
+            }
+        }
+    };
+}
+
+/// `broadcast` (single instruction `DUP Vd.T, Vn.T[lane]` - the trait default
+/// round-trips through a GPR via `splat(extract(v))`) and `align` (single
+/// instruction `EXT` - the trait default lowers to two `TBL`s + `BSL`).
+/// Match arms collapse at monomorphization.
+macro_rules! neon_broadcast_align {
+    ($dup:ident, $ext:ident; 2) => {
+        fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$dup::<0>(value),
+                    _ => arch::$dup::<1>(value),
+                }
+            }
+        }
+
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match OFFSET {
+                    0 => a,
+                    1 => arch::$ext::<1>(a, b),
+                    2 => b,
+                    _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                }
+            }
+        }
+    };
+    ($dup:ident, $ext:ident; 4) => {
+        fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$dup::<0>(value),
+                    1 => arch::$dup::<1>(value),
+                    2 => arch::$dup::<2>(value),
+                    _ => arch::$dup::<3>(value),
+                }
+            }
+        }
+
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match OFFSET {
+                    0 => a,
+                    1 => arch::$ext::<1>(a, b),
+                    2 => arch::$ext::<2>(a, b),
+                    3 => arch::$ext::<3>(a, b),
+                    4 => b,
+                    _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                }
+            }
+        }
+    };
+    ($dup:ident, $ext:ident; 8) => {
+        fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$dup::<0>(value),
+                    1 => arch::$dup::<1>(value),
+                    2 => arch::$dup::<2>(value),
+                    3 => arch::$dup::<3>(value),
+                    4 => arch::$dup::<4>(value),
+                    5 => arch::$dup::<5>(value),
+                    6 => arch::$dup::<6>(value),
+                    _ => arch::$dup::<7>(value),
+                }
+            }
+        }
+
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match OFFSET {
+                    0 => a,
+                    1 => arch::$ext::<1>(a, b),
+                    2 => arch::$ext::<2>(a, b),
+                    3 => arch::$ext::<3>(a, b),
+                    4 => arch::$ext::<4>(a, b),
+                    5 => arch::$ext::<5>(a, b),
+                    6 => arch::$ext::<6>(a, b),
+                    7 => arch::$ext::<7>(a, b),
+                    8 => b,
+                    _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                }
+            }
+        }
+    };
+    ($dup:ident, $ext:ident; 16) => {
+        fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match I {
+                    0 => arch::$dup::<0>(value),
+                    1 => arch::$dup::<1>(value),
+                    2 => arch::$dup::<2>(value),
+                    3 => arch::$dup::<3>(value),
+                    4 => arch::$dup::<4>(value),
+                    5 => arch::$dup::<5>(value),
+                    6 => arch::$dup::<6>(value),
+                    7 => arch::$dup::<7>(value),
+                    8 => arch::$dup::<8>(value),
+                    9 => arch::$dup::<9>(value),
+                    10 => arch::$dup::<10>(value),
+                    11 => arch::$dup::<11>(value),
+                    12 => arch::$dup::<12>(value),
+                    13 => arch::$dup::<13>(value),
+                    14 => arch::$dup::<14>(value),
+                    _ => arch::$dup::<15>(value),
+                }
+            }
+        }
+
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            unsafe {
+                match OFFSET {
+                    0 => a,
+                    1 => arch::$ext::<1>(a, b),
+                    2 => arch::$ext::<2>(a, b),
+                    3 => arch::$ext::<3>(a, b),
+                    4 => arch::$ext::<4>(a, b),
+                    5 => arch::$ext::<5>(a, b),
+                    6 => arch::$ext::<6>(a, b),
+                    7 => arch::$ext::<7>(a, b),
+                    8 => arch::$ext::<8>(a, b),
+                    9 => arch::$ext::<9>(a, b),
+                    10 => arch::$ext::<10>(a, b),
+                    11 => arch::$ext::<11>(a, b),
+                    12 => arch::$ext::<12>(a, b),
+                    13 => arch::$ext::<13>(a, b),
+                    14 => arch::$ext::<14>(a, b),
+                    15 => arch::$ext::<15>(a, b),
+                    16 => b,
+                    _ => Self::swizzle_const::<crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                }
+            }
+        }
+    };
+}

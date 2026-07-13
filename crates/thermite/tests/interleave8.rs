@@ -4,12 +4,14 @@
 //! (3) deinterleave directly against a scalar even/odd oracle. This guards the v2 `pshufb`
 //! deinterleave and the v3 AVX2 cross-lane `unpack`/`permute4x64` sequences (and the v1
 //! scalar fallback).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
 use generic_array::typenum::Unsigned;
 use thermite::register::{CoreRegister, InterleaveRegister as _};
+// Which of these are used varies by backend cfg (x86 / wasm / neon).
+#[allow(unused_imports)]
 use thermite::simd::{NativeSimd, Simd};
 
 macro_rules! interleave_roundtrip {
@@ -79,4 +81,14 @@ mod wasm {
 
     interleave_roundtrip!(i8x16, <Wasm as NativeSimd>::i8xN, i8);
     interleave_roundtrip!(u8x16, <Wasm as NativeSimd>::u8xN, u8);
+}
+
+// NEON: native 16-lane i8x16/u8x16 (= the fixed i8x16 slot).
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    interleave_roundtrip!(i8x16, <Neon as NativeSimd>::i8xN, i8);
+    interleave_roundtrip!(u8x16, <Neon as NativeSimd>::u8xN, u8);
 }

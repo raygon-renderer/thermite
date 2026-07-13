@@ -25,6 +25,9 @@ pub mod x86_v3;
 #[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
 pub mod wasm;
 
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+pub mod neon;
+
 #[cfg(all(feature = "spirv", target_arch = "spirv"))]
 pub mod spirv;
 

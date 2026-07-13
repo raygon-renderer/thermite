@@ -5,7 +5,7 @@
 //!
 //! Masks are built from comparisons (known per-lane bool patterns) and every
 //! operation is checked against the booleans computed in plain Rust.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32"))]
+#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
 
 mod harness;
 
@@ -127,6 +127,13 @@ mod wasm_reg {
     reg_mask_suite!(reg_wasm, Wasm, "wasm");
 }
 
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon_reg {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    reg_mask_suite!(reg_neon, Neon, "neon");
+}
+
 /// The same `MaskRegister` primitives on the 3-lane `ReducedRegister` mask types
 /// (`set`/`test`/`new_mask`/`native_bitmask`/`from_mask`/bitwise), which the
 /// native-width suite above doesn't reach.
@@ -171,6 +178,24 @@ mod reduced_mask_wasm {
     }
     t3!(wasm_f32x3A, Wasm, f32x3A, "wasm");
     t3!(wasm_i64x3A, Wasm, i64x3A, "wasm");
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod reduced_mask_neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    use thermite::simd::Simd3A;
+
+    macro_rules! t3 {
+        ($name:ident, $backend:ty, $reg:ident, $bl:expr) => {
+            #[test]
+            fn $name() {
+                check_mask_reg::<<$backend as Simd3A>::$reg>(concat!($bl, " ", stringify!($reg)));
+            }
+        };
+    }
+    t3!(neon_f32x3A, Neon, f32x3A, "neon");
+    t3!(neon_i64x3A, Neon, i64x3A, "neon");
 }
 
 macro_rules! mask_suite {
@@ -325,4 +350,11 @@ mod wasm {
     use super::*;
     use thermite::backend::wasm::Wasm;
     mask_suite!(wasm, Wasm);
+}
+
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+mod neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+    mask_suite!(neon, Neon);
 }
