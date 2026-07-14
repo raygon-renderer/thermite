@@ -31,6 +31,34 @@ impl<V: FloatVector, const N: usize> Vector<V, N> {
         Self(coords)
     }
 
+    /// Load `V::LANES` vectors from an interleaved (array-of-structures) span -
+    /// a `&[[f32; N]]`, the layout every mesh, buffer and file format actually
+    /// uses - transposing to SoA on the way in.
+    ///
+    /// `self.0[c]` ends up holding component `c` of all `LANES` input vectors:
+    /// `out[c].extract(lane) == ptr[lane * N + c]`. For `N == 3` on NEON this is
+    /// a single `LD3` - the transpose happens in the load unit - and a shuffle
+    /// network elsewhere.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for reads of `N * V::LANES` elements.
+    #[inline(always)]
+    pub unsafe fn load_interleaved(ptr: *const V::Element) -> Self {
+        Self(unsafe { V::load_deinterleaved::<N>(ptr) })
+    }
+
+    /// Store `V::LANES` vectors back to an interleaved span - the exact inverse
+    /// of [`load_interleaved`](Self::load_interleaved) (`ST3` on NEON).
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for writes of `N * V::LANES` elements.
+    #[inline(always)]
+    pub unsafe fn store_interleaved(self, ptr: *mut V::Element) {
+        unsafe { V::store_interleaved::<N>(ptr, self.0) }
+    }
+
     #[inline(always)]
     pub fn min(mut self, other: Self) -> Self {
         for i in 0..N {

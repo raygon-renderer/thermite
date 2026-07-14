@@ -67,6 +67,22 @@ struct Rays {
     dz: Vec<f32>,
 }
 
+/// AoS rays - origin and direction interleaved, the way a renderer actually
+/// stores them (and the way glam/nalgebra consume them here).
+///
+/// `#[repr(C)]` over six contiguous `f32`, so a `&[Ray]` is an interleaved
+/// `oxoyozdxdydz...` span and a batch of `LANES` rays is exactly a 6-stream
+/// AoS -> SoA load. The SoA kernels above get their de-interleaving for free
+/// (someone else paid for it, off the clock); this one pays for it inline via
+/// [`GenericVector::load_deinterleaved`], which is the honest comparison against
+/// the AoS scalar kernels.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct Ray {
+    o: [f32; 3],
+    d: [f32; 3],
+}
+
 /// `v0` plus precomputed edges `v1 - v0` and `v2 - v0`.
 #[derive(Clone, Copy)]
 struct Tri {
@@ -112,6 +128,7 @@ struct NaWideTri {
 
 struct Scene {
     rays: Rays,
+    rays_aos: Vec<Ray>,
     glam_o: Vec<Vec3A>,
     glam_d: Vec<Vec3A>,
     na_o: Vec<Point3<f32>>,
@@ -182,6 +199,13 @@ fn make_scene() -> Scene {
     );
     let m = glam_m.to_cols_array();
     let na_m = Matrix4::from_column_slice(&m);
+
+    let rays_aos: Vec<Ray> = (0..N)
+        .map(|i| Ray {
+            o: [rays.ox[i], rays.oy[i], rays.oz[i]],
+            d: [rays.dx[i], rays.dy[i], rays.dz[i]],
+        })
+        .collect();
 
     let glam_o: Vec<Vec3A> = (0..N).map(|i| Vec3A::new(rays.ox[i], rays.oy[i], rays.oz[i])).collect();
     let glam_d: Vec<Vec3A> = (0..N).map(|i| Vec3A::new(rays.dx[i], rays.dy[i], rays.dz[i])).collect();
@@ -262,6 +286,7 @@ fn make_scene() -> Scene {
 
     Scene {
         rays,
+        rays_aos,
         glam_o,
         glam_d,
         na_o,
@@ -495,6 +520,103 @@ fn cross3<V: FloatVector>(a: &[V; 3], b: &[V; 3]) -> [V; 3] {
     ]
 }
 
+/// The branchless Moller-Trumbore inner loop for one batch of rays already in
+/// object space: every lane evaluates every triangle, masks pick the winners.
+/// Shared verbatim by the SoA and AoS kernels so they differ ONLY in how the
+/// batch was loaded.
+#[inline(always)]
+fn nearest_hit<V: FloatVector<Element = f32>>(o: &[V; 3], d: &[V; 3], tris: &[Tri], eps: V, t_min: V) -> V {
+    let mut t_near = V::INFINITY;
+
+    let mut k = 0;
+    while k < tris.len() {
+        let tri = &tris[k];
+        let v0 = [V::splat(tri.v0[0]), V::splat(tri.v0[1]), V::splat(tri.v0[2])];
+        let e1 = [V::splat(tri.e1[0]), V::splat(tri.e1[1]), V::splat(tri.e1[2])];
+        let e2 = [V::splat(tri.e2[0]), V::splat(tri.e2[1]), V::splat(tri.e2[2])];
+
+        let p = cross3(d, &e2);
+        let det = dot3(&e1, &p);
+        let inv = V::ONE / det;
+        let s = [o[0] - v0[0], o[1] - v0[1], o[2] - v0[2]];
+        let u = dot3(&s, &p) * inv;
+        let q = cross3(&s, &e1);
+        let v = dot3(d, &q) * inv;
+        let t = dot3(&e2, &q) * inv;
+
+        // No separate u > 1 test; u + v <= 1 with v >= 0 covers it.
+        let hit =
+            det.abs().cmp_gt(eps) & u.cmp_ge(V::ZERO) & v.cmp_ge(V::ZERO) & (u + v).cmp_le(V::ONE) & t.cmp_gt(t_min);
+        t_near = t_near.min(hit.select(t, V::INFINITY));
+        k += 1;
+    }
+
+    let found = t_near.cmp_lt(V::INFINITY);
+    found.select(t_near, V::ZERO)
+}
+
+/// AoS variant: the rays arrive interleaved and are de-interleaved inline, in
+/// one call per batch - the AoS -> SoA transpose that the SoA kernel gets handed
+/// for free. Everything downstream is bit-identical to the SoA kernel.
+///
+/// The load is `load_deinterleaved_grouped::<2, 2>`, not a flat 6-stream
+/// `load_deinterleaved::<6>`, and the distinction is worth real time. A `Ray` is
+/// not six independent streams; it is TWO streams (origin, direction) of THREE
+/// components each, and the grouped call says so. Backends with structural loads
+/// then split it per chunk into `LD3`s - the transpose happens in the load unit -
+/// while the flat view, whose stream count of 6 no `LDn` covers, falls back to a
+/// register shuffle network. NEON `f32x4`: **12 instructions (two `LD3`) grouped,
+/// versus ~25 flat**; double-pumped `f32x8`: 25 versus 44. On x86 (no structural
+/// loads) both spell the same 6-stream shuffle network, so nothing is lost.
+///
+/// The general lesson: describe the layout you actually have, and let the backend
+/// decide what it can do with it.
+#[inline(always)]
+fn ray_tri_kernel_aos<V: FloatVector<Element = f32>>(rays: &[Ray], tris: &[Tri], m: &[f32; 16]) -> f32 {
+    let m00 = V::splat(m[0]);
+    let m01 = V::splat(m[4]);
+    let m02 = V::splat(m[8]);
+    let m03 = V::splat(m[12]);
+    let m10 = V::splat(m[1]);
+    let m11 = V::splat(m[5]);
+    let m12 = V::splat(m[9]);
+    let m13 = V::splat(m[13]);
+    let m20 = V::splat(m[2]);
+    let m21 = V::splat(m[6]);
+    let m22 = V::splat(m[10]);
+    let m23 = V::splat(m[14]);
+
+    let eps = V::splat(EPS);
+    let t_min = V::splat(T_MIN);
+
+    let mut acc = V::ZERO;
+    let mut i = 0;
+    while i + V::lanes() <= rays.len() {
+        // `Ray` is `#[repr(C)]` over two 3-component vectors, so a batch of
+        // `LANES` rays is 2 streams x 3 components: one grouped load, which is
+        // two `LD3`s wherever the hardware has them.
+        let [og, dg] = unsafe { V::load_deinterleaved_grouped::<2, 2>(rays.as_ptr().add(i) as *const f32) };
+
+        let (ox, oy, oz) = (og.head, og.tail[0], og.tail[1]);
+        let (dx, dy, dz) = (dg.head, dg.tail[0], dg.tail[1]);
+
+        let o = [
+            ox.mul_adde(m00, oy.mul_adde(m01, oz.mul_adde(m02, m03))),
+            ox.mul_adde(m10, oy.mul_adde(m11, oz.mul_adde(m12, m13))),
+            ox.mul_adde(m20, oy.mul_adde(m21, oz.mul_adde(m22, m23))),
+        ];
+        let d = [
+            dx.mul_adde(m00, dy.mul_adde(m01, dz * m02)),
+            dx.mul_adde(m10, dy.mul_adde(m11, dz * m12)),
+            dx.mul_adde(m20, dy.mul_adde(m21, dz * m22)),
+        ];
+
+        acc += nearest_hit::<V>(&o, &d, tris, eps, t_min);
+        i += V::lanes();
+    }
+    acc.sum_elements()
+}
+
 /// Branchless Moller-Trumbore: every lane evaluates every triangle, masks pick
 /// the winners.
 #[inline(always)]
@@ -542,35 +664,7 @@ fn ray_tri_kernel<V: FloatVector<Element = f32>>(rays: &Rays, tris: &[Tri], m: &
             dx.mul_adde(m20, dy.mul_adde(m21, dz * m22)),
         ];
 
-        let mut t_near = V::INFINITY;
-        let mut k = 0;
-        while k < tris.len() {
-            let tri = &tris[k];
-            let v0 = [V::splat(tri.v0[0]), V::splat(tri.v0[1]), V::splat(tri.v0[2])];
-            let e1 = [V::splat(tri.e1[0]), V::splat(tri.e1[1]), V::splat(tri.e1[2])];
-            let e2 = [V::splat(tri.e2[0]), V::splat(tri.e2[1]), V::splat(tri.e2[2])];
-
-            let p = cross3(&d, &e2);
-            let det = dot3(&e1, &p);
-            let inv = V::ONE / det;
-            let s = [o[0] - v0[0], o[1] - v0[1], o[2] - v0[2]];
-            let u = dot3(&s, &p) * inv;
-            let q = cross3(&s, &e1);
-            let v = dot3(&d, &q) * inv;
-            let t = dot3(&e2, &q) * inv;
-
-            // No separate u > 1 test; u + v <= 1 with v >= 0 covers it.
-            let hit = det.abs().cmp_gt(eps)
-                & u.cmp_ge(V::ZERO)
-                & v.cmp_ge(V::ZERO)
-                & (u + v).cmp_le(V::ONE)
-                & t.cmp_gt(t_min);
-            t_near = t_near.min(hit.select(t, V::INFINITY));
-            k += 1;
-        }
-
-        let found = t_near.cmp_lt(V::INFINITY);
-        acc += found.select(t_near, V::ZERO);
+        acc += nearest_hit::<V>(&o, &d, tris, eps, t_min);
         i += V::lanes();
     }
     acc.sum_elements()
@@ -584,6 +678,11 @@ macro_rules! thermite_kernel {
             #[target_feature(enable = $tf)]
             pub unsafe fn ray_tri(rays: &Rays, tris: &[Tri], m: &[f32; 16]) -> f32 {
                 ray_tri_kernel::<$V>(rays, tris, m)
+            }
+
+            #[target_feature(enable = $tf)]
+            pub unsafe fn ray_tri_aos(rays: &[Ray], tris: &[Tri], m: &[f32; 16]) -> f32 {
+                ray_tri_kernel_aos::<$V>(rays, tris, m)
             }
         }
     };
@@ -621,6 +720,13 @@ fn bench(c: &mut Criterion) {
     {
         let r_v2 = unsafe { v2::ray_tri(&scene.rays, &scene.tris, &scene.m) };
         let r_v3 = unsafe { v3::ray_tri(&scene.rays, &scene.tris, &scene.m) };
+        // The AoS kernels must agree EXACTLY with their SoA twins: same math,
+        // same order, only the load differs. Anything else is a de-interleave bug.
+        let r_v2_aos = unsafe { v2::ray_tri_aos(&scene.rays_aos, &scene.tris, &scene.m) };
+        let r_v3_aos = unsafe { v3::ray_tri_aos(&scene.rays_aos, &scene.tris, &scene.m) };
+        assert_eq!(r_v2, r_v2_aos, "thermite-v2-aos disagrees with thermite-v2");
+        assert_eq!(r_v3, r_v3_aos, "thermite-v3-aos disagrees with thermite-v3");
+
         for (name, r) in [("thermite-v2", r_v2), ("thermite-v3", r_v3)] {
             let rel = (r - r_glam).abs() / r_glam;
             assert!(rel < 1e-2, "{name} disagrees with glam: {r} vs {r_glam}");
@@ -630,6 +736,18 @@ fn bench(c: &mut Criterion) {
     {
         let r_neon128 = unsafe { neon128::ray_tri(&scene.rays, &scene.tris, &scene.m) };
         let r_neon256 = unsafe { neon256::ray_tri(&scene.rays, &scene.tris, &scene.m) };
+
+        let r_neon128_aos = unsafe { neon128::ray_tri_aos(&scene.rays_aos, &scene.tris, &scene.m) };
+        let r_neon256_aos = unsafe { neon256::ray_tri_aos(&scene.rays_aos, &scene.tris, &scene.m) };
+        assert_eq!(
+            r_neon128, r_neon128_aos,
+            "thermite-neon-128-aos disagrees with its SoA twin"
+        );
+        assert_eq!(
+            r_neon256, r_neon256_aos,
+            "thermite-neon-256-aos disagrees with its SoA twin"
+        );
+
         for (name, r) in [("thermite-neon-128", r_neon128), ("thermite-neon-256", r_neon256)] {
             let rel = (r - r_glam).abs() / r_glam;
             assert!(rel < 1e-2, "{name} disagrees with glam: {r} vs {r_glam}");
@@ -678,6 +796,14 @@ fn bench(c: &mut Criterion) {
         g.bench_function("thermite-v3", |b| {
             b.iter(|| unsafe { black_box(v3::ray_tri(black_box(&scene.rays), &scene.tris, &scene.m)) })
         });
+        // Same kernels, but fed AoS rays and de-interleaving inline - the cost
+        // the SoA rows do not pay, and the layout glam/nalgebra actually use.
+        g.bench_function("thermite-v2-aos", |b| {
+            b.iter(|| unsafe { black_box(v2::ray_tri_aos(black_box(&scene.rays_aos), &scene.tris, &scene.m)) })
+        });
+        g.bench_function("thermite-v3-aos", |b| {
+            b.iter(|| unsafe { black_box(v3::ray_tri_aos(black_box(&scene.rays_aos), &scene.tris, &scene.m)) })
+        });
     }
     #[cfg(all(feature = "neon", target_arch = "aarch64"))]
     {
@@ -686,6 +812,14 @@ fn bench(c: &mut Criterion) {
         });
         g.bench_function("thermite-neon-256", |b| {
             b.iter(|| unsafe { black_box(neon256::ray_tri(black_box(&scene.rays), &scene.tris, &scene.m)) })
+        });
+        // AoS rays, de-interleaved inline: on NEON this lowers to the structural
+        // loads, where the transpose happens in the load unit.
+        g.bench_function("thermite-neon-128-aos", |b| {
+            b.iter(|| unsafe { black_box(neon128::ray_tri_aos(black_box(&scene.rays_aos), &scene.tris, &scene.m)) })
+        });
+        g.bench_function("thermite-neon-256-aos", |b| {
+            b.iter(|| unsafe { black_box(neon256::ray_tri_aos(black_box(&scene.rays_aos), &scene.tris, &scene.m)) })
         });
     }
     g.finish();

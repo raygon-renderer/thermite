@@ -29,6 +29,31 @@ impl<V: FloatVector, const N: usize> Point<V, N> {
 
         self
     }
+
+    /// Load `V::LANES` points from an interleaved (array-of-structures) span - a
+    /// `&[[f32; N]]`, the layout meshes and buffers actually use - transposing to
+    /// SoA on the way in. `N == 3` on NEON is a single `LD3`.
+    ///
+    /// See [`Vector::load_interleaved`](super::Vector::load_interleaved).
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for reads of `N * V::LANES` elements.
+    #[inline(always)]
+    pub unsafe fn load_interleaved(ptr: *const V::Element) -> Self {
+        Self(unsafe { V::load_deinterleaved::<N>(ptr) })
+    }
+
+    /// Store `V::LANES` points back to an interleaved span - the exact inverse of
+    /// [`load_interleaved`](Self::load_interleaved) (`ST3` on NEON).
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for writes of `N * V::LANES` elements.
+    #[inline(always)]
+    pub unsafe fn store_interleaved(self, ptr: *mut V::Element) {
+        unsafe { V::store_interleaved::<N>(ptr, self.0) }
+    }
 }
 
 impl<V: FloatVector, const N: usize> Add<Vector<V, N>> for Point<V, N> {

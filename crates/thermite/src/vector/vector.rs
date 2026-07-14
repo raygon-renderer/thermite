@@ -317,8 +317,38 @@ impl<R: Register> GenericVector for Vector<R> {
         unsafe { R::store_interleaved::<N>(ptr, regs) }
     }
 
-    // Overrides `GenericVector`'s lane-wise grouped defaults with the register
+    // Overrides `GenericVector`'s lane-wise record defaults with the register
     // engine. Same hand-rolled-loop reasoning as above.
+    unsafe fn load_deinterleaved_arrays<const M: usize, const C: usize>(ptr: *const Self::Element) -> [[Self; C]; M] {
+        let records = unsafe { R::load_deinterleaved_arrays::<M, C>(ptr) };
+
+        let mut out = [[Vector(R::EMPTY); C]; M];
+        let mut j = 0;
+        while j < M {
+            let mut c = 0;
+            while c < C {
+                out[j][c] = Vector(records[j][c]);
+                c += 1;
+            }
+            j += 1;
+        }
+        out
+    }
+
+    unsafe fn store_interleaved_arrays<const M: usize, const C: usize>(ptr: *mut Self::Element, values: [[Self; C]; M]) {
+        let mut records = [[R::EMPTY; C]; M];
+        let mut j = 0;
+        while j < M {
+            let mut c = 0;
+            while c < C {
+                records[j][c] = values[j][c].0;
+                c += 1;
+            }
+            j += 1;
+        }
+        unsafe { R::store_interleaved_arrays::<M, C>(ptr, records) }
+    }
+
     unsafe fn load_deinterleaved_grouped<const M: usize, const TAIL: usize>(
         ptr: *const Self::Element,
     ) -> [StreamGroup<Self, TAIL>; M] {

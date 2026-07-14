@@ -704,6 +704,117 @@ pub fn interleave_n<R: Register, const N: usize>(values: [Storage<R>; N]) -> [St
     buf
 }
 
+/// The flat view of `[[T; C]; M]` as `[T; M * C]` - the array form of
+/// [`flat_groups`], needing no wrapper type because nested arrays are already
+/// contiguous.
+#[inline(always)]
+pub fn flat_arrays<T, const C: usize, const M: usize>(records: &[[T; C]; M]) -> &[T] {
+    // SAFETY: `[[T; C]; M]` is `M * C` contiguous `T` by array layout.
+    unsafe { core::slice::from_raw_parts(records.as_ptr() as *const T, M * C) }
+}
+
+/// Mutable [`flat_arrays`].
+#[inline(always)]
+pub fn flat_arrays_mut<T, const C: usize, const M: usize>(records: &mut [[T; C]; M]) -> &mut [T] {
+    // SAFETY: as in `flat_arrays`.
+    unsafe { core::slice::from_raw_parts_mut(records.as_mut_ptr() as *mut T, M * C) }
+}
+
+/// [`digit_reversal`] for `M` records of `C` components, shaped so the length is
+/// spellable from `M` and `C` alone.
+#[inline(always)]
+const fn digit_reversal_arrays<const M: usize, const C: usize>() -> [[usize; C]; M] {
+    let mut t = [[0usize; C]; M];
+
+    let n = M * C;
+
+    let mut j = 0;
+    while j < n {
+        t[j / C][j % C] = stream_pos(j, n);
+        j += 1;
+    }
+
+    t
+}
+
+/// [`deinterleave_n`] for `M` records of `C` components each (`M * C` streams).
+///
+/// The sibling of [`deinterleave_grouped`], keyed on the component COUNT rather
+/// than on the count minus one. The two exist because stable Rust can compute
+/// neither `C = TAIL + 1` nor `TAIL = C - 1` as a const-generic argument, so a
+/// caller can only use whichever one its own const generic already spells:
+/// `Dual<V, N>` has `N` derivative parts and reaches for `TAIL = N`, while a
+/// geometric `Vector<V, N>` has `N` components and reaches for `C = N`. Same
+/// engine, same cost - only the spelling differs.
+#[inline(always)]
+pub fn deinterleave_arrays<R: Register, const M: usize, const C: usize>(
+    src: [[Storage<R>; C]; M],
+) -> [[Storage<R>; C]; M] {
+    const { assert!(M >= 1 && C >= 1) };
+
+    let n = M * C;
+
+    let mut buf = src;
+    let mut tmp = [[R::EMPTY; C]; M];
+    stages_deinterleave_flat::<R>(
+        flat_arrays_mut(&mut buf),
+        flat_arrays_mut(&mut tmp),
+        n,
+        const { leftover(M * C) },
+    );
+
+    let perm = const { digit_reversal_arrays::<M, C>() };
+    let perm = flat_arrays(&perm);
+
+    let src_flat = flat_arrays(&buf);
+    let out_flat = flat_arrays_mut(&mut tmp);
+
+    let mut j = 0;
+    while j < n {
+        // SAFETY: `stream_pos(_, n) < n` by construction, `j < n`.
+        unsafe { *out_flat.get_unchecked_mut(j) = *src_flat.get_unchecked(*perm.get_unchecked(j)) };
+        j += 1;
+    }
+
+    tmp
+}
+
+/// [`interleave_n`] for `M` records of `C` components. The exact inverse of
+/// [`deinterleave_arrays`].
+#[inline(always)]
+pub fn interleave_arrays<R: Register, const M: usize, const C: usize>(
+    values: [[Storage<R>; C]; M],
+) -> [[Storage<R>; C]; M] {
+    const { assert!(M >= 1 && C >= 1) };
+
+    let n = M * C;
+
+    let perm = const { digit_reversal_arrays::<M, C>() };
+    let perm = flat_arrays(&perm);
+
+    let mut buf = [[R::EMPTY; C]; M];
+    {
+        let src_flat = flat_arrays(&values);
+        let buf_flat = flat_arrays_mut(&mut buf);
+
+        let mut j = 0;
+        while j < n {
+            // SAFETY: `stream_pos(_, n) < n` by construction, `j < n`.
+            unsafe { *buf_flat.get_unchecked_mut(*perm.get_unchecked(j)) = *src_flat.get_unchecked(j) };
+            j += 1;
+        }
+    }
+
+    let mut tmp = [[R::EMPTY; C]; M];
+    stages_interleave_flat::<R>(
+        flat_arrays_mut(&mut buf),
+        flat_arrays_mut(&mut tmp),
+        n,
+        const { leftover(M * C) },
+    );
+    buf
+}
+
 /// [`deinterleave_n`] for `M * (TAIL + 1)` streams - the grouped form that a
 /// composite element type cannot spell as a plain const-generic count (see the
 /// module docs). `src` is the flat AoS span typed as groups; the output's

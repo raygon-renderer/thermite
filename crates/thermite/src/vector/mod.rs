@@ -895,6 +895,77 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `ptr` must be valid for writes of `N * LANES` elements.
     unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]);
 
+    /// Load `M` interleaved AoS records of `C` components each and de-interleave
+    /// them: reads `M * C * LANES` contiguous elements, and `out[j][c]` holds
+    /// component `c` of record `j`
+    /// (`out[j][c].extract(lane) == ptr[lane * M * C + j * C + c]`).
+    ///
+    /// This is the AoS -> SoA load for structured data: an array of 3D points is
+    /// `M = 1, C = 3`; an array of rays (origin + direction) is `M = 2, C = 3`.
+    /// See
+    /// [`Register::load_deinterleaved_arrays`](crate::register::Register::load_deinterleaved_arrays)
+    /// for how a backend serves it (NEON: an `LD3` per chunk).
+    ///
+    /// The default is a lane-wise gather - correct for ANY vector type, but
+    /// scalar. [`Vector`] overrides it with the register engine.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for reads of `M * C * LANES` elements.
+    unsafe fn load_deinterleaved_arrays<const M: usize, const C: usize>(
+        ptr: *const Self::Element,
+    ) -> [[Self; C]; M] {
+        const { assert!(M >= 1 && C >= 1) };
+
+        let mut out = [[Self::EMPTY; C]; M];
+
+        let mut j = 0;
+        while j < M {
+            let mut c = 0;
+            while c < C {
+                let mut v = Self::EMPTY;
+
+                let mut lane = 0;
+                while lane < Self::LANES {
+                    v = v.insertv(lane, unsafe { ptr.add(lane * (M * C) + j * C + c).read_unaligned() });
+                    lane += 1;
+                }
+
+                out[j][c] = v;
+                c += 1;
+            }
+            j += 1;
+        }
+
+        out
+    }
+
+    /// Interleave `M` records of `C` components and store them contiguously - the
+    /// exact inverse of
+    /// [`load_deinterleaved_arrays`](Self::load_deinterleaved_arrays), with the
+    /// same lane-wise default.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for writes of `M * C * LANES` elements.
+    unsafe fn store_interleaved_arrays<const M: usize, const C: usize>(ptr: *mut Self::Element, values: [[Self; C]; M]) {
+        const { assert!(M >= 1 && C >= 1) };
+
+        let mut j = 0;
+        while j < M {
+            let mut c = 0;
+            while c < C {
+                let v = values[j][c];
+
+                let mut lane = 0;
+                while lane < Self::LANES {
+                    unsafe { ptr.add(lane * (M * C) + j * C + c).write_unaligned(v.extractv(lane)) };
+                    lane += 1;
+                }
+                c += 1;
+            }
+            j += 1;
+        }
+    }
+
     /// Load `M` interleaved composite streams of `1 + TAIL` components each and
     /// de-interleave them into `M` [`StreamGroup`]s: reads
     /// `M * (TAIL + 1) * LANES` contiguous elements, and group `j`'s

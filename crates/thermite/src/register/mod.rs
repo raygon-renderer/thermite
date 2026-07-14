@@ -793,39 +793,171 @@ pub trait Register:
         }
     }
 
-    /// Load `M` interleaved streams of composite elements, each `1 + TAIL`
-    /// components, and de-interleave them into `M` [`StreamGroup`]s: reads
+    /// Load `M` interleaved AoS records of `C` components each and de-interleave
+    /// them: reads `M * C * LANES` contiguous elements, and `out[j][c]` holds
+    /// component `c` of record `j`, i.e.
+    /// `out[j][c][lane] == ptr[lane * M * C + j * C + c]`.
+    ///
+    /// The array sibling of
+    /// [`load_deinterleaved_grouped`](Self::load_deinterleaved_grouped), keyed on
+    /// the component COUNT rather than the count minus one. Both exist because
+    /// stable Rust can compute neither `C = TAIL + 1` nor `TAIL = C - 1` as a
+    /// const-generic argument, so each caller uses whichever its own const
+    /// generic already spells - see
+    /// [`deinterleave_arrays`](crate::backend::generic::polyfills::deinterleave_arrays).
+    ///
+    /// This is the natural spelling for geometry: an AoS `[[f32; 3]]` of points
+    /// is `M = 1, C = 3`, and a ray (origin + direction) is `M = 2, C = 3`.
+    ///
+    /// Two strategies, chosen at compile time. With structural loads
+    /// ([`HAS_STRUCTURAL_MEMOPS`](Self::HAS_STRUCTURAL_MEMOPS)), each chunk of
+    /// `LANES` records is loaded by [`load_deinterleaved`](Self::load_deinterleaved)
+    /// at radix `C` - an `LD2`/`LD3`/`LD4`, transposing in the load unit - and one
+    /// radix-`M` register de-interleave per component re-sorts chunk order into
+    /// stream order. (No dispatch ladder is needed here, unlike the grouped form:
+    /// `C` IS the chunk radix, so it passes straight through as the const-generic
+    /// argument.) Otherwise the whole `M * C`-stream problem goes to the flat
+    /// shuffle engine in one go, which measures tighter when the chunk loads would
+    /// be shuffles anyway.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for reads of `M * C * LANES` elements.
+    unsafe fn load_deinterleaved_arrays<const M: usize, const C: usize>(
+        ptr: *const Self::Element,
+    ) -> [[Storage<Self>; C]; M] {
+        const { assert!(M >= 1 && C >= 1) };
+
+        let lanes = Self::lanes();
+
+        if const { Self::HAS_STRUCTURAL_MEMOPS && C <= 4 } {
+            // comp[c][k] = component c of chunk k (records k*LANES .. (k+1)*LANES).
+            let mut comp = [[Self::EMPTY; M]; C];
+
+            let mut k = 0;
+            while k < M {
+                let chunk = unsafe { Self::load_deinterleaved::<C>(ptr.add(k * C * lanes)) };
+
+                let mut c = 0;
+                while c < C {
+                    comp[c][k] = chunk[c];
+                    c += 1;
+                }
+                k += 1;
+            }
+
+            // Per-component radix-M de-interleave: chunk-order record
+            // q = k * LANES + lane becomes stream-order q = lane * M + j.
+            let mut out = [[Self::EMPTY; C]; M];
+
+            let mut c = 0;
+            while c < C {
+                let streams = crate::backend::generic::polyfills::deinterleave_n::<Self, M>(comp[c]);
+
+                let mut j = 0;
+                while j < M {
+                    out[j][c] = streams[j];
+                    j += 1;
+                }
+                c += 1;
+            }
+
+            out
+        } else {
+            let mut buf = [[Self::EMPTY; C]; M];
+
+            {
+                let flat = crate::backend::generic::polyfills::flat_arrays_mut(&mut buf);
+                let mut i = 0;
+                while i < M * C {
+                    flat[i] = unsafe { Self::load_unaligned(ptr.add(i * lanes)) };
+                    i += 1;
+                }
+            }
+
+            crate::backend::generic::polyfills::deinterleave_arrays::<Self, M, C>(buf)
+        }
+    }
+
+    /// Interleave `M` records of `C` components and store them as a contiguous
+    /// array-of-structures - the exact inverse of
+    /// [`load_deinterleaved_arrays`](Self::load_deinterleaved_arrays), with the
+    /// same two strategies replayed backwards.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for writes of `M * C * LANES` elements.
+    unsafe fn store_interleaved_arrays<const M: usize, const C: usize>(
+        ptr: *mut Self::Element,
+        values: [[Storage<Self>; C]; M],
+    ) {
+        const { assert!(M >= 1 && C >= 1) };
+
+        let lanes = Self::lanes();
+
+        if const { Self::HAS_STRUCTURAL_MEMOPS && C <= 4 } {
+            // Per-component radix-M interleave: stream-order back to chunk-order.
+            let mut comp = [[Self::EMPTY; M]; C];
+
+            let mut c = 0;
+            while c < C {
+                let mut streams = [Self::EMPTY; M];
+
+                let mut j = 0;
+                while j < M {
+                    streams[j] = values[j][c];
+                    j += 1;
+                }
+
+                comp[c] = crate::backend::generic::polyfills::interleave_n::<Self, M>(streams);
+                c += 1;
+            }
+
+            let mut k = 0;
+            while k < M {
+                let mut chunk = [Self::EMPTY; C];
+
+                let mut c = 0;
+                while c < C {
+                    chunk[c] = comp[c][k];
+                    c += 1;
+                }
+
+                unsafe { Self::store_interleaved::<C>(ptr.add(k * C * lanes), chunk) };
+                k += 1;
+            }
+        } else {
+            let out = crate::backend::generic::polyfills::interleave_arrays::<Self, M, C>(values);
+            let flat = crate::backend::generic::polyfills::flat_arrays(&out);
+
+            let mut i = 0;
+            while i < M * C {
+                unsafe { Self::store_unaligned(ptr.add(i * lanes), flat[i]) };
+                i += 1;
+            }
+        }
+    }
+
+    /// Load `M` interleaved composite records of `1 + TAIL` components each and
+    /// de-interleave them into `M` [`StreamGroup`]s: reads
     /// `M * (TAIL + 1) * LANES` contiguous elements starting at `ptr`, and
-    /// returns `out` such that `out[j].head`/`out[j].tail[c]` hold the
-    /// de-interleaved head/tail components of composite stream `j`, i.e.
+    /// `out[j].head`/`out[j].tail[c]` hold the de-interleaved components of
+    /// composite stream `j`, i.e.
     /// `out[j].head[lane] == ptr[lane * M * (TAIL + 1) + j * (TAIL + 1)]` and
     /// `out[j].tail[c][lane] == ptr[lane * M * (TAIL + 1) + j * (TAIL + 1) + 1 + c]`.
     ///
-    /// This is [`load_deinterleaved`](Self::load_deinterleaved) generalized to a
-    /// composite element of `1 + TAIL` scalar components (a `Dual` primal plus
-    /// its derivatives, a `Compensated` value plus its error, ...) - see the
-    /// [`StreamGroup`] module docs for why `M` and `TAIL` are separate const
-    /// generics rather than a single product `M * (TAIL + 1)`.
-    ///
-    /// Three strategies, chosen entirely at compile time:
-    /// - `TAIL == 0`: no tail components at all, so this is exactly
-    ///   [`load_deinterleaved`](Self::load_deinterleaved) with the streams
-    ///   repacked into groups.
-    /// - `TAIL <= 3` on hardware with true structural loads
-    ///   ([`HAS_STRUCTURAL_MEMOPS`](Self::HAS_STRUCTURAL_MEMOPS)): a per-chunk
-    ///   structural path. Chunk `k` covers composite
-    ///   records `[k * LANES, (k + 1) * LANES)`; loading it with
-    ///   [`load_deinterleaved`](Self::load_deinterleaved) at `C = TAIL + 1`
-    ///   splits it into its `C` components (a NEON `LD2`/`LD3`/`LD4`, an
-    ///   `ArrayRegister` chunk, or the x86 shuffle engine - whatever
-    ///   [`load_deinterleaved`](Self::load_deinterleaved) is tuned to for that
-    ///   backend). Component `c`'s registers across all `M` chunks then hold
-    ///   record index `q = k * LANES + lane`; one radix-`M` register
-    ///   de-interleave per component re-sorts `q = lane * M + j` into stream
-    ///   `j`, matching the flat AoS contract above.
-    /// - Otherwise: the general path. Load `M * (TAIL + 1)` contiguous
-    ///   registers into a group buffer through [`flat_groups_mut`], and hand it
-    ///   to [`deinterleave_grouped`].
+    /// The `TAIL` spelling of
+    /// [`load_deinterleaved_arrays`](Self::load_deinterleaved_arrays), which is
+    /// the real implementation - this only re-shapes `[[_; TAIL + 1]; M]` into
+    /// `[StreamGroup<_, TAIL>; M]`. It exists because a composite type built as
+    /// "a head plus `N` more" (`Dual<V, N>`: a primal and `N` derivatives) can
+    /// spell `TAIL = N` but not `C = N + 1`, while a type built as "`N`
+    /// components" (a geometric `Vector<V, N>`) is the reverse. Stable Rust can
+    /// bridge neither direction: `arrays::<M, { TAIL + 1 }>` is a const-generic
+    /// ARGUMENT computed from a generic parameter, which needs
+    /// `generic_const_exprs`. Hence the small `TAIL -> C` dispatch below - three
+    /// arms, naming the only component counts a structural load can serve
+    /// anyway, and no duplicated transpose logic.
     ///
     /// # Safety
     ///
@@ -835,82 +967,40 @@ pub trait Register:
     ) -> [StreamGroup<Storage<Self>, TAIL>; M] {
         const { assert!(M >= 1) };
 
-        let lanes = Self::lanes();
+        let mut out = [StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] }; M];
+
+        // Re-shape `[[_; C]; M]` (C == TAIL + 1) into groups. `records[j][0]` is
+        // the head; the rest is the tail, in order.
+        macro_rules! reshape {
+            ($c:literal) => {{
+                let records = unsafe { Self::load_deinterleaved_arrays::<M, $c>(ptr) };
+
+                let mut j = 0;
+                while j < M {
+                    out[j].head = records[j][0];
+
+                    let mut c = 0;
+                    while c < TAIL {
+                        out[j].tail[c] = records[j][1 + c];
+                        c += 1;
+                    }
+                    j += 1;
+                }
+            }};
+        }
 
         if const { TAIL == 0 } {
-            let regs = unsafe { Self::load_deinterleaved::<M>(ptr) };
-
-            let mut out = [StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] }; M];
-            let mut j = 0;
-            while j < M {
-                out[j] = StreamGroup { head: regs[j], tail: [Self::EMPTY; TAIL] };
-                j += 1;
-            }
-            out
-        } else if const { Self::HAS_STRUCTURAL_MEMOPS && TAIL <= 3 } {
-            // Transposed component buffer: comp.head[k] / comp.tail[c][k] is
-            // component (head / tail c) of chunk k, i.e. of records
-            // [k * LANES, (k + 1) * LANES).
-            let mut comp = StreamGroup { head: [Self::EMPTY; M], tail: [[Self::EMPTY; M]; TAIL] };
-
-            let mut k = 0;
-            while k < M {
-                let base = unsafe { ptr.add(k * (TAIL + 1) * lanes) };
-
-                if const { TAIL == 1 } {
-                    let ch = unsafe { Self::load_deinterleaved::<2>(base) };
-                    comp.head[k] = ch[0];
-                    let mut c = 0;
-                    while c < TAIL {
-                        comp.tail[c][k] = ch[1 + c];
-                        c += 1;
-                    }
-                } else if const { TAIL == 2 } {
-                    let ch = unsafe { Self::load_deinterleaved::<3>(base) };
-                    comp.head[k] = ch[0];
-                    let mut c = 0;
-                    while c < TAIL {
-                        comp.tail[c][k] = ch[1 + c];
-                        c += 1;
-                    }
-                } else {
-                    let ch = unsafe { Self::load_deinterleaved::<4>(base) };
-                    comp.head[k] = ch[0];
-                    let mut c = 0;
-                    while c < TAIL {
-                        comp.tail[c][k] = ch[1 + c];
-                        c += 1;
-                    }
-                }
-
-                k += 1;
-            }
-
-            // Per-component register de-interleave, radix M: sorts chunk-order
-            // record q = k * LANES + lane into stream-order q = lane * M + j.
-            let head_out = crate::backend::generic::polyfills::deinterleave_n::<Self, M>(comp.head);
-
-            let mut tail_out = [[Self::EMPTY; M]; TAIL];
-            let mut c = 0;
-            while c < TAIL {
-                tail_out[c] = crate::backend::generic::polyfills::deinterleave_n::<Self, M>(comp.tail[c]);
-                c += 1;
-            }
-
-            let mut out = [StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] }; M];
-            let mut j = 0;
-            while j < M {
-                let mut tail = [Self::EMPTY; TAIL];
-                let mut c = 0;
-                while c < TAIL {
-                    tail[c] = tail_out[c][j];
-                    c += 1;
-                }
-                out[j] = StreamGroup { head: head_out[j], tail };
-                j += 1;
-            }
-            out
+            reshape!(1);
+        } else if const { TAIL == 1 } {
+            reshape!(2);
+        } else if const { TAIL == 2 } {
+            reshape!(3);
+        } else if const { TAIL == 3 } {
+            reshape!(4);
         } else {
+            // Beyond the structural widths the array form has nothing extra to
+            // offer, so take the flat engine directly and skip the re-shape.
+            let lanes = Self::lanes();
             let empty = StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] };
             let mut buf = [empty; M];
 
@@ -923,19 +1013,17 @@ pub trait Register:
                 }
             }
 
-            crate::backend::generic::polyfills::deinterleave_grouped::<Self, M, TAIL>(buf)
+            return crate::backend::generic::polyfills::deinterleave_grouped::<Self, M, TAIL>(buf);
         }
+
+        out
     }
 
     /// Interleave `M` [`StreamGroup`]s and store them as a contiguous
-    /// array-of-structures: writes `M * (TAIL + 1) * LANES` elements starting
-    /// at `ptr` such that
-    /// `ptr[lane * M * (TAIL + 1) + j * (TAIL + 1)] == values[j].head[lane]` and
-    /// `ptr[lane * M * (TAIL + 1) + j * (TAIL + 1) + 1 + c] == values[j].tail[c][lane]`.
-    ///
-    /// The exact inverse of
-    /// [`load_deinterleaved_grouped`](Self::load_deinterleaved_grouped); same
-    /// three strategies, replayed backwards.
+    /// array-of-structures - the exact inverse of
+    /// [`load_deinterleaved_grouped`](Self::load_deinterleaved_grouped), and the
+    /// same thin re-shape over
+    /// [`store_interleaved_arrays`](Self::store_interleaved_arrays).
     ///
     /// # Safety
     ///
@@ -946,80 +1034,36 @@ pub trait Register:
     ) {
         const { assert!(M >= 1) };
 
-        let lanes = Self::lanes();
+        macro_rules! reshape {
+            ($c:literal) => {{
+                let mut records = [[Self::EMPTY; $c]; M];
+
+                let mut j = 0;
+                while j < M {
+                    records[j][0] = values[j].head;
+
+                    let mut c = 0;
+                    while c < TAIL {
+                        records[j][1 + c] = values[j].tail[c];
+                        c += 1;
+                    }
+                    j += 1;
+                }
+
+                unsafe { Self::store_interleaved_arrays::<M, $c>(ptr, records) };
+            }};
+        }
 
         if const { TAIL == 0 } {
-            let mut regs = [Self::EMPTY; M];
-            let mut j = 0;
-            while j < M {
-                regs[j] = values[j].head;
-                j += 1;
-            }
-            unsafe { Self::store_interleaved::<M>(ptr, regs) };
-        } else if const { Self::HAS_STRUCTURAL_MEMOPS && TAIL <= 3 } {
-            // Transposed component buffer: comp.head[j] / comp.tail[c][j] is
-            // component (head / tail c) of stream j - the exact inverse of the
-            // load's chunk-indexed buffer.
-            let mut comp = StreamGroup { head: [Self::EMPTY; M], tail: [[Self::EMPTY; M]; TAIL] };
-
-            let mut j = 0;
-            while j < M {
-                comp.head[j] = values[j].head;
-                let mut c = 0;
-                while c < TAIL {
-                    comp.tail[c][j] = values[j].tail[c];
-                    c += 1;
-                }
-                j += 1;
-            }
-
-            // Per-component register interleave, radix M: sorts stream-order
-            // record q = lane * M + j into chunk-order q = k * LANES + lane.
-            let head_chunks = crate::backend::generic::polyfills::interleave_n::<Self, M>(comp.head);
-
-            let mut tail_chunks = [[Self::EMPTY; M]; TAIL];
-            let mut c = 0;
-            while c < TAIL {
-                tail_chunks[c] = crate::backend::generic::polyfills::interleave_n::<Self, M>(comp.tail[c]);
-                c += 1;
-            }
-
-            let mut k = 0;
-            while k < M {
-                let base = unsafe { ptr.add(k * (TAIL + 1) * lanes) };
-
-                if const { TAIL == 1 } {
-                    let mut ch = [Self::EMPTY; 2];
-                    ch[0] = head_chunks[k];
-                    let mut c = 0;
-                    while c < TAIL {
-                        ch[1 + c] = tail_chunks[c][k];
-                        c += 1;
-                    }
-                    unsafe { Self::store_interleaved::<2>(base, ch) };
-                } else if const { TAIL == 2 } {
-                    let mut ch = [Self::EMPTY; 3];
-                    ch[0] = head_chunks[k];
-                    let mut c = 0;
-                    while c < TAIL {
-                        ch[1 + c] = tail_chunks[c][k];
-                        c += 1;
-                    }
-                    unsafe { Self::store_interleaved::<3>(base, ch) };
-                } else {
-                    let mut ch = [Self::EMPTY; 4];
-                    ch[0] = head_chunks[k];
-                    let mut c = 0;
-                    while c < TAIL {
-                        ch[1 + c] = tail_chunks[c][k];
-                        c += 1;
-                    }
-                    unsafe { Self::store_interleaved::<4>(base, ch) };
-                }
-
-                k += 1;
-            }
+            reshape!(1);
+        } else if const { TAIL == 1 } {
+            reshape!(2);
+        } else if const { TAIL == 2 } {
+            reshape!(3);
+        } else if const { TAIL == 3 } {
+            reshape!(4);
         } else {
+            let lanes = Self::lanes();
             let out = crate::backend::generic::polyfills::interleave_grouped::<Self, M, TAIL>(values);
             let flat = crate::backend::generic::polyfills::flat_groups(&out);
 

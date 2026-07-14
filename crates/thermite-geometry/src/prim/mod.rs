@@ -16,7 +16,7 @@ pub mod vector;
 pub use bounds::Bounds;
 pub use matrix::Matrix;
 pub use point::Point;
-pub use ray::Ray;
+pub use ray::{Ray, RayRecord};
 pub use vector::Vector;
 
 pub type Point2<V> = Point<V, 2>;
