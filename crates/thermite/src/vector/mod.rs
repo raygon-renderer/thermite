@@ -866,6 +866,34 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// that is at least `Self::Lanes` elements long.
     unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
+    /// Load `N` interleaved (array-of-structures) streams and de-interleave them
+    /// into `N` vectors: reads `N * LANES` contiguous elements from `ptr` and
+    /// returns `out` with `out[j].extract(lane) == ptr[lane * N + j]`.
+    ///
+    /// The AoS -> SoA load. `N == 3` over `f32` is the classic case: a
+    /// `[[f32; 3]]` of `xyzxyzxyz...` becomes one vector each of `xxx`, `yyy`,
+    /// `zzz`. ARM lowers this to a single `LD2`/`LD3`/`LD4` (the de-interleave
+    /// happens in the load unit); elsewhere it is contiguous loads plus a
+    /// cross-register permute.
+    ///
+    /// No alignment is required beyond that of `Element`.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for reads of `N * LANES` elements.
+    unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Self; N];
+
+    /// Interleave `N` vectors and store them contiguously as an
+    /// array-of-structures: writes `N * LANES` elements such that
+    /// `ptr[lane * N + j] == values[j].extract(lane)`.
+    ///
+    /// The SoA -> AoS store, and the exact inverse of
+    /// [`load_deinterleaved`](Self::load_deinterleaved). Lowers to `ST2`/`ST3`/`ST4`
+    /// on ARM. No alignment is required beyond that of `Element`.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for writes of `N * LANES` elements.
+    unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]);
+
     /// Assemble a vector from a slice of elements and a vector of indices
     /// into that slice. If an index is outside the bounds of the given slice,
     /// the resulting lane will be the first element of the input slice.

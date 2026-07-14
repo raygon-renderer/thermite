@@ -1,0 +1,17 @@
+# `cross` configuration for building the aarch64 criterion bench binaries
+# (`just pi-bench-build`). Only benches need cross - the pure-Rust test suite
+# cross-links with musl + rust-lld and no container (`just pi-build`).
+#
+# Image pin: cross's *default* (`:main`) images are Ubuntu 24.04 (glibc 2.39),
+# and glibc has no forward compatibility - a binary linked against 2.39 fails
+# on a device with an older runtime:
+#
+#     ./raytri: /lib/aarch64-linux-gnu/libc.so.6: version `GLIBC_2.39' not
+#     found (required by ./raytri)
+#
+# Raspberry Pi OS ships glibc 2.36 (Bookworm) / 2.31 (Bullseye), so we pin the
+# released `0.2.5` image (Ubuntu 16.04, glibc 2.23). Binaries built against an
+# OLD glibc run on NEW ones, so this covers every Pi OS generation - and any
+# other aarch64 Linux box.
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:0.2.5"

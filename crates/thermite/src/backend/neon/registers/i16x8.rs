@@ -24,9 +24,9 @@ neon_mask_core!(
 );
 
 neon_register!(
-    I16x8Neon, elem: i16, lanes: 8, suffix: s16,
+    I16x8Neon, elem: i16, lanes: 8, suffix: s16, vec: int16x8,
     signed: super::I16x8Neon, unsigned: super::U16x8Neon,
-    compress: table
+    compress: table, bytes: (vreinterpretq_u8_s16, vreinterpretq_s16_u8)
 );
 
 neon_partial_ord!(I16x8Neon, suffix: s16, from_u: vreinterpretq_s16_u16);

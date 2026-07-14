@@ -169,6 +169,22 @@ impl Register for U64x4V3 {
         unsafe { arch::_mm256_setr_epi64x(value as i64, 0, 0, 0) }
     }
 
+    fn deinterleave3(
+        a: Storage<Self>,
+        b: Storage<Self>,
+        c: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        unsafe { arch::_mm256_deinterleave3_epi64(a, b, c) }
+    }
+
+    fn interleave3(
+        x: Storage<Self>,
+        y: Storage<Self>,
+        z: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        unsafe { arch::_mm256_interleave3_epi64(x, y, z) }
+    }
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi64x(value as i64) }
     }
@@ -418,7 +434,6 @@ impl NumericRegister for U64x4V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for U64x4V3 {
-
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mullhi_epu64x_v3(lhs, rhs) }
     }

@@ -4,6 +4,7 @@ pub mod bits;
 pub mod casts;
 pub mod compress;
 pub mod divider;
+pub mod interleave;
 pub mod math;
 pub mod sort;
 
@@ -11,6 +12,7 @@ pub use bits::*;
 pub use casts::*;
 pub use compress::*;
 pub use divider::*;
+pub use interleave::*;
 pub use math::*;
 pub use sort::*;
 

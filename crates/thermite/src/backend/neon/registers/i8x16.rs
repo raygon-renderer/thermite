@@ -24,9 +24,9 @@ neon_mask_core!(
 );
 
 neon_register!(
-    I8x16Neon, elem: i8, lanes: 16, suffix: s8,
+    I8x16Neon, elem: i8, lanes: 16, suffix: s8, vec: int8x16,
     signed: super::I8x16Neon, unsigned: super::U8x16Neon,
-    compress: wide,
+    compress: wide, bytes: (vreinterpretq_u8_s8, vreinterpretq_s8_u8),
     extras: {
         // Whole-table TBL for byte tables of exactly 1/2/3/4 q-registers
         // (16/32/48/64 entries): one TBL(+table load) vs 16 scalar

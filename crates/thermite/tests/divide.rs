@@ -20,99 +20,136 @@ fn test_failure1() {
     assert_eq!(expected, result, "u32 division failed for d={}, n={:?}", d, n);
 }
 
-#[test]
-fn test_divide() {
+/// Every divisor under test: the whole `i8` range plus the `i32` extremes.
+fn divisors() -> impl Iterator<Item = i64> {
+    ((i8::MIN as i64)..=(i8::MAX as i64)).chain([i32::MIN as i64, i32::MAX as i64])
+}
+
+/// Exhaustively check one divisor against the whole `i16` numerator range (plus
+/// the `i32` extremes), for all four widths, scalar and vector, plain and
+/// branchfree.
+///
+/// The dividers are built once per `d`, not once per `(d, i)`: they are pure
+/// functions of `d`, and reconstructing them 65k times was most of the runtime.
+fn check_divisor(d: i64) {
+    if d == 0 {
+        return;
+    }
+
+    let d_i32 = Divider::i32(d as i32);
+    let d_i64 = Divider::i64(d as i64);
+    let d_u32 = Divider::u32(d as u32);
+    let d_u64 = Divider::u64(d as u64);
+
+    let d_i32_bf = BranchfreeDivider::i32(d as i32);
+    let d_i64_bf = BranchfreeDivider::i64(d as i64);
+
+    // The unsigned branchfree divider does not support 1.
+    let unsigned_bf = (d != 1).then(|| (BranchfreeDivider::u32(d as u32), BranchfreeDivider::u64(d as u64)));
+
+    for i in ((i16::MIN as i64)..=(i16::MAX as i64)).chain([i32::MIN as i64, i32::MAX as i64]) {
+        let x_i32 = i32x8::splat(i as i32) + i32x8::indexed();
+        let x_i64 = i64x8::splat(i as i64) + i64x8::indexed();
+        let x_u32 = u32x8::splat(i as u32) + u32x8::indexed();
+        let x_u64 = u64x8::splat(i as u64) + u64x8::indexed();
+
+        let expected_i32 = x_i32.map(|v| v.wrapping_div(d as i32));
+        let expected_i64 = x_i64.map(|v| v.wrapping_div(d as i64));
+        let expected_u32 = x_u32.map(|v| v.wrapping_div(d as u32));
+        let expected_u64 = x_u64.map(|v| v.wrapping_div(d as u64));
+
+        assert_eq!(d_i32.divide(i as i32), (i as i32).wrapping_div(d as i32));
+        assert_eq!(d_i64.divide(i as i64), (i as i64).wrapping_div(d as i64));
+        assert_eq!(d_u32.divide(i as u32), (i as u32).wrapping_div(d as u32));
+        assert_eq!(d_u64.divide(i as u64), (i as u64).wrapping_div(d as u64));
+
+        assert_eq!(d_i32_bf.divide(i as i32), (i as i32).wrapping_div(d as i32));
+        assert_eq!(d_i64_bf.divide(i as i64), (i as i64).wrapping_div(d as i64));
+
+        let result_i32_bf = x_i32 / d_i32_bf;
+        let result_i64_bf = x_i64 / d_i64_bf;
+        let result_i32 = x_i32 / d_i32;
+        let result_i64 = x_i64 / d_i64;
+
+        let result_u32 = x_u32 / d_u32;
+        let result_u64 = x_u64 / d_u64;
+
+        assert_eq!(expected_i32, result_i32, "i32 division failed for d={d}, x={x_i32:?}");
+        assert_eq!(expected_i64, result_i64, "i64 division failed for d={d}, x={x_i64:?}");
+
+        assert_eq!(
+            expected_i32, result_i32_bf,
+            "i32 bf division failed for d={d}, x={x_i32:?}"
+        );
+        assert_eq!(
+            expected_i64, result_i64_bf,
+            "i64 bf division failed for d={d}, x={x_i64:?}"
+        );
+
+        assert_eq!(
+            expected_u32, result_u32,
+            "u32 division failed for d={}, x={x_u32:?} ({d}, {x_i32:?})",
+            d as u32
+        );
+        assert_eq!(
+            expected_u64, result_u64,
+            "u64 division failed for d={}, x={x_u64:?} ({d}, {x_i32:?})",
+            d as u64
+        );
+
+        let Some((d_u32_bf, d_u64_bf)) = unsigned_bf else {
+            continue;
+        };
+
+        assert_eq!(d_u32_bf.divide(i as u32), (i as u32).wrapping_div(d as u32));
+        assert_eq!(d_u64_bf.divide(i as u64), (i as u64).wrapping_div(d as u64));
+
+        let result_u32_bf = x_u32 / d_u32_bf;
+        let result_u64_bf = x_u64 / d_u64_bf;
+
+        assert_eq!(
+            expected_u32, result_u32_bf,
+            "u32 bf division failed for d={}, x={x_u32:?} ({d}, {x_i32:?})",
+            d as u32
+        );
+        assert_eq!(
+            expected_u64, result_u64_bf,
+            "u64 bf division failed for d={}, x={x_u64:?} ({d}, {x_i32:?})",
+            d as u64
+        );
+    }
+}
+
+/// The divisor sweep is ~17M exhaustive checks - by far the longest test in the
+/// suite, and long enough that it alone set the wall clock of a fully parallel
+/// run. Splitting it into interleaved shards (divisor `k`, `k + SHARDS`, ...)
+/// lets the harness run them concurrently; the coverage is identical, and the
+/// stride keeps each shard's mix of easy/hard divisors even.
+const SHARDS: usize = 16;
+
+fn run_shard(shard: usize) {
     if cfg!(debug_assertions) {
         println!("Skipping divider tests in debug mode, run in release mode for full coverage.");
         return;
     }
 
-    for d in ((i8::MIN as i64)..=(i8::MAX as i64)).chain([i32::MIN as i64, i32::MAX as i64]) {
-        for i in ((i16::MIN as i64)..=(i16::MAX as i64)).chain([i32::MIN as i64, i32::MAX as i64]) {
-            if d == 0 {
-                continue;
-            }
-
-            let x_i32 = i32x8::splat(i as i32) + i32x8::indexed();
-            let x_i64 = i64x8::splat(i as i64) + i64x8::indexed();
-            let x_u32 = u32x8::splat(i as u32) + u32x8::indexed();
-            let x_u64 = u64x8::splat(i as u64) + u64x8::indexed();
-
-            let expected_i32 = x_i32.map(|v| v.wrapping_div(d as i32));
-            let expected_i64 = x_i64.map(|v| v.wrapping_div(d as i64));
-            let expected_u32 = x_u32.map(|v| v.wrapping_div(d as u32));
-            let expected_u64 = x_u64.map(|v| v.wrapping_div(d as u64));
-
-            let d_i32 = Divider::i32(d as i32);
-            let d_i64 = Divider::i64(d as i64);
-            let d_u32 = Divider::u32(d as u32);
-            let d_u64 = Divider::u64(d as u64);
-
-            assert_eq!(d_i32.divide(i as i32), (i as i32).wrapping_div(d as i32));
-            assert_eq!(d_i64.divide(i as i64), (i as i64).wrapping_div(d as i64));
-            assert_eq!(d_u32.divide(i as u32), (i as u32).wrapping_div(d as u32));
-            assert_eq!(d_u64.divide(i as u64), (i as u64).wrapping_div(d as u64));
-
-            let d_i32_bf = BranchfreeDivider::i32(d as i32);
-            let d_i64_bf = BranchfreeDivider::i64(d as i64);
-
-            assert_eq!(d_i32_bf.divide(i as i32), (i as i32).wrapping_div(d as i32));
-            assert_eq!(d_i64_bf.divide(i as i64), (i as i64).wrapping_div(d as i64));
-
-            let result_i32_bf = x_i32 / d_i32_bf;
-            let result_i64_bf = x_i64 / d_i64_bf;
-            let result_i32 = x_i32 / d_i32;
-            let result_i64 = x_i64 / d_i64;
-
-            let result_u32 = x_u32 / d_u32;
-            let result_u64 = x_u64 / d_u64;
-
-            assert_eq!(expected_i32, result_i32, "i32 division failed for d={d}, x={x_i32:?}");
-            assert_eq!(expected_i64, result_i64, "i64 division failed for d={d}, x={x_i64:?}");
-
-            assert_eq!(
-                expected_i32, result_i32_bf,
-                "i32 bf division failed for d={d}, x={x_i32:?}"
-            );
-            assert_eq!(
-                expected_i64, result_i64_bf,
-                "i64 bf division failed for d={d}, x={x_i64:?}"
-            );
-
-            assert_eq!(
-                expected_u32, result_u32,
-                "u32 division failed for d={}, x={x_u32:?} ({d}, {x_i32:?})",
-                d as u32
-            );
-            assert_eq!(
-                expected_u64, result_u64,
-                "u64 division failed for d={}, x={x_u64:?} ({d}, {x_i32:?})",
-                d as u64
-            );
-
-            if d == 1 {
-                continue; // unsigned branchfree divider for 1 is not supported
-            }
-
-            let d_u32_bf = BranchfreeDivider::u32(d as u32);
-            let d_u64_bf = BranchfreeDivider::u64(d as u64);
-
-            assert_eq!(d_u32_bf.divide(i as u32), (i as u32).wrapping_div(d as u32));
-            assert_eq!(d_u64_bf.divide(i as u64), (i as u64).wrapping_div(d as u64));
-
-            let result_u32_bf = x_u32 / d_u32_bf;
-            let result_u64_bf = x_u64 / d_u64_bf;
-
-            assert_eq!(
-                expected_u32, result_u32_bf,
-                "u32 bf division failed for d={}, x={x_u32:?} ({d}, {x_i32:?})",
-                d as u32
-            );
-            assert_eq!(
-                expected_u64, result_u64_bf,
-                "u64 bf division failed for d={}, x={x_u64:?} ({d}, {x_i32:?})",
-                d as u64
-            );
-        }
+    for d in divisors().skip(shard).step_by(SHARDS) {
+        check_divisor(d);
     }
+}
+
+macro_rules! divide_shards {
+    ($($name:ident = $shard:expr),+ $(,)?) => {$(
+        #[test]
+        fn $name() {
+            run_shard($shard);
+        }
+    )+};
+}
+
+divide_shards! {
+    test_divide_00 = 0, test_divide_01 = 1, test_divide_02 = 2, test_divide_03 = 3,
+    test_divide_04 = 4, test_divide_05 = 5, test_divide_06 = 6, test_divide_07 = 7,
+    test_divide_08 = 8, test_divide_09 = 9, test_divide_10 = 10, test_divide_11 = 11,
+    test_divide_12 = 12, test_divide_13 = 13, test_divide_14 = 14, test_divide_15 = 15,
 }

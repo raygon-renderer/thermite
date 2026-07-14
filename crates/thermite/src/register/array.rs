@@ -492,6 +492,45 @@ where
         }
     }
 
+    /// De-interleaving an array register decomposes into ONE inner
+    /// de-interleave per chunk, which is what lets the inner register's native
+    /// path do the work (on ARM, an `f32x8` `load_deinterleaved::<3>` becomes
+    /// two `LD3`s rather than a cross-register gather over six registers).
+    ///
+    /// Chunk `k` of output stream `j` holds lanes `k * L .. (k+1) * L`, i.e.
+    /// elements `ptr[(k * L + l) * S + j]` = `ptr[k * L * S + (l * S + j)]` -
+    /// exactly the inner de-interleave of the sub-span starting at
+    /// `k * L * S`.
+    unsafe fn load_deinterleaved<const S: usize>(ptr: *const Self::Element) -> [Storage<Self>; S] {
+        let l = R::Lanes::USIZE;
+
+        let mut out = [Self::EMPTY; S];
+
+        for k in 0..N {
+            let inner = unsafe { R::load_deinterleaved::<S>(ptr.add(k * l * S)) };
+
+            for (j, o) in out.iter_mut().enumerate() {
+                o.0[k] = inner[j];
+            }
+        }
+
+        out
+    }
+
+    /// The exact inverse; same per-chunk decomposition (`ST2`/`ST3`/`ST4` on ARM).
+    unsafe fn store_interleaved<const S: usize>(ptr: *mut Self::Element, values: [Storage<Self>; S]) {
+        let l = R::Lanes::USIZE;
+
+        for k in 0..N {
+            let mut inner = [R::EMPTY; S];
+            for (j, v) in values.iter().enumerate() {
+                inner[j] = v.0[k];
+            }
+
+            unsafe { R::store_interleaved::<S>(ptr.add(k * l * S), inner) };
+        }
+    }
+
     unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
         for (i, r) in value.0.iter().enumerate() {
             unsafe { R::store_masked(ptr.add(i * R::Lanes::USIZE), mask.0[i], *r) };

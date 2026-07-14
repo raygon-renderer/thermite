@@ -10,12 +10,14 @@ pub mod bits;
 pub mod casts;
 pub mod cmp;
 pub mod divider;
+pub mod interleave;
 pub mod math;
 
 pub use bits::*;
 pub use casts::*;
 pub use cmp::*;
 pub use divider::*;
+pub use interleave::*;
 pub use math::*;
 
 #[inline(always)]

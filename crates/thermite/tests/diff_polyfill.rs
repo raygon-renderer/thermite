@@ -53,6 +53,26 @@ macro_rules! popcount_for {
     };
 }
 
+/// `roli`/`rori` (const-generic amounts) vs Rust's `rotate_left`/`rotate_right`,
+/// for each literal amount that fits the element width.
+macro_rules! check_rot_const {
+    ($l:expr, $reg:ty, $e:ty, $input:expr, $regv:expr, $bits:expr; $($imm:literal),* $(,)?) => {$(
+        if ($imm as u32) < $bits {
+            let got = harness::read::<$reg>(&<$reg>::roli::<$imm>($regv));
+            let want: Vec<$e> = $input.iter().map(|&x| x.rotate_left($imm as u32)).collect();
+            harness::assert_lanes_eq(
+                concat!($l, " [roli<", stringify!($imm), ">]"),
+                &[$input.as_slice()], &got, &want, Tol::Exact);
+
+            let got = harness::read::<$reg>(&<$reg>::rori::<$imm>($regv));
+            let want: Vec<$e> = $input.iter().map(|&x| x.rotate_right($imm as u32)).collect();
+            harness::assert_lanes_eq(
+                concat!($l, " [rori<", stringify!($imm), ">]"),
+                &[$input.as_slice()], &got, &want, Tol::Exact);
+        }
+    )*};
+}
+
 /// Byte/bit reversal and rotates - correct for every width.
 macro_rules! bitperm_for {
     ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
@@ -64,6 +84,47 @@ macro_rules! bitperm_for {
                 oracle_shift!($l, <$b as Simd>::$reg, $e, rol, |x, s| x.rotate_left(s));
                 oracle_shift!($l, <$b as Simd>::$reg, $e, ror, |x, s| x.rotate_right(s));
             )*
+        }
+
+        /// Rotates by an amount >= the element width, and the const-generic
+        /// `roli`/`rori` forms - neither had any coverage.
+        ///
+        /// Rust's `rotate_left`/`rotate_right` (and hence the scalar backend,
+        /// which literally *is* those) reduce the amount modulo the width. The
+        /// register-trait default computes `shr(v, width - shift)`, which
+        /// underflowed for `shift >= width` and made every vector backend
+        /// return zeros - a silent divergence from the scalar oracle. The
+        /// default now masks the amount; this pins that down.
+        #[test]
+        fn rotate_wraparound_and_const() {
+            $({
+                type R = <$b as Simd>::$reg;
+                let bits = (core::mem::size_of::<$e>() * 8) as u32;
+                let lanes = <<R as thermite::register::CoreRegister>::Lanes
+                    as generic_array::typenum::Unsigned>::USIZE;
+                let mut rng = harness::rng();
+
+                for input in harness::corpus::<$e>(lanes, &mut rng) {
+                    let reg = harness::make_array::<R>(&input);
+
+                    // out-of-range amounts, including exactly `bits` and past it
+                    for extra in [0u32, 1, 3, bits / 2] {
+                        let sh = bits + extra;
+                        let got = harness::read::<R>(&R::rol(reg, sh));
+                        let want: Vec<$e> = input.iter().map(|&x| x.rotate_left(sh)).collect();
+                        harness::assert_lanes_eq(
+                            concat!($l, " [rol out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
+
+                        let got = harness::read::<R>(&R::ror(reg, sh));
+                        let want: Vec<$e> = input.iter().map(|&x| x.rotate_right(sh)).collect();
+                        harness::assert_lanes_eq(
+                            concat!($l, " [ror out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
+                    }
+
+                    // const-generic forms (a representative spread, incl. 0)
+                    check_rot_const!($l, R, $e, input, reg, bits; 0, 1, 3, 7, 8, 15, 16, 31, 32, 63);
+                }
+            })*
         }
     };
 }

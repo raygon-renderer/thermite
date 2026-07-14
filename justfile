@@ -36,8 +36,19 @@ default:
 # --- Tests -------------------------------------------------------------------
 
 # Run the thermite test suite (release; the differential suites are slow in debug).
-test:
-    {{ _cargo }} test {{ _args }} --release
+#
+# `nextest` runs every test in its own process and schedules them across all
+# cores, rather than running each test binary to completion in turn - worth ~25%
+# here. It deliberately does not support doctests, so those run separately;
+# `test` is the real gate and runs both. Pass a filter, e.g.
+# `just test -E 'test(interleave)'` or `just test --test diff_ops`.
+test *args:
+    {{ _cargo }} nextest run {{ _args }} --release {{ args }}
+    {{ _cargo }} test {{ _args }} --release --doc
+
+# Tests only, no doctests - the fast inner-loop gate.
+test-fast *args:
+    {{ _cargo }} nextest run {{ _args }} --release {{ args }}
 
 # --- WASM test suite ---------------------------------------------------------
 #

@@ -292,6 +292,30 @@ impl<R: Register> GenericVector for Vector<R> {
     unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element) { unsafe { R::store_masked(ptr, mask.0, self.0) } }
     unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
     unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
+
+    // NOTE: hand-rolled loops, not `core::array::{from_fn, map}` - those fail to
+    // inline inside `#[target_feature]` code and fall back to scalar copies.
+    unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Self; N] {
+        let regs = unsafe { R::load_deinterleaved::<N>(ptr) };
+
+        let mut out = [Vector(R::EMPTY); N];
+        let mut i = 0;
+        while i < N {
+            out[i] = Vector(regs[i]);
+            i += 1;
+        }
+        out
+    }
+
+    unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]) {
+        let mut regs = [R::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            regs[i] = values[i].0;
+            i += 1;
+        }
+        unsafe { R::store_interleaved::<N>(ptr, regs) }
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]

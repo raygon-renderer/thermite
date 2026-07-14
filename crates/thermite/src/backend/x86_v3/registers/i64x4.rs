@@ -174,6 +174,22 @@ impl Register for I64x4V3 {
         unsafe { arch::_mm256_set_epi64x(0, 0, 0, value) }
     }
 
+    fn deinterleave3(
+        a: Storage<Self>,
+        b: Storage<Self>,
+        c: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        unsafe { arch::_mm256_deinterleave3_epi64(a, b, c) }
+    }
+
+    fn interleave3(
+        x: Storage<Self>,
+        y: Storage<Self>,
+        z: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        unsafe { arch::_mm256_interleave3_epi64(x, y, z) }
+    }
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi64x(value) }
     }

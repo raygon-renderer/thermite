@@ -24,9 +24,9 @@ neon_mask_core!(
 );
 
 neon_register!(
-    U64x2Neon, elem: u64, lanes: 2, suffix: u64,
+    U64x2Neon, elem: u64, lanes: 2, suffix: u64, vec: uint64x2,
     signed: super::I64x2Neon, unsigned: super::U64x2Neon,
-    compress: table
+    compress: table, bytes: (vreinterpretq_u8_u64, vreinterpretq_u64_u8)
 );
 
 neon_partial_ord!(U64x2Neon, suffix: u64, from_u: identity);

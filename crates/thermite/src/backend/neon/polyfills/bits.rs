@@ -611,3 +611,124 @@ pub fn neon_morton2_compress_u32(v: uint32x4_t) -> uint32x4_t {
         vandq_u32(vorrq_u32(c, vshrq_n_u32::<8>(c)), LOW)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Multi-register byte-table lookup (TBL1/2/3/4).
+//
+// `vqtbl{1,2,3,4}q_u8` index a table of 1-4 *consecutive* q-registers (16-64
+// bytes) with one byte index per output lane, zeroing any lane whose index is
+// out of range. This is what powers `array_permutev`/`array_swizzle` on
+// `ArrayRegister` chunks: an N-chunk array is exactly a 16*N-byte table, so a
+// whole cross-chunk permute is ONE instruction per output chunk instead of the
+// generic default's N permutes + N blends per output chunk.
+//
+// `chunks.len()` must be in `1..=4` (the caller guarantees it).
+// ---------------------------------------------------------------------------
+
+/// `N` is a const generic (not `chunks.len()`) so the arity selection folds at
+/// monomorphization into a single `TBL` - passing a slice leaves a runtime
+/// branch over all four forms.
+#[inline(always)]
+pub fn neon_tbl_n_u8<const N: usize>(t: [uint8x16_t; 4], idx: uint8x16_t) -> uint8x16_t {
+    unsafe {
+        match N {
+            1 => vqtbl1q_u8(t[0], idx),
+            2 => vqtbl2q_u8(uint8x16x2_t(t[0], t[1]), idx),
+            3 => vqtbl3q_u8(uint8x16x3_t(t[0], t[1], t[2]), idx),
+            _ => vqtbl4q_u8(uint8x16x4_t(t[0], t[1], t[2], t[3]), idx),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Constant-amount bit rotates via SRI (shift-right-and-insert).
+//
+// `vsriq_n_u32::<N>(dst, src)` shifts each `src` lane right by `N` and inserts
+// it into `dst`, KEEPING `dst`'s top `N` bits. So the two halves of a rotate
+// fuse into two instructions instead of the trait default's three (SHL, USHR,
+// ORR):
+//
+//   ror(x, n) = (x >> n) | (x << (W - n))
+//             = vsriq_n::<n>(vshlq_n::<W - n>(x), x)   // SHL, SRI
+//   rol(x, n) = ror(x, W - n)
+//             = vsriq_n::<W - n>(vshlq_n::<n>(x), x)   // SHL, SRI
+//
+// The SRI keeps the top `n` bits of its `dst` operand - exactly the
+// `x << (W - n)` term - and fills the low `W - n` bits with `x >> n`. The two
+// bit ranges are disjoint and together cover the lane, so the insert IS the OR.
+//
+// Immediate ranges: `vshlq_n` requires `0..=W-1` and `vsriq_n` requires
+// `1..=W`, so `n == 0` (the identity rotate) cannot be expressed and is
+// special-cased to return the input. The trait's `IMM8` is an `i32` the caller
+// may set to anything, so it is normalized with `& (W - 1)` before dispatch -
+// well-defined for every input, and it agrees with the generic default on the
+// default's own well-defined domain (`0..=W`, where both `0` and `W` are the
+// identity).
+//
+// NEON const-generic immediates must be constants, so one `match` arm per
+// rotate amount is generated below; the arms collapse at monomorphization since
+// `IMM8` is a constant.
+// ---------------------------------------------------------------------------
+
+macro_rules! neon_rotate_imm {
+    (
+        $rori:ident, $roli:ident, $ty:ty, width: $w:literal,
+        shl: $shl:ident, sri: $sri:ident, amounts: [$($n:literal),*]
+    ) => {
+        /// Rotate each lane right by `IMM8 & (W - 1)` bits (SHL + SRI).
+        #[inline(always)]
+        pub fn $rori<const IMM8: i32>(v: $ty) -> $ty {
+            unsafe {
+                match (IMM8 as u32) & ($w - 1) {
+                    $($n => $sri::<$n>($shl::<{ $w - $n }>(v), v),)*
+                    // rotate by 0 is the identity (and is not an encodable
+                    // SRI/SHL immediate)
+                    _ => v,
+                }
+            }
+        }
+
+        /// Rotate each lane left by `IMM8 & (W - 1)` bits (SHL + SRI).
+        #[inline(always)]
+        pub fn $roli<const IMM8: i32>(v: $ty) -> $ty {
+            unsafe {
+                match (IMM8 as u32) & ($w - 1) {
+                    $($n => $sri::<{ $w - $n }>($shl::<$n>(v), v),)*
+                    _ => v,
+                }
+            }
+        }
+    };
+}
+
+neon_rotate_imm!(
+    neon_rori_u8, neon_roli_u8, uint8x16_t, width: 8,
+    shl: vshlq_n_u8, sri: vsriq_n_u8,
+    amounts: [1, 2, 3, 4, 5, 6, 7]
+);
+
+neon_rotate_imm!(
+    neon_rori_u16, neon_roli_u16, uint16x8_t, width: 16,
+    shl: vshlq_n_u16, sri: vsriq_n_u16,
+    amounts: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+);
+
+neon_rotate_imm!(
+    neon_rori_u32, neon_roli_u32, uint32x4_t, width: 32,
+    shl: vshlq_n_u32, sri: vsriq_n_u32,
+    amounts: [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+    ]
+);
+
+neon_rotate_imm!(
+    neon_rori_u64, neon_roli_u64, uint64x2_t, width: 64,
+    shl: vshlq_n_u64, sri: vsriq_n_u64,
+    amounts: [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+        33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+        49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63
+    ]
+);

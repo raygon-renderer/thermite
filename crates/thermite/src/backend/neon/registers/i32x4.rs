@@ -24,9 +24,9 @@ neon_mask_core!(
 );
 
 neon_register!(
-    I32x4Neon, elem: i32, lanes: 4, suffix: s32,
+    I32x4Neon, elem: i32, lanes: 4, suffix: s32, vec: int32x4,
     signed: super::I32x4Neon, unsigned: super::U32x4Neon,
-    compress: table
+    compress: table, bytes: (vreinterpretq_u8_s32, vreinterpretq_s32_u8)
 );
 
 neon_partial_ord!(I32x4Neon, suffix: s32, from_u: vreinterpretq_s32_u32);

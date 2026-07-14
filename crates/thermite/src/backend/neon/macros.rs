@@ -297,9 +297,9 @@ macro_rules! neon_mask_core {
 /// The `Register` impl: memory ops, lane accessors, splats, permutes.
 macro_rules! neon_register {
     (
-        $reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident,
+        $reg:ty, elem: $e:ty, lanes: $n:tt, suffix: $s:ident, vec: $vt:ident,
         signed: $sg:ty, unsigned: $un:ty,
-        compress: $compress:tt
+        compress: $compress:tt, bytes: ($to_b:ident, $from_b:ident)
         $(, extras: { $($extras:tt)* })?
     ) => {
         paste::paste! {
@@ -377,6 +377,293 @@ macro_rules! neon_register {
                             crate::generic_array::const_transmute(I::INDICES)
                         })
                     })
+                }
+
+                // Cross-chunk permute of an `ArrayRegister<Self, M>` in ONE `TBL`
+                // per output chunk (the M-chunk array IS a 16*M-byte table), vs
+                // the default's M permutes + M blends per chunk. TBL tables cap
+                // at 4 registers (64 bytes), so M > 4 keeps the scalar path.
+                //
+                // Semantics: the default WRAPS an out-of-range index (`g &
+                // (total-1)` when total is a power of two), while TBL ZEROES an
+                // out-of-range byte - so indices are masked before building the
+                // table, reproducing the default exactly.
+                fn array_permutev<const M: usize>(value: [Storage<Self>; M], idxs: &[u32]) -> [Storage<Self>; M] {
+                    const ES: usize = 16 / $n; // element size in bytes
+                    let l = $n;
+                    let total = M * l;
+
+                    if const { M >= 1 && M <= 4 } {
+                        // one up-front bound so the per-lane index reads do not each check
+                        let idxs = &idxs[..total];
+
+                        unsafe {
+                            let v = value.as_slice();
+                            let mut table = [arch::vdupq_n_u8(0); 4];
+                            let mut j = 0;
+                            while j < M {
+                                table[j] = arch::$to_b(v[j]);
+                                j += 1;
+                            }
+
+                            let mut out = [Self::EMPTY; M];
+                            let mut i = 0;
+                            while i < M {
+                                let mut bytes = [0u8; 16];
+                                let mut lane = 0;
+                                while lane < l {
+                                    let g = idxs[i * l + lane] as usize;
+                                    // mirror the default's normalization exactly
+                                    let g = if const { (M * $n).is_power_of_two() } {
+                                        g & (total - 1)
+                                    } else {
+                                        g.min(total - 1)
+                                    };
+                                    let mut b = 0;
+                                    while b < ES {
+                                        bytes[lane * ES + b] = (g * ES + b) as u8;
+                                        b += 1;
+                                    }
+                                    lane += 1;
+                                }
+                                let idxv = arch::vld1q_u8(bytes.as_ptr());
+                                out[i] = arch::$from_b(arch::neon_tbl_n_u8::<M>(table, idxv));
+                                i += 1;
+                            }
+                            return out;
+                        }
+                    }
+
+                    // M > 4 (or a non-power-of-two span): scalar gather.
+                    let mut out = [Self::EMPTY; M];
+                    for i in 0..M {
+                        let mut arr: GenericArray<Self::Element, Self::Lanes> = GenericArray::default();
+                        for lane in 0..l {
+                            let g = idxs[i * l + lane] as usize;
+                            let g = if total.is_power_of_two() { g & (total - 1) } else { g.min(total - 1) };
+                            arr[lane] = Self::as_slice(&value[g / l])[g % l];
+                        }
+                        out[i] = Self::new(arr);
+                    }
+                    out
+                }
+
+                // Two-source companion: `a` then `b` is a 32*M-byte table, so it
+                // fits TBL for M <= 2 (2 or 4 q-registers).
+                fn array_swizzle<const M: usize>(
+                    a: [Storage<Self>; M],
+                    b: [Storage<Self>; M],
+                    idxs: &[u32],
+                ) -> [Storage<Self>; M] {
+                    const ES: usize = 16 / $n;
+                    let l = $n;
+                    let total = M * l;
+                    let span = 2 * total;
+
+                    if const { M >= 1 && M <= 2 } {
+                        let idxs = &idxs[..total];
+
+                        unsafe {
+                            let (av, bv) = (a.as_slice(), b.as_slice());
+                            let mut table = [arch::vdupq_n_u8(0); 4];
+                            let mut j = 0;
+                            while j < M {
+                                table[j] = arch::$to_b(av[j]);
+                                table[M + j] = arch::$to_b(bv[j]);
+                                j += 1;
+                            }
+
+                            let mut out = [Self::EMPTY; M];
+                            let mut i = 0;
+                            while i < M {
+                                let mut bytes = [0u8; 16];
+                                let mut lane = 0;
+                                while lane < l {
+                                    let g = idxs[i * l + lane] as usize;
+                                    let g = if const { (2 * M * $n).is_power_of_two() } {
+                                        g & (span - 1)
+                                    } else {
+                                        g.min(span - 1)
+                                    };
+                                    let mut bb = 0;
+                                    while bb < ES {
+                                        bytes[lane * ES + bb] = (g * ES + bb) as u8;
+                                        bb += 1;
+                                    }
+                                    lane += 1;
+                                }
+                                let idxv = arch::vld1q_u8(bytes.as_ptr());
+                                // `{ 2 * M }` in const-generic position needs
+                                // `generic_const_exprs`; M is 1 or 2 here, so
+                                // branch on it - `if const` folds the dead arm.
+                                out[i] = arch::$from_b(if const { M == 1 } {
+                                    arch::neon_tbl_n_u8::<2>(table, idxv)
+                                } else {
+                                    arch::neon_tbl_n_u8::<4>(table, idxv)
+                                });
+                                i += 1;
+                            }
+                            return out;
+                        }
+                    }
+
+                    let mut out = [Self::EMPTY; M];
+                    for i in 0..M {
+                        let mut arr: GenericArray<Self::Element, Self::Lanes> = GenericArray::default();
+                        for lane in 0..l {
+                            let g = idxs[i * l + lane] as usize;
+                            let g = if span.is_power_of_two() { g & (span - 1) } else { g.min(span - 1) };
+                            let src = if g / l < M { &a[g / l] } else { &b[g / l - M] };
+                            arr[lane] = Self::as_slice(src)[g % l];
+                        }
+                        out[i] = Self::new(arr);
+                    }
+                    out
+                }
+
+                // Radix-3 register de-interleave in three `TBL3`s: the three
+                // registers ARE a 48-byte table, so each output stream is one
+                // whole-table lookup (vs the default's 9 permute+blend pairs).
+                // Index vectors are compile-time constants, so they fold to a
+                // literal load.
+                fn deinterleave3(
+                    a: Storage<Self>,
+                    b: Storage<Self>,
+                    c: Storage<Self>,
+                ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+                    const ES: usize = 16 / $n;
+
+                    // Byte table for output stream `r`: lane `l` wants flat
+                    // element `l * 3 + r`, i.e. bytes `(l*3+r)*ES ..`.
+                    const fn table<const R: usize>() -> arch::uint8x16_t {
+                        let mut bytes = [0u8; 16];
+                        let mut l = 0;
+                        while l < $n {
+                            let g = l * 3 + R;
+                            let mut b = 0;
+                            while b < ES {
+                                bytes[l * ES + b] = (g * ES + b) as u8;
+                                b += 1;
+                            }
+                            l += 1;
+                        }
+                        arch::cu8x16(bytes)
+                    }
+
+                    unsafe {
+                        let t = [arch::$to_b(a), arch::$to_b(b), arch::$to_b(c), arch::vdupq_n_u8(0)];
+                        (
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
+                        )
+                    }
+                }
+
+                fn interleave3(
+                    x: Storage<Self>,
+                    y: Storage<Self>,
+                    z: Storage<Self>,
+                ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+                    const ES: usize = 16 / $n;
+
+                    // Byte table for output register `i`: lane `l` is flat
+                    // position `g = i * LANES + l`, which is element `g / 3` of
+                    // stream `g % 3` - source flat index `(g % 3) * LANES + g / 3`.
+                    const fn table<const I: usize>() -> arch::uint8x16_t {
+                        let mut bytes = [0u8; 16];
+                        let mut l = 0;
+                        while l < $n {
+                            let g = I * $n + l;
+                            let src = (g % 3) * $n + (g / 3);
+                            let mut b = 0;
+                            while b < ES {
+                                bytes[l * ES + b] = (src * ES + b) as u8;
+                                b += 1;
+                            }
+                            l += 1;
+                        }
+                        arch::cu8x16(bytes)
+                    }
+
+                    unsafe {
+                        let t = [arch::$to_b(x), arch::$to_b(y), arch::$to_b(z), arch::vdupq_n_u8(0)];
+                        (
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
+                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
+                        )
+                    }
+                }
+
+                // Structural (de-interleaving) load/store: `LD2`/`LD3`/`LD4` read
+                // N interleaved streams and hand back N de-interleaved registers
+                // in ONE instruction - the AoS -> SoA transpose happens in the
+                // load unit. `ST2`/`ST3`/`ST4` do the inverse. This is the NEON
+                // feature x86 has no answer to (there, the default's load + TBL
+                // permute is the best available).
+                //
+                // No alignment requirement on AArch64: unlike ARMv7's `:64`/`:128`
+                // qualifiers, A64 structural loads take a plain address (a fault
+                // needs SCTLR.A strict-alignment checking, which Linux leaves off).
+                //
+                // N == 1 and N > 4 fall back to the portable default's shape
+                // (contiguous loads + a cross-register permute).
+                unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Storage<Self>; N] {
+                    let mut out = [Self::EMPTY; N];
+                    {
+                        let o = out.as_mut_slice();
+                        unsafe {
+                            match N {
+                                2 => {
+                                    let v = arch::[<vld2q_ $s>](ptr);
+                                    o[0] = v.0;
+                                    o[1] = v.1;
+                                }
+                                3 => {
+                                    let v = arch::[<vld3q_ $s>](ptr);
+                                    o[0] = v.0;
+                                    o[1] = v.1;
+                                    o[2] = v.2;
+                                }
+                                4 => {
+                                    let v = arch::[<vld4q_ $s>](ptr);
+                                    o[0] = v.0;
+                                    o[1] = v.1;
+                                    o[2] = v.2;
+                                    o[3] = v.3;
+                                }
+                                _ => {
+                                    // N == 1, or beyond what LD4 covers: load
+                                    // contiguously and use the portable
+                                    // butterfly / gather.
+                                    let mut src = [Self::EMPTY; N];
+                                    for (i, s) in src.iter_mut().enumerate() {
+                                        *s = Self::load_unaligned(ptr.add(i * $n));
+                                    }
+                                    return crate::backend::generic::polyfills::deinterleave_n::<Self, N>(src);
+                                }
+                            }
+                        }
+                    }
+                    out
+                }
+
+                unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Storage<Self>; N]) {
+                    let v = values.as_slice();
+                    unsafe {
+                        match N {
+                            2 => arch::[<vst2q_ $s>](ptr, arch::[<$vt x2_t>](v[0], v[1])),
+                            3 => arch::[<vst3q_ $s>](ptr, arch::[<$vt x3_t>](v[0], v[1], v[2])),
+                            4 => arch::[<vst4q_ $s>](ptr, arch::[<$vt x4_t>](v[0], v[1], v[2], v[3])),
+                            _ => {
+                                let out = crate::backend::generic::polyfills::interleave_n::<Self, N>(values);
+                                for (i, s) in out.iter().enumerate() {
+                                    Self::store_unaligned(ptr.add(i * $n), *s);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 neon_compress_sel!($compress);
@@ -614,6 +901,19 @@ macro_rules! neon_bitshift {
 
                 fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
                     unsafe { arch::$from_b(arch::neon_bshri_u8x16::<IMM8>(arch::$to_b(value))) }
+                }
+
+                // Constant rotates fuse into SHL + SRI (2 instructions) instead
+                // of the trait default's SHL + USHR + ORR. A rotate is a pure
+                // bit operation, so both run on the unsigned view. See
+                // `polyfills/bits.rs` for the immediate ranges and the `n == 0`
+                // identity case.
+                fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_roli_ $us>]::<IMM8>(arch::$to_u(value))) }
+                }
+
+                fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_rori_ $us>]::<IMM8>(arch::$to_u(value))) }
                 }
 
                 fn reverse_bits(value: Storage<Self>) -> Storage<Self> {

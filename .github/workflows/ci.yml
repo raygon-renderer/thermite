@@ -17,11 +17,22 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       # Scoped to `-p thermite`: the rest of the workspace targets other ISAs
       # (spirv/neon/wasm) or is mid-rewrite, so a `--workspace` run won't build on
       # an x86_64 host. `std` is additive and lights up the fmt-gated panic paths.
+      #
+      # nextest schedules every test as its own process across all cores instead
+      # of running each test binary to completion in turn. It deliberately does
+      # not support doctests, so those get their own step - dropping it would
+      # silently stop gating ~24 tests.
       - name: Run tests
-        run: cargo test -p thermite --features std
+        run: cargo nextest run -p thermite --features std
+
+      - name: Run doctests
+        run: cargo test -p thermite --features std --doc
 
       # The wasm backend is build-only here (no SIMD128 runtime on the runner).
       - name: Check wasm backend builds

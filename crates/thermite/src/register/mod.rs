@@ -684,6 +684,100 @@ pub trait Register:
         unsafe { Self::store(ptr, value) }
     }
 
+    /// Radix-3 de-interleave: the 3-way sibling of
+    /// [`InterleaveRegister::deinterleave`].
+    ///
+    /// Treats `a`, `b`, `c` as one contiguous `3 * LANES` span and splits it by
+    /// residue mod 3: `out.r[lane] == concat(a, b, c)[lane * 3 + r]`.
+    ///
+    /// This is the primitive behind the `xyz` case (`N == 3`) and every
+    /// `N = 3 * 2^k` in
+    /// [`load_deinterleaved`](Self::load_deinterleaved) - radix-2 cannot
+    /// decompose an odd factor, so without this, three-stream data falls back to
+    /// the `O(N^2)` permute+blend gather. The default IS that gather; backends
+    /// with a three-register table lookup (NEON `TBL3`) or a hand-tuned shuffle
+    /// sequence override it.
+    fn deinterleave3(
+        a: Storage<Self>,
+        b: Storage<Self>,
+        c: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        let out = crate::backend::generic::polyfills::deinterleave_any::<Self, 3>([a, b, c]);
+        (out[0], out[1], out[2])
+    }
+
+    /// Radix-3 interleave - the exact inverse of
+    /// [`deinterleave3`](Self::deinterleave3):
+    /// `concat(out.0, out.1, out.2)[q * 3 + r]` is lane `q` of the `r`-th input.
+    fn interleave3(
+        x: Storage<Self>,
+        y: Storage<Self>,
+        z: Storage<Self>,
+    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
+        let out = crate::backend::generic::polyfills::interleave_any::<Self, 3>([x, y, z]);
+        (out[0], out[1], out[2])
+    }
+
+    /// Load `N` interleaved (array-of-structures) streams and de-interleave them
+    /// into `N` registers: reads `N * LANES` contiguous elements starting at
+    /// `ptr`, and returns `out` such that `out[j]` holds every `j`-th element,
+    /// i.e. `out[j][lane] == ptr[lane * N + j]`.
+    ///
+    /// This is the AoS -> SoA load. `N == 3` over `f32` is the classic case:
+    /// `xyzxyzxyz...` in memory becomes one register each of `xxx`, `yyy`, `zzz`.
+    ///
+    /// **Any `N >= 1`.** The pointer needs **no alignment** beyond that of
+    /// `Element` - ARM's structural loads (`LD2`/`LD3`/`LD4`) have no alignment
+    /// requirement on AArch64, and the portable path uses unaligned loads.
+    ///
+    /// The default loads `N` contiguous registers and hands them to
+    /// [`deinterleave_n`](crate::backend::generic::polyfills::deinterleave_n),
+    /// a mixed-radix stage engine: a radix-2 butterfly of the native 2-way
+    /// `deinterleave` and radix-3 rounds of [`deinterleave3`](Self::deinterleave3)
+    /// cover the `2^a * 3^b` part of `N`, and a permute+blend gather stage
+    /// handles any leftover factor. A backend with true structural loads
+    /// overrides this for the widths it supports.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for reads of `N * LANES` elements.
+    unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Storage<Self>; N] {
+        const { assert!(N >= 1) };
+
+        let lanes = Self::lanes();
+
+        let mut src = [Self::EMPTY; N];
+        for (i, s) in src.iter_mut().enumerate() {
+            *s = unsafe { Self::load_unaligned(ptr.add(i * lanes)) };
+        }
+
+        crate::backend::generic::polyfills::deinterleave_n::<Self, N>(src)
+    }
+
+    /// Interleave `N` registers and store them as a contiguous
+    /// array-of-structures: writes `N * LANES` elements starting at `ptr` such
+    /// that `ptr[lane * N + j] == values[j][lane]`.
+    ///
+    /// The SoA -> AoS store, and the exact inverse of
+    /// [`load_deinterleaved`](Self::load_deinterleaved). Any `N >= 1`, same
+    /// alignment freedom, same portable strategy
+    /// ([`interleave_n`](crate::backend::generic::polyfills::interleave_n)).
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be valid for writes of `N * LANES` elements.
+    unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Storage<Self>; N]) {
+        const { assert!(N >= 1) };
+
+        let lanes = Self::lanes();
+
+        let out = crate::backend::generic::polyfills::interleave_n::<Self, N>(values);
+
+        for (i, o) in out.iter().enumerate() {
+            unsafe { Self::store_unaligned(ptr.add(i * lanes), *o) };
+        }
+    }
+
     /// # Safety
     ///
     /// Every lane of `indices` must be a valid index into `values` (i.e. `< values.len()`).
@@ -1455,14 +1549,26 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     }
 
     /// Rotate bits left
+    ///
+    /// The amount is reduced modulo the element bit width, matching
+    /// [`u32::rotate_left`] (and hence the scalar backend, which *is*
+    /// `rotate_left`). Without the mask, `width - shift` underflows for
+    /// `shift >= width` and every vector backend returns zeros where the
+    /// scalar oracle returns a rotation - a silent cross-backend divergence.
+    /// `shift == 0` is unaffected: `shr(value, width)` is a defined zero on
+    /// every backend, and `value | 0 == value`.
     #[conditional] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {
         let width = (core::mem::size_of::<Self::Element>() * 8) as u32;
+        let shift = shift & (width - 1); // widths are powers of two
         Self::bitor(Self::shl(value, shift), Self::shr(value, width - shift))
     }
 
     /// Rotate bits right
+    ///
+    /// The amount is reduced modulo the element bit width; see [`Self::rol`].
     #[conditional] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {
         let width = (core::mem::size_of::<Self::Element>() * 8) as u32;
+        let shift = shift & (width - 1);
         Self::bitor(Self::shr(value, shift), Self::shl(value, width - shift))
     }
 
