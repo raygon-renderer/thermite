@@ -39,6 +39,14 @@
 //! real powers and bases) have no place in those families and get their own; see
 //! [`specialized`] for [`ComplexVector`] and [`ComplexMath`].
 //!
+//! The inner `V` need not be a plain vector. Anything implementing [`ComplexValue`]
+//! will do, including the other composites:
+//!
+//! ```text
+//! Complex<Dual<V, N>>      => complex arithmetic carrying N derivatives  (`dual` feature)
+//! Complex<Compensated<V>>  => complex arithmetic in double-double        (`compensated`)
+//! ```
+//!
 //! # Ordering, sign and rounding
 //!
 //! C is neither ordered nor signed, but the vector traits require both:
@@ -173,6 +181,35 @@ impl<V: thermite_dual::DualValue, const N: usize> ComplexValue for thermite_dual
     #[inline(always)]
     fn val_trunc(self) -> Self {
         thermite_dual::DualValue::val_trunc(self)
+    }
+}
+
+/// `Complex<Compensated<V>>`: a complex number whose parts are each a double-double,
+/// roughly doubling the mantissa of the complex arithmetic and of every kernel built
+/// on it.
+///
+/// [`Compensated`] carries no error term of its own through a complex multiply; the
+/// compensation is per component, and the cross terms of `(a + bi)(c + di)` are
+/// summed in double-double, which is where the precision comes from.
+///
+/// [`Compensated`]: thermite_compensated::Compensated
+#[cfg(feature = "compensated")]
+impl<V: thermite_compensated::ScalarValue> ComplexValue for thermite_compensated::Compensated<V> {
+    const VAL_ZERO: Self = thermite_compensated::Compensated {
+        value: V::SCALAR_ZERO,
+        error: V::SCALAR_ZERO,
+    };
+
+    const VAL_ONE: Self = thermite_compensated::Compensated {
+        value: V::SCALAR_ONE,
+        error: V::SCALAR_ZERO,
+    };
+
+    // Truncating the folded value+error, as `Compensated`'s own `Rem` and
+    // `FloatElement::trunc` do.
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        thermite_compensated::Compensated::new(self.value().scalar_trunc())
     }
 }
 

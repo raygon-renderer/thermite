@@ -18,11 +18,15 @@ std = ["thermite/std"]
 dual = ["dep:thermite-dual"]
 # Special functions (erf/erfc and the polynomial families) over the complex plane.
 special = ["dep:thermite-special"]
+# Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`.
+# Not on by default: thermite-compensated is not no_std.
+compensated = ["dep:thermite-compensated"]
 
 [dependencies]
 thermite = { workspace = true }
 thermite-dual = { workspace = true, optional = true }
 thermite-special = { workspace = true, optional = true }
+thermite-compensated = { workspace = true, optional = true }
 num-traits = { version = "0.2", default-features = false }
 paste = "1"
 
