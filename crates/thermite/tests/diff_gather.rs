@@ -8,7 +8,12 @@
 //! One generic `fn check_gather::<V>()` over any `GenericVector`, instantiated
 //! per backend/width (Scalar + V2 + V3). Indices are the vector's own
 //! `Unsigned` type; values are bit-preserving, so NaN lanes must match too.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

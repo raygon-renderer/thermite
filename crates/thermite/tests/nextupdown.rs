@@ -11,7 +11,12 @@
 //! the IEEE-754 domain explicitly: NaNs (payloads and signs), both infinities,
 //! +/-MAX, exponent-rollover boundaries, the normal/subnormal boundary, the
 //! tiniest subnormals, and both zeros.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

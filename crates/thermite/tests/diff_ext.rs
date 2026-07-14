@@ -6,7 +6,12 @@
 //! reference at the same element type x width, so the emulated `ArrayRegister`
 //! and `ReducedRegister` delegation paths (blendv / zz / nz, lane routing, the
 //! split/recombine helpers) are all exercised.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

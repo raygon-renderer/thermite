@@ -5,7 +5,12 @@
 //! register emulates a 3-lane vector inside a 4-lane register; only the first
 //! three lanes are meaningful, so only those are checked). Pure arithmetic /
 //! bitwise / rounding ops are bit-exact (NaN-aware via the harness).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

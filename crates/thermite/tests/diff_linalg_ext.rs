@@ -17,7 +17,12 @@
 //! documented behaviour rather than an independent textbook convention.
 //! Tested at the `Vector` layer on Scalar + V2 + V3, `Vector<f32x4>` /
 //! `Vector<f64x4>`.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

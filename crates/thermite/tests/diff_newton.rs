@@ -6,7 +6,12 @@
 //! Each of those branches gets a dedicated scenario, on Scalar + V2 + V3 for
 //! both `f32x4` and `f64x4`. Roots are known in closed form and checked against
 //! `f64` oracles.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use thermite::Vector;
 use thermite::math::algorithms::{newtons_method, prod_f, sum_f};

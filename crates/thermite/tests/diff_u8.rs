@@ -5,7 +5,12 @@
 //! ladder. The scalar backend's native 8-bit slot is 1-lane, so the differential reference is
 //! an `ArrayRegister<{i8,u8}, N>` (N = the backend's native byte width: 16 on SSE, 32 on
 //! AVX2), which is a pure element-wise scalar register of matching lane count.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

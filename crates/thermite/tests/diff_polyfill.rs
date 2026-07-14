@@ -13,7 +13,12 @@
 //!
 //! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
 //! in both; the regression tests cover both backends.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

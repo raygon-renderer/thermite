@@ -7,7 +7,12 @@
 //! Sorting is checked by the identity `sort([n-1, …, 1, 0]) == [0, 1, …, n-1]`:
 //! `indexed()` is a known distinct ascending ramp, so its reverse must sort back
 //! to it exactly.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use thermite::Vector;
 // Which of these are used varies by backend cfg (x86 / wasm / neon).

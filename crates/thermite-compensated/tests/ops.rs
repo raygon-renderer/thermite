@@ -150,10 +150,7 @@ fn probit_matches_reference() {
 
     for (p, want) in cases {
         let got = val(c(p).probit_p::<Precision>());
-        assert!(
-            (got - want).abs() <= 1e-13,
-            "probit({p}) = {got}, want {want}"
-        );
+        assert!((got - want).abs() <= 1e-13, "probit({p}) = {got}, want {want}");
     }
 }
 

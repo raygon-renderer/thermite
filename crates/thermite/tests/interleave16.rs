@@ -3,7 +3,12 @@
 //! Checks (1) the interleave lane layout, (2) that deinterleave inverts interleave, and
 //! (3) deinterleave directly against a scalar even/odd oracle. This is what guards the
 //! AVX2 `pshufb`/`unpack`/`permute` deinterleave sequences.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

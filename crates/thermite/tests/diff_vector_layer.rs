@@ -7,7 +7,12 @@
 //! These impls are generic over `R`, so a single concrete instantiation per impl
 //! covers its source lines; we use `X86V3` (+ `Scalar` for the masked ops, whose
 //! `_c`/`_m`/`_z` lowering differs from the x86 blend path).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use num_traits::{Bounded, One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd, WrappingMul, WrappingSub, Zero};
 

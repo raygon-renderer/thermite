@@ -4,7 +4,12 @@
 //! Only built where the x86 SIMD backends exist. The 16-bit slots live on
 //! `Simd` (a staging trait), so register types are resolved through it rather
 //! than `Simd`.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

@@ -880,12 +880,7 @@ fn f64x2_to_2xi32(v: arch::float64x2_t) -> [i32; 2] {
 /// Two f64x2 -> i32x4 with Rust `as` (f64 -> i32) semantics, fully in-register.
 #[inline(always)]
 fn f64x4_to_i32x4(a: arch::float64x2_t, b: arch::float64x2_t) -> arch::int32x4_t {
-    unsafe {
-        arch::vqmovn_high_s64(
-            arch::vqmovn_s64(arch::vcvtq_s64_f64(a)),
-            arch::vcvtq_s64_f64(b),
-        )
-    }
+    unsafe { arch::vqmovn_high_s64(arch::vqmovn_s64(arch::vcvtq_s64_f64(a)), arch::vcvtq_s64_f64(b)) }
 }
 
 // --- x2 (ArrayRegister<i8,2> <-> ReducedRegister<F32x4Neon,2> = F32x2Neon) ---
@@ -1004,8 +999,7 @@ impl CastRegister<ArrayRegister<super::F64x2Neon, 2>> for U8x4Neon {
     fn cast_from(value: Storage<ArrayRegister<super::F64x2Neon, 2>>) -> Storage<Self> {
         unsafe {
             ReducedRegister::new(arch::vreinterpretq_u8_s8(narrow_i32_to_low_bytes(f64x4_to_i32x4(
-                value.0[0],
-                value.0[1],
+                value.0[0], value.0[1],
             ))))
         }
     }

@@ -309,6 +309,11 @@ macro_rules! neon_register {
                 type Signed = $sg;
                 type Unsigned = $un;
 
+                // `LD2`/`LD3`/`LD4` below are real load-unit transposes, so the
+                // grouped memory ops should decompose into per-chunk structural
+                // loads rather than take the flat shuffle engine.
+                const HAS_STRUCTURAL_MEMOPS: bool = true;
+
                 fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
                     arch::[<neon_nonzero_mask_ $s>](value)
                 }
@@ -1656,7 +1661,6 @@ macro_rules! neon_broadcast_align {
         }
     };
 }
-
 
 /// `rcp`/`rsqrt` + their capability flags.
 ///

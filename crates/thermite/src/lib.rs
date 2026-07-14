@@ -144,7 +144,7 @@ pub mod prelude {
             BitCastVector, BitshiftVector, BitwiseVector, CastVector, ConcatVector, ExtendVector, FloatVector,
             FloatVectorWithBits, GenericVector, GenericVector2 as _, GenericVector3 as _, GenericVector4 as _,
             IndexableVector, IntegerVector, Interleave, LinAlg3Vector, LinAlg4Vector, NumericVector, PackedFloatVector,
-            PartialOrdVector, SignedIntegerVector, SignedVector, SplatConst, Swizzle3 as _, Swizzle4 as _,
+            PartialOrdVector, SignedIntegerVector, SignedVector, SplatConst, StreamGroup, Swizzle3 as _, Swizzle4 as _,
             SwizzleVector, UnsignedIntegerVector, VectorIndices, VectorWithRegister as _,
         },
     };

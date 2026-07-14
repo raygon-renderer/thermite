@@ -101,13 +101,19 @@ pub fn wasm_morton2_spread_epu32x(v: v128) -> v128 {
 /// Per-16-bit-lane 2D Morton encode: low 8 bits of `x` (even) with `y` (odd).
 #[inline(always)]
 pub fn wasm_morton2_epu16x(x: v128, y: v128) -> v128 {
-    v128_or(wasm_morton2_spread_epu16x(x), i16x8_shl(wasm_morton2_spread_epu16x(y), 1))
+    v128_or(
+        wasm_morton2_spread_epu16x(x),
+        i16x8_shl(wasm_morton2_spread_epu16x(y), 1),
+    )
 }
 
 /// Per-32-bit-lane 2D Morton encode: low 16 bits of `x` (even) with `y` (odd).
 #[inline(always)]
 pub fn wasm_morton2_epu32x(x: v128, y: v128) -> v128 {
-    v128_or(wasm_morton2_spread_epu32x(x), i32x4_shl(wasm_morton2_spread_epu32x(y), 1))
+    v128_or(
+        wasm_morton2_spread_epu32x(x),
+        i32x4_shl(wasm_morton2_spread_epu32x(y), 1),
+    )
 }
 
 /// Compress the even bits of each 16-bit lane back to a contiguous low 8 bits -

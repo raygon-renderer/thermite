@@ -316,6 +316,48 @@ impl<R: Register> GenericVector for Vector<R> {
         }
         unsafe { R::store_interleaved::<N>(ptr, regs) }
     }
+
+    // Overrides `GenericVector`'s lane-wise grouped defaults with the register
+    // engine. Same hand-rolled-loop reasoning as above.
+    unsafe fn load_deinterleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *const Self::Element,
+    ) -> [StreamGroup<Self, TAIL>; M] {
+        let groups = unsafe { R::load_deinterleaved_grouped::<M, TAIL>(ptr) };
+
+        let mut out = [StreamGroup { head: Vector(R::EMPTY), tail: [Vector(R::EMPTY); TAIL] }; M];
+        let mut j = 0;
+        while j < M {
+            let mut tail = [Vector(R::EMPTY); TAIL];
+            let mut c = 0;
+            while c < TAIL {
+                tail[c] = Vector(groups[j].tail[c]);
+                c += 1;
+            }
+            out[j] = StreamGroup { head: Vector(groups[j].head), tail };
+            j += 1;
+        }
+        out
+    }
+
+    unsafe fn store_interleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *mut Self::Element,
+        values: [StreamGroup<Self, TAIL>; M],
+    ) {
+        let empty = StreamGroup { head: R::EMPTY, tail: [R::EMPTY; TAIL] };
+        let mut regs = [empty; M];
+        let mut j = 0;
+        while j < M {
+            let mut tail = [R::EMPTY; TAIL];
+            let mut c = 0;
+            while c < TAIL {
+                tail[c] = values[j].tail[c].0;
+                c += 1;
+            }
+            regs[j] = StreamGroup { head: values[j].head.0, tail };
+            j += 1;
+        }
+        unsafe { R::store_interleaved_grouped::<M, TAIL>(ptr, regs) }
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]

@@ -1,7 +1,12 @@
 //! Differential tests for the sub-native 8-bit integer ladder (`Simd` i8x2/x4/x8):
 //! every backend register op vs. the `Scalar` reference, plus the i8<->i32 / u8<->u32 widen and
 //! narrow casts that the ladder adds. Mirrors `diff_i16.rs`, one element size down.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

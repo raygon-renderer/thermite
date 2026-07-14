@@ -7,8 +7,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastMaskRegister, CoreRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
-        UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage, UnsignedIntegerRegister,
+        ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
 };
 

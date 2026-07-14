@@ -29,9 +29,9 @@ use core::ops::{Add, Div, Mul, Rem, Sub};
 use num_traits::Bounded;
 
 use thermite::element::{Element, FloatElement, SignedElement};
-use thermite::math::algorithms::reduce_in_place;
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
 use thermite::mask::{GenericMask, GenericSelectable};
+use thermite::math::algorithms::reduce_in_place;
 use thermite::vector::ops::{NegMasked, Square, SquareMasked};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 use thermite::{LargeInt, prelude::*};
@@ -361,7 +361,6 @@ where
 // GenericVector
 // =====================================================================================
 
-#[rustfmt::skip]
 impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     type Element = Dual<V::Element, N>;
 
@@ -381,7 +380,10 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     {
         Self {
             re: V::new(array_each!([<V::Element as Element>::ZERO; M], |m| value[m].re)),
-            dual: array_each!([V::ZERO; N], |j| V::new(array_each!([<V::Element as Element>::ZERO; M], |m| value[m].dual[j]))),
+            dual: array_each!([V::ZERO; N], |j| V::new(array_each!(
+                [<V::Element as Element>::ZERO; M],
+                |m| value[m].dual[j]
+            ))),
         }
     }
 
@@ -413,27 +415,68 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
+    // Composite element alignment only guarantees the alignment of a single
+    // `V::Element`, so aligned load/store just forward to the unaligned path -
+    // there is no separate "aligned" fast path to take.
     #[inline(always)]
     unsafe fn load(ptr: *const Self::Element) -> Self {
-        let mut out = Self::EMPTY;
-        for i in 0..Self::LANES {
-            out = out.insertv(i, unsafe { ptr.add(i).read() });
-        }
-        out
+        unsafe { Self::load_unaligned(ptr) }
     }
 
+    /// A `Dual` element is `#[repr(C)]` over `1 + N` floats, so a single
+    /// element is exactly [`load_deinterleaved::<1>`](Self::load_deinterleaved)
+    /// - which routes through the inner vector's tuned register engine, not a
+    /// scalar lane-by-lane loop.
     #[inline(always)]
     unsafe fn load_unaligned(ptr: *const Self::Element) -> Self {
-        let mut out = Self::EMPTY;
-        for i in 0..Self::LANES {
-            out = out.insertv(i, unsafe { ptr.add(i).read_unaligned() });
-        }
+        let [out] = unsafe { Self::load_deinterleaved::<1>(ptr) };
         out
     }
 
     #[inline(always)]
     unsafe fn load_streaming(ptr: *const Self::Element) -> Self {
         unsafe { Self::load(ptr) }
+    }
+
+    /// A `Dual` element is `#[repr(C)]` over `1 + N` floats (the primal, then
+    /// the `N` derivative parts), so `M` interleaved `Dual` streams are
+    /// exactly `M * (N + 1)` interleaved float streams. That is precisely the
+    /// factorization [`StreamGroup`] exists for: this hands `M` and `N`
+    /// straight to the inner vector's [`GenericVector::load_deinterleaved_grouped`]
+    /// (a NEON `LD2`/`LD3`/`LD4`, or a shuffle network on x86), for any `M`
+    /// and `N` - no dispatch ladder, no scalar fallback.
+    #[inline(always)]
+    unsafe fn load_deinterleaved<const M: usize>(ptr: *const Self::Element) -> [Self; M] {
+        let groups = unsafe { V::load_deinterleaved_grouped::<M, N>(ptr as *const V::Element) };
+
+        let mut out = [Self::EMPTY; M];
+        let mut j = 0;
+        while j < M {
+            out[j] = Dual {
+                re: groups[j].head,
+                dual: groups[j].tail,
+            };
+            j += 1;
+        }
+        out
+    }
+
+    /// The exact inverse of [`load_deinterleaved`](Self::load_deinterleaved).
+    #[inline(always)]
+    unsafe fn store_interleaved<const M: usize>(ptr: *mut Self::Element, values: [Self; M]) {
+        let mut groups = [StreamGroup {
+            head: V::ZERO,
+            tail: [V::ZERO; N],
+        }; M];
+        let mut j = 0;
+        while j < M {
+            groups[j] = StreamGroup {
+                head: values[j].re,
+                tail: values[j].dual,
+            };
+            j += 1;
+        }
+        unsafe { V::store_interleaved_grouped::<M, N>(ptr as *mut V::Element, groups) }
     }
 
     #[inline(always)]
@@ -454,18 +497,15 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         unsafe { Self::load_m(Self::EMPTY, mask, ptr) }
     }
 
+    // See the note on `load` above: aligned store forwards to unaligned.
     #[inline(always)]
     unsafe fn store(self, ptr: *mut Self::Element) {
-        for i in 0..Self::LANES {
-            unsafe { ptr.add(i).write(self.extractv(i)) };
-        }
+        unsafe { self.store_unaligned(ptr) }
     }
 
     #[inline(always)]
     unsafe fn store_unaligned(self, ptr: *mut Self::Element) {
-        for i in 0..Self::LANES {
-            unsafe { ptr.add(i).write_unaligned(self.extractv(i)) };
-        }
+        unsafe { Self::store_interleaved::<1>(ptr, [self]) }
     }
 
     #[inline(always)]
@@ -600,7 +640,8 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
-    #[inline(always)] fn map<F>(mut self, f: F) -> Self
+    #[inline(always)]
+    fn map<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::Element) -> Self::Element,
     {
@@ -610,7 +651,8 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         self
     }
 
-    #[inline(always)] fn fold<F>(self, mut init: Self::Element, f: F) -> Self::Element
+    #[inline(always)]
+    fn fold<F>(self, mut init: Self::Element, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
@@ -620,7 +662,8 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         init
     }
 
-    #[inline(always)] fn reduce<F>(self, f: F) -> Self::Element
+    #[inline(always)]
+    fn reduce<F>(self, f: F) -> Self::Element
     where
         F: Fn(Self::Element, Self::Element) -> Self::Element,
     {
@@ -631,20 +674,62 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         result
     }
 
-    #[inline(always)] fn splat_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), src) }
-    #[inline(always)] fn splat_z(mask: Self::Mask, value: Self::Element) -> Self { mask.select(Self::splat(value), Self::EMPTY) }
-    #[inline(always)] fn broadcast_c<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), self) }
-    #[inline(always)] fn broadcast_m<const I: usize>(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), src) }
-    #[inline(always)] fn broadcast_z<const I: usize>(self, mask: Self::Mask) -> Self { mask.select(self.broadcast::<I>(), Self::EMPTY) }
-    #[inline(always)] fn broadcastv_c(self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), self) }
-    #[inline(always)] fn broadcastv_m(self, src: Self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), src) }
-    #[inline(always)] fn broadcastv_z(self, mask: Self::Mask, idx: usize) -> Self { mask.select(self.broadcastv(idx), Self::EMPTY) }
-    #[inline(always)] fn reverse_c(self, mask: Self::Mask) -> Self { mask.select(self.reverse(), self) }
-    #[inline(always)] fn reverse_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.reverse(), src) }
-    #[inline(always)] fn reverse_z(self, mask: Self::Mask) -> Self { mask.select(self.reverse(), Self::EMPTY) }
-    #[inline(always)] fn swap_bytes_c(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), self) }
-    #[inline(always)] fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), src) }
-    #[inline(always)] fn swap_bytes_z(self, mask: Self::Mask) -> Self { mask.select(self.swap_bytes(), Self::EMPTY) }
+    #[inline(always)]
+    fn splat_m(src: Self, mask: Self::Mask, value: Self::Element) -> Self {
+        mask.select(Self::splat(value), src)
+    }
+    #[inline(always)]
+    fn splat_z(mask: Self::Mask, value: Self::Element) -> Self {
+        mask.select(Self::splat(value), Self::EMPTY)
+    }
+    #[inline(always)]
+    fn broadcast_c<const I: usize>(self, mask: Self::Mask) -> Self {
+        mask.select(self.broadcast::<I>(), self)
+    }
+    #[inline(always)]
+    fn broadcast_m<const I: usize>(self, src: Self, mask: Self::Mask) -> Self {
+        mask.select(self.broadcast::<I>(), src)
+    }
+    #[inline(always)]
+    fn broadcast_z<const I: usize>(self, mask: Self::Mask) -> Self {
+        mask.select(self.broadcast::<I>(), Self::EMPTY)
+    }
+    #[inline(always)]
+    fn broadcastv_c(self, mask: Self::Mask, idx: usize) -> Self {
+        mask.select(self.broadcastv(idx), self)
+    }
+    #[inline(always)]
+    fn broadcastv_m(self, src: Self, mask: Self::Mask, idx: usize) -> Self {
+        mask.select(self.broadcastv(idx), src)
+    }
+    #[inline(always)]
+    fn broadcastv_z(self, mask: Self::Mask, idx: usize) -> Self {
+        mask.select(self.broadcastv(idx), Self::EMPTY)
+    }
+    #[inline(always)]
+    fn reverse_c(self, mask: Self::Mask) -> Self {
+        mask.select(self.reverse(), self)
+    }
+    #[inline(always)]
+    fn reverse_m(self, src: Self, mask: Self::Mask) -> Self {
+        mask.select(self.reverse(), src)
+    }
+    #[inline(always)]
+    fn reverse_z(self, mask: Self::Mask) -> Self {
+        mask.select(self.reverse(), Self::EMPTY)
+    }
+    #[inline(always)]
+    fn swap_bytes_c(self, mask: Self::Mask) -> Self {
+        mask.select(self.swap_bytes(), self)
+    }
+    #[inline(always)]
+    fn swap_bytes_m(self, src: Self, mask: Self::Mask) -> Self {
+        mask.select(self.swap_bytes(), src)
+    }
+    #[inline(always)]
+    fn swap_bytes_z(self, mask: Self::Mask) -> Self {
+        mask.select(self.swap_bytes(), Self::EMPTY)
+    }
 }
 
 // =====================================================================================

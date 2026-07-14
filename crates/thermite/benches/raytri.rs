@@ -26,12 +26,12 @@ use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
 use nalgebra::{Matrix4, Point3, Vector3};
 use simba::simd::{SimdPartialOrd, SimdSigned, SimdValue, WideF32x4};
 
+#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+use thermite::backend::neon::Neon;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use thermite::backend::x86_v2::X86V2;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use thermite::backend::x86_v3::X86V3;
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
-use thermite::backend::neon::Neon;
 use thermite::prelude::*;
 use thermite::simd::Simd;
 
@@ -183,12 +183,8 @@ fn make_scene() -> Scene {
     let m = glam_m.to_cols_array();
     let na_m = Matrix4::from_column_slice(&m);
 
-    let glam_o: Vec<Vec3A> = (0..N)
-        .map(|i| Vec3A::new(rays.ox[i], rays.oy[i], rays.oz[i]))
-        .collect();
-    let glam_d: Vec<Vec3A> = (0..N)
-        .map(|i| Vec3A::new(rays.dx[i], rays.dy[i], rays.dz[i]))
-        .collect();
+    let glam_o: Vec<Vec3A> = (0..N).map(|i| Vec3A::new(rays.ox[i], rays.oy[i], rays.oz[i])).collect();
+    let glam_d: Vec<Vec3A> = (0..N).map(|i| Vec3A::new(rays.dx[i], rays.dy[i], rays.dz[i])).collect();
     let na_o: Vec<Point3<f32>> = (0..N)
         .map(|i| Point3::new(rays.ox[i], rays.oy[i], rays.oz[i]))
         .collect();
@@ -317,12 +313,7 @@ fn ray_tri_glam(o: &[Vec3A], d: &[Vec3A], tris: &[GlamTri], m: &Mat4) -> f32 {
     acc
 }
 
-fn ray_tri_nalgebra(
-    o: &[Point3<f32>],
-    d: &[Vector3<f32>],
-    tris: &[NaTri],
-    m: &Matrix4<f32>,
-) -> f32 {
+fn ray_tri_nalgebra(o: &[Point3<f32>], d: &[Vector3<f32>], tris: &[NaTri], m: &Matrix4<f32>) -> f32 {
     let mut acc = 0.0f32;
     for (o, d) in o.iter().zip(d) {
         let o = m.transform_point(o);
@@ -622,11 +613,7 @@ fn bench(c: &mut Criterion) {
     let r_glam_soa = ray_tri_glam_soa(&scene.glam_soa, &scene.tris, &scene.m);
     let r_na_soa = ray_tri_nalgebra_soa(&scene.na_soa, &scene.na_wide_tris, &scene.m);
     assert!(r_glam > 0.0, "scene produced no hits");
-    for (name, r) in [
-        ("nalgebra", r_na),
-        ("glam-soa", r_glam_soa),
-        ("nalgebra-soa", r_na_soa),
-    ] {
+    for (name, r) in [("nalgebra", r_na), ("glam-soa", r_glam_soa), ("nalgebra-soa", r_na_soa)] {
         let rel = (r - r_glam).abs() / r_glam;
         assert!(rel < 1e-2, "{name} disagrees with glam: {r} vs {r_glam}");
     }
@@ -672,13 +659,7 @@ fn bench(c: &mut Criterion) {
         })
     });
     g.bench_function("glam-soa", |b| {
-        b.iter(|| {
-            black_box(ray_tri_glam_soa(
-                black_box(&scene.glam_soa),
-                &scene.tris,
-                &scene.m,
-            ))
-        })
+        b.iter(|| black_box(ray_tri_glam_soa(black_box(&scene.glam_soa), &scene.tris, &scene.m)))
     });
     g.bench_function("nalgebra-soa", |b| {
         b.iter(|| {

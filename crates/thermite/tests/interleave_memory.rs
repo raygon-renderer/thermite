@@ -88,10 +88,13 @@ macro_rules! check_all_n {
         check!($label, $reg, $e, 4);
         check!($label, $reg, $e, 5); // pure gather (prime leftover)
         check!($label, $reg, $e, 6); // mixed radix (3 * 2), past LD4
+        check!($label, $reg, $e, 7); // pure gather, prime > LANES/2
         check!($label, $reg, $e, 8); // butterfly, past LD4
+        check!($label, $reg, $e, 9); // two radix-3 rounds (3 * 3)
         check!($label, $reg, $e, 10); // gather stage + butterfly (5 * 2)
         check!($label, $reg, $e, 12); // mixed radix (3 * 4), past LD4
         check!($label, $reg, $e, 15); // gather stage + radix-3 round (5 * 3)
+        check!($label, $reg, $e, 20); // gather stage + two butterflies (5 * 4)
     }};
 }
 

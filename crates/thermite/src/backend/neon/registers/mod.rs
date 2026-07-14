@@ -35,11 +35,7 @@ pub use u8x16::U8x16Neon;
 
 pub use half::{F32x2Neon, I32x2Neon, U32x2Neon};
 
-use crate::{
-    isa::InstructionSet,
-    register::Storage,
-    simd::HasIsa,
-};
+use crate::{isa::InstructionSet, register::Storage, simd::HasIsa};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Neon;

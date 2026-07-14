@@ -5,7 +5,12 @@
 //!
 //! Masks are built from comparisons (known per-lane bool patterns) and every
 //! operation is checked against the booleans computed in plain Rust.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

@@ -48,11 +48,7 @@ fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
         let got = R::compress(v, mask);
         let got_z = R::compress_z(v, mask);
         assert_eq!(R::as_slice(&got), &part[..], "compress n={n} bits={bits:b}");
-        assert_eq!(
-            R::as_slice(&got_z),
-            &zero[..],
-            "compress_z n={n} bits={bits:b}"
-        );
+        assert_eq!(R::as_slice(&got_z), &zero[..], "compress_z n={n} bits={bits:b}");
     }
 }
 

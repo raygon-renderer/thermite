@@ -8,7 +8,12 @@
 //! make the relative error meaningless. Pure lane-routing ops (transpose,
 //! zero4/one4) are bit-exact. 3D ops only check the first three lanes (the 4th
 //! is documented as unused / unspecified).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

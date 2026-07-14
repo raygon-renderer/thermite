@@ -3,7 +3,12 @@
 //!
 //! See `harness/mod.rs` for the methodology. Only built where the x86 SIMD
 //! backends exist; elsewhere there is nothing to differentiate against.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

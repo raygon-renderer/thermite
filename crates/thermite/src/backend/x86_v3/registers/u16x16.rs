@@ -343,7 +343,6 @@ impl NumericRegister for U16x16V3 {
 
 #[thermite_macros::inline_always]
 impl IntegerRegister for U16x16V3 {
-
     fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_mulhi_epu16(lhs, rhs) }
     }

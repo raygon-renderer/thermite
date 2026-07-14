@@ -6,7 +6,12 @@
 //! Most are exact-ish arithmetic checked against an `f64` oracle. The angle
 //! wrappers are checked *by property* (result in range, and congruent mod 2π) to
 //! avoid floating-point boundary ambiguity at ±π.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

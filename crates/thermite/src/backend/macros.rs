@@ -23,16 +23,16 @@ macro_rules! impl_byte_align_alignr {
     () => {
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match OFFSET {
-                0  => unsafe { arch::_mm_alignr_epi8::<0>(b, a) },
-                1  => unsafe { arch::_mm_alignr_epi8::<1>(b, a) },
-                2  => unsafe { arch::_mm_alignr_epi8::<2>(b, a) },
-                3  => unsafe { arch::_mm_alignr_epi8::<3>(b, a) },
-                4  => unsafe { arch::_mm_alignr_epi8::<4>(b, a) },
-                5  => unsafe { arch::_mm_alignr_epi8::<5>(b, a) },
-                6  => unsafe { arch::_mm_alignr_epi8::<6>(b, a) },
-                7  => unsafe { arch::_mm_alignr_epi8::<7>(b, a) },
-                8  => unsafe { arch::_mm_alignr_epi8::<8>(b, a) },
-                9  => unsafe { arch::_mm_alignr_epi8::<9>(b, a) },
+                0 => unsafe { arch::_mm_alignr_epi8::<0>(b, a) },
+                1 => unsafe { arch::_mm_alignr_epi8::<1>(b, a) },
+                2 => unsafe { arch::_mm_alignr_epi8::<2>(b, a) },
+                3 => unsafe { arch::_mm_alignr_epi8::<3>(b, a) },
+                4 => unsafe { arch::_mm_alignr_epi8::<4>(b, a) },
+                5 => unsafe { arch::_mm_alignr_epi8::<5>(b, a) },
+                6 => unsafe { arch::_mm_alignr_epi8::<6>(b, a) },
+                7 => unsafe { arch::_mm_alignr_epi8::<7>(b, a) },
+                8 => unsafe { arch::_mm_alignr_epi8::<8>(b, a) },
+                9 => unsafe { arch::_mm_alignr_epi8::<9>(b, a) },
                 10 => unsafe { arch::_mm_alignr_epi8::<10>(b, a) },
                 11 => unsafe { arch::_mm_alignr_epi8::<11>(b, a) },
                 12 => unsafe { arch::_mm_alignr_epi8::<12>(b, a) },
@@ -40,7 +40,7 @@ macro_rules! impl_byte_align_alignr {
                 14 => unsafe { arch::_mm_alignr_epi8::<14>(b, a) },
                 15 => unsafe { arch::_mm_alignr_epi8::<15>(b, a) },
                 16 => unsafe { arch::_mm_alignr_epi8::<16>(b, a) },
-                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                _ => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
             }
         }
     };
@@ -60,16 +60,16 @@ macro_rules! impl_byte_align_alignr256 {
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             let mid = unsafe { arch::_mm256_permute2x128_si256::<0x21>(a, b) };
             match OFFSET * core::mem::size_of::<Self::Element>() {
-                0  => unsafe { arch::_mm256_alignr_epi8::<0>(mid, a) },
-                1  => unsafe { arch::_mm256_alignr_epi8::<1>(mid, a) },
-                2  => unsafe { arch::_mm256_alignr_epi8::<2>(mid, a) },
-                3  => unsafe { arch::_mm256_alignr_epi8::<3>(mid, a) },
-                4  => unsafe { arch::_mm256_alignr_epi8::<4>(mid, a) },
-                5  => unsafe { arch::_mm256_alignr_epi8::<5>(mid, a) },
-                6  => unsafe { arch::_mm256_alignr_epi8::<6>(mid, a) },
-                7  => unsafe { arch::_mm256_alignr_epi8::<7>(mid, a) },
-                8  => unsafe { arch::_mm256_alignr_epi8::<8>(mid, a) },
-                9  => unsafe { arch::_mm256_alignr_epi8::<9>(mid, a) },
+                0 => unsafe { arch::_mm256_alignr_epi8::<0>(mid, a) },
+                1 => unsafe { arch::_mm256_alignr_epi8::<1>(mid, a) },
+                2 => unsafe { arch::_mm256_alignr_epi8::<2>(mid, a) },
+                3 => unsafe { arch::_mm256_alignr_epi8::<3>(mid, a) },
+                4 => unsafe { arch::_mm256_alignr_epi8::<4>(mid, a) },
+                5 => unsafe { arch::_mm256_alignr_epi8::<5>(mid, a) },
+                6 => unsafe { arch::_mm256_alignr_epi8::<6>(mid, a) },
+                7 => unsafe { arch::_mm256_alignr_epi8::<7>(mid, a) },
+                8 => unsafe { arch::_mm256_alignr_epi8::<8>(mid, a) },
+                9 => unsafe { arch::_mm256_alignr_epi8::<9>(mid, a) },
                 10 => unsafe { arch::_mm256_alignr_epi8::<10>(mid, a) },
                 11 => unsafe { arch::_mm256_alignr_epi8::<11>(mid, a) },
                 12 => unsafe { arch::_mm256_alignr_epi8::<12>(mid, a) },
@@ -93,7 +93,7 @@ macro_rules! impl_byte_align_alignr256 {
                 30 => unsafe { arch::_mm256_alignr_epi8::<14>(b, mid) },
                 31 => unsafe { arch::_mm256_alignr_epi8::<15>(b, mid) },
                 32 => unsafe { arch::_mm256_alignr_epi8::<16>(b, mid) },
-                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                _ => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
             }
         }
     };
@@ -115,16 +115,16 @@ macro_rules! impl_byteshift_align {
     () => {
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match const { OFFSET * core::mem::size_of::<Self::Element>() } {
-                0  => Self::bitor(Self::bshri::<0>(a),  Self::bshli::<16>(b)),
-                1  => Self::bitor(Self::bshri::<1>(a),  Self::bshli::<15>(b)),
-                2  => Self::bitor(Self::bshri::<2>(a),  Self::bshli::<14>(b)),
-                3  => Self::bitor(Self::bshri::<3>(a),  Self::bshli::<13>(b)),
-                4  => Self::bitor(Self::bshri::<4>(a),  Self::bshli::<12>(b)),
-                5  => Self::bitor(Self::bshri::<5>(a),  Self::bshli::<11>(b)),
-                6  => Self::bitor(Self::bshri::<6>(a),  Self::bshli::<10>(b)),
-                7  => Self::bitor(Self::bshri::<7>(a),  Self::bshli::<9>(b)),
-                8  => Self::bitor(Self::bshri::<8>(a),  Self::bshli::<8>(b)),
-                9  => Self::bitor(Self::bshri::<9>(a),  Self::bshli::<7>(b)),
+                0 => Self::bitor(Self::bshri::<0>(a), Self::bshli::<16>(b)),
+                1 => Self::bitor(Self::bshri::<1>(a), Self::bshli::<15>(b)),
+                2 => Self::bitor(Self::bshri::<2>(a), Self::bshli::<14>(b)),
+                3 => Self::bitor(Self::bshri::<3>(a), Self::bshli::<13>(b)),
+                4 => Self::bitor(Self::bshri::<4>(a), Self::bshli::<12>(b)),
+                5 => Self::bitor(Self::bshri::<5>(a), Self::bshli::<11>(b)),
+                6 => Self::bitor(Self::bshri::<6>(a), Self::bshli::<10>(b)),
+                7 => Self::bitor(Self::bshri::<7>(a), Self::bshli::<9>(b)),
+                8 => Self::bitor(Self::bshri::<8>(a), Self::bshli::<8>(b)),
+                9 => Self::bitor(Self::bshri::<9>(a), Self::bshli::<7>(b)),
                 10 => Self::bitor(Self::bshri::<10>(a), Self::bshli::<6>(b)),
                 11 => Self::bitor(Self::bshri::<11>(a), Self::bshli::<5>(b)),
                 12 => Self::bitor(Self::bshri::<12>(a), Self::bshli::<4>(b)),
@@ -132,7 +132,7 @@ macro_rules! impl_byteshift_align {
                 14 => Self::bitor(Self::bshri::<14>(a), Self::bshli::<2>(b)),
                 15 => Self::bitor(Self::bshri::<15>(a), Self::bshli::<1>(b)),
                 16 => Self::bitor(Self::bshri::<16>(a), Self::bshli::<0>(b)),
-                _  => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
+                _ => Self::swizzle_const::<$crate::swizzle::AlignIndices<OFFSET, Self::Lanes>>(a, b),
             }
         }
     };

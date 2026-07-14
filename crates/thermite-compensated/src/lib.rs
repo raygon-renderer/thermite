@@ -1231,6 +1231,38 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         Self { value, error }
     }
 
+    /// A `Compensated` element is `#[repr(C)]` over two floats (value, error),
+    /// so `M` interleaved `Compensated` streams are exactly `2 * M`
+    /// interleaved float streams - precisely a grouped problem with `TAIL = 1`
+    /// (see [`StreamGroup`]). This hands `M` straight to the inner vector's
+    /// [`GenericVector::load_deinterleaved_grouped`] (a NEON `LD2`/`LD3`/`LD4`,
+    /// or a shuffle network on x86), for any `M` - no dispatch ladder, no
+    /// scalar fallback.
+    #[inline(always)]
+    unsafe fn load_deinterleaved<const M: usize>(ptr: *const Self::Element) -> [Self; M] {
+        let groups = unsafe { V::load_deinterleaved_grouped::<M, 1>(ptr as *const V::Element) };
+
+        let mut out = [<Compensated<V> as GenericVector>::EMPTY; M];
+        let mut j = 0;
+        while j < M {
+            out[j] = Compensated { value: groups[j].head, error: groups[j].tail[0] };
+            j += 1;
+        }
+        out
+    }
+
+    /// The exact inverse of [`load_deinterleaved`](Self::load_deinterleaved).
+    #[inline(always)]
+    unsafe fn store_interleaved<const M: usize>(ptr: *mut Self::Element, values: [Self; M]) {
+        let mut groups = [StreamGroup { head: V::ZERO, tail: [V::ZERO; 1] }; M];
+        let mut j = 0;
+        while j < M {
+            groups[j] = StreamGroup { head: values[j].value, tail: [values[j].error] };
+            j += 1;
+        }
+        unsafe { V::store_interleaved_grouped::<M, 1>(ptr as *mut V::Element, groups) }
+    }
+
     #[inline(always)]
     unsafe fn load_m(src: Self, mask: Self::Mask, ptr: *const Self::Element) -> Self {
         let ptr = ptr as *const V::Element;

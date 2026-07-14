@@ -39,7 +39,9 @@ macro_rules! check {
                         got.as_slice()[i],
                         da[i].abs_diff(db[i]),
                         "abs_diff a={} b={} lane={}",
-                        da[i], db[i], i
+                        da[i],
+                        db[i],
+                        i
                     );
                 }
             }

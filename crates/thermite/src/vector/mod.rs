@@ -124,6 +124,7 @@ pub mod unaligned;
 pub use self::num::NumVector;
 pub use self::splat::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 pub use self::vector::Vector;
+pub use crate::register::StreamGroup;
 
 /// Three vector types (`Self`, `A`, `B`) whose masks can all be freely cast to
 /// one another.
@@ -893,6 +894,92 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// # SAFETY
     /// `ptr` must be valid for writes of `N * LANES` elements.
     unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]);
+
+    /// Load `M` interleaved composite streams of `1 + TAIL` components each and
+    /// de-interleave them into `M` [`StreamGroup`]s: reads
+    /// `M * (TAIL + 1) * LANES` contiguous elements, and group `j`'s
+    /// `head`/`tail[c - 1]` hold the de-interleaved components of composite
+    /// stream `j`. See [`StreamGroup`] for why the component count is a
+    /// separate const generic, and
+    /// [`Register::load_deinterleaved_grouped`](crate::register::Register::load_deinterleaved_grouped)
+    /// for the register-level strategy.
+    ///
+    /// The default is a lane-wise gather: correct for ANY vector type, but
+    /// scalar. [`Vector`] overrides it with the register engine; a composite
+    /// vector (dual numbers, compensated floats) instead implements its plain
+    /// [`load_deinterleaved`](Self::load_deinterleaved) by calling *its inner
+    /// vector's* grouped op with the composite's component count folded into
+    /// `TAIL`. Only a composite nested inside another composite ever reaches
+    /// this default - at that point layout-aware shuffling has run out of road,
+    /// and correctness is all that is on offer.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for reads of `M * (TAIL + 1) * LANES` elements.
+    unsafe fn load_deinterleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *const Self::Element,
+    ) -> [StreamGroup<Self, TAIL>; M] {
+        const { assert!(M >= 1) };
+
+        let c = TAIL + 1;
+
+        let mut out = [StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] }; M];
+
+        let mut j = 0;
+        while j < M {
+            let mut comp = 0;
+            while comp < c {
+                let mut v = Self::EMPTY;
+
+                let mut lane = 0;
+                while lane < Self::LANES {
+                    v = v.insertv(lane, unsafe { ptr.add(lane * (M * c) + j * c + comp).read_unaligned() });
+                    lane += 1;
+                }
+
+                if comp == 0 {
+                    out[j].head = v;
+                } else {
+                    out[j].tail[comp - 1] = v;
+                }
+                comp += 1;
+            }
+            j += 1;
+        }
+
+        out
+    }
+
+    /// Interleave `M` [`StreamGroup`]s and store them as a contiguous
+    /// array-of-structures - the exact inverse of
+    /// [`load_deinterleaved_grouped`](Self::load_deinterleaved_grouped), with
+    /// the same lane-wise default and the same override expectations.
+    ///
+    /// # SAFETY
+    /// `ptr` must be valid for writes of `M * (TAIL + 1) * LANES` elements.
+    unsafe fn store_interleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *mut Self::Element,
+        values: [StreamGroup<Self, TAIL>; M],
+    ) {
+        const { assert!(M >= 1) };
+
+        let c = TAIL + 1;
+
+        let mut j = 0;
+        while j < M {
+            let mut comp = 0;
+            while comp < c {
+                let v = if comp == 0 { values[j].head } else { values[j].tail[comp - 1] };
+
+                let mut lane = 0;
+                while lane < Self::LANES {
+                    unsafe { ptr.add(lane * (M * c) + j * c + comp).write_unaligned(v.extractv(lane)) };
+                    lane += 1;
+                }
+                comp += 1;
+            }
+            j += 1;
+        }
+    }
 
     /// Assemble a vector from a slice of elements and a vector of indices
     /// into that slice. If an index is outside the bounds of the given slice,

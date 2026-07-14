@@ -7,7 +7,12 @@
 //!
 //! Deterministic distinct-value inputs (no ties), values exactly representable in
 //! f32/i32, so comparisons are exact.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use thermite::Vector;
 use thermite::prelude::*;

@@ -7,7 +7,12 @@
 //!
 //! These had no coverage at all. Inputs are restricted to the well-behaved
 //! normal range (no denormals/inf/NaN) where the accuracy contract holds.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

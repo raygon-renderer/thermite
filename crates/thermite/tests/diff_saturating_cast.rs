@@ -7,7 +7,12 @@
 //! of the pack path against the clamp-then-truncate path on an identical corpus.
 //! The corpus spans the full source range, so out-of-range inputs (which is what
 //! exercises the saturation) dominate.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

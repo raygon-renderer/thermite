@@ -13,7 +13,12 @@
 //! differ from the sign-bit ones for ±0.0:
 //!   - `is_negative(x) == (x < 0)`   → `is_negative(-0.0)` is `false`
 //!   - `is_positive(x) == (x >= 0)`  → `is_positive(-0.0)` is `true`
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

@@ -33,7 +33,11 @@ macro_rules! check {
                 V::new(data.into()).cmp_ne(V::ZERO)
             };
 
-            let full: u64 = if LANES >= 64 { u64::MAX } else { (1u64 << LANES) - 1 };
+            let full: u64 = if LANES >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << LANES) - 1
+            };
 
             // Patterns: empty, full, each single bit, and full with one bit cleared.
             let mut patterns = alloc_patterns(full, LANES);

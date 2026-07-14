@@ -11,7 +11,12 @@
 //! others) - the things that had **zero** test coverage before this file
 //! existed. Tighten `TOL_*` and switch to a `Reference` policy for a precision
 //! audit.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

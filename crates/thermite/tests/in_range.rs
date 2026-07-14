@@ -20,13 +20,19 @@ macro_rules! check {
             // A spread of inclusive ranges, including degenerate (lo == hi),
             // a full range (0..=MAX), and ranges hugging both ends.
             let max = <$elem>::MAX;
-            let ranges: [($elem, $elem); 7] =
-                [(0, 0), (10, 20), (1, max), (0, max), (max, max), (max - 5, max), (64, 64)];
+            let ranges: [($elem, $elem); 7] = [
+                (0, 0),
+                (10, 20),
+                (1, max),
+                (0, max),
+                (max, max),
+                (max - 5, max),
+                (64, 64),
+            ];
 
             // Lane values exercising below/at/inside/above each range plus the
             // wrap-prone 0 and MAX endpoints.
-            let probes: [$elem; 12] =
-                [0, 1, 9, 10, 15, 20, 21, 63, 64, 65, max - 1, max];
+            let probes: [$elem; 12] = [0, 1, 9, 10, 15, 20, 21, 63, 64, 65, max - 1, max];
 
             for &(lo, hi) in &ranges {
                 let lo_v = V::splat(lo);

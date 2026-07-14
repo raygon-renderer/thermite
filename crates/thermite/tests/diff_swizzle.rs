@@ -10,7 +10,12 @@
 //!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
 //!    random fuzzing - the coverage formerly in `array_swizzle.rs`, broadened
 //!    here from V3-emulated-only to native registers across v1/v2/v3.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use generic_array::{GenericArray, arr, typenum::Unsigned};
 use rand::RngExt;

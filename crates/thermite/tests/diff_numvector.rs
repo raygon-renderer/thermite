@@ -3,7 +3,12 @@
 //! `is_zero`/`is_one`/`eq` are **all-lane**, `ne`/`is_nan`/`is_sign_negative` are
 //! **any-lane**, plus `partial_cmp` and `classify`. The forwarded arithmetic /
 //! math ops just need to execute (correctness is covered elsewhere).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use core::cmp::Ordering;
 use core::num::FpCategory;

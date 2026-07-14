@@ -5,7 +5,12 @@
 //! random `(divisor, x)` pairs through both the branching `Divider` and the
 //! `BranchfreeDivider`, hitting the power-of-two (`multiplier == 0`) path, the
 //! general `mullhi` + `ADD_MARKER` path, and (for signed) the `NEG_DIVISOR` path.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

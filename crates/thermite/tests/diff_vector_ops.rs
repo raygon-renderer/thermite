@@ -11,7 +11,12 @@
 //!
 //! Inputs are finite and small (no NaN/Inf, no overflow even under debug
 //! overflow checks), and f32 `==` treats ±0 as equal, so exact comparison is safe.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 use core::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign, ShrAssign,

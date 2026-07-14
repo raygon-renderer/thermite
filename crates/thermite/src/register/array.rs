@@ -353,6 +353,10 @@ where
     type Signed = ArrayRegister<R::Signed, N>;
     type Unsigned = ArrayRegister<R::Unsigned, N>;
 
+    // The per-chunk overrides below decompose into the inner register's memory
+    // ops, so structural hardware shows through unchanged.
+    const HAS_STRUCTURAL_MEMOPS: bool = R::HAS_STRUCTURAL_MEMOPS;
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {}
     fn into_mask_unchecked(value: Storage<Self>) -> Storage<Self::Mask> {}
     fn msb_to_mask(value: Storage<Self>) -> Storage<Self::Mask> {}
@@ -528,6 +532,69 @@ where
             }
 
             unsafe { R::store_interleaved::<S>(ptr.add(k * l * S), inner) };
+        }
+    }
+
+    /// The grouped ops decompose per chunk exactly like
+    /// [`load_deinterleaved`](Self::load_deinterleaved) above, delegating each
+    /// chunk to the INNER register's grouped op so the inner width picks its
+    /// own strategy (structural loads on ARM, the flat shuffle engine on x86).
+    ///
+    /// This matters even without structural hardware: running the flat engine
+    /// at THIS register's width pairs up chunked stage ops, while per-chunk
+    /// delegation folds each half into the tight inner-width network - an AVX2
+    /// `Compensated<f32x16>` 3-stream load measured 155 instructions flat
+    /// versus 105 decomposed - identical to the plain 6-stream
+    /// `load_deinterleaved` on the same data.
+    unsafe fn load_deinterleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *const Self::Element,
+    ) -> [crate::backend::generic::polyfills::StreamGroup<Storage<Self>, TAIL>; M] {
+        use crate::backend::generic::polyfills::StreamGroup;
+
+        let l = R::Lanes::USIZE;
+
+        let mut out = [StreamGroup { head: Self::EMPTY, tail: [Self::EMPTY; TAIL] }; M];
+
+        for k in 0..N {
+            let inner = unsafe { R::load_deinterleaved_grouped::<M, TAIL>(ptr.add(k * l * M * (TAIL + 1))) };
+
+            for (j, o) in out.iter_mut().enumerate() {
+                o.head.0[k] = inner[j].head;
+
+                let mut c = 0;
+                while c < TAIL {
+                    o.tail[c].0[k] = inner[j].tail[c];
+                    c += 1;
+                }
+            }
+        }
+
+        out
+    }
+
+    /// The exact inverse; same per-chunk delegation to the inner grouped op.
+    unsafe fn store_interleaved_grouped<const M: usize, const TAIL: usize>(
+        ptr: *mut Self::Element,
+        values: [crate::backend::generic::polyfills::StreamGroup<Storage<Self>, TAIL>; M],
+    ) {
+        use crate::backend::generic::polyfills::StreamGroup;
+
+        let l = R::Lanes::USIZE;
+
+        for k in 0..N {
+            let mut inner = [StreamGroup { head: R::EMPTY, tail: [R::EMPTY; TAIL] }; M];
+
+            for (j, v) in values.iter().enumerate() {
+                inner[j].head = v.head.0[k];
+
+                let mut c = 0;
+                while c < TAIL {
+                    inner[j].tail[c] = v.tail[c].0[k];
+                    c += 1;
+                }
+            }
+
+            unsafe { R::store_interleaved_grouped::<M, TAIL>(ptr.add(k * l * M * (TAIL + 1)), inner) };
         }
     }
 

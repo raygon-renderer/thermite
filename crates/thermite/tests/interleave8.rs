@@ -4,7 +4,12 @@
 //! (3) deinterleave directly against a scalar even/odd oracle. This guards the v2 `pshufb`
 //! deinterleave and the v3 AVX2 cross-lane `unpack`/`permute4x64` sequences (and the v1
 //! scalar fallback).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "wasm32", all(feature = "neon", target_arch = "aarch64")))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    all(feature = "neon", target_arch = "aarch64")
+))]
 
 mod harness;
 

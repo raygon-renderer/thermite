@@ -78,8 +78,14 @@ pub unsafe fn _mm256_morton2_spread_epu32x_v3(v: __m256i) -> __m256i {
         0x00, 0x01, 0x04, 0x05, 0x10, 0x11, 0x14, 0x15, 0x40, 0x41, 0x44, 0x45, 0x50, 0x51, 0x54, 0x55,
     );
     let c = _mm256_and_si256(v, _mm256_set1_epi32(0x0000_FFFF));
-    let c = _mm256_and_si256(_mm256_or_si256(c, _mm256_slli_epi32(c, 8)), _mm256_set1_epi32(0x00FF_00FF));
-    let n = _mm256_and_si256(_mm256_or_si256(c, _mm256_slli_epi32(c, 4)), _mm256_set1_epi32(0x0F0F_0F0F));
+    let c = _mm256_and_si256(
+        _mm256_or_si256(c, _mm256_slli_epi32(c, 8)),
+        _mm256_set1_epi32(0x00FF_00FF),
+    );
+    let n = _mm256_and_si256(
+        _mm256_or_si256(c, _mm256_slli_epi32(c, 4)),
+        _mm256_set1_epi32(0x0F0F_0F0F),
+    );
     _mm256_shuffle_epi8(lut, n)
 }
 
@@ -133,9 +139,18 @@ pub unsafe fn _mm256_morton2_compress_epu32x_v3(v: __m256i) -> __m256i {
     let e = _mm256_and_si256(v, _mm256_set1_epi32(0x5555_5555));
     let lo = _mm256_shuffle_epi8(lut, e);
     let hi = _mm256_shuffle_epi8(lut, _mm256_srli_epi32(e, 4));
-    let n = _mm256_and_si256(_mm256_or_si256(lo, _mm256_slli_epi32(hi, 2)), _mm256_set1_epi32(0x0F0F_0F0F));
-    let c = _mm256_and_si256(_mm256_or_si256(n, _mm256_srli_epi32(n, 4)), _mm256_set1_epi32(0x00FF_00FF));
-    _mm256_and_si256(_mm256_or_si256(c, _mm256_srli_epi32(c, 8)), _mm256_set1_epi32(0x0000_FFFF))
+    let n = _mm256_and_si256(
+        _mm256_or_si256(lo, _mm256_slli_epi32(hi, 2)),
+        _mm256_set1_epi32(0x0F0F_0F0F),
+    );
+    let c = _mm256_and_si256(
+        _mm256_or_si256(n, _mm256_srli_epi32(n, 4)),
+        _mm256_set1_epi32(0x00FF_00FF),
+    );
+    _mm256_and_si256(
+        _mm256_or_si256(c, _mm256_srli_epi32(c, 8)),
+        _mm256_set1_epi32(0x0000_FFFF),
+    )
 }
 
 // https://arxiv.org/pdf/1611.07612.pdf
