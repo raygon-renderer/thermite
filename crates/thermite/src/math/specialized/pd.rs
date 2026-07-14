@@ -507,7 +507,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let ei: V::SignedBits = ee.fast_cast();
 
         // biased exponent of result:
-        let ej = ei + (V::SignedBits::from_bits(x.abs()) >> 52);
+        let ej = ei + (V::SignedBits::from_bits(z.abs()) >> 52);
 
         // add exponent by signed integer addition
         let mut z = V::from_bits(V::SignedBits::from_bits(z) + (ei << 52));

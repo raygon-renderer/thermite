@@ -351,9 +351,7 @@ macro_rules! math_suite {
                 };
                 math_binary!($bl, R, f32, atan2, libm::atan2f, TOL_F32, safe, safe);
                 math_binary!($bl, R, f32, hypot, libm::hypotf, TOL_F32, safe, safe);
-                // powf: only `x^0 == 1` is asserted (the value we just fixed).
-                // The general op still has Performance-policy bugs - e.g.
-                // powf(2, -1) == 0 (#W10) - so it isn't asserted yet.
+                // Positive base, exponent in [-8, 8]; see the f64 case above (#W11).
                 math_binary!(
                     $bl,
                     R,
@@ -366,7 +364,7 @@ macro_rules! math_suite {
                     } else {
                         2.0
                     },
-                    |_| 0.0
+                    |y: f32| if y.is_finite() { y % 8.0 } else { 0.0 }
                 );
                 // compound(x, n) = (1+x)^n; oracle in f64 keeps x's low bits that (1+x)^n would lose
                 math_binary!(
@@ -733,8 +731,9 @@ macro_rules! math_suite {
                 };
                 math_binary!($bl, R, f64, atan2, libm::atan2, TOL_F64, safe, safe);
                 math_binary!($bl, R, f64, hypot, libm::hypot, TOL_F64, safe, safe);
-                // Only `x^0 == 1` is asserted; the general powf still has
-                // Performance-policy bugs (e.g. powf(2,-1)==0, #W10).
+                // Positive base, exponent in [-8, 8] -- covers the exponent-split path in
+                // both directions, including the power-of-two bases and negative exponents
+                // that #W11 silently flushed to zero.
                 math_binary!(
                     $bl,
                     R,
@@ -747,7 +746,7 @@ macro_rules! math_suite {
                     } else {
                         2.0
                     },
-                    |_| 0.0
+                    |y: f64| if y.is_finite() { y % 8.0 } else { 0.0 }
                 );
                 // compound(x, n) = (1+x)^n
                 math_binary!(
