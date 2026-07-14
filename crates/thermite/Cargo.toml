@@ -129,16 +129,28 @@ glam = "0.33"
 rand = "0.10"
 num-traits = { version = "0.2.19", default-features = true }
 
-# Benchmark harness only. criterion pulls rayon, which refuses to build for wasi, so keep it
-# out of the wasm test build graph (benches are native-only). Run wasm tests with `--tests` so
-# the bench targets that `use criterion` are not selected.
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Benchmark harness: criterion pulls rayon (refuses to build for wasi) and `alloca`
+# (an unconditional `cc`-built C shim on unix/windows, NOT feature-trimmable), so it
+# is gated to targets whose builds have a C toolchain:
+#   - native x86 hosts (normal `cargo bench`)
+#   - aarch64 *glibc* (`aarch64-unknown-linux-gnu`), built via `cross` in a container
+#     that carries the C cross-toolchain (`just pi-bench-build`)
+# The aarch64 *musl* target (test binaries for the Pi, `just pi-build`) deliberately
+# has NO criterion so the pure-Rust test suite links with rust-lld alone. This means
+# `cargo check --tests` for aarch64 must use the MUSL target on the bare host; the
+# gnu target's dev graph now requires the C cross-toolchain (i.e. run under cross).
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", all(target_arch = "aarch64", target_env = "gnu")))'.dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
-
-[[bench]]
-name = "compress"
-harness = false
+# Comparison libraries for the raytri bench only; keep them out of the non-x86
+# build graph alongside criterion. simba (nalgebra's scalar abstraction) with
+# the `wide` feature provides nalgebra's SIMD lane types.
+nalgebra = "0.35"
+simba = { version = "0.10", features = ["wide"] }
 
 [[bench]]
 name = "math"
+harness = false
+
+[[bench]]
+name = "raytri"
 harness = false
