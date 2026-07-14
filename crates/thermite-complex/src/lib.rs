@@ -1,456 +1,285 @@
 #![no_std]
 
-use thermite::{
-    math::{
-        RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy,
-        policy::{DefaultPolicy, Policy},
-    },
-    register::FloatElement,
-};
+//! # SIMD complex numbers
+//!
+//! [`Complex<V>`] stores a real and an imaginary part, each an inner value `V`.
+//! With `V` a Thermite [`FloatVector`](thermite::prelude::FloatVector) each lane
+//! is an independent complex number (struct-of-arrays); with `V` an `f32`/`f64`
+//! it is a complex scalar, which is the [`Element`](thermite::element::Element)
+//! of the vector form.
+//!
+//! ```text
+//! Complex<f32>        => a complex scalar
+//! Complex<Vector<R>>  => LANES complex numbers, SIMD-parallel
+//! ```
+//!
+//! `Complex<V>` implements the [`GenericVector`] -> [`FloatVector`] stack and the
+//! `Specialized*Math` traits. [`CoreMath`], [`TranscendentalMath`] and
+//! [`SpatialMath`] (with their `_p::<P>()` policy forms) then come from the same
+//! blanket impls that serve `Vector<R>`:
+//!
+//! ```
+//! use thermite::prelude::*;
+//! use thermite::math::TranscendentalMath;
+//! use thermite_complex::Complex;
+//!
+//! fn gaussian<V: FloatVector + TranscendentalMath>(x: V) -> V {
+//!     (-(x * x)).exp()
+//! }
+//!
+//! type V = Vector<f64>;
+//!
+//! // e^(-i^2) = e^1 = e
+//! let z = gaussian(Complex::<V>::I);
+//! assert!((z.re.extract::<0>() - core::f64::consts::E).abs() < 1e-12);
+//! assert!(z.im.extract::<0>().abs() < 1e-12);
+//! ```
+//!
+//! The operations whose result or argument is *real* (`norm`, `arg`, polar form,
+//! real powers and bases) have no place in those families and get their own; see
+//! [`specialized`] for [`ComplexVector`] and [`ComplexMath`].
+//!
+//! # Ordering, sign and rounding
+//!
+//! C is neither ordered nor signed, but the vector traits require both:
+//!
+//! - Ordering ([`cmp_lt`] and friends, [`min`], [`max`], [`clamp`],
+//!   [`arg_minmax`], the derived [`PartialOrd`]) is lexicographic by `(re, im)`.
+//!   It is a tiebreak rule, not a statement about magnitudes.
+//! - [`abs`] and [`signum`] are modulus-based: `$|z|$` (as a real complex) and
+//!   `$z/|z|$`, preserving `abs(z) * signum(z) == z`. The spatial norms
+//!   ([`l1_norm`], [`l2_norm`], [`hypot`]) are likewise the real quantities.
+//! - The sign-bit ops ([`copysign`], [`mul_sign`], [`signed_zero`]) are
+//!   componentwise. [`is_negative`]/[`is_positive`] report the sign of `re`, a
+//!   mask having only one bit per lane.
+//! - Rounding ([`floor`], [`ceil`], [`round`], [`trunc`], [`fract`]) is
+//!   componentwise, and `%` is `z - trunc(z/w)*w` with that truncation. These
+//!   satisfy the traits; they are not complex-analytic operations.
+//!
+//! [`RealMath`] is *not* implemented: `atan2`, `wrap_angle`, `step`, `smoothstep`
+//! and the rest of that family are defined over an ordered field, so a
+//! `V: RealMath` bound will not accept a complex vector. For the argument of `z`,
+//! use [`ComplexMath::arg`], which returns the real vector it is.
+//!
+//! [`GenericVector`]: thermite::prelude::GenericVector
+//! [`FloatVector`]: thermite::prelude::FloatVector
+//! [`CoreMath`]: thermite::math::CoreMath
+//! [`TranscendentalMath`]: thermite::math::TranscendentalMath
+//! [`SpatialMath`]: thermite::math::SpatialMath
+//! [`RealMath`]: thermite::math::RealMath
+//! [`cmp_lt`]: thermite::prelude::PartialOrdVector::cmp_lt
+//! [`min`]: thermite::prelude::NumericVector::min
+//! [`max`]: thermite::prelude::NumericVector::max
+//! [`clamp`]: thermite::prelude::NumericVector::clamp
+//! [`arg_minmax`]: thermite::prelude::NumericVector::arg_minmax
+//! [`abs`]: thermite::prelude::SignedVector::abs
+//! [`signum`]: thermite::prelude::SignedVector::signum
+//! [`l1_norm`]: thermite::math::SpatialMath::l1_norm
+//! [`l2_norm`]: thermite::math::SpatialMath::l2_norm
+//! [`hypot`]: thermite::math::SpatialMath::hypot
+//! [`copysign`]: thermite::prelude::SignedVector::copysign
+//! [`mul_sign`]: thermite::prelude::FloatVector::mul_sign
+//! [`signed_zero`]: thermite::prelude::FloatVector::signed_zero
+//! [`is_negative`]: thermite::prelude::SignedVector::is_negative
+//! [`is_positive`]: thermite::prelude::SignedVector::is_positive
+//! [`floor`]: thermite::prelude::FloatVector::floor
+//! [`ceil`]: thermite::prelude::FloatVector::ceil
+//! [`round`]: thermite::prelude::FloatVector::round
+//! [`trunc`]: thermite::prelude::FloatVector::trunc
+//! [`fract`]: thermite::prelude::FloatVector::fract
 
-/// A trait for vectors that support the necessary mathematical operations
-/// to be used as the real and imaginary parts of a complex number.
-pub trait MathVector: TranscendentalMathWithPolicy + SpatialMathWithPolicy + RealMathWithPolicy {}
-impl<V> MathVector for V where V: TranscendentalMathWithPolicy + SpatialMathWithPolicy + RealMathWithPolicy {}
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
-pub struct Complex<V: MathVector, P: Policy = DefaultPolicy> {
-    pub re: V,
-    pub im: V,
-    _policy: core::marker::PhantomData<P>,
+use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square};
+
+pub mod math;
+pub mod specialized;
+pub mod vector;
+
+#[cfg(feature = "special")]
+pub mod special;
+
+pub use specialized::{ComplexMath, ComplexMathWithPolicy, ComplexVector, SpecializedComplexMath};
+pub use vector::ComplexFloatVector;
+
+/// A value usable as the real/imaginary storage of a [`Complex`].
+///
+/// Implemented for `f32`/`f64` and for every Thermite float
+/// [`Vector`](thermite::prelude::Vector). The arithmetic below is written once
+/// against it and serves both the element level (`Complex<f32>`) and the vector
+/// level (`Complex<Vector<R>>`). The math library wants the stronger
+/// [`ComplexFloatVector`].
+pub trait ComplexValue:
+    Copy
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+    + MulAddExt<Self, Self, Output = Self>
+{
+    /// The additive identity in this value type.
+    const VAL_ZERO: Self;
+    /// The multiplicative identity in this value type.
+    const VAL_ONE: Self;
+
+    /// Truncate towards zero. Used to give [`Complex`] a (componentwise) `Rem`.
+    fn val_trunc(self) -> Self;
 }
 
-impl<V: MathVector, P: Policy> Clone for Complex<V, P> {
-    fn clone(&self) -> Self {
-        *self
+impl ComplexValue for f32 {
+    const VAL_ZERO: Self = 0.0;
+    const VAL_ONE: Self = 1.0;
+
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        thermite::register::FloatElement::trunc(self)
     }
 }
 
-impl<V: MathVector, P: Policy> Copy for Complex<V, P> {}
+impl ComplexValue for f64 {
+    const VAL_ZERO: Self = 0.0;
+    const VAL_ONE: Self = 1.0;
 
-impl<V: MathVector, P: Policy> Complex<V, P> {
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        thermite::register::FloatElement::trunc(self)
+    }
+}
+
+impl<R: thermite::register::FloatRegister> ComplexValue for thermite::prelude::Vector<R> {
+    const VAL_ZERO: Self = <Self as thermite::prelude::NumericVector>::ZERO;
+    const VAL_ONE: Self = <Self as thermite::prelude::NumericVector>::ONE;
+
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        thermite::prelude::FloatVector::trunc(self)
+    }
+}
+
+/// `Complex<Dual<V, N>>`: a complex number whose parts each carry `N` derivative
+/// components, giving forward-mode AD through the complex functions.
+///
+/// Everything here is written against [`ComplexValue`], which [`Dual`] satisfies,
+/// so this impl is all it takes. Seeded along the real axis (`dz = 1`), the dual
+/// parts of `f(z)` are `f'(z)` for holomorphic `f`.
+///
+/// [`Dual`]: thermite_dual::Dual
+#[cfg(feature = "dual")]
+impl<V: thermite_dual::DualValue, const N: usize> ComplexValue for thermite_dual::Dual<V, N> {
+    const VAL_ZERO: Self = Self::ZERO;
+    const VAL_ONE: Self = Self::ONE;
+
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        thermite_dual::DualValue::val_trunc(self)
+    }
+}
+
+/// A complex number `re + im*i`.
+///
+/// The derived [`PartialOrd`] is lexicographic on `(re, im)`, matching
+/// [`PartialOrdVector`](thermite::prelude::PartialOrdVector). The [crate docs](crate)
+/// cover the rest of the ordering/sign/rounding semantics.
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct Complex<V> {
+    /// The real part.
+    pub re: V,
+    /// The imaginary part.
+    pub im: V,
+}
+
+impl<V: ComplexValue> thermite::const_default::ConstDefault for Complex<V> {
+    const DEFAULT: Self = Self::ZERO;
+}
+
+impl<V: ComplexValue> Complex<V> {
+    /// Zero: `0 + 0i`.
+    pub const ZERO: Self = Self::new(V::VAL_ZERO, V::VAL_ZERO);
+    /// One: `1 + 0i`.
+    pub const ONE: Self = Self::new(V::VAL_ONE, V::VAL_ZERO);
+    /// The imaginary unit: `0 + 1i`.
+    pub const I: Self = Self::new(V::VAL_ZERO, V::VAL_ONE);
+
     /// Creates a complex number with the given real and imaginary parts.
     #[inline(always)]
     pub const fn new(re: V, im: V) -> Self {
-        Self {
-            re,
-            im,
-            _policy: core::marker::PhantomData,
-        }
+        Self { re, im }
     }
 
-    /// Creates a complex number with the given real and imaginary parts splatted across all lanes.
-    #[inline(always)]
-    pub fn splat(re: V::Element, im: V::Element) -> Self {
-        Self::new(V::splat(re), V::splat(im))
-    }
-
-    /// Changes the policy of the complex number operations.
-    #[inline(always)]
-    pub const fn with_policy<Q: Policy>(self) -> Complex<V, Q> {
-        Complex::<V, Q>::new(self.re, self.im)
-    }
-}
-
-impl<V: MathVector, P: Policy> Complex<V, P> {
     /// Creates a complex number with the given real part and zero imaginary part.
     #[inline(always)]
     pub const fn real(re: V) -> Self {
-        Self::new(re, V::ZERO)
+        Self::new(re, V::VAL_ZERO)
     }
 
     /// Creates a complex number with zero real part and the given imaginary part.
     #[inline(always)]
     pub const fn imag(im: V) -> Self {
-        Self::new(V::ZERO, im)
+        Self::new(V::VAL_ZERO, im)
     }
 
-    pub const I: Self = Self::new(V::ZERO, V::ONE);
-    pub const NEG_I: Self = Self::new(V::ZERO, V::NEG_ONE);
-    pub const ZERO: Self = Self::new(V::ZERO, V::ZERO);
-    pub const ONE: Self = Self::new(V::ONE, V::ZERO);
-}
-
-impl<V: MathVector, P: Policy> Complex<V, P> {
-    /// Computes the squared norm (magnitude) of the complex number.
-    #[inline(always)]
-    pub fn norm_sqr(self) -> V {
-        self.re.mul_adde(self.re, self.im * self.im)
-    }
-
-    /// Computes the norm (magnitude) of the complex number.
-    #[inline(always)]
-    pub fn norm(self) -> V {
-        self.re.hypot_p::<P>(self.im)
-    }
-
-    /// Scales/multiplies the complex number by the given vector.
-    #[inline(always)]
-    pub fn scale(self, t: V) -> Self {
-        self * t
-    }
-
-    /// Unscales/divides the complex number by the given vector.
-    #[inline(always)]
-    pub fn unscale(self, t: V) -> Self {
-        self / t
-    }
-
-    /// Computes the complex conjugate of the complex number.
+    /// The complex conjugate: `re - im*i`.
     #[inline(always)]
     pub fn conj(self) -> Self {
         Self::new(self.re, -self.im)
     }
 
-    /// Computes the multiplicative inverse of the complex number.
+    /// The squared modulus `$|z|^2 = re^2 + im^2$`.
+    ///
+    /// Cheaper than the modulus (no square root), but it squares the range, so it
+    /// overflows or underflows near the limits of the format.
+    #[inline(always)]
+    pub fn norm_sqr(self) -> V {
+        self.re.mul_adde(self.re, self.im * self.im)
+    }
+
+    /// The multiplicative inverse `$1/z = \bar{z}/|z|^2$`.
+    ///
+    /// Inherits the range limits of [`norm_sqr`](Complex::norm_sqr); the scaled
+    /// form is [`finv`](crate::ComplexMath::finv).
     #[inline(always)]
     pub fn inv(self) -> Self {
-        self.unscale(self.norm_sqr()).conj()
-    }
-
-    /// Returns `self * m + a`
-    #[inline(always)]
-    pub fn mul_add(self, m: Self, a: Self) -> Self {
-        Self::new(
-            self.im.nmul_adde(m.im, self.re.mul_adde(m.re, a.re)),
-            self.re.mul_adde(m.im, self.im.mul_adde(m.re, a.im)),
-        )
-    }
-
-    /// Returns the L1 norm `|re| + |im|` -- the [Manhattan distance] from the origin.
-    ///
-    /// [Manhattan distance]: https://en.wikipedia.org/wiki/Taxicab_geometry
-    #[inline(always)]
-    pub fn l1_norm(self) -> V {
-        self.re.abs() + self.im.abs()
-    }
-
-    /// Calculate the principal Arg of self.
-    #[inline(always)]
-    pub fn arg(self) -> V {
-        self.im.atan2_p::<P>(self.re)
-    }
-
-    /// Convert to polar form (r, theta), such that
-    /// `self = r * exp(i * theta)`
-    #[inline(always)]
-    pub fn to_polar(self) -> (V, V) {
-        (self.norm(), self.arg())
-    }
-
-    /// Convert a polar representation into a complex number.
-    #[inline(always)]
-    pub fn from_polar(r: V, theta: V) -> Self {
-        let (s, c) = theta.sin_cos_p::<P>();
-        Self::new(r * c, r * s)
-    }
-
-    /// Computes `e^(self)`, where `e` is the base of the natural logarithm.
-    #[inline]
-    pub fn exp(self) -> Self {
-        // formula: e^(a + bi) = e^a (cos(b) + i*sin(b))
-        // = from_polar(e^a, b)
-        Self::from_polar(self.re.exp_p::<P>(), self.im)
-    }
-
-    /// Computes the principal value of natural logarithm of `self`.
-    ///
-    /// This function has one branch cut:
-    ///
-    /// * `(-inf, 0]`, continuous from above.
-    ///
-    /// The branch satisfies `-π <= arg(ln(z)) <= π`.
-    #[inline]
-    pub fn ln(self) -> Self {
-        // formula: ln(z) = ln|z| + i*arg(z)
-        let (r, theta) = self.to_polar();
-        Self::new(r.ln_p::<P>(), theta)
-    }
-
-    /// Computes the principal value of the square root of `self`.
-    #[inline(always)]
-    pub fn sqrt(self) -> Self {
-        // Old formula: sqrt(r e^(it)) = sqrt(r) e^(it/2)
-        // let (r, theta) = self.to_polar();
-        // Self::from_polar(r.sqrt(), theta * V::splat_as(0.5))
-
-        // New formula from: http://stanleyrabinowitz.com/bibliography/complexSquareRoot.pdf
-        let half = V::HALF;
-        let m = self.norm() * half;
-
-        let r = self.re.mul_adde(half, m).sqrt(); // sqrt(0.5 * (m + re))
-        let i = self.re.nmul_adde(half, m).sqrt(); // sqrt(0.5 * (m - re))
-
-        Complex::new(r, i.mul_sign(self.im))
-    }
-
-    /// Computes the principal value of the cube root of `self`.
-    ///
-    /// Note that this does not match the usual result for the cube root of
-    /// negative real numbers. For example, the real cube root of `-8` is `-2`,
-    /// but the principal complex cube root of `-8` is `1 + i*sqrt(3)`.
-    #[inline]
-    pub fn cbrt(self) -> Self {
-        // formula: cbrt(r e^(it)) = cbrt(r) e^(it/3)
-        let (r, theta) = self.to_polar();
-        // 1/3 isn't well-represented in float, so an exact inverse can't work with all precisions
-        Self::from_polar(r.cbrt_p::<P>(), theta / V::splat(FloatElement::from_int(3)))
-    }
-
-    /// Raises `self` to a floating point power.
-    #[inline]
-    pub fn powf(self, exp: V) -> Self {
-        // formula: x^y = (ρ e^(i θ))^y = ρ^y e^(i θ y)
-        // = from_polar(ρ^y, θ y)
-        let (r, theta) = self.to_polar();
-        Self::from_polar(r.powf_p::<P>(exp), theta * exp)
-    }
-
-    /// Returns the logarithm of `self` with respect to an arbitrary base.
-    #[inline]
-    pub fn log(self, base: V) -> Self {
-        // formula: log_y(x) = log_y(ρ e^(i θ))
-        // = log_y(ρ) + log_y(e^(i θ)) = log_y(ρ) + ln(e^(i θ)) / ln(y)
-        // = log_y(ρ) + i θ / ln(y)
-        let (r, theta) = self.to_polar();
-        let d = V::ONE / base.ln_p::<P>();
-        Self::new(r.ln_p::<P>() * d, theta * d)
-    }
-
-    /// Raises `self` to a complex power.
-    #[inline]
-    pub fn powc(self, exp: Self) -> Self {
-        // formula: x^y = (a + i b)^(c + i d)
-        // = (ρ e^(i θ))^c (ρ e^(i θ))^(i d)
-        //    where ρ=|x| and θ=arg(x)
-        // = ρ^c e^(-d θ) e^(i c θ) ρ^(i d)
-        // = p^c e^(-d θ) (cos(c θ)
-        //   + i sin(c θ)) (cos(d ln(ρ)) + i sin(d ln(ρ)))
-        // = p^c e^(-d θ) (
-        //   cos(c θ) cos(d ln(ρ)) - sin(c θ) sin(d ln(ρ))
-        //   + i(cos(c θ) sin(d ln(ρ)) + sin(c θ) cos(d ln(ρ))))
-        // = p^c e^(-d θ) (cos(c θ + d ln(ρ)) + i sin(c θ + d ln(ρ)))
-        // = from_polar(p^c e^(-d θ), c θ + d ln(ρ))
-        let (r, theta) = self.to_polar();
-        Self::from_polar(
-            r.powf_p::<P>(exp.re) * (-exp.im * theta).exp_p::<P>(),
-            exp.im.mul_adde(r.ln_p::<P>(), exp.re * theta),
-        )
-    }
-
-    /// Raises a floating point number to the complex power `self`.
-    #[inline]
-    pub fn expf(self, base: V) -> Self {
-        // formula: x^(a+bi) = x^a x^bi = x^a e^(b ln(x) i)
-        // = from_polar(x^a, b ln(x))
-        Self::from_polar(base.powf_p::<P>(self.re), self.im * base.ln_p::<P>())
-    }
-
-    /// Computes sine and cosine of `self` together, improving efficiency.
-    #[inline]
-    pub fn sin_cos(self) -> (Self, Self) {
-        let (s, c) = self.re.sin_cos_p::<P>();
-        let (sh, ch) = (self.im.sinh_p::<P>(), self.im.cosh_p::<P>());
-
-        (Self::new(s * ch, c * sh), Self::new(c * ch, -s * sh))
-    }
-
-    /// Computes the sine of `self`.
-    #[inline]
-    pub fn sin(self) -> Self {
-        // formula: sin(a + bi) = sin(a)cosh(b) + i*cos(a)sinh(b)
-        let (s, c) = self.re.sin_cos_p::<P>();
-        Self::new(s * self.im.cosh_p::<P>(), c * self.im.sinh_p::<P>())
-    }
-
-    /// Computes the cosine of `self`.
-    #[inline]
-    pub fn cos(self) -> Self {
-        // formula: cos(a + bi) = cos(a)cosh(b) - i*sin(a)sinh(b)
-        let (s, c) = self.re.sin_cos_p::<P>();
-        Self::new(c * self.im.cosh_p::<P>(), -s * self.im.sinh_p::<P>())
-    }
-
-    /// Computes the tangent of `self`.
-    #[inline]
-    pub fn tan(self) -> Self {
-        // formula: tan(a + bi) = (sin(2a) + i*sinh(2b))/(cos(2a) + cosh(2b))
-        let (two_re, two_im) = (self.re + self.re, self.im + self.im);
-        let (s, c) = two_re.sin_cos_p::<P>();
-        Self::new(s, two_im.sinh_p::<P>()).unscale(c + two_im.cosh_p::<P>())
-    }
-
-    /// Computes the principal value of the inverse sine of `self`.
-    ///
-    /// This function has two branch cuts:
-    ///
-    /// * `(-inf, -1)`, continuous from above.
-    /// * `(1, inf)`, continuous from below.
-    ///
-    /// The branch satisfies `-π/2 <= Re(asin(z)) <= π/2`.
-    #[inline]
-    pub fn asin(self) -> Self {
-        // formula: arcsin(z) = -i ln(sqrt(1-z^2) + iz)
-        Self::NEG_I * self.mul_add(Self::I, self.mul_add(-self, Self::ONE).sqrt()).ln()
-    }
-
-    /// Computes the principal value of the inverse cosine of `self`.
-    ///
-    /// This function has two branch cuts:
-    ///
-    /// * `(-inf, -1)`, continuous from above.
-    /// * `(1, inf)`, continuous from below.
-    ///
-    /// The branch satisfies `0 <= Re(acos(z)) <= π`.
-    #[inline]
-    pub fn acos(self) -> Self {
-        // formula: arccos(z) = -i ln(i sqrt(1-z^2) + z)
-        Self::NEG_I * Self::I.mul_add(self.mul_add(-self, Self::ONE).sqrt(), self).ln()
-    }
-
-    /// Computes the principal value of the inverse tangent of `self`.
-    ///
-    /// This function has two branch cuts:
-    ///
-    /// * `(-inf i, -i]`, continuous from the left.
-    /// * `[i, inf i)`, continuous from the right.
-    ///
-    /// The branch satisfies `-π/2 <= Re(atan(z)) <= π/2`.
-    #[inline]
-    pub fn atan(self) -> Self {
-        // formula: arctan(z) = (ln(1+iz) - ln(1-iz))/(2i)
-        let a = self.mul_add(Self::I, Self::ONE);
-        let b = self.mul_add(Self::NEG_I, Self::ONE);
-
-        // z/(2i) == -0.5i * z
-        (a.ln() - b.ln()) * Self::imag(-V::HALF)
-    }
-
-    /// Computes the hyperbolic sine of `self`.
-    #[inline]
-    pub fn sinh(self) -> Self {
-        // formula: sinh(a + bi) = sinh(a)cos(b) + i*cosh(a)sin(b)
-        let (s, c) = self.im.sin_cos_p::<P>();
-        let (sh, ch) = self.re.sinh_cosh_p::<P>();
-        Self::new(sh * c, ch * s)
-    }
-
-    /// Computes the hyperbolic cosine of `self`.
-    #[inline]
-    pub fn cosh(self) -> Self {
-        // formula: cosh(a + bi) = cosh(a)cos(b) + i*sinh(a)sin(b)
-        let (s, c) = self.im.sin_cos_p::<P>();
-        let (sh, ch) = self.re.sinh_cosh_p::<P>();
-        Self::new(ch * c, sh * s)
-    }
-
-    /// Computes the hyperbolic tangent of `self`.
-    #[inline]
-    pub fn tanh(self) -> Self {
-        // formula: tanh(a + bi) = (sinh(2a) + i*sin(2b))/(cosh(2a) + cos(2b))
-        let (two_re, two_im) = (self.re + self.re, self.im + self.im);
-        let (s, c) = two_im.sin_cos_p::<P>();
-        let (sh, ch) = two_re.sinh_cosh_p::<P>();
-        Self::new(sh + s, ch + c).unscale(ch + c)
-    }
-
-    /// Computes the principal value of inverse hyperbolic sine of `self`.
-    ///
-    /// This function has two branch cuts:
-    ///
-    /// * `(-inf i, -i)`, continuous from the left.
-    /// * `(i, inf i)`, continuous from the right.
-    ///
-    /// The branch satisfies `-π/2 <= Im(asinh(z)) <= π/2`.
-    #[inline]
-    pub fn asinh(self) -> Self {
-        // formula: arcsinh(z) = ln(z + sqrt(1+z^2))
-        //(self + (one + self * self).sqrt()).ln()
-        (self + self.mul_add(self, Self::ONE).sqrt()).ln()
-    }
-
-    /// Computes the principal value of inverse hyperbolic cosine of `self`.
-    ///
-    /// This function has one branch cut:
-    ///
-    /// * `(-inf, 1)`, continuous from above.
-    ///
-    /// The branch satisfies `-π <= Im(acosh(z)) <= π` and `0 <= Re(acosh(z)) < inf`.
-    #[inline]
-    pub fn acosh(self) -> Self {
-        // formula: arccosh(z) = 2 ln(sqrt((z+1)/2) + sqrt((z-1)/2))
-        let one_half = Self::real(V::HALF);
-
-        let a = self.mul_add(one_half, one_half).sqrt();
-        let b = self.mul_add(one_half, -one_half).sqrt();
-        let half_res = (a + b).ln();
-
-        half_res + half_res // res * 2
-    }
-
-    /// Computes the principal value of inverse hyperbolic tangent of `self`.
-    ///
-    /// This function has two branch cuts:
-    ///
-    /// * `(-inf, -1]`, continuous from above.
-    /// * `[1, inf)`, continuous from below.
-    ///
-    /// The branch satisfies `-π/2 <= Im(atanh(z)) <= π/2`.
-    #[inline]
-    pub fn atanh(self) -> Self {
-        // formula: arctanh(z) = (ln(1+z) - ln(1-z))/2
-
-        //if self == one {
-        //    return Self::new(T::infinity(), T::zero());
-        //} else if self == -one {
-        //    return Self::new(-T::infinity(), T::zero());
-        //}
-        Self::real(V::HALF) * ((Self::ONE + self).ln() - (Self::ONE - self).ln())
-    }
-
-    /// Returns `1/self` using floating-point operations.
-    ///
-    /// This may be more accurate than the generic `self.inv()` in cases
-    /// where `self.norm_sqr()` would overflow to inf or underflow to 0.
-    #[inline(always)]
-    pub fn finv(self) -> Self {
-        let norm = Self::real(self.norm());
-        // TODO: Maybe extract 1/n and multiply?
-        (self.conj() / norm) / norm
-    }
-
-    /// Returns `self/other` using floating-point operations.
-    ///
-    /// This may be more accurate than the generic `Div` implementation in cases
-    /// where `other.norm_sqr()` would overflow to inf or underflow to 0.
-    #[inline(always)]
-    pub fn fdiv(self, rhs: Self) -> Self {
-        self * rhs.finv()
+        self.conj() / self.norm_sqr()
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Add for Complex<V, P> {
+// --- Arithmetic: Complex op Complex ---
+
+impl<V: ComplexValue> Neg for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn add(self, rhs: Self) -> Self::Output {
+    fn neg(self) -> Self {
+        Self::new(-self.re, -self.im)
+    }
+}
+
+impl<V: ComplexValue> Add for Complex<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn add(self, rhs: Self) -> Self {
         Self::new(self.re + rhs.re, self.im + rhs.im)
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Sub for Complex<V, P> {
+impl<V: ComplexValue> Sub for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn sub(self, rhs: Self) -> Self::Output {
+    fn sub(self, rhs: Self) -> Self {
         Self::new(self.re - rhs.re, self.im - rhs.im)
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Mul for Complex<V, P> {
+impl<V: ComplexValue> Mul for Complex<V> {
     type Output = Self;
 
+    // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
     #[inline(always)]
-    fn mul(self, rhs: Self) -> Self::Output {
+    fn mul(self, rhs: Self) -> Self {
         Self::new(
             self.re.mul_sube(rhs.re, self.im * rhs.im),
             self.re.mul_adde(rhs.im, self.im * rhs.re),
@@ -458,42 +287,295 @@ impl<V: MathVector, P: Policy> core::ops::Mul for Complex<V, P> {
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Div for Complex<V, P> {
+impl<V: ComplexValue> Div for Complex<V> {
     type Output = Self;
 
+    // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c^2 + d^2), taking one
+    // reciprocal of the real denominator, so there is only one division.
+    #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
-    fn div(self, rhs: Self) -> Self::Output {
+    fn div(self, rhs: Self) -> Self {
         let denom = rhs.re.mul_adde(rhs.re, rhs.im * rhs.im);
+        let inv = V::VAL_ONE / denom;
+
         Self::new(
-            self.re.mul_adde(rhs.re, -self.im * rhs.im) / denom,
-            self.im.mul_adde(rhs.re, self.re * rhs.im) / denom,
+            self.re.mul_adde(rhs.re, self.im * rhs.im) * inv,
+            self.im.mul_sube(rhs.re, self.re * rhs.im) * inv,
         )
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Mul<V> for Complex<V, P> {
+// z % w = z - trunc(z/w)*w, truncating the quotient componentwise. Required by
+// num_traits::NumOps for NumericVector; not a complex-analytic operation.
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl<V: ComplexValue> Rem for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn mul(self, rhs: V) -> Self::Output {
+    fn rem(self, rhs: Self) -> Self {
+        let q = self / rhs;
+        let k = Complex::new(q.re.val_trunc(), q.im.val_trunc());
+
+        k.nmul_adde(rhs, self) // self - k*rhs
+    }
+}
+
+// --- Arithmetic: Complex op real value ---
+
+impl<V: ComplexValue> Add<V> for Complex<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn add(self, rhs: V) -> Self {
+        Self::new(self.re + rhs, self.im)
+    }
+}
+
+impl<V: ComplexValue> Sub<V> for Complex<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn sub(self, rhs: V) -> Self {
+        Self::new(self.re - rhs, self.im)
+    }
+}
+
+impl<V: ComplexValue> Mul<V> for Complex<V> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn mul(self, rhs: V) -> Self {
         Self::new(self.re * rhs, self.im * rhs)
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Div<V> for Complex<V, P> {
+impl<V: ComplexValue> Div<V> for Complex<V> {
     type Output = Self;
 
+    // single reciprocal, then multiply through
+    #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
-    fn div(self, rhs: V) -> Self::Output {
-        Self::new(self.re / rhs, self.im / rhs)
+    fn div(self, rhs: V) -> Self {
+        // single reciprocal, then multiply through
+        let inv = V::VAL_ONE / rhs;
+
+        Self::new(self.re * inv, self.im * inv)
     }
 }
 
-impl<V: MathVector, P: Policy> core::ops::Neg for Complex<V, P> {
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl<V: ComplexValue> Rem<V> for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
-    fn neg(self) -> Self::Output {
-        Self::new(-self.re, -self.im)
+    fn rem(self, rhs: V) -> Self {
+        let q = self / rhs;
+        let k = Complex::new(q.re.val_trunc(), q.im.val_trunc());
+
+        k.nmul_adde(Complex::real(rhs), self)
     }
 }
+
+// --- Fused multiply-add by a real value ---
+//
+// z*r + w with real r is a single fused op per component (re*r + w.re,
+// im*r + w.im). Unlike the complex-by-complex form it is therefore a true
+// single-rounding FMA whenever the inner type has one.
+macro_rules! complex_real_fma {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[inline(always)]
+            fn $name(self, a: V, b: Self) -> Self {
+                Self::new(self.re.$name(a, b.re), self.im.$name(a, b.im))
+            }
+        )*
+    };
+}
+
+#[rustfmt::skip]
+impl<V: ComplexValue> MulAddExt<V, Self> for Complex<V> {
+    type Output = Self;
+
+    const HAS_TRUE_FMA: bool = <V as MulAddExt<V, V>>::HAS_TRUE_FMA;
+
+    complex_real_fma!(mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube);
+}
+
+// --- Assignment variants ---
+
+macro_rules! impl_assign {
+    ($($assign_trait:ident::$assign_method:ident => $op_trait:ident::$op_method:ident),* $(,)?) => {$(
+        impl<V: ComplexValue, T> $assign_trait<T> for Complex<V>
+        where
+            Self: $op_trait<T, Output = Self>,
+        {
+            #[inline(always)]
+            fn $assign_method(&mut self, rhs: T) {
+                *self = $op_trait::$op_method(*self, rhs);
+            }
+        }
+    )*};
+}
+
+#[rustfmt::skip]
+impl_assign! {
+    AddAssign::add_assign => Add::add,
+    SubAssign::sub_assign => Sub::sub,
+    MulAssign::mul_assign => Mul::mul,
+    DivAssign::div_assign => Div::div,
+    RemAssign::rem_assign => Rem::rem,
+}
+
+// --- Fused multiply-add ---
+//
+// (a + bi)(c + di) + (e + fi) expands to
+//
+//   re = a*c - b*d + e  =  fnma(b, d, fma(a, c, e))
+//   im = a*d + b*c + f  =  fma(a, d, fma(b, c, f))
+//
+// i.e. two nested FMAs of the inner type per component. Composing the complex Mul
+// and Add instead would round the product first. Each component still rounds more
+// than once, so HAS_TRUE_FMA is false.
+
+// The eight methods are the (product sign, addend sign) pairs over the exact or
+// the estimating inner FMA. Both negations fold into the inner FMA's sign bits.
+macro_rules! complex_mul_add {
+    ($($name:ident => $neg_self:expr, $neg_addend:expr, $fma:ident, $nfma:ident);* $(;)?) => {
+        $(
+            #[inline(always)]
+            fn $name(self, a: Self, b: Self) -> Self {
+                let p = if $neg_self { -self } else { self };
+                let c = if $neg_addend { -b } else { b };
+
+                // re = p.re*a.re - p.im*a.im + c.re ; im = p.re*a.im + p.im*a.re + c.im
+                Self::new(
+                    p.im.$nfma(a.im, p.re.$fma(a.re, c.re)),
+                    p.re.$fma(a.im, p.im.$fma(a.re, c.im)),
+                )
+            }
+        )*
+    };
+}
+
+#[rustfmt::skip]
+impl<V: ComplexValue> MulAddExt<Self, Self> for Complex<V> {
+    type Output = Self;
+
+    // A complex "FMA" rounds each component several times whatever the inner FMA
+    // does. It is never a single-rounding operation.
+    const HAS_TRUE_FMA: bool = false;
+
+    complex_mul_add! {
+        mul_add   => false, false, mul_add,  nmul_add;
+        mul_sub   => false, true,  mul_add,  nmul_add;
+        nmul_add  => true,  false, mul_add,  nmul_add;
+        nmul_sub  => true,  true,  mul_add,  nmul_add;
+        mul_adde  => false, false, mul_adde, nmul_adde;
+        mul_sube  => false, true,  mul_adde, nmul_adde;
+        nmul_adde => true,  false, mul_adde, nmul_adde;
+        nmul_sube => true,  true,  mul_adde, nmul_adde;
+    }
+}
+
+#[rustfmt::skip]
+impl<V: ComplexValue, A, B> MulAddAssignExt<A, B> for Complex<V>
+where
+    Self: MulAddExt<A, B, Output = Self>,
+{
+    #[inline(always)] fn mul_add_assign(&mut self, a: A, b: B) { *self = self.mul_add(a, b); }
+    #[inline(always)] fn mul_sub_assign(&mut self, a: A, b: B) { *self = self.mul_sub(a, b); }
+    #[inline(always)] fn nmul_add_assign(&mut self, a: A, b: B) { *self = self.nmul_add(a, b); }
+    #[inline(always)] fn nmul_sub_assign(&mut self, a: A, b: B) { *self = self.nmul_sub(a, b); }
+    #[inline(always)] fn mul_adde_assign(&mut self, a: A, b: B) { *self = self.mul_adde(a, b); }
+    #[inline(always)] fn mul_sube_assign(&mut self, a: A, b: B) { *self = self.mul_sube(a, b); }
+    #[inline(always)] fn nmul_adde_assign(&mut self, a: A, b: B) { *self = self.nmul_adde(a, b); }
+    #[inline(always)] fn nmul_sube_assign(&mut self, a: A, b: B) { *self = self.nmul_sube(a, b); }
+}
+
+impl<V: ComplexValue> Square for Complex<V> {
+    type Output = Self;
+
+    // z^2 = (re^2 - im^2) + 2*re*im*i. The imaginary part is one add and one
+    // multiply, versus the FMA over two products a general self*self would take.
+    #[inline(always)]
+    fn square(self) -> Self {
+        Self::new(
+            self.re.mul_sube(self.re, self.im * self.im),
+            (self.re + self.re) * self.im,
+        )
+    }
+}
+
+// --- Iterator reductions ---
+
+impl<V: ComplexValue> core::iter::Sum for Complex<V> {
+    #[inline]
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ZERO, |a, b| a + b)
+    }
+}
+
+impl<V: ComplexValue> core::iter::Product for Complex<V> {
+    #[inline]
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ONE, |a, b| a * b)
+    }
+}
+
+// --- Float constants (real-valued) ---
+
+macro_rules! impl_float_consts {
+    ($($name:ident),* $(,)?) => {
+        impl<V: ComplexValue + thermite::math::FloatConsts> thermite::math::FloatConsts for Complex<V> {
+            $(const $name: Self = Self::real(<V as thermite::math::FloatConsts>::$name);)*
+        }
+    };
+}
+
+impl_float_consts!(
+    NEG_ZERO,
+    E,
+    EULER_GAMMA,
+    PI_SQUARED,
+    PI_CUBED,
+    PI_FOURTH,
+    FRAC_1_PI,
+    FRAC_1_SQRT_2,
+    FRAC_1_SQRT_3,
+    FRAC_2_PI,
+    FRAC_1_SQRT_PI,
+    FRAC_2_SQRT_PI,
+    FRAC_SQRT_PI_2,
+    FRAC_1_SQRT_TAU,
+    FRAC_PI_2,
+    FRAC_PI_3,
+    FRAC_PI_4,
+    FRAC_PI_6,
+    FRAC_PI_8,
+    FRAC_PI_180,
+    FRAC_180_PI,
+    LN_2,
+    LN_10,
+    LN_PI,
+    FRAC_LN_PI_2,
+    LOG2_10,
+    LOG2_E,
+    LOG10_2,
+    LOG10_E,
+    PI,
+    SQRT_2,
+    SQRT_3,
+    SQRT_E,
+    EPSILON,
+    SQRT_EPSILON,
+    FOURTH_ROOT_EPSILON,
+    TAU,
+    SQRT_FRAC_PI_2,
+    SQRT_TAU,
+    PHI,
+    FRAC_1_3,
+    FRAC_2_3,
+    FRAC_1_4,
+    FRAC_1_6,
+    FRAC_NEG_1_E
+);
