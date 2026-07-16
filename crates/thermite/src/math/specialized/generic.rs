@@ -224,7 +224,7 @@ where
         10 => V::log10::<P>(x),
         _ => V::log2::<P>(x).scale(
             const {
-                if N <= 32 {
+                if const { N <= 32 } {
                     E::LOG2_TABLE[N.saturating_sub(3)]
                 } else {
                     E::ZERO

@@ -20,6 +20,16 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct F64x4V3;
 
+/// Plain 4x4 `f64` transpose (`(de)interleave_radix_by::<4, 1>` on [`F64x4V3`]): the
+/// `W = 8` bytes square transpose. `f64x4`'s storage is already the pd domain the shared
+/// [`transpose256_w64`](arch::transpose256_w64) is spelled in, so this is a direct call -
+/// no cast. Same 8-op body every 64-bit-element 256-bit register (i64x4/u64x4, f32x8
+/// `(4,2)`) reuses. Its own inverse, so interleave reuses it.
+#[inline(always)]
+fn transpose_4x4_f64(i: [arch::__m256d; 4]) -> [arch::__m256d; 4] {
+    unsafe { arch::transpose256_w64(i) }
+}
+
 #[thermite_macros::inline_always]
 impl CoreRegister for F64x4V3 {
     type Lanes = typenum::U4;
@@ -188,20 +198,92 @@ impl Register for F64x4V3 {
         unsafe { arch::_mm256_setr_pd(value, 0.0, 0.0, 0.0) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_deinterleave3_pd(a, b, c) }
+    impl_native_radix3!(arch::_mm256_interleave3_pd, arch::_mm256_deinterleave3_pd);
+
+    fn interleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        if const { GROUP == 2 } {
+            // Pair granularity on `f64x4` is a 128-bit-lane (whole-pair) interleave: `lo` is
+            // `[a.P0, b.P0]`, `hi` is `[a.P1, b.P1]` - two `permute2f128`s, no `unpck` needed.
+            unsafe {
+                (
+                    arch::_mm256_permute2f128_pd(a, b, 0x20),
+                    arch::_mm256_permute2f128_pd(a, b, 0x31),
+                )
+            }
+        } else {
+            crate::backend::generic::polyfills::interleave_by_default::<Self, GROUP>(a, b)
+        }
     }
 
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_interleave3_pd(x, y, z) }
+    fn deinterleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        if const { GROUP == 2 } {
+            // Its own inverse: the 2x2 128-bit block transpose. `a = [lo.P0, hi.P0]`,
+            // `b = [lo.P1, hi.P1]`.
+            unsafe {
+                (
+                    arch::_mm256_permute2f128_pd(a, b, 0x20),
+                    arch::_mm256_permute2f128_pd(a, b, 0x31),
+                )
+            }
+        } else {
+            crate::backend::generic::polyfills::deinterleave_by_default::<Self, GROUP>(a, b)
+        }
+    }
+
+    // The `(N, GROUP) == (4, 1)` square case is the 4x4 `f64` transpose (8 ops,
+    // its own inverse); `interleave_radix_by` reuses the same body. Everything else
+    // defers to the generic default (which forwards `GROUP == 1` back to the native
+    // `deinterleave_radix`/radix-3 paths).
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 1 } {
+            // SAFETY: `N == 4` on this arm, so indices 0..4 are in bounds.
+            unsafe {
+                let t = transpose_4x4_f64([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                *out.get_unchecked_mut(0) = t[0];
+                *out.get_unchecked_mut(1) = t[1];
+                *out.get_unchecked_mut(2) = t[2];
+                *out.get_unchecked_mut(3) = t[3];
+                out
+            }
+        } else if const { arch::ladder_viable(N, GROUP, 8) } {
+            // Certified ladder plan for any other pow-2 shape (see `polyfills::transpose256`);
+            // f64 declares its 8-byte elements so GROUP converts to 32-bit slots.
+            let plan = const { arch::ladder_search_elem(N, GROUP, 8) };
+            unsafe { arch::ladder_radix_by_pd::<N, true>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::deinterleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
+    }
+
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 1 } {
+            // SAFETY: `N == 4` on this arm, so indices 0..4 are in bounds.
+            unsafe {
+                let t = transpose_4x4_f64([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                *out.get_unchecked_mut(0) = t[0];
+                *out.get_unchecked_mut(1) = t[1];
+                *out.get_unchecked_mut(2) = t[2];
+                *out.get_unchecked_mut(3) = t[3];
+                out
+            }
+        } else if const { arch::ladder_viable(N, GROUP, 8) } {
+            let plan = const { arch::ladder_search_elem(N, GROUP, 8) };
+            unsafe { arch::ladder_radix_by_pd::<N, false>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::interleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
     }
 
     fn splat(value: Self::Element) -> Storage<Self> {
@@ -557,6 +639,18 @@ impl FloatRegister for F64x4V3 {
 
     fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::nmul_sub(lhs, rhs, acc)
+    }
+
+    fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_addsub_pd(a, b) }
+    }
+
+    fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_fmaddsub_pd(a, b, c) }
+    }
+
+    fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_fmsubadd_pd(a, b, c) }
     }
 
     fn sqrt(value: Storage<Self>) -> Storage<Self> {

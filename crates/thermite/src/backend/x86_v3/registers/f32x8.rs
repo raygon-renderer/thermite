@@ -16,6 +16,28 @@ use super::arch;
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct F32x8V3;
 
+/// Interleaved-complex 4x4 transpose (`(de)interleave_radix_by::<4, 2>`): the `W = 8`
+/// bytes (64-bit effective element) square transpose. A thin adapter over the shared
+/// [`transpose256_w64`](arch::transpose256_w64) - `f32` pairs cast to the pd domain and
+/// back, both casts free. See that function for why the body is register-type-agnostic.
+#[inline(always)]
+fn transpose_4x4_pairs(i: [arch::__m256; 4]) -> [arch::__m256; 4] {
+    unsafe {
+        let t = arch::transpose256_w64([
+            arch::_mm256_castps_pd(i[0]),
+            arch::_mm256_castps_pd(i[1]),
+            arch::_mm256_castps_pd(i[2]),
+            arch::_mm256_castps_pd(i[3]),
+        ]);
+        [
+            arch::_mm256_castpd_ps(t[0]),
+            arch::_mm256_castpd_ps(t[1]),
+            arch::_mm256_castpd_ps(t[2]),
+            arch::_mm256_castpd_ps(t[3]),
+        ]
+    }
+}
+
 #[thermite_macros::inline_always]
 impl CoreRegister for F32x8V3 {
     type Lanes = generic_array::typenum::U8;
@@ -184,21 +206,7 @@ impl Register for F32x8V3 {
         unsafe { arch::_mm256_setr_ps(value, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_deinterleave3_ps(a, b, c) }
-    }
-
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_interleave3_ps(x, y, z) }
-    }
+    impl_native_radix3!(arch::_mm256_interleave3_ps, arch::_mm256_deinterleave3_ps);
 
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_ps(value) }
@@ -266,6 +274,141 @@ impl Register for F32x8V3 {
         unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }
     }
 
+    fn interleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        if const { GROUP == 2 } {
+            unsafe {
+                // Pair granularity = `f64`-lane interleave: adjacent `f32` pairs (one complex each)
+                // move as a unit. Same structure as `interleave`, on the `pd` reinterpretation.
+                let (a, b) = (arch::_mm256_castps_pd(a), arch::_mm256_castps_pd(b));
+                let u_lo = arch::_mm256_unpacklo_pd(a, b);
+                let u_hi = arch::_mm256_unpackhi_pd(a, b);
+                let res_lo = arch::_mm256_permute2f128_pd(u_lo, u_hi, 0x20);
+                let res_hi = arch::_mm256_permute2f128_pd(u_lo, u_hi, 0x31);
+                (arch::_mm256_castpd_ps(res_lo), arch::_mm256_castpd_ps(res_hi))
+            }
+        } else {
+            crate::backend::generic::polyfills::interleave_by_default::<Self, GROUP>(a, b)
+        }
+    }
+
+    fn deinterleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        if const { GROUP == 2 } {
+            unsafe {
+                let (a, b) = (arch::_mm256_castps_pd(a), arch::_mm256_castps_pd(b));
+                let t0 = arch::_mm256_permute2f128_pd(a, b, 0x20);
+                let t1 = arch::_mm256_permute2f128_pd(a, b, 0x31);
+                let o0 = arch::_mm256_unpacklo_pd(t0, t1);
+                let o1 = arch::_mm256_unpackhi_pd(t0, t1);
+                (arch::_mm256_castpd_ps(o0), arch::_mm256_castpd_ps(o1))
+            }
+        } else {
+            crate::backend::generic::polyfills::deinterleave_by_default::<Self, GROUP>(a, b)
+        }
+    }
+
+    // The `(N, GROUP) == (4, 2)` square case is the interleaved-complex 4x4
+    // transpose: four `f64`-lane unpacks + four `permute2f128` = 8 ops (vs the
+    // ~12 a 2-round `interleave_by::<2>` network folds to). It is its own inverse,
+    // so `interleave_radix_by` reuses the same body. Every other shape defers to the
+    // generic default.
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 2 } {
+            // SAFETY: `N == 4` on this arm, so indices 0..4 are in bounds.
+            unsafe {
+                let t = transpose_4x4_pairs([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                *out.get_unchecked_mut(0) = t[0];
+                *out.get_unchecked_mut(1) = t[1];
+                *out.get_unchecked_mut(2) = t[2];
+                *out.get_unchecked_mut(3) = t[3];
+                out
+            }
+        } else if const { N == 8 && GROUP == 1 } {
+            // The full 8x8 f32 transpose (the square N==LANES, GROUP==1 case).
+            // SAFETY: `N == 8` on this arm, so indices 0..8 are in bounds.
+            unsafe {
+                let t = arch::transpose256_w32([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                    *inputs.get_unchecked(4),
+                    *inputs.get_unchecked(5),
+                    *inputs.get_unchecked(6),
+                    *inputs.get_unchecked(7),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                let mut k = 0;
+                while k < 8 {
+                    *out.get_unchecked_mut(k) = t[k];
+                    k += 1;
+                }
+                out
+            }
+        } else if const { arch::ladder_viable(N, GROUP, 4) } {
+            // Any other pow-2 shape the certified ladder engine covers (see
+            // `polyfills::transpose256`): min-round plan found by compile-time search.
+            let plan = const { arch::ladder_search_elem(N, GROUP, 4) };
+            unsafe { arch::ladder_radix_by_ps::<N, true>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::deinterleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
+    }
+
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 2 } {
+            // The pair transpose is its own inverse - reuse the same 8-op sequence.
+            // SAFETY: `N == 4` on this arm, so indices 0..4 are in bounds.
+            unsafe {
+                let t = transpose_4x4_pairs([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                *out.get_unchecked_mut(0) = t[0];
+                *out.get_unchecked_mut(1) = t[1];
+                *out.get_unchecked_mut(2) = t[2];
+                *out.get_unchecked_mut(3) = t[3];
+                out
+            }
+        } else if const { N == 8 && GROUP == 1 } {
+            // The 8x8 transpose is its own inverse - reuse the shared `transpose256_w32`.
+            // SAFETY: `N == 8` on this arm, so indices 0..8 are in bounds.
+            unsafe {
+                let t = arch::transpose256_w32([
+                    *inputs.get_unchecked(0),
+                    *inputs.get_unchecked(1),
+                    *inputs.get_unchecked(2),
+                    *inputs.get_unchecked(3),
+                    *inputs.get_unchecked(4),
+                    *inputs.get_unchecked(5),
+                    *inputs.get_unchecked(6),
+                    *inputs.get_unchecked(7),
+                ]);
+                let mut out = [Self::EMPTY; N];
+                let mut k = 0;
+                while k < 8 {
+                    *out.get_unchecked_mut(k) = t[k];
+                    k += 1;
+                }
+                out
+            }
+        } else if const { arch::ladder_viable(N, GROUP, 4) } {
+            // The certified ladder plan run in the inverse direction (DEINT = false).
+            let plan = const { arch::ladder_search_elem(N, GROUP, 4) };
+            unsafe { arch::ladder_radix_by_ps::<N, false>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::interleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
+    }
+
     fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         unsafe {
             let idxs: arch::__m256i = core::mem::transmute(idxs);
@@ -309,6 +452,7 @@ impl InterleaveRegister for F32x8V3 {
             (a, b)
         }
     }
+
 }
 
 #[thermite_macros::inline_always]
@@ -567,6 +711,18 @@ impl FloatRegister for F32x8V3 {
 
     fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         Self::nmul_sub(lhs, rhs, acc)
+    }
+
+    fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_addsub_ps(a, b) }
+    }
+
+    fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_fmaddsub_ps(a, b, c) }
+    }
+
+    fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm256_fmsubadd_ps(a, b, c) }
     }
 
     fn sqrt(value: Storage<Self>) -> Storage<Self> {

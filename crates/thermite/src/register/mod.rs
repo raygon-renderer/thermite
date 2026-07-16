@@ -112,6 +112,43 @@ where
     unsafe { core::mem::zeroed() }
 }
 
+/// Build a lane-alternating sign-bit constant for a float register: a value that
+/// is `-0.0` on lanes of one parity and `+0.0` on the other, so that
+/// `bitxor(x, ...)` flips the sign of `x` on exactly those lanes.
+///
+/// With `neg_on_even = true` this yields `[-0.0, +0.0, -0.0, +0.0, ...]`
+/// (`ALT_NEG` - even lanes flip); with `false` it yields `[+0.0, -0.0, ...]`
+/// (`ALT_POS` - odd lanes flip). Materialized entirely at compile time (a plain
+/// constant load at runtime), so `addsub`/`fmaddsub`/`fmsubadd` need no runtime
+/// shuffle to construct their mask.
+///
+/// Works for every float register - including the emulated `ArrayRegister` and
+/// `ReducedRegister` widths - because it treats the storage as a flat run of
+/// `R::Element` lanes, exactly like [`reg_splat`].
+#[inline(always)]
+pub(crate) const fn alt_sign_reg<R: FloatRegister>(neg_on_even: bool) -> Storage<R> {
+    // Start from all `+0.0` (zeroed storage) and copy the element-wise `-0.0`
+    // out of NEG_ZERO into every lane of the selected parity.
+    let neg = <R as FloatRegister>::NEG_ZERO;
+    let mut dst = R::EMPTY;
+
+    // SAFETY: contiguous element storage, same assumption as `reg_splat`.
+    unsafe {
+        let dstp = &mut dst as *mut Storage<R> as *mut R::Element;
+        let negp = &neg as *const Storage<R> as *const R::Element;
+
+        let mut i = 0;
+        while i < <R::Lanes as typenum::Unsigned>::USIZE {
+            if (i % 2 == 0) == neg_on_even {
+                dstp.add(i).write(negp.add(i).read());
+            }
+            i += 1;
+        }
+    }
+
+    dst
+}
+
 pub trait MaskInteroperable<
     A: CoreRegister<Lanes = Self::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<B::Mask>>,
     B: CoreRegister<Lanes = Self::Lanes, Mask: CastMaskRegister<Self::Mask> + CastMaskRegister<A::Mask>>,
@@ -306,15 +343,15 @@ pub trait BitwiseRegister: CoreRegister {
     #[conditional] fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
         let mut acc = Self::EMPTY;
 
-        if IMM == 0xCA {
+        if const { IMM == 0xCA } {
             // Special case for select pattern `a ? b : c` to improve debug builds
             return Self::bitor(Self::bitand(a, b), Self::bitandnot(a, c));
         }
 
         // Combine cases using Disjunctive Normal Form (DNF)
         macro_rules! case {
-            (0,         $expr:expr) => { if (IMM & (1 << 0))    != 0 { acc = $expr; } };
-            ($bit:expr, $expr:expr) => { if (IMM & (1 << $bit)) != 0 { acc = Self::bitor(acc, $expr); } };
+            (0,         $expr:expr) => { if const { (IMM & (1 << 0))    != 0 } { acc = $expr; } };
+            ($bit:expr, $expr:expr) => { if const { (IMM & (1 << $bit)) != 0 } { acc = Self::bitor(acc, $expr); } };
         }
 
         case!(0, Self::bitandnot(a, Self::bitandnot(b, Self::not(c)))); // Case 0: inputs are 0, 0, 0
@@ -334,10 +371,10 @@ pub trait BitwiseRegister: CoreRegister {
         let mut acc = Self::EMPTY;
 
         // Disjunctive Normal Form (DNF) again
-        if (IMM & (1 << 0)) != 0 { acc = Self::not(Self::bitor(a, b)); } // Case 0: inputs are 0, 0, simplified
-        if (IMM & (1 << 1)) != 0 { acc = Self::bitor(acc, Self::bitandnot(a, b)); } // Case 1: inputs are 0, 1
-        if (IMM & (1 << 2)) != 0 { acc = Self::bitor(acc, Self::bitandnot(b, a)); } // Case 2: inputs are 1, 0
-        if (IMM & (1 << 3)) != 0 { acc = Self::bitor(acc, Self::bitand(a, b)); } // Case 3: inputs are 1, 1
+        if const { (IMM & (1 << 0)) != 0 } { acc = Self::not(Self::bitor(a, b)); } // Case 0: inputs are 0, 0, simplified
+        if const { (IMM & (1 << 1)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(a, b)); } // Case 1: inputs are 0, 1
+        if const { (IMM & (1 << 2)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(b, a)); } // Case 2: inputs are 1, 0
+        if const { (IMM & (1 << 3)) != 0 } { acc = Self::bitor(acc, Self::bitand(a, b)); } // Case 3: inputs are 1, 1
 
         acc
     }
@@ -686,38 +723,69 @@ pub trait Register:
         unsafe { Self::store(ptr, value) }
     }
 
-    /// Radix-3 de-interleave: the 3-way sibling of
-    /// [`InterleaveRegister::deinterleave`].
+    /// Radix-`N` de-interleave: the generic sibling of
+    /// [`InterleaveRegister::deinterleave`] (`N == 2`). Treats the `N` inputs as
+    /// one contiguous `N * LANES` span and splits it by residue mod `N`:
+    /// `out[r][lane] == concat(inputs)[lane * N + r]`.
     ///
-    /// Treats `a`, `b`, `c` as one contiguous `3 * LANES` span and splits it by
-    /// residue mod 3: `out.r[lane] == concat(a, b, c)[lane * 3 + r]`.
+    /// `N` is inferred from the array length, so radix-2/3 call sites need no
+    /// turbofish: `R::deinterleave_radix([a, b])` is the 2-way split. The default
+    /// forwards `N == 2` to the required [`deinterleave`](InterleaveRegister::deinterleave)
+    /// primitive and sends every other `N` to the single-round permute+blend
+    /// gather ([`deinterleave_any`](crate::backend::generic::polyfills::deinterleave_any)).
+    /// Backends with a native radix-3 sequence (NEON `TBL3`, an x86 shuffle
+    /// network) override this via [`impl_native_radix3!`] to add an `N == 3` arm;
+    /// this radix-3 primitive is what the `2^a * 3^b` part of
+    /// [`load_deinterleaved`](Self::load_deinterleaved) rides on.
     ///
-    /// This is the primitive behind the `xyz` case (`N == 3`) and every
-    /// `N = 3 * 2^k` in
-    /// [`load_deinterleaved`](Self::load_deinterleaved) - radix-2 cannot
-    /// decompose an odd factor, so without this, three-stream data falls back to
-    /// the `O(N^2)` permute+blend gather. The default IS that gather; backends
-    /// with a three-register table lookup (NEON `TBL3`) or a hand-tuned shuffle
-    /// sequence override it.
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        let out = crate::backend::generic::polyfills::deinterleave_any::<Self, 3>([a, b, c]);
-        (out[0], out[1], out[2])
+    /// This is a primitive for small, fixed radices; the tuned mixed-radix engine
+    /// for arbitrary `N` is [`load_deinterleaved`](Self::load_deinterleaved).
+    fn deinterleave_radix<const N: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        crate::backend::generic::polyfills::deinterleave_radix_default::<Self, N>(inputs)
     }
 
-    /// Radix-3 interleave - the exact inverse of
-    /// [`deinterleave3`](Self::deinterleave3):
-    /// `concat(out.0, out.1, out.2)[q * 3 + r]` is lane `q` of the `r`-th input.
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        let out = crate::backend::generic::polyfills::interleave_any::<Self, 3>([x, y, z]);
-        (out[0], out[1], out[2])
+    /// Radix-`N` interleave - the exact inverse of
+    /// [`deinterleave_radix`](Self::deinterleave_radix):
+    /// `concat(out)[q * N + r]` is lane `q` of the `r`-th input.
+    ///
+    /// Same dispatch as [`deinterleave_radix`](Self::deinterleave_radix): `N == 2`
+    /// forwards to [`interleave`](InterleaveRegister::interleave), a native radix-3
+    /// override (via [`impl_native_radix3!`]) handles `N == 3`, and any other `N`
+    /// uses [`interleave_any`](crate::backend::generic::polyfills::interleave_any).
+    fn interleave_radix<const N: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        crate::backend::generic::polyfills::interleave_radix_default::<Self, N>(inputs)
+    }
+
+    /// Group-granularity radix-`N` de-interleave: the two-axis unification of
+    /// [`deinterleave_radix`](Self::deinterleave_radix) (`GROUP == 1`) and
+    /// [`deinterleave_by`](Self::deinterleave_by) (`N == 2`). Each register is
+    /// viewed as `LANES / GROUP` groups of `GROUP` consecutive elements, and the `N`
+    /// inputs' group sequences are split by residue mod `N`:
+    /// `out[r].group[q] == concat_groups(inputs)[q * N + r]`, where each group moves
+    /// as a unit and is never split.
+    ///
+    /// The square case `N == LANES / GROUP` is a **register-array transpose** of
+    /// `GROUP`-wide elements: `out[r].group[q] == inputs[q].group[r]`. In particular
+    /// `deinterleave_radix_by::<4, 2>` on an 8-lane f32 register is the 4x4
+    /// interleaved-complex transpose (four `unpacklo/hi_pd` + four `permute2f128` =
+    /// 8 ops on AVX2), and `deinterleave_radix_by::<4, 1>` on f64x4 is the plain 4x4
+    /// `f64` transpose - the natural primitives for FFT codelets and small matrices.
+    ///
+    /// The default forwards `GROUP == 1` to [`deinterleave_radix`](Self::deinterleave_radix)
+    /// (inheriting its native radix-2/3 paths) and `N == 2` to
+    /// [`deinterleave_by`](Self::deinterleave_by), and sends the general case to a
+    /// lane-wise fallback. Backends override the `(N, GROUP)` shapes they do natively.
+    /// `GROUP` must divide `LANES`.
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        crate::backend::generic::polyfills::deinterleave_radix_by_default::<Self, N, GROUP>(inputs)
+    }
+
+    /// The exact inverse of [`deinterleave_radix_by`](Self::deinterleave_radix_by):
+    /// `concat_groups(out)[q * N + r]` is group `q` of the `r`-th input. For the
+    /// square case it is the same register-array transpose (which is its own
+    /// inverse). Same dispatch as [`deinterleave_radix_by`](Self::deinterleave_radix_by).
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        crate::backend::generic::polyfills::interleave_radix_by_default::<Self, N, GROUP>(inputs)
     }
 
     /// Load `N` interleaved (array-of-structures) streams and de-interleave them
@@ -735,7 +803,7 @@ pub trait Register:
     /// The default loads `N` contiguous registers and hands them to
     /// [`deinterleave_n`](crate::backend::generic::polyfills::deinterleave_n),
     /// a mixed-radix stage engine: a radix-2 butterfly of the native 2-way
-    /// `deinterleave` and radix-3 rounds of [`deinterleave3`](Self::deinterleave3)
+    /// `deinterleave` and radix-3 rounds of [`deinterleave_radix::<3>`](Self::deinterleave_radix)
     /// cover the `2^a * 3^b` part of `N`, and a permute+blend gather stage
     /// handles any leftover factor. A backend with true structural loads
     /// overrides this for the widths it supports.
@@ -1333,6 +1401,33 @@ pub trait Register:
         }
 
         result
+    }
+
+    /// Group-granularity 2-way interleave: blocks of `GROUP` consecutive elements
+    /// move as a unit, never split. It is [`InterleaveRegister::interleave`] on the
+    /// register reinterpreted as `LANES / GROUP` elements of `GROUP *` the width.
+    ///
+    /// `GROUP == 1` is exactly [`interleave`](InterleaveRegister::interleave);
+    /// `GROUP == 2` is the pair (complex) interleave -
+    /// `lo == [a.G0, b.G0, a.G1, b.G1, ...]` over the low half of the groups, `hi`
+    /// over the high half - the natural primitive for interleaved-complex SIMD
+    /// (FFT transposes, complex gather/scatter). `GROUP` must divide `LANES`.
+    ///
+    /// The default forwards `GROUP == 1` to the required
+    /// [`interleave`](InterleaveRegister::interleave) primitive and sends any other
+    /// `GROUP` to the lane-wise [`interleave_by`](crate::backend::generic::polyfills::interleave_by)
+    /// fallback. Backends override this for the group sizes they do natively (the
+    /// doubled-element `_mm256_unpacklo_pd` + `permute2f128` for `GROUP == 2` on
+    /// AVX2, one `zip` on NEON).
+    fn interleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        crate::backend::generic::polyfills::interleave_by_default::<Self, GROUP>(a, b)
+    }
+
+    /// The inverse of [`interleave_by`](Self::interleave_by) - group-granularity
+    /// de-interleave. `GROUP == 1` forwards to
+    /// [`deinterleave`](InterleaveRegister::deinterleave).
+    fn deinterleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        crate::backend::generic::polyfills::deinterleave_by_default::<Self, GROUP>(a, b)
     }
 
     #[masked]
@@ -2520,6 +2615,22 @@ pub trait FloatRegister:
 
     const EXP_MASK: Storage<Self::Bits>;
 
+    /// Lane-alternating sign-bit mask `[-0.0, +0.0, -0.0, +0.0, ...]` (sign set on
+    /// **even** lanes). `bitxor`ing a value with this negates its even lanes; it
+    /// is the mask that turns [`addsub`](Self::addsub)/[`fmaddsub`](Self::fmaddsub)
+    /// into a cheap `xor` on backends without a native alternating add/sub.
+    ///
+    /// Materialized at compile time (a constant load, never a runtime shuffle);
+    /// the default fits every width including the emulated `ArrayRegister` /
+    /// `ReducedRegister` ones. A backend with a native instruction just overrides
+    /// the methods and leaves this untouched.
+    const ALT_NEG: Storage<Self> = crate::register::alt_sign_reg::<Self>(true);
+
+    /// Lane-alternating sign-bit mask `[+0.0, -0.0, +0.0, -0.0, ...]` (sign set on
+    /// **odd** lanes) - the opposite parity of [`ALT_NEG`](Self::ALT_NEG), used by
+    /// [`fmsubadd`](Self::fmsubadd).
+    const ALT_POS: Storage<Self> = crate::register::alt_sign_reg::<Self>(false);
+
     const NATIVE_CAP: NativeCapability;
 
     /// LLVM sometimes attempts to further autovectorize our vectorized code, and ends up making it far worse.
@@ -2817,6 +2928,62 @@ pub trait FloatRegister:
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
             *lhs = MulAddExt::nmul_sub(*lhs, rhs, acc);
         })
+    }
+
+    /// Lane-alternating subtract/add: **even lanes subtract, odd lanes add**.
+    ///
+    /// ```text
+    /// [a0 - b0, a1 + b1, a2 - b2, a3 + b3, ...]
+    /// ```
+    ///
+    /// This matches x86 `ADDSUBPS`/`ADDSUBPD` semantics exactly, so the native
+    /// path is a single instruction. It is the building block for interleaved
+    /// complex `[re, im, re, im, ...]` arithmetic; see [`fmaddsub`](Self::fmaddsub)
+    /// for the complex-multiply lowering.
+    ///
+    /// The portable default flips the sign bit of `b` on even lanes with the
+    /// materialized [`ALT_NEG`](Self::ALT_NEG) constant, then adds - so the even
+    /// lanes compute `a + (-b) == a - b` exactly (single rounding).
+    #[conditional] fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        Self::add(a, Self::bitxor(b, Self::ALT_NEG))
+    }
+
+    /// Fused multiply then [`addsub`](Self::addsub): **even lanes subtract, odd lanes add**.
+    ///
+    /// ```text
+    /// [a0*b0 - c0, a1*b1 + c1, a2*b2 - c2, ...]
+    /// ```
+    ///
+    /// Matches x86 `VFMADDSUB213PS`/`PD` (native path is one instruction). This
+    /// is the core of an interleaved complex multiply of `a` by `w`:
+    ///
+    /// ```text
+    /// wr = duplicate_even(w);  wi = duplicate_odd(w);  a_swap = swap_adjacent(a);
+    /// result = fmaddsub(a, wr, a_swap * wi)   // [ar*wr - ai*wi, ar*wi + ai*wr, ...]
+    /// ```
+    ///
+    /// The portable default uses the estimating [`mul_adde`](Self::mul_adde) (real
+    /// FMA where available, otherwise a plain multiply-add) against a `c` whose
+    /// even lanes are sign-flipped by the materialized [`ALT_NEG`](Self::ALT_NEG)
+    /// constant, so non-FMA backends stay a cheap `xor` + `mul_adde`.
+    #[conditional] fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        // even lanes: a*b - c ; odd lanes: a*b + c
+        Self::mul_adde(a, b, Self::bitxor(c, Self::ALT_NEG))
+    }
+
+    /// Fused multiply then subadd - the opposite parity of [`fmaddsub`](Self::fmaddsub):
+    /// **even lanes add, odd lanes subtract**.
+    ///
+    /// ```text
+    /// [a0*b0 + c0, a1*b1 - c1, a2*b2 + c2, ...]
+    /// ```
+    ///
+    /// Matches x86 `VFMSUBADD213PS`/`PD`. The portable default flips the sign of
+    /// `c` on the *odd* lanes with the materialized [`ALT_POS`](Self::ALT_POS)
+    /// constant and feeds it through [`mul_adde`](Self::mul_adde).
+    #[conditional] fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        // even lanes: a*b + c ; odd lanes: a*b - c
+        Self::mul_adde(a, b, Self::bitxor(c, Self::ALT_POS))
     }
 
     #[conditional] fn sqrt(value: Storage<Self>) -> Storage<Self>;

@@ -1,6 +1,7 @@
 //! Radix-3 register de-interleave/interleave for 128-bit registers.
 //!
-//! The 3-way siblings of `unpcklps`/`unpckhps`. `Register::deinterleave3`'s
+//! The 3-way siblings of `unpcklps`/`unpckhps`, wired into
+//! `Register::deinterleave_radix::<3>` via `impl_native_radix3!`. That method's
 //! default is an `O(N^2)` permute+blend gather; three registers of `xyzxyz...`
 //! have far more structure than that, and a fixed shuffle sequence exploits it:
 //! every index here is a compile-time immediate, so these are pure register

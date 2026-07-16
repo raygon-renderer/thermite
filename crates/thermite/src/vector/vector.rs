@@ -293,6 +293,87 @@ impl<R: Register> GenericVector for Vector<R> {
     unsafe fn store_unaligned(self, ptr: *mut Self::Element) { unsafe { R::store_unaligned(ptr, self.0) } }
     unsafe fn store_streaming(self, ptr: *mut Self::Element) { unsafe { R::store_stream(ptr, self.0) } }
 
+    fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (a, b) = R::interleave_by::<GROUP>(self.0, other.0);
+        (Vector(a), Vector(b))
+    }
+
+    fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (a, b) = R::deinterleave_by::<GROUP>(self.0, other.0);
+        (Vector(a), Vector(b))
+    }
+
+    // Hand-rolled unwrap/rewrap loops, not `core::array::map` - that fails to
+    // inline inside `#[target_feature]` code and falls back to scalar copies.
+    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let mut regs = [R::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            regs[i] = inputs[i].0;
+            i += 1;
+        }
+        let out = R::interleave_radix::<N>(regs);
+        let mut res = [Vector(R::EMPTY); N];
+        let mut i = 0;
+        while i < N {
+            res[i] = Vector(out[i]);
+            i += 1;
+        }
+        res
+    }
+
+    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let mut regs = [R::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            regs[i] = inputs[i].0;
+            i += 1;
+        }
+        let out = R::deinterleave_radix::<N>(regs);
+        let mut res = [Vector(R::EMPTY); N];
+        let mut i = 0;
+        while i < N {
+            res[i] = Vector(out[i]);
+            i += 1;
+        }
+        res
+    }
+
+    // Hand-rolled unwrap/rewrap loops (not `core::array::map`) - see the note above.
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let mut regs = [R::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            regs[i] = inputs[i].0;
+            i += 1;
+        }
+        let out = R::deinterleave_radix_by::<N, GROUP>(regs);
+        let mut res = [Vector(R::EMPTY); N];
+        let mut i = 0;
+        while i < N {
+            res[i] = Vector(out[i]);
+            i += 1;
+        }
+        res
+    }
+
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let mut regs = [R::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            regs[i] = inputs[i].0;
+            i += 1;
+        }
+        let out = R::interleave_radix_by::<N, GROUP>(regs);
+        let mut res = [Vector(R::EMPTY); N];
+        let mut i = 0;
+        while i < N {
+            res[i] = Vector(out[i]);
+            i += 1;
+        }
+        res
+    }
+
     // NOTE: hand-rolled loops, not `core::array::{from_fn, map}` - those fail to
     // inline inside `#[target_feature]` code and fall back to scalar copies.
     unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Self; N] {

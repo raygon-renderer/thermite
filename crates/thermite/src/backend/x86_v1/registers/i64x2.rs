@@ -192,21 +192,7 @@ impl Register for I64x2V1 {
         unsafe { arch::_mm_setr_epi64x(value, 0) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_deinterleave3_epi64(a, b, c) }
-    }
-
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_interleave3_epi64(x, y, z) }
-    }
+    impl_native_radix3!(arch::_mm_interleave3_epi64, arch::_mm_deinterleave3_epi64);
 
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi64x(value) }

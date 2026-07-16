@@ -293,3 +293,65 @@ macro_rules! compress_via_wide {
         }
     };
 }
+
+/// Native radix-3 `interleave_radix`/`deinterleave_radix` overrides, stamped from
+/// the backend's `(de)interleave3` register intrinsics. Drop into an
+/// `impl Register for <Reg> { ... }` block.
+///
+/// Only the native radix-3 sequence is provided here; radix 2 and every other
+/// radix fall back to the shared defaults
+/// ([`interleave_radix_default`](crate::backend::generic::polyfills::interleave_radix_default)
+/// / [`deinterleave_radix_default`](crate::backend::generic::polyfills::deinterleave_radix_default)),
+/// so the `N == 2` forward and the permute+blend gather live in one place. `N` is
+/// a compile-time constant at every call site, so the `if N == 3` folds and the
+/// array plumbing evaporates (verified equal to the old tuple `interleave3` asm).
+///
+/// `$ilv3`/`$dilv3` are `unsafe fn(a, b, c) -> (x, y, z)` register intrinsics,
+/// e.g. `arch::_mm256_interleave3_ps`.
+macro_rules! impl_native_radix3 {
+    ($ilv3:path, $dilv3:path) => {
+        #[inline(always)]
+        fn interleave_radix<const N: usize>(
+            inputs: [$crate::register::Storage<Self>; N],
+        ) -> [$crate::register::Storage<Self>; N] {
+            if const { N == 3 } {
+                // SAFETY: `N == 3` on this arm, so lanes 0/1/2 are in bounds.
+                let (x, y, z) =
+                    unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2)) };
+                let (a, b, c) = unsafe { $ilv3(x, y, z) };
+                let mut out = [<Self as $crate::register::CoreRegister>::EMPTY; N];
+                // SAFETY: as above.
+                unsafe {
+                    *out.get_unchecked_mut(0) = a;
+                    *out.get_unchecked_mut(1) = b;
+                    *out.get_unchecked_mut(2) = c;
+                }
+                out
+            } else {
+                $crate::backend::generic::polyfills::interleave_radix_default::<Self, N>(inputs)
+            }
+        }
+
+        #[inline(always)]
+        fn deinterleave_radix<const N: usize>(
+            inputs: [$crate::register::Storage<Self>; N],
+        ) -> [$crate::register::Storage<Self>; N] {
+            if const { N == 3 } {
+                // SAFETY: `N == 3` on this arm.
+                let (a, b, c) =
+                    unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2)) };
+                let (x, y, z) = unsafe { $dilv3(a, b, c) };
+                let mut out = [<Self as $crate::register::CoreRegister>::EMPTY; N];
+                // SAFETY: as above.
+                unsafe {
+                    *out.get_unchecked_mut(0) = x;
+                    *out.get_unchecked_mut(1) = y;
+                    *out.get_unchecked_mut(2) = z;
+                }
+                out
+            } else {
+                $crate::backend::generic::polyfills::deinterleave_radix_default::<Self, N>(inputs)
+            }
+        }
+    };
+}

@@ -21,7 +21,7 @@
 //!   gather per output stream. Only `min(p, LANES)` sources can contribute lanes
 //!   to a given stream, and non-contributors are skipped, so it costs
 //!   `p * min(p, LANES)` permutes (one fewer blend each), not `p^2`.
-//! - **radix-3 stages** via [`Register::deinterleave3`] - a real register
+//! - **radix-3 stages** via [`Register::deinterleave_radix`] - a real register
 //!   primitive, so a backend can give it a native sequence (NEON: three
 //!   `TBL3`s).
 //! - **radix-2 butterfly stages** over [`InterleaveRegister`]'s native 2-way
@@ -94,7 +94,7 @@
 //! A backend with true structural loads (ARM `LD2`/`LD3`/`LD4`) overrides the
 //! memory ops outright for the widths it supports and falls back here otherwise.
 
-use generic_array::{GenericArray, sequence::GenericSequence};
+use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
 use crate::register::{CoreRegister, MaskRegister, Register, Storage};
 
@@ -427,11 +427,11 @@ fn stages_deinterleave_flat<R: Register>(buf: &mut [Storage<R>], tmp: &mut [Stor
                 // their panic paths keep LLVM from promoting `buf`/`tmp` out of
                 // memory, which turns the whole stage into stack traffic.
                 unsafe {
-                    let (p0, p1, p2) = R::deinterleave3(
+                    let [p0, p1, p2] = R::deinterleave_radix::<3>([
                         *buf.get_unchecked(g),
                         *buf.get_unchecked(g + 1),
                         *buf.get_unchecked(g + 2),
-                    );
+                    ]);
                     *tmp.get_unchecked_mut(base + i) = p0;
                     *tmp.get_unchecked_mut(base + sub + i) = p1;
                     *tmp.get_unchecked_mut(base + 2 * sub + i) = p2;
@@ -526,11 +526,11 @@ fn stages_interleave_flat<R: Register>(buf: &mut [Storage<R>], tmp: &mut [Storag
                 let g = base + 3 * i;
                 // SAFETY: as above - `g + 2 < base + size <= n`.
                 unsafe {
-                    let (r0, r1, r2) = R::interleave3(
+                    let [r0, r1, r2] = R::interleave_radix::<3>([
                         *buf.get_unchecked(base + i),
                         *buf.get_unchecked(base + sub + i),
                         *buf.get_unchecked(base + 2 * sub + i),
-                    );
+                    ]);
                     *tmp.get_unchecked_mut(g) = r0;
                     *tmp.get_unchecked_mut(g + 1) = r1;
                     *tmp.get_unchecked_mut(g + 2) = r2;
@@ -589,7 +589,7 @@ fn interleave_any_flat<R: Register>(values: &[Storage<R>], out: &mut [Storage<R>
 /// De-interleave `N` contiguous registers into `N` streams with a single
 /// permute+blend gather round - no stage decomposition. This is the leftover
 /// path of [`deinterleave_n`] applied at full width, and the default body of
-/// [`Register::deinterleave3`]; it needs only `GenericArray<_, LANES>` index
+/// [`Register::deinterleave_radix`]; it needs only `GenericArray<_, LANES>` index
 /// arrays, so `N` is genuinely unbounded.
 #[inline(always)]
 pub fn deinterleave_any<R: Register, const N: usize>(src: [Storage<R>; N]) -> [Storage<R>; N] {
@@ -605,6 +605,395 @@ pub fn interleave_any<R: Register, const N: usize>(values: [Storage<R>; N]) -> [
     let mut out = [R::EMPTY; N];
     interleave_any_flat::<R>(&values, &mut out, N);
     out
+}
+
+/// The non-native body of [`Register::deinterleave_radix`]: forward `N == 2` to
+/// the required [`InterleaveRegister::deinterleave`] primitive and send every
+/// other `N` to the single-round [`deinterleave_any`] gather.
+///
+/// Backends that add a native radix (e.g. radix-3) call this for the arms they
+/// do not handle, so the `N == 2` forward and the gather fallback live in one
+/// place. `N` is a compile-time constant at every call site, so the `if` folds.
+#[inline(always)]
+pub fn deinterleave_radix_default<R: Register, const N: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+    if const { N == 2 } {
+        // SAFETY: `N == 2` on this arm.
+        let (a, b) = unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1)) };
+        let (r0, r1) = R::deinterleave(a, b);
+        let mut out = [R::EMPTY; N];
+        // SAFETY: as above.
+        unsafe {
+            *out.get_unchecked_mut(0) = r0;
+            *out.get_unchecked_mut(1) = r1;
+        }
+        out
+    } else {
+        deinterleave_any::<R, N>(inputs)
+    }
+}
+
+/// The non-native body of [`Register::interleave_radix`] - the exact inverse of
+/// [`deinterleave_radix_default`]: `N == 2` forwards to
+/// [`InterleaveRegister::interleave`], any other `N` uses [`interleave_any`].
+#[inline(always)]
+pub fn interleave_radix_default<R: Register, const N: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+    if const { N == 2 } {
+        // SAFETY: `N == 2` on this arm.
+        let (a, b) = unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1)) };
+        let (r0, r1) = R::interleave(a, b);
+        let mut out = [R::EMPTY; N];
+        // SAFETY: as above.
+        unsafe {
+            *out.get_unchecked_mut(0) = r0;
+            *out.get_unchecked_mut(1) = r1;
+        }
+        out
+    } else {
+        interleave_any::<R, N>(inputs)
+    }
+}
+
+/// Group-granularity 2-way interleave - the default body of
+/// [`Register::interleave_by`](crate::register::Register::interleave_by).
+///
+/// Blocks of `group` consecutive elements move as a unit, never split: it is the
+/// element-granularity [`InterleaveRegister::interleave`] on the register
+/// reinterpreted as `LANES / group` elements of `group *` the width. `group == 1`
+/// is exactly `interleave`; `group == 2` is pair (complex) interleave, so
+/// `lo == [a.G0, b.G0, a.G1, b.G1, ...]` over the low half of the groups and `hi`
+/// over the high half. `group` must divide `LANES`.
+///
+/// A correct lane-wise fallback; backends override
+/// [`Register::interleave_by`](crate::register::Register::interleave_by) for the
+/// group sizes they can do natively (the doubled-element `unpacklo_pd` +
+/// `permute2f128` for `group == 2` on AVX2, `zip` on NEON).
+#[inline(always)]
+pub fn interleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) -> (Storage<R>, Storage<R>) {
+    let lanes = R::lanes();
+    let groups = lanes / group;
+    let mut lo = R::EMPTY;
+    let mut hi = R::EMPTY;
+    {
+        let sa = R::as_slice(&a);
+        let sb = R::as_slice(&b);
+        let dlo = R::as_mut_slice(&mut lo);
+        let dhi = R::as_mut_slice(&mut hi);
+        // The interleaved group sequence is `[a.G0, b.G0, a.G1, b.G1, ...]` (`2*groups` groups);
+        // `lo` is its first `groups`, `hi` the rest. Output group `k` (element `e = k*group + sub`)
+        // is source group `k/2` of `a` (k even) or `b` (k odd); `hi`'s group `k` is `groups + k`.
+        for e in 0..lanes {
+            let k = e / group;
+            let sub = e % group;
+            dlo[e] = if k % 2 == 0 { sa[(k / 2) * group + sub] } else { sb[(k / 2) * group + sub] };
+            let kh = groups + k;
+            dhi[e] = if kh % 2 == 0 { sa[(kh / 2) * group + sub] } else { sb[(kh / 2) * group + sub] };
+        }
+    }
+    (lo, hi)
+}
+
+/// The exact inverse of [`interleave_by`] - group-granularity de-interleave.
+/// Default body of [`Register::deinterleave_by`](crate::register::Register::deinterleave_by).
+#[inline(always)]
+pub fn deinterleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) -> (Storage<R>, Storage<R>) {
+    let lanes = R::lanes();
+    let groups = lanes / group;
+    let mut o0 = R::EMPTY;
+    let mut o1 = R::EMPTY;
+    {
+        let sa = R::as_slice(&a);
+        let sb = R::as_slice(&b);
+        let d0 = R::as_mut_slice(&mut o0);
+        let d1 = R::as_mut_slice(&mut o1);
+        // Invert `interleave_by`: `a.Gm` was placed at sequence group `2m`, `b.Gm` at `2m + 1`; the
+        // first `groups` of the sequence live in `a` (the lo input), the rest in `b` (hi).
+        for e in 0..lanes {
+            let m = e / group;
+            let sub = e % group;
+            let (s0, p0) = if 2 * m < groups { (sa, 2 * m) } else { (sb, 2 * m - groups) };
+            let (s1, p1) = if 2 * m + 1 < groups { (sa, 2 * m + 1) } else { (sb, 2 * m + 1 - groups) };
+            d0[e] = s0[p0 * group + sub];
+            d1[e] = s1[p1 * group + sub];
+        }
+    }
+    (o0, o1)
+}
+
+/// The non-native body of [`Register::interleave_by`]: forward `GROUP == 1` to the
+/// required [`InterleaveRegister::interleave`] primitive and send every other
+/// `GROUP` to the lane-wise [`interleave_by`] fallback. Backends that add a native
+/// group size (e.g. `GROUP == 2`) call this for the sizes they do not handle.
+#[inline(always)]
+pub fn interleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b: Storage<R>) -> (Storage<R>, Storage<R>) {
+    if const { GROUP == 1 } {
+        R::interleave(a, b)
+    } else {
+        interleave_by::<R>(a, b, GROUP)
+    }
+}
+
+/// The non-native body of [`Register::deinterleave_by`] - the exact inverse of
+/// [`interleave_by_default`].
+#[inline(always)]
+pub fn deinterleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b: Storage<R>) -> (Storage<R>, Storage<R>) {
+    if const { GROUP == 1 } {
+        R::deinterleave(a, b)
+    } else {
+        deinterleave_by::<R>(a, b, GROUP)
+    }
+}
+
+/// Group-granularity radix-`N` de-interleave via radix-2 staging over the native
+/// [`Register::deinterleave_by`](crate::register::Register::deinterleave_by)`::<GROUP>`
+/// primitive, for a power-of-two `N`. The exact `GROUP`-granular analogue of the
+/// radix-2 stages in [`stages_deinterleave_flat`]: `log2(N)` butterfly rounds over
+/// blocks that halve, then the free bit-reversal register re-slot (`digit_reversal`
+/// is pure bit reversal when every stage is radix 2).
+///
+/// This is what a genuine group-radix case (`N > 2`, `GROUP > 1`) with no native arm
+/// should compile to. It composes the backend's own `deinterleave_by::<GROUP>` - a
+/// single `unpck`/`zip`/pair-transpose on the backends that have it - instead of the
+/// lane-wise scalar copy [`deinterleave_radix_by_lanewise`] falls back to, which
+/// stores both registers to the stack and shuffles elements one at a time.
+///
+/// Note this does NOT beat a hand-written native *square* transpose (e.g.
+/// `transpose_8x8` for `(8, 1)`): each radix-2 stage still uses the full-register
+/// `deinterleave_by`, which crosses the 128-bit lane boundary every round, whereas a
+/// native sequence defers all lane crossings to one round. The generic vocabulary has
+/// no within-128 sublane op to express that, so the hot square cases keep their native
+/// arms; this raises the floor for every *other* `(N, GROUP)`.
+#[inline(always)]
+fn deinterleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+    let mut buf = inputs;
+    let mut tmp = [R::EMPTY; N];
+
+    // Radix-2 butterfly stages at GROUP granularity, blocks shrinking N -> 1.
+    let mut size = N;
+    while size > 1 {
+        let sub = size / 2;
+        let mut base = 0;
+        while base < N {
+            let mut i = 0;
+            while i < sub {
+                let g = base + 2 * i;
+                // SAFETY: g + 1 < base + size <= N, and the two writes land in the same block.
+                unsafe {
+                    let (evens, odds) = R::deinterleave_by::<GROUP>(*buf.get_unchecked(g), *buf.get_unchecked(g + 1));
+                    *tmp.get_unchecked_mut(base + i) = evens;
+                    *tmp.get_unchecked_mut(base + sub + i) = odds;
+                }
+                i += 1;
+            }
+            base += size;
+        }
+        buf.copy_from_slice(&tmp);
+        size = sub;
+    }
+
+    // Undo the bit-reversal the stages leave behind (free register re-slotting).
+    let perm = const { digit_reversal::<N>() };
+    let mut out = [R::EMPTY; N];
+    let mut j = 0;
+    while j < N {
+        // SAFETY: perm[j] = stream_pos(j, N) < N by construction; j < N.
+        unsafe { *out.get_unchecked_mut(j) = *buf.get_unchecked(*perm.get_unchecked(j)) };
+        j += 1;
+    }
+    out
+}
+
+/// Lane-wise group-granularity radix-`N` de-interleave - the correctness-floor
+/// fallback when `N` is not a power of two (the staged [`deinterleave_radix_by_pow2`]
+/// needs radix-2 stages). Stores each register to a stack slice and shuffles elements
+/// one group at a time.
+///
+/// Viewing each register as `groups = LANES / GROUP` groups of `GROUP` consecutive
+/// elements, output register `r` group `q` is the `(q * N + r)`-th group of the
+/// concatenated input sequence (input register `c / groups`, its group `c % groups`
+/// for `c = q * N + r`).
+#[inline(always)]
+fn deinterleave_radix_by_lanewise<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    let lanes = R::lanes();
+    let groups = lanes / GROUP;
+    let mut out = [R::EMPTY; N];
+    for (r, slot) in out.iter_mut().enumerate() {
+        let d = R::as_mut_slice(slot);
+        for q in 0..groups {
+            let c = q * N + r;
+            let src_reg = c / groups;
+            let src_grp = c % groups;
+            let s = R::as_slice(&inputs[src_reg]);
+            for sub in 0..GROUP {
+                d[q * GROUP + sub] = s[src_grp * GROUP + sub];
+            }
+        }
+    }
+    out
+}
+
+/// The group-radix (`GROUP >= 2`, `N > 2`) fallback dispatcher: staged radix-2 over the
+/// native `deinterleave_by::<GROUP>` ([`deinterleave_radix_by_pow2`]) when that is the
+/// cheaper choice, else the lane-wise floor ([`deinterleave_radix_by_lanewise`]).
+///
+/// Staged costs `(N/2)*log2(N)` `deinterleave_by::<GROUP>` calls, each `O(1)` cross-lane
+/// permutes; lane-wise costs `O(N)` block moves that LLVM vectorizes for `GROUP >= 2`.
+/// So staged wins while its stage count stays low (small `N`) **or** the group spans at
+/// least a 128-bit sublane (`GROUP >= LANES/2`), where each `deinterleave_by` is a single
+/// permute; past that its `O(N log N)` permutes lose. Measured on AVX2 `f32x8`: `(16, 2)`
+/// lane-wise 18 ns vs staged 24; `(8, 4)`/`(16, 4)` staged 8/13 ns vs lane-wise 11/22.
+/// `GROUP == 1` never reaches here - [`deinterleave_radix_by_default`] sends it to the
+/// [`deinterleave_n`] staged engine; native square transposes ((4,2)/(8,1)) intercept in
+/// the register impls before the default.
+#[inline(always)]
+pub fn deinterleave_radix_by<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    if const { N.is_power_of_two() && (N <= 8 || 2 * GROUP >= <R::Lanes as Unsigned>::USIZE) } {
+        deinterleave_radix_by_pow2::<R, N, GROUP>(inputs)
+    } else {
+        deinterleave_radix_by_lanewise::<R, N, GROUP>(inputs)
+    }
+}
+
+/// The exact inverse of [`deinterleave_radix_by_pow2`]: scatter the streams into
+/// bit-reversed register order, then replay the radix-2 stages bottom-up over the
+/// native [`Register::interleave_by`](crate::register::Register::interleave_by)`::<GROUP>`.
+/// Power-of-two `N` only, exactly as its inverse.
+#[inline(always)]
+fn interleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+    // Scatter into the bit-reversed order the stages expect.
+    let perm = const { digit_reversal::<N>() };
+    let mut buf = [R::EMPTY; N];
+    let mut j = 0;
+    while j < N {
+        // SAFETY: perm[j] < N by construction; j < N.
+        unsafe { *buf.get_unchecked_mut(*perm.get_unchecked(j)) = *inputs.get_unchecked(j) };
+        j += 1;
+    }
+
+    // Radix-2 interleave stages at GROUP granularity, blocks growing 2 -> N.
+    let mut tmp = [R::EMPTY; N];
+    let mut size = 2;
+    while size <= N {
+        let sub = size / 2;
+        let mut base = 0;
+        while base < N {
+            let mut i = 0;
+            while i < sub {
+                let g = base + 2 * i;
+                // SAFETY: g + 1 < base + size <= N.
+                unsafe {
+                    let (lo, hi) = R::interleave_by::<GROUP>(*buf.get_unchecked(base + i), *buf.get_unchecked(base + sub + i));
+                    *tmp.get_unchecked_mut(g) = lo;
+                    *tmp.get_unchecked_mut(g + 1) = hi;
+                }
+                i += 1;
+            }
+            base += size;
+        }
+        buf.copy_from_slice(&tmp);
+        size *= 2;
+    }
+    buf
+}
+
+/// Lane-wise group-granularity radix-`N` interleave - the non-power-of-two
+/// correctness floor (inverse of [`deinterleave_radix_by_lanewise`]). The
+/// concatenated output group `c = out_reg * groups + lg` is group `c / N` of input
+/// register `c % N`.
+#[inline(always)]
+fn interleave_radix_by_lanewise<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    let lanes = R::lanes();
+    let groups = lanes / GROUP;
+    let mut out = [R::EMPTY; N];
+    for (out_reg, slot) in out.iter_mut().enumerate() {
+        let d = R::as_mut_slice(slot);
+        for lg in 0..groups {
+            let c = out_reg * groups + lg;
+            let src_reg = c % N;
+            let src_grp = c / N;
+            let s = R::as_slice(&inputs[src_reg]);
+            for sub in 0..GROUP {
+                d[lg * GROUP + sub] = s[src_grp * GROUP + sub];
+            }
+        }
+    }
+    out
+}
+
+/// The group-radix interleave fallback dispatcher - the exact inverse of
+/// [`deinterleave_radix_by`], with the same staged-vs-lane-wise choice.
+#[inline(always)]
+pub fn interleave_radix_by<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    if const { N.is_power_of_two() && (N <= 8 || 2 * GROUP >= <R::Lanes as Unsigned>::USIZE) } {
+        interleave_radix_by_pow2::<R, N, GROUP>(inputs)
+    } else {
+        interleave_radix_by_lanewise::<R, N, GROUP>(inputs)
+    }
+}
+
+/// The non-native body of [`Register::deinterleave_radix_by`]: route each axis to its
+/// best generic path. `GROUP == 1` is an `N`-way de-interleave, so it goes to the
+/// mixed-radix [`deinterleave_n`] stage engine - NOT [`Register::deinterleave_radix`],
+/// whose default is a single full-width gather that spills catastrophically past `~LANES`
+/// registers (measured AVX2 `f32x8`: a `(16, 1)` gather is 690 instrs / 242 ns, vs 24 ns
+/// staged; `(32, 1)` 747 ns vs 74). `N == 2` is the [`Register::deinterleave_by`]
+/// primitive; the genuine group-radix case (`N > 2`, `GROUP >= 2`) goes to
+/// [`deinterleave_radix_by`]'s staged-vs-lane-wise dispatch. Native square transposes
+/// (the `(4, 2)` / `(8, 1)` AVX2 arms) intercept in the register impls before this.
+/// Every `N`/`GROUP` is a compile-time constant, so the `if`s fold.
+#[inline(always)]
+pub fn deinterleave_radix_by_default<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    if const { GROUP == 1 } {
+        deinterleave_n::<R, N>(inputs)
+    } else if const { N == 2 } {
+        // SAFETY: `N == 2` on this arm.
+        let (a, b) = unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1)) };
+        let (o0, o1) = R::deinterleave_by::<GROUP>(a, b);
+        let mut out = [R::EMPTY; N];
+        // SAFETY: as above.
+        unsafe {
+            *out.get_unchecked_mut(0) = o0;
+            *out.get_unchecked_mut(1) = o1;
+        }
+        out
+    } else {
+        deinterleave_radix_by::<R, N, GROUP>(inputs)
+    }
+}
+
+/// The non-native body of [`Register::interleave_radix_by`] - the exact inverse of
+/// [`deinterleave_radix_by_default`]: `GROUP == 1` to the [`interleave_n`] stage engine
+/// (not the single-gather `Register::interleave_radix`), `N == 2` to `interleave_by`, the
+/// group-radix case to [`interleave_radix_by`].
+#[inline(always)]
+pub fn interleave_radix_by_default<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
+    if const { GROUP == 1 } {
+        interleave_n::<R, N>(inputs)
+    } else if const { N == 2 } {
+        // SAFETY: `N == 2` on this arm.
+        let (a, b) = unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1)) };
+        let (o0, o1) = R::interleave_by::<GROUP>(a, b);
+        let mut out = [R::EMPTY; N];
+        // SAFETY: as above.
+        unsafe {
+            *out.get_unchecked_mut(0) = o0;
+            *out.get_unchecked_mut(1) = o1;
+        }
+        out
+    } else {
+        interleave_radix_by::<R, N, GROUP>(inputs)
+    }
 }
 
 /// The digit-reversal permutation, materialized at compile time:

@@ -169,21 +169,7 @@ impl Register for U64x4V3 {
         unsafe { arch::_mm256_setr_epi64x(value as i64, 0, 0, 0) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_deinterleave3_epi64(a, b, c) }
-    }
-
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm256_interleave3_epi64(x, y, z) }
-    }
+    impl_native_radix3!(arch::_mm256_interleave3_epi64, arch::_mm256_deinterleave3_epi64);
 
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi64x(value as i64) }
@@ -235,6 +221,31 @@ impl Register for U64x4V3 {
     }
 
     const HAS_PERMUTEV: bool = false;
+
+    // Square transpose via the shared 256-bit family body (identical to `I64x4V3` -
+    // both are raw `__m256i`): `(4, 1)` -> the 4x4 W=8 transpose. Self-inverse.
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 1 } {
+            unsafe { arch::radix_by_w64_si(inputs) }
+        } else if const { arch::ladder_viable(N, GROUP, 8) } {
+            // Certified ladder plan for any other pow-2 shape (see `polyfills::transpose256`).
+            let plan = const { arch::ladder_search_elem(N, GROUP, 8) };
+            unsafe { arch::ladder_radix_by_si::<N, true>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::deinterleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
+    }
+
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
+        if const { N == 4 && GROUP == 1 } {
+            unsafe { arch::radix_by_w64_si(inputs) }
+        } else if const { arch::ladder_viable(N, GROUP, 8) } {
+            let plan = const { arch::ladder_search_elem(N, GROUP, 8) };
+            unsafe { arch::ladder_radix_by_si::<N, false>(inputs, plan) }
+        } else {
+            crate::backend::generic::polyfills::interleave_radix_by_default::<Self, N, GROUP>(inputs)
+        }
+    }
 
     compress_via_table!();
 

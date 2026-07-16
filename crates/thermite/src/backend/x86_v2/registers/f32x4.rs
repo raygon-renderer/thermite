@@ -185,21 +185,7 @@ impl Register for F32x4V2 {
         unsafe { arch::_mm_set_ss(value) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_deinterleave3_ps(a, b, c) }
-    }
-
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_interleave3_ps(x, y, z) }
-    }
+    impl_native_radix3!(arch::_mm_interleave3_ps, arch::_mm_deinterleave3_ps);
 
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_ps(value) }
@@ -461,6 +447,22 @@ impl FloatRegister for F32x4V2 {
     #[cfg(not(feature = "disable_fast_fma"))]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_fmadd_psx_v1(Self::neg(lhs), rhs, Self::neg(acc)) }
+    }
+
+    // SSE3 has a native alternating add/sub, but no packed FMA, so fmaddsub /
+    // fmsubadd are a plain multiply followed by the native addsub (2 instructions,
+    // cheaper than the generic xor + mul_adde emulation).
+    fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        unsafe { arch::_mm_addsub_ps(a, b) }
+    }
+
+    fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        Self::addsub(Self::mul(a, b), c)
+    }
+
+    fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        // addsub(x, -c) = [x - (-c), x + (-c), ...] = [x + c, x - c, ...]
+        Self::addsub(Self::mul(a, b), Self::neg(c))
     }
 
     fn sqrt(value: Storage<Self>) -> Storage<Self> {

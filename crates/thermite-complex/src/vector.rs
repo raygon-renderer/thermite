@@ -19,7 +19,7 @@ use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::RealMathWithPolicy;
 use thermite::math::algorithms::reduce_in_place;
 use thermite::math::policy::DefaultPolicy;
-use thermite::vector::ops::{NegMasked, Square, SquareMasked};
+use thermite::vector::ops::{AddSubExt, AddSubExtMasked, NegMasked, Square, SquareMasked};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 use thermite::{LargeInt, prelude::*};
 
@@ -297,6 +297,19 @@ impl<V: ComplexFloatVector> crate::specialized::ComplexVector for Complex<V> {
     #[inline(always)] fn im(self) -> V { self.im }
     #[inline(always)] fn from_parts(re: V, im: V) -> Self { Self::new(re, im) }
 
+    #[inline(always)]
+    unsafe fn store_streaming_block(self, ptr: *mut Self) {
+        // Stream each half with the real per-vector NT store (`_mm256_stream_ps` on AVX2; a
+        // plain store where the backend has no NT). `&raw mut (*ptr).re/.im` are the true field
+        // addresses, so no `repr` assumption; a `[Self]` slot is `Self`-aligned, `re` sits at
+        // offset 0 and `im` at `size_of::<V>()`, both aligned for the vector NT store. Preserves
+        // the planar `[re | im]` block layout (NO interleave - see the trait doc).
+        unsafe {
+            self.re.store_streaming((&raw mut (*ptr).re).cast());
+            self.im.store_streaming((&raw mut (*ptr).im).cast());
+        }
+    }
+
     // Policy-free, so these are inherent on Complex<V> as well, where they also
     // serve the element-level Complex<f32>. The trait methods forward.
     #[inline(always)] fn conj(self) -> Self { Complex::conj(self) }
@@ -386,6 +399,84 @@ impl<V: ComplexFloatVector> GenericVector for Complex<V> {
     #[inline(always)]
     unsafe fn load_streaming(ptr: *const Self::Element) -> Self {
         unsafe { Self::load(ptr) }
+    }
+
+    #[inline(always)]
+    fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (re_lo, re_hi) = self.re.interleave_by::<GROUP>(other.re);
+        let (im_lo, im_hi) = self.im.interleave_by::<GROUP>(other.im);
+        (Self::new(re_lo, im_lo), Self::new(re_hi, im_hi))
+    }
+
+    #[inline(always)]
+    fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (re_lo, re_hi) = self.re.deinterleave_by::<GROUP>(other.re);
+        let (im_lo, im_hi) = self.im.deinterleave_by::<GROUP>(other.im);
+        (Self::new(re_lo, im_lo), Self::new(re_hi, im_hi))
+    }
+
+    #[inline(always)]
+    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            re[i] = inputs[i].re;
+            im[i] = inputs[i].im;
+        }
+        let re = V::interleave_radix::<N>(re);
+        let im = V::interleave_radix::<N>(im);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self::new(re[i], im[i]);
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            re[i] = inputs[i].re;
+            im[i] = inputs[i].im;
+        }
+        let re = V::deinterleave_radix::<N>(re);
+        let im = V::deinterleave_radix::<N>(im);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self::new(re[i], im[i]);
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            re[i] = inputs[i].re;
+            im[i] = inputs[i].im;
+        }
+        let re = V::deinterleave_radix_by::<N, GROUP>(re);
+        let im = V::deinterleave_radix_by::<N, GROUP>(im);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self::new(re[i], im[i]);
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            re[i] = inputs[i].re;
+            im[i] = inputs[i].im;
+        }
+        let re = V::interleave_radix_by::<N, GROUP>(re);
+        let im = V::interleave_radix_by::<N, GROUP>(im);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self::new(re[i], im[i]);
+        }
+        out
     }
 
     /// `M` interleaved `Complex` streams are `2 * M` interleaved float streams, i.e.
@@ -762,6 +853,44 @@ impl_masked!(Sub::sub);
 impl_masked!(Mul::mul);
 impl_masked!(Div::div);
 impl_masked!(Rem::rem);
+
+// =====================================================================================
+// Lane-alternating add/sub (`AddSubExt`), over the *inner vector's* lanes - so the
+// even/odd parity applies per complex number. `Add`/`Sub` are component-wise on
+// `re`/`im`, so this is exact: `neg_even` flips the even-lane signs of both parts,
+// then:
+//   addsub(a, b)      = a + neg_even(b)
+//   fmaddsub(a, b, c) = a*b + neg_even(c)   (via the complex product-rule mul_adde)
+//   fmsubadd(a, b, c) = a*b - neg_even(c)
+// =====================================================================================
+
+#[inline(always)]
+fn neg_even_complex<V: ComplexFloatVector>(x: Complex<V>) -> Complex<V> {
+    // `addsub(0, w) = [-w0, w1, -w2, ...]` flips the even lanes exactly.
+    Complex::new(V::ZERO.addsub(x.re), V::ZERO.addsub(x.im))
+}
+
+impl<V: ComplexFloatVector> AddSubExt for Complex<V> {
+    type Output = Self;
+
+    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_complex(b) }
+    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_complex(c)) }
+    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_complex(c)) }
+}
+
+impl<V: ComplexFloatVector> AddSubExtMasked<V::Mask> for Complex<V> {
+    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
+    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
+    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+
+    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
+    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
+    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+
+    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
+    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
+    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+}
 
 impl<V: ComplexFloatVector> SquareMasked<V::Mask> for Complex<V> {
     #[inline(always)]

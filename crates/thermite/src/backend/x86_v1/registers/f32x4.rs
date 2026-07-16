@@ -188,21 +188,7 @@ impl Register for F32x4V1 {
         unsafe { arch::_mm_set_ss(value) }
     }
 
-    fn deinterleave3(
-        a: Storage<Self>,
-        b: Storage<Self>,
-        c: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_deinterleave3_ps(a, b, c) }
-    }
-
-    fn interleave3(
-        x: Storage<Self>,
-        y: Storage<Self>,
-        z: Storage<Self>,
-    ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-        unsafe { arch::_mm_interleave3_ps(x, y, z) }
-    }
+    impl_native_radix3!(arch::_mm_interleave3_ps, arch::_mm_deinterleave3_ps);
 
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_ps(value) }

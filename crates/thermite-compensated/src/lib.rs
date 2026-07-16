@@ -8,7 +8,7 @@ use thermite::element::SignedElement;
 use thermite::vector::{NewConst, NewVector, SplatVector, VectorValue};
 use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
-use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square, SquareMasked};
+use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddExt, Square, SquareMasked};
 
 pub mod consts;
 pub mod math;
@@ -1078,6 +1078,44 @@ impl_masked!(Mul::mul);
 impl_masked!(Div::div);
 impl_masked!(Rem::rem);
 
+// =====================================================================================
+// Lane-alternating add/sub (`AddSubExt`). Double-double add/sub mix `value`/`error`
+// via two_sum/two_diff, so `addsub` can NOT be done component-wise - but a *sign
+// flip* is component-wise-exact, so `neg_even` (flip even-lane signs of both
+// components) is, and then a single real double-double add finishes the job:
+//   addsub(a, b)      = a + neg_even(b)
+//   fmaddsub(a, b, c) = a*b + neg_even(c)   (via the double-double fused mul_adde)
+//   fmsubadd(a, b, c) = a*b - neg_even(c)
+// =====================================================================================
+
+#[inline(always)]
+fn neg_even_compensated<V: CompensatedFloatVector>(x: Compensated<V>) -> Compensated<V> {
+    // `addsub(0, w) = [-w0, w1, -w2, ...]` flips the even lanes exactly.
+    Compensated { value: V::ZERO.addsub(x.value), error: V::ZERO.addsub(x.error) }
+}
+
+impl<V: CompensatedFloatVector> AddSubExt for Compensated<V> {
+    type Output = Self;
+
+    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_compensated(b) }
+    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_compensated(c)) }
+    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_compensated(c)) }
+}
+
+impl<V: CompensatedFloatVector> AddSubExtMasked<V::Mask> for Compensated<V> {
+    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
+    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
+    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+
+    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
+    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
+    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+
+    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
+    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
+    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+}
+
 // `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
 // binary (`fn m(self, Self) -> Self`) vector ops, as plain select blends -- the
 // same pattern `impl_masked!` uses for the `core::ops` methods above. Invoked
@@ -1229,6 +1267,84 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         let b = unsafe { V::load(ptr.add(V::LANES)) };
         let (value, error) = a.deinterleave(b);
         Self { value, error }
+    }
+
+    #[inline(always)]
+    fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.interleave_by::<GROUP>(other.value);
+        let (error_lo, error_hi) = self.error.interleave_by::<GROUP>(other.error);
+        (Self { value: value_lo, error: error_lo }, Self { value: value_hi, error: error_hi })
+    }
+
+    #[inline(always)]
+    fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (value_lo, value_hi) = self.value.deinterleave_by::<GROUP>(other.value);
+        let (error_lo, error_hi) = self.error.deinterleave_by::<GROUP>(other.error);
+        (Self { value: value_lo, error: error_lo }, Self { value: value_hi, error: error_hi })
+    }
+
+    #[inline(always)]
+    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut value, mut error) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            value[i] = inputs[i].value;
+            error[i] = inputs[i].error;
+        }
+        let value = V::interleave_radix::<N>(value);
+        let error = V::interleave_radix::<N>(error);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self { value: value[i], error: error[i] };
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut value, mut error) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            value[i] = inputs[i].value;
+            error[i] = inputs[i].error;
+        }
+        let value = V::deinterleave_radix::<N>(value);
+        let error = V::deinterleave_radix::<N>(error);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self { value: value[i], error: error[i] };
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut value, mut error) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            value[i] = inputs[i].value;
+            error[i] = inputs[i].error;
+        }
+        let value = V::deinterleave_radix_by::<N, GROUP>(value);
+        let error = V::deinterleave_radix_by::<N, GROUP>(error);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self { value: value[i], error: error[i] };
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
+        let (mut value, mut error) = ([V::EMPTY; N], [V::EMPTY; N]);
+        for i in 0..N {
+            value[i] = inputs[i].value;
+            error[i] = inputs[i].error;
+        }
+        let value = V::interleave_radix_by::<N, GROUP>(value);
+        let error = V::interleave_radix_by::<N, GROUP>(error);
+        let mut out = [Self::EMPTY; N];
+        for i in 0..N {
+            out[i] = Self { value: value[i], error: error[i] };
+        }
+        out
     }
 
     /// A `Compensated` element is `#[repr(C)]` over two floats (value, error),

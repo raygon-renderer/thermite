@@ -14,6 +14,7 @@ pub mod cmp;
 pub mod divider;
 pub mod interleave;
 pub mod math;
+pub mod transpose256;
 
 pub use bits::*;
 pub use casts::*;
@@ -21,6 +22,7 @@ pub use cmp::*;
 pub use divider::*;
 pub use interleave::*;
 pub use math::*;
+pub use transpose256::*;
 
 #[inline(always)]
 pub unsafe fn _mm256_blendv_epi32x_v3(ymm0: __m256i, ymm1: __m256i, mask: __m256i) -> __m256i {

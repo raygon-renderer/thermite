@@ -530,74 +530,104 @@ macro_rules! neon_register {
                 // registers ARE a 48-byte table, so each output stream is one
                 // whole-table lookup (vs the default's 9 permute+blend pairs).
                 // Index vectors are compile-time constants, so they fold to a
-                // literal load.
-                fn deinterleave3(
-                    a: Storage<Self>,
-                    b: Storage<Self>,
-                    c: Storage<Self>,
-                ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-                    const ES: usize = 16 / $n;
+                // literal load. Only the `RADIX == 3` arm is native here; every
+                // other radix takes the shared default (2-way `deinterleave` /
+                // permute+blend gather).
+                fn deinterleave_radix<const RADIX: usize>(
+                    inputs: [Storage<Self>; RADIX],
+                ) -> [Storage<Self>; RADIX] {
+                    if const { RADIX == 3 } {
+                        const ES: usize = 16 / $n;
 
-                    // Byte table for output stream `r`: lane `l` wants flat
-                    // element `l * 3 + r`, i.e. bytes `(l*3+r)*ES ..`.
-                    const fn table<const R: usize>() -> arch::uint8x16_t {
-                        let mut bytes = [0u8; 16];
-                        let mut l = 0;
-                        while l < $n {
-                            let g = l * 3 + R;
-                            let mut b = 0;
-                            while b < ES {
-                                bytes[l * ES + b] = (g * ES + b) as u8;
-                                b += 1;
+                        // Byte table for output stream `r`: lane `l` wants flat
+                        // element `l * 3 + r`, i.e. bytes `(l*3+r)*ES ..`.
+                        const fn table<const R: usize>() -> arch::uint8x16_t {
+                            let mut bytes = [0u8; 16];
+                            let mut l = 0;
+                            while l < $n {
+                                let g = l * 3 + R;
+                                let mut b = 0;
+                                while b < ES {
+                                    bytes[l * ES + b] = (g * ES + b) as u8;
+                                    b += 1;
+                                }
+                                l += 1;
                             }
-                            l += 1;
+                            arch::cu8x16(bytes)
                         }
-                        arch::cu8x16(bytes)
-                    }
 
-                    unsafe {
-                        let t = [arch::$to_b(a), arch::$to_b(b), arch::$to_b(c), arch::vdupq_n_u8(0)];
-                        (
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
-                        )
+                        // SAFETY: `RADIX == 3` on this arm.
+                        let (a, b, c) = unsafe {
+                            (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2))
+                        };
+                        let (o0, o1, o2) = unsafe {
+                            let t = [arch::$to_b(a), arch::$to_b(b), arch::$to_b(c), arch::vdupq_n_u8(0)];
+                            (
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
+                            )
+                        };
+                        let mut out = [Self::EMPTY; RADIX];
+                        // SAFETY: `RADIX == 3` on this arm.
+                        unsafe {
+                            *out.get_unchecked_mut(0) = o0;
+                            *out.get_unchecked_mut(1) = o1;
+                            *out.get_unchecked_mut(2) = o2;
+                        }
+                        out
+                    } else {
+                        crate::backend::generic::polyfills::deinterleave_radix_default::<Self, RADIX>(inputs)
                     }
                 }
 
-                fn interleave3(
-                    x: Storage<Self>,
-                    y: Storage<Self>,
-                    z: Storage<Self>,
-                ) -> (Storage<Self>, Storage<Self>, Storage<Self>) {
-                    const ES: usize = 16 / $n;
+                fn interleave_radix<const RADIX: usize>(
+                    inputs: [Storage<Self>; RADIX],
+                ) -> [Storage<Self>; RADIX] {
+                    if const { RADIX == 3 } {
+                        const ES: usize = 16 / $n;
 
-                    // Byte table for output register `i`: lane `l` is flat
-                    // position `g = i * LANES + l`, which is element `g / 3` of
-                    // stream `g % 3` - source flat index `(g % 3) * LANES + g / 3`.
-                    const fn table<const I: usize>() -> arch::uint8x16_t {
-                        let mut bytes = [0u8; 16];
-                        let mut l = 0;
-                        while l < $n {
-                            let g = I * $n + l;
-                            let src = (g % 3) * $n + (g / 3);
-                            let mut b = 0;
-                            while b < ES {
-                                bytes[l * ES + b] = (src * ES + b) as u8;
-                                b += 1;
+                        // Byte table for output register `i`: lane `l` is flat
+                        // position `g = i * LANES + l`, which is element `g / 3` of
+                        // stream `g % 3` - source flat index `(g % 3) * LANES + g / 3`.
+                        const fn table<const I: usize>() -> arch::uint8x16_t {
+                            let mut bytes = [0u8; 16];
+                            let mut l = 0;
+                            while l < $n {
+                                let g = I * $n + l;
+                                let src = (g % 3) * $n + (g / 3);
+                                let mut b = 0;
+                                while b < ES {
+                                    bytes[l * ES + b] = (src * ES + b) as u8;
+                                    b += 1;
+                                }
+                                l += 1;
                             }
-                            l += 1;
+                            arch::cu8x16(bytes)
                         }
-                        arch::cu8x16(bytes)
-                    }
 
-                    unsafe {
-                        let t = [arch::$to_b(x), arch::$to_b(y), arch::$to_b(z), arch::vdupq_n_u8(0)];
-                        (
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
-                            arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
-                        )
+                        // SAFETY: `RADIX == 3` on this arm.
+                        let (x, y, z) = unsafe {
+                            (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2))
+                        };
+                        let (o0, o1, o2) = unsafe {
+                            let t = [arch::$to_b(x), arch::$to_b(y), arch::$to_b(z), arch::vdupq_n_u8(0)];
+                            (
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<0>() })),
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<1>() })),
+                                arch::$from_b(arch::neon_tbl_n_u8::<3>(t, const { table::<2>() })),
+                            )
+                        };
+                        let mut out = [Self::EMPTY; RADIX];
+                        // SAFETY: `RADIX == 3` on this arm.
+                        unsafe {
+                            *out.get_unchecked_mut(0) = o0;
+                            *out.get_unchecked_mut(1) = o1;
+                            *out.get_unchecked_mut(2) = o2;
+                        }
+                        out
+                    } else {
+                        crate::backend::generic::polyfills::interleave_radix_default::<Self, RADIX>(inputs)
                     }
                 }
 

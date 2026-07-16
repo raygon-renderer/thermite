@@ -32,7 +32,7 @@ use thermite::element::{Element, FloatElement, SignedElement};
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::algorithms::reduce_in_place;
-use thermite::vector::ops::{NegMasked, Square, SquareMasked};
+use thermite::vector::ops::{AddSubExt, AddSubExtMasked, NegMasked, Square, SquareMasked};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 use thermite::{LargeInt, prelude::*};
 
@@ -514,6 +514,135 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     }
 
     #[inline(always)]
+    fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (re_lo, re_hi) = self.re.interleave_by::<GROUP>(other.re);
+        let mut lo = Self { re: re_lo, dual: [V::ZERO; N] };
+        let mut hi = Self { re: re_hi, dual: [V::ZERO; N] };
+        for i in 0..N {
+            let (d_lo, d_hi) = self.dual[i].interleave_by::<GROUP>(other.dual[i]);
+            lo.dual[i] = d_lo;
+            hi.dual[i] = d_hi;
+        }
+        (lo, hi)
+    }
+
+    #[inline(always)]
+    fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
+        let (re_lo, re_hi) = self.re.deinterleave_by::<GROUP>(other.re);
+        let mut lo = Self { re: re_lo, dual: [V::ZERO; N] };
+        let mut hi = Self { re: re_hi, dual: [V::ZERO; N] };
+        for i in 0..N {
+            let (d_lo, d_hi) = self.dual[i].deinterleave_by::<GROUP>(other.dual[i]);
+            lo.dual[i] = d_lo;
+            hi.dual[i] = d_hi;
+        }
+        (lo, hi)
+    }
+
+    // `M` is the radix (input count); `N` is the (fixed) derivative-part count.
+    // Each component - `re` and each of the `N` duals - is radix-interleaved
+    // independently across the `M` inputs.
+    #[inline(always)]
+    fn interleave_radix<const M: usize>(inputs: [Self; M]) -> [Self; M] {
+        let mut re = [V::EMPTY; M];
+        for i in 0..M {
+            re[i] = inputs[i].re;
+        }
+        let re = V::interleave_radix::<M>(re);
+
+        let mut out = [Self::EMPTY; M];
+        for i in 0..M {
+            out[i].re = re[i];
+        }
+        for d in 0..N {
+            let mut comp = [V::EMPTY; M];
+            for i in 0..M {
+                comp[i] = inputs[i].dual[d];
+            }
+            let comp = V::interleave_radix::<M>(comp);
+            for i in 0..M {
+                out[i].dual[d] = comp[i];
+            }
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix<const M: usize>(inputs: [Self; M]) -> [Self; M] {
+        let mut re = [V::EMPTY; M];
+        for i in 0..M {
+            re[i] = inputs[i].re;
+        }
+        let re = V::deinterleave_radix::<M>(re);
+
+        let mut out = [Self::EMPTY; M];
+        for i in 0..M {
+            out[i].re = re[i];
+        }
+        for d in 0..N {
+            let mut comp = [V::EMPTY; M];
+            for i in 0..M {
+                comp[i] = inputs[i].dual[d];
+            }
+            let comp = V::deinterleave_radix::<M>(comp);
+            for i in 0..M {
+                out[i].dual[d] = comp[i];
+            }
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn deinterleave_radix_by<const M: usize, const GROUP: usize>(inputs: [Self; M]) -> [Self; M] {
+        let mut re = [V::EMPTY; M];
+        for i in 0..M {
+            re[i] = inputs[i].re;
+        }
+        let re = V::deinterleave_radix_by::<M, GROUP>(re);
+
+        let mut out = [Self::EMPTY; M];
+        for i in 0..M {
+            out[i].re = re[i];
+        }
+        for d in 0..N {
+            let mut comp = [V::EMPTY; M];
+            for i in 0..M {
+                comp[i] = inputs[i].dual[d];
+            }
+            let comp = V::deinterleave_radix_by::<M, GROUP>(comp);
+            for i in 0..M {
+                out[i].dual[d] = comp[i];
+            }
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn interleave_radix_by<const M: usize, const GROUP: usize>(inputs: [Self; M]) -> [Self; M] {
+        let mut re = [V::EMPTY; M];
+        for i in 0..M {
+            re[i] = inputs[i].re;
+        }
+        let re = V::interleave_radix_by::<M, GROUP>(re);
+
+        let mut out = [Self::EMPTY; M];
+        for i in 0..M {
+            out[i].re = re[i];
+        }
+        for d in 0..N {
+            let mut comp = [V::EMPTY; M];
+            for i in 0..M {
+                comp[i] = inputs[i].dual[d];
+            }
+            let comp = V::interleave_radix_by::<M, GROUP>(comp);
+            for i in 0..M {
+                out[i].dual[d] = comp[i];
+            }
+        }
+        out
+    }
+
+    #[inline(always)]
     unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element) {
         let flags = mask.select(<V::Signed as NumericVector>::ONE, <V::Signed as NumericVector>::ZERO);
         let zero = <<V::Signed as GenericVector>::Element as Element>::ZERO;
@@ -883,6 +1012,49 @@ impl_masked!(Sub::sub);
 impl_masked!(Mul::mul);
 impl_masked!(Div::div);
 impl_masked!(Rem::rem);
+
+// =====================================================================================
+// Lane-alternating add/sub (`AddSubExt`). `addsub` is linear, so it differentiates
+// exactly like an add: apply it component-wise. The building block is `neg_even`,
+// which flips the sign of the even lanes of every stored component (exact) via the
+// inner vector's `addsub(0, w) = [-w0, w1, -w2, ...]`. Then:
+//   addsub(a, b)      = a + neg_even(b)
+//   fmaddsub(a, b, c) = a*b + neg_even(c)   (via the inner product-rule mul_adde)
+//   fmsubadd(a, b, c) = a*b - neg_even(c)
+// =====================================================================================
+
+#[inline(always)]
+fn neg_even_dual<V: DualFloatVector, const N: usize>(x: Dual<V, N>) -> Dual<V, N> {
+    let mut dual = x.dual;
+    let mut i = 0;
+    while i < N {
+        dual[i] = V::ZERO.addsub(dual[i]);
+        i += 1;
+    }
+    Dual { re: V::ZERO.addsub(x.re), dual }
+}
+
+impl<V: DualFloatVector, const N: usize> AddSubExt for Dual<V, N> {
+    type Output = Self;
+
+    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_dual(b) }
+    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_dual(c)) }
+    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_dual(c)) }
+}
+
+impl<V: DualFloatVector, const N: usize> AddSubExtMasked<V::Mask> for Dual<V, N> {
+    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
+    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
+    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+
+    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
+    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
+    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+
+    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
+    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
+    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+}
 
 // `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
 // binary (`fn m(self, Self) -> Self`) vector ops, as plain blends -- the same

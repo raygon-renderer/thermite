@@ -867,6 +867,55 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// that is at least `Self::Lanes` elements long.
     unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
+    /// Interleave two vectors at **group granularity**: blocks of `GROUP` consecutive elements move
+    /// as a unit and are never split. `GROUP == 1` is [`interleave`](Self::interleave); `GROUP == 2`
+    /// is the complex interleave - `lo == [a.c0, b.c0, a.c1, b.c1, ...]` over the low half of the
+    /// groups, `hi` over the high half - which lowers to the doubled-element unpack (`unpacklo_pd` +
+    /// `permute2f128` on AVX2, `zip` on NEON) rather than a general permute. The primitive for
+    /// complex FFT transposes and any group-structured SIMD. `GROUP` must divide `LANES`.
+    ///
+    /// The register-level default forwards `GROUP == 1` to [`interleave`](Self::interleave) and uses
+    /// a lane-wise fallback otherwise; backends override the group sizes they do natively.
+    fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self);
+
+    /// The inverse of [`interleave_by`](Self::interleave_by) - group-granularity de-interleave.
+    fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self);
+
+    /// Radix-`N` interleave: the generic sibling of [`interleave`](Self::interleave)
+    /// (`N == 2`). Treats the `N` inputs as one contiguous `N * LANES` span and
+    /// gives `out` with `concat(out)[q * N + r] == inputs[r].extract(q)`.
+    ///
+    /// `N` is inferred from the array length, so no turbofish is needed:
+    /// `V::interleave_radix([a, b])` is the 2-way interleave. `N == 2` reuses the
+    /// native `interleave`, `N == 3` a native radix-3 register sequence; any other
+    /// `N` uses a single permute+blend gather. For the AoS<->SoA memory form over
+    /// arbitrary `N`, use [`load_deinterleaved`](Self::load_deinterleaved) /
+    /// [`store_interleaved`](Self::store_interleaved) instead.
+    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N];
+
+    /// The inverse of [`interleave_radix`](Self::interleave_radix) - radix-`N`
+    /// de-interleave: `out[r].extract(q) == concat(inputs)[q * N + r]`.
+    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N];
+
+    /// Group-granularity radix-`N` de-interleave: the two-axis unification of
+    /// [`deinterleave_radix`](Self::deinterleave_radix) (`GROUP == 1`) and
+    /// [`deinterleave_by`](Self::deinterleave_by) (`N == 2`). Each vector is viewed
+    /// as `LANES / GROUP` groups of `GROUP` consecutive elements; `out[r]` group `q`
+    /// is the `(q * N + r)`-th group of the concatenated input sequence, each group
+    /// moving as a unit.
+    ///
+    /// The square case `N == LANES / GROUP` is a register-array transpose of
+    /// `GROUP`-wide elements: `deinterleave_radix_by::<4, 2>` on 8-lane f32 is the
+    /// 4x4 interleaved-complex transpose (8 ops on AVX2), and
+    /// `deinterleave_radix_by::<4, 1>` on f64x4 is the 4x4 `f64` transpose - the
+    /// primitives for FFT codelets and small matrices. `GROUP` must divide `LANES`.
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N];
+
+    /// The inverse of [`deinterleave_radix_by`](Self::deinterleave_radix_by) -
+    /// group-granularity radix-`N` interleave. For the square case it is the same
+    /// (self-inverse) register-array transpose.
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N];
+
     /// Load `N` interleaved (array-of-structures) streams and de-interleave them
     /// into `N` vectors: reads `N * LANES` contiguous elements from `ptr` and
     /// returns `out` with `out[j].extract(lane) == ptr[lane * N + j]`.
@@ -2008,6 +2057,7 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     + CastVector<Self::ExtendedPrecision>
     + ops::MulAddExtMasked<Self::Mask, Self, Self, Output = Self>
     + ops::MulAddAssignExtMasked<Self::Mask, Self, Self>
+    + ops::AddSubExtMasked<Self::Mask, Output = Self>
 {
     /// The value `0.5` represented in this vector type.
     const HALF: Self;

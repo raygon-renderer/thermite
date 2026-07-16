@@ -535,6 +535,225 @@ where
         }
     }
 
+    /// Radix-`S` interleave decomposes into ONE inner `interleave_radix::<S>` per
+    /// chunk position - the same per-chunk delegation as
+    /// [`interleave`](InterleaveRegister::interleave), lifted to any radix, so the
+    /// inner register's native radix-`S` (e.g. a single `_mm_interleave3_ps`) does
+    /// the work instead of the default's cross-chunk permute+blend gather over the
+    /// full array width.
+    ///
+    /// The `S` inputs are `S * N` chunks; treated as one flat chunk span (flat
+    /// chunk `c` is `inputs[c / N].0[c % N]`), the radix-`S` interleave sends
+    /// output chunk `i` to flat chunks `S*i .. S*i + S` - and because a chunk is
+    /// `L` lanes, `S*i*L` is always a chunk boundary, so each output chunk is
+    /// exactly one inner `interleave_radix::<S>` of chunk `i` of the `S` inputs.
+    fn interleave_radix<const S: usize>(inputs: [Storage<Self>; S]) -> [Storage<Self>; S] {
+        let mut out = [Self::EMPTY; S];
+
+        let mut i = 0;
+        while i < N {
+            // Interleave chunk `i` of each of the `S` input streams.
+            let mut group = [R::EMPTY; S];
+            let mut s = 0;
+            while s < S {
+                group[s] = inputs[s].0[i];
+                s += 1;
+            }
+
+            let res = R::interleave_radix::<S>(group);
+
+            // Scatter: inner result `k` is flat output chunk `S*i + k`.
+            let mut k = 0;
+            while k < S {
+                let c = S * i + k;
+                out[c / N].0[c % N] = res[k];
+                k += 1;
+            }
+
+            i += 1;
+        }
+
+        out
+    }
+
+    /// The exact inverse of [`interleave_radix`](Self::interleave_radix): output
+    /// chunk `i` of each stream is one inner `deinterleave_radix::<S>` of the `S`
+    /// consecutive flat chunks `S*i .. S*i + S`.
+    fn deinterleave_radix<const S: usize>(inputs: [Storage<Self>; S]) -> [Storage<Self>; S] {
+        let mut out = [Self::EMPTY; S];
+
+        let mut i = 0;
+        while i < N {
+            // Gather the `S` consecutive flat chunks for output-chunk position `i`.
+            let mut group = [R::EMPTY; S];
+            let mut k = 0;
+            while k < S {
+                let c = S * i + k;
+                group[k] = inputs[c / N].0[c % N];
+                k += 1;
+            }
+
+            let res = R::deinterleave_radix::<S>(group);
+
+            // Inner result `s` is chunk `i` of output stream `s`.
+            let mut s = 0;
+            while s < S {
+                out[s].0[i] = res[s];
+                s += 1;
+            }
+
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Group-granularity interleave is `interleave` on the register reinterpreted
+    /// as `LANES / GROUP` elements of `GROUP *` the width - so when a group fits in
+    /// a chunk (`GROUP` divides `L`) it is exactly the radix-2 chunk-chaining of
+    /// [`interleave`](InterleaveRegister::interleave) with the inner op replaced by
+    /// `R::interleave_by::<GROUP>`, and the inner register's native pair op (e.g.
+    /// `unpcklo_pd`) does the work instead of a lane-wise spill. A group that spans
+    /// chunks (`GROUP > L`) falls back to the lane-wise default.
+    fn interleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let l = R::Lanes::USIZE;
+        if GROUP <= l && l % GROUP == 0 {
+            let mut lo = [R::EMPTY; N];
+            let mut hi = [R::EMPTY; N];
+            let mut i = 0;
+            while i < N {
+                // Chunk `i` of `a`/`b` interleaves into flat output chunks `2i`, `2i+1`.
+                let (r_lo, r_hi) = R::interleave_by::<GROUP>(a.0[i], b.0[i]);
+                let (idx1, idx2) = (2 * i, 2 * i + 1);
+                if idx1 < N {
+                    lo[idx1] = r_lo;
+                } else {
+                    hi[idx1 - N] = r_lo;
+                }
+                if idx2 < N {
+                    lo[idx2] = r_hi;
+                } else {
+                    hi[idx2 - N] = r_hi;
+                }
+                i += 1;
+            }
+            (Self(lo), Self(hi))
+        } else {
+            crate::backend::generic::polyfills::interleave_by_default::<Self, GROUP>(a, b)
+        }
+    }
+
+    /// The exact inverse of [`interleave_by`](Self::interleave_by): the radix-2
+    /// chunk de-interleave with the inner op `R::deinterleave_by::<GROUP>`.
+    fn deinterleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let l = R::Lanes::USIZE;
+        if GROUP <= l && l % GROUP == 0 {
+            let mut out_a = [R::EMPTY; N];
+            let mut out_b = [R::EMPTY; N];
+            let mut i = 0;
+            while i < N {
+                // Flat input chunks `2i`, `2i+1` de-interleave into chunk `i` of `a`/`b`.
+                let (idx1, idx2) = (2 * i, 2 * i + 1);
+                let chunk1 = if idx1 < N { a.0[idx1] } else { b.0[idx1 - N] };
+                let chunk2 = if idx2 < N { a.0[idx2] } else { b.0[idx2 - N] };
+                let (de_a, de_b) = R::deinterleave_by::<GROUP>(chunk1, chunk2);
+                out_a[i] = de_a;
+                out_b[i] = de_b;
+                i += 1;
+            }
+            (Self(out_a), Self(out_b))
+        } else {
+            crate::backend::generic::polyfills::deinterleave_by_default::<Self, GROUP>(a, b)
+        }
+    }
+
+    /// Both axes at once: the [`interleave_radix`](Self::interleave_radix) per-chunk
+    /// delegation with the inner op carrying the group width, so the inner register's
+    /// `interleave_radix_by` picks the strategy for its own width.
+    ///
+    /// The decomposition is unchanged from `interleave_radix` because a group that fits
+    /// in a chunk (`GROUP` divides `L`) never straddles a chunk boundary: with `m = L /
+    /// GROUP` groups per chunk, output group `q' = i*m + qc` draws flat group
+    /// `q'*S + j = i*(m*S) + (qc*S + j)`, and `qc*S + j < m*S` is exactly `S` chunks'
+    /// worth - so output chunk `i` of every stream is one inner
+    /// `interleave_radix_by::<S, GROUP>` of the flat chunks `S*i .. S*i + S`, the same
+    /// span `interleave_radix` uses. A group spanning chunks (`GROUP > L`) falls back.
+    ///
+    /// This is what carries the inner width's `radix_by` work up to the emulated
+    /// widths - `f32x16 = ArrayRegister<F32x8V3, 2>` reaches `F32x8V3`'s native square
+    /// transposes and its certified ladder plans through here, instead of running the
+    /// portable engine at the full array width.
+    fn interleave_radix_by<const S: usize, const GROUP: usize>(inputs: [Storage<Self>; S]) -> [Storage<Self>; S] {
+        let l = R::Lanes::USIZE;
+        if GROUP <= l && l % GROUP == 0 {
+            let mut out = [Self::EMPTY; S];
+
+            let mut i = 0;
+            while i < N {
+                // Interleave chunk `i` of each of the `S` input streams.
+                let mut group = [R::EMPTY; S];
+                let mut s = 0;
+                while s < S {
+                    group[s] = inputs[s].0[i];
+                    s += 1;
+                }
+
+                let res = R::interleave_radix_by::<S, GROUP>(group);
+
+                // Scatter: inner result `k` is flat output chunk `S*i + k`.
+                let mut k = 0;
+                while k < S {
+                    let c = S * i + k;
+                    out[c / N].0[c % N] = res[k];
+                    k += 1;
+                }
+
+                i += 1;
+            }
+
+            out
+        } else {
+            crate::backend::generic::polyfills::interleave_radix_by_default::<Self, S, GROUP>(inputs)
+        }
+    }
+
+    /// The exact inverse of [`interleave_radix_by`](Self::interleave_radix_by): output
+    /// chunk `i` of each stream is one inner `deinterleave_radix_by::<S, GROUP>` of the
+    /// `S` consecutive flat chunks `S*i .. S*i + S`.
+    fn deinterleave_radix_by<const S: usize, const GROUP: usize>(inputs: [Storage<Self>; S]) -> [Storage<Self>; S] {
+        let l = R::Lanes::USIZE;
+        if GROUP <= l && l % GROUP == 0 {
+            let mut out = [Self::EMPTY; S];
+
+            let mut i = 0;
+            while i < N {
+                // Gather the `S` consecutive flat chunks for output-chunk position `i`.
+                let mut group = [R::EMPTY; S];
+                let mut k = 0;
+                while k < S {
+                    let c = S * i + k;
+                    group[k] = inputs[c / N].0[c % N];
+                    k += 1;
+                }
+
+                let res = R::deinterleave_radix_by::<S, GROUP>(group);
+
+                // Inner result `s` is chunk `i` of output stream `s`.
+                let mut s = 0;
+                while s < S {
+                    out[s].0[i] = res[s];
+                    s += 1;
+                }
+
+                i += 1;
+            }
+
+            out
+        } else {
+            crate::backend::generic::polyfills::deinterleave_radix_by_default::<Self, S, GROUP>(inputs)
+        }
+    }
+
     /// The record ops decompose per chunk exactly like
     /// [`load_deinterleaved`](Self::load_deinterleaved) above, delegating each
     /// chunk to the INNER register's op so the inner width picks its own

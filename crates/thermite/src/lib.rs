@@ -132,6 +132,7 @@ pub mod prelude {
         slice::SimdSlice as _,
         swizzle::Swizzle as _,
         vector::ops::{
+            AddSubExt as _, AddSubExtMasked as _,
             AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndNot as _,
             BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _, BitOrAssignMasked as _,
             BitOrMasked as _, BitXorAssignMasked as _, BitXorMasked as _, DivAssignMasked as _, DivMasked as _,

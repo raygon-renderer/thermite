@@ -115,6 +115,28 @@ pub trait ComplexVector:
     /// Builds a complex vector from its real and imaginary parts.
     fn from_parts(re: Self::Real, im: Self::Real) -> Self;
 
+    /// Non-temporal store of the whole block to `ptr`, in `Self`'s own memory layout (the
+    /// planar/SoA `[re | im]` layout for `Complex<V>`), bypassing the cache. This is for
+    /// **relocating blocks within a `[Self]` buffer** - e.g. an FFT transpose whose output is
+    /// too large to cache - NOT the AoS boundary (that is [`store`](thermite::GenericVector::store)
+    /// / [`store_streaming`](thermite::GenericVector::store_streaming), which interleave re/im).
+    ///
+    /// Weakly ordered: a non-temporal store is not guaranteed visible to a later load until an
+    /// `sfence`, so the caller **must fence before reading the result**. Use it only when the
+    /// destination clearly exceeds last-level cache (NT forfeits cache reuse, so it loses below
+    /// a few MB).
+    ///
+    /// The default is a plain store (correct everywhere, no NT benefit). `Complex<V>` overrides
+    /// it to stream each half with the real [`store_streaming`](thermite::GenericVector::store_streaming)
+    /// of its component vector (`_mm256_stream_ps` on AVX2; a plain store on backends without NT).
+    ///
+    /// # Safety
+    /// `ptr` must be valid for writes and aligned to `Self` (a `[Self]` slot satisfies this).
+    #[inline(always)]
+    unsafe fn store_streaming_block(self, ptr: *mut Self) {
+        unsafe { ptr.write(self) }
+    }
+
     /// Builds a complex vector from a real part, with zero imaginary part.
     #[inline(always)]
     fn from_real(re: Self::Real) -> Self {

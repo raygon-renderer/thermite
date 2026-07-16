@@ -431,6 +431,87 @@ mul_add_ext! {
     nmul_sube
 }
 
+/// Lane-alternating add/subtract operations for interleaved data (e.g. complex
+/// numbers packed as `[re, im, re, im, ...]`).
+///
+/// All three follow the x86 `ADDSUB`/`FMADDSUB` convention: **even lanes
+/// subtract, odd lanes add** (`fmsubadd` is the opposite parity). See
+/// [`FloatRegister::addsub`](crate::register::FloatRegister::addsub) for the
+/// interleaved complex-multiply lowering these are built for.
+pub trait AddSubExt: Sized {
+    type Output;
+
+    /// `[a0 - b0, a1 + b1, a2 - b2, ...]` - even lanes subtract, odd lanes add.
+    fn addsub(self, b: Self) -> Self::Output;
+
+    /// `[a0*b0 - c0, a1*b1 + c1, ...]` - fused multiply then [`addsub`](Self::addsub).
+    fn fmaddsub(self, b: Self, c: Self) -> Self::Output;
+
+    /// `[a0*b0 + c0, a1*b1 - c1, ...]` - fused multiply then subadd (opposite parity).
+    fn fmsubadd(self, b: Self, c: Self) -> Self::Output;
+}
+
+impl<R: FloatRegister> AddSubExt for Vector<R> {
+    type Output = Self;
+
+    #[inline(always)]
+    fn addsub(self, b: Self) -> Self { Vector(R::addsub(self.0, b.0)) }
+
+    #[inline(always)]
+    fn fmaddsub(self, b: Self, c: Self) -> Self { Vector(R::fmaddsub(self.0, b.0, c.0)) }
+
+    #[inline(always)]
+    fn fmsubadd(self, b: Self, c: Self) -> Self { Vector(R::fmsubadd(self.0, b.0, c.0)) }
+}
+
+/// Masked variants of [`AddSubExt`] (mask-first argument order, matching the rest
+/// of Thermite's `_c`/`_m`/`_z` surface).
+pub trait AddSubExtMasked<Mask>: AddSubExt {
+    /// [`addsub`](AddSubExt::addsub) where `mask` is true, else `self`.
+    fn addsub_c(self, mask: Mask, b: Self) -> Self::Output;
+    /// [`addsub`](AddSubExt::addsub) where `mask` is true, else `src`.
+    fn addsub_m(self, src: Self, mask: Mask, b: Self) -> Self::Output;
+    /// [`addsub`](AddSubExt::addsub) where `mask` is true, else zero.
+    fn addsub_z(self, mask: Mask, b: Self) -> Self::Output;
+
+    /// [`fmaddsub`](AddSubExt::fmaddsub) where `mask` is true, else `self`.
+    fn fmaddsub_c(self, mask: Mask, b: Self, c: Self) -> Self::Output;
+    /// [`fmaddsub`](AddSubExt::fmaddsub) where `mask` is true, else `src`.
+    fn fmaddsub_m(self, src: Self, mask: Mask, b: Self, c: Self) -> Self::Output;
+    /// [`fmaddsub`](AddSubExt::fmaddsub) where `mask` is true, else zero.
+    fn fmaddsub_z(self, mask: Mask, b: Self, c: Self) -> Self::Output;
+
+    /// [`fmsubadd`](AddSubExt::fmsubadd) where `mask` is true, else `self`.
+    fn fmsubadd_c(self, mask: Mask, b: Self, c: Self) -> Self::Output;
+    /// [`fmsubadd`](AddSubExt::fmsubadd) where `mask` is true, else `src`.
+    fn fmsubadd_m(self, src: Self, mask: Mask, b: Self, c: Self) -> Self::Output;
+    /// [`fmsubadd`](AddSubExt::fmsubadd) where `mask` is true, else zero.
+    fn fmsubadd_z(self, mask: Mask, b: Self, c: Self) -> Self::Output;
+}
+
+impl<R: FloatRegister> AddSubExtMasked<Mask<R>> for Vector<R> {
+    #[inline(always)]
+    fn addsub_c(self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_c(mask.0, self.0, b.0)) }
+    #[inline(always)]
+    fn addsub_m(self, src: Self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_m(src.0, mask.0, self.0, b.0)) }
+    #[inline(always)]
+    fn addsub_z(self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_z(mask.0, self.0, b.0)) }
+
+    #[inline(always)]
+    fn fmaddsub_c(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_c(mask.0, self.0, b.0, c.0)) }
+    #[inline(always)]
+    fn fmaddsub_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_m(src.0, mask.0, self.0, b.0, c.0)) }
+    #[inline(always)]
+    fn fmaddsub_z(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_z(mask.0, self.0, b.0, c.0)) }
+
+    #[inline(always)]
+    fn fmsubadd_c(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_c(mask.0, self.0, b.0, c.0)) }
+    #[inline(always)]
+    fn fmsubadd_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_m(src.0, mask.0, self.0, b.0, c.0)) }
+    #[inline(always)]
+    fn fmsubadd_z(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_z(mask.0, self.0, b.0, c.0)) }
+}
+
 // Vector shifts
 
 impl<R: BitshiftRegister> Shl<Vector<R::Unsigned>> for Vector<R> {
