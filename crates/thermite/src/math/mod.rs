@@ -139,6 +139,10 @@ macro_rules! decl_math {
         #[doc = "For convenience, a default-policy version is provided by [`ScalarMath`], which"]
         #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`] for all operations."]
         #[thermite_macros::dispatch(Self, thermite = "crate")]
+        #[diagnostic::on_unimplemented(
+            message = "`{Self}` is not a bare floating-point scalar",
+            note = "`ScalarMathWithPolicy` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the vector math traits (`CoreMath`, `TranscendentalMath`, ...) instead."
+        )]
         pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
              $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -165,6 +169,10 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "All types that implement [`ScalarMathWithPolicy`] automatically implement this trait."]
         #[thermite_macros::dispatch(Self, thermite = "crate")]
+        #[diagnostic::on_unimplemented(
+            message = "`{Self}` is not a bare floating-point scalar",
+            note = "`ScalarMath` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the vector math traits (`CoreMath`, `TranscendentalMath`, ...) instead."
+        )]
         pub trait ScalarMath: ScalarMathWithPolicy {$($(
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -216,6 +224,10 @@ mod tests {
 
 decl_math! {
     /// Float-specific mathematical functions like `ldexp` and `frexp`.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide float bit-level math (`ldexp`, `frexp`, `flush_denormals`)",
+        note = "This trait is auto-implemented for every `FloatVectorWithBits` (concrete float vectors such as `Vector<f32>` / `f32xN`). A bare `f32`/`f64` must be wrapped in `Vector::<f32>::splat(x)`; for scalar math use `ScalarMath` instead."
+    )]
     trait Float<FloatElementWithBits>: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
         fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;
@@ -239,6 +251,10 @@ decl_math! {
     }
 
     /// This is the core set of mathematical operations that form the basis for more advanced functions.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide core polynomial math (`poly`, `poly_rev`, ...)",
+        note = "The math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
+    )]
     trait Core<FloatElement>: FloatVector {
         /// Computes the polynomial with the given coefficients at `self`.
         ///
@@ -290,6 +306,12 @@ decl_math! {
     }
 
     /// Transcendental mathematical functions like trigonometric, exponential, and logarithmic functions.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide transcendental math (`sin`, `cos`, `exp`, `ln`, `powf`, ...)",
+        label = "no transcendental math",
+        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types (`Dual`, `Complex`, `Compensated`). A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods (`x.scalar_exp()`, ...).",
+        note = "If `{Self}` already is a `FloatVector` and only the method call fails to resolve, bring the trait into scope: `use thermite::math::TranscendentalMath;`."
+    )]
     trait Transcendental<FloatElement>: CoreMathWithPolicy {
         /// Trigonometric sine and cosine, together. This will be more efficient than calling `sin` and `cos` separately.
         fn sin_cos[][](self: Self) -> (Self, Self);
@@ -452,6 +474,10 @@ decl_math! {
     /// Spatial mathematical functions like norms and distances.
     ///
     /// These functions are primarily useful in dimensions higher than one.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide spatial math (`hypot`, `atan2`, ...)",
+        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
+    )]
     trait Spatial<FloatElement>: CoreMathWithPolicy {
         /// Computes the Euclidean norm (hypotenuse) of `self` and `other`, i.e., `sqrt(self^2 + other^2)`.
         ///
@@ -492,6 +518,10 @@ decl_math! {
     }
 
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide real-valued math (`to_degrees`, `to_radians`, `tolerance`, ...)",
+        note = "`RealMath` builds on both `TranscendentalMath` and `SpatialMath`, and is only meaningful for real-valued float vectors - number types like `Complex` deliberately do not implement it. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`."
+    )]
     trait Real<FloatElement>: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
         /// default tolerance to use for numerical methods.

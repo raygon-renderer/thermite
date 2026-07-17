@@ -510,6 +510,12 @@ pub trait Interleave: Sized {
 /// and scalar-fallback (`map`/`fold`/`reduce`) operations live on this trait.
 /// Arithmetic, bitwise and float operations are added by the sub-traits.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a Thermite vector type",
+    label = "not a SIMD vector",
+    note = "`GenericVector` is the root of Thermite's vector trait tower. It is implemented by `Vector<R>` (including the 1-lane scalar `Vector<f32>` / `Vector<f64>`) and by composite vector types such as `Dual`, `Complex`, and `Compensated`.",
+    note = "A bare scalar such as `f32` or `f64` is NOT a vector. Wrap it with `Vector::<f32>::splat(x)` (or `Vector(x)`) to get a 1-lane vector, or use the `ScalarMath` methods (`x.scalar_sin()`, ...) for one-off scalar math."
+)]
 pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     + const_default::ConstDefault
     + SplatVector<Self::Element> + NewVector<Self::Element, Self::Lanes>
@@ -868,20 +874,20 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     unsafe fn store_streaming(self, ptr: *mut Self::Element);
 
     /// Interleave two vectors at **group granularity**: blocks of `GROUP` consecutive elements move
-    /// as a unit and are never split. `GROUP == 1` is [`interleave`](Self::interleave); `GROUP == 2`
+    /// as a unit and are never split. `GROUP == 1` is [`interleave`](Interleave::interleave); `GROUP == 2`
     /// is the complex interleave - `lo == [a.c0, b.c0, a.c1, b.c1, ...]` over the low half of the
     /// groups, `hi` over the high half - which lowers to the doubled-element unpack (`unpacklo_pd` +
     /// `permute2f128` on AVX2, `zip` on NEON) rather than a general permute. The primitive for
     /// complex FFT transposes and any group-structured SIMD. `GROUP` must divide `LANES`.
     ///
-    /// The register-level default forwards `GROUP == 1` to [`interleave`](Self::interleave) and uses
+    /// The register-level default forwards `GROUP == 1` to [`interleave`](Interleave::interleave) and uses
     /// a lane-wise fallback otherwise; backends override the group sizes they do natively.
     fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self);
 
     /// The inverse of [`interleave_by`](Self::interleave_by) - group-granularity de-interleave.
     fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self);
 
-    /// Radix-`N` interleave: the generic sibling of [`interleave`](Self::interleave)
+    /// Radix-`N` interleave: the generic sibling of [`interleave`](Interleave::interleave)
     /// (`N == 2`). Treats the `N` inputs as one contiguous `N * LANES` span and
     /// gives `out` with `concat(out)[q * N + r] == inputs[r].extract(q)`.
     ///
@@ -1335,6 +1341,11 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not support bitwise vector operations",
+    label = "no `&`, `|`, `^`, `!`, andnot, or ternlog",
+    note = "`BitwiseVector` is implemented by integer and mask vectors. Floating-point vectors have no direct bitwise ops; reach their bits via `FloatVectorWithBits` (`.to_bits()` / reinterpret) first."
+)]
 pub trait BitwiseVector:
     GenericVector
     + ops::BitAndMasked<Self::Mask, Self, Output = Self>
@@ -1425,6 +1436,11 @@ pub trait BitwiseVector:
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not support bit-shift vector operations",
+    label = "no `<<`, `>>`, rotate, or byte-shift",
+    note = "`BitshiftVector` is implemented by integer vectors (`Vector<i32>`, `Vector<u8>`, `i32xN`, ...). Float and mask vectors do not have shifts."
+)]
 pub trait BitshiftVector:
     BitwiseVector
     + ops::ShrMasked<Self::Mask, Self::Unsigned, Output = Self>
@@ -1599,6 +1615,11 @@ pub trait PackedFloatVector<S: crate::element::float::spec::FloatSpec, F>: Gener
 ///
 /// For floating-point vectors, NaN compares unequal to everything, so e.g.
 /// `cmp_lt(x, NaN)` is always `false`, matching the `<` operator on `f32`/`f64`.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not support lane-wise comparisons",
+    label = "no `cmp_lt` / `cmp_le` / `cmp_gt` / `cmp_ge` / `cmp_eq` / `cmp_ne`",
+    note = "`PartialOrdVector` turns lane-wise comparisons into a `Mask`; it is implemented by all numeric vectors (integer and float)."
+)]
 pub trait PartialOrdVector: GenericVector + PartialEq {
     /// Lane-wise `self < other`.
     fn cmp_lt(self, other: Self) -> Self::Mask;
@@ -1644,6 +1665,12 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
 /// For float element types, overflow simply produces an infinity per IEEE 754;
 /// there is nothing to wrap.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not support arithmetic vector operations",
+    label = "no `+`, `-`, `*`, `/`, `%`, min/max, or FMA",
+    note = "`NumericVector` is implemented by numeric vectors - integer (`Vector<i32>`, `i32xN`, ...) and float (`Vector<f32>`, `f32xN`, ...). Masks and bare scalars do not qualify.",
+    note = "A bare `f32`/`f64` is not a vector: wrap it in `Vector::<f32>::splat(x)` first."
+)]
 pub trait NumericVector:
     PartialOrdVector<Element: num_traits::NumOps>
     + ops::AddMasked<Self::Mask, Self, Output = Self>
@@ -1766,6 +1793,11 @@ pub trait NumericVector:
 /// `i32::MIN` in every lane rather than panicking.
 // TODO: Add back in some kind of `Signed` trait requirement for Element?
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a signed SIMD vector",
+    label = "no `abs`, `signum`, `copysign`, or unary `-`",
+    note = "`SignedVector` is implemented by signed integer and floating-point vectors. Unsigned integer vectors (`Vector<u32>`, `u8xN`, ...) are not signed."
+)]
 pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self> {
     /// A vector of the value "-1" in the element type.
     const NEG_ONE: Self;
@@ -1823,6 +1855,11 @@ pub trait SignedVector: NumericVector + ops::NegMasked<Self::Mask, Output = Self
 /// [`prod_elements`](NumericVector::prod_elements), [`wrapping_sum`](Self::wrapping_sum),
 /// [`wrapping_prod`](Self::wrapping_prod)) all wrap on overflow.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an integer SIMD vector",
+    label = "not an integer vector",
+    note = "`IntegerVector` is implemented by integer vectors (`Vector<i32>`, `Vector<u8>`, `i32xN`, ...). Float vectors implement `FloatVector` instead; convert with `.to_int()` or a cast."
+)]
 pub trait IntegerVector:
     NumericVector<Element: Denominator>
     + BitshiftVector
@@ -1926,6 +1963,11 @@ pub trait IntegerVector:
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a signed integer SIMD vector",
+    label = "not a signed integer vector",
+    note = "`SignedIntegerVector` is the meeting point of `SignedVector` and `IntegerVector`: it is implemented only by vectors of signed integer elements (`Vector<i32>`, `i16xN`, ...). Unsigned integer and float vectors do not qualify."
+)]
 pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::element::SignedIntegerElement> {
     /// For each lane in the vector, right shift in sign bits by the immediate value.
     #[conditional] fn srai<const I: i32>(self) -> Self;
@@ -1950,6 +1992,11 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not an unsigned integer SIMD vector",
+    label = "not an unsigned integer vector",
+    note = "`UnsignedIntegerVector` is implemented only by vectors of unsigned integer elements (`Vector<u32>`, `u8xN`, ...). Signed integer and float vectors do not qualify."
+)]
 pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::UnsignedIntegerElement> {
     /// Determines if each unsigned integer element in the vector is a
     /// power of two, returning a mask indicating whether or not it is.
@@ -2052,6 +2099,13 @@ pub trait UnsignedIntegerVectorWithRegister:
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a floating-point SIMD vector",
+    label = "not a float vector",
+    note = "`FloatVector` is implemented by float vectors: the 1-lane `Vector<f32>` / `Vector<f64>`, the native-width `f32xN` / `f64xN`, and composite float types (`Dual`, `Complex`, `Compensated`).",
+    note = "Bare `f32` / `f64` do NOT implement `FloatVector`. Wrap the scalar first - `Vector::<f32>::splat(x)` or `Vector(x)` - or, for one-off scalar math, use `ScalarMath` (`x.scalar_sqrt()`, `x.scalar_exp()`, ...).",
+    note = "Integer vectors are not float vectors either; convert with `.to_float()` or a cast before calling float operations."
+)]
 pub trait FloatVector: SignedVector<Element: FloatElement>
     + FloatConsts
     + CastVector<Self::ExtendedPrecision>
@@ -2310,6 +2364,11 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
 /// can attempt to obtain it via [`FloatVector::with_bits`].
 ///
 /// The methods on this trait do **not** have masked (`_c`/`_m`/`_z`) variants.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not expose float bit-manipulation operations",
+    label = "no `ldexp` / `frexp` or raw bit access",
+    note = "`FloatVectorWithBits` is implemented by concrete float vectors (`Vector<f32>`, `f32xN`, ...). Composite float types such as `Dual` / `Compensated` may not expose raw bit access, so bound on `FloatVector` instead unless you specifically need bit-level ops."
+)]
 pub trait FloatVectorWithBits:
     BitwiseVector
     + FloatVector<Element: FloatElementWithBits, Signed: CastVector<Self::SignedBits>, Unsigned: CastVector<Self::Bits>>

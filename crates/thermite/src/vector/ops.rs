@@ -436,7 +436,7 @@ mul_add_ext! {
 ///
 /// All three follow the x86 `ADDSUB`/`FMADDSUB` convention: **even lanes
 /// subtract, odd lanes add** (`fmsubadd` is the opposite parity). See
-/// [`FloatRegister::addsub`](crate::register::FloatRegister::addsub) for the
+/// [`FloatRegister::addsub`] for the
 /// interleaved complex-multiply lowering these are built for.
 pub trait AddSubExt: Sized {
     type Output;

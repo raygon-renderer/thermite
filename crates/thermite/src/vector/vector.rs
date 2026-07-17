@@ -499,12 +499,14 @@ where
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: BitwiseRegister + Register> BitwiseVector for Vector<R> {
     #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
     #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self {}
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: BitshiftRegister> BitshiftVector for Vector<R> {
     const HAS_TRUE_SHIFTV: bool = R::HAS_TRUE_SHIFTV;
     const HAS_WIDE_BYTE_SHIFTS: bool = R::HAS_WIDE_BYTE_SHIFTS;
@@ -527,6 +529,7 @@ impl<R: BitshiftRegister> BitshiftVector for Vector<R> {
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]
+#[diagnostic::do_not_recommend]
 impl<R: PartialOrdRegister> PartialOrdVector for Vector<R> {
     fn cmp_lt(self, other: Self) -> Self::Mask { Mask(R::lt(self.0, other.0)) }
     fn cmp_le(self, other: Self) -> Self::Mask { Mask(R::le(self.0, other.0)) }
@@ -537,6 +540,7 @@ impl<R: PartialOrdRegister> PartialOrdVector for Vector<R> {
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: NumericRegister> NumericVector for Vector<R> {
     const ZERO: Self = Vector(R::ZERO);
     const ONE: Self = Vector(R::ONE);
@@ -621,6 +625,7 @@ impl<R: NumericRegister> num_traits::Bounded for Vector<R> {
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: SignedRegister> SignedVector for Vector<R> {
     const NEG_ONE: Self = Vector(R::NEG_ONE);
     const MIN_POSITIVE: Self = Vector(R::MIN_POSITIVE);
@@ -638,6 +643,7 @@ impl<R: SignedRegister> SignedVector for Vector<R> {
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: IntegerRegister> IntegerVector for Vector<R>
 where
     R::Element: Denominator,
@@ -752,6 +758,7 @@ where
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: SignedIntegerRegister> SignedIntegerVector for Vector<R>
 where
     R::Element: Denominator,
@@ -765,6 +772,7 @@ where
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: UnsignedIntegerRegister> UnsignedIntegerVector for Vector<R>
 where
     R::Element: Denominator,
@@ -789,6 +797,7 @@ where
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_impl]
+#[diagnostic::do_not_recommend]
 impl<R: FloatRegister> FloatVector for Vector<R> {
     const HALF: Self = Vector(R::HALF);
     const NEG_ZERO: Self = Vector(R::NEG_ZERO);
