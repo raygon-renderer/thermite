@@ -88,6 +88,7 @@ impl Register for [<i $width>] {
 #[thermite_macros::inline_always]
 impl<I: UnsignedIntegerRegister<Lanes = Self::Lanes>> IndexableRegister<I> for [<i $width>] {}
 
+#[thermite_macros::inline_always]
 impl BitshiftRegister for [<i $width>] {
     const HAS_TRUE_SHIFTV:      bool = true;
     const HAS_WIDE_BYTE_SHIFTS: bool = false; // no whole-vector byte-lane shift on SPIRV

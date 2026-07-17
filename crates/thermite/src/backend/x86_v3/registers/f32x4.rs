@@ -133,6 +133,7 @@ impl WideRegister for F32x4V3 {
     type Wide = super::F32x8V3;
 }
 
+#[thermite_macros::inline_always]
 impl Register for F32x4V3 {
     type Element = f32;
 

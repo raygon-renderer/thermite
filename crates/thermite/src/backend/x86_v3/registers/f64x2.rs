@@ -159,6 +159,7 @@ impl WideRegister for F64x2V3 {
     type Wide = super::F64x4V3;
 }
 
+#[thermite_macros::inline_always]
 impl Register for F64x2V3 {
     type Element = f64;
 
@@ -309,6 +310,7 @@ impl PermuteRegister for F64x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl PartialOrdRegister for F64x2V3 {
     fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmp_pd(lhs, rhs, arch::_CMP_LT_OQ) }

@@ -60,6 +60,7 @@ impl InterleaveRegister for [<u $width>] {
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) { (a, b) }
 }
 
+#[thermite_macros::inline_always]
 impl Register for [<u $width>] {
     type Element = $i;
 

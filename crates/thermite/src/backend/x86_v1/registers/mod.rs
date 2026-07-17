@@ -56,6 +56,7 @@ impl HasIsa for X86V1 {
     const ISA: InstructionSet = InstructionSet::X86V1;
 }
 
+#[thermite_macros::inline_always]
 impl NativeIsa for X86V1 {
     type Registers = generic_array::typenum::U8;
 

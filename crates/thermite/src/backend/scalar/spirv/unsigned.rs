@@ -89,6 +89,7 @@ impl Register for [<u $width>] {
 #[thermite_macros::inline_always]
 impl<I: UnsignedIntegerRegister<Lanes = Self::Lanes>> IndexableRegister<I> for [<u $width>] {}
 
+#[thermite_macros::inline_always]
 impl BitshiftRegister for [<u $width>] {
     const HAS_TRUE_SHIFTV:      bool = true;
     const HAS_WIDE_BYTE_SHIFTS: bool = false;

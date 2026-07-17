@@ -295,6 +295,7 @@ impl ShuffleRegister for U64x2V2 {
 //     }
 // }
 
+#[thermite_macros::inline_always]
 impl PartialOrdRegister for U64x2V2 {
     fn gt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmpgt_epu64x_v2(lhs, rhs) }

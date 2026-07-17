@@ -74,6 +74,7 @@ impl BitwiseRegister for I64x2Wasm {
     }
 }
 
+#[thermite_macros::inline_always]
 impl InterleaveRegister for I64x2Wasm {
     fn interleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         let low = arch::i64x2_shuffle::<0, 2>(a, b);

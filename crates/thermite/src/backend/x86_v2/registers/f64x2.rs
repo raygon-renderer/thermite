@@ -261,6 +261,7 @@ impl PermuteRegister for F64x2V2 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl PartialOrdRegister for F64x2V2 {
     fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_cmplt_pd(lhs, rhs) }

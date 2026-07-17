@@ -87,6 +87,7 @@ impl Register for [<f $width>] {
 #[thermite_macros::inline_always]
 impl<I: UnsignedIntegerRegister<Lanes = Self::Lanes>> IndexableRegister<I> for [<f $width>] {}
 
+#[thermite_macros::inline_always]
 impl ShuffleRegister for [<f $width>] {
     fn shuffle<const IMM8: i32>(lhs: Self, rhs: Self) -> Self {
         if IMM8 & 0b01 == 0 { lhs } else { rhs }
