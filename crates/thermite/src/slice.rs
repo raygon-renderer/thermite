@@ -71,6 +71,27 @@ pub trait SimdSlice {
     /// Returns `(iter, remainder)` where `remainder` is the trailing elements that did
     /// not fill a complete vector. The [`Unaligned`] iterator issues unaligned loads, so
     /// no alignment guarantee on the slice is required.
+    ///
+    /// # Examples
+    ///
+    /// Unlike [`aligned_simd_iter`](SimdSlice::aligned_simd_iter), items are yielded by
+    /// value rather than as `&V`: an unaligned slice cannot be reinterpreted as a slice
+    /// of vectors, so each step performs a load instead of handing out a reference.
+    ///
+    /// ```
+    /// # use thermite::backend::scalar::prelude::*;
+    /// let data: Vec<f32> = (0..10).map(|i| i as f32).collect();
+    ///
+    /// let (iter, remainder) = data.unaligned_simd_iter::<f32x4>();
+    ///
+    /// let mut sum = f32x4::ZERO;
+    /// for v in iter {
+    ///     sum += v;
+    /// }
+    ///
+    /// let total = sum.sum_elements() + remainder.iter().sum::<f32>();
+    /// assert_eq!(total, 45.0);
+    /// ```
     fn unaligned_simd_iter<V>(&self) -> (Unaligned<'_, V>, &Self)
     where
         V: GenericVector<Element = Self::Element>;
@@ -110,6 +131,37 @@ pub trait SimdSlice {
     /// Returns `(iter, remainder)` where `remainder` is the trailing elements that did
     /// not fill a complete vector. The [`UnalignedMut`] iterator issues unaligned
     /// loads and stores, so no alignment guarantee on the slice is required.
+    ///
+    /// # Examples
+    ///
+    /// Iteration yields vectors by value, not `&mut V` - an unaligned slice cannot hand
+    /// out references to vectors - so modifying a vector in place is not possible. To
+    /// write results back, pair the iterator with [`enumerate`](Iterator::enumerate) and
+    /// store each result through [`write`](UnalignedMut::write) at the same index:
+    ///
+    /// ```
+    /// # use thermite::backend::scalar::prelude::*;
+    /// let mut data: Vec<f32> = (0..10).map(|i| i as f32).collect();
+    ///
+    /// let (mut iter, remainder) = data.unaligned_simd_iter_mut::<f32x4>();
+    ///
+    /// for (i, v) in iter.enumerate() {
+    ///     iter.write(i, v * f32x4::splat(2.0));
+    /// }
+    ///
+    /// // The trailing elements still have to be handled with scalar code.
+    /// for x in remainder {
+    ///     *x *= 2.0;
+    /// }
+    ///
+    /// assert_eq!(data[0], 0.0);
+    /// assert_eq!(data[9], 18.0);
+    /// ```
+    ///
+    /// The index passed to `write` is in units of vectors, matching the index from
+    /// `enumerate`, so the vector written is exactly the one that was just read.
+    /// [`read`](Unaligned::read) is the random-access counterpart, if a plain
+    /// `for i in 0..iter.len()` loop reads better than `enumerate`.
     fn unaligned_simd_iter_mut<V>(&mut self) -> (UnalignedMut<'_, V>, &mut Self)
     where
         V: GenericVector<Element = Self::Element>;
