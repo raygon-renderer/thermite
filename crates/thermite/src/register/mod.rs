@@ -1321,31 +1321,7 @@ pub trait Register:
     /// are a win. For the zero-filled tail variant matching AVX-512 zero-masking,
     /// see [`compress_z`](Self::compress_z).
     fn compress(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
-        let n = <Self::Lanes as Unsigned>::USIZE;
-
-        let src = Self::as_slice(&value);
-        let mut result = value;
-        let dst = Self::as_mut_slice(&mut result);
-
-        let mut pos = 0;
-
-        // Selected lanes first, in order.
-        for i in 0..n {
-            if <Self::Mask as MaskRegister>::test(mask, i) {
-                dst[pos] = src[i];
-                pos += 1;
-            }
-        }
-
-        // Unselected lanes after, in order.
-        for i in 0..n {
-            if !<Self::Mask as MaskRegister>::test(mask, i) {
-                dst[pos] = src[i];
-                pos += 1;
-            }
-        }
-
-        result
+        crate::backend::generic::polyfills::compress_default::<Self>(value, mask)
     }
 
     /// Zero-filling left-pack: like [`compress`](Self::compress), but the lanes
@@ -1360,22 +1336,7 @@ pub trait Register:
     /// [`compress`](Self::compress) needs. Concrete backend registers override
     /// it (the macros do so alongside `compress`) for the table / wide paths.
     fn compress_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
-        let n = <Self::Lanes as Unsigned>::USIZE;
-        let src = Self::as_slice(&value);
-
-        // `EMPTY` is zero, so the tail is already filled - only place selected.
-        let mut result = Self::EMPTY;
-        let dst = Self::as_mut_slice(&mut result);
-
-        let mut pos = 0;
-        for i in 0..n {
-            if <Self::Mask as MaskRegister>::test(mask, i) {
-                dst[pos] = src[i];
-                pos += 1;
-            }
-        }
-
-        result
+        crate::backend::generic::polyfills::compress_z_default::<Self>(value, mask)
     }
 
     const HAS_PERMUTEV: bool;

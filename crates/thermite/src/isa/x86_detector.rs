@@ -59,7 +59,13 @@ impl DetectInstructionSet {
 
         if core_detect::is_x86_feature_detected!("avx512f") {
             best = InstructionSet::X86V4; // TODO: Check if more AVX512 features are needed
-        } else if core_detect::is_x86_feature_detected!("avx2") && core_detect::is_x86_feature_detected!("fma") {
+        } else if core_detect::is_x86_feature_detected!("avx2")
+            && core_detect::is_x86_feature_detected!("fma")
+            && core_detect::is_x86_feature_detected!("popcnt")
+        {
+            // POPCNT predates AVX2 by five years (Nehalem, 2008) and is present on
+            // every AVX2 CPU; checking it here lets dispatched code assume it, the
+            // same way the V2 level already does.
             best = InstructionSet::X86V3;
         } else if core_detect::is_x86_feature_detected!("sse4.2") && core_detect::is_x86_feature_detected!("popcnt") {
             best = InstructionSet::X86V2;

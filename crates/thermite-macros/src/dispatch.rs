@@ -36,7 +36,7 @@ static BACKENDS: &[Backend] = cfg_select! {
     feature = "x86" => &[
         Backend { isa: "Scalar", target_feature: "",       simd_type: Some("backend::scalar::Scalar") },
         Backend { isa: "X86V1",  target_feature: "sse2",   simd_type: Some("backend::x86_v1::X86V1")  },
-        Backend { isa: "X86V2",  target_feature: "sse4.2", simd_type: Some("backend::x86_v2::X86V2")  },
+        Backend { isa: "X86V2",  target_feature: "sse4.2,popcnt", simd_type: Some("backend::x86_v2::X86V2")  },
 
         // Target features for the x86-v3 (AVX2 + FMA) backend.
         //
@@ -51,10 +51,10 @@ static BACKENDS: &[Backend] = cfg_select! {
         Backend {
             isa: "X86V3",
             target_feature: cfg_select! {
-                all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,f16c,pclmulqdq",
-                feature = "avx2-f16c" => "avx2,fma,f16c",
-                feature = "avx2-pclmul" => "avx2,fma,pclmulqdq",
-                _ => "avx2,fma",
+                all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,popcnt,f16c,pclmulqdq",
+                feature = "avx2-f16c" => "avx2,fma,popcnt,f16c",
+                feature = "avx2-pclmul" => "avx2,fma,popcnt,pclmulqdq",
+                _ => "avx2,fma,popcnt",
             },
             simd_type: Some("backend::x86_v3::X86V3")
         },

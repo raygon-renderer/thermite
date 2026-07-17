@@ -136,11 +136,25 @@ pub fn compress_permute<R>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage
 where
     R: Register<Lanes: CompressTable>,
 {
-    // SAFETY: every lane count implementing `CompressTable` is <= 8, and
-    // `native_bitmask` returns `Some` for all registers with <= 64 lanes, so
-    // this is always `Some`. Folds away on backends where it is a plain
-    // `movemask`, keeping the path branchless. `native_bitmask` yields exactly
-    // `LANES` bits, so `bm < 2^LANES <= 256` indexes the table directly.
+    // SAFETY: every lane count implementing `CompressTable` is <= 8.
+    unsafe { compress_permute8_raw::<R>(value, mask) }
+}
+
+/// The bound-free body of [`compress_permute`], for callers that can prove
+/// `LANES <= 8` but cannot name the [`CompressTable`] bound - specifically
+/// blanket impls like `ArrayRegister`, which cannot add a per-method bound and
+/// instead guard with `if const { Lanes::USIZE <= 8 && HAS_PERMUTEV }`.
+///
+/// # Safety
+///
+/// `R::Lanes` must be <= 8.
+#[inline(always)]
+pub unsafe fn compress_permute8_raw<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+    // SAFETY: the caller guarantees `LANES <= 8`, and `native_bitmask` returns
+    // `Some` for all registers with <= 64 lanes, so this is always `Some`.
+    // Folds away on backends where it is a plain `movemask`, keeping the path
+    // branchless. `native_bitmask` yields exactly `LANES` bits, so
+    // `bm < 2^LANES <= 256` indexes the table directly.
     let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;
 
     // SAFETY: `bm < 256`, exactly the table length. The row is `[u32; 8]`;
@@ -831,4 +845,59 @@ mod tests {
             }
         }
     }
+}
+
+/// The portable scalar stable-partition left-pack: the default body behind
+/// [`Register::compress`]. Free-standing here so blanket impls (e.g.
+/// `ArrayRegister`) can fall back to it from their own `compress` overrides,
+/// which the trait system does not allow via `Self::compress` recursion or
+/// per-method bounds.
+pub fn compress_default<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+    let n = <R::Lanes as Unsigned>::USIZE;
+
+    let src = R::as_slice(&value);
+    let mut result = value;
+    let dst = R::as_mut_slice(&mut result);
+
+    let mut pos = 0;
+
+    // Selected lanes first, in order.
+    for i in 0..n {
+        if <R::Mask as MaskRegister>::test(mask, i) {
+            dst[pos] = src[i];
+            pos += 1;
+        }
+    }
+
+    // Unselected lanes after, in order.
+    for i in 0..n {
+        if !<R::Mask as MaskRegister>::test(mask, i) {
+            dst[pos] = src[i];
+            pos += 1;
+        }
+    }
+
+    result
+}
+
+/// The single-pass zero-filling left-pack: the default body behind
+/// [`Register::compress_z`]; see [`compress_default`] for why it is
+/// free-standing.
+pub fn compress_z_default<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+    let n = <R::Lanes as Unsigned>::USIZE;
+    let src = R::as_slice(&value);
+
+    // `EMPTY` is zero, so the tail is already filled - only place selected.
+    let mut result = R::EMPTY;
+    let dst = R::as_mut_slice(&mut result);
+
+    let mut pos = 0;
+    for i in 0..n {
+        if <R::Mask as MaskRegister>::test(mask, i) {
+            dst[pos] = src[i];
+            pos += 1;
+        }
+    }
+
+    result
 }

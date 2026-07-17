@@ -841,6 +841,33 @@ where
 
     const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
 
+    /// Left-pack via the shared 8-lane compaction table + one `permutev`
+    /// ([`compress_permute8_raw`](crate::backend::generic::polyfills::compress_permute8_raw)),
+    /// instead of the scalar stable-partition default. The emulated-wide
+    /// registers (e.g. 2x128 `f32x8` on SSE/NEON/wasm) have branchless
+    /// `native_bitmask` and `array_permutev`, so the whole compress stays
+    /// branch-free: `movemask`s -> table row -> cross-chunk permute.
+    ///
+    /// A blanket impl cannot add the `Lanes: CompressTable` bound to a single
+    /// method, so applicability is an `if const` guard on the raw polyfill.
+    fn compress(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // SAFETY: `Lanes <= 8` per the guard above.
+            return unsafe { crate::backend::generic::polyfills::compress_permute8_raw::<Self>(value, mask) };
+        }
+
+        crate::backend::generic::polyfills::compress_default::<Self>(value, mask)
+    }
+
+    fn compress_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // Zero the unselected lanes first; they carry into the tail.
+            return Self::compress(Self::zz(mask, value), mask);
+        }
+
+        crate::backend::generic::polyfills::compress_z_default::<Self>(value, mask)
+    }
+
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             return Self::scalar_permutev(value, idxs);
