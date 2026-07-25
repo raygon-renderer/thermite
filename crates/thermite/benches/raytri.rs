@@ -26,7 +26,7 @@ use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
 use nalgebra::{Matrix4, Point3, Vector3};
 use simba::simd::{SimdPartialOrd, SimdSigned, SimdValue, WideF32x4};
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 use thermite::backend::neon::Neon;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use thermite::backend::x86_v2::X86V2;
@@ -697,9 +697,9 @@ thermite_kernel!(v3, "avx2,fma", Vector<<X86V3 as Simd>::f32x8>);
 // NEON: native 128-bit width (f32x4) plus a 256-bit width (f32x8) that is
 // `ArrayRegister`-doubled from two 128-bit registers (2x128 double-pumped,
 // emulated).
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 thermite_kernel!(neon128, "neon", Vector<<Neon as Simd>::f32x4>);
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 thermite_kernel!(neon256, "neon", Vector<<Neon as Simd>::f32x8>);
 
 fn bench(c: &mut Criterion) {
@@ -732,7 +732,7 @@ fn bench(c: &mut Criterion) {
             assert!(rel < 1e-2, "{name} disagrees with glam: {r} vs {r_glam}");
         }
     }
-    #[cfg(all(feature = "neon", target_arch = "aarch64"))]
+    #[cfg(target_arch = "aarch64")]
     {
         let r_neon128 = unsafe { neon128::ray_tri(&scene.rays, &scene.tris, &scene.m) };
         let r_neon256 = unsafe { neon256::ray_tri(&scene.rays, &scene.tris, &scene.m) };
@@ -805,7 +805,7 @@ fn bench(c: &mut Criterion) {
             b.iter(|| unsafe { black_box(v3::ray_tri_aos(black_box(&scene.rays_aos), &scene.tris, &scene.m)) })
         });
     }
-    #[cfg(all(feature = "neon", target_arch = "aarch64"))]
+    #[cfg(target_arch = "aarch64")]
     {
         g.bench_function("thermite-neon-128", |b| {
             b.iter(|| unsafe { black_box(neon128::ray_tri(black_box(&scene.rays), &scene.tris, &scene.m)) })

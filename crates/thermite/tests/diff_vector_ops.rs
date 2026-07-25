@@ -15,7 +15,7 @@
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "wasm32",
-    all(feature = "neon", target_arch = "aarch64")
+    target_arch = "aarch64"
 ))]
 
 use core::ops::{
@@ -637,7 +637,7 @@ mod wasm {
     ops_suite!(wasm, Wasm, f32x4, i32x4);
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon {
     use super::*;
     use thermite::backend::neon::Neon;

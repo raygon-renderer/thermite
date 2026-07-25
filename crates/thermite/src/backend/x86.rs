@@ -309,12 +309,31 @@ pub mod avx512f {
         pub(super) use super::*;
 
         /// Oldest AVX512 CPUs
+        ///
+        /// F + CD: exactly the Knights Landing set. 512-bit only -- without VL
+        /// (tier 2) there are no EVEX encodings at 128/256-bit, so nothing here
+        /// can accelerate the existing `f32x4`/`f32x8` registers.
         pub mod tier1 {
             pub use super::*;
             pub use super::avx512cd::*;
         }
 
         /// Common AVX512 CPUs
+        ///
+        /// Tier 1 + BW + DQ + **VL**. Skylake-SP introduced the three together
+        /// and no CPU has BW/DQ without VL, so they form one rung.
+        ///
+        /// VL contributes no module of its own: it is not new operations but the
+        /// EVEX encodings (masking, zero-masking, embedded broadcast, registers
+        /// 16-31) applied to XMM/YMM instead of ZMM only. In practice that means
+        /// the 128/256-bit masked intrinsics, which `core::arch` gates on
+        /// `avx512vl,avx512f` -- so a backend built on this tier MUST put
+        /// `avx512vl` in its `#[target_feature]` set, and importing those
+        /// intrinsics here without it will not compile.
+        ///
+        /// This is the rung that matters most for this crate: it is what turns
+        /// the `_c`/`_m`/`_z` variants into single masked instructions at the
+        /// register widths thermite already uses.
         pub mod tier2 {
             pub use super::tier1::*;
 

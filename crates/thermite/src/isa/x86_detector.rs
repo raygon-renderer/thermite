@@ -55,21 +55,25 @@ impl DetectInstructionSet {
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn detect_internal() -> InstructionSet {
+        // Hand-rolled `cpuid` (see `crate::cpu::x86`) rather than a detection
+        // crate: the same module already has to speak `cpuid` for cache and
+        // topology queries, so this costs nothing and drops a dependency.
+        // Crucially, its AVX-class flags already fold in the `XCR0` check --
+        // the OS must save YMM/ZMM state, not just the CPU implement it.
+        let features = crate::cpu::x86::features();
+
         let mut best = InstructionSet::Scalar;
 
-        if core_detect::is_x86_feature_detected!("avx512f") {
+        if features.avx512f {
             best = InstructionSet::X86V4; // TODO: Check if more AVX512 features are needed
-        } else if core_detect::is_x86_feature_detected!("avx2")
-            && core_detect::is_x86_feature_detected!("fma")
-            && core_detect::is_x86_feature_detected!("popcnt")
-        {
+        } else if features.avx2 && features.fma && features.popcnt {
             // POPCNT predates AVX2 by five years (Nehalem, 2008) and is present on
             // every AVX2 CPU; checking it here lets dispatched code assume it, the
             // same way the V2 level already does.
             best = InstructionSet::X86V3;
-        } else if core_detect::is_x86_feature_detected!("sse4.2") && core_detect::is_x86_feature_detected!("popcnt") {
+        } else if features.sse42 && features.popcnt {
             best = InstructionSet::X86V2;
-        } else if core_detect::is_x86_feature_detected!("sse2") {
+        } else if features.sse2 {
             best = InstructionSet::X86V1;
         }
 

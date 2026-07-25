@@ -7,7 +7,7 @@
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "wasm32",
-    all(feature = "neon", target_arch = "aarch64")
+    target_arch = "aarch64"
 ))]
 
 use thermite::register::{IntegerRegister, NumericRegister, Register};
@@ -20,7 +20,7 @@ type Backend = thermite::backend::x86_v3::X86V3;
 #[cfg(target_arch = "wasm32")]
 type Backend = thermite::backend::wasm::Wasm;
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 type Backend = thermite::backend::neon::Neon;
 
 #[test]

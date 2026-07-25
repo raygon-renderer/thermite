@@ -66,7 +66,7 @@ fn x86() {
     );
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 #[test]
 fn neon() {
     every_pointer::<thermite::backend::neon::Neon>();

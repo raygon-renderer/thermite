@@ -17,7 +17,7 @@
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "wasm32",
-    all(feature = "neon", target_arch = "aarch64")
+    target_arch = "aarch64"
 ))]
 
 mod harness;
@@ -883,7 +883,7 @@ mod wasm {
 // neon: exercise the same backend-generic polyfill macros on Neon's native types
 // (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2) - validates neon's count_ones/leading_zeros/
 // swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon {
     use super::*;
     use thermite::backend::neon::Neon;

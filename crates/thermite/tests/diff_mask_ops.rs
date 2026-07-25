@@ -9,7 +9,7 @@
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "wasm32",
-    all(feature = "neon", target_arch = "aarch64")
+    target_arch = "aarch64"
 ))]
 
 mod harness;
@@ -132,7 +132,7 @@ mod wasm_reg {
     reg_mask_suite!(reg_wasm, Wasm, "wasm");
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon_reg {
     use super::*;
     use thermite::backend::neon::Neon;
@@ -185,7 +185,7 @@ mod reduced_mask_wasm {
     t3!(wasm_i64x3A, Wasm, i64x3A, "wasm");
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod reduced_mask_neon {
     use super::*;
     use thermite::backend::neon::Neon;
@@ -357,7 +357,7 @@ mod wasm {
     mask_suite!(wasm, Wasm);
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon {
     use super::*;
     use thermite::backend::neon::Neon;

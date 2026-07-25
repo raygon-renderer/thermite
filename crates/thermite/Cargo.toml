@@ -59,7 +59,10 @@ strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
 
 std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
-neon = []
+
+# NOTE: there is deliberately no `neon` feature. NEON/AdvSIMD is mandatory in
+# AArch64, so the backend is gated on `target_arch = "aarch64"` and is always
+# compiled there -- nothing to opt into.
 
 # Assume the `f16c` CPU feature is available whenever AVX2 is (the x86-v3 backend).
 # F16C shipped one generation before AVX2 (Ivy Bridge vs. Haswell), so any AVX2-capable
@@ -106,7 +109,6 @@ libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 rand = { version = "0.10", optional = true, default-features = false }
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
-core_detect = "1"
 thermite-macros = { workspace = true, features = ["x86"] }
 
 # aarch64 only: 32-bit arm NEON intrinsics (and its `#[target_feature(enable = "neon")]`)

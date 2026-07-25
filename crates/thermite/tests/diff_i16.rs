@@ -8,7 +8,7 @@
     target_arch = "x86",
     target_arch = "x86_64",
     target_arch = "wasm32",
-    all(feature = "neon", target_arch = "aarch64")
+    target_arch = "aarch64"
 ))]
 
 mod harness;
@@ -330,7 +330,7 @@ mod wasm {
 }
 
 // --- NEON: native 8-lane i16x8 (= i16xN); sub-native reduced, wider via ArrayRegister ---
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon {
     use super::*;
     use thermite::backend::neon::Neon;
@@ -397,7 +397,7 @@ mod wasm_cast {
     cast16!(u16_u64_x16, u16x16, u64x16, u16, u64);
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 mod neon_cast {
     use super::*;
     use thermite::backend::neon::Neon;

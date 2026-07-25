@@ -24,7 +24,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 use thermite::backend::neon::Neon;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use thermite::backend::x86_v2::X86V2;
@@ -157,11 +157,11 @@ math_kernels!(
 // NEON: native 128-bit width (f32x4/f64x2) mirrors v2; the 256-bit width
 // (f32x8/f64x4) is `ArrayRegister`-doubled from two 128-bit registers (2x128
 // double-pumped, emulated) and mirrors v3, with a `Precision` variant on it.
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(neon128_f32, "neon", Vector<<Neon as Simd>::f32x4>, f32, DefaultPolicy);
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(neon256_f32, "neon", Vector<<Neon as Simd>::f32x8>, f32, DefaultPolicy);
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(
     neon256_f32_precise,
     "neon",
@@ -169,11 +169,11 @@ math_kernels!(
     f32,
     Precision
 );
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(neon128_f64, "neon", Vector<<Neon as Simd>::f64x2>, f64, DefaultPolicy);
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(neon256_f64, "neon", Vector<<Neon as Simd>::f64x4>, f64, DefaultPolicy);
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 math_kernels!(
     neon256_f64_precise,
     "neon",
@@ -253,7 +253,7 @@ macro_rules! element {
 
 /// NEON counterpart of `op_group!`: scalar vs the native 128-bit width vs the
 /// 256-bit (double-pumped 2x128) width vs that wider width with `Precision`.
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 macro_rules! op_group_neon {
     ($c:expr, $group:expr, $scalar:ident, $n128:ident, $n256:ident, $n256p:ident, $method:ident ( $($data:expr),+ )) => {{
         let mut g = $c.benchmark_group($group);
@@ -275,7 +275,7 @@ macro_rules! op_group_neon {
 }
 
 /// NEON counterpart of `element!` for one element type.
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 macro_rules! element_neon {
     ($c:expr, $E:ty, $tag:literal, $scalar:ident, $n128:ident, $n256:ident, $n256p:ident) => {{
         let trig: Vec<$E> = make(-3.14159265, 3.14159265);
@@ -312,7 +312,7 @@ fn bench(c: &mut Criterion) {
     element!(c, f64, "f64", scalar_f64, v2_f64, v3_f64, v3_f64_precise);
 }
 
-#[cfg(all(feature = "neon", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 fn bench(c: &mut Criterion) {
     element_neon!(c, f32, "f32", scalar_f32, neon128_f32, neon256_f32, neon256_f32_precise);
     element_neon!(c, f64, "f64", scalar_f64, neon128_f64, neon256_f64, neon256_f64_precise);

@@ -161,6 +161,7 @@ pub mod vector;
 
 pub mod backend;
 pub mod compat;
+pub mod cpu;
 pub mod divider;
 pub mod element;
 pub mod mask;

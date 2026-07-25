@@ -20,8 +20,10 @@ tests           (crates/thermite/tests/)     <- differential vs the scalar oracl
 Nothing is free *across backends*: a new primitive needs a real implementation
 for **scalar, x86_v1 (SSE2), x86_v2 (SSE4.2), x86_v3 (AVX2), wasm, neon**
 (optionally spirv) -- the dispatcher can select any of them. The neon backend
-(macro-stamped registers, `backend/neon/macros.rs`) only compiles on aarch64;
-verify it via `just pi-build` + `just qemu-test` (section 7).
+(macro-stamped registers, `backend/neon/macros.rs`) compiles on aarch64 and
+**only** there, with no feature to enable -- NEON is mandatory in AArch64, so it
+is gated on `target_arch` alone. Verify it via `just pi-build` + `just qemu-test`
+(section 7).
 
 Read [architecture.md](architecture.md) first (Element -> Register -> Vector).
 Also load-bearing: [trait-hierarchy.md](trait-hierarchy.md) (what each trait
@@ -190,7 +192,7 @@ runtime branch). The backend set it iterates is the authoritative target list:
 ```
 x86 build:   Scalar("")  X86V1("sse2")  X86V2("sse4.2,popcnt")
              X86V3("avx2,fma,popcnt" [+",f16c"] [+",pclmulqdq"] per avx2-f16c/avx2-pclmul)
-neon build:  Scalar("")  NEON("neon")   -- aarch64-only; NEON is target baseline,
+neon build:  Scalar("")  NEON("neon")   -- aarch64-only, always on; NEON is baseline,
              so InstructionSet::get() is constant and the trampoline attr is a no-op
 wasm build:  Scalar("")  WASM32("simd128")
 ```
@@ -678,7 +680,7 @@ PowerShell on Windows.
 | `just cov` / `cov-collect` / `cov-missing` / `cov-summary` / `cov-percent` | `cargo-llvm-cov`. Always `--ignore-run-fail` (one accepted failure: `frldexp` denormal-flush under off-by-default `preserve_denormals`). **Never `--all-features`** -- backend features are mutually exclusive on one host. `cov-missing` = authoritative uncovered-line list. |
 | `just cov-branch` | Branch coverage (nightly). Reads low/misleading (LLVM doesn't credit diverging arms); informational only. |
 | `just miri [filter]` | `cargo +nightly miri test`. Miri lacks x86 SIMD intrinsics (V2/V3 error) -- use for scalar + generic `unsafe` (slice iterators, gather/scatter bounds). Filter to Miri-safe tests. |
-| `just pi-build [args]` | Cross-compiles the test binaries for `aarch64-unknown-linux-musl` with `--features "neon,std"` (LTO off) and stages them in `target/pi-stage` for ARM hardware / qemu. |
+| `just pi-build [args]` | Cross-compiles the test binaries for `aarch64-unknown-linux-musl` with `--features "std"` (LTO off) and stages them in `target/pi-stage` for ARM hardware / qemu. The NEON backend needs no feature flag. |
 | `just qemu-test` | Runs the staged aarch64 binaries under qemu via Podman (`--platform linux/arm64`, alpine). Prereq: `just pi-build`; binfmt install once per machine boot. |
 | `just doc` / `doc-open` | rustdoc with the KaTeX header (`katex-header.html`). |
 | `just sync-assets` | Re-propagate `LICENSE-*` and `katex-header.html`. |

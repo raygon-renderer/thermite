@@ -56,9 +56,13 @@ Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 | `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
 | `nightly` | off | Nightly-only paths (requires nightly compiler). |
 | `wasm` | off | wasm32/wasm64 SIMD128 backend. |
-| `neon` | off | ARM NEON backend. |
 | `avx512-tier1..4` | off | AVX-512 tiers (tier4 cutting-edge; each implies lower). |
 | `spirv` | off | Experimental SPIR-V GPU backend (implies `nightly`). |
+
+**No `neon` feature**: NEON/AdvSIMD is mandatory in AArch64, so the backend is
+gated on `target_arch = "aarch64"` and is **always compiled** there -- nothing to
+opt into, and `--features neon` is now an error. (Contrast `wasm`, which stays
+opt-in because SIMD128 is a proposal the engine may not enable.)
 
 Strict-numerics std app: `features = ["std"]`. Fully `no_std`:
 `default-features = false` + re-enable what you need.
