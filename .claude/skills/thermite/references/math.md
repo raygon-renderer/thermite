@@ -1,15 +1,15 @@
 # The math library
 
-Transcendental and real-math functions, a compile-time **policy** system for
-precision/performance trade-offs, scalar shortcuts, and ~45 float constants.
-Defined in `crates/thermite/src/math/`.
+Transcendental/real-math functions, a compile-time **policy** system for
+precision/perf trade-offs, scalar shortcuts, ~45 float constants. Defined in
+`crates/thermite/src/math/`.
 
 ## Math trait families
 
-Each family comes as a pair: a policy-parameterized `*WithPolicy` trait (methods
-suffixed `_p`, generic over `<P: Policy>`) and a default-policy `*Math` trait
-(same methods, no suffix, using `DefaultPolicy`). All require at least
-`FloatVector`. Declared by the `decl_math!` macro in `math/mod.rs`.
+Each family is a pair: policy-parameterized `*WithPolicy` (methods suffixed `_p`,
+generic over `<P: Policy>`) and default-policy `*Math` (same methods, no suffix,
+`DefaultPolicy`). All require at least `FloatVector`. Declared by `decl_math!` in
+`math/mod.rs`.
 
 | Trait | Requires | Provides (selection) |
 |---|---|---|
@@ -19,23 +19,21 @@ suffixed `_p`, generic over `<P: Policy>`) and a default-policy `*Math` trait
 | `SpatialMath` | `CoreMath` | `hypot`, `hypot_n`, `inv_hypot_n`, `l1_norm`, `l2_norm`, `l2_norm_squared` |
 | `RealMath` | `Transcendental + Spatial` | `atan2`, `lerp`, `rescale`, `to_degrees`, `to_radians`, `wrap_angle`, `angle_diff`, `logaddexp`, `smoothstep`, `inverse_smoothstep`, `smoothstep_derivative`, `smooth_interpolator`, `step` |
 
-To name any of these in a generic bound you must import it explicitly (the prelude
-brings them in anonymously):
+To *name* these in a bound, import explicitly (prelude imports them anonymously):
 
 ```rust
 use thermite::math::{CoreMath, TranscendentalMath, SpatialMath, RealMath, FloatMath};
-
 fn f<V: FloatVector + TranscendentalMath>(x: V) -> V { x.sin() + x.exp() }
 ```
 
 ## Policy variants `_p::<P>()`
 
-Every math method has a policy-parameterized sibling. The plain method delegates
-to the `_p` form with `DefaultPolicy`:
+Every math method has a policy sibling; the plain method delegates with
+`DefaultPolicy`:
 
 ```rust
 let a = x.sin();                         // DefaultPolicy
-let b = x.sin_p::<HighPerformance>();    // explicit policy
+let b = x.sin_p::<HighPerformance>();
 let c = x.exp_p::<Precision>();
 ```
 
@@ -55,7 +53,7 @@ pub struct PolicyParameters {
 }
 ```
 
-Preset policies (in `thermite::math::policy::policies`, also re-exported):
+Presets (`thermite::math::policy::policies`, re-exported):
 
 | Preset | precision | overflow | branchless | compensated | denormals | use when |
 |---|---|---|---|---|---|---|
@@ -67,11 +65,10 @@ Preset policies (in `thermite::math::policy::policies`, also re-exported):
 | `Reference` | Reference | yes | no | yes | FlushToZero | validation only (slow) |
 | `GpuDefault` | Average | yes | yes | no | Crush | SPIR-V default |
 
-`DefaultPolicy` is `Performance` on CPU, `Size` on WASM, `GpuDefault` on SPIR-V
-(selected by `cfg`).
+`DefaultPolicy` = `Performance` on CPU, `Size` on WASM, `GpuDefault` on SPIR-V
+(cfg-selected).
 
-Composable modifiers wrap a base policy `P` and tweak one axis -- all implement
-`Policy`:
+Composable modifiers wrap a base policy `P`, all implement `Policy`:
 
 ```rust
 ExtraPrecision<P>   LessPrecision<P>
@@ -80,7 +77,7 @@ CheckOverflow<P, const ON: bool>   AvoidBranching<P, const ON: bool>
 UnrollLoops<P, const ON: bool>     UseCompensation<P, const ON: bool>
 MaxIterations<P, const N: usize>   CmpLessPrecision<A, B>   // min precision of two
 
-// e.g. "HighPerformance but checked and extra-precise":
+// "HighPerformance but checked and extra-precise":
 x.exp_p::<ExtraPrecision<CheckOverflow<HighPerformance, true>>>()
 ```
 
@@ -95,24 +92,24 @@ Two families, four signs each:
 | `nmul_adde(b, c)` | `nmul_add(b, c)` | `c - a*b` |
 | `nmul_sube(b, c)` | `nmul_sub(b, c)` | `-a*b - c` |
 
-- **Estimating (`*e`)**: real FMA if the hardware has it, else separate `mul`+`add`.
-  Use these by default -- they are fast everywhere.
-- **Always single-rounded (no `e`)**: real FMA if available; otherwise, **by default**,
-  a *vectorized emulated FMA* (a compensated split -- single-rounding accuracy, slower
-  than true FMA but still SIMD and far cheaper than `libm`, and not bit-identical to true
-  FMA). Only the `disable_fast_fma` feature (implied by `strict_ieee754`) makes the
-  fallback the exact scalar `libm::fma` that is *dozens of times slower*. So the non-`e`
-  forms are a valid **accuracy** choice even without hardware FMA; gate them behind
-  `V::HAS_TRUE_FMA` to avoid the *emulation* cost, not merely to avoid `libm`.
+- **Estimating (`*e`)**: real FMA if hardware has it, else separate `mul`+`add`.
+  Default choice -- fast everywhere.
+- **Always single-rounded (no `e`)**: real FMA if available; otherwise **by
+  default** a *vectorized emulated FMA* (compensated split -- single-rounding
+  accuracy, slower than true FMA but still SIMD and far cheaper than `libm`, not
+  bit-identical to true FMA). Only `disable_fast_fma` (implied by
+  `strict_ieee754`) makes the fallback the exact scalar `libm::fma`, *dozens of
+  times slower*. So non-`e` forms are a valid **accuracy** choice even without
+  hardware FMA; gate on `V::HAS_TRUE_FMA` to avoid the *emulation* cost, not
+  merely to avoid `libm`.
 
-Detail and ILP techniques in [performance.md](performance.md).
+Detail and ILP techniques: [performance.md](performance.md).
 
 ## Scalar shortcut: `ScalarMath` for bare `f32`/`f64`
 
-A bare `f32`/`f64` does **not** implement `FloatVector`. For one-off scalar math
-without constructing a vector, `ScalarMath`/`ScalarMathWithPolicy` are implemented
-directly on `f32`/`f64`, with every method `scalar_`-prefixed (to avoid clashing
-with inherent `f64::sin` etc.):
+Bare `f32`/`f64` do **not** implement `FloatVector`. For one-off scalar math,
+`ScalarMath`/`ScalarMathWithPolicy` are implemented directly on `f32`/`f64`, all
+methods `scalar_`-prefixed (avoids clashing with inherent `f64::sin`):
 
 ```rust
 use thermite::math::ScalarMath;
@@ -120,14 +117,12 @@ let s = 0.5_f64.scalar_sin();
 let e = 2.0_f32.scalar_exp_p::<HighPerformance>();
 ```
 
-`rcp`/`sqrt`/`abs`-style names are unaffected; only the math-trait methods get the
-prefix. For *generic* code that must also accept scalars, wrap them:
-`Vector::<f64>::splat(x)`.
+For *generic* code that must accept scalars, wrap: `Vector::<f64>::splat(x)`.
 
 ## FloatConsts: ~45 constants
 
-`FloatConsts` is implemented for `f32`, `f64`, and every `Vector<R: FloatRegister>`.
-Prefer these over recomputing (e.g. use `V::SQRT_EPSILON`, not `V::EPSILON.sqrt()`):
+Implemented for `f32`, `f64`, and every `Vector<R: FloatRegister>`. Prefer these
+over recomputing (`V::SQRT_EPSILON`, not `V::EPSILON.sqrt()`):
 
 ```
 PI TAU E PHI EULER_GAMMA  FRAC_PI_2 FRAC_PI_3 FRAC_PI_4 FRAC_PI_6 FRAC_PI_8
@@ -139,8 +134,8 @@ FRAC_1_3 FRAC_2_3 FRAC_1_4 FRAC_1_6  FRAC_PI_180 FRAC_180_PI  NEG_ZERO ...
 
 ## Algorithms module (`math/algorithms/`)
 
-Generic numerical building blocks. The convergent ones are over `V: FloatVector` +
-a `Policy`; the reductions are over any `V: Copy` (no policy):
+Generic numerical building blocks; convergent ones over `V: FloatVector` + a
+`Policy`, reductions over any `V: Copy` (no policy):
 
 ```rust
 newtons_method::<V, P>(x0, tol, bounds, |x| (f, df)) -> (root, converged_mask)  // hybrid Newton-bisection
@@ -155,9 +150,8 @@ These power the inverse-smoothstep and special-function kernels.
 ## Known math gotchas
 
 - `smooth_interpolator_inverse` returns NaN at the midpoint (`y = 0.5`).
-- `min`/`max` default to fast SSE-style asymmetric NaN propagation (performance
-  first), not IEEE `minNum`/`maxNum`. Enable the IEEE-correct behavior with the
-  `strict_ieee754` crate feature when you need it (that feature also governs
-  IEEE-correct denormals/NaNs elsewhere, at some performance cost).
-- `ldexp_f32` for extreme exponents (e.g. `ldexp(f32::MAX, i32::MIN)`) only flushes
-  correctly under the `strict_ieee754` feature.
+- `min`/`max` default to fast SSE-style asymmetric NaN propagation, not IEEE
+  `minNum`/`maxNum`. `strict_ieee754` enables IEEE-correct behavior (also governs
+  denormals/NaNs elsewhere, at a perf cost).
+- `ldexp_f32` at extreme exponents (`ldexp(f32::MAX, i32::MIN)`) only flushes
+  correctly under `strict_ieee754`.

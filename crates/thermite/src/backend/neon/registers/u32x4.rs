@@ -33,6 +33,8 @@ neon_partial_ord!(U32x4Neon, suffix: u32, from_u: identity);
 
 neon_shuffle_permute!(U32x4Neon, suffix: u32, from_u: identity; 4);
 
+neon_extend_scalar!(U32x4Neon, elem: u32);
+
 neon_int_numeric!(U32x4Neon, elem: u32, lanes: 4, suffix: u32);
 
 neon_bitshift!(

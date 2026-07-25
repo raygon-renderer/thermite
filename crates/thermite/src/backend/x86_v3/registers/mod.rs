@@ -92,6 +92,12 @@ impl NativeIsa for X86V3 {
 
     type NativeAlignment = crate::simd::Align32; // 256-bit vectors = 32 bytes
 
+    const HAS_PREFETCH: bool = arch::HAS_PREFETCH;
+
+    fn prefetch<const LOCALITY: u8, const WRITE: bool>(ptr: *const u8) {
+        arch::prefetch::<LOCALITY, WRITE>(ptr);
+    }
+
     unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
         unsafe { Ok(arch::disable_denormals()) }
     }
@@ -206,6 +212,86 @@ impl_packed_fp8!(
     U8x16V3 => ArrayRegister<F32x8V3, 2>,
 );
 
+// Same-width, different-lane-count reinterprets of the 128-bit byte register, so it can
+// be viewed as wider accumulator lanes (the SAD family). All `__m128i`, so identity.
+impl_bit_casts_identity! {
+    U8x16V3 as U16x8V3,
+    U8x16V3 as U32x4V3,
+    U8x16V3 as U64x2V3,
+}
+
+impl_sad_native_u64!(@ssse3 U8x16V3 => (U16x8V3, U32x4V3, U64x2V3) via _mm_sad_epu8);
+
+// Sub-native byte ladder: lane-wise (see `impl_sad_scalar!`).
+impl_sad_scalar! {
+    half8::U8x8V3 => (half16::U16x4V3, U32x2V3, u64),
+    half8::U8x4V3 => (ArrayRegister<u16, 2>, u32, u64),
+}
+
+// SAD on wider elements: `u16` pairs/quads -> `u32`/`u64`, `u32` pairs -> `u64`. Same
+// same-width-reinterpret shape as the byte family (all `__m128i`, so identity casts).
+impl_bit_casts_identity! {
+    U16x8V3 as U32x4V3,
+    U16x8V3 as U64x2V3,
+    U32x4V3 as U64x2V3,
+}
+
+impl_sad_u16!(@swar U16x8V3 => (U32x4V3, U64x2V3));
+impl_sad_u32!(@swar U32x4V3 => U64x2V3);
+
+// Sub-native rungs: lane-wise.
+impl_sad_u16!(@scalar half16::U16x4V3 => (U32x2V3, u64));
+impl_sad_u32!(@scalar U32x2V3 => u64);
+
+// Native 256-bit rungs (v3 only). All `__m256i`, so the reinterprets are identity.
+impl_bit_casts_identity! {
+    U16x16V3 as U32x8V3,
+    U16x16V3 as U64x4V3,
+    U32x8V3 as U64x4V3,
+}
+
+impl_sad_u16!(@swar U16x16V3 => (U32x8V3, U64x4V3));
+impl_sad_u32!(@swar U32x8V3 => U64x4V3);
+
+// The native 256-bit byte register (`u8xN` on AVX2). `_mm256_sad_epu8` is the full-width
+// PSADBW, and `pmaddubsw`/`pmaddwd` have 256-bit forms too, so every grouping is native
+// at twice the width of the 128-bit ladder.
+impl_bit_casts_identity! {
+    U8x32V3 as U16x16V3,
+    U8x32V3 as U32x8V3,
+    U8x32V3 as U64x4V3,
+}
+
+const _: () = {
+    use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
+
+    #[thermite_macros::inline_always]
+    impl Sad16Register<U16x16V3> for U8x32V3 {
+        fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x16V3> {
+            unsafe { arch::_mm256_maddubs_epi16(Self::abs_diff(a, b), arch::_mm256_set1_epi8(1)) }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad32Register<U32x8V3> for U8x32V3 {
+        fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x8V3> {
+            unsafe {
+                arch::_mm256_madd_epi16(
+                    <Self as Sad16Register<U16x16V3>>::sad16(a, b),
+                    arch::_mm256_set1_epi16(1),
+                )
+            }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x4V3> for U8x32V3 {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x4V3> {
+            unsafe { arch::_mm256_sad_epu8(a, b) }
+        }
+    }
+};
+
 // 16-bit gather/scatter on x86v3 has no hardware support; mark scalar-fallback impls.
 macro_rules! impl_indexable16 {
     ($idx:ty => $($ty:ty),* $(,)?) => {$( impl IndexableRegister<$idx> for $ty {} )*};
@@ -237,6 +323,21 @@ impl_concat_bool_register2!(i32, I32x2V3);
 impl_concat_bool_register2!(f64, F64x2V3);
 impl_concat_bool_register2!(u64, U64x2V3);
 impl_concat_bool_register2!(i64, I64x2V3);
+
+// --- extend-from-scalar: native (non-emulated) register widths ---
+// The 64-bit x2 (F64x2V3/I64x2V3/U64x2V3), the 32-bit x2 (via half.rs), and the
+// 128-bit 8/16-bit natives already carry explicit element-extend impls; the widths
+// below are the ones that were only wired up pairwise.
+impl_native_extend_from_scalar!(
+    F32x4V3 => f32, F32x8V3 => f32,
+    I32x4V3 => i32, I32x8V3 => i32,
+    U32x4V3 => u32, U32x8V3 => u32,
+    F64x4V3 => f64,
+    I64x4V3 => i64,
+    U64x4V3 => u64,
+    I16x16V3 => i16,
+);
+
 
 const fn shuffle_to_m256i(bitmask: i32) -> arch::__m256i {
     let mut masks = [0i32; 8];

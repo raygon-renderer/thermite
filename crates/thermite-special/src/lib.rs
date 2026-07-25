@@ -136,6 +136,10 @@ macro_rules! decl_math {
         #[doc = "For convenience, a default-policy version is provided by [`ScalarSpecialMath`], which"]
         #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`](thermite::math::policy::DefaultPolicy) for all operations."]
         #[thermite::dispatch(Self)]
+        #[diagnostic::on_unimplemented(
+            message = "`{Self}` is not a bare floating-point scalar",
+            note = "`ScalarSpecialMathWithPolicy` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the special-math traits (`SpecialMath`, `RealSpecialMath`, ...) instead."
+        )]
         pub trait ScalarSpecialMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
              $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
@@ -167,6 +171,10 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "All types that implement [`ScalarSpecialMathWithPolicy`] automatically implement this trait."]
         #[thermite::dispatch(Self)]
+        #[diagnostic::on_unimplemented(
+            message = "`{Self}` is not a bare floating-point scalar",
+            note = "`ScalarSpecialMath` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the special-math traits (`SpecialMath`, `RealSpecialMath`, ...) instead."
+        )]
         pub trait ScalarSpecialMath: ScalarSpecialMathWithPolicy {$($(
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
@@ -221,6 +229,11 @@ macro_rules! decl_math {
 
 decl_math! {
     /// Special math functions that are valid for both real and complex floating-point vectors.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide special math (`erf`, `gamma`, activations, ...)",
+        note = "The special-math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`'s `scalar_`-prefixed methods.",
+        note = "If `{Self}` already is a `FloatVector` and only the method call fails to resolve, bring the trait into scope: `use thermite_special::SpecialMath;` (or the relevant `RealSpecialMath` / `RealPrimalMath`)."
+    )]
     trait Special: TranscendentalMathWithPolicy {
         /// Computes the error function.
         ///
@@ -407,6 +420,10 @@ decl_math! {
     /// These functions either rely on ordering/sign information that has no complex analogue
     /// (e.g. `erfinv`, `probit`, `lgamma_r`), or use the real absolute value in a way that
     /// makes them non-holomorphic (e.g. `algebraic_sigmoid`).
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide real-valued special math (`erfinv`, `probit`, `lgamma_r`, ...)",
+        note = "`RealSpecialMath` is only meaningful for real-valued float vectors - complex number types deliberately do not implement it. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
+    )]
     trait RealSpecial: SpecialMathWithPolicy {
         /// Computes the inverse error function.
         fn erfinv[][](self: Self) -> Self;
@@ -495,6 +512,10 @@ decl_math! {
     ///
     /// Each `*_d` method mirrors the like-named value-only function in [`SpecialMath`] /
     /// [`RealSpecialMath`], returning that same value as the first tuple element.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` does not provide value-and-derivative special math (`softplus_d`, `gelu_d`, ...)",
+        note = "`RealPrimalMath` builds on `RealSpecialMath` and is only meaningful for real-valued float vectors. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
+    )]
     trait RealPrimal: RealSpecialMathWithPolicy {
         /// [`softplus`](SpecialMath::softplus) together with its derivative w.r.t. `x`
         /// (the logistic sigmoid `$\sigma(kx)$`).

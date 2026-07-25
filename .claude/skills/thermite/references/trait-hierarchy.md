@@ -1,8 +1,8 @@
 # The vector trait hierarchy
 
-All of these live in `thermite::vector` (re-exported by the prelude) and are
-defined in `crates/thermite/src/vector/mod.rs`. Constrain generic code on the
-weakest trait that supplies what you call ([generic-programming.md](generic-programming.md)).
+All in `thermite::vector` (prelude re-exports), defined in
+`crates/thermite/src/vector/mod.rs`. Constrain on the weakest trait that supplies
+what you call ([generic-programming.md](generic-programming.md)).
 
 ```
 GenericVector                         (mod.rs:512)
@@ -23,10 +23,9 @@ LinAlg4Vector : LinAlg3Vector         (2499)   4D/mat4 helpers
 GenericVector2/3/4                    (2200+)  named-lane accessors x()/y()/z()/w()
 ```
 
-(Line numbers drift as the file grows; when one misses, grep
-`^pub trait <Name>` in `vector/mod.rs` -- the trait names are stable.)
+(Line numbers drift; when one misses, grep `^pub trait <Name>` in `vector/mod.rs`.)
 
-Exact supertrait declarations (quoted from source):
+Exact supertrait declarations (from source):
 
 - `GenericVector: 'static + Sized + Default + Copy + Debug + ConstDefault + SplatVector + NewVector + GenericSelectable + HasIsa + CastVector + Interleave`
 - `BitwiseVector: GenericVector + <masked bitwise ops>`
@@ -55,59 +54,67 @@ On `GenericVector`:
 | `Mask` | mask type for comparisons (`GenericMask + CastMask`) |
 | `EMPTY` | all-zero value (const) |
 
-On `FloatVector`: `ExtendedPrecision` (a wider float vector, e.g. `f64` for `f32`,
+On `FloatVector`: `ExtendedPrecision` (wider float vector, e.g. `f64` for `f32`,
 used internally for compensation).
 
-On `FloatVectorWithBits`: `Bits` (unsigned int view of the raw bits), `SignedBits`
-(signed int view), `NATIVE_CAP` (a `NativeCapability` bitflag advertising native
+On `FloatVectorWithBits`: `Bits` (unsigned int view of raw bits), `SignedBits`
+(signed view), `NATIVE_CAP` (`NativeCapability` bitflag advertising native
 transcendental support).
 
-On `IntegerVector`: `Divider`, `BranchfreeDivider`, `VectorizedDivider` (the
-divisor representations used by `/`; see [vector-api.md](vector-api.md) and the
-`divider` module).
+On `IntegerVector`: `Divider`, `BranchfreeDivider`, `VectorizedDivider` (divisor
+representations used by `/`; see [vector-api.md](vector-api.md) and the `divider`
+module).
 
 ## Capability constants (compile-time, branch with `if const`)
 
-These resolve at compile time inside the `target_feature` context the dispatcher
-establishes, so `if const { V::HAS_... } { ... } else { ... }` emits different
-instruction sequences per backend at zero runtime cost
-([performance.md](performance.md) section 3):
+Resolve at compile time inside the dispatcher's `target_feature` context, so
+`if const { V::HAS_... } { ... } else { ... }` emits different instruction
+sequences per backend at zero runtime cost ([performance.md](performance.md) sec 3):
 
-- `FloatVector::HAS_APPROX_RCP`, `HAS_APPROX_RSQRT` -- whether `rcp`/`rsqrt` are real
+- `FloatVector::HAS_APPROX_RCP`, `HAS_APPROX_RSQRT` -- `rcp`/`rsqrt` are real
   approximate-reciprocal instructions (true for f32 on x86) vs `1.0/x` fallbacks.
-- `MulAddExt::HAS_TRUE_FMA` (on the FMA ops) -- whether `mul_adde` lowers to a real
-  fused instruction.
-- `BitshiftVector::HAS_TRUE_SHIFTV`, `HAS_WIDE_BYTE_SHIFTS` -- variable / byte shift
-  hardware support.
+- `MulAddExt::HAS_TRUE_FMA` (on the FMA ops) -- `mul_adde` lowers to a real fused
+  instruction.
+- `BitshiftVector::HAS_TRUE_SHIFTV`, `HAS_WIDE_BYTE_SHIFTS` -- variable / byte
+  shift hardware support.
 
-## Where the methods live (index)
+## Method index (details in [vector-api.md](vector-api.md) by section)
 
-- **GenericVector**: construction, lane access, load/store, gather/scatter, lookup,
-  widen/narrow (`extend`/`narrow`/`concat`/`split`), interleave/deinterleave,
-  reverse/swap_bytes/compress, `align::<OFFSET>` (two-vector lane window), cast/into_bits,
-  `zz`/`nz`, prefix/suffix mask, map/fold/reduce. -> [vector-api.md](vector-api.md) section 1.
-- **BitwiseVector / BitshiftVector**: `&` `|` `^` `!`, `bitandnot`, `ternlog`/`bilog`;
-  `shl`/`shr`/`shlv`/`shrv`/`shli`/`shri`, byte shifts, rotates, `reverse_bits`.
-  -> section 2.
-- **PartialOrdVector**: `cmp_lt/le/gt/ge/eq/ne -> Mask`. -> section 3.
-- **NumericVector**: `+ - * / %`, `square`, `min`/`max`/`clamp`, reductions
-  (`sum_elements`, `prod_elements`, `min_element`, `max_element`, `min_max_element`,
-  `arg_minmax`), `is_zero`/`is_all_zero`, `pairwise_sum`, `scale`, `indexed`/`offset`,
-  constants `ZERO/ONE/TWO/MIN/MAX`. -> section 4.
-- **SignedVector**: `abs`, `signum`, `copysign`, `neg`, `is_positive`/`is_negative`,
-  `NEG_ONE`, `MIN_POSITIVE`. -> section 5.
-- **IntegerVector family**: `mulhi`/`mullo`, `saturating_add/sub`, `wrapping_sum/prod`,
-  dividers, `count_ones/zeros`, `leading_ones/zeros`; signed `srai/sra/srav`,
-  `avg_floor/ceil`, `mulhrs` (rounded Q-format multiply); unsigned `is_power_of_two`,
-  `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`, and Morton-code
-  (Z-order) interleave: `morton::<N>([Self; N])` / `reverse_morton::<N>()`. -> section 6.
-- **FloatVector**: `sqrt`, `rcp`, `rsqrt`, `floor/ceil/round/trunc/fract`, `mix`,
-  `next_up/down`, `mul_sign`, `signed_zero`, `one_minus_sq`, classification
-  (`is_nan/finite/infinite/normal/subnormal`), constants
-  `HALF/NEG_ZERO/INFINITY/NEG_INFINITY/NAN/EPSILON`, and the FMA family
-  (`mul_add(e)`, `mul_sub(e)`, `nmul_add(e)`, `nmul_sub(e)`). -> section 7.
-- **FloatVectorWithBits**: `native_ldexp`/`native_frexp`, `native_sin_cos`/... (unsafe,
-  gated by `NATIVE_CAP`), `total_order`/`linear_order`. -> section 8.
-- **LinAlg3Vector / LinAlg4Vector**: `dot3`/`dot4`, `cross3`, `refract`, mat3/mat4
-  transpose/product/det/inverse, quaternion ops. -> [geometry.md](geometry.md) and
-  [vector-api.md](vector-api.md) section 9.
+- **GenericVector** (sec 1): construction, lane access, load/store, gather/scatter,
+  lookup, widen/narrow (`extend`/`narrow`/`concat`/`split`),
+  interleave/deinterleave, reverse/swap_bytes/compress, `align::<OFFSET>`
+  (two-vector lane window), cast/into_bits, `zz`/`nz`, prefix/suffix mask,
+  map/fold/reduce.
+- **BitwiseVector / BitshiftVector** (sec 2): `&` `|` `^` `!`, `bitandnot`,
+  `ternlog`/`bilog`; `shl`/`shr`/`shlv`/`shrv`/`shli`/`shri`, byte shifts,
+  rotates, `reverse_bits`.
+- **PartialOrdVector** (sec 3): `cmp_lt/le/gt/ge/eq/ne -> Mask`.
+- **NumericVector** (sec 4): `+ - * / %`, `square`, `min`/`max`/`clamp`,
+  reductions (`sum_elements`, `prod_elements`, `min_element`, `max_element`,
+  `min_max_element`, `arg_minmax`), `is_zero`/`is_all_zero`, `pairwise_sum`,
+  `scale`, `indexed`/`offset`, constants `ZERO/ONE/TWO/MIN/MAX`.
+- **SignedVector** (sec 5): `abs`, `signum`, `copysign`, `neg`,
+  `is_positive`/`is_negative`, `NEG_ONE`, `MIN_POSITIVE`.
+- **IntegerVector family** (sec 6): `mulhi`/`mullo`, `saturating_add/sub`,
+  `wrapping_sum/prod`, dividers, `count_ones/zeros`, `leading_ones/zeros`; signed
+  `srai/sra/srav`, `avg_floor/ceil`, `mulhrs` (rounded Q-format multiply);
+  unsigned `is_power_of_two`, `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`,
+  Morton (Z-order) interleave `morton::<N>([Self; N])` / `reverse_morton::<N>()`.
+- **FloatVector** (sec 7): `sqrt`, `rcp`, `rsqrt`, `floor/ceil/round/trunc/fract`,
+  `mix`, `next_up/down`, `mul_sign`, `signed_zero`, `one_minus_sq`,
+  classification (`is_nan/finite/infinite/normal/subnormal`), constants
+  `HALF/NEG_ZERO/INFINITY/NEG_INFINITY/NAN/EPSILON`, FMA family
+  (`mul_add(e)`, `mul_sub(e)`, `nmul_add(e)`, `nmul_sub(e)`).
+- **FloatVectorWithBits** (sec 8): `native_ldexp`/`native_frexp`,
+  `native_sin_cos`/... (unsafe, gated by `NATIVE_CAP`),
+  `total_order`/`linear_order`.
+- **PackedFloatVector<S, F>** (sec 9): fp16/bf16/fp8 storage in u16/u8 vectors;
+  `pack` (f32 -> packed, RTNE) / `unpack` (packed -> f32, exact). Formats
+  `Fp16`/`Fp16Fast`/`Bf16`/`Fp8E4M3`/`Fp8E5M2` in `element::float::spec`.
+- **Sad16/32/64Vector<W>** (sec 10): sum of absolute differences over groups of
+  2/4/8 byte lanes of a `u8` vector into `u16`/`u32`/`u64` lanes (same total
+  width). `sad32_accum`/`sad64_accum` for blocked loops; no `sad16_accum` (u16
+  saturates). x86 `psadbw` / NEON `vpaddlq` / wasm `extadd_pairwise` natively.
+- **LinAlg3Vector / LinAlg4Vector** (sec 11 + [geometry.md](geometry.md)):
+  `dot3`/`dot4`, `cross3`, `refract`, mat3/mat4 transpose/product/det/inverse,
+  quaternion ops.

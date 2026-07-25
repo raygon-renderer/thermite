@@ -41,6 +41,8 @@ neon_float_register!(
     exp_mask: 0x7F80_0000, approx: yes
 );
 
+neon_extend_scalar!(F32x4Neon, elem: f32);
+
 // f32x4 -> f64x4 (ExtendedPrecision): promote each half with `vcvt`.
 #[thermite_macros::inline_always]
 impl CastRegister<F32x4Neon> for ArrayRegister<super::F64x2Neon, 2> {

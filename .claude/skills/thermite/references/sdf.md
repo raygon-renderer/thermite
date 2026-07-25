@@ -1,20 +1,12 @@
 # thermite-sdf
 
-Signed distance fields (SDFs): a large library of distance primitives plus
-combinators and domain transforms, all generic over a float vector so they
-evaluate many points in parallel and run on any backend. Builds on
+Signed distance fields: distance primitives + combinators + domain transforms,
+generic over a float vector (many points in parallel, any backend). Builds on
 `thermite-geometry`.
 
-```toml
-# depends on thermite + thermite-geometry (pulled in transitively)
-thermite-sdf = { git = "https://github.com/raygon-renderer/thermite" }
-```
-
-The Thermite source ships two full worked examples as the authoritative usage
-reference -- `crates/thermite-sdf/examples/raymarch.rs` (sphere-tracing a scene
-to a PNG) and `crates/thermite-sdf/examples/voronoi.rs`. They are the best
-starting point for a real SDF pipeline; read them rather than running them in
-the Thermite tree.
+Authoritative usage reference: the worked examples
+`crates/thermite-sdf/examples/raymarch.rs` (sphere-tracing a scene to PNG) and
+`crates/thermite-sdf/examples/voronoi.rs` -- read them for a real SDF pipeline.
 
 ## The traits
 

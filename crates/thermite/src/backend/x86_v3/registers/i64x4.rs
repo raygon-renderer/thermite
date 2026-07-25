@@ -176,6 +176,8 @@ impl Register for I64x4V3 {
 
     impl_native_radix3!(arch::_mm256_interleave3_epi64, arch::_mm256_deinterleave3_epi64);
 
+    impl_native_extract!(@epi64x4);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi64x(value) }
     }

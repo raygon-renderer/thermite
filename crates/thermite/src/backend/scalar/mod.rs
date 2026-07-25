@@ -37,6 +37,14 @@ impl NativeIsa for Scalar {
 
     type NativeAlignment = ();
 
+    // Prefetch is a memory hint, not a SIMD op: the scalar backend gets the host's
+    // real instruction wherever one exists (x86, aarch64), not a no-op.
+    const HAS_PREFETCH: bool = crate::backend::prefetch::HAS_PREFETCH;
+
+    fn prefetch<const LOCALITY: u8, const WRITE: bool>(ptr: *const u8) {
+        crate::backend::prefetch::prefetch::<LOCALITY, WRITE>(ptr);
+    }
+
     #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
     unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
         unsafe { Ok(crate::backend::x86::sse2::disable_denormals()) }
@@ -123,6 +131,58 @@ impl Simd for Scalar {
     type u8x8 = ArrayRegister<u8, 8>;
 }
 
+// Same-width, different-lane-count reinterprets of the 16-byte scalar byte register, so
+// it can be viewed as wider accumulator lanes (the SAD family). These are distinct
+// `ArrayRegister` shapes rather than one shared intrinsic, so they transmute by value;
+// the element-wise array bitcast only relates arrays of equal lane count.
+impl_bit_casts_transmute! {
+    ArrayRegister<u8, 16> as ArrayRegister<u16, 8>,
+    ArrayRegister<u8, 16> as ArrayRegister<u32, 4>,
+    ArrayRegister<u8, 16> as ArrayRegister<u64, 2>,
+    // ... and the same-width pairs one and two element sizes up (the 2:1 and 4:1
+    // array ratios already come from the generic impls in `register/array.rs`).
+    ArrayRegister<u16, 8> as ArrayRegister<u64, 2>,
+    ArrayRegister<u16, 2> as u32,
+    ArrayRegister<u16, 4> as u64,
+    ArrayRegister<u32, 2> as u64,
+}
+
+impl_sad!(ArrayRegister<u8, 16> => (ArrayRegister<u16, 8>, ArrayRegister<u32, 4>, ArrayRegister<u64, 2>));
+
+// Sub-native byte ladder: lane-wise (see `impl_sad_scalar!`).
+impl_sad_scalar! {
+    ArrayRegister<u8, 8> => (ArrayRegister<u16, 4>, ArrayRegister<u32, 2>, u64),
+    ArrayRegister<u8, 4> => (ArrayRegister<u16, 2>, u32, u64),
+}
+
+// Wider-element SAD. The scalar backend is the differential oracle, so every rung takes
+// the obvious lane-wise path rather than a reinterpret + SWAR cascade.
+impl_sad_u16! {
+    @scalar
+    ArrayRegister<u16, 8> => (ArrayRegister<u32, 4>, ArrayRegister<u64, 2>),
+    ArrayRegister<u16, 4> => (ArrayRegister<u32, 2>, u64),
+}
+
+impl_sad_u32! {
+    @scalar
+    ArrayRegister<u32, 4> => ArrayRegister<u64, 2>,
+    ArrayRegister<u32, 2> => u64,
+    ArrayRegister<u32, 8> => ArrayRegister<u64, 4>,
+    ArrayRegister<u32, 16> => ArrayRegister<u64, 8>,
+}
+
+impl_sad_u16! {
+    @scalar
+    ArrayRegister<u16, 16> => (ArrayRegister<u32, 8>, ArrayRegister<u64, 4>),
+}
+
+// The scalar backend's `xN` slots are the bare 1-lane elements, so every grouping is
+// partial there: one output lane summing the register's single value.
+impl_sad_scalar!(u8 => (u16, u32, u64));
+
+impl_sad_u16!(@scalar u16 => (u32, u64));
+impl_sad_u32!(@scalar u32 => u64);
+
 impl Simd3 for Scalar {
     type usizex3 = ArrayRegister<USize, 3>;
 
@@ -152,7 +212,7 @@ macro_rules! impl_extends {
     })*};
 }
 
-impl_extends!(f32, i32, u32, f64, i64, u64);
+impl_extends!(f32, i32, u32, f64, i64, u64, i8, i16, u8, u16);
 
 impl_newregister!(f32, i32, u32, f64, i64, u64);
 

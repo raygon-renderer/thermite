@@ -763,6 +763,42 @@ where
     }
 }
 
+/// Stamp the extend-from-scalar impl (`ExtendRegister<$elem>`) on `ReducedRegister`
+/// for every scalar element type, satisfying the `Register: ExtendRegister<Self::Element>`
+/// supertrait for every reduced width on every backend at once.
+///
+/// The inner register `R` stays *generic* -- that is what makes this cover the
+/// `Simd3A`/`Simd3` associated-type defaults (`ReducedRegister<S::f32x4, U1>` and
+/// friends), whose inner is an opaque projection that no concrete stamp could name.
+///
+/// The `FROM` type, on the other hand, MUST be a concrete scalar. Written with an
+/// opaque `R::Element` as `FROM` it overlaps the extend-from-inner impl above
+/// (`ExtendRegister<ReducedRegister<R, N>> for R`), since the compiler cannot prove
+/// an associated type distinct from `ReducedRegister<_, _>`. A concrete `f32` is
+/// provably distinct, so there is no overlap.
+macro_rules! impl_reduced_extend_from_scalar {
+    ($($elem:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl<R, N: Unsigned> ExtendRegister<$elem> for ReducedRegister<R, N>
+        where
+            R: Register<Element = $elem> + CoreReducible<N> + ExtendRegister<$elem>,
+        {
+            fn extend(value: Storage<$elem>) -> Storage<Self> {
+                // The scalar lands in lane 0 with the rest zeroed, which is exactly
+                // the reduced register's dead-upper-lane invariant.
+                ReducedRegister(R::extend(value), PhantomData)
+            }
+
+            fn narrow(value: Storage<Self>) -> Storage<$elem> {
+                R::narrow(value.0)
+            }
+        }
+    )*};
+}
+
+// `usize` needs no entry: `FindUSize` aliases the `usizexN` slots onto `u32`/`u64`.
+impl_reduced_extend_from_scalar!(f32, f64, i8, i16, i32, i64, u8, u16, u32, u64);
+
 #[rustfmt::skip] #[thermite_macros::reduced_impl]
 impl<R: PartialOrdRegister, N: Unsigned> PartialOrdRegister for ReducedRegister<R, N> where R: Reducible<N> {
     fn eq(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}

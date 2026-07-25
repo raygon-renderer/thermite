@@ -3,8 +3,8 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 
 mod dispatch;
-mod late_bound;
 mod internal;
+mod late_bound;
 
 /// Compile-time ISA dispatch for functions, `impl` blocks, traits, and modules.
 ///

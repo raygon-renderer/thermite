@@ -88,7 +88,8 @@ const SIMD_VECTOR_TYPES: &[&str] = &[
     "f64x2", "f64x4", "f64x8", "f64x16", "i64x2", "i64x4", "i64x8", "i64x16", "u64x2", "u64x4", "u64x8", "u64x16",
     "usizex2", "usizex4", "usizex8", "usizex16", "f32xN", "i32xN", "u32xN", "f64xN", "i64xN", "u64xN", "usizexN",
     "usizex3A", "f32x3A", "i32x3A", "u32x3A", "f64x3A", "i64x3A", "u64x3A", "usizex3", "f32x3", "i32x3", "u32x3",
-    "f64x3", "i64x3", "u64x3",
+    "f64x3", "i64x3", "u64x3", "i16x2", "u16x2", "i16x4", "u16x4", "i16x8", "u16x8", "i16x16", "u16x16", "i8x2",
+    "u8x2", "i8x4", "u8x4", "i8x8", "u8x8", "i8x16", "u8x16", "i16xN", "u16xN", "i8xN", "u8xN",
 ];
 
 /// Holds the directly parsed attributes (no intermediate Punctuated tree).
@@ -1118,7 +1119,12 @@ fn dispatch_dyn_call(input: DispatchDynCall) -> proc_macro::TokenStream {
     match &binder {
         Some(ident) => {
             let mut count = 0;
-            substitute_ident(expr.to_token_stream(), &ident.to_string(), &TokenStream::new(), &mut count);
+            substitute_ident(
+                expr.to_token_stream(),
+                &ident.to_string(),
+                &TokenStream::new(),
+                &mut count,
+            );
             if count == 0 {
                 return syn::Error::new(
                     ident.span(),

@@ -1,13 +1,8 @@
 # thermite-special
 
-Extended special functions, all generic over any float vector (and therefore over
-composite types too). Same trait pattern as the core math library: a `_p::<P>()`
-policy variant for every method, a default-policy method without the suffix, and a
-`scalar_`-prefixed surface on `f32`/`f64`.
-
-```toml
-thermite-special = { git = "https://github.com/raygon-renderer/thermite" }
-```
+Special functions, generic over any float vector (composites too). Same trait
+pattern as core math: `_p::<P>()` policy variant per method, default-policy
+method without suffix, `scalar_`-prefixed surface on `f32`/`f64`.
 
 ```rust
 use thermite::prelude::*;
@@ -17,10 +12,9 @@ fn activation<V: RealSpecialMath>(x: V, beta: V) -> (V, V) { x.swish_d(beta) }
 let e = Vector::<f64>::splat(1.0).erf();   // 0.842700792949715
 ```
 
-`erf` runs generically on `Vector<f64>` and on native `f32xN` via dispatch, like any
-other math trait. The blanket impl is
-`impl<E, V: FloatVector<Element=E>> SpecialMathWithPolicy for V where V: SpecializedSpecialMath<E>`,
-so anything that is a float vector gets the whole surface.
+Blanket impl:
+`impl<E, V: FloatVector<Element=E>> SpecialMathWithPolicy for V where V: SpecializedSpecialMath<E>`
+-- any float vector gets the whole surface.
 
 ## `SpecialMath` (real and complex vectors; requires `TranscendentalMath`)
 

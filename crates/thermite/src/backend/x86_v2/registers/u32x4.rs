@@ -173,6 +173,8 @@ impl Register for U32x4V2 {
 
     impl_native_radix3!(arch::_mm_interleave3_epi32, arch::_mm_deinterleave3_epi32);
 
+    impl_native_extract!(@epi32x4);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi32(value as i32) }
     }

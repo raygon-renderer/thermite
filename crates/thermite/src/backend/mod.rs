@@ -5,6 +5,8 @@ mod macros;
 
 pub mod generic;
 
+pub mod prefetch;
+
 pub mod scalar;
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

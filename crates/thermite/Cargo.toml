@@ -19,7 +19,7 @@ include = ["/src", "/README.md", "/GUIDE.md", "/katex-header.html", "/LICENSE-AP
 workspace = true
 
 [package.metadata.docs.rs]
-features = ["document_registers", "std"]
+features = ["document_registers", "std", "avx2-f16c"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
@@ -149,6 +149,10 @@ simba = { version = "0.10", features = ["wide"] }
 
 [[bench]]
 name = "math"
+harness = false
+
+[[bench]]
+name = "radixby"
 harness = false
 
 [[bench]]

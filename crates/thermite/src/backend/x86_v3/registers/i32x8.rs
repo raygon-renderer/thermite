@@ -179,6 +179,8 @@ impl Register for I32x8V3 {
 
     impl_native_radix3!(arch::_mm256_interleave3_epi32, arch::_mm256_deinterleave3_epi32);
 
+    impl_native_extract!(@epi32x8);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi32(value) }
     }

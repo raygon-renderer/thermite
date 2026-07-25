@@ -23,8 +23,15 @@ pub mod sse {
 
         _MM_FROUND_CEIL, _MM_FROUND_CUR_DIRECTION, _MM_FROUND_FLOOR, _MM_FROUND_NEARBYINT, _MM_FROUND_NINT,
         _MM_FROUND_NO_EXC, _MM_FROUND_RAISE_EXC, _MM_FROUND_RINT, _MM_FROUND_TO_NEAREST_INT, _MM_FROUND_TO_NEG_INF,
-        _MM_FROUND_TO_POS_INF, _MM_FROUND_TO_ZERO, _MM_FROUND_TRUNC
+        _MM_FROUND_TO_POS_INF, _MM_FROUND_TO_ZERO, _MM_FROUND_TRUNC,
+
+        _MM_HINT_ET0, _MM_HINT_ET1, _MM_HINT_NTA, _MM_HINT_T0, _MM_HINT_T1, _MM_HINT_T2
     }
+
+    // Software prefetch is the same instruction at every x86 tier, so it lives in
+    // the shared, target-generic module; re-exported here so register/ISA code can
+    // reach it through the usual `arch::` namespace.
+    pub use crate::backend::prefetch::{HAS_PREFETCH, prefetch};
 
     import_intrinsics! {
         _mm_add_ps, _mm_add_ss, _mm_and_ps, _mm_andnot_ps, _mm_cmpeq_ps, _mm_cmpeq_ss, _mm_cmpge_ps, _mm_cmpge_ss,

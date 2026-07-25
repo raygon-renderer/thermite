@@ -188,6 +188,8 @@ impl Register for I8x16V1 {
         unsafe { arch::_mm_loadu_si128(value.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@epi8x16_v1);
+
     fn single(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_setr_epi8(value, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) }
     }

@@ -3248,3 +3248,277 @@ where
     array::ArrayRegister<f32, N>: FloatRegister<Element = f32, Lanes = Self::Lanes, Bits: CastRegister<Self>>,
 {
 }
+
+// =====================================================================================
+// Sum of absolute differences (SAD).
+//
+// `SadN` sums `N / 8` consecutive byte-lanes of `|a - b|` into one `uN` lane, so the
+// output register is always the SAME total width as the input (group bytes * 8 == output
+// bits) and the lane count is `LANES / (N / 8)`. That same-width property is what lets
+// the generic default simply bit-cast and run a SWAR cascade.
+//
+// The lane-count relation is deliberately NOT expressed in the bounds. Like
+// [`BitCastRegister`], it is "enforced simply by the fact that it will only be
+// implemented for" correctly-shaped pairs - the per-backend stamping macro and the
+// `Simd` slot bounds pin the exact output register. Encoding `Lanes = Quot<Lanes, U8>`
+// instead would drag a `typenum::Div` obligation through every emulated container and
+// produce an unsatisfiable `U0` for the sub-native widths.
+//
+// The u64 form is the widest grouping and the one x86 does in a single `psadbw` (SSE2,
+// so every tier); the narrower groupings are the single-instruction cases on NEON
+// (`vpaddl`) and wasm (`extadd_pairwise`). Every backend gets a correct SWAR default and
+// overrides where its hardware wins.
+// =====================================================================================
+
+/// Sum `2` consecutive byte-lanes of `|a - b|` into each `u16` lane of `W`.
+///
+/// Output lanes: `Self::LANES / 2`, same total width. Each result is at most `2 * 255 =
+/// 510`, so no lane can overflow. There is no accumulating form: a `u16` lane saturates
+/// after only ~128 accumulations, so callers that reduce over a long run should widen
+/// deliberately or use [`Sad32Register`] / [`Sad64Register`].
+pub trait Sad16Register<W>: UnsignedIntegerRegister<Unsigned = Self>
+where
+    W: UnsignedIntegerRegister<Element = u16>,
+{
+    fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<W>;
+}
+
+/// Sum `4` consecutive byte-lanes of `|a - b|` into each `u32` lane of `W`.
+///
+/// Output lanes: `Self::LANES / 4`, same total width. Each result is at most `4 * 255 =
+/// 1020`, and [`sad32_accum`](Sad32Register::sad32_accum) can absorb roughly `4.2e6`
+/// accumulations before a `u32` lane overflows.
+pub trait Sad32Register<W>: UnsignedIntegerRegister<Unsigned = Self>
+where
+    W: UnsignedIntegerRegister<Element = u32>,
+{
+    fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<W>;
+
+    /// `acc + sad32(a, b)`, the accumulate step of a blocked SAD loop.
+    #[inline(always)]
+    fn sad32_accum(acc: Storage<W>, a: Storage<Self>, b: Storage<Self>) -> Storage<W> {
+        W::add(acc, Self::sad32(a, b))
+    }
+}
+
+/// Sum `8` consecutive byte-lanes of `|a - b|` into each `u64` lane of `W` - x86
+/// `PSADBW` semantics.
+///
+/// Output lanes: `Self::LANES / 8`, same total width. Each result is at most `8 * 255 =
+/// 2040`; the `u64` lane is deliberate accumulation headroom, so
+/// [`sad64_accum`](Sad64Register::sad64_accum) cannot overflow in any realistic loop
+/// (~9e15 iterations). This is the form to reach for when reducing a large byte buffer:
+/// accumulate in the `u64` lanes and reduce horizontally exactly once, at the end.
+pub trait Sad64Register<W>: UnsignedIntegerRegister<Unsigned = Self>
+where
+    W: UnsignedIntegerRegister<Element = u64>,
+{
+    fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<W>;
+
+    /// `acc + sad64(a, b)`, the accumulate step of a blocked SAD loop.
+    #[inline(always)]
+    fn sad64_accum(acc: Storage<W>, a: Storage<Self>, b: Storage<Self>) -> Storage<W> {
+        W::add(acc, Self::sad64(a, b))
+    }
+}
+
+/// Lane-wise SAD for registers narrower than 128 bits, where there is no SIMD win to be
+/// had: sum `GROUP` consecutive byte lanes of `|a - b|` into each output lane, clamped at
+/// the input lane count so a register holding fewer than one full group sums everything it
+/// has into a single lane. The `ReducedRegister`/`ArrayRegister` sub-native ladder takes
+/// this path on every backend.
+macro_rules! decl_sad_scalar {
+    ($name:ident, $ielem:ty, $oelem:ty, $group:expr) => {
+        #[inline(always)]
+        pub(crate) fn $name<C, W>(a: Storage<C>, b: Storage<C>) -> Storage<W>
+        where
+            C: UnsignedIntegerRegister<Element = $ielem>,
+            W: UnsignedIntegerRegister<Element = $oelem>,
+        {
+            let d = C::abs_diff(a, b);
+            let ds = C::as_slice(&d);
+            let n = ds.len();
+
+            let mut out = W::EMPTY;
+            {
+                let os = W::as_mut_slice(&mut out);
+                let mut j = 0;
+                while j < os.len() {
+                    let start = j * $group;
+                    let mut acc: $oelem = 0;
+                    let mut k = 0;
+                    while k < $group && start + k < n {
+                        acc += ds[start + k] as $oelem;
+                        k += 1;
+                    }
+                    os[j] = acc;
+                    j += 1;
+                }
+            }
+            out
+        }
+    };
+}
+
+decl_sad_scalar!(sad_scalar_u8_16, u8, u16, 2);
+decl_sad_scalar!(sad_scalar_u8_32, u8, u32, 4);
+decl_sad_scalar!(sad_scalar_u8_64, u8, u64, 8);
+decl_sad_scalar!(sad_scalar_u16_32, u16, u32, 2);
+decl_sad_scalar!(sad_scalar_u16_64, u16, u64, 4);
+decl_sad_scalar!(sad_scalar_u32_64, u32, u64, 2);
+
+// `u8x2` is `ArrayRegister<u8, 2>` on every backend, and its SAD outputs are the 1-lane
+// scalar registers, so these three impls cover every backend at once. Two bytes is below
+// any grouping, so `sad32`/`sad64` sum the whole register into one lane.
+#[thermite_macros::inline_always]
+impl Sad16Register<u16> for array::ArrayRegister<u8, 2> {
+    fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<u16> {
+        sad_scalar_u8_16::<Self, u16>(a, b)
+    }
+}
+
+#[thermite_macros::inline_always]
+impl Sad32Register<u32> for array::ArrayRegister<u8, 2> {
+    fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<u32> {
+        sad_scalar_u8_32::<Self, u32>(a, b)
+    }
+}
+
+#[thermite_macros::inline_always]
+impl Sad64Register<u64> for array::ArrayRegister<u8, 2> {
+    fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<u64> {
+        sad_scalar_u8_64::<Self, u64>(a, b)
+    }
+}
+
+// `u16x2` is `ArrayRegister<u16, 2>` on every backend: two u16 lanes make exactly one
+// 4-byte group and a partial 8-byte one, so both sum the whole register into one lane.
+#[thermite_macros::inline_always]
+impl Sad32Register<u32> for array::ArrayRegister<u16, 2> {
+    fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<u32> {
+        sad_scalar_u16_32::<Self, u32>(a, b)
+    }
+}
+
+#[thermite_macros::inline_always]
+impl Sad64Register<u64> for array::ArrayRegister<u16, 2> {
+    fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<u64> {
+        sad_scalar_u16_64::<Self, u64>(a, b)
+    }
+}
+
+// An `ArrayRegister` composite (`u16x16` = `[u16x8; 2]`, `u32x16` = `[u32x8; 2]`, ...) just
+// applies the inner register's SAD to each half: a group never spans two inner registers,
+// so the result is exact and every emulated width above 128 bits comes for free. The
+// output must be the array of the inner outputs, which is exactly how the wider `Simd`
+// slots are defined.
+macro_rules! impl_array_sad {
+    ($trait:ident, $method:ident, $elem:ty) => {
+        impl<C, W, const N: usize> $trait<array::ArrayRegister<W, N>> for array::ArrayRegister<C, N>
+        where
+            C: $trait<W>,
+            W: UnsignedIntegerRegister<Element = $elem>,
+            array::ArrayRegister<C, N>: UnsignedIntegerRegister<Unsigned = Self, Storage = array::ArrayRegister<C, N>>,
+            array::ArrayRegister<W, N>: UnsignedIntegerRegister<Element = $elem, Storage = array::ArrayRegister<W, N>>,
+        {
+            #[inline(always)]
+            fn $method(a: Storage<Self>, b: Storage<Self>) -> Storage<array::ArrayRegister<W, N>> {
+                let mut out = <array::ArrayRegister<W, N> as CoreRegister>::EMPTY;
+                let mut i = 0;
+                // Hand-rolled: `array::map`/`zip` do not inline in target_feature code.
+                while i < N {
+                    out.0[i] = C::$method(a.0[i], b.0[i]);
+                    i += 1;
+                }
+                out
+            }
+        }
+    };
+}
+
+impl_array_sad!(Sad16Register, sad16, u16);
+impl_array_sad!(Sad32Register, sad32, u32);
+impl_array_sad!(Sad64Register, sad64, u64);
+
+/// One SWAR fold step: `(x & mask) + ((x >> shift) & mask)`, summing adjacent
+/// `shift`-bit fields into `2 * shift`-bit fields. Written purely in register-trait ops,
+/// so it compiles for every backend.
+#[inline(always)]
+pub(crate) fn swar_fold<W: UnsignedIntegerRegister>(x: Storage<W>, shift: u32, mask: W::Element) -> Storage<W> {
+    let mask = W::splat(mask);
+    W::add(W::bitand(x, mask), W::bitand(W::shr(x, shift), mask))
+}
+
+/// Generic byte-pair sum: one fold on `u16` lanes. Backends with a widening pairwise add
+/// (NEON `vpaddlq_u8`, wasm `i16x8.extadd_pairwise_i8x16_u`) override with one instruction.
+#[inline(always)]
+pub(crate) fn sad_cascade_u8_16<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u8>,
+    W: UnsignedIntegerRegister<Element = u16> + BitCastRegister<C>,
+{
+    swar_fold::<W>(<W as BitCastRegister<C>>::from_bits(diffs), 8, 0x00ff)
+}
+
+/// Generic 4-byte group sum: fold to `u16` fields, then to `u32` fields.
+#[inline(always)]
+pub(crate) fn sad_cascade_u8_32<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u8>,
+    W: UnsignedIntegerRegister<Element = u32> + BitCastRegister<C>,
+{
+    let x = <W as BitCastRegister<C>>::from_bits(diffs);
+    let x = swar_fold::<W>(x, 8, 0x00ff_00ff);
+    swar_fold::<W>(x, 16, 0x0000_ffff)
+}
+
+/// Generic 8-byte group sum: fold to `u16`, `u32`, then `u64` fields. The final step
+/// needs no pre-mask - the high half is garbage that the trailing mask discards.
+#[inline(always)]
+pub(crate) fn sad_cascade_u8_64<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u8>,
+    W: UnsignedIntegerRegister<Element = u64> + BitCastRegister<C>,
+{
+    let x = <W as BitCastRegister<C>>::from_bits(diffs);
+    let x = swar_fold::<W>(x, 8, 0x00ff_00ff_00ff_00ff);
+    let x = swar_fold::<W>(x, 16, 0x0000_ffff_0000_ffff);
+    W::bitand(W::add(x, W::shr(x, 32)), W::splat(0x0000_0000_ffff_ffff))
+}
+
+/// Sum adjacent `u16` lane pairs of `|a - b|` into `u32` lanes: one fold.
+#[inline(always)]
+pub(crate) fn sad_cascade_u16_32<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u16>,
+    W: UnsignedIntegerRegister<Element = u32> + BitCastRegister<C>,
+{
+    swar_fold::<W>(<W as BitCastRegister<C>>::from_bits(diffs), 16, 0x0000_ffff)
+}
+
+/// Sum groups of four `u16` lanes into `u64` lanes. After the first fold each 32-bit field
+/// holds at most `2 * 65535`, so the cheap add-then-mask final step cannot overflow.
+#[inline(always)]
+pub(crate) fn sad_cascade_u16_64<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u16>,
+    W: UnsignedIntegerRegister<Element = u64> + BitCastRegister<C>,
+{
+    let x = <W as BitCastRegister<C>>::from_bits(diffs);
+    let x = swar_fold::<W>(x, 16, 0x0000_ffff_0000_ffff);
+    W::bitand(W::add(x, W::shr(x, 32)), W::splat(0x0000_0000_ffff_ffff))
+}
+
+/// Sum adjacent `u32` lane pairs of `|a - b|` into `u64` lanes.
+///
+/// Unlike the narrower cascades this MUST mask before adding: two `u32` absolute
+/// differences can each reach `u32::MAX`, so their sum needs 33 bits and the cheap
+/// add-then-mask form used above would truncate it.
+#[inline(always)]
+pub(crate) fn sad_cascade_u32_64<C, W>(diffs: Storage<C>) -> Storage<W>
+where
+    C: UnsignedIntegerRegister<Element = u32>,
+    W: UnsignedIntegerRegister<Element = u64> + BitCastRegister<C>,
+{
+    swar_fold::<W>(<W as BitCastRegister<C>>::from_bits(diffs), 32, 0x0000_0000_ffff_ffff)
+}

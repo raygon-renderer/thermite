@@ -181,6 +181,8 @@ impl Register for U16x16V3 {
         unsafe { arch::_mm256_loadu_si256(arr.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@epi16x16);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi16(value as i16) }
     }

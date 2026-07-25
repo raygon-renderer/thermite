@@ -49,6 +49,12 @@ impl_newregister!(
     F32x4Wasm, I32x4Wasm, U32x4Wasm, F64x2Wasm, I64x2Wasm, U64x2Wasm, I16x8Wasm, U16x8Wasm, I8x16Wasm, U8x16Wasm
 );
 
+// The other seven natives carry hand-written element-extend impls in their own
+// register files; these three did not, and the x2 halves need them to reach the
+// scalar rung. `single` is `f32x4(v, 0, 0, 0)` and `extract` is a native
+// `*_extract_lane`, so the generic stamp is the same codegen either way.
+impl_native_extend_from_scalar!(F32x4Wasm => f32, I32x4Wasm => i32, U32x4Wasm => u32);
+
 impl HasIsa for Wasm {
     const ISA: InstructionSet = arch::ISA;
 }
@@ -62,6 +68,10 @@ impl NativeIsa for Wasm {
     type Native8Width = generic_array::typenum::U16;
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
+
+    // No `prefetch` override: WebAssembly has no software-prefetch hint (the engine's
+    // own JIT/host does what it can), so the trait's no-op default is the honest
+    // lowering and `HAS_PREFETCH` stays false.
 }
 
 #[thermite_macros::inline_always]
@@ -179,6 +189,92 @@ impl_packed_fp8! {
     half8::U8x8Wasm => ArrayRegister<F32x4Wasm, 2>,
     U8x16Wasm => ArrayRegister<F32x4Wasm, 4>,
 }
+
+// Same-width, different-lane-count reinterprets of the byte register, so it can be viewed
+// as wider accumulator lanes (the SAD family). Everything is `v128`, so identity.
+impl_bit_casts_identity! {
+    U8x16Wasm as U16x8Wasm,
+    U8x16Wasm as U32x4Wasm,
+    U8x16Wasm as U64x2Wasm,
+}
+
+// Sub-native byte ladder: lane-wise (see `impl_sad_scalar!`).
+impl_sad_scalar! {
+    half8::U8x8Wasm => (half16::U16x4Wasm, U32x2Wasm, u64),
+    half8::U8x4Wasm => (ArrayRegister<u16, 2>, u32, u64),
+}
+
+// Wider-element SAD. `u32x4_extadd_pairwise_u16x8` is the native `u16` pair sum; the rest
+// reinterpret and fold (everything is `v128`, so the casts are identity).
+impl_bit_casts_identity! {
+    U16x8Wasm as U32x4Wasm,
+    U16x8Wasm as U64x2Wasm,
+    U32x4Wasm as U64x2Wasm,
+}
+
+const _: () = {
+    use crate::register::{Sad32Register, Sad64Register, UnsignedIntegerRegister};
+
+    #[thermite_macros::inline_always]
+    impl Sad32Register<U32x4Wasm> for U16x8Wasm {
+        fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Wasm> {
+            arch::u32x4_extadd_pairwise_u16x8(Self::abs_diff(a, b))
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x2Wasm> for U16x8Wasm {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Wasm> {
+            let x = arch::u32x4_extadd_pairwise_u16x8(Self::abs_diff(a, b));
+            arch::v128_and(
+                arch::u64x2_add(x, arch::u64x2_shr(x, 32)),
+                arch::u64x2_splat(0xffff_ffff),
+            )
+        }
+    }
+};
+
+impl_sad_u32!(@swar U32x4Wasm => U64x2Wasm);
+
+// Sub-native rungs: lane-wise.
+impl_sad_u16!(@scalar half16::U16x4Wasm => (U32x2Wasm, u64));
+impl_sad_u32!(@scalar U32x2Wasm => u64);
+
+// SIMD128 has widening pairwise adds for the two narrow groupings
+// (`extadd_pairwise`), so 2- and 4-byte SAD are one instruction past the absolute
+// difference. There is no `i64x2` extadd, so the 8-byte grouping chains both and folds
+// the final u32 pair into a u64 lane by hand - still well short of the full SWAR cascade.
+const _: () = {
+    use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
+
+    #[thermite_macros::inline_always]
+    impl Sad16Register<U16x8Wasm> for U8x16Wasm {
+        fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x8Wasm> {
+            arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b))
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad32Register<U32x4Wasm> for U8x16Wasm {
+        fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Wasm> {
+            arch::u32x4_extadd_pairwise_u16x8(arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b)))
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x2Wasm> for U8x16Wasm {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Wasm> {
+            let x = arch::u32x4_extadd_pairwise_u16x8(arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b)));
+            // Each u64 lane now holds two independent u32 sums; add them and drop the
+            // high half. (`extend_low`/`extend_high` would pair lanes 0+2 / 1+3, which is
+            // the wrong grouping.)
+            arch::v128_and(
+                arch::u64x2_add(x, arch::u64x2_shr(x, 32)),
+                arch::u64x2_splat(0xffff_ffff),
+            )
+        }
+    }
+};
 
 impl Simd3 for Wasm {
     type usizex3 = <Self as Simd3A>::usizex3A;

@@ -1,11 +1,10 @@
 # Performance: writing fast, accurate, portable kernels
 
-Everything here is generic over the trait hierarchy, so it applies to every backend
-at once -- and is drawn from real hot paths (the elliptic-integral and
-transcendental kernels). The
-theme: **the compiler will not reassociate FP math, will not pick the cheapest
-hardware primitive, and will not hoist capability-specific paths -- you do that
-once, in generic code, and every backend benefits.**
+All generic over the trait hierarchy (applies to every backend at once), drawn
+from real hot paths (elliptic-integral and transcendental kernels). Theme: **the
+compiler will not reassociate FP math, pick the cheapest hardware primitive, or
+hoist capability-specific paths -- you do that once, in generic code, and every
+backend benefits.**
 
 ## 1. FMA: pick the right variant
 
@@ -148,7 +147,15 @@ conditionally-invalid term -- use `select` to keep the good lane.
 - Bare closures passed to `std` combinators (`map`, `from_fn`) often don't inline
   either. `#[inline(always)]` helpers are fine; bare closures are not.
 
-## 12. Verify your own kernels
+## 12. Bounds checks throttle SIMD kernels
+
+`from_slice`/`copy_to_slice` bounds checks inside a hot loop cost more than a
+compare: they break LLVM's block scheduling around the SIMD ops (in one real
+kernel this was the *entire* performance gap vs RustFFT). Hoist one length
+assert before the loop, or elide with `core::hint::assert_unchecked` on the
+index bound, so the loop body is check-free and schedules as a single block.
+
+## 13. Verify your own kernels
 
 - Keep tight accuracy tests (e.g. `1e-13` for f64) so a "harmless" transform is
   *proven* harmless; test boundary cases.

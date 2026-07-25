@@ -24,6 +24,10 @@ pub use math::*;
 
 pub use crate::backend::generic::polyfills::*;
 
+// `prfm` is not a NEON instruction and needs no register plumbing, so the shared,
+// target-generic implementation is simply re-exported into `arch::`.
+pub use crate::backend::prefetch::{HAS_PREFETCH, prefetch};
+
 #[inline(always)]
 pub const fn identity<T>(value: T) -> T {
     value

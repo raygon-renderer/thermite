@@ -182,6 +182,8 @@ impl Register for U64x2V1 {
         unsafe { arch::_mm_loadu_si128(value.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@epi64x2_v1);
+
     fn single(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_setr_epi64x(value as i64, 0) }
     }

@@ -158,6 +158,7 @@ use crate::{
     simd::{NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
+#[thermite_macros::inline_always]
 impl NativeIsa for Neon {
     type Registers = generic_array::typenum::U32; // 32 128-bit V registers on aarch64
 
@@ -167,6 +168,12 @@ impl NativeIsa for Neon {
     type Native8Width = generic_array::typenum::U16;
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
+
+    const HAS_PREFETCH: bool = arch::HAS_PREFETCH; // `prfm` is baseline aarch64
+
+    fn prefetch<const LOCALITY: u8, const WRITE: bool>(ptr: *const u8) {
+        arch::prefetch::<LOCALITY, WRITE>(ptr);
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -283,6 +290,89 @@ impl_packed_fp8! {
     half8::U8x8Neon => ArrayRegister<F32x4Neon, 2>,
     U8x16Neon => ArrayRegister<F32x4Neon, 4>,
 }
+
+// Same-width, different-lane-count reinterprets of the byte register, so it can be viewed
+// as wider accumulator lanes (the SAD family). Bit-casts only -- unlike the sibling
+// reinterprets above these relate different lane counts, so there is no meaningful
+// `CastMaskRegister` counterpart.
+impl_bit_casts! {
+    U8x16Neon as U16x8Neon => vreinterpretq_u16_u8,
+    U8x16Neon as U32x4Neon => vreinterpretq_u32_u8,
+    U8x16Neon as U64x2Neon => vreinterpretq_u64_u8,
+    // ... and one/two element sizes up. NEON's own SAD uses `vpaddlq` (whose types
+    // already line up), so these exist purely to satisfy the same-width reinterpret
+    // contract the `Simd` slots advertise to downstream generic code.
+    U16x8Neon as U32x4Neon => vreinterpretq_u32_u16,
+    U16x8Neon as U64x2Neon => vreinterpretq_u64_u16,
+    U32x4Neon as U64x2Neon => vreinterpretq_u64_u32,
+}
+
+// Sub-native byte ladder: lane-wise (see `impl_sad_scalar!`).
+impl_sad_scalar! {
+    half8::U8x8Neon => (half16::U16x4Neon, U32x2Neon, u64),
+    half8::U8x4Neon => (ArrayRegister<u16, 2>, u32, u64),
+}
+
+// Wider-element SAD. `vabdq_u16`/`vabdq_u32` then widening pairwise adds - the register
+// types line up exactly, so unlike the other backends NEON needs no reinterpret at all.
+const _: () = {
+    use crate::register::{Sad32Register, Sad64Register, UnsignedIntegerRegister};
+
+    #[thermite_macros::inline_always]
+    impl Sad32Register<U32x4Neon> for U16x8Neon {
+        fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Neon> {
+            unsafe { arch::vpaddlq_u16(Self::abs_diff(a, b)) }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x2Neon> for U16x8Neon {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
+            unsafe { arch::vpaddlq_u32(arch::vpaddlq_u16(Self::abs_diff(a, b))) }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x2Neon> for U32x4Neon {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
+            unsafe { arch::vpaddlq_u32(Self::abs_diff(a, b)) }
+        }
+    }
+};
+
+// Sub-native rungs: lane-wise.
+impl_sad_u16!(@scalar half16::U16x4Neon => (U32x2Neon, u64));
+impl_sad_u32!(@scalar U32x2Neon => u64);
+
+// NEON does every SAD grouping natively: `vabdq_u8` for the absolute difference (already
+// the `abs_diff` override), then a chain of widening pairwise adds. `vpaddlq_u8` sums
+// adjacent `u8` lanes into `u16`, `vpaddlq_u16` into `u32`, `vpaddlq_u32` into `u64` -
+// exactly the 2/4/8-byte groupings, and the register types line up with no reinterpret.
+// Same cascade the popcount polyfill uses. 2/3/4 instructions vs the SWAR default's ~7/11/15.
+const _: () = {
+    use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
+
+    #[thermite_macros::inline_always]
+    impl Sad16Register<U16x8Neon> for U8x16Neon {
+        fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x8Neon> {
+            unsafe { arch::vpaddlq_u8(Self::abs_diff(a, b)) }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad32Register<U32x4Neon> for U8x16Neon {
+        fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Neon> {
+            unsafe { arch::vpaddlq_u16(arch::vpaddlq_u8(Self::abs_diff(a, b))) }
+        }
+    }
+
+    #[thermite_macros::inline_always]
+    impl Sad64Register<U64x2Neon> for U8x16Neon {
+        fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
+            unsafe { arch::vpaddlq_u32(arch::vpaddlq_u16(arch::vpaddlq_u8(Self::abs_diff(a, b)))) }
+        }
+    }
+};
 
 impl Simd3 for Neon {
     type usizex3 = <Self as Simd3A>::usizex3A;

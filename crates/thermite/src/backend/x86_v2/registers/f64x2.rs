@@ -197,6 +197,8 @@ impl Register for F64x2V2 {
 
     impl_native_radix3!(arch::_mm_interleave3_pd, arch::_mm_deinterleave3_pd);
 
+    impl_native_extract!(@pd128);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_pd(value) }
     }

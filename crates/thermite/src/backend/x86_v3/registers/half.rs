@@ -27,16 +27,8 @@ impl ConcatRegister<f32> for F32x2V3 {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<f32> for F32x2V3 {
-    fn extend(value: Storage<f32>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_setr_ps(value, 0.0, 0.0, 0.0) })
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<f32> {
-        unsafe { arch::_mm_cvtss_f32(value.0) }
-    }
-}
+// `ExtendRegister<f32> for F32x2V3` comes from the generic extend-from-scalar blanket
+// in `register/reduced.rs` (F32x4V3::extend / ::narrow, same codegen).
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<F32x2V3> for super::F32x4V3 {
@@ -65,16 +57,7 @@ impl ConcatRegister<i32> for I32x2V3 {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<i32> for I32x2V3 {
-    fn extend(value: Storage<i32>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_setr_epi32(value, 0, 0, 0) })
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<i32> {
-        unsafe { arch::_mm_cvtsi128_si32(value.0) }
-    }
-}
+// See the F32x2V3 note above: supplied by the extend-from-scalar blanket.
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<I32x2V3> for super::I32x4V3 {
@@ -103,16 +86,7 @@ impl ConcatRegister<u32> for U32x2V3 {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<u32> for U32x2V3 {
-    fn extend(value: Storage<u32>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_setr_epu32x(value, 0, 0, 0) })
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<u32> {
-        unsafe { arch::_mm_cvtsi128_si32(value.0) as u32 }
-    }
-}
+// See the F32x2V3 note above: supplied by the extend-from-scalar blanket.
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<U32x2V3> for super::U32x4V3 {

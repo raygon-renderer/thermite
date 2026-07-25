@@ -188,6 +188,8 @@ impl Register for I16x8V2 {
         unsafe { arch::_mm_setr_epi16(value, 0, 0, 0, 0, 0, 0, 0) }
     }
 
+    impl_native_extract!(@epi16x8);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_epi16(value) }
     }

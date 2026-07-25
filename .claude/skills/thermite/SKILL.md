@@ -1,229 +1,156 @@
 ---
 name: thermite
-description: Use Thermite, the generic ISA-portable Rust SIMD library, and its companion crates (special functions, autodiff Dual, Compensated double-double, SDF, geometry, FFI). Load when writing, reviewing, or debugging code that uses thermite/thermite-* crates, GenericVector/FloatVector/NumericVector trait bounds, the policy-based math library, masks, dispatch, slice iteration, or composite vector types. ALWAYS load this skill before working on Thermite's OWN source (contributing to / modifying the thermite/thermite-* crates themselves -- adding or changing a register op, backend, math kernel, polyfill, macro, or trait), and read references/development.md first in that case. Triggers: "write a SIMD kernel", "make this generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", thermite build/test errors, and any edit under crates/thermite*/src (register/vector/backend/math/element/macros).
+description: Thermite, the generic ISA-portable Rust SIMD library, and its companion crates (thermite-special, -dual autodiff, -compensated double-double, -sdf, -geometry, -ffi). Load when writing/reviewing/debugging code using thermite/thermite-* crates - GenericVector/NumericVector/FloatVector bounds, the policy math library, masks, dispatch, slice iteration, or composite vector types (Dual/Compensated). ALWAYS load before modifying Thermite's OWN source (register op, backend, math kernel, polyfill, macro, trait) and read references/development.md first. Triggers - "write a SIMD kernel", "generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", thermite build/test errors, edits under crates/thermite*/src.
 ---
 
 # Thermite
 
-Thermite is a pure-Rust SIMD abstraction library. You write a function **once**,
-generic over a trait hierarchy (`GenericVector -> NumericVector -> FloatVector`,
-plus math traits), and it compiles to optimal code for every backend (SSE2,
-SSE4.2, AVX2, WASM SIMD128, scalar, and an experimental SPIR-V GPU path) at every
-lane count. The same generic function also runs on **composite** vector types --
-`Dual` (forward-mode autodiff), `Compensated` (double-double precision), and
-others -- with zero changes, because those types implement the same traits.
+Pure-Rust SIMD abstraction. Write a function **once** over a trait hierarchy
+(`GenericVector -> NumericVector -> FloatVector` + math traits); it compiles to
+optimal code for every backend (SSE2, SSE4.2, AVX2, WASM SIMD128, NEON, scalar,
+experimental AVX-512 + SPIR-V) at every lane count. The *same* function also runs
+on **composite** types -- `Dual` (autodiff), `Compensated` (double-double) -- with
+no changes, because they implement the same traits.
 
-This skill is for developers who **add Thermite as a dependency** to their own
-crate. It documents the core `thermite` crate plus the companion crates you can
-pull in alongside it. File paths in the sub-files (e.g. `crates/thermite/src/...`)
-point into the Thermite source so you can read the authoritative implementation;
-they are references, not files in your own project.
+This skill is for crates that **depend on** Thermite. Sub-file paths like
+`crates/thermite/src/...` point into the Thermite source (authoritative impl), not
+your project. If prose ever disagrees with the code, trust the code and fix the skill.
 
-> This skill is the source of truth for *using* Thermite, second only to the code
-> itself. Everything in it was verified against the current source. If any prose
-> ever disagrees with the code, trust the code (and fix the skill).
+**Modifying Thermite's own source** (adding an op / math fn / backend, fixing
+internals)? Read [references/development.md](references/development.md) **first** --
+it's the contributor map (crate layout, proc-macro toolbox, a full worked example
+of adding a primitive across all backends, register-vs-math-fn checklists, the
+build/test/verify loop). The user-facing references (architecture, trait-hierarchy,
+math, performance) remain load-bearing when changing the code behind them.
 
-> [!IMPORTANT]
-> **Working on Thermite's own source (adding an op, a math function, a backend,
-> fixing internals)? Read [references/development.md](references/development.md)
-> first -- before touching any file.** Most of this skill is written for people
-> who *depend on* Thermite, but development.md is the contributor map: the
-> repository/crate layout, the proc-macro toolbox, a full worked example of
-> adding a new primitive across every backend, the checklists for a register
-> primitive vs a precision-tunable math function, and the build/test/verify loop.
-> Do **not** skip the skill just because the rest of it reads as user-facing --
-> development.md is the one file that makes the internals tractable, and the
-> user-facing references (architecture, trait-hierarchy, math, performance) are
-> still load-bearing context when you change the code that backs them.
+## Add to a project
 
-## Add Thermite to your project
+Not on crates.io (core `0.2.0-beta.0`; companions are `publish = false`). Git deps:
 
-Thermite is **not on crates.io yet** (core is `0.2.0-beta.0`; the companion
-crates are `publish = false`). Depend on it via git:
+All git-only, same URL `https://github.com/raygon-renderer/thermite`. Add
+`thermite` plus only the companions you use (see the sub-file list for what each
+provides): `thermite-special`, `-dual`, `-compensated`, `-sdf`, `-geometry`.
+`-dual`/`-compensated`/`-sdf` pull in `thermite` transitively, but list it anyway
+when you name its types (you usually do).
 
-```toml
-[dependencies]
-# Core SIMD library. Default features are fine for most users; see the table below.
-thermite = { git = "https://github.com/raygon-renderer/thermite" }
-
-# Optional companion crates (each is a separate dependency; all currently git-only):
-thermite-special    = { git = "https://github.com/raygon-renderer/thermite" } # erf, gamma, activations, Lambert W, ...
-thermite-dual       = { git = "https://github.com/raygon-renderer/thermite" } # forward-mode autodiff (Dual)
-thermite-compensated = { git = "https://github.com/raygon-renderer/thermite" } # double-double precision (Compensated)
-thermite-sdf        = { git = "https://github.com/raygon-renderer/thermite" } # signed-distance fields
-thermite-geometry   = { git = "https://github.com/raygon-renderer/thermite" } # SoA Vector/Point/Ray/Bounds/Matrix
-```
-
-Only add the companions you use. `thermite-dual`, `thermite-compensated`, and
-`thermite-sdf` already depend on `thermite` transitively, so you don't need to
-list `thermite` separately unless you name its types directly (you usually do).
-
-**Toolchain: core Thermite works on stable Rust** (MSRV **1.95**, edition 2024).
-You do *not* need nightly for normal use. The optional `nightly` feature unlocks
-nightly-only paths (smarter const splat via `core_intrinsics`/`const_eval_select`,
-wasm64 SIMD, the experimental SPIR-V backend) and, if enabled, *requires* a
-nightly compiler (it `compile_error!`s otherwise). The FFI crate is the one place
-that needs nightly -- see [references/ffi.md](references/ffi.md).
+**Toolchain: stable Rust** (MSRV **1.95**, edition 2024). The `nightly` feature
+unlocks nightly-only paths (smarter const splat, wasm64 SIMD, SPIR-V) and then
+*requires* nightly (`compile_error!`s otherwise). Only FFI mandates nightly -- see
+[references/ffi.md](references/ffi.md). Crate is `no_std` by default.
 
 ### Feature flags (`thermite`)
 
-Default features are `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`. The crate is
-`no_std` by default. User-relevant flags:
+Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 
-| Feature | Default | What it does |
+| Feature | Default | Effect |
 |---|---|---|
-| `std` | off | Enables `std` (e.g. fmt in panicking paths, `num-traits/std`). Turn on if you build for a std target and want those; leave off for `no_std`. |
-| `bitvec` | **on** | Enables `bitvec` integration for masks (`dep:bitvec`). |
-| `avx2-f16c` | **on** | Assume `f16c` whenever AVX2 is present (true for all AVX2 CPUs); enables half-precision conversion intrinsics in the AVX2 backend with no extra runtime check. x86 only. |
-| `avx2-pclmul` | **on** | Assume `pclmulqdq` whenever AVX2 is present (PCLMULQDQ predates AVX2 by three years); enables the CLMUL-based 2D Morton-code fast path on u64-lane registers. x86 only. |
-| `partial-ord` | off | Implements `PartialOrd` for `Vector` (only meaningful when all lanes share the order). |
-| `strict_ieee754` | off | Follow IEEE-754 as closely as possible: implies `preserve_denormals` + `disable_fast_fma`. Significantly slower; only if you need spec-exact denormals/NaN/min-max behavior. |
+| `std` | off | Enable std (fmt in panics, `num-traits/std`). |
+| `bitvec` | **on** | `bitvec` mask integration. |
+| `avx2-f16c` | **on** | Assume `f16c` w/ AVX2 (all AVX2 CPUs have it); enables f16 conv, no runtime check. x86. |
+| `avx2-pclmul` | **on** | Assume `pclmulqdq` w/ AVX2; CLMUL 2D-Morton fast path on u64 lanes. x86. |
+| `partial-ord` | off | `PartialOrd` for `Vector` (only when all lanes share order). |
+| `strict_ieee754` | off | Spec-exact denormals/NaN/min-max; implies `preserve_denormals`+`disable_fast_fma`. Much slower. |
 | `preserve_denormals` | off | Keep denormals (required for strict IEEE-754); slower on denormal-heavy data. |
-| `ignore_denormals` | off | Flush/ignore denormals by default; slight overhead to fix them, usually cheaper than operating on them. |
-| `disable_fast_fma` | off | Use exact (but very slow) scalar `libm::fma` instead of the accurate emulated fast FMA on non-FMA backends. Only for bitwise-identical FMA results. |
-| `disable_dispatch` | off | Replace runtime ISA dispatch with `#[inline(always)]`. Bloats code and can be very slow unless everything inlines -- advanced use only. |
-| `nightly` | off | Unlocks nightly-only code paths (see toolchain note); requires a nightly compiler. |
-| `wasm` | off | Use the wasm32/wasm64 SIMD128 backend. |
+| `ignore_denormals` | off | Flush denormals by default. |
+| `disable_fast_fma` | off | Exact but very slow scalar `libm::fma` instead of accurate emulated FMA on non-FMA backends. |
+| `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
+| `nightly` | off | Nightly-only paths (requires nightly compiler). |
+| `wasm` | off | wasm32/wasm64 SIMD128 backend. |
 | `neon` | off | ARM NEON backend. |
-| `avx512-tier1..4` | off | Opt into AVX-512 backend tiers (tier4 is cutting-edge; each tier implies the lower ones). |
+| `avx512-tier1..4` | off | AVX-512 tiers (tier4 cutting-edge; each implies lower). |
 | `spirv` | off | Experimental SPIR-V GPU backend (implies `nightly`). |
 
-A common setup for a std application that wants strict numerics:
-`thermite = { git = "...", features = ["std"] }`. To go fully `no_std`, add
-`default-features = false` and re-enable just what you need.
+Strict-numerics std app: `features = ["std"]`. Fully `no_std`:
+`default-features = false` + re-enable what you need.
 
-## A complete example
+## The thesis, in one example
 
-One generic function, run on a scalar lane, native-width SIMD, `Dual` (autodiff),
-and `Compensated` (double-double) -- the whole thesis on one screen. Drop this into
-a binary that depends on `thermite`, `thermite-dual`, and `thermite-compensated`:
+One generic fn run 4 ways -- scalar, native SIMD, `Dual`, `Compensated`. The fn is
+never edited; the *type you instantiate* decides plain SIMD vs derivative vs precision.
 
 ```rust
 use thermite::prelude::*;
-use thermite::math::TranscendentalMath;
+use thermite::math::TranscendentalMath; // math trait names need explicit import to NAME in bounds
 use thermite_dual::AutoDiff;
 use thermite_compensated::Compensated;
 
-// Written ONCE, over trait bounds -- no backend, lane count, or element type named.
+// Written ONCE over trait bounds - no backend, lane count, or element named.
 fn gaussian<V: FloatVector + TranscendentalMath>(x: V) -> V { (-(x * x)).exp() }
 
 type V = Vector<f64>;
 
 fn main() {
-    // 1. Scalar (1-lane) backend -- no dispatch needed.
-    let s = gaussian(V::splat(0.5)).extract::<0>();           // 0.7788007830714049
+    let s = gaussian(V::splat(0.5)).extract::<0>();            // 0.7788007830714049 (scalar)
 
-    // 2. Native-width SIMD -- runtime-dispatched to the best ISA for this CPU.
-    let simd = thermite::dispatch_dyn!(for<S> || -> f32 {
+    let simd = thermite::dispatch_dyn!(for<S> || -> f32 {      // runtime-dispatched to best ISA
         gaussian(f32xN::splat(0.5)).extract::<0>()
     });                                                        // ~0.77880079 (f32)
 
-    // 3. Dual<V, N>: the SAME fn now returns value AND gradient.
-    //    d/dx e^{-x^2} = -2x e^{-x^2}.
-    let r = gaussian.ad([V::splat(0.5)]);
+    let r = gaussian.ad([V::splat(0.5)]);                      // value AND gradient
     let value = r.re.extract::<0>();                           // 0.7788007830714049
-    let dydx  = r.dual[0].extract::<0>();                      // -0.7788007830714049
+    let dydx  = r.dual[0].extract::<0>();                      // -0.7788... (= -2x e^{-x^2})
 
-    // 4. Compensated<V>: the SAME fn carried in double-double precision.
-    let hi = gaussian(Compensated::<V>::new(V::splat(0.5)))
+    let hi = gaussian(Compensated::<V>::new(V::splat(0.5)))    // double-double
         .value().extract::<0>();                               // 0.7788007830714049
-
-    println!("{s}  {simd}  {value}  {dydx}  {hi}");
 }
 ```
 
-`gaussian` is never edited between cases -- the *type you instantiate it with*
-decides whether you get plain SIMD, a derivative, or extra precision. (The values
-in the comments were checked against this exact code.) See
-[references/generic-programming.md](references/generic-programming.md) for the
-mechanics and [references/composite-types.md](references/composite-types.md) for
-how `Dual`/`Compensated` plug in.
-
-## The one thing to internalize
-
-Constrain on **traits**, never on a concrete backend or width:
-
-```rust
-use thermite::prelude::*;
-use thermite::math::TranscendentalMath; // math trait names need an explicit import
-
-// Works on ANY backend, ANY lane count, ANY float element -- and on Dual,
-// Compensated, etc. The caller picks the concrete type.
-fn gaussian<V: FloatVector + TranscendentalMath>(x: V) -> V {
-    (-(x * x)).exp()
-}
-```
-
-`gaussian(Vector::<f64>::splat(0.5))` runs scalar; the *same* function under
-`dispatch_dyn!` runs at AVX2 width; `gaussian.ad([V::splat(0.5)])` returns the
-value **and** its derivative. See
-[references/generic-programming.md](references/generic-programming.md) -- the
-single most important file here.
+Constrain on **traits**, never a concrete backend/width -- that is the whole point.
+Layer discipline: user code targets the `*Vector` traits ONLY. The `*Register`
+layer (`R::op(storage)`) is backend-implementation machinery -- never call it
+from user or generic code (its semantics can even differ from the vector layer,
+e.g. `bitandnot` operand order). Concrete `Vector<R>` types are a last resort
+too: legitimate mainly as the scalar 1-lane seeds (`Vector<f32>`/`Vector<f64>`)
+and at `dispatch_dyn!` boundaries; anything reusable stays generic over bounds.
+See [references/generic-programming.md](references/generic-programming.md) (read
+first) and [references/composite-types.md](references/composite-types.md).
 
 ## Quick reference
 
 ```rust
-use thermite::prelude::*;                       // Vector, Mask, the *Vector traits, SimdSlice
+use thermite::prelude::*;                       // Vector, Mask, *Vector traits, SimdSlice
 use thermite::math::{TranscendentalMath, RealMath, CoreMath, SpatialMath}; // to NAME math traits in bounds
 
-a + b   a - b   a * b   a / b   -a              // NumericVector / SignedVector ops
-a & b   a | b   a ^ b   !a                      // BitwiseVector
-a << n  a >> n                                  // BitshiftVector
+a + b  a - b  a * b  a / b  -a                  // NumericVector / SignedVector
+a & b  a | b  a ^ b  !a                         // BitwiseVector
+a << n  a >> n                                  // BitshiftVector (>> is LOGICAL; use srai/sra/srav for arithmetic)
 let m = a.cmp_lt(b); m.select(a, b)             // PartialOrdVector -> Mask, branchless select
 v.sqrt()  v.exp()  v.sin()  a.mul_adde(b, c)    // FloatVector + math + estimating-FMA
 v.sqrt_c(mask)  a.add_c(mask, b)                // masked variants: mask is the FIRST arg
 ```
 
-You compile and test all of this as part of your own crate -- a normal
-`cargo build` / `cargo test` once Thermite is in your `[dependencies]`. There is
-no separate build step for the library.
+Build/test as part of your own crate -- normal `cargo build`/`cargo test`, no
+separate library step.
 
 ## Sub-files: load what the task needs
 
 Core usage:
+- [generic-programming.md](references/generic-programming.md) -- **read first.** Functions over `*Vector` bounds; assoc types (`V::Element`/`V::Mask`/`V::LANES`); running on scalar/SIMD/composite; bound recipes; pitfalls.
+- [trait-hierarchy.md](references/trait-hierarchy.md) -- full `GenericVector..FloatVector` tree, supertraits, assoc types, which methods live where.
+- [vector-api.md](references/vector-api.md) -- method reference for the vector traits (construction, lanes, memory, gather/scatter, cast, interleave, reductions, FMA, packed fp16/bf16/fp8 storage via `PackedFloatVector`) + the `_c`/`_m`/`_z` masked system.
+- [masks.md](references/masks.md) -- `Mask<R>`, `GenericMask` (`all`/`any`/`select`/`bitmask`), casting, `zz`/`nz`.
+- [math.md](references/math.md) -- math trait families (`CoreMath`/`TranscendentalMath`/`SpatialMath`/`RealMath`/`FloatMath`), the `_p::<P>()` policy system + presets, `ScalarMath` for bare `f32`/`f64`, `FloatConsts`, FMA semantics, algorithms module.
+- [slices-and-dispatch.md](references/slices-and-dispatch.md) -- `SimdSlice` iteration (aligned/try-aligned/unaligned/streaming), alignment, `#[dispatch]`/`dispatch_dyn!`.
 
-- [references/generic-programming.md](references/generic-programming.md) -- **read first.** Writing functions once over `*Vector` bounds; associated types (`V::Element`, `V::Mask`, `V::LANES`, ...); how the same code runs on scalar, SIMD, and composite types; common bound recipes; pitfalls.
-- [references/trait-hierarchy.md](references/trait-hierarchy.md) -- the full `GenericVector ... FloatVector` tree, every trait, its supertraits and associated types, and which methods live where.
-- [references/vector-api.md](references/vector-api.md) -- method-level reference for `GenericVector`/`NumericVector`/`FloatVector` (construction, lanes, memory, gather/scatter, cast, interleave, reductions, FMA), plus the `_c`/`_m`/`_z` masked-variant system.
-- [references/masks.md](references/masks.md) -- `Mask<R>`, `GenericMask` (`all`/`any`/`select`/`bitmask`), mask casting, and `zz`/`nz` helpers.
-- [references/math.md](references/math.md) -- the math trait families (`CoreMath`, `TranscendentalMath`, `SpatialMath`, `RealMath`, `FloatMath`), the `_p::<P>()` policy system and presets, `ScalarMath` for bare `f32`/`f64`, `FloatConsts`, FMA semantics, and the algorithms module.
-- [references/slices-and-dispatch.md](references/slices-and-dispatch.md) -- slice iteration (`SimdSlice`: aligned / try-aligned / unaligned / streaming), alignment, and the `#[dispatch]` / `dispatch_dyn!` ISA macros.
-
-Composite & companion crates:
-
-- [references/composite-types.md](references/composite-types.md) -- **the compose story.** How `Dual<V, N>` (autodiff) and `Compensated<V>` (double-double) implement the vector traits by delegating to an inner `V`, so generic code differentiates / error-tracks for free. Nesting (`Dual<Compensated<V>>`) too.
-- [references/special.md](references/special.md) -- `thermite-special`: `erf`, gamma, activations (`gelu`/`swish`), Lambert W, elliptic integrals, etc., all generic over any float vector.
-- [references/sdf.md](references/sdf.md) -- `thermite-sdf`: signed-distance primitives, boolean/smooth combinators, transforms, fractals; the `SDF`/`GradientSdf`/`BoundedSdf` traits.
-- [references/geometry.md](references/geometry.md) -- `thermite-geometry`: SoA `Vector`/`Point`/`Ray`/`Bounds`/`Matrix` built on the linalg vector traits.
-- [references/ffi.md](references/ffi.md) -- `thermite-ffi`: the C ABI (`thermite_init`, batch math functions, the `Thermite` vtable), header generation, and the `release-ffi` profile.
+Composite & companions:
+- [composite-types.md](references/composite-types.md) -- **the compose story.** `Dual<V,N>` and `Compensated<V>` delegate the vector traits to inner `V` so generic code differentiates/error-tracks free. Nesting (`Dual<Compensated<V>>`).
+- [special.md](references/special.md) -- `thermite-special`: erf, gamma, activations (gelu/swish), Lambert W, elliptic integrals.
+- [sdf.md](references/sdf.md) -- `thermite-sdf`: primitives, boolean/smooth combinators, transforms, fractals; `SDF`/`GradientSdf`/`BoundedSdf`.
+- [geometry.md](references/geometry.md) -- `thermite-geometry`: SoA `Vector`/`Point`/`Ray`/`Bounds`/`Matrix`.
+- [ffi.md](references/ffi.md) -- `thermite-ffi`: C ABI, header gen, `release-ffi` profile.
 
 Cross-cutting:
+- [performance.md](references/performance.md) -- FMA-variant choice, `if const` capability gating, ILP/critical-path, cancellation-avoidance, `scale` for SPIR-V, `target_feature` codegen gotchas.
+- [architecture.md](references/architecture.md) -- **worth reading as a user.** Element -> Register -> Vector layering, backends/ISA levels, the `Simd` type hierarchy, how composites slot in; demystifies type errors.
+- [development.md](references/development.md) -- **contributor-only.** Modifying Thermite's source: crate map, proc-macro toolbox, worked example (Morton interleave across all backends), register-vs-math-fn checklists, build/test/verify loop.
 
-- [references/performance.md](references/performance.md) -- FMA-variant choice, `if const` capability gating, ILP/critical-path tricks, cancellation-avoidance, `scale` for SPIR-V, and `target_feature` codegen gotchas.
-- [references/architecture.md](references/architecture.md) -- **worth reading even as a user**: the Element -> Register -> Vector layering, backends and ISA levels, the `Simd` type hierarchy, and how composites slot in. It explains *why* the API is shaped this way and demystifies the trickier type errors. Only the lowest level (per-ISA register impls) is contributor-only.
-- [references/development.md](references/development.md) -- **contributor-only; skip if you are just using Thermite.** How to *modify Thermite's own source*: the repository/crate map, the proc-macro toolbox, a full worked example of adding a new primitive (accelerated Morton-code interleave) across every backend, the generalized checklists for a register primitive vs a precision-tunable math function, and the build/test/verify loop (`just` recipes, the differential harness, wasm/spirv/asm verification, CI).
+## Gotchas (full list in sub-files)
 
-## Gotchas that bite (full list in the sub-files)
-
-- **Bare `f32`/`f64` do not implement `FloatVector`.** Wrap a scalar in
-  `Vector::<f64>::splat(x)` (or `Vector(x)`), or use `ScalarMath`'s `scalar_`-prefixed
-  methods (`x.scalar_sin()`). See [references/math.md](references/math.md).
-- **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`,
-  `a.add_m(src, mask, b)` (merge: `src` then `mask`). Some prose docs show the old
-  `add_c(b, mask)` order -- that is wrong.
-- **Math trait names are imported anonymously by the prelude** (`as _`): their
-  methods work, but to write `<V: TranscendentalMath>` you must
-  `use thermite::math::TranscendentalMath;` explicitly.
-- **Prefer `mul_adde` (estimating FMA), not `mul_add`, for speed.** On a non-FMA
-  backend the non-`e` form lowers to a *vectorized emulated FMA* (compensated split) by
-  default -- slower than true FMA but single-rounding-accurate and still SIMD; it only
-  becomes the very slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So
-  `mul_add` is a valid accuracy choice when a slight slowdown is fine. See
-  [references/performance.md](references/performance.md).
-- **`thermite-dual` / `thermite-compensated` / `thermite-special` are `publish = false`**
-  (pre-release). Their vector-trait surfaces are complete, but a few special
-  functions still `todo!()`-panic: `bessel_j` beyond f32 `J_0` in
-  `thermite-special`, and the gamma family (`tgamma`/`lgamma`/`digamma`/`beta`)
-  plus `bessel_j` on `Dual` and `Compensated` (blocked on those upstream
-  primitives). Treat them as solid-but-WIP and grep for `todo!` before relying
-  on a special function.
+- **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
+- **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`, `a.add_m(src, mask, b)` (merge: `src` then `mask`). Old `add_c(b, mask)` order is wrong.
+- **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.
+- **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to vectorized emulated FMA (single-rounding-accurate, still SIMD) by default -- only becomes slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So `mul_add` is a valid accuracy choice.
+- **`>>` is LOGICAL even on signed vectors.** Use `srai`/`sra`/`srav` for sign-filling shifts.
+- **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
+- **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.
+- **`-dual`/`-compensated`/`-special` are `publish = false` (pre-release).** Vector-trait surfaces are complete but some special fns `todo!()`-panic: `bessel_j` beyond f32 `J_0`; the gamma family (`tgamma`/`lgamma`/`digamma`/`beta`) + `bessel_j` on `Dual`/`Compensated`. Grep `todo!` before relying on a special function.

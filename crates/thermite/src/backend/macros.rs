@@ -10,6 +10,591 @@ macro_rules! impl_packed_fp8 {
     )*};
 }
 
+/// Stamp [`BitCastRegister`](crate::register::BitCastRegister) between two registers of
+/// the same total width whose `Storage` types differ, via a by-value transmute. This is
+/// the `ArrayRegister` counterpart to [`impl_bit_casts_identity`]: the scalar backend's
+/// registers are `ArrayRegister<u8, 16>` / `ArrayRegister<u64, 2>` etc., which are
+/// distinct types rather than one shared intrinsic, and the element-wise array bitcast
+/// (`register/array.rs`) only relates arrays with the SAME lane count.
+///
+/// The transmute is by value, so the differing alignments of `[u8; 16]` and `[u64; 2]`
+/// are irrelevant (alignment constrains references, not value copies). Byte order within
+/// the wider lane is target-endian, which is immaterial to the SAD family: the SWAR
+/// cascade sums all bytes of a lane regardless of their position within it.
+macro_rules! impl_bit_casts_transmute {
+    ($($from:ty as $to:ty),* $(,)?) => {
+        const _: () = {$(
+            #[thermite_macros::inline_always]
+            impl $crate::register::BitCastRegister<$from> for $to {
+                fn from_bits(value: $crate::register::Storage<$from>) -> $crate::register::Storage<Self> {
+                    unsafe { $crate::generic_array::const_transmute(value) }
+                }
+            }
+        )*};
+    };
+}
+
+/// Attach the generic-default SAD impls ([`Sad16Register`](crate::register::Sad16Register)
+/// / [`Sad32Register`](crate::register::Sad32Register) /
+/// [`Sad64Register`](crate::register::Sad64Register)) on one or more
+/// `u8 register => (u16, u32, u64 register)` groups. The three output registers must have
+/// the same total width as the `u8` register - that shape is what the traits rely on
+/// instead of a lane-count bound. Backends override individual methods where hardware
+/// wins (x86 `psadbw`, NEON `vpaddl`, wasm `extadd_pairwise`); this macro is the wiring
+/// that opts every register into the SWAR defaults.
+macro_rules! impl_sad {
+    // Single-grouping arms, reused by the other SAD macros. The SWAR cascade needs the
+    // output register to be a same-width reinterpret of the byte register, which holds
+    // whenever the group divides the lane count evenly.
+    (@swar16 $u8:ty => $u16:ty) => {
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad16Register<$u16> for $u8 {
+            fn sad16(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u16> {
+                $crate::register::sad_cascade_u8_16::<Self, $u16>(
+                    <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b),
+                )
+            }
+        }
+    };
+    (@swar32 $u8:ty => $u32:ty) => {
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad32Register<$u32> for $u8 {
+            fn sad32(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u32> {
+                $crate::register::sad_cascade_u8_32::<Self, $u32>(
+                    <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b),
+                )
+            }
+        }
+    };
+    (@swar64 $u8:ty => $u64:ty) => {
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u8 {
+            fn sad64(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                $crate::register::sad_cascade_u8_64::<Self, $u64>(
+                    <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b),
+                )
+            }
+        }
+    };
+
+    ($($u8:ty => ($u16:ty, $u32:ty, $u64:ty)),* $(,)?) => {$(
+        impl_sad!(@swar16 $u8 => $u16);
+        impl_sad!(@swar32 $u8 => $u32);
+        impl_sad!(@swar64 $u8 => $u64);
+    )*};
+}
+
+/// SAD on `u16` inputs: `sad32` sums adjacent lane pairs, `sad64` groups of four. Same
+/// same-width-reinterpret shape as the `u8` family, one element size up. `$swar` selects
+/// the SWAR cascade (full-width registers) or the lane-wise path (sub-native ones).
+macro_rules! impl_sad_u16 {
+    (@swar $($u16:ty => ($u32:ty, $u64:ty)),* $(,)?) => {$(
+        impl_sad_u16!(@body $u16 => ($u32, $u64),
+            |a, b| $crate::register::sad_cascade_u16_32::<Self, $u32>(
+                <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b)),
+            |a, b| $crate::register::sad_cascade_u16_64::<Self, $u64>(
+                <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b)));
+    )*};
+    (@scalar $($u16:ty => ($u32:ty, $u64:ty)),* $(,)?) => {$(
+        impl_sad_u16!(@body $u16 => ($u32, $u64),
+            |a, b| $crate::register::sad_scalar_u16_32::<Self, $u32>(a, b),
+            |a, b| $crate::register::sad_scalar_u16_64::<Self, $u64>(a, b));
+    )*};
+    (@body $u16:ty => ($u32:ty, $u64:ty), |$a32:ident, $b32:ident| $e32:expr, |$a64:ident, $b64:ident| $e64:expr) => {
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad32Register<$u32> for $u16 {
+            fn sad32(
+                $a32: $crate::register::Storage<Self>,
+                $b32: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u32> {
+                $e32
+            }
+        }
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u16 {
+            fn sad64(
+                $a64: $crate::register::Storage<Self>,
+                $b64: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                $e64
+            }
+        }
+    };
+}
+
+/// SAD on `u32` inputs: `sad64` sums adjacent lane pairs.
+macro_rules! impl_sad_u32 {
+    (@swar $($u32:ty => $u64:ty),* $(,)?) => {$(
+        impl_sad_u32!(@body $u32 => $u64,
+            |a, b| $crate::register::sad_cascade_u32_64::<Self, $u64>(
+                <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b)));
+    )*};
+    (@scalar $($u32:ty => $u64:ty),* $(,)?) => {$(
+        impl_sad_u32!(@body $u32 => $u64, |a, b| $crate::register::sad_scalar_u32_64::<Self, $u64>(a, b));
+    )*};
+    (@body $u32:ty => $u64:ty, |$a:ident, $b:ident| $e:expr) => {
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u32 {
+            fn sad64(
+                $a: $crate::register::Storage<Self>,
+                $b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                $e
+            }
+        }
+    };
+}
+
+/// Lane-wise SAD for the sub-native (`< 128`-bit) `u8` ladder. Below a full register there
+/// is no SIMD win, so `ReducedRegister`/`ArrayRegister` byte registers just sum their lanes
+/// (see `sad_scalar_*` in `register/mod.rs`). Where the register holds fewer bytes than one
+/// group, the single output lane sums the whole register.
+macro_rules! impl_sad_scalar {
+    ($($u8:ty => ($u16:ty, $u32:ty, $u64:ty)),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad16Register<$u16> for $u8 {
+            fn sad16(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u16> {
+                $crate::register::sad_scalar_u8_16::<Self, $u16>(a, b)
+            }
+        }
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad32Register<$u32> for $u8 {
+            fn sad32(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u32> {
+                $crate::register::sad_scalar_u8_32::<Self, $u32>(a, b)
+            }
+        }
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u8 {
+            fn sad64(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                $crate::register::sad_scalar_u8_64::<Self, $u64>(a, b)
+            }
+        }
+    )*};
+}
+
+/// As [`impl_sad`], but overriding the `u64` grouping with a native sum-of-absolute-
+/// differences instruction (x86 `PSADBW` via `_mm_sad_epu8` / `_mm256_sad_epu8`), which
+/// does the absolute difference AND the 8-byte horizontal sum in one op. Available on
+/// every x86 tier - `psadbw` is SSE2 - so all three take this path. The 16/32 groupings
+/// have no single-instruction x86 form and keep the SWAR defaults.
+macro_rules! impl_sad_native_u64 {
+    // SSSE3+ variant: the narrow groupings also get native forms. `pmaddubsw` against a
+    // vector of ones sums adjacent byte pairs into `u16` (max 510, so the instruction's
+    // saturation never triggers), and `pmaddwd` against ones sums adjacent `u16` pairs
+    // into `u32` - the 2- and 4-byte groupings in one instruction each past `abs_diff`.
+    (@ssse3 $($u8:ty => ($u16:ty, $u32:ty, $u64:ty) via $sad:ident),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad16Register<$u16> for $u8 {
+            fn sad16(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u16> {
+                unsafe {
+                    arch::_mm_maddubs_epi16(
+                        <Self as $crate::register::UnsignedIntegerRegister>::abs_diff(a, b),
+                        arch::_mm_set1_epi8(1),
+                    )
+                }
+            }
+        }
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad32Register<$u32> for $u8 {
+            fn sad32(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u32> {
+                unsafe {
+                    arch::_mm_madd_epi16(
+                        <Self as $crate::register::Sad16Register<$u16>>::sad16(a, b),
+                        arch::_mm_set1_epi16(1),
+                    )
+                }
+            }
+        }
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u8 {
+            fn sad64(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                unsafe { arch::$sad(a, b) }
+            }
+        }
+    )*};
+
+    ($($u8:ty => ($u16:ty, $u32:ty, $u64:ty) via $sad:ident),* $(,)?) => {$(
+        impl_sad!(@swar16 $u8 => $u16);
+        impl_sad!(@swar32 $u8 => $u32);
+
+        #[thermite_macros::inline_always]
+        impl $crate::register::Sad64Register<$u64> for $u8 {
+            fn sad64(
+                a: $crate::register::Storage<Self>,
+                b: $crate::register::Storage<Self>,
+            ) -> $crate::register::Storage<$u64> {
+                unsafe { arch::$sad(a, b) }
+            }
+        }
+    )*};
+}
+
+/// Stamp `ExtendRegister<$elem>` (extend-from-scalar) on one or more concrete
+/// native register types. Zero-extend places the scalar in lane 0 and zeros the
+/// rest -- exactly `Register::single` -- and narrow reads lane 0 back with
+/// `extract::<0>`. This is what satisfies the `Register: ExtendRegister<Self::Element>`
+/// supertrait for every native (non-emulated) register width. Invoked from each
+/// backend's `registers/mod.rs`, once per `(register, element)` pair.
+///
+/// Float masks are `Mask = Self`, so a float register's mask-extend obligation is
+/// discharged by this same impl; integer/usize masks are handled where they differ.
+macro_rules! impl_native_extend_from_scalar {
+    ($($reg:ty => $elem:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl $crate::register::ExtendRegister<$elem> for $reg {
+            fn extend(value: $crate::register::Storage<$elem>) -> $crate::register::Storage<Self> {
+                <Self as $crate::register::Register>::single(value)
+            }
+
+            fn narrow(value: $crate::register::Storage<Self>) -> $crate::register::Storage<$elem> {
+                <Self as $crate::register::Register>::extract::<0>(value)
+            }
+        }
+    )*};
+}
+
+/// Emit an optimal `Register::extract<const I>` method body for an x86 register,
+/// overriding the generic `as_slice[I]` default. Placed INSIDE the `impl Register`
+/// block (like `impl_native_radix3!`). Intrinsic paths are absolute
+/// (`core::arch::x86_64::*`) - a `:path` fragment can't take a `::<I>` turbofish,
+/// and definition-site hygiene would break an unqualified `arch::`. The `as _`
+/// casts adapt the intrinsic's `i32`/`i64` result to signed OR unsigned
+/// `Self::Element`, so one tag serves both. Shapes are named by element/width:
+/// `epi8x16`/`epi16x8`/`epi32x4`/`epi64x2` (128-bit int), their `x32`/`x16`/`x8`/`x4`
+/// 256-bit counterparts, and `ps128`/`ps256`/`pd128`/`pd256` for floats.
+///
+/// SSE4.1 introduced most of these intrinsics; SSE2 (x86_v1) uses the `_v1`-suffixed
+/// shapes below, which reach lane 0 with a `cvt` and any other lane with one shuffle.
+macro_rules! impl_native_extract {
+    // ===== 128-bit integer =====
+    (@epi64x2) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_extract_epi64::<0>(value) as _,
+                _ => core::arch::x86_64::_mm_extract_epi64::<1>(value) as _,
+            } }
+        }
+    };
+    (@epi32x4) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_extract_epi32::<0>(value) as _,
+                1 => core::arch::x86_64::_mm_extract_epi32::<1>(value) as _,
+                2 => core::arch::x86_64::_mm_extract_epi32::<2>(value) as _,
+                _ => core::arch::x86_64::_mm_extract_epi32::<3>(value) as _,
+            } }
+        }
+    };
+    (@epi16x8) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_extract_epi16::<0>(value) as _,
+                1 => core::arch::x86_64::_mm_extract_epi16::<1>(value) as _,
+                2 => core::arch::x86_64::_mm_extract_epi16::<2>(value) as _,
+                3 => core::arch::x86_64::_mm_extract_epi16::<3>(value) as _,
+                4 => core::arch::x86_64::_mm_extract_epi16::<4>(value) as _,
+                5 => core::arch::x86_64::_mm_extract_epi16::<5>(value) as _,
+                6 => core::arch::x86_64::_mm_extract_epi16::<6>(value) as _,
+                _ => core::arch::x86_64::_mm_extract_epi16::<7>(value) as _,
+            } }
+        }
+    };
+    (@epi8x16) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_extract_epi8::<0>(value) as _,
+                1 => core::arch::x86_64::_mm_extract_epi8::<1>(value) as _,
+                2 => core::arch::x86_64::_mm_extract_epi8::<2>(value) as _,
+                3 => core::arch::x86_64::_mm_extract_epi8::<3>(value) as _,
+                4 => core::arch::x86_64::_mm_extract_epi8::<4>(value) as _,
+                5 => core::arch::x86_64::_mm_extract_epi8::<5>(value) as _,
+                6 => core::arch::x86_64::_mm_extract_epi8::<6>(value) as _,
+                7 => core::arch::x86_64::_mm_extract_epi8::<7>(value) as _,
+                8 => core::arch::x86_64::_mm_extract_epi8::<8>(value) as _,
+                9 => core::arch::x86_64::_mm_extract_epi8::<9>(value) as _,
+                10 => core::arch::x86_64::_mm_extract_epi8::<10>(value) as _,
+                11 => core::arch::x86_64::_mm_extract_epi8::<11>(value) as _,
+                12 => core::arch::x86_64::_mm_extract_epi8::<12>(value) as _,
+                13 => core::arch::x86_64::_mm_extract_epi8::<13>(value) as _,
+                14 => core::arch::x86_64::_mm_extract_epi8::<14>(value) as _,
+                _ => core::arch::x86_64::_mm_extract_epi8::<15>(value) as _,
+            } }
+        }
+    };
+    // ===== SSE2-only (x86_v1) counterparts =====
+    // `_mm_extract_epi32`/`_mm_extract_epi64`/`_mm_extract_epi8`/`_mm_extract_ps` are all
+    // SSE4.1, so v1 reaches lane 0 with a `cvt` (free -- the value is already in the low
+    // element) and every other lane with one shuffle/unpack first. `@epi16x8` and `@pd128`
+    // are already SSE2-legal, so v1 uses those arms directly rather than getting `_v1` twins.
+    (@epi64x2_v1) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_cvtsi128_si64(value) as _,
+                _ => core::arch::x86_64::_mm_cvtsi128_si64(
+                    core::arch::x86_64::_mm_unpackhi_epi64(value, value),
+                ) as _,
+            } }
+        }
+    };
+    (@epi32x4_v1) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_cvtsi128_si32(value) as _,
+                1 => core::arch::x86_64::_mm_cvtsi128_si32(
+                    core::arch::x86_64::_mm_shuffle_epi32::<0b01_01_01_01>(value),
+                ) as _,
+                2 => core::arch::x86_64::_mm_cvtsi128_si32(
+                    core::arch::x86_64::_mm_unpackhi_epi64(value, value),
+                ) as _,
+                _ => core::arch::x86_64::_mm_cvtsi128_si32(
+                    core::arch::x86_64::_mm_shuffle_epi32::<0b11_11_11_11>(value),
+                ) as _,
+            } }
+        }
+    };
+    // Byte `I` is the low half of word `I / 2` when `I` is even, the high half when odd.
+    // The `as u8` before `as _` makes this bit-preserving for a signed OR unsigned element.
+    (@epi8x16_v1) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let word = match I / 2 {
+                    0 => core::arch::x86_64::_mm_extract_epi16::<0>(value),
+                    1 => core::arch::x86_64::_mm_extract_epi16::<1>(value),
+                    2 => core::arch::x86_64::_mm_extract_epi16::<2>(value),
+                    3 => core::arch::x86_64::_mm_extract_epi16::<3>(value),
+                    4 => core::arch::x86_64::_mm_extract_epi16::<4>(value),
+                    5 => core::arch::x86_64::_mm_extract_epi16::<5>(value),
+                    6 => core::arch::x86_64::_mm_extract_epi16::<6>(value),
+                    _ => core::arch::x86_64::_mm_extract_epi16::<7>(value),
+                };
+                ((word >> (8 * (I % 2))) as u8) as _
+            }
+        }
+    };
+    (@ps128_v1) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_cvtss_f32(value),
+                1 => core::arch::x86_64::_mm_cvtss_f32(
+                    core::arch::x86_64::_mm_shuffle_ps::<0b01_01_01_01>(value, value),
+                ),
+                2 => core::arch::x86_64::_mm_cvtss_f32(
+                    core::arch::x86_64::_mm_unpackhi_ps(value, value),
+                ),
+                _ => core::arch::x86_64::_mm_cvtss_f32(
+                    core::arch::x86_64::_mm_shuffle_ps::<0b11_11_11_11>(value, value),
+                ),
+            } }
+        }
+    };
+    // ===== 256-bit integer: extract the 128-bit lane, then the element =====
+    (@epi64x4) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<0>(value)) as _,
+                1 => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<0>(value)) as _,
+                2 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<1>(value)) as _,
+                _ => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<1>(value)) as _,
+            } }
+        }
+    };
+    (@epi32x8) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let (lo, hi) = (
+                    core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
+                    core::arch::x86_64::_mm256_extracti128_si256::<1>(value),
+                );
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi32::<0>(lo) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi32::<1>(lo) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi32::<2>(lo) as _,
+                    3 => core::arch::x86_64::_mm_extract_epi32::<3>(lo) as _,
+                    4 => core::arch::x86_64::_mm_extract_epi32::<0>(hi) as _,
+                    5 => core::arch::x86_64::_mm_extract_epi32::<1>(hi) as _,
+                    6 => core::arch::x86_64::_mm_extract_epi32::<2>(hi) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi32::<3>(hi) as _,
+                }
+            }
+        }
+    };
+    (@epi16x16) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let (lo, hi) = (
+                    core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
+                    core::arch::x86_64::_mm256_extracti128_si256::<1>(value),
+                );
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi16::<0>(lo) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi16::<1>(lo) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi16::<2>(lo) as _,
+                    3 => core::arch::x86_64::_mm_extract_epi16::<3>(lo) as _,
+                    4 => core::arch::x86_64::_mm_extract_epi16::<4>(lo) as _,
+                    5 => core::arch::x86_64::_mm_extract_epi16::<5>(lo) as _,
+                    6 => core::arch::x86_64::_mm_extract_epi16::<6>(lo) as _,
+                    7 => core::arch::x86_64::_mm_extract_epi16::<7>(lo) as _,
+                    8 => core::arch::x86_64::_mm_extract_epi16::<0>(hi) as _,
+                    9 => core::arch::x86_64::_mm_extract_epi16::<1>(hi) as _,
+                    10 => core::arch::x86_64::_mm_extract_epi16::<2>(hi) as _,
+                    11 => core::arch::x86_64::_mm_extract_epi16::<3>(hi) as _,
+                    12 => core::arch::x86_64::_mm_extract_epi16::<4>(hi) as _,
+                    13 => core::arch::x86_64::_mm_extract_epi16::<5>(hi) as _,
+                    14 => core::arch::x86_64::_mm_extract_epi16::<6>(hi) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi16::<7>(hi) as _,
+                }
+            }
+        }
+    };
+    (@epi8x32) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 32, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let (lo, hi) = (
+                    core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
+                    core::arch::x86_64::_mm256_extracti128_si256::<1>(value),
+                );
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi8::<0>(lo) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi8::<1>(lo) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi8::<2>(lo) as _,
+                    3 => core::arch::x86_64::_mm_extract_epi8::<3>(lo) as _,
+                    4 => core::arch::x86_64::_mm_extract_epi8::<4>(lo) as _,
+                    5 => core::arch::x86_64::_mm_extract_epi8::<5>(lo) as _,
+                    6 => core::arch::x86_64::_mm_extract_epi8::<6>(lo) as _,
+                    7 => core::arch::x86_64::_mm_extract_epi8::<7>(lo) as _,
+                    8 => core::arch::x86_64::_mm_extract_epi8::<8>(lo) as _,
+                    9 => core::arch::x86_64::_mm_extract_epi8::<9>(lo) as _,
+                    10 => core::arch::x86_64::_mm_extract_epi8::<10>(lo) as _,
+                    11 => core::arch::x86_64::_mm_extract_epi8::<11>(lo) as _,
+                    12 => core::arch::x86_64::_mm_extract_epi8::<12>(lo) as _,
+                    13 => core::arch::x86_64::_mm_extract_epi8::<13>(lo) as _,
+                    14 => core::arch::x86_64::_mm_extract_epi8::<14>(lo) as _,
+                    15 => core::arch::x86_64::_mm_extract_epi8::<15>(lo) as _,
+                    16 => core::arch::x86_64::_mm_extract_epi8::<0>(hi) as _,
+                    17 => core::arch::x86_64::_mm_extract_epi8::<1>(hi) as _,
+                    18 => core::arch::x86_64::_mm_extract_epi8::<2>(hi) as _,
+                    19 => core::arch::x86_64::_mm_extract_epi8::<3>(hi) as _,
+                    20 => core::arch::x86_64::_mm_extract_epi8::<4>(hi) as _,
+                    21 => core::arch::x86_64::_mm_extract_epi8::<5>(hi) as _,
+                    22 => core::arch::x86_64::_mm_extract_epi8::<6>(hi) as _,
+                    23 => core::arch::x86_64::_mm_extract_epi8::<7>(hi) as _,
+                    24 => core::arch::x86_64::_mm_extract_epi8::<8>(hi) as _,
+                    25 => core::arch::x86_64::_mm_extract_epi8::<9>(hi) as _,
+                    26 => core::arch::x86_64::_mm_extract_epi8::<10>(hi) as _,
+                    27 => core::arch::x86_64::_mm_extract_epi8::<11>(hi) as _,
+                    28 => core::arch::x86_64::_mm_extract_epi8::<12>(hi) as _,
+                    29 => core::arch::x86_64::_mm_extract_epi8::<13>(hi) as _,
+                    30 => core::arch::x86_64::_mm_extract_epi8::<14>(hi) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi8::<15>(hi) as _,
+                }
+            }
+        }
+    };
+    // ===== floats: lane 0 stays in xmm via cvt; other lanes via extract_ps/unpackhi =====
+    (@ps128) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_cvtss_f32(value),
+                1 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<1>(value) as u32),
+                2 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<2>(value) as u32),
+                _ => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<3>(value) as u32),
+            } }
+        }
+    };
+    (@ps256) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let (lo, hi) = (
+                    core::arch::x86_64::_mm256_extractf128_ps::<0>(value),
+                    core::arch::x86_64::_mm256_extractf128_ps::<1>(value),
+                );
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtss_f32(lo),
+                    1 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<1>(lo) as u32),
+                    2 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<2>(lo) as u32),
+                    3 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<3>(lo) as u32),
+                    4 => core::arch::x86_64::_mm_cvtss_f32(hi),
+                    5 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<1>(hi) as u32),
+                    6 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<2>(hi) as u32),
+                    _ => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<3>(hi) as u32),
+                }
+            }
+        }
+    };
+    (@pd128) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
+            unsafe { match I {
+                0 => core::arch::x86_64::_mm_cvtsd_f64(value),
+                _ => core::arch::x86_64::_mm_cvtsd_f64(core::arch::x86_64::_mm_unpackhi_pd(value, value)),
+            } }
+        }
+    };
+    (@pd256) => {
+        fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
+            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            unsafe {
+                let (lo, hi) = (
+                    core::arch::x86_64::_mm256_extractf128_pd::<0>(value),
+                    core::arch::x86_64::_mm256_extractf128_pd::<1>(value),
+                );
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtsd_f64(lo),
+                    1 => core::arch::x86_64::_mm_cvtsd_f64(core::arch::x86_64::_mm_unpackhi_pd(lo, lo)),
+                    2 => core::arch::x86_64::_mm_cvtsd_f64(hi),
+                    _ => core::arch::x86_64::_mm_cvtsd_f64(core::arch::x86_64::_mm_unpackhi_pd(hi, hi)),
+                }
+            }
+        }
+    };
+}
+
 /// Native two-register byte align (`IntegerRegister::align`) for a 128-bit byte
 /// register, via `_mm_alignr_epi8` (SSSE3+). Drop into an `impl IntegerRegister`
 /// block for an i8x16/u8x16-shaped register.
@@ -145,6 +730,30 @@ macro_rules! impl_bit_casts {
             impl $crate::register::BitCastRegister<$from> for $to {
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
+                }
+            }
+        )*};
+    };
+}
+
+/// Stamp [`BitCastRegister`](crate::register::BitCastRegister) for register pairs that
+/// already share a `Storage` type, where the reinterpret is the identity function and no
+/// `arch::` intrinsic exists (or is needed). On x86 every 128/256-bit integer register is
+/// the same `__m128i`/`__m256i`, and on wasm everything is `v128`, so this covers the
+/// whole integer matrix for those backends.
+///
+/// Complements [`impl_bit_casts`] (float <-> int, which needs a real cast intrinsic). The
+/// pairs stamped here differ from the usual same-lane-count reinterprets: they relate
+/// registers of the SAME TOTAL WIDTH but DIFFERENT lane counts (`u8x16` <-> `u64x2`),
+/// which is what group-wise reductions like the SAD family need in order to view a byte
+/// register as wider accumulator lanes.
+macro_rules! impl_bit_casts_identity {
+    ($($from:ty as $to:ty),* $(,)?) => {
+        const _: () = {$(
+            #[thermite_macros::inline_always]
+            impl $crate::register::BitCastRegister<$from> for $to {
+                fn from_bits(value: Storage<$from>) -> Storage<Self> {
+                    value
                 }
             }
         )*};

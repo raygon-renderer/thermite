@@ -286,6 +286,8 @@ impl Register for F64x4V3 {
         }
     }
 
+    impl_native_extract!(@pd256);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_pd(value) }
     }

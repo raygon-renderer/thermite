@@ -168,6 +168,8 @@ impl Register for F32x4V3 {
 
     impl_native_radix3!(arch::_mm_interleave3_ps, arch::_mm_deinterleave3_ps);
 
+    impl_native_extract!(@ps128);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set1_ps(value) }
     }

@@ -184,6 +184,8 @@ impl Register for F32x4V1 {
         unsafe { arch::_mm_loadu_ps(value.as_ptr()) }
     }
 
+    impl_native_extract!(@ps128_v1);
+
     fn single(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set_ss(value) }
     }

@@ -40,18 +40,9 @@ macro_rules! impl_half_ladder {
             }
         }
 
-        #[thermite_macros::inline_always]
-        impl ExtendRegister<$e> for $half {
-            fn extend(value: Storage<$e>) -> Storage<Self> {
-                unsafe {
-                    ReducedRegister::new(arch::[<vsetq_lane_ $s>]::<0>(value, <$full as CoreRegister>::EMPTY))
-                }
-            }
-
-            fn narrow(value: Storage<Self>) -> Storage<$e> {
-                unsafe { arch::[<vgetq_lane_ $s>]::<0>(value.0) }
-            }
-        }
+        // `ExtendRegister<$e> for $half` comes from the generic extend-from-scalar
+        // blanket in `register/reduced.rs`, which composes `$full`'s own
+        // `neon_extend_scalar!` impl - same `vsetq_lane`/`vgetq_lane` codegen.
 
         #[thermite_macros::inline_always]
         impl ConcatRegister<$half> for $full {

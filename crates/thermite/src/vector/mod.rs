@@ -1145,6 +1145,20 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `I` must be less than [`LANES`](Self::LANES).
     fn extract<const I: usize>(self) -> Self::Element;
 
+    /// Extract lane 0 -- the scalar counterpart to [`single`](Self::single).
+    ///
+    /// `single` is the way *into* a vector from a bare scalar; this is the way back
+    /// out. Together they are the whole scalar/SIMD boundary, and neither is free:
+    /// lane 0 lives in a vector register, so reading it costs a cross-domain move
+    /// (and a shuffle on backends without a lane-0 extract). Mixing scalar and SIMD
+    /// code pays that on every crossing -- prefer staying in vector form.
+    ///
+    /// Equivalent to `self.extract::<0>()`, and lowered identically.
+    #[inline(always)]
+    fn first(self) -> Self::Element {
+        self.extract::<0>()
+    }
+
     /// Extract a single element from the vector at the runtime index `idx`.
     ///
     /// Prefer [`extract`](Self::extract) when the index is known at compile
@@ -1602,6 +1616,54 @@ pub trait PackedFloatVector<S: crate::element::float::spec::FloatSpec, F>: Gener
 
     /// Decode this packed-float vector into the `f32` vector it represents (exact).
     fn unpack(self) -> F;
+}
+
+/// A `u8` vector whose absolute differences can be summed in groups of 2 byte-lanes into
+/// the `u16` vector `W` (same total width, `LANES / 2` output lanes).
+///
+/// Vector-layer mirror of [`Sad16Register`](crate::register::Sad16Register);
+/// blanket-implemented for every `Vector<R>` whose register implements it. Each output
+/// lane is at most `510`. There is no accumulating form - a `u16` lane saturates after
+/// ~128 accumulations; use [`Sad32Vector`] / [`Sad64Vector`] to reduce over a long run.
+pub trait Sad16Vector<W>: GenericVector {
+    /// Sum of absolute differences over each aligned pair of byte lanes.
+    fn sad16(self, other: Self) -> W;
+}
+
+/// A `u8` vector whose absolute differences can be summed in groups of 4 byte-lanes into
+/// the `u32` vector `W` (same total width, `LANES / 4` output lanes).
+///
+/// Vector-layer mirror of [`Sad32Register`](crate::register::Sad32Register). Each output
+/// lane is at most `1020`, so [`sad32_accum`](Self::sad32_accum) absorbs ~4.2e6
+/// accumulations before overflow.
+pub trait Sad32Vector<W>: GenericVector {
+    /// Sum of absolute differences over each aligned group of 4 byte lanes.
+    fn sad32(self, other: Self) -> W;
+
+    /// `acc + self.sad32(other)` - the accumulate step of a blocked SAD loop.
+    fn sad32_accum(self, acc: W, other: Self) -> W;
+}
+
+/// A `u8` vector whose absolute differences can be summed in groups of 8 byte-lanes into
+/// the `u64` vector `W` (same total width, `LANES / 8` output lanes) - x86 `PSADBW`
+/// semantics.
+///
+/// Vector-layer mirror of [`Sad64Register`](crate::register::Sad64Register). The `u64`
+/// lanes are accumulation headroom (each result is at most `2040`), so the intended shape
+/// of a byte-buffer reduction is to [`sad64_accum`](Self::sad64_accum) through the loop
+/// and reduce horizontally exactly once at the end:
+///
+/// ```ignore
+/// let mut acc = W::ZERO;
+/// for (a, b) in blocks { acc = a.sad64_accum(acc, b); }
+/// let total = acc.sum_elements();
+/// ```
+pub trait Sad64Vector<W>: GenericVector {
+    /// Sum of absolute differences over each aligned group of 8 byte lanes.
+    fn sad64(self, other: Self) -> W;
+
+    /// `acc + self.sad64(other)` - the accumulate step of a blocked SAD loop.
+    fn sad64_accum(self, acc: W, other: Self) -> W;
 }
 
 /// Per-lane comparison producing a [`Mask`](GenericVector::Mask).

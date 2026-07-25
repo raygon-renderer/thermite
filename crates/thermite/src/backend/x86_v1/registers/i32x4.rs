@@ -180,6 +180,8 @@ impl Register for I32x4V1 {
         unsafe { arch::_mm_loadu_si128(value.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@epi32x4_v1);
+
     fn single(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_setr_epi32(value, 0, 0, 0) }
     }

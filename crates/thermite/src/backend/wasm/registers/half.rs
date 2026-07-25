@@ -45,16 +45,8 @@ impl ConcatRegister<f32> for F32x2Wasm {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<f32> for F32x2Wasm {
-    fn extend(value: Storage<f32>) -> Storage<Self> {
-        ReducedRegister::new(arch::f32x4(value, 0.0, 0.0, 0.0))
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<f32> {
-        arch::f32x4_extract_lane::<0>(value.0)
-    }
-}
+// `ExtendRegister<f32> for F32x2Wasm` comes from the generic extend-from-scalar blanket
+// in `register/reduced.rs` (F32x4Wasm::extend / ::narrow, same codegen).
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<F32x2Wasm> for super::F32x4Wasm {
@@ -87,16 +79,7 @@ impl ConcatRegister<i32> for I32x2Wasm {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<i32> for I32x2Wasm {
-    fn extend(value: Storage<i32>) -> Storage<Self> {
-        ReducedRegister::new(arch::i32x4(value, 0, 0, 0))
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<i32> {
-        arch::i32x4_extract_lane::<0>(value.0)
-    }
-}
+// See the F32x2Wasm note above: supplied by the extend-from-scalar blanket.
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<I32x2Wasm> for super::I32x4Wasm {
@@ -128,16 +111,7 @@ impl ConcatRegister<u32> for U32x2Wasm {
     }
 }
 
-#[thermite_macros::inline_always]
-impl ExtendRegister<u32> for U32x2Wasm {
-    fn extend(value: Storage<u32>) -> Storage<Self> {
-        ReducedRegister::new(arch::u32x4(value, 0, 0, 0))
-    }
-
-    fn narrow(value: Storage<Self>) -> Storage<u32> {
-        arch::u32x4_extract_lane::<0>(value.0)
-    }
-}
+// See the F32x2Wasm note above: supplied by the extend-from-scalar blanket.
 
 #[thermite_macros::inline_always]
 impl ConcatRegister<U32x2Wasm> for super::U32x4Wasm {

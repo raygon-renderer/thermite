@@ -67,6 +67,12 @@ impl NativeIsa for X86V2 {
 
     type NativeAlignment = crate::simd::Align16; // 128-bit vectors = 16 bytes
 
+    const HAS_PREFETCH: bool = arch::HAS_PREFETCH;
+
+    fn prefetch<const LOCALITY: u8, const WRITE: bool>(ptr: *const u8) {
+        arch::prefetch::<LOCALITY, WRITE>(ptr);
+    }
+
     unsafe fn disable_denormals() -> Result<bool, crate::simd::UnsupportedError> {
         unsafe { Ok(arch::disable_denormals()) }
     }
@@ -202,6 +208,37 @@ impl_packed_fp8!(
     half8::U8x8V2 => ArrayRegister<F32x4V2, 2>,
     U8x16V2 => ArrayRegister<F32x4V2, 4>,
 );
+
+// Same-width, different-lane-count reinterprets of the 128-bit byte register (all
+// `__m128i`, so identity), and the SAD family built on them.
+impl_bit_casts_identity! {
+    U8x16V2 as U16x8V2,
+    U8x16V2 as U32x4V2,
+    U8x16V2 as U64x2V2,
+}
+
+impl_sad_native_u64!(@ssse3 U8x16V2 => (U16x8V2, U32x4V2, U64x2V2) via _mm_sad_epu8);
+
+// Sub-native byte ladder: lane-wise (see `impl_sad_scalar!`).
+impl_sad_scalar! {
+    half8::U8x8V2 => (half16::U16x4V2, half::U32x2V2, u64),
+    half8::U8x4V2 => (ArrayRegister<u16, 2>, u32, u64),
+}
+
+// SAD on wider elements: `u16` pairs/quads -> `u32`/`u64`, `u32` pairs -> `u64`. Same
+// same-width-reinterpret shape as the byte family (all `__m128i`, so identity casts).
+impl_bit_casts_identity! {
+    U16x8V2 as U32x4V2,
+    U16x8V2 as U64x2V2,
+    U32x4V2 as U64x2V2,
+}
+
+impl_sad_u16!(@swar U16x8V2 => (U32x4V2, U64x2V2));
+impl_sad_u32!(@swar U32x4V2 => U64x2V2);
+
+// Sub-native rungs: lane-wise.
+impl_sad_u16!(@scalar half16::U16x4V2 => (half::U32x2V2, u64));
+impl_sad_u32!(@scalar half::U32x2V2 => u64);
 
 impl_concat_bool_register2!(f32, half::F32x2V2);
 impl_concat_bool_register2!(u32, half::U32x2V2);

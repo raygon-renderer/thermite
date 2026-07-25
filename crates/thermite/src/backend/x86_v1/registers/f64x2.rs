@@ -194,6 +194,8 @@ impl Register for F64x2V1 {
         unsafe { arch::_mm_loadu_pd(value.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@pd128);
+
     fn single(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm_set_sd(value) }
     }

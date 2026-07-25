@@ -155,6 +155,47 @@ where
 }
 
 #[thermite_macros::inline_always]
+impl<R, W> Sad16Vector<Vector<W>> for Vector<R>
+where
+    W: register::UnsignedIntegerRegister<Element = u16>,
+    R: register::Sad16Register<W>,
+{
+    fn sad16(self, other: Self) -> Vector<W> {
+        Vector(<R as register::Sad16Register<W>>::sad16(self.0, other.0))
+    }
+}
+
+#[thermite_macros::inline_always]
+impl<R, W> Sad32Vector<Vector<W>> for Vector<R>
+where
+    W: register::UnsignedIntegerRegister<Element = u32>,
+    R: register::Sad32Register<W>,
+{
+    fn sad32(self, other: Self) -> Vector<W> {
+        Vector(<R as register::Sad32Register<W>>::sad32(self.0, other.0))
+    }
+
+    fn sad32_accum(self, acc: Vector<W>, other: Self) -> Vector<W> {
+        Vector(<R as register::Sad32Register<W>>::sad32_accum(acc.0, self.0, other.0))
+    }
+}
+
+#[thermite_macros::inline_always]
+impl<R, W> Sad64Vector<Vector<W>> for Vector<R>
+where
+    W: register::UnsignedIntegerRegister<Element = u64>,
+    R: register::Sad64Register<W>,
+{
+    fn sad64(self, other: Self) -> Vector<W> {
+        Vector(<R as register::Sad64Register<W>>::sad64(self.0, other.0))
+    }
+
+    fn sad64_accum(self, acc: Vector<W>, other: Self) -> Vector<W> {
+        Vector(<R as register::Sad64Register<W>>::sad64_accum(acc.0, self.0, other.0))
+    }
+}
+
+#[thermite_macros::inline_always]
 impl<R> GenericSelectable for Vector<R>
 where
     R: Register,

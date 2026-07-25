@@ -166,6 +166,8 @@ impl Register for I8x32V3 {
         unsafe { arch::_mm256_loadu_si256(arr.as_ptr() as *const _) }
     }
 
+    impl_native_extract!(@epi8x32);
+
     fn splat(value: Self::Element) -> Storage<Self> {
         unsafe { arch::_mm256_set1_epi8(value) }
     }

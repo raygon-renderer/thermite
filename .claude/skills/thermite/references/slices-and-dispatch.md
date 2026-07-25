@@ -2,72 +2,67 @@
 
 ## Iterating slices as SIMD vectors: `SimdSlice`
 
-The `SimdSlice` extension trait (`crates/thermite/src/slice.rs`, in the prelude) is
-the ergonomic way to walk a `&[E]` / `&mut [E]` as vectors. It is parameterized by
-the vector type `V` (whose `Element` must match the slice element).
-
-Three strategies, each with a shared and a `_mut` variant:
+Extension trait (`crates/thermite/src/slice.rs`, in the prelude) for walking
+`&[E]` / `&mut [E]` as vectors, parameterized by vector type `V` (`Element` must
+match). Three strategies, each with a `_mut` variant:
 
 ```rust
-use thermite::prelude::*;   // brings SimdSlice into scope
+use thermite::prelude::*;   // SimdSlice
 
-// 1. try-aligned: NEVER panics. Splits into (head scalars, aligned middle, tail scalars).
-//    This is the standard, safe pattern for arbitrary slices.
+// 1. try-aligned: NEVER panics. (head scalars, aligned middle, tail scalars).
+//    The standard safe pattern for arbitrary slices -- use 95% of the time.
 let (head, chunks, tail) = data.try_aligned_simd_iter::<V>();
 for e in head   { /* scalar prologue */ }
 for v in chunks { /* v: &V */ }
 for e in tail   { /* scalar epilogue */ }
-
-// mutable:
 let (head, chunks, tail) = data.try_aligned_simd_iter_mut::<V>();
 for v in chunks { *v = transform(*v); }
 
-// 2. aligned: PANICS if the slice isn't exactly aligned with no remainder.
-//    Use only when you control the allocation (aligned container).
+// 2. aligned: PANICS unless exactly aligned with no remainder.
+//    Only when you control the allocation (aligned container).
 for v in data.aligned_simd_iter::<V>() { /* &V */ }
 data.aligned_simd_iter_mut::<V>();
 
-// 3. unaligned: handles any slice via unaligned loads/stores. Returns (iter, remainder).
+// 3. unaligned: any slice via unaligned loads/stores -> (iter, remainder).
 let (iter, remainder) = data.unaligned_simd_iter::<V>();
 let (iter, remainder) = data.unaligned_simd_iter_mut::<V>();
 
-// streaming (non-temporal, cache-bypassing) variants for write-once bulk data:
+// streaming (non-temporal, cache-bypassing) for write-once bulk data:
 for sv in data.streaming_simd_iter::<V>()      { let v = sv.load(); /* or sv.load_cached() */ }
 for sv in data.streaming_simd_iter_mut::<V>()  { sv.store(v);       /* NT store */ }
 ```
 
-Notes:
-- `try_aligned_*` is what you want 95% of the time -- it can't panic and handles any
-  length and any starting alignment.
-- The `Unaligned` iterator trusts its constructor to have truncated the slice to a
-  whole number of lanes; it does not re-check in `next()`.
-- For the lowest level, `V::align_slice(&[E]) -> (&[E], &[V], &[E])` is what
+- The `Unaligned` iterator trusts its constructor to have truncated to whole
+  lanes; `next()` does not re-check.
+- Lowest level: `V::align_slice(&[E]) -> (&[E], &[V], &[E])` -- what
   `try_aligned_simd_iter` is built on.
 
 ## Alignment
 
-Native register alignment differs per backend (16-byte for SSE, 32-byte for AVX2).
-A vector type's alignment is part of its register. Aligned loads/stores require the
-pointer to satisfy it; the `try_aligned`/`unaligned` iterators handle the mismatch
-for you. When allocating buffers you intend to iterate `aligned`, allocate through
-a `NativeSimd`-aligned container so the head/tail are empty.
+Native register alignment differs per backend (16B SSE, 32B AVX2) and is part of
+the register type. Aligned loads/stores require it; `try_aligned`/`unaligned`
+iterators handle mismatch. For `aligned` iteration, allocate through a
+`NativeSimd`-aligned container so head/tail are empty.
 
 ## ISA dispatch
 
-The dispatcher detects the CPU's instruction set once (cached via
-`InstructionSet::get()`), then runs a version of your code compiled with the right
-`target_feature`. There are **two distinct tools** -- a function-like macro for the
-entry point, and an attribute macro for library code:
+The dispatcher detects the CPU once (cached `InstructionSet::get()`), then runs
+code compiled with the right `target_feature`. **Two distinct tools**: a bang
+macro for the entry point, an attribute for library code.
 
-### `dispatch_dyn!` -- the runtime entry point (a `#[proc_macro]`, bang form)
+### `dispatch_dyn!` -- runtime entry point (bang form)
 
-This is what you call from ordinary scalar code to *runtime-select* the best ISA
-and run a SIMD block under it. Inside the body, bare width identifiers (`f32xN`,
-`f32x4`, `f32x8`, `i32x4`, `f64xN`, ...) are rewritten to `Vector<S::...>` for the
-chosen backend `S`. `f32xN` is the widest native f32 width.
+Call from scalar code to runtime-select the best ISA and run a SIMD block under
+it. Inside the body, bare width identifiers are rewritten to `Vector<S::...>` for
+the chosen backend `S`; `f32xN` = widest native f32. The rewrite list
+(`thermite-macros/src/dispatch.rs`) covers every `Simd` associated type: the
+32/64-bit and `usize` families, the `xN` natives, the `x3`/`x3A` forms, and the
+8/16-bit families (`u8x16`, `i8x16`, `u16x8`, ...). Only bare, unqualified,
+generic-argument-free occurrences are rewritten.
 
 ```rust
-// for<S> names the backend type, in scope inside the body. Default bound is Simd3.
+// for<S> names the backend type, in scope inside the body. Default bound Simd3
+// (= Simd plus 3-lane vector support: f32x3/i32x3/... incl. padded x3A forms).
 let total: f32 = thermite::dispatch_dyn!(for<S> |data: &[f32]| -> f32 {
     let v = f32xN::splat(1.0);
     v.sum_elements()
@@ -79,22 +74,21 @@ thermite::dispatch_dyn!(for<S> |data: &mut [f32]| {
     for v in chunks { *v = v.sin(); }
 });
 
-// Custom backend bound, extra generics, where-clause are all supported:
+// Custom backend bound, extra generics, where-clause all supported:
 thermite::dispatch_dyn!(for<S: Simd> |data: &[f32]| -> f32 { /* ... */ });
 ```
 
-**Crucial constraint:** the macro's parameters and return type must be
-ISA-agnostic (scalars, slices, `Vec`, `bool`, ...). They are the I/O contract with
-the scalar world. **Never** put `f32xN`, `Vector<S::f32x4>`, `Mask<...>` in the
-signature -- the caller can't know which backend was chosen, so a SIMD-typed
-parameter or return would have nowhere to come from. All SIMD work happens inside
-the body: load from slices, process, store back.
+**Crucial constraint:** parameters and return type must be ISA-agnostic
+(scalars, slices, `Vec`, `bool`, ...) -- they are the I/O contract with the
+scalar world. **Never** put `f32xN`/`Vector<S::f32x4>`/`Mask<...>` in the
+signature; the caller can't know which backend was chosen. All SIMD work happens
+inside: load from slices, process, store back.
 
-#### The call form -- dispatch a `#[dispatch]` function without closure syntax
+#### The call form -- dispatch a `#[dispatch]` fn without closure syntax
 
-When the SIMD work is already a `#[dispatch]` function, skip the closure syntax
-entirely -- the callee carries its own per-backend `#[target_feature]` trampolines,
-so the macro only emits the runtime `InstructionSet::get()` match:
+When the SIMD work is already a `#[dispatch]` function, the callee carries its
+own per-backend `#[target_feature]` trampolines, so the macro only emits the
+runtime `InstructionSet::get()` match:
 
 ```rust
 #[thermite::dispatch(S)]
@@ -103,12 +97,12 @@ fn dot<S: Simd>(a: &[f32], b: &[f32]) -> f32 { /* ... */ }
 // Bare form: backend injected as the callee's ONLY generic argument.
 let r = thermite::dispatch_dyn!(dot(&a, &b));
 
-// for<S> form: S marks where the backend type goes -- required when the callee
-// has extra generics (partial turbofish is not legal Rust):
+// for<S> form: S marks where the backend goes -- required when the callee has
+// extra generics (partial turbofish is not legal Rust):
 let r = thermite::dispatch_dyn!(for<S> scale::<S, f32>(&a, factor));
 
-// The for<S> form also dispatches METHOD calls on a receiver, when the method
-// itself is generic over the backend (a `#[dispatch(S)] impl` block):
+// for<S> also dispatches METHOD calls when the method is generic over the
+// backend (a `#[dispatch(S)] impl` block):
 #[thermite::dispatch(S)]
 impl Kernel {
     fn run<S: Simd>(&self, data: &[f32]) -> f32 { /* ... */ }
@@ -116,25 +110,24 @@ impl Kernel {
 let r = thermite::dispatch_dyn!(for<S> kernel.run::<S>(&data));
 ```
 
-Arguments are ordinary expressions evaluated in the selected arm -- none of the
-closure form's capture-by-name/reborrow rules apply. Caveats: keep it to a single
-dispatched call (free fn or method) and do everything else outside the macro (any
-code inside that isn't the callee compiles without target features); the callee
-must be a `#[dispatch]` function (a plain generic fn still runs *correctly* but
-with scalar-quality codegen); and no bare-`f32xN` type rewriting happens in the
-call form. Bounds on the binder (`for<S: Bound>`) are rejected; the callee's own
-bounds apply.
+Arguments are ordinary expressions evaluated in the selected arm -- no closure
+capture/reborrow rules. Caveats: keep it to a single dispatched call (free fn or
+method), everything else outside the macro (other code inside compiles WITHOUT
+target features); the callee must be `#[dispatch]` (a plain generic fn runs
+correctly but with scalar-quality codegen); no bare-`f32xN` rewriting in the
+call form; bounds on the binder (`for<S: Bound>`) are rejected -- the callee's
+own bounds apply.
 
-### `#[thermite::dispatch(...)]` -- per-backend codegen for library code (an attribute)
+### `#[thermite::dispatch(...)]` -- per-backend codegen for library code (attribute)
 
-`dispatch` is a `#[proc_macro_attribute]`, not a bang macro. Put it on a `fn`,
-`impl` block, `trait`, or `mod` whose code is generic over `S: HasIsa`/`Simd`. For
-each backend it generates a `#[target_feature]` trampoline and turns the body into
-a `match <S as HasIsa>::ISA { ... }` that LLVM folds away at monomorphization (no
-runtime branch). This is how you give a reusable kernel correct per-ISA codegen.
+A `#[proc_macro_attribute]`, not a bang macro. Put it on a `fn`, `impl` block,
+`trait`, or `mod` generic over `S: HasIsa`/`Simd`. For each backend it generates
+a `#[target_feature]` trampoline and turns the body into a
+`match <S as HasIsa>::ISA { ... }` that LLVM folds away at monomorphization (no
+runtime branch). This is how a reusable kernel gets correct per-ISA codegen.
 
 ```rust
-// On a whole impl block -- `Self` resolves at the impl level:
+// Whole impl block -- `Self` resolves at the impl level:
 #[thermite::dispatch(Self)]
 impl Kernel {
     pub fn run<S: FloatSimd<f32>>(&self, data: &mut [f32]) {
@@ -145,26 +138,25 @@ impl Kernel {
     fn helper(&self) { /* ... */ }
 }
 
-// On a single method WITH a receiver, pass the concrete Self type explicitly
+// Single method WITH a receiver: pass the concrete Self type explicitly
 // (the macro can't see the surrounding impl):
 impl Kernel { #[thermite::dispatch(Kernel)] fn process(&self) { /* ... */ } }
 
-// On a free function generic over the backend:
+// Free function generic over the backend:
 #[thermite::dispatch(S)]
 fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) { /* uses S::fxN, S::f32x8, ... */ }
 ```
 
-The two compose: a `dispatch_dyn!` block is the runtime boundary that picks `S`,
-and the `#[dispatch]`-annotated functions it calls carry the per-backend
-`target_feature` codegen. On AVX2 the boundary also calls `zeroupper` to avoid
-AVX<->SSE transition penalties. `#[inline(always)]` helpers inside a dispatched
-body keep their target-feature codegen.
+The two compose: `dispatch_dyn!` is the runtime boundary that picks `S`; the
+`#[dispatch]` functions it calls carry the per-backend `target_feature` codegen.
+On AVX2 the boundary also calls `zeroupper` (avoids AVX<->SSE transition
+penalties). `#[inline(always)]` helpers inside a dispatched body keep their
+target-feature codegen.
 
 ### When you need `FloatSimd<F>` / `Simd` instead of a `*Vector` bound
 
-Reach for the `Simd` family only when you need the native width *by name* or both a
-float type and its matching integer type together. Prefer a plain
-`V: FloatVector` bound otherwise.
+Only when you need the native width *by name* or a float type plus its matching
+integer type together; otherwise prefer plain `V: FloatVector`.
 
 ```rust
 use thermite::simd::FloatSimd;
@@ -181,6 +173,7 @@ where
 }
 ```
 
-The `Simd` hierarchy is `HasIsa -> NativeIsa -> NativeSimd -> Simd -> SizedSimd<F,I,U> -> FloatSimd<F>`;
-`Simd` defines all the fixed-width register aliases (`f32x2..f64x16`, `usizex2..16`),
-`NativeSimd` defines `f32xN`/`f64xN` (widest native).
+Hierarchy: `HasIsa -> NativeIsa -> NativeSimd -> Simd -> SizedSimd<F,I,U> -> FloatSimd<F>`.
+`Simd` defines the fixed-width register aliases (`f32x2..f64x16`, `usizex2..16`,
+8/16-bit `i8x16`/`u8x16`/`i16x8`/`u16x8`); `NativeSimd` defines `f32xN`/`f64xN`
+(widest native).

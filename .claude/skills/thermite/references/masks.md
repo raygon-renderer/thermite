@@ -1,9 +1,8 @@
 # Masks
 
-Comparisons return a `Mask`. A `Mask<R>` wraps `Storage<R::Mask>`; on pre-AVX512
-backends it is a full-width vector of all-ones/all-zeros lanes, on AVX-512 it will
-be a k-register. The trait is `GenericMask` (`crates/thermite/src/mask.rs:66`),
-re-exported by the prelude.
+Comparisons return a `Mask`. `Mask<R>` wraps `Storage<R::Mask>`: full-width
+all-ones/all-zeros lanes pre-AVX512, a k-register on AVX-512. Trait:
+`GenericMask` (`crates/thermite/src/mask.rs:66`), prelude re-exported.
 
 ```rust
 use thermite::prelude::*;
@@ -26,7 +25,7 @@ m.count_set() -> usize           // number of true lanes (popcount)
 m.select(t, f) -> S       // per-lane: mask ? t : f   (one instruction; S: GenericSelectable)
 
 // bitwise combine
-m1 & m2     m1 | m2     m1 ^ m2     !m     m1.bitandnot(m2)
+m1 & m2     m1 | m2     m1 ^ m2     !m     m1.bitandnot(m2)   // m1 & !m2 (register layer is reversed)
 Mask::ternlog::<IMM>(a, b, c)
 
 // constants
@@ -69,8 +68,7 @@ the NaN. (See [performance.md](performance.md) section 9.)
 
 ## Casting masks between types
 
-A mask for `f32x8` and a mask for `i32x8` have the same lane count and width, so
-`m.cast()` (via `CastMask`) moves between them for free. This matters when you
-compute a mask from a float compare and apply it to the integer view, or vice
-versa. `GenericVector::Mask` is bounded `CastMask<Unsigned::Mask> + CastMask<Signed::Mask>`
-so these casts are always available within a vector's own family.
+Masks for same-lane-count/width vectors (`f32x8` vs `i32x8`) convert free via
+`m.cast()` (`CastMask`) -- e.g. float-compare mask applied to the integer view.
+`GenericVector::Mask` is bounded `CastMask<Unsigned::Mask> + CastMask<Signed::Mask>`,
+so these casts always exist within a vector's own family.
