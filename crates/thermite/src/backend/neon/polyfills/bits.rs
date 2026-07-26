@@ -135,6 +135,80 @@ pub fn neon_movemask_u8(m: uint8x16_t) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
+// Mask population counts. A mask lane is all-ones or all-zeros, i.e. -1 or 0
+// read as signed, so the number of set lanes is just the NEGATED horizontal sum
+// - no bit-weighting and no popcount at all. NEON has a single-instruction
+// horizontal add (`addv`), so several masks reduce to `N - 1` vector adds plus
+// one `addv`, rather than the movemask-then-popcount pair per register the
+// generic path would do.
+//
+// Accumulating in the lane width bounds `N`: each lane of the accumulator holds
+// -N, and the final sum is -(LANES * N). Both fit comfortably for any `N` a
+// composite register can produce (the 8-bit form is the tightest at N <= 127).
+// ---------------------------------------------------------------------------
+
+#[inline(always)]
+pub fn neon_count_mask_u32<const N: usize>(values: [uint32x4_t; N]) -> usize {
+    unsafe {
+        let mut acc = vdupq_n_s32(0);
+
+        let mut i = 0;
+        while i < N {
+            acc = vaddq_s32(acc, vreinterpretq_s32_u32(values[i]));
+            i += 1;
+        }
+
+        (-vaddvq_s32(acc)) as usize
+    }
+}
+
+#[inline(always)]
+pub fn neon_count_mask_u64<const N: usize>(values: [uint64x2_t; N]) -> usize {
+    unsafe {
+        let mut acc = vdupq_n_s64(0);
+
+        let mut i = 0;
+        while i < N {
+            acc = vaddq_s64(acc, vreinterpretq_s64_u64(values[i]));
+            i += 1;
+        }
+
+        (-vaddvq_s64(acc)) as usize
+    }
+}
+
+#[inline(always)]
+pub fn neon_count_mask_u16<const N: usize>(values: [uint16x8_t; N]) -> usize {
+    unsafe {
+        let mut acc = vdupq_n_s16(0);
+
+        let mut i = 0;
+        while i < N {
+            acc = vaddq_s16(acc, vreinterpretq_s16_u16(values[i]));
+            i += 1;
+        }
+
+        (-vaddvq_s16(acc)) as usize
+    }
+}
+
+#[inline(always)]
+pub fn neon_count_mask_u8<const N: usize>(values: [uint8x16_t; N]) -> usize {
+    unsafe {
+        let mut acc = vdupq_n_s8(0);
+
+        let mut i = 0;
+        while i < N {
+            acc = vaddq_s8(acc, vreinterpretq_s8_u8(values[i]));
+            i += 1;
+        }
+
+        // Widening horizontal add: 16 lanes of -N overflow an i8 sum.
+        (-vaddlvq_s8(acc)) as usize
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Population count: native `vcntq_u8`, widened per level with pairwise adds.
 // ---------------------------------------------------------------------------
 
@@ -489,6 +563,27 @@ macro_rules! stamp_mask_view_layer {
         #[inline(always)]
         pub fn [<neon_movemask_ $s>](m: $ty) -> u64 {
             unsafe { [<neon_movemask_ $us>]($to_u(m)) }
+        }
+
+        #[inline(always)]
+        pub fn [<neon_count_mask_ $s>]<const N: usize>(values: [$ty; N]) -> usize {
+            if N == 0 {
+                return 0;
+            }
+
+            unsafe {
+                // Seeded from lane 0 so the unsigned vector type never has to be
+                // named here; every reinterpret is a no-op.
+                let mut u = [$to_u(values[0]); N];
+
+                let mut i = 1;
+                while i < N {
+                    u[i] = $to_u(values[i]);
+                    i += 1;
+                }
+
+                [<neon_count_mask_ $us>](u)
+            }
         }
     })*};
 }

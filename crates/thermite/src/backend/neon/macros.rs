@@ -276,6 +276,11 @@ macro_rules! neon_mask_core {
                     Some(arch::[<neon_movemask_ $s>](value))
                 }
 
+                // Negated horizontal sum of the mask lanes - no bitmask, no popcount.
+                fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+                    arch::[<neon_count_mask_ $s>](values)
+                }
+
                 #[cfg(feature = "bitvec")]
                 fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) {
                     let mask = arch::[<neon_movemask_ $s>](value) as u32;

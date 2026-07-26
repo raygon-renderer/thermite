@@ -73,6 +73,22 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     + Not<Output = Self>
     + Interleave
 {
+    /// Number of lanes, matching the vector this mask came from.
+    const LANES: usize;
+
+    /// Number of lanes, as a runtime value.
+    ///
+    /// Prefer it over the constant in loop bounds and address arithmetic, for the
+    /// same reason as [`GenericVector::lanes`](crate::vector::GenericVector::lanes):
+    /// a scalable-vector backend can only report its lane count at runtime.
+    #[inline(always)]
+    fn lanes() -> usize {
+        Self::LANES
+    }
+
+    /// Number of lanes, as a typenum.
+    type Lanes: Lanes;
+
     /// A mask with every lane set to `true` (all bits set).
     const TRUTHY: Self;
     /// A mask with every lane set to `false` (all bits clear). This is also the
@@ -100,6 +116,59 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
 
     /// Number of lanes set to `true` (population count of the mask).
     fn count_set(self) -> usize;
+
+    /// [`first_set`](Self::first_set) over several masks at once, treating them
+    /// as one concatenated mask (`masks[i]` occupying lanes
+    /// `i * LANES .. (i + 1) * LANES`).
+    fn first_set_many<const N: usize>(masks: [Self; N]) -> Option<usize> {
+        let lanes = Self::LANES;
+
+        let mut i = 0;
+        while i < N {
+            if let Some(idx) = masks[i].first_set() {
+                return Some(i * lanes + idx);
+            }
+            i += 1;
+        }
+
+        None
+    }
+
+    /// [`last_set`](Self::last_set) over several masks at once; concatenation
+    /// order is as described on [`first_set_many`](Self::first_set_many).
+    fn last_set_many<const N: usize>(masks: [Self; N]) -> Option<usize> {
+        let lanes = Self::LANES;
+
+        let mut i = N;
+        while i > 0 {
+            i -= 1;
+            if let Some(idx) = masks[i].last_set() {
+                return Some(i * lanes + idx);
+            }
+        }
+
+        None
+    }
+
+    /// Total lanes set to `true` across several masks at once.
+    ///
+    /// Prefer this over summing [`count_set`](Self::count_set) yourself: a
+    /// population count cannot observe lane order, so backends merge the masks
+    /// with a narrowing pack (x86) or a plain vector add (NEON) and reduce once,
+    /// instead of extracting a bitmask and popcounting per mask. Counting a
+    /// 64-byte block of 16 `i32` lanes on AVX2, for instance, is one `vpackssdw`
+    /// + `vpmovmskb` + `popcnt` rather than two `vmovmskps` + `popcnt` pairs.
+    fn count_set_many<const N: usize>(masks: [Self; N]) -> usize {
+        let mut total = 0;
+
+        let mut i = 0;
+        while i < N {
+            total += masks[i].count_set();
+            i += 1;
+        }
+
+        total
+    }
 
     /// Extract the mask as a packed integer bitmask, one bit per lane (lane 0 in
     /// the least-significant bit), if the backend can produce one directly.
@@ -195,6 +264,22 @@ impl<R: Register> Clone for Mask<R> {
 
 impl<R: Register> Copy for Mask<R> {}
 
+impl<R: Register> Mask<R> {
+    /// Strip the wrappers off a batch of masks for the register layer.
+    #[inline(always)]
+    fn raw<const N: usize>(masks: [Self; N]) -> [Storage<R::Mask>; N] {
+        let mut raw = [<R::Mask as MaskRegister>::FALSY; N];
+
+        let mut i = 0;
+        while i < N {
+            raw[i] = masks[i].0;
+            i += 1;
+        }
+
+        raw
+    }
+}
+
 const _: () = {
     use core::fmt;
 
@@ -263,6 +348,8 @@ impl<R: Register> Interleave for Mask<R> {
 }
 
 impl<R: Register> GenericMask for Mask<R> {
+    const LANES: usize = <R::Lanes as Unsigned>::USIZE;
+    type Lanes = R::Lanes;
     const FALSY: Self = Mask(<R::Mask as MaskRegister>::FALSY);
     const TRUTHY: Self = Mask(<R::Mask as MaskRegister>::TRUTHY);
 
@@ -283,17 +370,35 @@ impl<R: Register> GenericMask for Mask<R> {
 
     #[inline(always)]
     fn first_set(self) -> Option<usize> {
-        <R::Mask as MaskRegister>::first_set(self.0)
+        <R::Mask as MaskRegister>::first_set([self.0])
     }
 
     #[inline(always)]
     fn last_set(self) -> Option<usize> {
-        <R::Mask as MaskRegister>::last_set(self.0)
+        <R::Mask as MaskRegister>::last_set([self.0])
     }
 
     #[inline(always)]
     fn count_set(self) -> usize {
-        <R::Mask as MaskRegister>::count_set(self.0)
+        <R::Mask as MaskRegister>::count_set([self.0])
+    }
+
+    // Hand the whole batch to the register layer in one call - that is where the
+    // merged pack / horizontal-add reductions live.
+
+    #[inline(always)]
+    fn first_set_many<const N: usize>(masks: [Self; N]) -> Option<usize> {
+        <R::Mask as MaskRegister>::first_set(Self::raw(masks))
+    }
+
+    #[inline(always)]
+    fn last_set_many<const N: usize>(masks: [Self; N]) -> Option<usize> {
+        <R::Mask as MaskRegister>::last_set(Self::raw(masks))
+    }
+
+    #[inline(always)]
+    fn count_set_many<const N: usize>(masks: [Self; N]) -> usize {
+        <R::Mask as MaskRegister>::count_set(Self::raw(masks))
     }
 
     #[inline(always)]

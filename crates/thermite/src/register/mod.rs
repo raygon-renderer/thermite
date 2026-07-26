@@ -457,14 +457,17 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
 
     // The `else` arms below are only reached by masks whose `native_bitmask`
     // returns `None` (wider than 64 lanes). The only such type today,
-    // `ArrayRegister`, overrides all three with a sub-register scan, so these
-    // fall back to the canonical `bitmask()` word-scan (the same packing
+    // `ArrayRegister`, overrides the `*_one` forms with a sub-register scan, so
+    // these fall back to the canonical `bitmask()` word-scan (the same packing
     // `bitmask()` itself uses) rather than poking one lane at a time - dropping
     // to the per-lane `test` loop only when `bitvec` is unavailable.
 
-    /// Index of the lowest lane set to `true`, or `None` if every lane is
-    /// `false`. A SIMD find-first: combined with a comparison this is `memchr`.
-    fn first_set(value: Storage<Self>) -> Option<usize> {
+    /// Single-register form of [`first_set`](Self::first_set).
+    ///
+    /// The N-ary forms below default to scanning with this; a backend that
+    /// overrides them for some shapes still routes leftovers here, so this is
+    /// the one that must always be correct.
+    fn first_set_one(value: Storage<Self>) -> Option<usize> {
         let lanes = <Self::Lanes as Unsigned>::USIZE;
         if let Some(bm) = Self::native_bitmask(value) {
             let bm = bm & lane_bitmask(lanes);
@@ -481,9 +484,8 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
         }
     }
 
-    /// Index of the highest lane set to `true`, or `None` if every lane is
-    /// `false` (a find-last).
-    fn last_set(value: Storage<Self>) -> Option<usize> {
+    /// Single-register form of [`last_set`](Self::last_set).
+    fn last_set_one(value: Storage<Self>) -> Option<usize> {
         let lanes = <Self::Lanes as Unsigned>::USIZE;
         if let Some(bm) = Self::native_bitmask(value) {
             let bm = bm & lane_bitmask(lanes);
@@ -500,8 +502,8 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
         }
     }
 
-    /// Number of lanes set to `true` (population count of the mask).
-    fn count_set(value: Storage<Self>) -> usize {
+    /// Single-register form of [`count_set`](Self::count_set).
+    fn count_set_one(value: Storage<Self>) -> usize {
         let lanes = <Self::Lanes as Unsigned>::USIZE;
         if let Some(bm) = Self::native_bitmask(value) {
             (bm & lane_bitmask(lanes)).count_ones() as usize
@@ -515,6 +517,66 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
                 (0..lanes).filter(|&i| Self::test(value, i)).count()
             }
         }
+    }
+
+    /// Index of the lowest lane set to `true`, or `None` if every lane is
+    /// `false`. A SIMD find-first: combined with a comparison this is `memchr`.
+    ///
+    /// `values` is treated as one concatenated mask, `values[i]` occupying
+    /// lanes `i * LANES .. (i + 1) * LANES`. Unlike
+    /// [`count_set`](Self::count_set) this is **order-preserving**, so an
+    /// override may not use a lane-scrambling narrowing pack without
+    /// restitching the lane order first.
+    fn first_set<const N: usize>(values: [Storage<Self>; N]) -> Option<usize> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+
+        let mut i = 0;
+        while i < N {
+            if let Some(idx) = Self::first_set_one(values[i]) {
+                return Some(i * lanes + idx);
+            }
+            i += 1;
+        }
+
+        None
+    }
+
+    /// Index of the highest lane set to `true`, or `None` if every lane is
+    /// `false` (a find-last). Concatenation order and the order-preservation
+    /// requirement are as described on [`first_set`](Self::first_set).
+    fn last_set<const N: usize>(values: [Storage<Self>; N]) -> Option<usize> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE;
+
+        let mut i = N;
+        while i > 0 {
+            i -= 1;
+            if let Some(idx) = Self::last_set_one(values[i]) {
+                return Some(i * lanes + idx);
+            }
+        }
+
+        None
+    }
+
+    /// Total number of lanes set to `true` across all of `values` (population
+    /// count of the concatenated mask).
+    ///
+    /// **Lane order across `values` is unspecified and irrelevant.** A
+    /// population count cannot observe it, which is what lets an implementation
+    /// merge several masks with a saturating narrowing pack - scrambling the
+    /// lane order in the process - and extract a single bitmask, instead of one
+    /// bitmask extraction and popcount per register. Any override is free to
+    /// exploit that; nothing here may depend on where a given lane lands.
+    fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+        let mut total = 0;
+
+        let mut i = 0;
+        while i < N {
+            total += Self::count_set_one(values[i]);
+            i += 1;
+        }
+
+        total
     }
 }
 

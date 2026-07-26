@@ -87,6 +87,10 @@ impl MaskRegister for U32x4V1 {
         unsafe { arch::_mm_movemask_epi8(value) == 0 }
     }
 
+    fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+        unsafe { arch::_mm_count_mask_epi32x_v1(values) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm_movemask_ps(arch::_mm_castsi128_ps(value)) as u64 })
     }

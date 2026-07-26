@@ -114,6 +114,10 @@ impl MaskRegister for F32x8V3 {
         unsafe { arch::_mm256_movemask_ps(value) == 0 }
     }
 
+    fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+        unsafe { arch::_mm256_count_mask_ps_v3(values) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm256_movemask_ps(value) as u64 })
     }

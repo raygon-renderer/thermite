@@ -256,3 +256,104 @@ pub unsafe fn _mm_mulhi_epu8x_v1(a: __m128i, b: __m128i) -> __m128i {
     let p_hi = _mm_srli_epi16(_mm_mullo_epi16(a_hi, b_hi), 8);
     _mm_packus_epi16(p_lo, p_hi)
 }
+
+// ---------------------------------------------------------------------------
+// Mask population counts: merge several masks with a saturating narrowing pack
+// and extract ONE bitmask, instead of a movemask + popcount per register.
+//
+// `_mm_packs_epi32`/`_mm_packs_epi16` saturate signed, which maps an all-ones
+// lane (-1) to -1 and an all-zeros lane to 0 - both mask lanes survive the
+// narrowing exactly. The pack interleaves its two sources, so the lane ORDER of
+// the result is scrambled; a population count cannot observe that, which is
+// precisely why this is only legal for `count_set` and not for
+// `first_set`/`last_set`.
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: set lanes across two 32-bit-lane masks.
+///
+/// Narrows to 8 16-bit lanes, so `movmskb` reports 2 bits per lane.
+#[inline(always)]
+pub unsafe fn _mm_count_mask2_epi32x_v1(a: __m128i, b: __m128i) -> usize {
+    (_mm_movemask_epi8(_mm_packs_epi32(a, b)) as u32).count_ones() as usize / 2
+}
+
+/// POLYFILL: set lanes across four 32-bit-lane masks.
+///
+/// Two levels of packing land on 16 8-bit lanes, so `movmskb` reports exactly
+/// one bit per lane and no division is needed.
+#[inline(always)]
+pub unsafe fn _mm_count_mask4_epi32x_v1(a: __m128i, b: __m128i, c: __m128i, d: __m128i) -> usize {
+    let lo = _mm_packs_epi32(a, b);
+    let hi = _mm_packs_epi32(c, d);
+    (_mm_movemask_epi8(_mm_packs_epi16(lo, hi)) as u32).count_ones() as usize
+}
+
+/// POLYFILL: set lanes across two 16-bit-lane masks. Exact, one bit per lane.
+#[inline(always)]
+pub unsafe fn _mm_count_mask2_epi16x_v1(a: __m128i, b: __m128i) -> usize {
+    (_mm_movemask_epi8(_mm_packs_epi16(a, b)) as u32).count_ones() as usize
+}
+
+/// POLYFILL: total set lanes across `N` 32-bit-lane masks.
+///
+/// Descending ladder: fours, then a pair, then a single. Four is the ceiling
+/// for 32-bit lanes - two narrowing steps reach 8-bit lanes, which is the floor
+/// (`movmskb` is already one bit per byte, and there is nothing narrower to
+/// pack to). Larger `N` is therefore chunks of four, which is optimal: OR-ing
+/// several chunks' bitmasks into one word to save popcounts costs exactly the
+/// shift-and-or it saves.
+#[inline(always)]
+pub unsafe fn _mm_count_mask_epi32x_v1<const N: usize>(values: [__m128i; N]) -> usize {
+    let mut total = 0;
+    let mut i = 0;
+
+    while i + 3 < N {
+        total += _mm_count_mask4_epi32x_v1(values[i], values[i + 1], values[i + 2], values[i + 3]);
+        i += 4;
+    }
+
+    if i + 1 < N {
+        total += _mm_count_mask2_epi32x_v1(values[i], values[i + 1]);
+        i += 2;
+    }
+
+    if i < N {
+        total += (_mm_movemask_ps(_mm_castsi128_ps(values[i])) as u32).count_ones() as usize;
+    }
+
+    total
+}
+
+/// POLYFILL: total set lanes across `N` 16-bit-lane masks.
+#[inline(always)]
+pub unsafe fn _mm_count_mask_epi16x_v1<const N: usize>(values: [__m128i; N]) -> usize {
+    let mut total = 0;
+    let mut i = 0;
+
+    while i + 1 < N {
+        total += _mm_count_mask2_epi16x_v1(values[i], values[i + 1]);
+        i += 2;
+    }
+
+    if i < N {
+        // 8 16-bit lanes -> 2 bits per lane out of `movmskb`.
+        total += (_mm_movemask_epi8(values[i]) as u32).count_ones() as usize / 2;
+    }
+
+    total
+}
+
+/// POLYFILL: [`_mm_count_mask_epi32x_v1`] for masks held in float registers.
+/// The casts are register renames, so the copy loop costs nothing.
+#[inline(always)]
+pub unsafe fn _mm_count_mask_ps_v1<const N: usize>(values: [__m128; N]) -> usize {
+    let mut ints = [_mm_setzero_si128(); N];
+
+    let mut i = 0;
+    while i < N {
+        ints[i] = _mm_castps_si128(values[i]);
+        i += 1;
+    }
+
+    _mm_count_mask_epi32x_v1(ints)
+}

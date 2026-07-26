@@ -22,6 +22,12 @@ m.first_set() -> Option<usize>   // index of lowest true lane; with cmp_eq this 
 m.last_set()  -> Option<usize>   // index of highest true lane
 m.count_set() -> usize           // number of true lanes (popcount)
 
+// N-ary forms (associated fns) - hand several masks over at once:
+M::count_set_many([m0, m1]) -> usize            // total true lanes
+M::first_set_many([m0, m1]) -> Option<usize>    // masks concatenated: m1's lane 0 is index LANES
+M::last_set_many([m0, m1])  -> Option<usize>
+M::LANES  M::lanes()  M::Lanes                   // lane count: const, runtime, typenum
+
 m.select(t, f) -> S       // per-lane: mask ? t : f   (one instruction; S: GenericSelectable)
 
 // bitwise combine
@@ -39,6 +45,19 @@ m.bitmask() -> BitArray             // always works (software fallback; needs `b
 let m2: OtherVec::Mask = m.cast::<_>();    // via CastMask
 m.swap(&mut a, &mut b)                      // conditionally swap lanes of a and b
 ```
+
+**Prefer `count_set_many` over summing `count_set` yourself.** A popcount cannot
+observe lane order, so backends merge the masks before reducing - a saturating
+narrowing pack on x86 (up to 4 masks of 32-bit lanes collapse into one bitmask
+extraction), a plain vector add on NEON (mask lanes are `-1`, so the count is a
+negated horizontal sum: no bitmask and no popcount at all). Counting 16 `i32`
+lanes on AVX2 is `vpcmpgtd` x2 + `vpackssdw` + `vpmovmskb` + `popcnt`, against
+two `vmovmskps`/`popcnt` pairs if you sum them by hand. This is automatic for a
+mask from a composite vector (`Vector<S::i32x16>` on AVX2) - its `count_set`
+already hands all sub-registers over at once.
+
+`first_set_many`/`last_set_many` get no such merge: they are order-preserving,
+and restoring lane order after a pack costs the instruction the merge saves.
 
 ## Selecting and masking: the idioms
 

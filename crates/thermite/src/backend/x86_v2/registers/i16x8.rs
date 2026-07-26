@@ -113,6 +113,10 @@ impl MaskRegister for I16x8V2 {
         unsafe { arch::_mm_movemask_epi8(value) == 0 }
     }
 
+    fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+        unsafe { arch::_mm_count_mask_epi16x_v1(values) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         // Pack the 8x16-bit mask down to 8x8-bit (low 64 bits), then one bit per lane.
         let packed = unsafe { arch::_mm_packs_epi16(value, arch::_mm_setzero_si128()) };

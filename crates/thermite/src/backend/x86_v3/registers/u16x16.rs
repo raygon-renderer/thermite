@@ -103,6 +103,10 @@ impl MaskRegister for U16x16V3 {
         unsafe { arch::_mm256_movemask_epi8(value) == 0 }
     }
 
+    fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
+        unsafe { arch::_mm256_count_mask_epi16x_v3(values) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         unsafe {
             let packed = arch::_mm256_packs_epi16(value, arch::_mm256_setzero_si256());

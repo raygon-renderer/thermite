@@ -185,33 +185,21 @@ where
         }
     }
 
-    // Scan sub-registers directly rather than going through the combined
-    // bitmask: this short-circuits on the first hit and stays correct when the
-    // total lane count exceeds 64 (where `native_bitmask` returns `None`).
-    fn first_set(value: Storage<Self>) -> Option<usize> {
-        for i in 0..N {
-            if let Some(idx) = R::first_set(value.0[i]) {
-                return Some(i * R::Lanes::USIZE + idx);
-            }
-        }
-        None
+    // Hand the whole sub-register array to `R` in one call rather than going
+    // through the combined bitmask. That stays correct when the total lane
+    // count exceeds 64 (where `native_bitmask` returns `None`), and it is what
+    // lets a backend see all `N` masks at once - `R::count_set` in particular
+    // merges them with a narrowing pack instead of extracting a bitmask per
+    // register. `R`'s own default still short-circuits the scans.
+    fn first_set_one(value: Storage<Self>) -> Option<usize> {
+        R::first_set::<N>(value.0)
     }
 
-    fn last_set(value: Storage<Self>) -> Option<usize> {
-        for i in (0..N).rev() {
-            if let Some(idx) = R::last_set(value.0[i]) {
-                return Some(i * R::Lanes::USIZE + idx);
-            }
-        }
-        None
+    fn last_set_one(value: Storage<Self>) -> Option<usize> {
+        R::last_set::<N>(value.0)
     }
-
-    fn count_set(value: Storage<Self>) -> usize {
-        let mut total = 0;
-        for i in 0..N {
-            total += R::count_set(value.0[i]);
-        }
-        total
+    fn count_set_one(value: Storage<Self>) -> usize {
+        R::count_set::<N>(value.0)
     }
 }
 
