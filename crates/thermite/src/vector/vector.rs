@@ -1029,6 +1029,23 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }
 
+    fn mat4_point3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
+        // Single-vector convenience over the array form (`N == 1`).
+        Self::mat4_point3_product_array::<COLUMN_MAJOR, 1>(m, &[self])[0]
+    }
+
+    fn mat4_point3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        vectors: &[Self; N],
+    ) -> [Self; N] {
+        // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+        let raw = R::mat4_point3_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
+            core::mem::transmute(vectors)
+        });
+        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
+        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+    }
+
     fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>

@@ -2958,11 +2958,27 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// transposed before the actual multiplication, which will incur a performance penalty.
     fn mat4_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
 
-    /// 4x4 matrix times `N` 3D vectors (small-`N` batch; see
+    /// 4x4 matrix multiplied with `N` 3D vectors (small-`N` batch; see
     /// [`mat4_vec4_product_array`](Self::mat4_vec4_product_array)).
     fn mat4_vec3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
         m: &[Self; 4],
         vectors: &[Self; N],
+    ) -> [Self; N];
+
+    /// 4x4 Matrix-Point3 multiplication, optimized for the case where the input 3D value is a
+    /// point of homogenous coordinates (i.e. 4th lane is 1.0).
+    ///
+    /// The `COLUMN_MAJOR` generic parameter indicates whether the matrix
+    /// is stored in column-major order (`true`) or row-major order (`false`).
+    ///
+    /// If the matrix is **NOT** in column-major order, it will need to be
+    /// transposed before the actual multiplication, which will incur a performance penalty.
+    fn mat4_point3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self;
+
+    /// 4x4 Matrix multiplied with `N` 3D points (small-`N` batch).
+    fn mat4_point3_product_array<const COLUMN_MAJOR: bool, const N: usize>(
+        m: &[Self; 4],
+        points: &[Self; N],
     ) -> [Self; N];
 
     /// 4x4 Matrix-Matrix multiplication.

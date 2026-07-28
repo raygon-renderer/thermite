@@ -146,7 +146,19 @@ macro_rules! decl_math {
         pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
              $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
-        )*)*}
+        )*)*
+
+            /// Square root of `self`.
+            ///
+            /// Unlike the rest of this trait, `sqrt` is not a policy-driven approximation - it is
+            /// exact (correctly rounded) on all supported formats, so the policy is ignored. This
+            /// exists only so scalar code can spell it the same way as the other `scalar_` methods;
+            /// on vectors, `sqrt` is an inherent [`FloatVector`] method rather than a math trait one.
+            #[inline(always)]
+            fn scalar_sqrt_p<P: Policy>(self) -> Self {
+                FloatElement::sqrt(self)
+            }
+        }
 
         #[doc = "Aggregate of all scalar math traits using the default policy."]
         #[doc = ""]
@@ -177,7 +189,17 @@ macro_rules! decl_math {
             $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?
             { ScalarMathWithPolicy::[<scalar_ $name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*)*}
+        )*)*
+
+            /// Square root of `self`.
+            ///
+            /// See [`ScalarMathWithPolicy::scalar_sqrt_p`]. `sqrt` is exact, so this is simply the
+            /// scalar spelling of the inherent [`FloatVector::sqrt`] vector method.
+            #[inline(always)]
+            fn scalar_sqrt(self) -> Self {
+                ScalarMathWithPolicy::scalar_sqrt_p::<DefaultPolicy>(self)
+            }
+        }
 
         impl<M> ScalarMath for M where M: ScalarMathWithPolicy {}
 
@@ -219,6 +241,9 @@ mod tests {
     fn test_f32_scalar_math() {
         let x: f32 = 1.0;
         let _ = x.scalar_sin();
+
+        assert_eq!(4.0f32.scalar_sqrt(), 2.0);
+        assert_eq!(4.0f64.scalar_sqrt(), 2.0);
     }
 }
 

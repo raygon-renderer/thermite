@@ -549,6 +549,33 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         out
     }
 
+    /// 4x4 matrix times `N` 3D _points_. The 4th column is assumed to be multiplied with 1.0.
+    ///
+    /// Same small-`N`, transpose-once semantics as [`mat4_vec4_product`](Self::mat4_vec4_product).
+    #[inline(always)]
+    fn mat4_point3_product<const COLUMN_MAJOR: bool, const N: usize>(
+        cols: &[Storage<Self>; 4],
+        vectors: &[Storage<Self>; N],
+    ) -> [Storage<Self>; N] {
+        let m = if const { COLUMN_MAJOR } {
+            *cols
+        } else {
+            Self::mat4_transpose(cols)
+        };
+
+        let mut out = [Self::EMPTY; N];
+        let mut i = 0;
+        while i < N {
+            let v = vectors[i];
+            let x = Self::broadcast::<0>(v);
+            let y = Self::broadcast::<1>(v);
+            let z = Self::broadcast::<2>(v);
+            out[i] = Self::mul_adde(m[2], z, Self::mul_adde(m[1], y, Self::mul_adde(m[0], x, m[3])));
+            i += 1;
+        }
+        out
+    }
+
     /// 4x4 matrix times `N` 4D vectors, returning the transformed array.
     ///
     /// Intended for **small** `N`: the array is taken/returned **by value** and
