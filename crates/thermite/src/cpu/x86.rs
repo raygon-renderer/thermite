@@ -12,6 +12,8 @@
 //! | `0x80000008` / `0x8000001E` | AMD's topology, when the above are absent |
 //! | `7`:0 EDX[15] | hybrid part |
 //! | `0x1A` EAX[31:24] | this core's type (`0x20` Atom/E, `0x40` Core/P) |
+//! | `7`:1 EDX[19] | AVX10 enumerated (leaf `0x24` is valid) |
+//! | `0x24` EBX[7:0] | AVX10 converged version ([`features`]) |
 //!
 //! Leaves are tried and *checked for an empty answer*, not merely bounded by
 //! the reported maximum: a CPU can advertise a max leaf above one it does not
@@ -49,6 +51,26 @@ pub enum Avx512Tier {
     Tier3,
     /// Tier 3 + BF16 (Cooper Lake, Sapphire Rapids, Zen 4+).
     Tier4,
+}
+
+/// AVX10 converged-vector-ISA version, from leaf `0x24`.
+///
+/// AVX10 retires the per-feature AVX-512 alphabet in favour of a single
+/// monotonic version number: version N is a strict superset of version N-1,
+/// and there are no optional sub-features to enumerate. AVX10.1 is
+/// architecturally defined as the complete Granite Rapids AVX-512 feature set
+/// -- every `avx512*` flag in [`Features`], including FP16 -- at 128/256/512-bit
+/// vector lengths, so [`Features::avx512_tier`] reports [`Avx512Tier::Tier4`]
+/// on any AVX10 part.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Avx10Version {
+    /// AVX10.1 (Granite Rapids). No new operations: the rebranding rung, fixing
+    /// the AVX-512 baseline described above so software can key on one number.
+    V10_1,
+    /// AVX10.2 (Diamond Rapids). The first rung with new instructions: full
+    /// BF16 *arithmetic* (not just `vdpbf16ps`), FP8 conversions, saturating
+    /// integer converts, `vminmax*`/`vcomx` compares, and media additions.
+    V10_2,
 }
 
 #[cfg(target_arch = "x86")]
@@ -347,6 +369,10 @@ pub struct Features {
     pub avx512vpopcntdq: bool,
     pub avx512ifma: bool,
     pub avx512bf16: bool,
+    /// IEEE half-precision *arithmetic* on ZMM, not merely F16C conversion.
+    /// Sapphire Rapids and later on the Intel side, absent from Zen 4/5, which
+    /// is why no [`Avx512Tier`] requires it; part of the AVX10.1 baseline.
+    pub avx512fp16: bool,
 
     // Enumerated among the AVX-512 bits, but independent features -- Zen 3 has
     // VAES and VPCLMULQDQ with AVX2 and no AVX-512 whatsoever (GFNI arrived with
@@ -357,6 +383,15 @@ pub struct Features {
     pub gfni: bool,
     pub vaes: bool,
     pub vpclmulqdq: bool,
+
+    /// AVX10 converged version from leaf `0x24` EBX[7:0]: `0` = no AVX10,
+    /// `1` = AVX10.1, `2` = AVX10.2, higher = a future superset. Raw so an
+    /// unknown future version is preserved; [`Features::avx10`] maps it to the
+    /// [`Avx10Version`] rungs this crate knows. Like the `avx512*` flags it
+    /// means **usable** -- zeroed unless the OS saves ZMM/opmask state -- and a
+    /// non-zero version implies every `avx512*` flag above is set (see
+    /// [`features`]).
+    pub avx10_version: u8,
 }
 
 impl Features {
@@ -364,6 +399,10 @@ impl Features {
     /// crate features and the `arch::tiers::tierN` intrinsic modules in
     /// `backend/x86.rs` **exactly** -- the tier ladder is defined there, and this
     /// only reports which rung the hardware reaches.
+    ///
+    /// An AVX10 part always reports [`Avx512Tier::Tier4`]: AVX10.1 subsumes the
+    /// whole ladder, and [`features`] folds that guarantee into the individual
+    /// flags this reads.
     pub fn avx512_tier(&self) -> Option<Avx512Tier> {
         // tier1: F + CD
         if !(self.avx512f && self.avx512cd) {
@@ -393,6 +432,17 @@ impl Features {
         }
         Some(Avx512Tier::Tier4)
     }
+
+    /// The AVX10 version this CPU implements, if any.
+    pub fn avx10(&self) -> Option<Avx10Version> {
+        match self.avx10_version {
+            0 => None,
+            1 => Some(Avx10Version::V10_1),
+            // Versions are strict supersets with no optional parts, so an
+            // unknown future version still delivers everything 10.2 promises.
+            _ => Some(Avx10Version::V10_2),
+        }
+    }
 }
 
 /// Probe the CPU. Costs a few `cpuid`s; callers cache the result.
@@ -420,6 +470,9 @@ pub fn features() -> Features {
     // CPUID.1:ECX[27] reports; guarded above.
     let xcr0 = if osxsave { unsafe { _xgetbv(0) } } else { 0 };
     let os_saves_ymm = osxsave && (xcr0 & XCR0_AVX) == XCR0_AVX;
+    // AVX-512 and AVX10 both need three more XCR0 components on top of AVX's:
+    // the opmask registers, the upper half of ZMM0-15, and ZMM16-31.
+    let os_saves_zmm = os_saves_ymm && (xcr0 & XCR0_AVX512) == XCR0_AVX512;
 
     f.avx = os_saves_ymm && bit(leaf1.ecx, 28);
     // FMA and F16C operate on YMM, so they inherit the same OS requirement.
@@ -428,11 +481,13 @@ pub fn features() -> Features {
 
     if max_basic >= 7 {
         let leaf7 = cpuid(7, 0);
+        // Subleaf 0's EAX reports the max subleaf; subleaf 1 carries AVX512-BF16
+        // and the AVX10 enumeration bit, so check before reading.
+        let leaf7_1 = (leaf7.eax >= 1).then(|| cpuid(7, 1));
+
         f.avx2 = f.avx && bit(leaf7.ebx, 5);
 
-        // AVX-512 needs three more XCR0 components on top of AVX's: the opmask
-        // registers, the upper half of ZMM0-15, and ZMM16-31.
-        f.avx512f = f.avx && (xcr0 & XCR0_AVX512) == XCR0_AVX512 && bit(leaf7.ebx, 16);
+        f.avx512f = f.avx && os_saves_zmm && bit(leaf7.ebx, 16);
 
         if f.avx512f {
             // Leaf 7 subleaf 0: EBX
@@ -449,10 +504,12 @@ pub fn features() -> Features {
             f.avx512bitalg = bit(leaf7.ecx, 12);
             f.avx512vpopcntdq = bit(leaf7.ecx, 14);
 
-            // BF16 is the odd one out: leaf 7 *subleaf 1*, EAX[5]. EAX of
-            // subleaf 0 reports the max subleaf, so check before reading.
-            if leaf7.eax >= 1 {
-                f.avx512bf16 = bit(cpuid(7, 1).eax, 5);
+            // Leaf 7 subleaf 0: EDX
+            f.avx512fp16 = bit(leaf7.edx, 23);
+
+            // BF16 is the odd one out: leaf 7 *subleaf 1*, EAX[5].
+            if let Some(l) = leaf7_1 {
+                f.avx512bf16 = bit(l.eax, 5);
             }
         }
 
@@ -470,6 +527,50 @@ pub fn features() -> Features {
         f.gfni = bit(leaf7.ecx, 8);
         f.vaes = f.avx && bit(leaf7.ecx, 9);
         f.vpclmulqdq = f.avx && bit(leaf7.ecx, 10);
+
+        // --- AVX10 ------------------------------------------------------
+        // 7:1 EDX[19] only says leaf 0x24 is valid; the capability itself is
+        // that leaf's converged version number. The 256-bit-max option (and
+        // with it the vector-length enumeration in 0x24 EBX[18:16]) was
+        // dropped from the spec in rev 2.0 -- AVX10 always means all three
+        // widths -- so the length bits are deliberately not consulted: the SDM
+        // now marks them reserved-at-1 purely for software written against the
+        // original spec (Linux/KVM read only the version too). Usability is
+        // therefore gated on the same OS ZMM state as AVX-512.
+        if os_saves_zmm
+            && f.avx
+            && max_basic >= 0x24
+            && let Some(l) = leaf7_1
+            && bit(l.edx, 19)
+        {
+            f.avx10_version = (cpuid(0x24, 0).ebx & 0xff) as u8;
+        }
+
+        // AVX10.1 is architecturally defined as the complete Granite Rapids
+        // AVX-512 feature set at every vector length, so fold that guarantee
+        // into the individual flags. On every shipped part this is a no-op --
+        // the legacy bits are still enumerated alongside AVX10 -- but the
+        // spec only promises that for early processors, and dispatch keyed on
+        // `avx512f` (or the tier ladder) must keep working when the legacy
+        // bits eventually go dark.
+        if f.avx10_version >= 1 {
+            f.avx512f = true;
+            f.avx512cd = true;
+            f.avx512bw = true;
+            f.avx512dq = true;
+            f.avx512vl = true;
+            f.avx512vbmi = true;
+            f.avx512vbmi2 = true;
+            f.avx512vnni = true;
+            f.avx512bitalg = true;
+            f.avx512vpopcntdq = true;
+            f.avx512ifma = true;
+            f.avx512bf16 = true;
+            f.avx512fp16 = true;
+            f.gfni = true;
+            f.vaes = true;
+            f.vpclmulqdq = true;
+        }
     }
 
     f

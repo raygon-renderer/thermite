@@ -461,6 +461,7 @@ mod tests {
         );
         assert_eq!(f.avx512ifma, std::is_x86_feature_detected!("avx512ifma"), "avx512ifma");
         assert_eq!(f.avx512bf16, std::is_x86_feature_detected!("avx512bf16"), "avx512bf16");
+        assert_eq!(f.avx512fp16, std::is_x86_feature_detected!("avx512fp16"), "avx512fp16");
         assert_eq!(f.gfni, std::is_x86_feature_detected!("gfni"), "gfni");
         assert_eq!(f.vaes, std::is_x86_feature_detected!("vaes"), "vaes");
         assert_eq!(f.vpclmulqdq, std::is_x86_feature_detected!("vpclmulqdq"), "vpclmulqdq");
@@ -483,7 +484,9 @@ mod tests {
             assert_eq!(f.avx512_tier(), None, "a tier without AVX512F");
             assert!(!f.avx512cd && !f.avx512bw && !f.avx512dq && !f.avx512vl);
             assert!(!f.avx512vbmi && !f.avx512vbmi2 && !f.avx512vnni && !f.avx512bitalg);
-            assert!(!f.avx512vpopcntdq && !f.avx512ifma && !f.avx512bf16);
+            assert!(!f.avx512vpopcntdq && !f.avx512ifma && !f.avx512bf16 && !f.avx512fp16);
+            // AVX10 folds the foundation in, so it cannot outlive it either.
+            assert_eq!(f.avx10_version, 0, "AVX10 without AVX512F");
         }
 
         // Synthesise each rung and check it reports exactly that rung: this pins
@@ -534,6 +537,38 @@ mod tests {
         assert_eq!(f_only.avx512_tier(), None);
 
         assert!(Avx512Tier::Tier1 < Avx512Tier::Tier4, "tiers must order");
+    }
+
+    /// AVX10 is a version number, not a feature alphabet: `features()` must
+    /// fold version >= 1 into the full AVX-512 flag set, and the raw-version
+    /// mapping must treat unknown future versions as supersets.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn avx10_implies_the_full_ladder() {
+        use crate::cpu::x86::{Avx10Version, Avx512Tier, Features};
+
+        let f = crate::cpu::x86::features();
+
+        // On real AVX10 hardware the fold must have landed: the whole ladder,
+        // plus the pieces no tier requires (FP16).
+        if f.avx10().is_some() {
+            assert_eq!(f.avx512_tier(), Some(Avx512Tier::Tier4));
+            assert!(f.avx512fp16 && f.avx512vl && f.gfni && f.vaes && f.vpclmulqdq);
+        }
+
+        // The raw-version -> rung mapping. Versions are strict supersets with
+        // no optional parts, so an unknown future version still satisfies
+        // everything 10.2 promises and must not report `None`.
+        let mut s = Features::default();
+        assert_eq!(s.avx10(), None);
+        s.avx10_version = 1;
+        assert_eq!(s.avx10(), Some(Avx10Version::V10_1));
+        s.avx10_version = 2;
+        assert_eq!(s.avx10(), Some(Avx10Version::V10_2));
+        s.avx10_version = 9;
+        assert_eq!(s.avx10(), Some(Avx10Version::V10_2), "future versions are supersets of 10.2");
+
+        assert!(Avx10Version::V10_1 < Avx10Version::V10_2, "versions must order");
     }
 
 
