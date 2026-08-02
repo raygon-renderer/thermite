@@ -209,6 +209,26 @@ macro_rules! check {
     }};
 }
 
+/// `Dual` must report its inner vector's align capability, in both directions:
+/// the scans are an `align` ladder, and a wrong answer here picks the wrong
+/// lowering without changing any result.
+#[test]
+fn forwards_native_align() {
+    assert!(
+        !<Dual<Vector<f32>, 2> as GenericVector>::HAS_NATIVE_ALIGN,
+        "scalar backend has no native align; Dual must not claim one"
+    );
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        use thermite::backend::x86_v3::f32x8;
+        assert!(
+            <Dual<f32x8, 2> as GenericVector>::HAS_NATIVE_ALIGN,
+            "f32x8 has a native align on AVX2; Dual dropped it"
+        );
+    }
+}
+
 /// 1-lane scalar backend: every ladder stage is compiled out, so this pins the
 /// degenerate case where a scan is the identity.
 #[test]

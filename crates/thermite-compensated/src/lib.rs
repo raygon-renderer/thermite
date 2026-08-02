@@ -1637,6 +1637,9 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
+    // Both components align through `V`, so this is only as native as `V` is.
+    const HAS_NATIVE_ALIGN: bool = V::HAS_NATIVE_ALIGN;
+
 
     fn map<F>(mut self, f: F) -> Self
     where

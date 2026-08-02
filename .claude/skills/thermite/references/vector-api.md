@@ -77,6 +77,10 @@ let out    = done.expand_m(background, active);   // == active.select(kernel-per
 // Two-vector element align (palignr family; any element type): the window of
 // LANES lanes starting at lane OFFSET of [a, b]. OFFSET=0 -> a, OFFSET=LANES -> b.
 a.align::<OFFSET>(b)   // sliding window across a load boundary; int backends use native byte aligns
+V::HAS_NATIVE_ALIGN    // whether that's one instruction or a shuffle+blend fallback.
+    // Same results either way, so it only picks a lowering - gate on it when building a
+    // LADDER of aligns (the prefix-scan family), where the emulated form can lose to a
+    // lane walk. Composites (Dual/Compensated/Complex) forward their inner vector's.
 
 // Casting
 v.cast::<W>()         // numeric cast, like `as`

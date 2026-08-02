@@ -1317,6 +1317,22 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// native byte aligns.
     fn align<const OFFSET: usize>(self, other: Self) -> Self;
 
+    /// Whether [`align`](Self::align) is a native cross-register instruction rather
+    /// than the generic shuffle-and-blend fallback, forwarded from
+    /// [`Register::HAS_NATIVE_ALIGN`](crate::register::Register::HAS_NATIVE_ALIGN).
+    ///
+    /// Both paths give the same results, so this only ever selects between
+    /// lowerings: one instruction where the backend has a real align (`palignr`,
+    /// `vext`, `i8x16.shuffle`), two permutes plus a blend where it has only
+    /// variable permutes, and a scalar memory round-trip where it has neither.
+    ///
+    /// Gate on it when an algorithm is built from a *ladder* of aligns - the
+    /// prefix-scan family is the one in-tree - since a ladder of emulated aligns can
+    /// lose to walking the lanes outright. A composite vector forwards the flag from
+    /// the vector it wraps, so `Dual`/`Compensated`/`Complex` report whatever their
+    /// inner vector does.
+    const HAS_NATIVE_ALIGN: bool;
+
     /// Apply a function to each element in the vector, returning a new vector with the results.
     ///
     /// This is not explicitly SIMD-optimized, so may be slower than using native vector operations.
@@ -2554,9 +2570,13 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
 /// ladder, and reversing back, which needs only literal shifts and is correct at any
 /// width.
 ///
-/// No `HAS_NATIVE_ALIGN` gate is possible here: it is a `Register` const and is not
-/// re-exposed on the vector traits, so a composite over a register with an emulated
-/// align runs the ladder where the register layer would have chosen a scalar walk.
+/// Every stage is an `align`, so on a vector whose
+/// [`HAS_NATIVE_ALIGN`](GenericVector::HAS_NATIVE_ALIGN) is false each one expands to
+/// a shuffle-and-blend and the ladder gets correspondingly more expensive. It is
+/// still `ceil(log2(LANES))` stages against a per-lane walk's `LANES` extract/insert
+/// pairs, which is why this does not switch lowering the way the register-layer
+/// ladder does -- there the fallback walks a slice in place and is genuinely cheaper.
+/// Gate on the const at the call site if a specific composite says otherwise.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! scan_ladder {

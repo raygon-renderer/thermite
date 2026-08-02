@@ -84,8 +84,8 @@ sequences per backend at zero runtime cost ([performance.md](performance.md) sec
   lookup, widen/narrow (`extend`/`narrow`/`concat`/`split`),
   interleave/deinterleave, reverse/swap_bytes, `compress`/`compress_z`/`compress_m`
   and the inverse `expand`/`expand_z`/`expand_m`, `align::<OFFSET>`
-  (two-vector lane window), cast/into_bits, `zz`/`nz`, prefix/suffix mask,
-  map/fold/reduce.
+  (two-vector lane window) + `HAS_NATIVE_ALIGN`, cast/into_bits, `zz`/`nz`,
+  prefix/suffix mask, map/fold/reduce.
 - **BitwiseVector / BitshiftVector** (sec 2): `&` `|` `^` `!`, `bitandnot`,
   `ternlog`/`bilog`; `shl`/`shr`/`shlv`/`shrv`/`shli`/`shri`, byte shifts,
   rotates, `reverse_bits`.

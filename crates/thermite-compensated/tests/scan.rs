@@ -139,6 +139,26 @@ macro_rules! check {
     }};
 }
 
+/// `Compensated` must report its inner vector's align capability, in both
+/// directions: the scans are an `align` ladder, and a wrong answer here picks the
+/// wrong lowering without changing any result.
+#[test]
+fn forwards_native_align() {
+    assert!(
+        !<Compensated<Vector<f64>> as GenericVector>::HAS_NATIVE_ALIGN,
+        "scalar backend has no native align; Compensated must not claim one"
+    );
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        use thermite::backend::x86_v3::f64x4;
+        assert!(
+            <Compensated<f64x4> as GenericVector>::HAS_NATIVE_ALIGN,
+            "f64x4 has a native align on AVX2; Compensated dropped it"
+        );
+    }
+}
+
 #[test]
 fn scalar() {
     check!("scalar Compensated<f64>", Vector<f64>);

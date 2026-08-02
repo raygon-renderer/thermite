@@ -319,6 +319,7 @@ impl<R: Register> GenericVector for Vector<R> {
     fn expand_z(self, mask: Self::Mask) -> Self { Vector(R::expand_z(self.0, mask.0)) }
     fn expand_m(self, src: Self, mask: Self::Mask) -> Self { Vector(R::expand_m(src.0, mask.0, self.0)) }
     fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
+    const HAS_NATIVE_ALIGN: bool = R::HAS_NATIVE_ALIGN;
 
     // The arguments of these are reversed for the register
     fn zz(self, mask: Self::Mask) -> Self { Vector(R::zz(mask.0, self.0)) }

@@ -170,6 +170,26 @@ macro_rules! check {
     }};
 }
 
+/// `Complex` must report its inner vector's align capability, in both directions:
+/// the min/max scans are an `align` ladder, and a wrong answer here picks the wrong
+/// lowering without changing any result.
+#[test]
+fn forwards_native_align() {
+    assert!(
+        !<Complex<Vector<f64>> as GenericVector>::HAS_NATIVE_ALIGN,
+        "scalar backend has no native align; Complex must not claim one"
+    );
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        use thermite::backend::x86_v3::f64x4;
+        assert!(
+            <Complex<f64x4> as GenericVector>::HAS_NATIVE_ALIGN,
+            "f64x4 has a native align on AVX2; Complex dropped it"
+        );
+    }
+}
+
 #[test]
 fn scalar() {
     check!("scalar Complex<f64>", Vector<f64>);

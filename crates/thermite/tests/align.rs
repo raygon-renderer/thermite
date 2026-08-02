@@ -218,4 +218,40 @@ mod native_align_flag {
             n::I64x2Neon, n::U8x16Neon, n::U16x8Neon, n::U32x4Neon, n::U64x2Neon,
         );
     }
+
+    /// `GenericVector::HAS_NATIVE_ALIGN` has to report what the register underneath
+    /// actually does. A wrong answer here is invisible to every functional test -
+    /// both align paths agree on results - and only shows up as a composite scan
+    /// picking the wrong lowering, so it is asserted directly.
+    #[test]
+    fn vector_layer_forwards_the_register() {
+        use thermite::prelude::*;
+
+        macro_rules! assert_forwards {
+            ($($v:ty => $r:ty),* $(,)?) => {$(
+                assert_eq!(
+                    <$v as GenericVector>::HAS_NATIVE_ALIGN,
+                    <$r as Register>::HAS_NATIVE_ALIGN,
+                    "{} does not forward {}'s HAS_NATIVE_ALIGN",
+                    stringify!($v),
+                    stringify!($r),
+                );
+            )*};
+        }
+
+        // The scalar backend is the interesting direction: it has no native align,
+        // so this pins that `false` propagates as readily as `true`.
+        assert_forwards!(Vector<f32> => f32, Vector<f64> => f64);
+
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            use thermite::backend::x86_v3::{self, registers as v3};
+            assert_forwards!(
+                x86_v3::f32x4 => v3::F32x4V3,
+                x86_v3::f32x8 => v3::F32x8V3,
+                x86_v3::f64x4 => v3::F64x4V3,
+                x86_v3::i32x8 => v3::I32x8V3,
+            );
+        }
+    }
 }

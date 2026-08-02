@@ -782,7 +782,9 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   just routes the whole prefix-scan family onto the sequential fallback. Set the
   flag in the same `impl_*_align*!` macro that emits the body, and if you hand-roll
   an `align`, set it by hand; `tests/align.rs::native_align_flag` asserts it for
-  every full-width register. Same discipline elsewhere: `compress_via_table!` /
+  every full-width register, and that `GenericVector::HAS_NATIVE_ALIGN` (the
+  vector-layer re-export, which composites forward from their inner vector) reports
+  the same thing. Same discipline elsewhere: `compress_via_table!` /
   `compress_via_wide!` emit `compress` *and* `expand` together so a backend cannot
   take a fast one and a scalar other.
 - **The scalar backend is mandatory and is the oracle.** Must compile and be

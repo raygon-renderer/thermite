@@ -671,6 +671,9 @@ impl<V: ComplexFloatVector> GenericVector for Complex<V> {
         Complex::new(self.re.align::<OFFSET>(other.re), self.im.align::<OFFSET>(other.im))
     }
 
+    // Both parts align through `V`, so this is only as native as `V` is.
+    const HAS_NATIVE_ALIGN: bool = V::HAS_NATIVE_ALIGN;
+
     #[inline(always)]
     fn map<F>(mut self, f: F) -> Self
     where

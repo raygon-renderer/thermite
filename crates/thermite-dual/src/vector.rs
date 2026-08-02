@@ -805,6 +805,9 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
+    // Every component aligns through `V`, so this is only as native as `V` is.
+    const HAS_NATIVE_ALIGN: bool = V::HAS_NATIVE_ALIGN;
+
     #[inline(always)]
     fn map<F>(mut self, f: F) -> Self
     where
