@@ -120,6 +120,13 @@ own bounds apply.
 
 ### `#[thermite::dispatch(...)]` -- per-backend codegen for library code (attribute)
 
+**Mandatory on every SIMD entry point, not an optimization.** A generic-over-`S`
+body with no `#[dispatch]` above it (and no `#[dispatch]` ancestor it inlines
+into) is compiled without the target features, so rustc refuses to inline any
+`core::arch` intrinsic into it -- the kernel degenerates to a `call` per single
+instruction. Catastrophically slow, and nothing in the type system or test suite
+catches it ([performance.md](performance.md) sec 0).
+
 A `#[proc_macro_attribute]`, not a bang macro. Put it on a `fn`, `impl` block,
 `trait`, or `mod` generic over `S: HasIsa`/`Simd`. For each backend it generates
 a `#[target_feature]` trampoline and turns the body into a
@@ -150,8 +157,25 @@ fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) { /* uses S::fxN, S::f32x8, ... *
 The two compose: `dispatch_dyn!` is the runtime boundary that picks `S`; the
 `#[dispatch]` functions it calls carry the per-backend `target_feature` codegen.
 On AVX2 the boundary also calls `zeroupper` (avoids AVX<->SSE transition
-penalties). `#[inline(always)]` helpers inside a dispatched body keep their
-target-feature codegen.
+penalties).
+
+#### `#[inline(always)]` is the other half of the rule
+
+Target features propagate into a callee **only when it is inlined**, so every
+helper reached from inside a dispatched body must be `#[inline(always)]` --
+plain `#[inline]` is a hint the optimizer routinely declines in exactly the
+large `target_feature` bodies where it matters, and a non-inlined helper is
+featureless: the same call-per-instruction soup, one level down. This is
+affordable because the `#[dispatch]` trampoline carries the features itself, so
+the dispatched fn need not inline (one out-of-line copy per backend) while the
+interior inlines aggressively.
+
+Corollary -- don't put `#[dispatch]` on tiny leaf helpers: a dispatch boundary
+on a one-liner just blocks inlining (that is what `#[skip_dispatch]` exists for
+inside `decl_math!`). Also beware closures and `core::array::map`/`from_fn`
+inside a dispatched body -- they often fail to inline, dropping their intrinsics
+outside the feature context; hand-roll loops
+([performance.md](performance.md) secs 0 and 11).
 
 ### When you need `FloatSimd<F>` / `Simd` instead of a `*Vector` bound
 

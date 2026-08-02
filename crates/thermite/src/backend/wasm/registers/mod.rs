@@ -423,3 +423,11 @@ macro_rules! impl_extend_same {
 impl_extend_same!(
     F32x4Wasm, I32x4Wasm, U32x4Wasm, F64x2Wasm, I64x2Wasm, U64x2Wasm, I16x8Wasm, U16x8Wasm, I8x16Wasm, U8x16Wasm
 );
+
+// `WidenIndexRegister` for the table-path registers (see the macro for why wasm
+// needs a two-step extend ladder rather than a single widening load).
+impl_widen_indices_wasm! {
+    F32x4Wasm => x4, I32x4Wasm => x4, U32x4Wasm => x4,
+    F64x2Wasm => x2, I64x2Wasm => x2, U64x2Wasm => x2,
+    I16x8Wasm => x8, U16x8Wasm => x8,
+}

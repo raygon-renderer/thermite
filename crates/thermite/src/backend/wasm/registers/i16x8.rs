@@ -100,6 +100,10 @@ impl MaskRegister for I16x8Wasm {
         !arch::v128_any_true(value)
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        arch::bitmask_to_i16x8x(bitmask)
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i16x8_bitmask(value) as u64)
     }
@@ -190,17 +194,14 @@ impl Register for I16x8Wasm {
 
     const HAS_PERMUTEV: bool = true;
 
+    impl_wasm_align_shuffle!();
+
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // Build a per-byte swizzle control: lane w -> bytes [2w, 2w+1].
-        let mut bytes = [0u8; 16];
-        let mut i = 0;
-        while i < 8 {
-            bytes[2 * i] = (idxs[i] as u8).wrapping_mul(2);
-            bytes[2 * i + 1] = (idxs[i] as u8).wrapping_mul(2).wrapping_add(1);
-            i += 1;
-        }
-        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
-        arch::u8x16_relaxed_swizzle(value, ctrl)
+        // Per-byte swizzle control: lane w -> bytes [2w, 2w+1]. Note this also
+        // fixes an out-of-range difference from the other backends: the old
+        // `wrapping_mul(2)` build aliased a valid lane for large indices where
+        // the clamping builder zeroes, matching `neon_lane_table`/x86.
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<8>(unsafe { core::mem::transmute(idxs) }))
     }
 
     compress_via_table!();

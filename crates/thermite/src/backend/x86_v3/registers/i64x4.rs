@@ -88,6 +88,10 @@ impl MaskRegister for I64x4V3 {
         unsafe { arch::_mm256_movemask_epi8(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_movm_epi64x_v3(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm256_movemask_pd(arch::_mm256_castsi256_pd(value)) as u64 })
     }

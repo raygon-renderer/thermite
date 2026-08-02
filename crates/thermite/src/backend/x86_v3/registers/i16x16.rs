@@ -122,6 +122,10 @@ impl MaskRegister for I16x16V3 {
         unsafe { arch::_mm256_count_mask_epi16x_v3(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_movm_epi16x_v3(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         // Pack the 16x16-bit mask to 16x8-bit. `vpacksswb` interleaves the two 128-bit
         // lanes ([a0..a7 b0..b7 a8..a15 b8..b15] order), so permute the 64-bit groups back

@@ -80,6 +80,142 @@ pub const fn neon_lane_table<const N: usize>(elem_size: usize, idxs: [u32; N]) -
     cu8x16(out)
 }
 
+/// `expand[j] = j / elem` - replicates each lane index across its `elem` byte
+/// slots. Constant for a given register shape.
+const fn lane_expand_pattern(elem: usize) -> [u8; 16] {
+    let mut o = [0u8; 16];
+    let mut j = 0;
+    while j < 16 {
+        o[j] = (j / elem) as u8;
+        j += 1;
+    }
+    o
+}
+
+/// `offsets[j] = j % elem` - the intra-lane byte offsets added after scaling.
+const fn lane_offset_pattern(elem: usize) -> [u8; 16] {
+    let mut o = [0u8; 16];
+    let mut j = 0;
+    while j < 16 {
+        o[j] = (j % elem) as u8;
+        j += 1;
+    }
+    o
+}
+
+/// Runtime companion to [`neon_lane_table`]: the same `tbl` byte-index table,
+/// built with SIMD instead of a scalar loop.
+///
+/// [`neon_lane_table`] is a `const fn`, which is exactly right for callers that
+/// can evaluate it at compile time - `swizzle_const` and the `IMM8` shuffle
+/// family, where it folds to a literal (measured: a 4-lane `swizzle_const` is 5
+/// instructions, and LLVM often recognises the pattern and skips `tbl`
+/// entirely). But const-evaluable code has no SIMD, so on the two *runtime*
+/// callers - `permutev` and `swizzle` - it lowered verbatim to ~80 scalar
+/// instructions: a saturating `cmp`/`csel` clamp plus a `mov v0.b[i]` insert for
+/// every one of the 16 output bytes. Measured on a 4-lane runtime permute:
+/// 83 instructions (plus a stack frame) before, 17 after.
+///
+/// The mapping `byte[j] = idx[j / elem] * elem + (j % elem)` is pure lane work:
+///
+/// 1. saturating-narrow the `u32` indices to bytes,
+/// 2. clamp to `AVAIL` (see below) so an out-of-range lane index lands exactly
+///    on the first byte the table lookup cannot address, which it zeroes -
+///    preserving [`neon_lane_table`]'s documented out-of-range semantics,
+/// 3. replicate each index across its `elem` byte slots (one `tbl` with a
+///    constant pattern),
+/// 4. scale by `elem` and add the intra-lane offsets (both constants).
+///
+/// `AVAIL` is the number of lanes the consuming `tbl` can actually address, and
+/// is what step 2 clamps to: `N` for the single-register [`permutev`] form, but
+/// `2 * N` for the two-register `swizzle` form, whose `tbl2` addresses 32 bytes
+/// and for which indices in `N..2*N` are *valid* selections from the second
+/// register. Clamping to `AVAIL` puts an out-of-range index on byte
+/// `AVAIL * elem` (16 or 32 respectively), which the corresponding `tbl` zeroes.
+///
+/// Shapes outside `{2, 4, 8, 16}` lanes (`elem` would not divide 16) fall back
+/// to the scalar builder, which is still correct.
+#[inline(always)]
+pub unsafe fn neon_lane_table_dyn<const N: usize, const AVAIL: usize>(idxs: [u32; N]) -> uint8x16_t {
+    unsafe {
+        if const { !(N == 2 || N == 4 || N == 8 || N == 16) } {
+            return neon_lane_table::<N>(16 / N, idxs);
+        }
+
+        let p = idxs.as_ptr();
+
+        // 1. Saturating narrow to bytes. Saturation keeps a wildly out-of-range
+        //    index out of range rather than aliasing a valid lane.
+        let bytes: uint8x16_t = if const { N == 16 } {
+            let lo = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));
+            let hi = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p.add(8))), vqmovn_u32(vld1q_u32(p.add(12)))));
+            vcombine_u8(lo, hi)
+        } else if const { N == 8 } {
+            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));
+            vcombine_u8(b, b)
+        } else if const { N == 4 } {
+            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vdup_n_u16(0)));
+            vcombine_u8(b, b)
+        } else {
+            // N == 2: only a 64-bit load is in bounds.
+            let v = vcombine_u32(vld1_u32(p), vdup_n_u32(0));
+            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(v), vdup_n_u16(0)));
+            vcombine_u8(b, b)
+        };
+
+        // 2. Clamp: index AVAIL scales to byte AVAIL*elem (16 for tbl, 32 for
+        //    tbl2), which the consuming table lookup treats as out of range.
+        let clamped = vminq_u8(bytes, vdupq_n_u8(const { AVAIL as u8 }));
+
+        // 3-4. Byte registers need no replication, scaling, or offsetting.
+        if const { N == 16 } {
+            return clamped;
+        }
+
+        neon_lane_expand::<N>(clamped)
+    }
+}
+
+/// Steps 3-4 of [`neon_lane_table_dyn`], on already-clamped byte lane indices:
+/// replicate each index across its `elem` byte slots, scale, offset.
+#[inline(always)]
+unsafe fn neon_lane_expand<const N: usize>(clamped: uint8x16_t) -> uint8x16_t {
+    unsafe {
+        if const { N == 16 } {
+            return clamped;
+        }
+
+        let expanded = vqtbl1q_u8(clamped, const { cu8x16(lane_expand_pattern(16 / N)) });
+        let scaled = match const { 16 / N } {
+            2 => vshlq_n_u8::<1>(expanded),
+            4 => vshlq_n_u8::<2>(expanded),
+            _ => vshlq_n_u8::<3>(expanded),
+        };
+
+        vaddq_u8(scaled, const { cu8x16(lane_offset_pattern(16 / N)) })
+    }
+}
+
+/// Byte-row entry point for the compress/expand table paths.
+///
+/// A `COMPRESS8`/`EXPAND8` row is already byte-sized lane indices, and its first
+/// `LANES` entries are always `< LANES` (the padding lanes sort past them), so
+/// neither the saturating narrow nor the clamp that [`neon_lane_table_dyn`]
+/// needs applies here - the row goes straight into the replicate/scale/offset
+/// tail. That removes the `u8 -> u32 -> u8` round trip those paths would
+/// otherwise make through `widen_indices` and back.
+///
+/// # Safety
+///
+/// `row` must point to at least 8 readable bytes, all `< N`.
+#[inline(always)]
+pub unsafe fn neon_lane_table_row<const N: usize>(row: *const u8) -> uint8x16_t {
+    unsafe {
+        let b = vld1_u8(row);
+        neon_lane_expand::<N>(vcombine_u8(b, b))
+    }
+}
+
 /// Byte-index table selecting lane `idx & (N-1)` of each pair of lanes from a
 /// 4-lane register, from an x86-style 2-bit-per-lane `IMM8` (`_mm_shuffle_ps`
 /// index encoding).

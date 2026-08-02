@@ -115,6 +115,10 @@ impl MaskRegister for F64x2Wasm {
         arch::v128_any_true(value)
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        arch::bitmask_to_i64x2x(bitmask)
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i64x2_bitmask(value) as u64)
     }
@@ -191,8 +195,10 @@ impl Register for F64x2Wasm {
 
     const HAS_PERMUTEV: bool = true;
 
+    impl_wasm_align_shuffle!();
+
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(value, arch::x2indices(idxs[0] as u8, idxs[1] as u8))
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<2>(unsafe { core::mem::transmute(idxs) }))
     }
 
     /// Const-index permute: emits a single `i64x2.shuffle`. Only 4 possible

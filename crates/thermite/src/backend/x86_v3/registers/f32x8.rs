@@ -118,6 +118,10 @@ impl MaskRegister for F32x8V3 {
         unsafe { arch::_mm256_count_mask_ps_v3(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_castsi256_ps(arch::_mm256_movm_epi32x_v3(bitmask)) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm256_movemask_ps(value) as u64 })
     }
@@ -275,6 +279,8 @@ impl Register for F32x8V3 {
     compress_via_table!();
 
     const HAS_PERMUTEV: bool = true;
+
+    impl_float_align_via_bits!(super::U32x8V3);
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }

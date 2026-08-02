@@ -276,6 +276,10 @@ macro_rules! neon_mask_core {
                     Some(arch::[<neon_movemask_ $s>](value))
                 }
 
+                fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+                    unsafe { arch::$from_u(arch::[<neon_frombitmask_x $n>](bitmask)) }
+                }
+
                 // Negated horizontal sum of the mask lanes - no bitmask, no popcount.
                 fn count_set<const N: usize>(values: [Storage<Self>; N]) -> usize {
                     arch::[<neon_count_mask_ $s>](values)
@@ -367,7 +371,7 @@ macro_rules! neon_register {
 
                 fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
                     let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
-                    arch::[<neon_tbl_ $s>](value, arch::neon_lane_table::<$n>(16 / $n, idxs))
+                    arch::[<neon_tbl_ $s>](value, unsafe { arch::neon_lane_table_dyn::<$n, $n>(idxs) })
                 }
 
                 // One TBL2 replaces the default's two-permute + blend lowering.
@@ -375,7 +379,7 @@ macro_rules! neon_register {
                 // the permutev-based default's out-of-range behavior.
                 fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
                     let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
-                    arch::[<neon_tbl2_ $s>](a, b, arch::neon_lane_table::<$n>(16 / $n, idxs))
+                    arch::[<neon_tbl2_ $s>](a, b, unsafe { arch::neon_lane_table_dyn::<$n, { 2 * $n }>(idxs) })
                 }
 
                 fn swizzle_const<I: crate::swizzle::SwizzleIndices<Self::Lanes>>(
@@ -1577,6 +1581,8 @@ macro_rules! neon_broadcast_align {
             }
         }
 
+        const HAS_NATIVE_ALIGN: bool = true;
+
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match OFFSET {
@@ -1599,6 +1605,8 @@ macro_rules! neon_broadcast_align {
                 }
             }
         }
+
+        const HAS_NATIVE_ALIGN: bool = true;
 
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
@@ -1628,6 +1636,8 @@ macro_rules! neon_broadcast_align {
                 }
             }
         }
+
+        const HAS_NATIVE_ALIGN: bool = true;
 
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
@@ -1669,6 +1679,8 @@ macro_rules! neon_broadcast_align {
                 }
             }
         }
+
+        const HAS_NATIVE_ALIGN: bool = true;
 
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
@@ -1746,4 +1758,54 @@ macro_rules! neon_approx_recip {
         const HAS_APPROX_RCP: bool = false;
         const HAS_APPROX_RSQRT: bool = false;
     };
+}
+
+/// Stamp [`WidenIndexRegister`](crate::register::WidenIndexRegister) for NEON
+/// registers: widen a `u8` compress/expand table row to the `u32` permute
+/// control via the `vmovl` ladder (`u8 -> u16 -> u32`).
+///
+/// Shape tag is the lane count; `x8` needs both halves of the intermediate
+/// `uint16x8_t` because the control array is then 32 bytes.
+#[rustfmt::skip]
+macro_rules! impl_widen_indices_neon {
+    ($($reg:ty => ($shape:ident, $sfx:ident)),* $(,)?) => {
+        $(
+            #[thermite_macros::inline_always]
+            impl $crate::register::WidenIndexRegister for $reg {
+                fn widen_indices(
+                    idxs: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
+                ) -> generic_array::GenericArray<u32, <Self as $crate::register::CoreRegister>::Lanes> {
+                    unsafe { impl_widen_indices_neon!(@body idxs, $shape) }
+                }
+
+                // Straight from the byte row: no widen, no narrow, no clamp.
+                fn permutev_row(
+                    value: $crate::register::Storage<Self>,
+                    row: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
+                ) -> $crate::register::Storage<Self> {
+                    paste::paste! {
+                        unsafe { arch::[<neon_tbl_ $sfx>](value, impl_widen_indices_neon!(@row row, $shape)) }
+                    }
+                }
+            }
+        )*
+    };
+
+    (@row $row:ident, x2) => { arch::neon_lane_table_row::<2>($row.as_ptr()) };
+    (@row $row:ident, x4) => { arch::neon_lane_table_row::<4>($row.as_ptr()) };
+    (@row $row:ident, x8) => { arch::neon_lane_table_row::<8>($row.as_ptr()) };
+
+    (@body $idxs:ident, x2) => {{ impl_widen_indices_neon!(@low $idxs) }};
+    (@body $idxs:ident, x4) => {{ impl_widen_indices_neon!(@low $idxs) }};
+    (@body $idxs:ident, x8) => {{
+        let w16 = arch::vmovl_u8(arch::vld1_u8($idxs.as_ptr()));
+        let lo = arch::vmovl_u16(arch::vget_low_u16(w16));
+        let hi = arch::vmovl_high_u16(w16);
+        core::mem::transmute_copy(&[lo, hi])
+    }};
+
+    (@low $idxs:ident) => {{
+        let w16 = arch::vmovl_u8(arch::vld1_u8($idxs.as_ptr()));
+        core::mem::transmute_copy(&arch::vmovl_u16(arch::vget_low_u16(w16)))
+    }};
 }

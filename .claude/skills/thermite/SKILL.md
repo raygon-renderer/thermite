@@ -109,6 +109,46 @@ and at `dispatch_dyn!` boundaries; anything reusable stays generic over bounds.
 See [references/generic-programming.md](references/generic-programming.md) (read
 first) and [references/composite-types.md](references/composite-types.md).
 
+## Rule zero: `#[thermite::dispatch]` + `#[inline(always)]`
+
+**The single highest-impact rule in Thermite code, and invisible to the type
+system.** rustc **will not inline a `#[target_feature]` fn into a caller lacking
+those features**, and every `core::arch` intrinsic is one. A generic-over-`S`
+body with no `#[dispatch]` above it (and no `#[dispatch]` ancestor inlining it)
+is compiled featureless: every intrinsic stays out-of-line, a `call` per single
+instruction, no scheduling or regalloc across ops. Compiles, correct,
+catastrophically slow. Two attributes fix it:
+
+- **`#[thermite::dispatch(S)]`** (or `(Self)` / `(TypeName)`) on every SIMD entry
+  point -- fn, `impl`, `trait` or `mod`. Emits a `#[target_feature]` trampoline
+  per backend plus a const-folded ISA match; the only way the body gets per-ISA
+  codegen at all.
+- **`#[inline(always)]`** on every helper called from inside a dispatched body.
+  Features propagate into a callee **only if it is inlined**; a non-inlined
+  helper is featureless and hits the same soup one level down. Plain `#[inline]`
+  is a hint the optimizer declines in exactly the big bodies that matter.
+
+The pairing is cheap, not bloat: the trampoline itself carries the features, so
+the dispatched fn need not inline (one out-of-line copy per backend) while the
+interior inlines aggressively. Exception: don't `#[dispatch]` one-line leaf
+helpers -- it only blocks inlining; keep them `#[inline(always)]`.
+
+```rust
+#[inline(always)]                                   // interior: must inline to keep features
+fn step<V: FloatVector>(v: V) -> V { v.mul_adde(v, v) }
+
+#[thermite::dispatch(S)]                            // boundary: per-backend target_feature
+pub fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) {
+    let (_, chunks, _) = data.try_aligned_simd_iter_mut::<Vector<S::fxN>>();
+    for v in chunks { *v = step(*v); }
+}
+
+let _ = thermite::dispatch_dyn!(kernel(&mut data)); // runtime ISA selection
+```
+
+Details: [references/performance.md](references/performance.md) sec 0,
+[references/slices-and-dispatch.md](references/slices-and-dispatch.md).
+
 ## Quick reference
 
 ```rust
@@ -121,6 +161,9 @@ a << n  a >> n                                  // BitshiftVector (>> is LOGICAL
 let m = a.cmp_lt(b); m.select(a, b)             // PartialOrdVector -> Mask, branchless select
 v.sqrt()  v.exp()  v.sin()  a.mul_adde(b, c)    // FloatVector + math + estimating-FMA
 v.sqrt_c(mask)  a.add_c(mask, b)                // masked variants: mask is the FIRST arg
+v.compress_z(m) / v.expand_m(src, m)            // stream compaction and its exact inverse
+v.prefix_sum()  v.count_conflicts()             // inclusive lane scan; duplicate-lane ranks
+v.group_by_value(valid)                         // divergent packet -> uniform sub-packets
 ```
 
 Build/test as part of your own crate -- normal `cargo build`/`cargo test`, no
@@ -131,7 +174,7 @@ separate library step.
 Core usage:
 - [generic-programming.md](references/generic-programming.md) -- **read first.** Functions over `*Vector` bounds; assoc types (`V::Element`/`V::Mask`/`V::LANES`); running on scalar/SIMD/composite; bound recipes; pitfalls.
 - [trait-hierarchy.md](references/trait-hierarchy.md) -- full `GenericVector..FloatVector` tree, supertraits, assoc types, which methods live where.
-- [vector-api.md](references/vector-api.md) -- method reference for the vector traits (construction, lanes, memory, gather/scatter, cast, interleave, reductions, FMA, packed fp16/bf16/fp8 storage via `PackedFloatVector`) + the `_c`/`_m`/`_z` masked system.
+- [vector-api.md](references/vector-api.md) -- method reference for the vector traits (construction, lanes, memory, gather/scatter, cast, interleave, compress/expand, prefix scans, conflict detection + `group_by_value`, reductions, FMA, packed fp16/bf16/fp8 storage via `PackedFloatVector`) + the `_c`/`_m`/`_z` masked system.
 - [masks.md](references/masks.md) -- `Mask<R>`, `GenericMask` (`all`/`any`/`select`/`bitmask`), casting, `zz`/`nz`.
 - [math.md](references/math.md) -- math trait families (`CoreMath`/`TranscendentalMath`/`SpatialMath`/`RealMath`/`FloatMath`), the `_p::<P>()` policy system + presets, `ScalarMath` for bare `f32`/`f64`, `FloatConsts`, FMA semantics, algorithms module.
 - [slices-and-dispatch.md](references/slices-and-dispatch.md) -- `SimdSlice` iteration (aligned/try-aligned/unaligned/streaming), alignment, `#[dispatch]`/`dispatch_dyn!`.
@@ -150,6 +193,7 @@ Cross-cutting:
 
 ## Gotchas (full list in sub-files)
 
+- **Missing `#[thermite::dispatch]` / `#[inline(always)]` is the #1 silent perf bug** -- no compile error, no test failure, but the kernel degenerates to a `call` per intrinsic. See Rule zero above; check it first when a kernel underperforms.
 - **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
 - **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`, `a.add_m(src, mask, b)` (merge: `src` then `mask`). Old `add_c(b, mask)` order is wrong.
 - **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.

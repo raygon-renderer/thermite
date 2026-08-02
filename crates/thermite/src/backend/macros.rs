@@ -595,19 +595,24 @@ macro_rules! impl_native_extract {
     };
 }
 
-/// Native two-register byte align (`IntegerRegister::align`) for a 128-bit byte
-/// register, via `_mm_alignr_epi8` (SSSE3+). Drop into an `impl IntegerRegister`
-/// block for an i8x16/u8x16-shaped register.
+/// Native two-register element align (`Register::align`) for any 128-bit integer
+/// register, via `_mm_alignr_epi8` (SSSE3+). Drop into an `impl Register` block.
 ///
-/// `align::<OFFSET>(a, b)` is the 16-byte window at byte `OFFSET` of the
+/// `align::<OFFSET>(a, b)` is the `LANES`-lane window at lane `OFFSET` of the
 /// concatenation `[a, b]` with `a` as the low half. `_mm_alignr_epi8::<n>(hi, lo)`
-/// yields `concat(lo:hi)[n..]`, so we pass `(b, a)`. The immediate cannot be a
+/// yields `concat(lo:hi)[n..]` in BYTES, so we pass `(b, a)` and key the match on
+/// the byte offset `ob = OFFSET * size_of::<Element>()` - which makes this work
+/// for i32x4/u64x2/... and not just the byte registers. The immediate cannot be a
 /// const expression of `OFFSET` on stable, hence the (verbose) match supplying
-/// each literal; `OFFSET > 16` falls back to the generic `swizzle_const` default.
+/// each literal; `ob` const-folds to exactly one arm. `ob > 16` means
+/// `OFFSET > LANES` (out of range) and falls back to the generic `swizzle_const`
+/// default.
 macro_rules! impl_byte_align_alignr {
     () => {
+        const HAS_NATIVE_ALIGN: bool = true;
+
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-            match OFFSET {
+            match const { OFFSET * core::mem::size_of::<Self::Element>() } {
                 0 => unsafe { arch::_mm_alignr_epi8::<0>(b, a) },
                 1 => unsafe { arch::_mm_alignr_epi8::<1>(b, a) },
                 2 => unsafe { arch::_mm_alignr_epi8::<2>(b, a) },
@@ -642,6 +647,8 @@ macro_rules! impl_byte_align_alignr {
 /// literal (stable rejects a const expr of `OFFSET`); `ob` const-folds to one arm.
 macro_rules! impl_byte_align_alignr256 {
     () => {
+        const HAS_NATIVE_ALIGN: bool = true;
+
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             let mid = unsafe { arch::_mm256_permute2x128_si256::<0x21>(a, b) };
             match OFFSET * core::mem::size_of::<Self::Element>() {
@@ -698,6 +705,8 @@ macro_rules! impl_byte_align_alignr256 {
 /// NOTE: 128-bit only - AVX2 `_mm256_bslli/bsrli_epi128` shift per 128-bit lane.
 macro_rules! impl_byteshift_align {
     () => {
+        const HAS_NATIVE_ALIGN: bool = true;
+
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match const { OFFSET * core::mem::size_of::<Self::Element>() } {
                 0 => Self::bitor(Self::bshri::<0>(a), Self::bshli::<16>(b)),
@@ -721,6 +730,91 @@ macro_rules! impl_byteshift_align {
             }
         }
     };
+}
+
+/// Native two-register element align (`Register::align`) for a FLOAT register,
+/// routed through its bitwise-identical unsigned integer register. Drop into an
+/// `impl Register` block for a float register; `$bits` must be the same register
+/// named by its [`FloatRegister::Bits`](crate::register::FloatRegister::Bits).
+///
+/// `align` is pure lane movement, so reinterpreting as the same-shape integer
+/// register, aligning there, and reinterpreting back is exact for every bit
+/// pattern (NaN payloads and signalling bits included). The reinterprets are free:
+/// on x86 `_mm_castps_si128` and friends emit no instruction.
+///
+/// The integer registers carry native `align` overrides (`palignr`,
+/// `pslldq`/`psrldq`, the AVX2 256-bit sequence); the float registers would
+/// otherwise fall through to the generic `swizzle_const` default - two `permutev`s
+/// plus a `blendv` at best, and on SSE2 (`HAS_PERMUTEV == false`) a scalar memory
+/// round-trip.
+macro_rules! impl_float_align_via_bits {
+    ($bits:ty) => {
+        // inherited, not asserted: this is only as native as the register it routes to
+        const HAS_NATIVE_ALIGN: bool = <$bits as $crate::register::Register>::HAS_NATIVE_ALIGN;
+
+        fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+            <Self as $crate::register::BitCastRegister<$bits>>::from_bits(
+                <$bits as $crate::register::Register>::align::<OFFSET>(
+                    <$bits as $crate::register::BitCastRegister<Self>>::from_bits(a),
+                    <$bits as $crate::register::BitCastRegister<Self>>::from_bits(b),
+                ),
+            )
+        }
+    };
+}
+
+/// Stamp [`WidenIndexRegister`](crate::register::WidenIndexRegister) for x86
+/// registers: widen a `u8` compress/expand table row into the `u32` permute
+/// control with the `pmovzxbd` family.
+///
+/// The shape tag is the register's **lane count**, not its width - the control
+/// array follows `LANES` (`f64x4` and `f32x4` both want four `u32`s). `x8h`
+/// ("halves") is the SSE4.1-only form for 8-lane registers on a tier without
+/// `_mm256_cvtepu8_epi32`, which widens in two 128-bit steps.
+///
+/// Invoke once per backend in its `registers/mod.rs`, where `arch` is in scope.
+macro_rules! impl_widen_indices_x86 {
+    ($($reg:ty => $shape:ident),* $(,)?) => {
+        $(
+            #[thermite_macros::inline_always]
+            impl $crate::register::WidenIndexRegister for $reg {
+                fn widen_indices(
+                    idxs: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
+                ) -> generic_array::GenericArray<u32, <Self as $crate::register::CoreRegister>::Lanes> {
+                    unsafe { impl_widen_indices_x86!(@body idxs, $shape) }
+                }
+            }
+        )*
+    };
+
+    // 2 lanes (8 bytes of control): widen four and keep the low half.
+    (@body $idxs:ident, x2) => {{
+        let q = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(
+            core::ptr::read_unaligned($idxs.as_ptr() as *const i32),
+        ));
+        core::mem::transmute_copy(&q)
+    }};
+    // 4 lanes (16 bytes): exactly one `pmovzxbd`.
+    (@body $idxs:ident, x4) => {{
+        let q = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(
+            core::ptr::read_unaligned($idxs.as_ptr() as *const i32),
+        ));
+        core::mem::transmute_copy(&q)
+    }};
+    // 8 lanes (32 bytes) with AVX2: one `vpmovzxbd` off a 64-bit load.
+    (@body $idxs:ident, x8) => {{
+        let o = arch::_mm256_cvtepu8_epi32(arch::_mm_loadl_epi64($idxs.as_ptr() as *const arch::__m128i));
+        core::mem::transmute_copy(&o)
+    }};
+    // 8 lanes without AVX2: two 128-bit widenings.
+    (@body $idxs:ident, x8h) => {{
+        let p = $idxs.as_ptr();
+        let lo = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(core::ptr::read_unaligned(p as *const i32)));
+        let hi = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(core::ptr::read_unaligned(
+            p.add(4) as *const i32,
+        )));
+        core::mem::transmute_copy(&[lo, hi])
+    }};
 }
 
 macro_rules! impl_bit_casts {
@@ -848,10 +942,15 @@ macro_rules! impl_newregister {
     )*};
 }
 
-/// Add `Register::compress` + `compress_z` overrides to a register `impl` block
-/// that delegate to the `<= 8`-lane table polyfill ([`compress_permute`]).
-/// Invoke inside `impl Register for <Reg> { ... }` for any `Register` with at
-/// most 8 lanes.
+/// Add `Register::compress` + `compress_z` + `expand` + `expand_z` overrides to
+/// a register `impl` block that delegate to the `<= 8`-lane table polyfills
+/// ([`compress_permute`] / [`expand_permute`]). Invoke inside
+/// `impl Register for <Reg> { ... }` for any `Register` with at most 8 lanes.
+///
+/// One macro emits both directions so a register cannot opt into a fast compress
+/// while silently leaving expand on the scalar default. The `_m` merge forms need
+/// no entry here: their trait defaults blend over these overridden bodies and
+/// inherit the fast path.
 macro_rules! compress_via_table {
     () => {
         #[inline(always)]
@@ -873,13 +972,37 @@ macro_rules! compress_via_table {
                 mask,
             )
         }
+
+        #[inline(always)]
+        fn expand(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::expand_permute::<Self>(value, mask)
+        }
+
+        #[inline(always)]
+        fn expand_z(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            // Expand, then zero the unselected lanes: the zz composes AFTER here
+            // (the packed front must be routed before masking), the mirror of
+            // compress_z's zz-before.
+            <Self as $crate::register::CoreRegister>::zz(
+                mask,
+                $crate::backend::generic::polyfills::expand_permute::<Self>(value, mask),
+            )
+        }
     };
 }
 
-/// Add `Register::compress` + `compress_z` overrides that delegate to the wide
-/// polyfill ([`compress_permute_wide`]). Invoke inside `impl Register for <Reg>
-/// { ... }` for any `Register` whose lane count is a multiple of 8 in `8..=64`
-/// (the 16/32-lane byte and short vectors).
+/// Add `Register::compress` + `compress_z` + `expand` + `expand_z` overrides
+/// that delegate to the wide polyfills ([`compress_permute_wide`] /
+/// [`expand_permute_wide`]). Invoke inside `impl Register for <Reg> { ... }`
+/// for any `Register` whose lane count is a multiple of 8 in `8..=64` (the
+/// 16/32-lane byte and short vectors). Emits both directions, same as
+/// [`compress_via_table!`].
 macro_rules! compress_via_wide {
     () => {
         #[inline(always)]
@@ -898,6 +1021,25 @@ macro_rules! compress_via_wide {
             $crate::backend::generic::polyfills::compress_permute_wide::<Self>(
                 <Self as $crate::register::CoreRegister>::zz(mask, value),
                 mask,
+            )
+        }
+
+        #[inline(always)]
+        fn expand(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::expand_permute_wide::<Self>(value, mask)
+        }
+
+        #[inline(always)]
+        fn expand_z(
+            value: $crate::register::Storage<Self>,
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> $crate::register::Storage<Self> {
+            <Self as $crate::register::CoreRegister>::zz(
+                mask,
+                $crate::backend::generic::polyfills::expand_permute_wide::<Self>(value, mask),
             )
         }
     };

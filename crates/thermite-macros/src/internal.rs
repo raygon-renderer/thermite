@@ -8,21 +8,133 @@ use syn::{
 const MASKED: &str = "masked";
 const CONDITIONAL: &str = "conditional";
 
+/// Binary register ops `f(lhs, rhs)` where an all-zero `rhs` is the identity:
+/// `f(lhs, ZERO) == lhs` on every lane.
+///
+/// Their `_c` variant needs no `blendv`. Zeroing `rhs` where the mask is false
+/// already leaves `lhs` untouched there, so
+///
+/// ```ignore
+/// f_c(mask, lhs, rhs) == f(lhs, rhs & from_mask(mask))
+/// ```
+///
+/// an `and` plus the op, versus the op plus a select. Cheaper on every backend
+/// (SSE2 emulates `blendv` with three instructions; where `vblendvps` exists it
+/// is still a longer-latency, more port-constrained uop than `vandps`), and it
+/// keeps the mask off the result's critical path.
+///
+/// Gated on `HAS_EQUAL_SIZE_MASK` like the `_z` variants: the rewrite needs a
+/// same-width all-ones/all-zeros mask register that `from_mask` can hand to
+/// `bitand`.
+///
+/// Why each op qualifies:
+///
+/// - `bitxor`/`bitor`: `x ^ 0 == x`, `x | 0 == x`. Not `bitand` (identity is
+///   all-ones) or `bitandnot` (`!lhs & 0 == 0`).
+/// - `add`/`sub`: additive identity. `sub` is bit-exact everywhere (`-0.0 - 0.0`
+///   is `-0.0`). `add` has one accepted deviation: `+0.0` is not the additive
+///   identity under round-to-nearest, so a masked-off `-0.0` lane comes back
+///   `+0.0` where `blendv` preserved the sign. The hand-written `add_c`
+///   overrides in the AVX2 float registers already make that trade.
+/// - `saturating_add`/`saturating_sub`: saturation never triggers against zero.
+/// - `abs_diff` (unsigned only): `(a -| 0) | (0 -| a) == a`.
+/// - `addsub`: `a +/- 0.0` per alternating lane; same signed-zero deviation as
+///   `add` on the lanes that add.
+/// - `mul_sign`: `value ^ (NEG_ZERO & 0) == value`, bit-exactly.
+///
+/// Zero is not the identity for `mul`, `div`, `rem`, `mulhi`, `mullo`, `min`,
+/// `max`, `avg`, `avg_floor`, `avg_ceil`, `mulhrs`, `copysign`
+/// (`copysign(x, +0.0) == |x|`), or the FMA family (zeroing `rhs`/`acc` yields
+/// `acc`/`lhs * rhs`, not `lhs`).
+///
+/// The maskable operand is not a `Storage<Self>` for the scalar- and
+/// immediate-shift families, `scale`, `broadcastv`, and the `div_*` divider ops.
+/// Variable shifts (`shlv`/`shrv`/`srav`) *are* zero-identity, but take a
+/// `Storage<Self::Unsigned>` and would need a cross-register mask cast.
+const ZERO_IDENTITY_RHS: &[&str] = &[
+    "bitxor",
+    "bitor",
+    "add",
+    "sub",
+    "saturating_add",
+    "saturating_sub",
+    "abs_diff",
+    "addsub",
+    "mul_sign",
+];
+
+/// True when `sig` is a binary `fn(Storage<Self>, Storage<Self>) -> Storage<Self>`
+/// named in [`ZERO_IDENTITY_RHS`].
+///
+/// The shape check is what makes matching by name safe: a same-named method
+/// elsewhere in the register hierarchy with a different signature (extra
+/// operands, a non-`Storage<Self>` operand, const generics) falls back to
+/// `blendv`.
+fn zero_identity_rhs(sig: &syn::Signature) -> Option<&Ident> {
+    if !ZERO_IDENTITY_RHS.contains(&sig.ident.to_string().as_str()) {
+        return None;
+    }
+
+    // No const/type generics: the rewrite reasons about the op's algebra, which a
+    // generic parameter can change (cf. `ternlog<IMM>`).
+    if !sig.generics.params.is_empty() {
+        return None;
+    }
+
+    if !is_self_storage(&sig.output) {
+        return None;
+    }
+
+    let mut inputs = sig.inputs.iter();
+
+    let (FnArg::Typed(lhs), FnArg::Typed(rhs), None) = (inputs.next()?, inputs.next()?, inputs.next()) else {
+        return None;
+    };
+
+    if !is_self_storage_type(&lhs.ty) || !is_self_storage_type(&rhs.ty) {
+        return None;
+    }
+
+    match &*rhs.pat {
+        Pat::Ident(pi) => Some(&pi.ident),
+        _ => None,
+    }
+}
+
+/// Exactly `Storage<Self>` -- not `Storage<Self::Unsigned>`, not `Self::Element`.
+fn is_self_storage_type(ty: &Type) -> bool {
+    let Type::Path(tp) = ty else { return false };
+    let Some(last) = tp.path.segments.last() else { return false };
+
+    last.ident == "Storage"
+        && matches!(&last.arguments, PathArguments::AngleBracketed(args)
+            if matches!(args.args.first(), Some(GenericArgument::Type(Type::Path(inner)))
+                if inner.path.is_ident("Self")))
+}
+
+fn is_self_storage(ty: &ReturnType) -> bool {
+    match ty {
+        ReturnType::Type(_, ty) => is_self_storage_type(ty),
+        ReturnType::Default => false,
+    }
+}
+
 // --- Core Utilities ---
 
-/// Helper to check for and remove specific internal attributes.
+/// Remove `#[name]` if present, reporting whether it was there.
 fn take_attribute(attrs: &mut Vec<Attribute>, name: &str) -> bool {
     let len = attrs.len();
     attrs.retain(|attr| !attr.path().is_ident(name));
     attrs.len() < len
 }
 
-/// Extracts documentation attributes from a list of attributes.
+/// The `#[doc]` attributes, to copy onto each generated variant.
 fn get_doc_attrs(attrs: &[Attribute]) -> Vec<&Attribute> {
     attrs.iter().filter(|attr| attr.path().is_ident("doc")).collect()
 }
 
-/// Extracts simple identifier names from function arguments for forwarding.
+/// Argument names to forward in the generated call. Panics on anything but a
+/// plain identifier pattern.
 fn extract_trait_arg_names(inputs: &Punctuated<FnArg, Comma>) -> impl Iterator<Item = &Ident> {
     inputs.iter().map(|arg| match arg {
         FnArg::Typed(pat_type) => match &*pat_type.pat {
@@ -122,11 +234,8 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
         let doc = get_doc_attrs(&method.attrs);
         let unsafety = method.sig.unsafety.as_ref();
 
-        // shared among all variants
-        // if the method is unsafe, wrap the call in an unsafe block.
-        // while not strictly necessary, clippy will complain about calling
-        // unsafe functions outside of an unsafe block, even if the function itself
-        // is marked unsafe.
+        // Shared by every variant. The unsafe block is redundant inside an unsafe
+        // fn, but clippy complains without it.
         let call = quote_spanned! { name.span() =>
             #unsafety { Self::#name #turbo(#(#arg_names),*) }
         };
@@ -140,12 +249,34 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
                 panic!("Expected at least one argument for conditional method.");
             };
 
+            // Where `f(lhs, ZERO) == lhs`, mask the operand instead of selecting
+            // the result: `and` + the op beats the op + `blendv`. See
+            // `ZERO_IDENTITY_RHS`.
+            let zero_identity_rhs = zero_identity_rhs(&method.sig).cloned();
+
             sig_c.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
+
+            let blendv = quote_spanned! { name.span() => Self::blendv(mask, #this, #call) };
+
+            let body = match zero_identity_rhs {
+                // Same `HAS_EQUAL_SIZE_MASK` gate as the `_z` variant below:
+                // `from_mask` has to produce an all-ones/all-zeros register.
+                Some(rhs) => quote_spanned! { name.span() =>
+                    if const { <Self as CoreRegister>::HAS_EQUAL_SIZE_MASK } {
+                        #unsafety {
+                            Self::#name(#this, Self::bitand(<Self as CoreRegister>::from_mask(mask), #rhs))
+                        }
+                    } else {
+                        #blendv
+                    }
+                },
+                None => blendv,
+            };
 
             let m_doc = format!("Computes [`{name}`](Self::{name}) when `mask` is true, returns `{this}` where false.");
             new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_c.span() =>
                 #(#doc)* #[doc = #m_doc] #[inline(always)] #[allow(unused)] #sig_c {
-                    Self::blendv(mask, #this, #call)
+                    #body
                 }
             }));
         }
@@ -166,8 +297,8 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
         }));
 
         // --- Zeroed (_z) variant ---
-        // For this, the default behavior should actually be to call the _m variant with EMPTY,
-        // since the _m variant may have better defaults on older platforms.
+        // Defaults to `_m` with EMPTY rather than to the base op: `_m` may have a
+        // better default on older platforms.
         let mut sig_z = method.sig.clone();
         sig_z.ident = format_ident!("{}_z", name);
         sig_z.inputs.insert(0, parse_quote!(mask: Storage<Self::Mask>));
@@ -540,8 +671,7 @@ pub fn vector_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
 
         let doc = get_doc_attrs(&method.attrs);
 
-        // 1 if method has a self receiver, 0 otherwise.
-        // We want to insert new arguments after the self receiver if it exists.
+        // New arguments go after the self receiver, so 1 if there is one, else 0.
         let insert_idx = method
             .sig
             .inputs

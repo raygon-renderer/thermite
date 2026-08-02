@@ -116,6 +116,10 @@ impl MaskRegister for F64x2V1 {
         unsafe { arch::_mm_movemask_pd(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm_castsi128_pd(arch::_mm_movm_epi64x_v1(bitmask)) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm_movemask_pd(value) as u64 })
     }
@@ -249,6 +253,8 @@ impl Register for F64x2V1 {
     }
 
     const HAS_PERMUTEV: bool = false;
+
+    impl_float_align_via_bits!(super::U64x2V1);
 }
 
 #[thermite_macros::inline_always]

@@ -222,6 +222,13 @@ impl<R: MaskRegister, N: Unsigned> MaskRegister for ReducedRegister<R, N> where 
 
         view[..Self::Lanes::USIZE].copy_from_bitslice(&bits[..Self::Lanes::USIZE]);
     }
+
+    // Drop bits belonging to the dead upper lanes before handing the word to the
+    // wider register, mirroring what `native_bitmask` masks off on the way out.
+    #[inline(always)]
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        Self(R::from_native_bitmask(bitmask & Self::BITMASK), PhantomData)
+    }
 }
 
 impl<R: InterleaveRegister, N: Unsigned> InterleaveRegister for ReducedRegister<R, N>

@@ -82,21 +82,25 @@ sequences per backend at zero runtime cost ([performance.md](performance.md) sec
 
 - **GenericVector** (sec 1): construction, lane access, load/store, gather/scatter,
   lookup, widen/narrow (`extend`/`narrow`/`concat`/`split`),
-  interleave/deinterleave, reverse/swap_bytes/compress, `align::<OFFSET>`
+  interleave/deinterleave, reverse/swap_bytes, `compress`/`compress_z`/`compress_m`
+  and the inverse `expand`/`expand_z`/`expand_m`, `align::<OFFSET>`
   (two-vector lane window), cast/into_bits, `zz`/`nz`, prefix/suffix mask,
   map/fold/reduce.
 - **BitwiseVector / BitshiftVector** (sec 2): `&` `|` `^` `!`, `bitandnot`,
   `ternlog`/`bilog`; `shl`/`shr`/`shlv`/`shrv`/`shli`/`shri`, byte shifts,
   rotates, `reverse_bits`.
-- **PartialOrdVector** (sec 3): `cmp_lt/le/gt/ge/eq/ne -> Mask`.
+- **PartialOrdVector** (sec 3): `cmp_lt/le/gt/ge/eq/ne -> Mask`;
+  `group_by_value(valid) -> ValueGroups` (equal-value lane groups).
 - **NumericVector** (sec 4): `+ - * / %`, `square`, `min`/`max`/`clamp`,
   reductions (`sum_elements`, `prod_elements`, `min_element`, `max_element`,
-  `min_max_element`, `arg_minmax`), `is_zero`/`is_all_zero`, `pairwise_sum`,
+  `min_max_element`, `arg_minmax`), inclusive scans (`prefix_sum`/`min`/`max` and
+  the `reverse_prefix_*` forms), `is_zero`/`is_all_zero`, `pairwise_sum`,
   `scale`, `indexed`/`offset`, constants `ZERO/ONE/TWO/MIN/MAX`.
 - **SignedVector** (sec 5): `abs`, `signum`, `copysign`, `neg`,
   `is_positive`/`is_negative`, `NEG_ONE`, `MIN_POSITIVE`.
 - **IntegerVector family** (sec 6): `mulhi`/`mullo`, `saturating_add/sub`,
-  `wrapping_sum/prod`, dividers, `count_ones/zeros`, `leading_ones/zeros`; signed
+  `wrapping_sum/prod`, dividers, `count_ones/zeros`, `leading_ones/zeros`,
+  `trailing_ones/zeros`, `count_conflicts`; signed
   `srai/sra/srav`, `avg_floor/ceil`, `mulhrs` (rounded Q-format multiply);
   unsigned `is_power_of_two`, `avg`, `parity`, `ilog2p1`, `abs_diff`, `in_range`,
   Morton (Z-order) interleave `morton::<N>([Self; N])` / `reverse_morton::<N>()`.

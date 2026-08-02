@@ -827,3 +827,44 @@ neon_rotate_imm!(
         49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63
     ]
 );
+
+// ---------------------------------------------------------------------------
+// Bitmask -> lane mask, the inverse of the movemask above. Broadcast the packed
+// bits, AND with the same per-lane powers of two, then compare against them.
+//
+// Bits at or above the lane count fall outside every lane's constant and so are
+// ignored, as `MaskRegister::from_native_bitmask` requires.
+// ---------------------------------------------------------------------------
+
+#[inline(always)]
+pub fn neon_frombitmask_x4(bitmask: u64) -> uint32x4_t {
+    const BITS: uint32x4_t = cu32x4([1, 2, 4, 8]);
+    unsafe { vceqq_u32(vandq_u32(vdupq_n_u32(bitmask as u32), BITS), BITS) }
+}
+
+#[inline(always)]
+pub fn neon_frombitmask_x2(bitmask: u64) -> uint64x2_t {
+    const BITS: uint64x2_t = cu64x2([1, 2]);
+    unsafe { vceqq_u64(vandq_u64(vdupq_n_u64(bitmask), BITS), BITS) }
+}
+
+#[inline(always)]
+pub fn neon_frombitmask_x8(bitmask: u64) -> uint16x8_t {
+    const BITS: uint16x8_t = cu16x8([1, 2, 4, 8, 16, 32, 64, 128]);
+    unsafe { vceqq_u16(vandq_u16(vdupq_n_u16(bitmask as u16), BITS), BITS) }
+}
+
+#[inline(always)]
+pub fn neon_frombitmask_x16(bitmask: u64) -> uint8x16_t {
+    #[rustfmt::skip]
+    const BITS: uint8x16_t = cu8x16([
+        1, 2, 4, 8, 16, 32, 64, 128,
+        1, 2, 4, 8, 16, 32, 64, 128,
+    ]);
+    unsafe {
+        // Byte lanes are narrower than the bit indices they test: bits 0..=7
+        // belong to the low half, bits 8..=15 to the high half.
+        let spread = vcombine_u8(vdup_n_u8(bitmask as u8), vdup_n_u8((bitmask >> 8) as u8));
+        vceqq_u8(vandq_u8(spread, BITS), BITS)
+    }
+}

@@ -315,6 +315,16 @@ feature to the dispatched `#[target_feature]` set. AVX-512 splits into
 `tiers::tier1..4` (CD; +BW/DQ; +VBMI/VBMI2/VNNI/BITALG/GFNI/...; +BF16),
 matching the `avx512-tier1..4` crate features.
 
+The `x86_v4` backend is generic over those tiers rather than being four
+backends: `X86V4<F: Avx512Features>` (`backend/x86_v4/mod.rs`), where
+`Avx512Features` is a const-per-extension trait implemented by the ZSTs
+`Tier1..Tier4`. Register code forks on `if const { F::AVX512VBMI }` and folds at
+monomorphization, exactly like `HAS_TRUE_FMA`. Two rules: ask about a *feature*,
+never `TIER`, so adding a rung never changes what an existing fork means; and a
+const being `true` does not make the intrinsic callable -- the
+`#[target_feature]` set in `thermite-macros/src/dispatch.rs` must enable the same
+feature, and the two lists are maintained by hand.
+
 ### 3c. The polyfill inheritance chain
 
 Each backend's `polyfills/mod.rs` re-exports the next lower backend's polyfills,
@@ -345,10 +355,20 @@ sub-trait), written **entirely in register-trait ops** (`R::shl`, `R::bitand`,
 ...), never raw intrinsics -- so they compile for **every** backend. The
 "better than scalar, portable" fallbacks: N-dimensional
 `morton_cascade`/`reverse_morton_cascade` shift/mask bit-spread, `compress`
-left-pack, sorting networks (`sort.rs`), generic `casts`/`divider`. A backend
+left-pack and its `expand` inverse, the `scan` prefix ladder, `conflict`
+duplicate ranks, sorting networks (`sort.rs`), generic `casts`/`divider`. A backend
 with a hardware shortcut overrides in its register impl; others delegate to the
 cascade. (The CLMUL `N == 2` Morton fast path delegates every other dimension
 count to `morton_cascade`.)
+
+The compress/expand pair shares one 256-entry 8-lane table (`COMPRESS8` in
+`compress.rs`, `EXPAND8` in `expand.rs` being its row-wise inverse); shared items
+live on the compress side by convention. Rows store `u8` indices, so a register
+must implement `WidenIndexRegister` to widen a row into the `u32` permute
+control. That method has no default on purpose -- a portable widening loop does
+not vectorize, and a defaulted one would cost ~8 instructions per compress with
+every test still green. Byte-shuffle backends (NEON, wasm) override
+`permutev_row` to feed the row in as bytes and skip the widen/narrow round trip.
 
 ### 3e. Where to put a new helper
 
@@ -755,6 +775,16 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
 - **A default-bodied register/vector method is auto-`#[inline(always)]`.** Keep
   defaults expressible purely in other trait ops; hardware-specific bodies
   belong in backend impls.
+- **A capability flag that drifts from its impl is invisible.** `HAS_NATIVE_ALIGN`
+  says whether `Register::align` is a real cross-register align rather than the
+  `swizzle_const` default. Both paths agree on results, so a register that
+  silently keeps the `false` default changes nothing a functional test sees -- it
+  just routes the whole prefix-scan family onto the sequential fallback. Set the
+  flag in the same `impl_*_align*!` macro that emits the body, and if you hand-roll
+  an `align`, set it by hand; `tests/align.rs::native_align_flag` asserts it for
+  every full-width register. Same discipline elsewhere: `compress_via_table!` /
+  `compress_via_wide!` emit `compress` *and* `expand` together so a backend cannot
+  take a fast one and a scalar other.
 - **The scalar backend is mandatory and is the oracle.** Must compile and be
   correct for every primitive. Simple over fast.
 - **x86_v1 is real and limited.** SSE2 has no `pshufb`, `blendv`, `round`,
@@ -779,6 +809,14 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   ([performance.md](performance.md) secs 1-2). For genuine double-double
   precision, `thermite-compensated` is often cleaner than leaning on emulated
   FMA.
+- **Rule zero: `#[dispatch]` on the boundary, `#[inline(always)]` on the
+  interior.** A generic-over-`S` body with no `#[dispatch]` above it (and no
+  `#[dispatch]` ancestor inlining it) is compiled without the target features,
+  and rustc will not inline a `target_feature` intrinsic into it -- a `call` per
+  single instruction. Correct, tests pass, catastrophically slow, invisible to
+  the type system. Helpers need `#[inline(always)]` (features propagate only via
+  inlining; `#[inline]` gets declined), but don't `#[dispatch]` one-liners --
+  that only blocks inlining. Full story: [performance.md](performance.md) sec 0.
 - **`target_feature` codegen traps that pass tests but tank benches:**
   `core::array::map`/`from_fn` and bare closures fail to inline in
   `target_feature` code and fall back to scalar -- hand-roll `while` loops.

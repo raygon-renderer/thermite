@@ -60,3 +60,40 @@ pub unsafe fn _mm_max_epu64x_v2(a: __m128i, b: __m128i) -> __m128i {
 pub unsafe fn _mm_min_epu64x_v2(a: __m128i, b: __m128i) -> __m128i {
     _mm_blendv_epi8(a, b, _mm_cmpgt_epu64x_v2(a, b))
 }
+
+// ---------------------------------------------------------------------------
+// Bitmask -> lane mask. See the v1 versions for the shape; these two shorten it
+// with instructions SSE2 lacks (`pcmpeqq`, `pshufb`). 32- and 16-bit lanes are
+// already optimal at v1 and are inherited as-is.
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: `_mm_movm_epi64` (AVX-512 VL+DQ `vpmovm2q`) - expand bits 0..=1 of
+/// `bitmask` into two full-width `i64` lane masks. `pcmpeqq` compares whole
+/// qwords, so this drops v1's broadcast shuffle.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi64x_v2(bitmask: u64) -> __m128i {
+    let bits = _mm_setr_epi64x(1, 2);
+    let broadcast = _mm_set1_epi64x(bitmask as i64);
+
+    _mm_cmpeq_epi64(_mm_and_si128(broadcast, bits), bits)
+}
+
+/// POLYFILL: `_mm_movm_epi8` (AVX-512 VL+BW `vpmovm2b`) - expand bits 0..=15 of
+/// `bitmask` into sixteen full-width `i8` lane masks. One `pshufb` spreads the
+/// low byte of `bitmask` over lanes 0..=7 and the second byte over lanes 8..=15,
+/// replacing v1's scalar `0x0101..` multiplies.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi8x_v2(bitmask: u64) -> __m128i {
+    let bits = _mm_setr_epi8(
+        1, 2, 4, 8, 16, 32, 64, -128, //
+        1, 2, 4, 8, 16, 32, 64, -128,
+    );
+    let spread = _mm_setr_epi8(
+        0, 0, 0, 0, 0, 0, 0, 0, //
+        1, 1, 1, 1, 1, 1, 1, 1,
+    );
+
+    let broadcast = _mm_shuffle_epi8(_mm_cvtsi32_si128(bitmask as i32), spread);
+
+    _mm_cmpeq_epi8(_mm_and_si128(broadcast, bits), bits)
+}

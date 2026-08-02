@@ -100,6 +100,10 @@ impl MaskRegister for I8x16Wasm {
         !arch::v128_any_true(value)
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        arch::bitmask_to_i8x16x(bitmask)
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i8x16_bitmask(value) as u16 as u64)
     }
@@ -193,16 +197,12 @@ impl Register for I8x16Wasm {
 
     const HAS_PERMUTEV: bool = true;
 
+    impl_wasm_align_shuffle!();
+
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // For 8-bit lanes the index IS the byte index; pack to bytes and swizzle.
-        let mut bytes = [0u8; 16];
-        let mut i = 0;
-        while i < 16 {
-            bytes[i] = idxs[i] as u8;
-            i += 1;
-        }
-        let ctrl = unsafe { arch::v128_load(bytes.as_ptr() as *const _) };
-        arch::u8x16_relaxed_swizzle(value, ctrl)
+        // For 8-bit lanes the index IS the byte index, so the builder only has
+        // to clamp and narrow.
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<16>(unsafe { core::mem::transmute(idxs) }))
     }
 
     compress_via_wide!();

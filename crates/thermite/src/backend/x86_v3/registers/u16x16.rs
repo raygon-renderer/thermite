@@ -107,6 +107,10 @@ impl MaskRegister for U16x16V3 {
         unsafe { arch::_mm256_count_mask_epi16x_v3(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_movm_epi16x_v3(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         unsafe {
             let packed = arch::_mm256_packs_epi16(value, arch::_mm256_setzero_si256());
@@ -232,6 +236,10 @@ impl Register for U16x16V3 {
     compress_via_wide!();
 
     // Byte-identical to the signed register (both raw `__m256i`); reuse it.
+    // hand-written body below, so the flag is set here rather than by an
+    // `impl_*_align*!` macro
+    const HAS_NATIVE_ALIGN: bool = true;
+
     fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         super::I16x16V3::align::<OFFSET>(a, b)
     }

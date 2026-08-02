@@ -95,6 +95,10 @@ impl MaskRegister for U16x8V1 {
         unsafe { arch::_mm_count_mask_epi16x_v1(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm_movm_epi16x_v1(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         let packed = unsafe { arch::_mm_packs_epi16(value, arch::_mm_setzero_si128()) };
         Some(unsafe { (arch::_mm_movemask_epi8(packed) as u64) & 0xFF })

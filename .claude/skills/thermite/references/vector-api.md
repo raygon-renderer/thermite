@@ -57,9 +57,22 @@ V::deinterleave_radix_by::<N, GROUP>([...])  V::interleave_radix_by::<N, GROUP>(
     // transpose (8 ops on AVX2); ::<4,1> on f64x4 = 4x4 f64 transpose (FFT codelet / small-matrix primitive).
 V::load_deinterleaved(...)  v.store_interleaved(...)   // AoS<->SoA memory form, arbitrary N (NEON LD3/ST3)
 
-// Compaction
-v.compress(mask)    // stable left-pack of true lanes (AVX-512 vpcompress; portable fallback)
-v.compress_z(mask)  // left-pack true lanes, zero the rest
+// Compaction, and its inverse (AVX-512 vpcompress/vpexpand; table fallback <=8 lanes)
+v.compress(mask)            // stable left-pack of true lanes
+v.compress_z(mask)          // left-pack true lanes, zero the rest
+v.compress_m(src, mask)     // left-pack; lanes at/beyond popcount keep src's own lanes
+                            // (position-addressed, not mask-addressed) -- the accumulator
+                            // step of a buffered stream compactor
+v.expand(mask)              // scatter the packed low lanes back out to the true lanes;
+                            // the EXACT inverse permutation of compress, so
+                            // v.compress(m).expand(m) == v and v.expand(m).compress(m) == v
+v.expand_z(mask)            // ...unselected lanes zeroed instead of reading the tail
+v.expand_m(src, mask)       // ...unselected lanes take src
+
+// Wavefront round trip: compact the active lanes, work on the packed front, scatter back.
+let packed = v.compress_z(active);
+let done   = kernel(packed);
+let out    = done.expand_m(background, active);   // == active.select(kernel-per-lane, background)
 
 // Two-vector element align (palignr family; any element type): the window of
 // LANES lanes starting at lane OFFSET of [a, b]. OFFSET=0 -> a, OFFSET=LANES -> b.
@@ -105,6 +118,16 @@ a.rol(n)  a.ror(n)  a.roli::<I>()  a.rori::<I>()  a.rolv(u)  a.rorv(u)   a.rever
 
 ```rust
 let m: M = a.cmp_lt(b);   // also cmp_le, cmp_gt, cmp_ge, cmp_eq, cmp_ne  -> Mask
+
+// Divergence -> a short run of uniform sub-packets: partition the lanes selected by
+// `valid` into groups of equal value, in order of first occurrence, each lane once.
+let mut groups = ids.group_by_value(valid);          // -> ValueGroups<V>
+while let Some((value, lanes)) = groups.next_group() {   // also impls Iterator
+    do_uniform_work(value, lanes);
+}
+groups.remaining()  groups.is_empty()   // stop part-way and keep the rest
+// Cost scales with the number of DISTINCT values, not LANES (~broadcast + cmp + 2 mask
+// ops per group); a uniform packet is one iteration. Pass Mask::TRUTHY for all lanes.
 ```
 
 (`PartialEq`/`PartialOrd` for `Vector` itself are whole-vector: `==` is "all lanes
@@ -117,6 +140,17 @@ a + b   a - b   a * b   a / b   a % b     a.square()
 a.min(b)   a.max(b)   a.clamp(lo, hi)
 v.sum_elements()  v.prod_elements()  v.min_element()  v.max_element()
 v.min_max_element() -> (E, E)    v.arg_minmax() -> (usize, usize)
+
+// Inclusive prefix scans: keep every partial in its own lane instead of collapsing
+// to a scalar (bin offsets, compaction write indices, running extents).
+v.prefix_sum()   v.prefix_min()   v.prefix_max()            // out[i] = op(v[0]..=v[i])
+v.reverse_prefix_sum()  v.reverse_prefix_min()  v.reverse_prefix_max()  // out[i] = op(v[i]..)
+// O(log2 LANES) align ladder where the backend has a native align, a sequential lane
+// walk where it does not -- chosen at compile time. No masked variants: neutralise the
+// lanes you want out first, e.g. `v.zz(mask).prefix_sum()`.
+// After prefix_sum the LAST lane is the whole-register total, so the carry into the
+// next chunk is `scanned.reverse().broadcast::<0>()` -- no horizontal reduction.
+// min/max: exact including infinities; on NaN input, which operand wins is unspecified.
 v.is_zero() -> M    v.is_all_zero() -> bool
 V::pairwise_sum(lo, hi)    V::relaxed_pairwise_sum(lo, hi)
 v.scale(e)                 // v * splat(e); lowers to OpVectorTimesScalar on SPIR-V
@@ -139,7 +173,13 @@ V::NEG_ONE   V::MIN_POSITIVE
 // IntegerVector
 a.mulhi(b)  a.mullo(b)   a.saturating_add(b)  a.saturating_sub(b)
 v.wrapping_sum()  v.wrapping_prod()   v.count_ones()  v.count_zeros()
-v.leading_ones()  v.leading_zeros()
+v.leading_ones()  v.leading_zeros()   v.trailing_ones()  v.trailing_zeros()
+v.count_conflicts()   // per lane, how many EARLIER lanes hold the same value
+    // (AVX-512CD vpconflict + popcount; portable rotate ladder otherwise).
+    // `.cmp_eq(V::ZERO)` is the first-occurrence mask, and the count IS the round
+    // number for a conflicting read-modify-write: a lane of rank r is safe in round r.
+    // That is what makes a vectorized histogram / bin increment correct where a plain
+    // scatter silently drops duplicate writes.
 // SignedIntegerVector
 v.srai::<I>()  v.sra(n)  v.srav(unsigned)   a.avg_floor(b)  a.avg_ceil(b)
 a.mulhrs(b)    // rounded Q(W-1) fixed-point multiply (i16: Q15, x86 PMULHRSW); rounds, not truncates

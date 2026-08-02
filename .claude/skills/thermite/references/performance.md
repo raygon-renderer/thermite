@@ -6,6 +6,75 @@ compiler will not reassociate FP math, pick the cheapest hardware primitive, or
 hoist capability-specific paths -- you do that once, in generic code, and every
 backend benefits.**
 
+## 0. Rule zero: `#[thermite::dispatch]` on the entry, `#[inline(always)]` on the helpers
+
+**This outranks every other item on this page**, and the failure mode is far
+worse than "falls back to the baseline ISA". `core::arch` intrinsics are
+`#[target_feature]`-gated `#[inline]` functions: **rustc refuses to inline a
+`target_feature` function into a caller that does not enable those features.** In
+a body without the features, every intrinsic Thermite uses internally stays
+out-of-line -- a `call` per `_mm256_add_ps`, per shuffle, per load, with ABI
+register shuffling around each and no scheduling, register allocation, or
+constant folding across ops. An order-of-magnitude class of loss, not a
+percentage -- and it compiles and is correct, so nothing in the type system or
+test suite catches it. Check it *first* when a kernel underperforms.
+
+Two attributes, and they do different jobs:
+
+- **`#[thermite::dispatch(S)]`** (or `(Self)` / `(TypeName)`) on any fn, impl,
+  trait or mod generic over the backend. It emits one
+  `#[target_feature(enable = "avx2,fma,...")]` trampoline per backend and a
+  `match <S as HasIsa>::ISA` that const-folds at monomorphization. This is the
+  **only** way a function body gets per-ISA codegen -- i.e. the only way the
+  intrinsics inside it are allowed to inline at all.
+- **`#[inline(always)]`** on every small helper called from inside a dispatched
+  body. Target features propagate into a callee only when it is inlined into the
+  enabled context; a helper that does not inline is compiled *without* the
+  features, so the intrinsics inside *it* in turn refuse to inline -- the
+  call-per-instruction soup, one level down. `#[inline]` (or nothing) is a
+  *hint* the optimizer routinely declines in exactly the big `target_feature`
+  bodies where it matters most.
+
+Why this pairing is cheap rather than a code-size disaster: **`#[dispatch]` is a
+real function boundary, deliberately.** The trampoline carries the target
+features itself, so the compiler is free to *not* inline the dispatched fn --
+one out-of-line copy per backend, called normally -- and the body still gets
+full AVX2/FMA/NEON codegen. Inline aggressively *inside* the kernel; let the
+compiler size the boundary.
+
+Practical shape:
+
+```rust
+#[inline(always)]                                  // interior: MUST inline to keep features
+fn step<V: FloatVector>(v: V) -> V { v.mul_adde(v, v) }
+
+#[thermite::dispatch(S)]                           // boundary: per-backend target_feature
+pub fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) {
+    let (_, chunks, _) = data.try_aligned_simd_iter_mut::<Vector<S::fxN>>();
+    for v in chunks { *v = step(*v); }
+}
+
+let _ = thermite::dispatch_dyn!(kernel(&mut data)); // runtime ISA selection
+```
+
+Rules of thumb:
+
+- Every public SIMD entry point in a dependent crate gets `#[dispatch]`. If a
+  generic-over-`S` fn has no `#[dispatch]` above it and no `#[dispatch]` ancestor
+  it is inlined into, it is a bug.
+- `dispatch_dyn!`'s call form only emits the runtime match -- it assumes the
+  callee is `#[dispatch]`. A plain generic callee there is *correct but
+  un-inlined*: the classic silent-slow case.
+- Don't reach for `#[dispatch]` on tiny leaf helpers; a dispatch boundary on a
+  one-liner just blocks inlining. Those are `#[inline(always)]` (that is what
+  `#[skip_dispatch]` exists for inside `decl_math!`).
+- Closures and `core::array::map`/`from_fn` inside a dispatched body often fail
+  to inline, which puts their intrinsic bodies outside the feature context again
+  -- hand-roll loops (sec 11).
+- Verify, don't assume: dump asm (sec 13). The tell is unmistakable -- streams of
+  `call` into one-instruction stubs (`_mm256_*` symbols surviving in the binary)
+  instead of straight-line `vfmadd*`/`vmulps` on `ymm` registers.
+
 ## 1. FMA: pick the right variant
 
 | Variant | Meaning | Use when |

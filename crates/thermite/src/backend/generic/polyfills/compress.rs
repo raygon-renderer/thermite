@@ -20,6 +20,12 @@
 //!   Benchmarks ~2.7x faster than `compress_permute_wide` at 16 lanes; the
 //!   advantage shrinks with more chunks (the merge swizzle is O(chunks^2)), so
 //!   it is the right choice at 16 lanes and `compress_permute_wide` wins beyond.
+//!
+//! The inverse direction lives in [`expand`](super::expand), a mirror image of
+//! this module. This module owns everything the two share - [`CompressRow`],
+//! [`CompressTable`], and [`COMPRESS8`], which `EXPAND8` is the row-wise
+//! inverse of. Keep it that way: compress-only code here, expand-only code
+//! there, shared code here regardless of which side reads it more.
 
 use core::mem::MaybeUninit;
 
@@ -33,7 +39,15 @@ use super::*;
 
 /// One table row: the stable-partition gather indices for an 8-lane mask plus
 /// its population count (so callers never recompute it at runtime).
-pub type CompressRow = (GenericArray<u32, U8>, u8);
+///
+/// Indices are stored as `u8`, not the `u32` that
+/// [`permutev`](Register::permutev) consumes. Every index is in `0..8`, so the
+/// row shrinks from 36 padded bytes to 9 and the two tables together drop from
+/// ~18 KB of `.rodata` to ~4.6 KB - worth it because the rows are indexed
+/// randomly by mask and wavefront code hits both directions in one loop. The
+/// widening back to `u32` is [`widen_row`], one `pmovzxbd`-shaped load on any
+/// backend with SSE4.1 or better.
+pub type CompressRow = (GenericArray<u8, U8>, u8);
 
 /// The single 256-entry 8-lane left-pack table, shared by every lane count.
 ///
@@ -42,16 +56,14 @@ pub type CompressRow = (GenericArray<u32, U8>, u8);
 /// unselected lanes, also in order - plus the population count of `m`.
 ///
 /// One table serves all lane counts. A register with `LANES <= 8` reads row `m`
-/// (where `m` is its `LANES`-bit `movemask`) and [`transmute_copy`]s the first
+/// (where `m` is its `LANES`-bit `movemask`) and [`widen_row`]s the first
 /// `LANES` indices: the high padding lanes (`LANES..8`) are always unselected,
 /// so they sort to the tail and are dropped, leaving exactly the `LANES`-lane
 /// compaction. Wider registers index it per 8-lane chunk.
-///
-/// [`transmute_copy`]: core::mem::transmute_copy
 pub static COMPRESS8: GenericArray<CompressRow, U256> = build_table8();
 
-/// Marker for lane counts (`1..=8`) small enough to `transmute_copy` their
-/// compaction indices straight out of [`COMPRESS8`].
+/// Marker for lane counts (`1..=8`) small enough to take their compaction
+/// indices straight out of a [`COMPRESS8`] row.
 pub trait CompressTable: Lanes {}
 
 impl CompressTable for U1 {}
@@ -62,6 +74,30 @@ impl CompressTable for U5 {}
 impl CompressTable for U6 {}
 impl CompressTable for U7 {}
 impl CompressTable for U8 {}
+
+/// Widen the first `N` indices of an 8-entry `u8` table row into the `u32`
+/// index array [`permutev`](Register::permutev) consumes.
+///
+/// Used by both directions, so it lives here per the module header. `N` must be
+/// `<= 8`, which the `LANES <= 8` table paths calling it already establish.
+///
+/// Hand-rolled `while` rather than `GenericArray::generate` or `array::map`:
+/// those fail to inline inside `#[target_feature]` code and silently degrade to
+/// scalar. With `N` a compile-time constant this unrolls, and LLVM contracts it
+/// into a single widening load (`pmovzxbd`/`vpmovzxbd`) on any ISA that has one.
+#[inline(always)]
+pub fn widen_row<N: ArrayLength>(row: &GenericArray<u8, U8>) -> GenericArray<u32, N> {
+    let mut idxs: GenericArray<u32, N> = GenericArray::default();
+
+    let n = <N as Unsigned>::USIZE;
+    let mut i = 0;
+    while i < n {
+        idxs[i] = row[i] as u32;
+        i += 1;
+    }
+
+    idxs
+}
 
 /// Build the 256-entry 8-lane stable-partition table at compile time. Runs
 /// entirely in const evaluation - no runtime cost. Each row also carries its
@@ -87,7 +123,7 @@ const fn build_table8() -> GenericArray<CompressRow, U256> {
         let mut i = 0;
         while i < lanes {
             if (m >> i) & 1 == 1 {
-                row[pos] = i as u32;
+                row[pos] = i as u8;
                 pos += 1;
             }
             i += 1;
@@ -99,7 +135,7 @@ const fn build_table8() -> GenericArray<CompressRow, U256> {
         let mut i = 0;
         while i < lanes {
             if (m >> i) & 1 == 0 {
-                row[pos] = i as u32;
+                row[pos] = i as u8;
                 pos += 1;
             }
             i += 1;
@@ -134,7 +170,7 @@ const fn build_table8() -> GenericArray<CompressRow, U256> {
 #[inline(always)]
 pub fn compress_permute<R>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R>
 where
-    R: Register<Lanes: CompressTable>,
+    R: WidenIndexRegister<Lanes: CompressTable>,
 {
     // SAFETY: every lane count implementing `CompressTable` is <= 8.
     unsafe { compress_permute8_raw::<R>(value, mask) }
@@ -149,7 +185,7 @@ where
 ///
 /// `R::Lanes` must be <= 8.
 #[inline(always)]
-pub unsafe fn compress_permute8_raw<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+pub unsafe fn compress_permute8_raw<R: WidenIndexRegister>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
     // SAFETY: the caller guarantees `LANES <= 8`, and `native_bitmask` returns
     // `Some` for all registers with <= 64 lanes, so this is always `Some`.
     // Folds away on backends where it is a plain `movemask`, keeping the path
@@ -157,14 +193,11 @@ pub unsafe fn compress_permute8_raw<R: Register>(value: Storage<R>, mask: Storag
     // `bm < 2^LANES <= 256` indexes the table directly.
     let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;
 
-    // SAFETY: `bm < 256`, exactly the table length. The row is `[u32; 8]`;
-    // `GenericArray<u32, R::Lanes>` is `LANES * 4 <= 32` bytes, so `transmute_copy`
-    // reads only the first `LANES` indices - exactly the `LANES`-lane compaction,
-    // since rows are stable-partitioned and the padding lanes `LANES..8` are
-    // always unselected (they sort past the `LANES`-th slot).
-    let idxs: GenericArray<u32, R::Lanes> = unsafe { core::mem::transmute_copy(&COMPRESS8.get_unchecked(bm).0) };
-
-    R::permutev(value, idxs)
+    // SAFETY: `bm < 256`, exactly the table length. Taking only the first
+    // `LANES` indices is exactly the `LANES`-lane compaction: rows are
+    // stable-partitioned and the padding lanes `LANES..8` are always unselected,
+    // so they sort past the `LANES`-th slot and drop out.
+    R::permutev_row(value, &unsafe { COMPRESS8.get_unchecked(bm) }.0)
 }
 
 /// Wide left-pack (`compress`, non-zeroing) for lane counts above 8, built by
@@ -303,7 +336,7 @@ pub fn compress_z_wide<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -
         let mut off = [0u32; 8];
         let mut j = 0;
         while j < 8 {
-            off[j] = entry.0[j] + base;
+            off[j] = entry.0[j] as u32 + base;
             j += 1;
         }
 
@@ -354,14 +387,14 @@ const fn build_merge_ctrl<TwoH: ArrayLength, Entries: ArrayLength>(
 }
 
 // One table per merge level: 8+8->16, 16+16->32, 32+32->64.
-const MERGE_CTRL_8: GenericArray<GenericArray<u32, U16>, generic_array::typenum::U9> = build_merge_ctrl(8);
-const MERGE_CTRL_16: GenericArray<GenericArray<u32, U32>, generic_array::typenum::U17> = build_merge_ctrl(16);
-const MERGE_CTRL_32: GenericArray<GenericArray<u32, U64>, generic_array::typenum::U33> = build_merge_ctrl(32);
+static MERGE_CTRL_8: GenericArray<GenericArray<u32, U16>, generic_array::typenum::U9> = build_merge_ctrl(8);
+static MERGE_CTRL_16: GenericArray<GenericArray<u32, U32>, generic_array::typenum::U17> = build_merge_ctrl(16);
+static MERGE_CTRL_32: GenericArray<GenericArray<u32, U64>, generic_array::typenum::U33> = build_merge_ctrl(32);
 
 /// Compact one 8-lane chunk (zeroing) and return its population count: the chunk
 /// becomes `[selected..., 0...]` and `count` is how many lanes are selected.
 #[inline(always)]
-fn compress_chunk_z<B: Register<Lanes = U8>>(chunk: Storage<B>, mask: Storage<B::Mask>) -> (Storage<B>, usize) {
+fn compress_chunk_z<B: WidenIndexRegister<Lanes = U8>>(chunk: Storage<B>, mask: Storage<B::Mask>) -> (Storage<B>, usize) {
     let packed = compress_permute::<B>(B::zz(mask, chunk), mask);
     // `native_bitmask` of an 8-lane mask yields exactly 8 bits, so `bm <= 255`.
     let bm = unsafe { <B::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;
@@ -380,7 +413,7 @@ fn compress_chunk_z<B: Register<Lanes = U8>>(chunk: Storage<B>, mask: Storage<B:
 #[inline(always)]
 pub fn compress_z_merge2<B>(chunks: [Storage<B>; 2], masks: [Storage<B::Mask>; 2]) -> [Storage<B>; 2]
 where
-    B: Register<Lanes = U8>,
+    B: WidenIndexRegister<Lanes = U8>,
     crate::register::array::ArrayRegister<B, 2>:
         Register<Lanes = U16, Storage = crate::register::array::ArrayRegister<B, 2>>,
 {
@@ -405,7 +438,7 @@ where
 #[inline(always)]
 pub fn compress_z_merge4<B>(chunks: [Storage<B>; 4], masks: [Storage<B::Mask>; 4]) -> [Storage<B>; 4]
 where
-    B: Register<Lanes = U8>,
+    B: WidenIndexRegister<Lanes = U8>,
     crate::register::array::ArrayRegister<B, 2>:
         Register<Lanes = U16, Storage = crate::register::array::ArrayRegister<B, 2>>,
     crate::register::array::ArrayRegister<B, 4>:
@@ -444,7 +477,7 @@ where
 #[inline(always)]
 pub fn compress_z_merge8<B>(chunks: [Storage<B>; 8], masks: [Storage<B::Mask>; 8]) -> [Storage<B>; 8]
 where
-    B: Register<Lanes = U8>,
+    B: WidenIndexRegister<Lanes = U8>,
     crate::register::array::ArrayRegister<B, 2>:
         Register<Lanes = U16, Storage = crate::register::array::ArrayRegister<B, 2>>,
     crate::register::array::ArrayRegister<B, 4>:
@@ -512,7 +545,7 @@ mod tests {
     fn check<const N: usize>()
     where
         generic_array::typenum::Const<N>: generic_array::IntoArrayLength,
-        ArrayRegister<i32, N>: Register<Element = i32, Lanes: CompressTable>,
+        ArrayRegister<i32, N>: WidenIndexRegister<Element = i32, Lanes: CompressTable>,
     {
         type R<const N: usize> = ArrayRegister<i32, N>;
 
@@ -895,6 +928,32 @@ pub fn compress_z_default<R: Register>(value: Storage<R>, mask: Storage<R::Mask>
     for i in 0..n {
         if <R::Mask as MaskRegister>::test(mask, i) {
             dst[pos] = src[i];
+            pos += 1;
+        }
+    }
+
+    result
+}
+
+/// The portable scalar merge-masked left-pack: the fallback body behind
+/// [`Register::compress_m`] for registers where the vectorized
+/// prefix-mask-blend composition is unavailable (`LANES > 64`, past the
+/// [`from_native_bitmask`](MaskRegister::from_native_bitmask) bound).
+/// Free-standing for the same reason as [`compress_default`].
+///
+/// Result lane `i` is the `i`-th selected element for `i < popcount(mask)`, and
+/// `src[i]` otherwise, matching AVX-512 merge-masked `vpcompress*`.
+pub fn compress_m_default<R: Register>(src: Storage<R>, mask: Storage<R::Mask>, value: Storage<R>) -> Storage<R> {
+    let n = <R::Lanes as Unsigned>::USIZE;
+    let val = R::as_slice(&value);
+
+    let mut result = src;
+    let dst = R::as_mut_slice(&mut result);
+
+    let mut pos = 0;
+    for i in 0..n {
+        if <R::Mask as MaskRegister>::test(mask, i) {
+            dst[pos] = val[i];
             pos += 1;
         }
     }

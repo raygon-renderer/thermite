@@ -455,6 +455,61 @@ pub trait MaskRegister: BitwiseRegister<Mask = Self> + CastMaskRegister<Self> + 
         bitmask
     }
 
+    /// Build a mask from a packed integer bitmask, bit `i` driving lane `i`
+    /// (lane 0 in the least-significant bit) - the inverse of
+    /// [`native_bitmask`](Self::native_bitmask).
+    ///
+    /// Bits at or above the lane count **must** be ignored by every
+    /// implementation; callers rely on that to hand a wider bitmask straight
+    /// through (`ArrayRegister` shifts one word per sub-register without
+    /// re-masking). Masks wider than 64 lanes take their low 64 lanes from
+    /// `bitmask` and leave everything above lane 63 `false` - for those, use
+    /// [`from_bitmask`](Self::from_bitmask) instead.
+    ///
+    /// The default is a per-lane [`set`](Self::set) loop; every backend with a
+    /// broadcast-and-compare sequence overrides it.
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE.min(64);
+
+        let mut result = Self::FALSY;
+
+        let mut i = 0;
+        while i < lanes {
+            if (bitmask >> i) & 1 != 0 {
+                result = Self::set(result, i, true);
+            }
+            i += 1;
+        }
+
+        result
+    }
+
+    /// Build a mask from a [`bitvec`] bit array, one bit per lane - the inverse
+    /// of [`bitmask`](Self::bitmask).
+    ///
+    /// Unlike [`from_native_bitmask`](Self::from_native_bitmask) this covers
+    /// masks of any width. `bits` shorter than the lane count is allowed: the
+    /// lanes it does not reach are `false`.
+    #[cfg(feature = "bitvec")]
+    fn from_bitmask(bits: &bitvec::slice::BitSlice<u32>) -> Storage<Self> {
+        let lanes = <Self::Lanes as Unsigned>::USIZE.min(bits.len());
+
+        if const { <Self::Lanes as Unsigned>::USIZE <= 64 } {
+            // Pack into one word so a native `from_native_bitmask` is used.
+            let mut bitmask = 0u64;
+            for i in bits[..lanes].iter_ones() {
+                bitmask |= 1 << i;
+            }
+            Self::from_native_bitmask(bitmask)
+        } else {
+            let mut result = Self::FALSY;
+            for i in bits[..lanes].iter_ones() {
+                result = Self::set(result, i, true);
+            }
+            result
+        }
+    }
+
     // The `else` arms below are only reached by masks whose `native_bitmask`
     // returns `None` (wider than 64 lanes). The only such type today,
     // `ArrayRegister`, overrides the `*_one` forms with a sub-register scan, so
@@ -1401,6 +1456,83 @@ pub trait Register:
         crate::backend::generic::polyfills::compress_z_default::<Self>(value, mask)
     }
 
+    /// Merge-masked left-pack: like [`compress`](Self::compress), but the lanes
+    /// at and beyond the population count take their values from `src` (at their
+    /// own positions) instead of holding the unselected elements. Matches
+    /// AVX-512 merge-masked `vpcompress*`. This is the accumulator step of a
+    /// buffered stream compactor: `src` holds the leftovers, `value` the
+    /// incoming batch.
+    ///
+    /// For `src = [w, x, y, z]`, `value = [a, b, c, d]`, `mask = [T, F, T, F]`
+    /// the result is `[a, c, y, z]`.
+    ///
+    /// The keep-lanes are *position*-addressed (`i >= popcount`), not
+    /// mask-addressed, so this cannot be expressed with the usual masked-variant
+    /// blend; the default builds a prefix mask of the count
+    /// ([`from_native_bitmask`](MaskRegister::from_native_bitmask)) and blends
+    /// over [`compress`](Self::compress), inheriting its fast path. Registers
+    /// wider than 64 lanes (beyond `from_native_bitmask`) fall back to a scalar
+    /// single pass.
+    fn compress_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        if const { <Self::Lanes as Unsigned>::USIZE > 64 } {
+            return crate::backend::generic::polyfills::compress_m_default::<Self>(src, mask, value);
+        }
+
+        let cnt = <Self::Mask as MaskRegister>::count_set_one(mask);
+        let bits = if cnt >= 64 { u64::MAX } else { (1u64 << cnt) - 1 };
+        let prefix = <Self::Mask as MaskRegister>::from_native_bitmask(bits);
+
+        Self::blendv(prefix, src, Self::compress(value, mask))
+    }
+
+    /// Inverse left-pack (`expand`): scatter the packed low lanes of `value`
+    /// back out to the lanes where `mask` is set, preserving order. Defined as
+    /// the **exact inverse permutation** of [`compress`](Self::compress) - the
+    /// unselected lanes read the tail, so for every input
+    /// `expand(compress(v, m), m) == v` and `compress(expand(v, m), m) == v`.
+    ///
+    /// For `value = [a, c, b, d]` and `mask = [T, F, T, F]` the result is
+    /// `[a, b, c, d]` (lane 0 reads packed `a`, lane 2 reads packed `c`, the
+    /// unselected lanes 1/3 read the tail `b, d`).
+    ///
+    /// This is the return trip of stream compaction - compact the active lanes,
+    /// operate, expand the results back to their home lanes. AVX-512
+    /// `vpexpand*` defines only the selected lanes (see
+    /// [`expand_z`](Self::expand_z) / [`expand_m`](Self::expand_m)); the
+    /// full-permutation form costs the same single permute.
+    fn expand(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        crate::backend::generic::polyfills::expand_default::<Self>(value, mask)
+    }
+
+    /// Zero-filling inverse left-pack: like [`expand`](Self::expand), but the
+    /// unselected lanes are zeroed instead of reading the tail. Matches AVX-512
+    /// zero-masking `vpexpand*`.
+    ///
+    /// For `value = [a, c, x, x]` and `mask = [T, F, T, F]` the result is
+    /// `[a, 0, c, 0]`.
+    ///
+    /// Unlike [`compress_z`](Self::compress_z) (whose `zz` must compose *before*
+    /// the permute), the zeroing here composes *after*, which is why the
+    /// overriding macros implement it as `zz(mask, expand(value, mask))`.
+    fn expand_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        crate::backend::generic::polyfills::expand_z_default::<Self>(value, mask)
+    }
+
+    /// Merge-masked inverse left-pack: like [`expand`](Self::expand), but the
+    /// unselected lanes take their values from `src` instead of reading the
+    /// tail. Matches AVX-512 merge-masked `vpexpand*`.
+    ///
+    /// For `src = [w, x, y, z]`, `value = [a, c, ..]`, `mask = [T, F, T, F]`
+    /// the result is `[a, x, c, z]`.
+    ///
+    /// The keep-lanes here *are* mask-addressed, so the default is a blend over
+    /// the plain [`expand`](Self::expand), inheriting its fast path. It still
+    /// cannot ride the `#[masked]` macro: `expand` already takes the mask as a
+    /// semantic argument, and the generated variant would insert a second one.
+    fn expand_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
+        Self::blendv(mask, src, Self::expand(value, mask))
+    }
+
     const HAS_PERMUTEV: bool;
 
     fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
@@ -1528,6 +1660,23 @@ pub trait Register:
     fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         Self::swizzle(a, b, I::INDICES)
     }
+
+    /// Whether [`align`](Self::align) has a native cross-register implementation on
+    /// this register, rather than the generic [`swizzle_const`](Self::swizzle_const)
+    /// default.
+    ///
+    /// The default path is correct everywhere but its cost varies: one instruction
+    /// with a real cross-register align (`palignr`, `vext`, `i8x16.shuffle`), two
+    /// `permutev`s plus a `blendv` with only variable permutes, and a scalar memory
+    /// round-trip where [`HAS_PERMUTEV`](Self::HAS_PERMUTEV) is false.
+    ///
+    /// Algorithms built out of an `align` ladder - the prefix-scan family in
+    /// `backend::generic::polyfills::scan` - gate on this, since a ladder of spilled
+    /// aligns loses to a scalar loop outright.
+    ///
+    /// Set by the `impl_*_align*!` macros alongside the `align` body they emit, so
+    /// the flag cannot drift from the implementation.
+    const HAS_NATIVE_ALIGN: bool = false;
 
     /// Two-register element align (the `palignr` family): the window of
     /// `Self::Lanes` lanes starting at lane `OFFSET` of the concatenation
@@ -1804,6 +1953,50 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
                 ptr.add(indices[i].try_into().unwrap_unchecked()).write(value[i]);
             }
         }
+    }
+}
+
+/// Widen a packed byte index row into the `u32` control array that
+/// [`permutev`](Register::permutev) consumes.
+///
+/// Plumbing for the `<= 8`-lane compress/expand table paths
+/// ([`polyfills::compress`](crate::backend::generic::polyfills::compress) and
+/// [`polyfills::expand`](crate::backend::generic::polyfills::expand)), whose
+/// gather indices are stored as `u8` (every index is in `0..8`), keeping the
+/// two tables at ~4.6 KB of `.rodata` instead of ~18 KB.
+///
+/// [`widen_indices`](Self::widen_indices) has no default on purpose: a portable
+/// widening loop does not vectorize - LLVM emits a `movzx` + `vpinsrd` chain
+/// instead of contracting it into a widening load (measured at `GenericArray`
+/// and `[u8; 8]` shapes, 128- and 256-bit), costing ~8 instructions per
+/// compress/expand with every correctness test still green. Requiring the
+/// method makes that a compile error instead.
+///
+/// With a real widening load the byte rows are one instruction cheaper than
+/// `u32` rows at 256-bit (`mov`/`vpmovzxbd`/`vpermd` vs
+/// `mov`/`shl`/`vmovups`/`vpermps`) and on the SSE4.2 `pshufb` path, and a tie
+/// at 128-bit AVX.
+pub trait WidenIndexRegister: Register {
+    /// Widen the leading `LANES` bytes of `idxs` into `u32` lanes. Bytes past
+    /// `LANES` are ignored (the table rows are always 8 wide).
+    fn widen_indices(
+        idxs: &GenericArray<u8, generic_array::typenum::U8>,
+    ) -> GenericArray<u32, Self::Lanes>;
+
+    /// Permute `value` directly by a compress/expand table row.
+    ///
+    /// The default widens the row and defers to
+    /// [`permutev`](Register::permutev), which is optimal where the permute
+    /// control *is* a `u32` vector (x86: one `pmovzxbd` feeding `vpermd`).
+    ///
+    /// Byte-shuffle backends override it: their `permutev` takes `u32` lane
+    /// indices but `tbl`/`i8x16.swizzle` want bytes, so the default would widen
+    /// `u8 -> u32` only to narrow it straight back. Feeding the row in as bytes
+    /// skips that round trip, and the clamp too, since a row's leading `LANES`
+    /// entries are always `< LANES`.
+    #[inline(always)]
+    fn permutev_row(value: Storage<Self>, row: &GenericArray<u8, generic_array::typenum::U8>) -> Storage<Self> {
+        Self::permutev(value, Self::widen_indices(row))
     }
 }
 
@@ -2220,6 +2413,42 @@ pub trait NumericRegister:
     fn sum_elements(value: Storage<Self>) -> Self::Element;
     fn prod_elements(value: Storage<Self>) -> Self::Element;
 
+    /// Inclusive forward prefix sum: `out[i] = value[0] + .. + value[i]`.
+    ///
+    /// A `ceil(log2(LANES))`-stage [`align`](Register::align) ladder where the register
+    /// has a native cross-register align, a sequential lane walk where it does not,
+    /// chosen at compile time on [`HAS_NATIVE_ALIGN`](Register::HAS_NATIVE_ALIGN).
+    /// See [`polyfills::scan`](crate::backend::generic::polyfills::scan) for the
+    /// derivation, the fill values, and the NaN caveat on `min`/`max`.
+    fn prefix_sum(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::prefix_sum::<Self>(value)
+    }
+
+    /// Inclusive forward prefix minimum: `out[i] = min(value[0], .., value[i])`.
+    fn prefix_min(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::prefix_min::<Self>(value)
+    }
+
+    /// Inclusive forward prefix maximum: `out[i] = max(value[0], .., value[i])`.
+    fn prefix_max(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::prefix_max::<Self>(value)
+    }
+
+    /// Inclusive reverse (suffix) sum: `out[i] = value[i] + .. + value[LANES-1]`.
+    fn reverse_prefix_sum(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::reverse_prefix_sum::<Self>(value)
+    }
+
+    /// Inclusive reverse (suffix) minimum: `out[i] = min(value[i], .., value[LANES-1])`.
+    fn reverse_prefix_min(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::reverse_prefix_min::<Self>(value)
+    }
+
+    /// Inclusive reverse (suffix) maximum: `out[i] = max(value[i], .., value[LANES-1])`.
+    fn reverse_prefix_max(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::scan::reverse_prefix_max::<Self>(value)
+    }
+
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
         let half = const { <Self::Lanes as Unsigned>::USIZE / 2 };
 
@@ -2300,6 +2529,23 @@ use num_traits::{WrappingAdd, WrappingMul};
 
 #[rustfmt::skip] #[thermite_macros::register_trait]
 pub trait IntegerRegister: NumericRegister<Element: IntegerElement> + BitshiftRegister {
+    /// For each lane, how many *earlier* lanes hold the same value:
+    /// `out[i] == |{ j < i : value[j] == value[i] }|`.
+    ///
+    /// AVX-512CD `vpconflict` followed by a population count. `== 0` is the
+    /// first-occurrence mask, and the count is the round number for a
+    /// conflicting read-modify-write (histogram / SAH-bin increment), where a
+    /// plain scatter would silently drop duplicate writes.
+    ///
+    /// The default is the portable rotate ladder in
+    /// [`polyfills::conflict`](crate::backend::generic::polyfills::conflict) -
+    /// `LANES - 1` steps of ~4 vector ops. A backend with real conflict
+    /// detection (AVX-512CD, behind `avx512-tier1`) should override it with
+    /// `vpconflict` + `vpopcnt`, two instructions at any width.
+    fn count_conflicts(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::conflict::count_conflicts_default::<Self>(value)
+    }
+
     #[conditional] fn mulhi(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn mullo(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
 
@@ -3100,7 +3346,7 @@ pub trait FloatRegister:
     }
 
     fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
+        if const { Self::HAS_TRUE_FMA } {
             Self::mul_add(Self::sub(b, a), t, a) // a + (b - a) * t
         } else {
             let t0 = Self::sub(Self::ONE, t); // 1 - t

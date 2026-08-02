@@ -582,3 +582,13 @@ mod tests {
         assert_is_signed::<F64x4V3>();
     }
 }
+
+// `WidenIndexRegister` for the table-path registers: AVX2 `vpmovzxbd`, so the
+// 8-lane forms widen in a single step.
+impl_widen_indices_x86! {
+    F32x4V3 => x4, I32x4V3 => x4, U32x4V3 => x4,
+    F64x4V3 => x4, I64x4V3 => x4, U64x4V3 => x4,
+    F64x2V3 => x2, I64x2V3 => x2, U64x2V3 => x2,
+    F32x8V3 => x8, I32x8V3 => x8, U32x8V3 => x8,
+    I16x8V3 => x8, U16x8V3 => x8,
+}

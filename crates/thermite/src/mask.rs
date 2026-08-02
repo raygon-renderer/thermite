@@ -187,6 +187,27 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     #[cfg(feature = "bitvec")]
     fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>>;
 
+    /// Build a mask from a packed integer bitmask, bit `i` driving lane `i`
+    /// (lane 0 in the least-significant bit) - the inverse of
+    /// [`native_bitmask`](Self::native_bitmask).
+    ///
+    /// Bits at or above [`LANES`](Self::LANES) are ignored. A mask wider than 64
+    /// lanes takes its low 64 lanes from `bitmask` and leaves everything above
+    /// lane 63 `false`; use [`from_bitmask`](Self::from_bitmask) for those.
+    ///
+    /// Lowers to a broadcast + AND + compare on most backends, a single
+    /// `vpmovm2*` on AVX-512.
+    fn from_native_bitmask(bitmask: u64) -> Self;
+
+    /// Build a mask from a [`bitvec`] bit array, one bit per lane - the inverse
+    /// of [`bitmask`](Self::bitmask), and unlike
+    /// [`from_native_bitmask`](Self::from_native_bitmask) valid at any width.
+    ///
+    /// `bits` shorter than [`LANES`](Self::LANES) is allowed: the lanes it does
+    /// not reach are `false`. Only available with the `bitvec` feature.
+    #[cfg(feature = "bitvec")]
+    fn from_bitmask(bits: &bitvec::slice::BitSlice<u32>) -> Self;
+
     /// Select between two lane-structured values: for each lane, take `t` where
     /// this mask is `true` and `f` where it is `false`.
     ///
@@ -410,6 +431,17 @@ impl<R: Register> GenericMask for Mask<R> {
     #[inline(always)]
     fn bitmask(&self) -> bitvec::array::BitArray<impl bitvec::view::BitViewSized<Store = u32>> {
         <R::Mask as MaskRegister>::bitmask(self.0)
+    }
+
+    #[inline(always)]
+    fn from_native_bitmask(bitmask: u64) -> Self {
+        Mask(<R::Mask as MaskRegister>::from_native_bitmask(bitmask))
+    }
+
+    #[cfg(feature = "bitvec")]
+    #[inline(always)]
+    fn from_bitmask(bits: &bitvec::slice::BitSlice<u32>) -> Self {
+        Mask(<R::Mask as MaskRegister>::from_bitmask(bits))
     }
 
     #[inline(always)]

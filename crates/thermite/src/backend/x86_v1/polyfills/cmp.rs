@@ -168,3 +168,74 @@ pub unsafe fn _mm_max_epu64x_v1(a: __m128i, b: __m128i) -> __m128i {
 pub unsafe fn _mm_min_epu64x_v1(a: __m128i, b: __m128i) -> __m128i {
     _mm_blendv_epi8x_v1(a, b, _mm_cmpgt_epu64x_v1(a, b))
 }
+
+// ---------------------------------------------------------------------------
+// Bitmask -> lane mask (the inverse of `movemask`).
+//
+// AVX-512 spells this `vpmovm2{b,w,d,q}` (`_mm_movm_epi32` and friends), hence
+// the names. Everything below is the pre-AVX512 lowering: broadcast the packed
+// bits, AND with a per-lane bit-select constant, then compare against that same
+// constant - three instructions plus a broadcast, all SSE2.
+//
+// Bits at or above the lane count fall outside every lane's bit-select constant
+// and so are ignored, as `MaskRegister::from_native_bitmask` requires.
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: `_mm_movm_epi32` (AVX-512 VL+DQ `vpmovm2d`) - expand bits 0..=3 of
+/// `bitmask` into four full-width `i32` lane masks.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi32x_v1(bitmask: u64) -> __m128i {
+    let bits = _mm_setr_epi32(1, 2, 4, 8);
+    let broadcast = _mm_set1_epi32(bitmask as i32);
+
+    _mm_cmpeq_epi32(_mm_and_si128(broadcast, bits), bits)
+}
+
+/// POLYFILL: `_mm_movm_epi64` (AVX-512 VL+DQ `vpmovm2q`) - expand bits 0..=1 of
+/// `bitmask` into two full-width `i64` lane masks.
+///
+/// `pcmpeqq` is SSE4.1, so the compare is done on the low dword of each lane and
+/// then broadcast over the lane with a shuffle.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi64x_v1(bitmask: u64) -> __m128i {
+    let bits = _mm_setr_epi32(1, 0, 2, 0);
+    let broadcast = _mm_set1_epi32(bitmask as i32);
+
+    let eq = _mm_cmpeq_epi32(_mm_and_si128(broadcast, bits), bits);
+
+    // dwords (0, 0, 2, 2): the low dword of each qword carries the verdict.
+    _mm_shuffle_epi32::<0b10_10_00_00>(eq)
+}
+
+/// POLYFILL: `_mm_movm_epi16` (AVX-512 VL+BW `vpmovm2w`) - expand bits 0..=7 of
+/// `bitmask` into eight full-width `i16` lane masks.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi16x_v1(bitmask: u64) -> __m128i {
+    let bits = _mm_setr_epi16(1, 2, 4, 8, 16, 32, 64, 128);
+    let broadcast = _mm_set1_epi16(bitmask as i16);
+
+    _mm_cmpeq_epi16(_mm_and_si128(broadcast, bits), bits)
+}
+
+/// POLYFILL: `_mm_movm_epi8` (AVX-512 VL+BW `vpmovm2b`) - expand bits 0..=15 of
+/// `bitmask` into sixteen full-width `i8` lane masks.
+///
+/// A byte lane is narrower than the bit index it tests, so the two relevant
+/// bytes of `bitmask` are spread over their eight lanes each. Without `pshufb`
+/// (SSSE3) that is done in the general-purpose registers, by multiplying each
+/// byte with `0x0101..` and building the vector from the two halves.
+#[inline(always)]
+pub unsafe fn _mm_movm_epi8x_v1(bitmask: u64) -> __m128i {
+    const SPREAD: u64 = 0x0101_0101_0101_0101;
+
+    let lo = (bitmask & 0xFF) * SPREAD;
+    let hi = ((bitmask >> 8) & 0xFF) * SPREAD;
+
+    let bits = _mm_setr_epi8(
+        1, 2, 4, 8, 16, 32, 64, -128, //
+        1, 2, 4, 8, 16, 32, 64, -128,
+    );
+    let broadcast = _mm_set_epi64x(hi as i64, lo as i64);
+
+    _mm_cmpeq_epi8(_mm_and_si128(broadcast, bits), bits)
+}

@@ -117,6 +117,10 @@ impl MaskRegister for I16x8V2 {
         unsafe { arch::_mm_count_mask_epi16x_v1(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm_movm_epi16x_v1(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         // Pack the 8x16-bit mask down to 8x8-bit (low 64 bits), then one bit per lane.
         let packed = unsafe { arch::_mm_packs_epi16(value, arch::_mm_setzero_si128()) };
@@ -237,6 +241,8 @@ impl Register for I16x8V2 {
     }
 
     const HAS_PERMUTEV: bool = true;
+
+    impl_byte_align_alignr!();
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         unsafe {

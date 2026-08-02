@@ -105,6 +105,10 @@ impl MaskRegister for I8x32V3 {
         unsafe { arch::_mm256_movemask_epi8(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_movm_epi8x_v3(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         // One bit per byte lane, directly - 32 bits, no packing/permute fixup needed.
         Some(unsafe { (arch::_mm256_movemask_epi8(value) as u32) as u64 })

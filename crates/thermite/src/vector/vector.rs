@@ -314,6 +314,10 @@ impl<R: Register> GenericVector for Vector<R> {
 
     fn compress(self, mask: Self::Mask) -> Self { Vector(R::compress(self.0, mask.0)) }
     fn compress_z(self, mask: Self::Mask) -> Self { Vector(R::compress_z(self.0, mask.0)) }
+    fn compress_m(self, src: Self, mask: Self::Mask) -> Self { Vector(R::compress_m(src.0, mask.0, self.0)) }
+    fn expand(self, mask: Self::Mask) -> Self { Vector(R::expand(self.0, mask.0)) }
+    fn expand_z(self, mask: Self::Mask) -> Self { Vector(R::expand_z(self.0, mask.0)) }
+    fn expand_m(self, src: Self, mask: Self::Mask) -> Self { Vector(R::expand_m(src.0, mask.0, self.0)) }
     fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
 
     // The arguments of these are reversed for the register
@@ -596,6 +600,13 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     #[conditional] fn min(self, other: Self) -> Self {}
     #[conditional] fn max(self, other: Self) -> Self {}
 
+    fn prefix_sum(self) -> Self {}
+    fn prefix_min(self) -> Self {}
+    fn prefix_max(self) -> Self {}
+    fn reverse_prefix_sum(self) -> Self {}
+    fn reverse_prefix_min(self) -> Self {}
+    fn reverse_prefix_max(self) -> Self {}
+
     fn clamp(self, min: Self, max: Self) -> Self { self.min(max).max(min) }
 
     fn min_element(self) -> Self::Element { R::min_element(self.0) }
@@ -715,6 +726,10 @@ where
     #[conditional] fn count_zeros(self) -> Self {}
     #[conditional] fn leading_ones(self) -> Self {}
     #[conditional] fn leading_zeros(self) -> Self {}
+    #[conditional] fn trailing_ones(self) -> Self {}
+    #[conditional] fn trailing_zeros(self) -> Self {}
+
+    fn count_conflicts(self) -> Self {}
 }
 
 #[thermite_macros::inline_always]

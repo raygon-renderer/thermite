@@ -56,6 +56,7 @@ impl MaskRegister for bool {
     fn any(value: Storage<Self>) -> bool { value }
 
     fn native_bitmask(value: Storage<Self>) -> Option<u64> { Some(value as u64) }
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> { (bitmask & 1) != 0 }
 
     #[cfg(feature = "bitvec")]
     fn fill_bitmask(value: Storage<Self>, view: &mut bitvec::slice::BitSlice<u32>) { view.set(0, value); }

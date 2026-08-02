@@ -1264,6 +1264,47 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `[a, c, 0, 0]`.
     fn compress_z(self, mask: Self::Mask) -> Self;
 
+    /// Merge-masked left-pack: like [`compress`](Self::compress), but the lanes
+    /// at and beyond the `mask` population count take their values from `src`
+    /// (at their own positions). Matches AVX-512 merge-masked `vpcompress*`.
+    ///
+    /// This is the accumulator step of a buffered stream compactor: pack
+    /// `self`'s selected lanes to the front while retaining `src`'s tail, then
+    /// [`align`](Self::align) by the running count.
+    ///
+    /// For `self = [a, b, c, d]`, `src = [w, x, y, z]`,
+    /// `mask = [true, false, true, false]` this returns `[a, c, y, z]`.
+    fn compress_m(self, src: Self, mask: Self::Mask) -> Self;
+
+    /// Inverse left-pack (`expand`): scatter this vector's packed low lanes back
+    /// out to the lanes where `mask` is set, preserving order; the unselected
+    /// lanes read the tail. The **exact inverse permutation** of
+    /// [`compress`](Self::compress):
+    /// `v.compress(m).expand(m) == v` and `v.expand(m).compress(m) == v` for
+    /// every `v` and `m`.
+    ///
+    /// For `[a, c, b, d]` with `mask = [true, false, true, false]` this returns
+    /// `[a, b, c, d]` - the return trip of stream compaction (compact the
+    /// active lanes, operate on the packed front, expand the results back to
+    /// their home lanes).
+    fn expand(self, mask: Self::Mask) -> Self;
+
+    /// Zero-filling inverse left-pack: like [`expand`](Self::expand), but the
+    /// unselected lanes are zeroed. Matches AVX-512 zero-masking `vpexpand*`.
+    ///
+    /// For `[a, c, _, _]` with `mask = [true, false, true, false]` this returns
+    /// `[a, 0, c, 0]`.
+    fn expand_z(self, mask: Self::Mask) -> Self;
+
+    /// Merge-masked inverse left-pack: like [`expand`](Self::expand), but the
+    /// unselected lanes take their values from `src`. Matches AVX-512
+    /// merge-masked `vpexpand*`.
+    ///
+    /// For `self = [a, c, _, _]`, `src = [w, x, y, z]`,
+    /// `mask = [true, false, true, false]` this returns `[a, x, c, z]` -
+    /// equivalent to `mask.select(self.expand(mask), src)`.
+    fn expand_m(self, src: Self, mask: Self::Mask) -> Self;
+
     /// Two-register element align (the `palignr` family): the window of `LANES`
     /// lanes starting at lane `OFFSET` of the concatenation `[self, other]`
     /// (`self`'s lanes first, then `other`'s). `OFFSET == 0` returns `self`,
@@ -1666,6 +1707,77 @@ pub trait Sad64Vector<W>: GenericVector {
     fn sad64_accum(self, acc: W, other: Self) -> W;
 }
 
+/// Lanes of a vector partitioned into groups of equal value, produced by
+/// [`group_by_value`](PartialOrdVector::group_by_value).
+///
+/// Each call to [`next_group`](Self::next_group) yields one distinct value and
+/// the mask of lanes holding it; groups come out in order of first occurrence,
+/// and every selected lane is yielded exactly once. That turns a divergent
+/// packet, whose lanes want different work, into a short sequence of uniform
+/// sub-packets.
+///
+/// The inherent [`next_group`](Self::next_group) is the primary interface: a
+/// plain `while let` loop needs no trait in scope and inlines predictably inside
+/// `#[target_feature]` bodies. [`Iterator`] is implemented on top of it, so
+/// `for` loops work too.
+///
+/// ```ignore
+/// // Shade a ray packet one geometry at a time.
+/// let mut groups = geom_ids.group_by_value(active);
+/// while let Some((geom_id, lanes)) = groups.next_group() {
+///     shade(geom_id, lanes);
+/// }
+/// ```
+///
+/// Cost is proportional to the number of *distinct* values, not the lane count:
+/// roughly a broadcast, a compare, and two mask ops per group. A uniform packet
+/// costs one iteration.
+#[derive(Debug, Clone, Copy)]
+pub struct ValueGroups<V: PartialOrdVector> {
+    value: V,
+    remaining: V::Mask,
+}
+
+impl<V: PartialOrdVector> ValueGroups<V> {
+    /// The next distinct value and the mask of remaining lanes holding it, or
+    /// `None` once every selected lane has been yielded.
+    #[inline(always)]
+    pub fn next_group(&mut self) -> Option<(V::Element, V::Mask)> {
+        let lane = self.remaining.first_set()?;
+
+        // `broadcastv` rather than `splat(extractv(..))`: one register op that
+        // backends already specialize, instead of a lane -> scalar -> lane
+        // round trip through memory.
+        let group = self.remaining & self.value.cmp_eq(self.value.broadcastv(lane));
+        let value = self.value.extractv(lane);
+
+        self.remaining = crate::vector::ops::BitAndNot::bitandnot(self.remaining, group);
+
+        Some((value, group))
+    }
+
+    /// Lanes not yet yielded, so a caller can stop part-way and keep the rest.
+    #[inline(always)]
+    pub fn remaining(&self) -> V::Mask {
+        self.remaining
+    }
+
+    /// Whether every selected lane has been yielded.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.remaining.none()
+    }
+}
+
+impl<V: PartialOrdVector> Iterator for ValueGroups<V> {
+    type Item = (V::Element, V::Mask);
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_group()
+    }
+}
+
 /// Per-lane comparison producing a [`Mask`](GenericVector::Mask).
 ///
 /// Each comparison returns a mask whose lanes are `true` where the predicate
@@ -1683,6 +1795,15 @@ pub trait Sad64Vector<W>: GenericVector {
     note = "`PartialOrdVector` turns lane-wise comparisons into a `Mask`; it is implemented by all numeric vectors (integer and float)."
 )]
 pub trait PartialOrdVector: GenericVector + PartialEq {
+    /// Partition the lanes selected by `valid` into groups of equal value.
+    ///
+    /// See [`ValueGroups`] for the loop shape and cost. Pass
+    /// `Self::Mask::TRUTHY` to group every lane.
+    #[inline(always)]
+    fn group_by_value(self, valid: Self::Mask) -> ValueGroups<Self> {
+        ValueGroups { value: self, remaining: valid }
+    }
+
     /// Lane-wise `self < other`.
     fn cmp_lt(self, other: Self) -> Self::Mask;
     /// Lane-wise `self <= other`.
@@ -1827,6 +1948,52 @@ pub trait NumericVector:
     ///
     /// This operation has an `O(log2 n)` complexity to reduce.
     fn prod_elements(self) -> Self::Element;
+
+    /// Inclusive forward prefix sum ("running total"): `out[i] = self[0] + .. + self[i]`.
+    ///
+    /// Unlike [`sum_elements`](Self::sum_elements), which collapses the register to one
+    /// scalar, this keeps every partial sum in its own lane - the primitive behind
+    /// bin offsets and stream-compaction write indices.
+    ///
+    /// `O(log2 LANES)` vector ops where the backend has a native cross-register
+    /// [`align`](GenericVector::align), a sequential lane walk where it does not,
+    /// chosen at compile time. For a scan over only some lanes, neutralise the rest
+    /// first: `v.zz(mask).prefix_sum()`.
+    ///
+    /// ```
+    /// use thermite::prelude::*;
+    /// use thermite::backend::scalar::Scalar;
+    ///
+    /// let v = <thermite::simd::i32x4<Scalar>>::new([1, 2, 3, 4]);
+    /// assert_eq!(v.prefix_sum().into_array(), [1, 3, 6, 10].into());
+    /// assert_eq!(v.reverse_prefix_sum().into_array(), [10, 9, 7, 4].into());
+    /// ```
+    fn prefix_sum(self) -> Self;
+
+    /// Inclusive forward prefix minimum: `out[i] = min(self[0], .., self[i])`.
+    ///
+    /// See [`prefix_sum`](Self::prefix_sum) for the cost model. With NaN lanes, which
+    /// operand wins is unspecified (as for [`min`](Self::min) itself); exact and
+    /// backend-identical otherwise, infinities included.
+    fn prefix_min(self) -> Self;
+
+    /// Inclusive forward prefix maximum: `out[i] = max(self[0], .., self[i])`.
+    ///
+    /// See [`prefix_min`](Self::prefix_min) for the NaN caveat.
+    fn prefix_max(self) -> Self;
+
+    /// Inclusive reverse (suffix) sum: `out[i] = self[i] + .. + self[LANES-1]`.
+    fn reverse_prefix_sum(self) -> Self;
+
+    /// Inclusive reverse (suffix) minimum: `out[i] = min(self[i], .., self[LANES-1])`.
+    ///
+    /// See [`prefix_min`](Self::prefix_min) for the NaN caveat.
+    fn reverse_prefix_min(self) -> Self;
+
+    /// Inclusive reverse (suffix) maximum: `out[i] = max(self[i], .., self[LANES-1])`.
+    ///
+    /// See [`prefix_min`](Self::prefix_min) for the NaN caveat.
+    fn reverse_prefix_max(self) -> Self;
 
     /// Returns a vector whose every lane equals [`LANES`](GenericVector::LANES),
     /// converted into the element type.
@@ -2022,6 +2189,27 @@ pub trait IntegerVector:
     #[conditional] fn leading_ones(self) -> Self;
     /// For each element in the vector, count the number of leading zeros.
     #[conditional] fn leading_zeros(self) -> Self;
+    /// For each element in the vector, count the number of trailing ones.
+    #[conditional] fn trailing_ones(self) -> Self;
+    /// For each element in the vector, count the number of trailing zeros.
+    #[conditional] fn trailing_zeros(self) -> Self;
+
+    /// For each lane, how many *earlier* lanes hold the same value:
+    /// `out[i] == |{ j < i : self[j] == self[i] }|`.
+    ///
+    /// Equivalent to AVX-512CD's `conflict(self).count_ones()`. Two things fall
+    /// out of it:
+    ///
+    /// - `count_conflicts().cmp_eq(Self::ZERO)` is the **first-occurrence** mask.
+    /// - The count is the round number for a conflicting read-modify-write. A
+    ///   lane of rank `r` is safe to process in round `r`, since every earlier
+    ///   duplicate has a strictly smaller rank and goes first. That is what
+    ///   makes a vectorized histogram / SAH-bin increment correct where a plain
+    ///   scatter would silently drop duplicate writes.
+    ///
+    /// Backed by [`IntegerRegister::count_conflicts`](crate::register::IntegerRegister::count_conflicts),
+    /// so a backend with hardware conflict detection overrides it in one place.
+    fn count_conflicts(self) -> Self;
 }
 
 #[rustfmt::skip] #[thermite_macros::vector_trait]

@@ -94,6 +94,10 @@ impl MaskRegister for U16x8V3 {
         unsafe { arch::_mm_count_mask_epi16x_v1(values) }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm_movm_epi16x_v1(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         let packed = unsafe { arch::_mm_packs_epi16(value, arch::_mm_setzero_si128()) };
         Some(unsafe { (arch::_mm_movemask_epi8(packed) as u64) & 0xFF })
@@ -208,6 +212,8 @@ impl Register for U16x8V3 {
     }
 
     const HAS_PERMUTEV: bool = <super::I16x8V3 as Register>::HAS_PERMUTEV;
+
+    impl_byte_align_alignr!();
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         super::I16x8V3::permutev(value, idxs)

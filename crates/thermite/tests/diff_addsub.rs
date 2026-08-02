@@ -77,8 +77,9 @@ macro_rules! oracle_fused {
     }};
 }
 
-/// Masked binary diff (`addsub_c`/`_m`/`_z`) vs. the scalar backend. All are
-/// exact (blendv over the exact `addsub`).
+/// Masked binary diff (`addsub_c`/`_m`/`_z`) vs. the scalar backend. `_m`/`_z`
+/// are exact (blendv / bitand over the exact `addsub`); `_c` is exact up to the
+/// sign of a zero result - see the comment on the assertion below.
 macro_rules! diff_addsub_masked {
     ($label:expr, $ut:ty, $rf:ty) => {{
         type E = <$ut as Register>::Element;
@@ -95,9 +96,18 @@ macro_rules! diff_addsub_masked {
             let m_ut = harness::build_mask::<$ut>(bools);
             let m_rf = harness::build_mask::<$rf>(bools);
 
+            // `_c` is `addsub(a, b & mask)` on an equal-size-mask backend, so a
+            // masked-off `-0.0` lane returns `+0.0` where the scalar oracle's
+            // blendv keeps the sign. See `Tol::ExactOrZeroSign`.
             let got_c = harness::read::<$ut>(&<$ut>::addsub_c(m_ut, ax, ay));
             let want_c = harness::read::<$rf>(&<$rf>::addsub_c(m_rf, rx, ry));
-            harness::assert_lanes_eq(concat!($label, " [addsub_c]"), &[x, y], &got_c, &want_c, Tol::Exact);
+            harness::assert_lanes_eq(
+                concat!($label, " [addsub_c]"),
+                &[x, y],
+                &got_c,
+                &want_c,
+                Tol::ExactOrZeroSign,
+            );
 
             let got_m = harness::read::<$ut>(&<$ut>::addsub_m(src, m_ut, ax, ay));
             let want_m = harness::read::<$rf>(&<$rf>::addsub_m(rsrc, m_rf, rx, ry));

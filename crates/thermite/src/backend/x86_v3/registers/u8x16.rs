@@ -94,6 +94,10 @@ impl MaskRegister for U8x16V3 {
         unsafe { arch::_mm_movemask_epi8(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm_movm_epi8x_v2(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { (arch::_mm_movemask_epi8(value) as u32) as u64 })
     }
@@ -219,6 +223,10 @@ impl Register for U8x16V3 {
     compress_via_wide!();
 
     // Byte-identical to the signed register (both are raw `__m128i`); reuse it.
+    // hand-written body below, so the flag is set here rather than by an
+    // `impl_*_align*!` macro
+    const HAS_NATIVE_ALIGN: bool = true;
+
     fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         super::I8x16V3::align::<OFFSET>(a, b)
     }

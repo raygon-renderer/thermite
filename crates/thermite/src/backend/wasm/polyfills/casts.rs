@@ -216,3 +216,58 @@ pub unsafe fn i32x4_to_2xf64x2(ints: v128) -> [v128; 2] {
         f64x2_convert_low_i32x4(i32x4_shuffle::<2, 3, 2, 3>(ints, ints)),
     ]
 }
+
+// ---------------------------------------------------------------------------
+// Bitmask -> lane mask (the inverse of `*_bitmask`). SIMD128 has no
+// bits-to-mask instruction, so broadcast the packed bits, AND with a per-lane
+// bit-select constant, and compare against that same constant.
+//
+// Bits at or above the lane count fall outside every lane's constant and so are
+// ignored, as `MaskRegister::from_native_bitmask` requires.
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: expand bits 0..=3 of `bitmask` into four full-width 32-bit lane masks.
+#[inline(always)]
+pub fn bitmask_to_i32x4x(bitmask: u64) -> v128 {
+    const BITS: v128 = u32x4(1, 2, 4, 8);
+
+    i32x4_eq(v128_and(u32x4_splat(bitmask as u32), BITS), BITS)
+}
+
+/// POLYFILL: expand bits 0..=1 of `bitmask` into two full-width 64-bit lane masks.
+#[inline(always)]
+pub fn bitmask_to_i64x2x(bitmask: u64) -> v128 {
+    const BITS: v128 = u64x2(1, 2);
+
+    i64x2_eq(v128_and(u64x2_splat(bitmask), BITS), BITS)
+}
+
+/// POLYFILL: expand bits 0..=7 of `bitmask` into eight full-width 16-bit lane masks.
+#[inline(always)]
+pub fn bitmask_to_i16x8x(bitmask: u64) -> v128 {
+    const BITS: v128 = u16x8(1, 2, 4, 8, 16, 32, 64, 128);
+
+    i16x8_eq(v128_and(u16x8_splat(bitmask as u16), BITS), BITS)
+}
+
+/// POLYFILL: expand bits 0..=15 of `bitmask` into sixteen full-width 8-bit lane
+/// masks.
+///
+/// A byte lane is narrower than the bit index it tests, so the two relevant
+/// bytes are spread over their eight lanes each by the `0x0101..` multiply,
+/// which is cheaper than sixteen lane inserts.
+#[inline(always)]
+pub fn bitmask_to_i8x16x(bitmask: u64) -> v128 {
+    #[rustfmt::skip]
+    const BITS: v128 = u8x16(
+        1, 2, 4, 8, 16, 32, 64, 128,
+        1, 2, 4, 8, 16, 32, 64, 128,
+    );
+
+    const SPREAD: u64 = 0x0101_0101_0101_0101;
+
+    let lo = (bitmask & 0xFF) * SPREAD;
+    let hi = ((bitmask >> 8) & 0xFF) * SPREAD;
+
+    i8x16_eq(v128_and(u64x2(lo, hi), BITS), BITS)
+}

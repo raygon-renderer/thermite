@@ -185,6 +185,45 @@ where
         }
     }
 
+    // Hand each sub-register its own window of the bitmask. `R` ignores bits at
+    // or above its own lane count, so the shifted word needs no re-masking.
+    // Sub-registers starting at or beyond bit 64 cannot be addressed by a `u64`
+    // and stay `FALSY` (the documented > 64-lane truncation).
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        let mut result = [R::FALSY; N];
+
+        for i in 0..N {
+            let shift = i * R::Lanes::USIZE;
+
+            if shift >= 64 {
+                break;
+            }
+
+            result[i] = R::from_native_bitmask(bitmask >> shift);
+        }
+
+        Self(result)
+    }
+
+    #[cfg(feature = "bitvec")]
+    fn from_bitmask(bits: &bitvec::slice::BitSlice<u32>) -> Storage<Self> {
+        let mut result = [R::FALSY; N];
+
+        for i in 0..N {
+            let start = i * R::Lanes::USIZE;
+
+            if start >= bits.len() {
+                break;
+            }
+
+            let end = (start + R::Lanes::USIZE).min(bits.len());
+
+            result[i] = R::from_bitmask(&bits[start..end]);
+        }
+
+        Self(result)
+    }
+
     // Hand the whole sub-register array to `R` in one call rather than going
     // through the combined bitmask. That stays correct when the total lane
     // count exceeds 64 (where `native_bitmask` returns `None`), and it is what
@@ -856,6 +895,24 @@ where
         crate::backend::generic::polyfills::compress_z_default::<Self>(value, mask)
     }
 
+    fn expand(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // SAFETY: `Lanes <= 8` per the guard above.
+            return unsafe { crate::backend::generic::polyfills::expand_permute8_raw::<Self>(value, mask) };
+        }
+
+        crate::backend::generic::polyfills::expand_default::<Self>(value, mask)
+    }
+
+    fn expand_z(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // Zero the unselected lanes after routing the packed front out.
+            return Self::zz(mask, Self::expand(value, mask));
+        }
+
+        crate::backend::generic::polyfills::expand_z_default::<Self>(value, mask)
+    }
+
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             return Self::scalar_permutev(value, idxs);
@@ -895,6 +952,10 @@ where
         Self(R::array_permutev::<N>(value.0, I::INDICES.as_slice()))
     }
 
+    // The per-chunk `R::align` below is the whole implementation, so this width is
+    // only as native as the register it is built from.
+    const HAS_NATIVE_ALIGN: bool = R::HAS_NATIVE_ALIGN;
+
     // Cross-chunk element align: each output chunk is a window between two
     // adjacent source chunks of the concatenation [a.0 .., b.0 ..], so it reduces
     // to a per-chunk `R::align` (which itself uses the native fast path). For
@@ -916,6 +977,22 @@ where
             c += 1;
         }
         Self(result)
+    }
+}
+
+/// Emulated widths take the portable widening: there is no single native
+/// instruction spanning the chunks. Spelled out rather than defaulted on the
+/// trait, so a native register can never silently land on this body.
+impl<R: Register, const N: usize> WidenIndexRegister for ArrayRegister<R, N>
+where
+    Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
+    ArrayRegister<R, N>: Register,
+{
+    #[inline(always)]
+    fn widen_indices(
+        idxs: &GenericArray<u8, generic_array::typenum::U8>,
+    ) -> GenericArray<u32, <Self as CoreRegister>::Lanes> {
+        crate::backend::generic::polyfills::widen_row::<<Self as CoreRegister>::Lanes>(idxs)
     }
 }
 

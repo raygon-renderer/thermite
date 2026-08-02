@@ -82,6 +82,10 @@ impl MaskRegister for U64x4V3 {
         unsafe { arch::_mm256_movemask_epi8(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_movm_epi64x_v3(bitmask) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm256_movemask_pd(arch::_mm256_castsi256_pd(value)) as u64 })
     }
@@ -252,6 +256,10 @@ impl Register for U64x4V3 {
     compress_via_table!();
 
     // Byte-identical to the signed register (both raw `__m256i`); reuse it.
+    // hand-written body below, so the flag is set here rather than by an
+    // `impl_*_align*!` macro
+    const HAS_NATIVE_ALIGN: bool = true;
+
     fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         super::I64x4V3::align::<OFFSET>(a, b)
     }

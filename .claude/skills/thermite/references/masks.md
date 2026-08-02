@@ -41,6 +41,10 @@ Mask::TRUTHY   // all true       Mask::FALSY    // all false (also Default)
 m.native_bitmask() -> Option<u64>   // packed bits if the backend supports it
 m.bitmask() -> BitArray             // always works (software fallback; needs `bitvec` feature)
 
+// ... and back (associated fns): bit i drives lane i, bits >= LANES are ignored
+M::from_native_bitmask(bits: u64) -> M      // broadcast + AND + compare (1 instr on AVX-512)
+M::from_bitmask(&BitSlice<u32>)   -> M      // any width; short slice leaves the rest false
+
 // reinterpret a mask to another vector's mask type (same lane count / compatible width)
 let m2: OtherVec::Mask = m.cast::<_>();    // via CastMask
 m.swap(&mut a, &mut b)                      // conditionally swap lanes of a and b

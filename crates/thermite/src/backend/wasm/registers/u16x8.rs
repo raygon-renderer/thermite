@@ -95,6 +95,10 @@ impl MaskRegister for U16x8Wasm {
         !arch::v128_any_true(value)
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        arch::bitmask_to_i16x8x(bitmask)
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(arch::i16x8_bitmask(value) as u64)
     }
@@ -184,6 +188,8 @@ impl Register for U16x8Wasm {
     }
 
     const HAS_PERMUTEV: bool = true;
+
+    impl_wasm_align_shuffle!();
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         super::I16x8Wasm::permutev(value, idxs)

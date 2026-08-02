@@ -42,6 +42,17 @@ pub enum Tol {
     /// for `min`/`max`, whose `NaN` propagation is explicitly *not* IEEE and is
     /// known to diverge between the scalar and x86 backends (see TESTING.md).
     ExactOrNan,
+    /// Bit-exact, except that `+0.0` and `-0.0` compare equal.
+    ///
+    /// For the `_c` variants of the additive float ops. Where the mask register
+    /// is the same width as the data register, `op_c` is lowered as
+    /// `op(lhs, rhs & mask)` rather than a `blendv` of the result - an `and`
+    /// plus the op instead of the op plus a select. `+0.0` is not quite the
+    /// additive identity under round-to-nearest (`-0.0 + 0.0 == +0.0`), so a
+    /// masked-off `-0.0` lane comes back as `+0.0`. The scalar oracle has no
+    /// equal-size mask and keeps the `blendv` form, so it preserves the sign.
+    /// That divergence is accepted; the magnitude is not (see TESTING.md).
+    ExactOrZeroSign,
 }
 
 /// A scalar element type that can be differentially tested: it knows its own
@@ -128,6 +139,8 @@ macro_rules! impl_diff_float {
                         (!cfg!(feature = "strict_ieee754") && got == 0.0 && want == 0.0)
                             || got.to_bits() == want.to_bits()
                     }
+                    // `got == want` is already sign-of-zero-blind for floats.
+                    Tol::ExactOrZeroSign => (got == 0.0 && want == 0.0) || got.to_bits() == want.to_bits(),
                     Tol::Ulp(n) => {
                         if got == want {
                             return true;

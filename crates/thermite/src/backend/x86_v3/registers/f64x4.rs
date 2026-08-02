@@ -106,6 +106,10 @@ impl MaskRegister for F64x4V3 {
         unsafe { arch::_mm256_movemask_pd(value) == 0 }
     }
 
+    fn from_native_bitmask(bitmask: u64) -> Storage<Self> {
+        unsafe { arch::_mm256_castsi256_pd(arch::_mm256_movm_epi64x_v3(bitmask)) }
+    }
+
     fn native_bitmask(value: Storage<Self>) -> Option<u64> {
         Some(unsafe { arch::_mm256_movemask_pd(value) as u64 })
     }
@@ -334,6 +338,8 @@ impl Register for F64x4V3 {
     }
 
     const HAS_PERMUTEV: bool = true;
+
+    impl_float_align_via_bits!(super::U64x4V3);
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         unsafe {
