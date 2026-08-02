@@ -642,6 +642,30 @@ impl<V: ComplexFloatVector> GenericVector for Complex<V> {
         Complex::new(self.re.compress_z(mask), self.im.compress_z(mask))
     }
 
+    // Pure lane movement driven by `mask` alone, so both parts take the same
+    // permutation and no lane ends up with a re/im pair from different sources.
+    // `compress_m` too: its keep-lanes come from the population count of the shared
+    // mask, so they land at the same positions in each part.
+    #[inline(always)]
+    fn compress_m(self, src: Self, mask: Self::Mask) -> Self {
+        Complex::new(self.re.compress_m(src.re, mask), self.im.compress_m(src.im, mask))
+    }
+
+    #[inline(always)]
+    fn expand(self, mask: Self::Mask) -> Self {
+        Complex::new(self.re.expand(mask), self.im.expand(mask))
+    }
+
+    #[inline(always)]
+    fn expand_z(self, mask: Self::Mask) -> Self {
+        Complex::new(self.re.expand_z(mask), self.im.expand_z(mask))
+    }
+
+    #[inline(always)]
+    fn expand_m(self, src: Self, mask: Self::Mask) -> Self {
+        Complex::new(self.re.expand_m(src.re, mask), self.im.expand_m(src.im, mask))
+    }
+
     #[inline(always)]
     fn align<const OFFSET: usize>(self, other: Self) -> Self {
         Complex::new(self.re.align::<OFFSET>(other.re), self.im.align::<OFFSET>(other.im))
@@ -1006,6 +1030,42 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
     #[inline(always)]
     fn sum_elements(self) -> Self::Element {
         Complex::new(self.re.sum_elements(), self.im.sum_elements())
+    }
+
+    // Complex addition is componentwise, so the scan is too - the same argument as
+    // `sum_elements`, one step at a time instead of all the way down.
+    #[inline(always)]
+    fn prefix_sum(self) -> Self {
+        Complex::new(self.re.prefix_sum(), self.im.prefix_sum())
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_sum(self) -> Self {
+        Complex::new(self.re.reverse_prefix_sum(), self.im.reverse_prefix_sum())
+    }
+
+    // min/max are lexicographic over both parts (see the ordering above), so there is
+    // no per-component scan to delegate to: scanning `re` and `im` separately would
+    // pair a real part from one lane with an imaginary part from another. The ladder
+    // runs on whole complex values through `Self::min`/`Self::max`.
+    #[inline(always)]
+    fn prefix_min(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn prefix_max(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::max)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_min(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_max(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
     }
 
     // Product is not componentwise (the parts cross-multiply) and needs complex

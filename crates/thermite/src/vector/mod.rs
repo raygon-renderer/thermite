@@ -2519,6 +2519,106 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     }
 }
 
+/// Inclusive scan ladder at the **vector** layer, for composite vector types.
+///
+/// The register-layer ladder in
+/// [`polyfills::scan`](crate::backend::generic::polyfills::scan) is written in
+/// `Register` ops and so cannot be reused by `Dual`/`Compensated`/`Complex`, whose
+/// scans have to run on their own `Self` operations (a dual carries the winning
+/// lane's derivative; a compensated sum has to renormalise its error term). This is
+/// the same ladder spelled in [`GenericVector`] methods, exported so those crates
+/// share one copy.
+///
+/// Invoke inside an `impl` block for the composite -- it resolves `Self`:
+///
+/// ```ignore
+/// fn prefix_min(self) -> Self {
+///     thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::min)
+/// }
+/// fn reverse_prefix_sum(self) -> Self {
+///     thermite::scan_ladder!(reverse, self, Self::ZERO, core::ops::Add::add)
+/// }
+/// ```
+///
+/// `$op` must be associative (a doubling ladder reassociates freely), and `$fill`
+/// must leave the already-final lanes alone: `ZERO` for a sum, and a broadcast of
+/// the *edge* lane for `min`/`max` -- lane 0 forward, lane `LANES - 1` reverse.
+/// `MIN`/`MAX` are finite bounds and would clamp an infinite lane, which is the same
+/// trap the register ladder documents.
+///
+/// `align`'s offset is a const-generic argument and must be a literal. The reverse
+/// direction is fine (the shift *is* the offset), but the forward direction needs
+/// `LANES - s`, hence the match on the compile-time lane count with a per-width
+/// offset list -- exactly one arm survives monomorphization. Widths outside
+/// power-of-two `<= 64` have no arm and fall back to reversing, running the reverse
+/// ladder, and reversing back, which needs only literal shifts and is correct at any
+/// width.
+///
+/// No `HAS_NATIVE_ALIGN` gate is possible here: it is a `Register` const and is not
+/// re-exposed on the vector traits, so a composite over a register with an emulated
+/// align runs the ladder where the register layer would have chosen a scalar walk.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! scan_ladder {
+    (reverse, $v:expr, $fill:expr, $op:path) => {{
+        let mut v = $v;
+        let f = $fill;
+        #[rustfmt::skip]
+        let () = {
+            if const { Self::LANES >  1 } { v = $op(v, v.align::<1>(f)); }
+            if const { Self::LANES >  2 } { v = $op(v, v.align::<2>(f)); }
+            if const { Self::LANES >  4 } { v = $op(v, v.align::<4>(f)); }
+            if const { Self::LANES >  8 } { v = $op(v, v.align::<8>(f)); }
+            if const { Self::LANES > 16 } { v = $op(v, v.align::<16>(f)); }
+            if const { Self::LANES > 32 } { v = $op(v, v.align::<32>(f)); }
+        };
+        v
+    }};
+
+    (forward, $v:expr, $fill:expr, $op:path) => {{
+        let mut v = $v;
+        let f = $fill;
+
+        if const { Self::LANES.is_power_of_two() && Self::LANES <= 64 } {
+            // `a.align::<OFFSET>(b)[i] == concat(a, b)[OFFSET + i]`, so with `a = fill`
+            // and `b = v` the stage that wants `v[i - s]` is `OFFSET == LANES - s`.
+            #[rustfmt::skip]
+            let () = match const { Self::LANES } {
+                0 | 1 => {}
+                2  => { v = $op(v, f.align::<1>(v)); }
+                4  => { v = $op(v, f.align::<3>(v));
+                        v = $op(v, f.align::<2>(v)); }
+                8  => { v = $op(v, f.align::<7>(v));
+                        v = $op(v, f.align::<6>(v));
+                        v = $op(v, f.align::<4>(v)); }
+                16 => { v = $op(v, f.align::<15>(v));
+                        v = $op(v, f.align::<14>(v));
+                        v = $op(v, f.align::<12>(v));
+                        v = $op(v, f.align::<8>(v)); }
+                32 => { v = $op(v, f.align::<31>(v));
+                        v = $op(v, f.align::<30>(v));
+                        v = $op(v, f.align::<28>(v));
+                        v = $op(v, f.align::<24>(v));
+                        v = $op(v, f.align::<16>(v)); }
+                64 => { v = $op(v, f.align::<63>(v));
+                        v = $op(v, f.align::<62>(v));
+                        v = $op(v, f.align::<60>(v));
+                        v = $op(v, f.align::<56>(v));
+                        v = $op(v, f.align::<48>(v));
+                        v = $op(v, f.align::<32>(v)); }
+                // unreachable: guarded by the `if const` above. Panicking is the right
+                // failure mode if a width ever slips past that guard.
+                _ => unreachable!(),
+            };
+            v
+        } else {
+            // `fill` is the lane-0 broadcast either way: reversing makes it the last
+            // lane, which is exactly what the reverse ladder wants.
+            $crate::scan_ladder!(reverse, v.reverse(), f, $op).reverse()
+        }
+    }};
+}
+
 /// Run a closure-like block with a generic [`FloatVector`] temporarily upcast
 /// to a [`FloatVectorWithBits`], when the backend supports it.
 ///

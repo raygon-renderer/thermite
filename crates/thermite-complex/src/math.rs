@@ -5,7 +5,7 @@
 //! [`TranscendentalMath`](thermite::math::TranscendentalMath) and
 //! [`SpatialMath`](thermite::math::SpatialMath) (with their `_p` policy forms)
 //! from the blanket impls in `thermite::math`, plus
-//! [`SpecializedComplexMath`](crate::SpecializedComplexMath) for the operations
+//! [`SpecializedComplexMath`] for the operations
 //! over the real part.
 //!
 //! Each kernel evaluates its complex function through the *inner* vector's policy

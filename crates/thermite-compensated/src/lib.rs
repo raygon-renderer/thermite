@@ -1593,6 +1593,42 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         }
     }
 
+    // Pure lane movement driven by `mask` alone, so both components take the same
+    // permutation and each value keeps its own error term. `compress_m` included:
+    // its keep-lanes come from the population count of the shared mask, so they
+    // land at the same positions in `value` and `error`.
+    #[inline(always)]
+    fn compress_m(self, src: Self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.compress_m(src.value, mask),
+            error: self.error.compress_m(src.error, mask),
+        }
+    }
+
+    #[inline(always)]
+    fn expand(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.expand(mask),
+            error: self.error.expand(mask),
+        }
+    }
+
+    #[inline(always)]
+    fn expand_z(self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.expand_z(mask),
+            error: self.error.expand_z(mask),
+        }
+    }
+
+    #[inline(always)]
+    fn expand_m(self, src: Self, mask: Self::Mask) -> Self {
+        Self {
+            value: self.value.expand_m(src.value, mask),
+            error: self.error.expand_m(src.error, mask),
+        }
+    }
+
     #[inline(always)]
     fn align<const OFFSET: usize>(self, other: Self) -> Self {
         Self {
@@ -1844,6 +1880,47 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
 
     fn prod_elements(self) -> Self::Element {
         self.reduce(|a, b| a * b)
+    }
+
+    // None of these are componentwise. Scanning `value` and `error` with the inner
+    // vector's own scan would add the value lanes without ever renormalising the
+    // carried error into them, which is exactly the compensation this type exists to
+    // do -- so the ladder runs on `Self`'s double-double `+`, like `sum_elements`
+    // reduces through `+` rather than through the components.
+    //
+    // The ladder associates the additions as a tree where a sequential scan would
+    // chain them, so the result is not bit-identical to folding lane by lane. Same
+    // reassociation the core `prefix_sum` documents, at double-double precision.
+    #[inline(always)]
+    fn prefix_sum(self) -> Self {
+        thermite::scan_ladder!(forward, self, Self::ZERO, core::ops::Add::add)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_sum(self) -> Self {
+        thermite::scan_ladder!(reverse, self, Self::ZERO, core::ops::Add::add)
+    }
+
+    // min/max order by the compensated value and carry the winning lane's error with
+    // it, so they scan whole elements through `Self::min`/`Self::max` above.
+    #[inline(always)]
+    fn prefix_min(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn prefix_max(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::max)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_min(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_max(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
     }
 
     #[inline(always)]

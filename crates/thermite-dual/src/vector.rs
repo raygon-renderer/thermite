@@ -761,6 +761,42 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         }
     }
 
+    // The compaction family is pure lane movement driven by `mask` alone, so every
+    // component takes the same permutation and the value/derivative pairing survives
+    // it. That includes `compress_m`, whose keep-lanes are chosen by the population
+    // count of the shared mask and so land identically in each component.
+    #[inline(always)]
+    fn compress_m(self, src: Self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.compress_m(src.re, mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].compress_m(src.dual[j], mask)),
+        }
+    }
+
+    #[inline(always)]
+    fn expand(self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.expand(mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].expand(mask)),
+        }
+    }
+
+    #[inline(always)]
+    fn expand_z(self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.expand_z(mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].expand_z(mask)),
+        }
+    }
+
+    #[inline(always)]
+    fn expand_m(self, src: Self, mask: Self::Mask) -> Self {
+        Self {
+            re: self.re.expand_m(src.re, mask),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].expand_m(src.dual[j], mask)),
+        }
+    }
+
     #[inline(always)]
     fn align<const OFFSET: usize>(self, other: Self) -> Self {
         Self {
@@ -1146,6 +1182,48 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
             j += 1;
         }
         Dual { re: self.re.sum_elements(), dual }
+    }
+
+    // Same linearity as `sum_elements`: scanning each component with the inner
+    // vector's own prefix sum is the scan of the duals.
+    #[inline(always)]
+    fn prefix_sum(self) -> Self {
+        Self {
+            re: self.re.prefix_sum(),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].prefix_sum()),
+        }
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_sum(self) -> Self {
+        Self {
+            re: self.re.reverse_prefix_sum(),
+            dual: array_each!([V::ZERO; N], |j| self.dual[j].reverse_prefix_sum()),
+        }
+    }
+
+    // min/max are *not* componentwise: a dual is ordered by its primal and the
+    // derivative of the winner comes with it, so scanning `re` and `dual` separately
+    // would pair a primal from one lane with a derivative from another. Run the
+    // ladder over whole duals instead, on `Self::min`/`Self::max` above.
+    #[inline(always)]
+    fn prefix_min(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn prefix_max(self) -> Self {
+        thermite::scan_ladder!(forward, self, self.broadcast::<0>(), Self::max)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_min(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+    }
+
+    #[inline(always)]
+    fn reverse_prefix_max(self) -> Self {
+        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
     }
 
     // Product is *not* linear (the per-lane derivatives cross-multiply), so it
