@@ -2,9 +2,8 @@
 
 use crate::{
     element::USize,
-    isa::InstructionSet,
-    register::{Element, ExtendRegister, MaskElement, Storage, array::ArrayRegister, reduced::ReducedRegister},
-    simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3},
+    register::{ExtendRegister, Storage, array::ArrayRegister},
+    simd::{NativeIsa, NativeSimd, Simd, Simd3},
 };
 
 cfg_if::cfg_if! {

@@ -1,5 +1,5 @@
 //! Portable N-way interleave / de-interleave of a register array - the register
-//! half of [`Register::load_deinterleaved`](crate::register::Register::load_deinterleaved)
+//! half of [`crate::register::Register::load_deinterleaved`]
 //! and [`store_interleaved`](crate::register::Register::store_interleaved).
 //!
 //! The contract, over the flat span of `N * LANES` elements that `N` contiguous
@@ -17,7 +17,7 @@
 //! sorts each element into its class. De-interleaving runs the stages top-down:
 //!
 //! - **the leftover gather stage**, at most once and first, for the
-//!   non-{2,3}-smooth factor of `N` (radix [`leftover`]`(N)`): a permute+blend
+//!   non-{2,3}-smooth factor of `N` (radix `leftover(N)`): a permute+blend
 //!   gather per output stream. Only `min(p, LANES)` sources can contribute lanes
 //!   to a given stream, and non-contributors are skipped, so it costs
 //!   `p * min(p, LANES)` permutes (one fewer blend each), not `p^2`.
@@ -50,7 +50,7 @@
 //!
 //! Stage order (3s, then 2s) is taste, not necessity - each radix's op count is
 //! order-independent - but the digit-reversal permutation must be derived from
-//! the same factor sequence the stages use, so both come from [`choose_radix`].
+//! the same factor sequence the stages use, so both come from `choose_radix`.
 //!
 //! ## Grouped streams: spelling a const-generic product on stable
 //!
@@ -83,7 +83,7 @@
 //! to unroll, and then nothing folds), and every count and radix is a
 //! compile-time constant - a const generic or a product of them, threaded
 //! through `#[inline(always)]` value parameters - never a runtime slice length.
-//! The digit-reversal is a const table rather than a call to [`stream_pos`]
+//! The digit-reversal is a const table rather than a call to `stream_pos`
 //! (recursive, `/`-and-`%`-heavy - with a runtime argument it does not fold and
 //! alone cost ~200 instructions). Skipping any of those turns a branch-free
 //! straight-line sequence into a spilling loop nest: an `f32x8`
@@ -608,7 +608,8 @@ pub fn interleave_any<R: Register, const N: usize>(values: [Storage<R>; N]) -> [
 }
 
 /// The non-native body of [`Register::deinterleave_radix`]: forward `N == 2` to
-/// the required [`InterleaveRegister::deinterleave`] primitive and send every
+/// the required [`InterleaveRegister::deinterleave`](crate::register::InterleaveRegister::deinterleave)
+/// primitive and send every
 /// other `N` to the single-round [`deinterleave_any`] gather.
 ///
 /// Backends that add a native radix (e.g. radix-3) call this for the arms they
@@ -634,7 +635,8 @@ pub fn deinterleave_radix_default<R: Register, const N: usize>(inputs: [Storage<
 
 /// The non-native body of [`Register::interleave_radix`] - the exact inverse of
 /// [`deinterleave_radix_default`]: `N == 2` forwards to
-/// [`InterleaveRegister::interleave`], any other `N` uses [`interleave_any`].
+/// [`InterleaveRegister::interleave`](crate::register::InterleaveRegister::interleave),
+/// any other `N` uses [`interleave_any`].
 #[inline(always)]
 pub fn interleave_radix_default<R: Register, const N: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
     if const { N == 2 } {
@@ -654,17 +656,18 @@ pub fn interleave_radix_default<R: Register, const N: usize>(inputs: [Storage<R>
 }
 
 /// Group-granularity 2-way interleave - the default body of
-/// [`Register::interleave_by`](crate::register::Register::interleave_by).
+/// [`crate::register::Register::interleave_by`].
 ///
 /// Blocks of `group` consecutive elements move as a unit, never split: it is the
-/// element-granularity [`InterleaveRegister::interleave`] on the register
+/// element-granularity [`InterleaveRegister::interleave`](crate::register::InterleaveRegister::interleave)
+/// on the register
 /// reinterpreted as `LANES / group` elements of `group *` the width. `group == 1`
 /// is exactly `interleave`; `group == 2` is pair (complex) interleave, so
 /// `lo == [a.G0, b.G0, a.G1, b.G1, ...]` over the low half of the groups and `hi`
 /// over the high half. `group` must divide `LANES`.
 ///
 /// A correct lane-wise fallback; backends override
-/// [`Register::interleave_by`](crate::register::Register::interleave_by) for the
+/// [`crate::register::Register::interleave_by`] for the
 /// group sizes they can do natively (the doubled-element `unpacklo_pd` +
 /// `permute2f128` for `group == 2` on AVX2, `zip` on NEON).
 #[inline(always)]
@@ -693,7 +696,7 @@ pub fn interleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) ->
 }
 
 /// The exact inverse of [`interleave_by`] - group-granularity de-interleave.
-/// Default body of [`Register::deinterleave_by`](crate::register::Register::deinterleave_by).
+/// Default body of [`crate::register::Register::deinterleave_by`].
 #[inline(always)]
 pub fn deinterleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) -> (Storage<R>, Storage<R>) {
     let lanes = R::lanes();
@@ -720,7 +723,8 @@ pub fn deinterleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) 
 }
 
 /// The non-native body of [`Register::interleave_by`]: forward `GROUP == 1` to the
-/// required [`InterleaveRegister::interleave`] primitive and send every other
+/// required [`InterleaveRegister::interleave`](crate::register::InterleaveRegister::interleave)
+/// primitive and send every other
 /// `GROUP` to the lane-wise [`interleave_by`] fallback. Backends that add a native
 /// group size (e.g. `GROUP == 2`) call this for the sizes they do not handle.
 #[inline(always)]
@@ -834,8 +838,8 @@ fn deinterleave_radix_by_lanewise<R: Register, const N: usize, const GROUP: usiz
 }
 
 /// The group-radix (`GROUP >= 2`, `N > 2`) fallback dispatcher: staged radix-2 over the
-/// native `deinterleave_by::<GROUP>` ([`deinterleave_radix_by_pow2`]) when that is the
-/// cheaper choice, else the lane-wise floor ([`deinterleave_radix_by_lanewise`]).
+/// native `deinterleave_by::<GROUP>` (`deinterleave_radix_by_pow2`) when that is the
+/// cheaper choice, else the lane-wise floor (`deinterleave_radix_by_lanewise`).
 ///
 /// Staged costs `(N/2)*log2(N)` `deinterleave_by::<GROUP>` calls, each `O(1)` cross-lane
 /// permutes; lane-wise costs `O(N)` block moves that LLVM vectorizes for `GROUP >= 2`.

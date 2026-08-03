@@ -47,8 +47,8 @@ pub unsafe fn _mm_mullhi_epi32x_v1(a: __m128i, b: __m128i) -> __m128i {
     let mut p = _mm_mullhi_epu32x_v1(a, b);
 
     // t1 = (a >> 31) & y, arithmetic shift
-    let mut t1 = _mm_and_si128(_mm_srai_epi32(a, 31), b);
-    let mut t2 = _mm_and_si128(_mm_srai_epi32(b, 31), a);
+    let t1 = _mm_and_si128(_mm_srai_epi32(a, 31), b);
+    let t2 = _mm_and_si128(_mm_srai_epi32(b, 31), a);
     p = _mm_sub_epi32(p, t1);
     p = _mm_sub_epi32(p, t2);
 

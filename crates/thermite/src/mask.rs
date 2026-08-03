@@ -330,7 +330,7 @@ const _: () = {
     }
 };
 
-use generic_array::{GenericArray, typenum::Unsigned};
+use generic_array::typenum::Unsigned;
 
 impl<R: Register> const_default::ConstDefault for Mask<R> {
     const DEFAULT: Self = Self::FALSY;

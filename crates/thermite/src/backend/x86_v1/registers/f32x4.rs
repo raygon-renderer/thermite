@@ -5,15 +5,13 @@ use generic_array::{
 };
 
 use crate::{
-    backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitCastRegister, BitshiftRegister, BitwiseRegister, BlendRegister, CastRegister, ConcatRegister, CoreRegister,
-        Element, ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
+        BitwiseRegister, BlendRegister, CastRegister, CoreRegister,
+        ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
         MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
         ShuffleRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg,
     },
-    simd::Simd,
 };
 
 use super::arch;

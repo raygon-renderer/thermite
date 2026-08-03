@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
+use generic_array::{ArrayLength, GenericArray};
 
 use crate::{Vector, register::Register};
 

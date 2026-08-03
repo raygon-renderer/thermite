@@ -5,7 +5,7 @@
 //! q-register impls.
 
 use crate::register::{
-    CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IndexableRegister, SaturatingCastRegister, Storage,
+    CastRegister, ConcatRegister, CoreRegister, IndexableRegister, SaturatingCastRegister, Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };
 

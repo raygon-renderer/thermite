@@ -182,7 +182,7 @@ pub unsafe fn _mm_cvtpd_epu64x_limited_v1(x: __m128d) -> __m128i {
 
 /// Only works for inputs in the range: [-2^51, 2^51]
 #[inline(always)]
-pub unsafe fn _mm_cvtepi64_pdx_limited_v1(mut x: __m128i) -> __m128d {
+pub unsafe fn _mm_cvtepi64_pdx_limited_v1(x: __m128i) -> __m128d {
     // https://stackoverflow.com/a/41223013/2083075
     let m = _mm_set1_pd(0x0018000000000000u64 as i64 as f64);
     _mm_sub_pd(_mm_castsi128_pd(_mm_add_epi64(x, _mm_castpd_si128(m))), m)
@@ -190,7 +190,7 @@ pub unsafe fn _mm_cvtepi64_pdx_limited_v1(mut x: __m128i) -> __m128d {
 
 /// Only works for inputs in the range: [0, 2^52)
 #[inline(always)]
-pub unsafe fn _mm_cvtepu64_pdx_limited_v1(mut x: __m128i) -> __m128d {
+pub unsafe fn _mm_cvtepu64_pdx_limited_v1(x: __m128i) -> __m128d {
     // https://stackoverflow.com/a/41223013/2083075
     let m = _mm_set1_pd(0x0010000000000000u64 as i64 as f64);
     _mm_sub_pd(_mm_castsi128_pd(_mm_or_si128(x, _mm_castpd_si128(m))), m)

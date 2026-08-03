@@ -40,7 +40,7 @@ use crate::{
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
-    vector::{ops::BitAndNot as _, *},
+    vector::*,
 };
 
 // use super::MathWithPolicy;
@@ -208,7 +208,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
 
             let dt = Self::from_bits(denormal_trick);
 
-            return (dt - (dt - self));
+            return dt - (dt - self);
         }
 
         let abs_bits = Self::SignedBits::from_bits(self.abs());

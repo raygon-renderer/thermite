@@ -3,7 +3,7 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
+        BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
         FloatRegister, IndexableRegister, InterleaveRegister, MaskElement, MaskRegister, NativeCapability,
         NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
         ZeroUpper, array::ArrayRegister, empty_reg, reg,

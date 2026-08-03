@@ -26,7 +26,7 @@ macro_rules! impl_easy_casts {
             #[thermite_macros::inline_always]
             impl CastRegister<$from> for $to {
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { value as _ } // built-in cast
+                    value as _ // built-in cast
                 }
             }
         )+
@@ -39,7 +39,7 @@ macro_rules! impl_nontrivial_casts {
             #[thermite_macros::inline_always]
             impl CastRegister<$from> for $to {
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { value as _ } // built-in cast
+                    value as _ // built-in cast
                 }
             }
         )+

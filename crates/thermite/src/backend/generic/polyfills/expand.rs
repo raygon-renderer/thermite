@@ -20,7 +20,7 @@
 //!
 //! This module holds expand-only code. Everything the two directions share -
 //! the [`CompressRow`] row type, the [`CompressTable`] lane-count marker, and
-//! [`COMPRESS8`] - lives in [`compress`](super::compress); see that header.
+//! [`COMPRESS8`] - lives in [`super::compress`]; see that header.
 //!
 //! The implementation mirrors `compress` ([`EXPAND8`] is [`COMPRESS8`] with each
 //! row inverted, carrying the same population counts):

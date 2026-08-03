@@ -32,7 +32,7 @@
 //! sysfs mirror (`regs/identification/midr_el1`) is the safe way to the same
 //! data, and it is subject to the same SELinux limits as everything else here.
 
-use super::{CacheInfo, CacheKind, CpuInfo};
+use super::{CpuInfo};
 
 /// `CTR_EL0`: cache type register, readable at EL0 by default.
 ///

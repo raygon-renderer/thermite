@@ -558,7 +558,7 @@ tail_fn!(tail_c16, 16, [4, 2, 1]);
 // gets a real network instead of the quadratic `sort_any`.
 // ---------------------------------------------------------------------------
 
-/// Sort the lanes of any register of at most [`MERGE_MAX_LANES`] lanes; wider
+/// Sort the lanes of any register of at most `MERGE_MAX_LANES` lanes; wider
 /// registers fall through to [`sort_any`].
 ///
 /// The default body of [`NumericRegister::sort_by`]. A register whose lane count
@@ -578,7 +578,7 @@ pub fn sort_lanes<R: NumericRegister, O: SortOrder>(v: Storage<R>) -> Storage<R>
     if const { <R::Lanes as Unsigned>::USIZE >= 16 } { tail_c16::<R, O>(v) } else { v }
 }
 
-/// Sort the lanes of a **bitonic** register of at most [`MERGE_MAX_LANES`]
+/// Sort the lanes of a **bitonic** register of at most `MERGE_MAX_LANES`
 /// lanes: the halving compare-exchange strides `LANES/2 .. 1`.
 ///
 /// The default body of [`NumericRegister::bitonic_clean_by`]. Garbage in,

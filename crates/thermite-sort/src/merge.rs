@@ -40,11 +40,11 @@
 //! - A **row stage** reverses the lanes of the upper row of every pair within
 //!   groups of `C`, then compare-exchanges the pair as whole vectors. Only the
 //!   reversal costs a shuffle; the compare-exchange is columnar.
-//! - The **tail** ([`tail_2`] and friends) finishes each row on its own with
+//! - The **tail** (`tail_2` and friends) finishes each row on its own with
 //!   `SortPairsReverse` at `C` followed by `SortPairsDistance` at `C/4`, `C/8`,
 //!   ... `1` - the odd-even half of the hybrid.
 //!
-//! Both are the same primitive, [`pair`]: permute each lane to face its partner,
+//! Both are the same primitive, `pair`: permute each lane to face its partner,
 //! take the pair's first and last under `O`, then blend so the lower index of
 //! every pair keeps the first. Identical in shape to `cmp_merge` in core's
 //! `backend::generic::polyfills::sort`, which cannot be reused here because it

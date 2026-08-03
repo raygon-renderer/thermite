@@ -3,7 +3,7 @@
 
 use generic_array::{
     GenericArray,
-    sequence::GenericSequence,
+    
     typenum::{self, Unsigned},
 };
 

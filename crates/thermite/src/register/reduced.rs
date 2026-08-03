@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
-    FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, LinAlg4Register, MaskRegister,
+    FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister,
     NativeCapability, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister,
     SignedRegister, Storage, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
@@ -997,8 +997,8 @@ where
     R: Reducible<N>,
 {
     #[conditional] fn ilog2p1(value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn next_power_of_two_m1(mut value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn parity(mut value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn parity(value: Storage<Self>) -> Storage<Self> {}
 
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {}
 }
@@ -1007,7 +1007,7 @@ where
 impl<R: SignedIntegerRegister, N: Unsigned> SignedIntegerRegister for ReducedRegister<R, N> where R: Reducible<N> {
     #[conditional] fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn srav(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::reduced_impl]

@@ -2,7 +2,6 @@ use core::mem::MaybeUninit;
 use core::ops::Mul;
 
 use generic_array::ArrayLength;
-use generic_array::functional::FunctionalSequence;
 use generic_array::typenum::{self, Const, Prod, ToUInt, Unsigned};
 
 use crate::{Vector, math::policy::Policy};
@@ -12,7 +11,7 @@ use super::*;
 // generates array_zip2, array_zip3, array_zip4, array_zip5, etc., to combine many arrays using a provided function
 macro_rules! decl_array_zips {
     ($($count:literal => ($($part:ident,)+)),* $(,)?) => {paste::paste! {$(
-        #[inline(always)]
+        #[inline(always)] #[allow(dead_code)]
         fn [<array_zip $count>]<$($part: Copy),+, U, F, const N: usize>($([<$part:lower>]: [$part; N]),+, mut f: F) -> [U; N]
         where F: FnMut($($part),+) -> U {
             let mut result: [MaybeUninit<U>; N] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -102,7 +101,7 @@ where
     fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
 
-    fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
+    fn zeroupper_z<Z: ZeroUpper>(_value: Storage<Self>) -> Storage<Self> {
         panic!("ArrayRegister does not support zeroupper operations");
     }
 
@@ -1136,8 +1135,7 @@ where
 
     fn indexed() -> Storage<Self> {
         let mut result = [R::ZERO; N];
-        let mut indexed = R::indexed();
-        result[0] = indexed;
+        result[0] = R::indexed();
 
         for i in 1..N {
             result[i] = R::add(result[i - 1], R::offset());
@@ -1177,15 +1175,15 @@ where
     #[conditional] fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> {}
-    #[conditional] fn shrv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
-    #[conditional] fn shlv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
     #[conditional] fn rol(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn roli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn rori<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn rorv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
     #[conditional] fn rolv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
-    #[conditional] fn reverse_bits(mut value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn reverse_bits(value: Storage<Self>) -> Storage<Self> {}
 }
 
 // Dispatch a runtime within-chunk offset (`off < R::Lanes <= 16`) to a
@@ -1267,8 +1265,8 @@ where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
 {
     #[conditional] fn ilog2p1(value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn next_power_of_two_m1(mut value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn parity(mut value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn parity(value: Storage<Self>) -> Storage<Self> {}
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {}
 }
 
@@ -1279,7 +1277,7 @@ where
 {
     #[conditional] fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
-    #[conditional] fn srav(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    #[conditional] fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::array_impl]

@@ -7,9 +7,9 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, 
         ExtendRegister, IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
+        NumericRegister, PartialOrdRegister, Register, SignedRegister, Storage,
         UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };

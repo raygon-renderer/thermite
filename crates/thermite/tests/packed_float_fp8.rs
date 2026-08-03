@@ -132,7 +132,6 @@ macro_rules! reg_pack {
 
 macro_rules! vec_roundtrip {
     ($spec:ty, $u8:ty, $f32:ty) => {{
-        use generic_array::sequence::GenericSequence;
         let l = lanes::<$u8>();
         // unpack all 256 codes through Vector::unpack
         let mut code: u32 = 0;
@@ -172,8 +171,6 @@ macro_rules! vec_roundtrip {
         }
     }};
 }
-
-use generic_array::GenericArray;
 
 macro_rules! fp8_suite {
     ($mod:ident, $u8x4:ty, $u8x8:ty, $u8x16:ty, $f32x4:ty, $f32x8:ty, $f32x16:ty) => {

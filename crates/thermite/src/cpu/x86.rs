@@ -6,18 +6,18 @@
 //! | Leaf | Field |
 //! |---|---|
 //! | `0` | max leaf + vendor string |
-//! | `1` EBX[15:8] | line size (`clflush` granularity, x8) |
+//! | `1` `EBX[15:8]` | line size (`clflush` granularity, x8) |
 //! | `4` / `0x8000001D` | deterministic cache parameters per level |
 //! | `0x1F` / `0xB` | extended topology (SMT + core level counts) |
 //! | `0x80000008` / `0x8000001E` | AMD's topology, when the above are absent |
-//! | `7`:0 EDX[15] | hybrid part |
-//! | `0x1A` EAX[31:24] | this core's type (`0x20` Atom/E, `0x40` Core/P) |
-//! | `7`:1 EDX[19] | AVX10 enumerated (leaf `0x24` is valid) |
-//! | `0x24` EBX[7:0] | AVX10 converged version ([`features`]) |
+//! | `7`:0 `EDX[15]` | hybrid part |
+//! | `0x1A` `EAX[31:24]` | this core's type (`0x20` Atom/E, `0x40` Core/P) |
+//! | `7`:1 `EDX[19]` | AVX10 enumerated (leaf `0x24` is valid) |
+//! | `0x24` `EBX[7:0]` | AVX10 converged version ([`features`](crate::cpu::x86::features)) |
 //!
 //! Leaves are tried and *checked for an empty answer*, not merely bounded by
 //! the reported maximum: a CPU can advertise a max leaf above one it does not
-//! implement, in which case it returns zeros (see [`read_topology_amd`]).
+//! implement, in which case it returns zeros (see `read_topology_amd`).
 //!
 //! `cpuid` is serializing (100-250 cycles bare metal, a VM exit under a
 //! hypervisor), which is why the caller caches the result.
@@ -87,7 +87,7 @@ fn bit(value: u32, index: u32) -> bool {
 fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
     // SAFETY: `cpuid` is unprivileged and has no preconditions on any CPU this
     // crate can target (486+). Callers bound `leaf` by the reported maximum.
-    unsafe { __cpuid_count(leaf, sub) }
+    __cpuid_count(leaf, sub)
 }
 
 /// Highest basic leaf, and highest extended (`0x8000_xxxx`) leaf.
@@ -384,7 +384,7 @@ pub struct Features {
     pub vaes: bool,
     pub vpclmulqdq: bool,
 
-    /// AVX10 converged version from leaf `0x24` EBX[7:0]: `0` = no AVX10,
+    /// AVX10 converged version from leaf `0x24` `EBX[7:0]`: `0` = no AVX10,
     /// `1` = AVX10.1, `2` = AVX10.2, higher = a future superset. Raw so an
     /// unknown future version is preserved; [`Features::avx10`] maps it to the
     /// [`Avx10Version`] rungs this crate knows. Like the `avx512*` flags it

@@ -38,13 +38,11 @@ impl_newregister!(
 );
 
 use crate::{
-    backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
     register::{
         IndexableRegister, Storage,
         array::ArrayRegister,
-        reduced::{HalfRegister2, ReducedRegister},
     },
     simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };

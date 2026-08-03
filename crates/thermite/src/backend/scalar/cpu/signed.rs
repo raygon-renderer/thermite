@@ -1,15 +1,14 @@
 use generic_array::{
     GenericArray,
-    sequence::GenericSequence,
-    typenum::{self, Unsigned},
+    typenum::{self},
 };
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IndexableRegister,
-    IntegerRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister,
+    BitshiftRegister, BitwiseRegister, CoreRegister, IndexableRegister,
+    IntegerRegister, InterleaveRegister, MaskElement, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-    UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
+    UnsignedIntegerRegister, ZeroUpper,
 };
 
 #[rustfmt::skip]
@@ -87,7 +86,7 @@ impl Register for [<i $width>] {
 
     const HAS_PERMUTEV: bool = false;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, _idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 
@@ -109,8 +108,8 @@ impl BitshiftRegister for [<i $width>] {
     const HAS_WIDE_BYTE_SHIFTS: bool = true; // Also technically true!
 
     // NOTE: We do _NOT_ want arithmetic shift here, so we cast to unsigned first
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { (value as $u).unbounded_shl((8 * IMM8) as u32) as $i }
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { (value as $u).unbounded_shr((8 * IMM8) as u32) as $i }
+    fn bshli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { (value as $u).unbounded_shl((8 * IMM8) as u32) as $i }
+    fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { (value as $u).unbounded_shr((8 * IMM8) as u32) as $i }
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { (value as $u).unbounded_shl(shift) as $i }
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { (value as $u).unbounded_shr(shift) as $i }
     fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { (value as $u).unbounded_shl(shifts as u32) as $i }

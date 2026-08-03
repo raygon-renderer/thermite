@@ -121,8 +121,6 @@ use core::ops::{
     Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
-use num_traits::{MulAdd, MulAddAssign, SaturatingAdd, SaturatingSub};
-
 use crate::{
     Mask, Vector,
     register::{BitshiftRegister, BitwiseRegister, FloatRegister, NumericRegister, Register, SignedRegister},

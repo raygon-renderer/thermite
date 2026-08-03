@@ -8,9 +8,8 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, Element, ExtendRegister,
-        FloatRegister, IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister,
-        NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister,
+        NumericRegister, PartialOrdRegister, Register, ShuffleRegister, SignedIntegerRegister,
         SignedRegister, Storage, WideRegister, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
@@ -229,7 +228,7 @@ impl Register for I64x2V3 {
         unsafe { arch::_mm_stream_si128(ptr as _, value) }
     }
 
-    fn reverse(mut value: Storage<Self>) -> Storage<Self> {
+    fn reverse(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_shuffle_epi32::<{ MM_SHUFFLE_R!(2, 3, 0, 1) }>(value) }
     }
 
@@ -309,11 +308,11 @@ impl BitshiftRegister for I64x2V3 {
     const HAS_TRUE_SHIFTV: bool = true;
     const HAS_WIDE_BYTE_SHIFTS: bool = true;
 
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    fn bshli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bslli_si128(value, IMM8) }
     }
 
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> {
+    fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_bsrli_si128(value, IMM8) }
     }
 

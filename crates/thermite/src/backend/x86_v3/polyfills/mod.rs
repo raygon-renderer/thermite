@@ -1,12 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 
-use crate::MM_SHUFFLE;
 
 use super::arch::*;
 
 pub use crate::backend::x86_v2::polyfills::*;
 
-use generic_array::{GenericArray, typenum};
 
 pub mod bits;
 pub mod casts;

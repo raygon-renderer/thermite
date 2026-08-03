@@ -21,7 +21,7 @@
 //!   advantage shrinks with more chunks (the merge swizzle is O(chunks^2)), so
 //!   it is the right choice at 16 lanes and `compress_permute_wide` wins beyond.
 //!
-//! The inverse direction lives in [`expand`](super::expand), a mirror image of
+//! The inverse direction lives in [`super::expand`], a mirror image of
 //! this module. This module owns everything the two share - [`CompressRow`],
 //! [`CompressTable`], and [`COMPRESS8`], which `EXPAND8` is the row-wise
 //! inverse of. Keep it that way: compress-only code here, expand-only code
@@ -32,7 +32,7 @@ use core::mem::MaybeUninit;
 use generic_array::{
     ArrayLength, GenericArray,
     sequence::GenericSequence,
-    typenum::{U1, U2, U3, U4, U5, U6, U7, U8, U16, U32, U64, U128, U256, Unsigned},
+    typenum::{U1, U2, U3, U4, U5, U6, U7, U8, U16, U32, U64, U256, Unsigned},
 };
 
 use super::*;

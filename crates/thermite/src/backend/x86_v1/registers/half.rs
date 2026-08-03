@@ -1,7 +1,7 @@
 use super::arch;
 
 use crate::register::{
-    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister,
+    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister,
     Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };

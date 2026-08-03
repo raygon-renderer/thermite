@@ -90,19 +90,12 @@
 //! and [`Vector<R>`] (this module's ergonomic wrapper). Most users only ever
 //! touch the [`Vector`] layer and its traits.
 
-use core::{
-    marker::PhantomData,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not},
-};
-
-#[cfg(feature = "bitvec")]
-use bitvec::{array::BitArray, view::BitViewSized};
 use generic_array::{GenericArray, typenum};
 
 use crate::{
-    BranchfreeDivider, Divider, Mask,
-    divider::{Denominator, vector::VectorDivider},
-    element::{FloatElementWithBits, UnsignedIntegerElement},
+    BranchfreeDivider, Divider,
+    divider::Denominator,
+    element::{FloatElementWithBits},
     isa::InstructionSet,
     mask::{CastMask, GenericMask, GenericSelectable},
     math::{FloatConsts, policy::Policy},
@@ -2558,8 +2551,8 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// Attempt to upcast this FloatVector to a FloatVectorWithBits,
     /// using the provided kernel. If not possible, returns None.
     fn with_bits<const N: usize, K: AsFloatVectorWithBitsKernel<Self, N>>(
-        values: [Self; N],
-        kernel: K,
+        _values: [Self; N],
+        _kernel: K,
     ) -> Option<<K as AsFloatVectorWithBitsKernel<Self, N>>::Output> {
         None // Default implementation returns None
     }

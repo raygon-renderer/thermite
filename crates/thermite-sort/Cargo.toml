@@ -11,7 +11,9 @@ description = "SIMD sorting algorithms built on Thermite"
 keywords = ["simd", "sort", "quicksort", "vectorized", "no_std"]
 categories = ["algorithms", "no-std", "hardware-support"]
 publish = false                                                  # not ready for release yet
-exclude = ["bench-hwy/"]
+
+[lints]
+workspace = true
 
 [dependencies]
 thermite = { workspace = true }

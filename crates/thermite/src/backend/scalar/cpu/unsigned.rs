@@ -1,15 +1,13 @@
 use generic_array::{
     GenericArray,
-    sequence::GenericSequence,
-    typenum::{self, Unsigned},
+    typenum::{self},
 };
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatRegister, IndexableRegister,
-    IntegerRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NumericRegister,
+    BitshiftRegister, BitwiseRegister, CoreRegister, IndexableRegister,
+    IntegerRegister, InterleaveRegister, MaskElement, NumericRegister,
     PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage, UnsignedIntegerRegister, ZeroUpper,
-    empty_reg, reg,
 };
 
 #[rustfmt::skip]
@@ -84,7 +82,7 @@ impl Register for [<u $width>] {
 
     const HAS_PERMUTEV: bool = false;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, _idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 
@@ -105,8 +103,8 @@ impl BitshiftRegister for [<u $width>] {
     const HAS_TRUE_SHIFTV: bool = true; // Technically true!
     const HAS_WIDE_BYTE_SHIFTS: bool = true; // Also technically true!
 
-    fn bshli<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value.unbounded_shl((8 * IMM8) as u32) }
-    fn bshri<const IMM8: i32>(mut value: Storage<Self>) -> Storage<Self> { value.unbounded_shr((8 * IMM8) as u32) }
+    fn bshli<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value.unbounded_shl((8 * IMM8) as u32) }
+    fn bshri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> { value.unbounded_shr((8 * IMM8) as u32) }
     fn shl(value: Storage<Self>, shift: u32) -> Storage<Self> { value.unbounded_shl(shift) }
     fn shr(value: Storage<Self>, shift: u32) -> Storage<Self> { value.unbounded_shr(shift) }
     fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> { value.unbounded_shl(shifts as u32) }

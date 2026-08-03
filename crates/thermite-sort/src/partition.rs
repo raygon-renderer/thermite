@@ -8,7 +8,7 @@
 //! ways into the hole.
 //!
 //! Two regions cannot use the overlapping-store trick and ride a small fixed
-//! stack buffer instead. Both are load-bearing for correctness, not just for
+//! stack buffer instead. Both are important for correctness, not just for
 //! order - getting either wrong duplicates and drops keys:
 //!
 //! - **The ragged tail.** The main loop consumes a whole block per iteration,
@@ -42,7 +42,7 @@
 //! picks the table one wherever compress-is-partition holds, including on
 //! AVX-512 for 64-bit lanes.
 //!
-//! That property is load-bearing and invisible to most tests, so
+//! That property is important and invisible to most tests, so
 //! `tests/compress_is_partition.rs` pins it across every mask value on every
 //! x86 tier: a `compress` that merely left-packed would pass every
 //! stream-compaction test in the tree while silently destroying half of each

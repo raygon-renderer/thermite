@@ -560,7 +560,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         // this the `not_special` fast return below leaks x's exponent for y == 0.
         z = yzero.select(V::ONE, z);
 
-        let not_special = (xfinite & yfinite & (efinite | xzero));
+        let not_special = xfinite & yfinite & (efinite | xzero) ;
 
         if crate::likely(not_special.all()) {
             return z; // fast return

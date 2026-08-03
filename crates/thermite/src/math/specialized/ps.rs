@@ -1,7 +1,7 @@
 use crate::{
     divider::Divider,
     math::policy::policies::MediumPrecision,
-    vector::ops::{AddMasked as _, MulAddExt as _},
+    vector::ops::{AddMasked as _},
 };
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
@@ -663,7 +663,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             z = xsign.select(z1, z);
         }
 
-        let not_special = (xfinite & yfinite & (efinite | xzero));
+        let not_special = xfinite & yfinite & (efinite | xzero) ;
 
         if crate::likely(not_special.all()) {
             return z; // fast return
@@ -1172,7 +1172,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
     }
 
     #[rustfmt::skip]
-    let mut s = x2.poly_rev_p::<P, _>(&[
+    let s = x2.poly_rev_p::<P, _>(&[
         -1.9515295891E-4,
         8.3321608736E-3,
         -1.6666654611E-1,
@@ -1214,7 +1214,7 @@ fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS:
          * Examined 2130706434 values of acos:
          *   15.2007108 avg ULP diff, 4492 max ULP, 4.51803e-05 max error // with "denormal crush"
          */
-        let mut m = xa.min(V::ONE); // clamp
+        let m = xa.min(V::ONE); // clamp
 
         let a0 = (V::ONE - m).sqrt();
         let a1 = m.poly_rev_p::<P, _>(&[-0.02164095, 0.077980478, -0.213300989, FRAC_PI_2]);

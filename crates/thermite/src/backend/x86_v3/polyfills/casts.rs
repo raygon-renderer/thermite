@@ -34,7 +34,7 @@ pub unsafe fn _mm256_cvtpd_epu64x_limited_v3(x: __m256d) -> __m256i {
 
 /// Only works for inputs in the range: [-2^51, 2^51]
 #[inline(always)]
-pub unsafe fn _mm256_cvtepi64_pdx_limited_v3(mut x: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepi64_pdx_limited_v3(x: __m256i) -> __m256d {
     // https://stackoverflow.com/a/41223013/2083075
     let m = _mm256_set1_pd(0x0018000000000000u64 as i64 as f64);
     _mm256_sub_pd(_mm256_castsi256_pd(_mm256_add_epi64(x, _mm256_castpd_si256(m))), m)
@@ -42,7 +42,7 @@ pub unsafe fn _mm256_cvtepi64_pdx_limited_v3(mut x: __m256i) -> __m256d {
 
 /// Only works for inputs in the range: [0, 2^52)
 #[inline(always)]
-pub unsafe fn _mm256_cvtepu64_pdx_limited_v3(mut x: __m256i) -> __m256d {
+pub unsafe fn _mm256_cvtepu64_pdx_limited_v3(x: __m256i) -> __m256d {
     // https://stackoverflow.com/a/41223013/2083075
     let m = _mm256_set1_pd(0x0010000000000000u64 as i64 as f64);
     _mm256_sub_pd(_mm256_castsi256_pd(_mm256_or_si256(x, _mm256_castpd_si256(m))), m)

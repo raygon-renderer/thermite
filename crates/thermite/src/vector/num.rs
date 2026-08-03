@@ -4,7 +4,9 @@ use core::ops::Deref;
 
 use super::{BitshiftVector, BitwiseVector, FloatVector, GenericVector, NumericVector, PartialOrdVector, SignedVector};
 use crate::mask::{CastMask, GenericMask, GenericSelectable};
-use crate::math::{CoreMath, FloatConsts, RealMath, SpatialMath, TranscendentalMath};
+// Only the `std`-gated `num_traits::float::Float` impl below names these.
+#[cfg(feature = "std")]
+use crate::math::{CoreMath, RealMath, SpatialMath, TranscendentalMath};
 
 /// Wraps a generic vector to provide implementations of `num_traits` traits.
 ///
@@ -269,7 +271,7 @@ impl<V: FloatVector> num_traits::float::FloatCore for NumVector<V>
     #[inline(always)] fn max(self, other: Self) -> Self { Self(self.0.max(other.0)) }
 
     /// Returns the reciprocal (1/x) of each lane. If you want to use an approximate
-    /// reciprocal, check the [`RealMath`] trait for that.
+    /// reciprocal, check the [`RealMath`](crate::math::RealMath) trait for that.
     #[inline(always)] fn recip(self) -> Self { <Self as num_traits::ConstOne>::ONE / self }
 }
 

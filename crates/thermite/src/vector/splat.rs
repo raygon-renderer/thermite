@@ -2,7 +2,7 @@ use core::ops::Add;
 
 use generic_array::{ArrayLength, GenericArray};
 
-use super::{Element, GenericVector, Vector};
+use super::{GenericVector};
 
 /// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///
@@ -41,7 +41,7 @@ macro_rules! const_splat {
         use core::marker::PhantomData;
 
         struct __GenericSplatValue<$($gen_param $(: $bound)?),+>(
-            PhantomData<($($gen_param),+)>
+            PhantomData<$($gen_param),+>
         );
 
         impl<$($gen_param $(: $bound)?),+> $crate::vector::SplatConst<$ty>

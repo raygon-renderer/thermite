@@ -66,10 +66,9 @@ impl_newregister!(
 );
 
 use crate::{
-    backend::scalar::Scalar,
     element::FindUSize,
     isa::InstructionSet,
-    register::{IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
+    register::{IndexableRegister, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 

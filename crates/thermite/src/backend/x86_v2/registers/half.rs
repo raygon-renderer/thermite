@@ -1,15 +1,11 @@
-use generic_array::typenum::U32;
 
 use super::arch;
 
-use crate::{
-    element::MaskElement,
-    register::{
-        CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register,
+use crate::register::{
+        CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register,
         SaturatingCastRegister, Storage,
         reduced::{HalfRegister2, ReducedRegister},
-    },
-};
+    };
 
 pub type F32x2V2 = HalfRegister2<super::F32x4V2>;
 pub type I32x2V2 = HalfRegister2<super::I32x4V2>;

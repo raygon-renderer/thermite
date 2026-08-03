@@ -100,7 +100,7 @@ impl<'a, V: GenericVector> UnalignedMut<'a, V> {
     /// This is provided for cases where `UnalignedMut` was constructed from
     /// a slice that is actually aligned, allowing for more efficient processing.
     #[inline(always)]
-    pub fn try_aligned_mut(mut self) -> Result<&'a mut [V], Self> {
+    pub fn try_aligned_mut(self) -> Result<&'a mut [V], Self> {
         if self.0.as_ptr().align_offset(core::mem::align_of::<V>()) == 0 {
             let len = self.0.len() / <V::Lanes as Unsigned>::USIZE;
             // SAFETY: Alignment was checked.
@@ -141,7 +141,7 @@ impl<'a, V: GenericVector> Iterator for Unaligned<'a, V> {
     }
 
     #[inline]
-    fn fold<B, F>(mut self, mut init: B, mut f: F) -> B
+    fn fold<B, F>(self, mut init: B, mut f: F) -> B
     where
         Self: Sized,
         F: FnMut(B, Self::Item) -> B,
@@ -201,7 +201,7 @@ impl<'a, V: GenericVector> DoubleEndedIterator for Unaligned<'a, V> {
         }
     }
 
-    fn rfold<B, F>(mut self, mut init: B, mut f: F) -> B
+    fn rfold<B, F>(self, mut init: B, mut f: F) -> B
     where
         Self: Sized,
         F: FnMut(B, Self::Item) -> B,

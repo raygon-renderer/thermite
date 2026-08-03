@@ -1,16 +1,16 @@
 use generic_array::{
     GenericArray,
-    sequence::GenericSequence,
+    
     typenum::{self, Unsigned},
 };
 
 use crate::{
     isa::InstructionSet,
     register::{
-        BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
+        BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, ExtendRegister,
         IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
         PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
-        array::ArrayRegister, empty_reg,
+        
     },
     swizzle::SwizzleIndices,
 };

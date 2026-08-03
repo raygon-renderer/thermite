@@ -1389,7 +1389,7 @@ macro_rules! decl_aliases {
 }
 
 use crate::vector::{
-    CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithBits, FloatVectorWithRegister,
+    CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithRegister,
     FullyInteroperable as FIV, GenericVector, IndexableVector, LinAlg3Vector, LinAlg4Vector, PackedFloatVector,
     Sad16Vector, Sad32Vector, Sad64Vector, SaturatingCastVector, SignedIntegerVector, SignedIntegerVectorWithRegister,
     SwizzleVector, UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,

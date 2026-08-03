@@ -11,7 +11,7 @@
 //! bitonic/odd-even merge - and covers registers up to 16 lanes.
 //!
 //! Wider registers fall back to the bitonic merge tree kept below
-//! ([`bitonic_block_16`] and friends): sort each vector's lanes, reverse one
+//! (`bitonic_block_16` and friends): sort each vector's lanes, reverse one
 //! side, clean. That construction wastes no comparator - it sits exactly at
 //! the bitonic floor - but the bitonic floor is not the achievable floor, and
 //! [`crate::merge`] beats it on comparators, shuffles and blends alike.

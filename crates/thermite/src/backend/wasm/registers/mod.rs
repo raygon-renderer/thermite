@@ -38,7 +38,7 @@ pub use half::{F32x2Wasm, I32x2Wasm, U32x2Wasm};
 use crate::{
     element::FindUSize,
     isa::InstructionSet,
-    register::{BitCastRegister, IndexableRegister, Storage, array::ArrayRegister, reduced::ReducedRegister},
+    register::{IndexableRegister, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 

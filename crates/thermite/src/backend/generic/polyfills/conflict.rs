@@ -14,7 +14,7 @@
 //! # The ladder
 //!
 //! Step `j` compares each lane against the one `LANES - j` positions earlier -
-//! [`align::<j>(v, v)`](Register::align) is exactly that rotate - and
+//! [`align::<j>(v, v)`](crate::register::Register::align) is exactly that rotate - and
 //! `suffix_mask(j)` is the set of lanes where the rotate did not wrap. Running
 //! `j` over `1..LANES` visits every ordered pair `(i, j < i)` exactly once.
 //!
@@ -34,11 +34,11 @@ use generic_array::typenum::Unsigned;
 
 use crate::{
     element::Element,
-    register::{BitwiseRegister, CoreRegister, IntegerRegister, NumericRegister, PartialOrdRegister, Register, Storage},
+    register::{BitwiseRegister, IntegerRegister, Storage},
 };
 
 /// Portable rotate-ladder body behind
-/// [`IntegerRegister::count_conflicts`](crate::register::IntegerRegister::count_conflicts).
+/// [`crate::register::IntegerRegister::count_conflicts`].
 ///
 /// Free-standing so blanket impls can reach it without `Self::count_conflicts`
 /// recursion, matching [`compress_default`](super::compress::compress_default).

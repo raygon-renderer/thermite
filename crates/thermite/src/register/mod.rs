@@ -851,7 +851,7 @@ pub trait Register:
     /// primitive and sends every other `N` to the single-round permute+blend
     /// gather ([`deinterleave_any`](crate::backend::generic::polyfills::deinterleave_any)).
     /// Backends with a native radix-3 sequence (NEON `TBL3`, an x86 shuffle
-    /// network) override this via [`impl_native_radix3!`] to add an `N == 3` arm;
+    /// network) override this via `impl_native_radix3!` to add an `N == 3` arm;
     /// this radix-3 primitive is what the `2^a * 3^b` part of
     /// [`load_deinterleaved`](Self::load_deinterleaved) rides on.
     ///
@@ -867,7 +867,7 @@ pub trait Register:
     ///
     /// Same dispatch as [`deinterleave_radix`](Self::deinterleave_radix): `N == 2`
     /// forwards to [`interleave`](InterleaveRegister::interleave), a native radix-3
-    /// override (via [`impl_native_radix3!`]) handles `N == 3`, and any other `N`
+    /// override (via `impl_native_radix3!`) handles `N == 3`, and any other `N`
     /// uses [`interleave_any`](crate::backend::generic::polyfills::interleave_any).
     fn interleave_radix<const N: usize>(inputs: [Storage<Self>; N]) -> [Storage<Self>; N] {
         crate::backend::generic::polyfills::interleave_radix_default::<Self, N>(inputs)
@@ -1270,7 +1270,7 @@ pub trait Register:
         let indices = <Self::Unsigned as Register>::as_slice(&indices);
 
         let mut res = Self::EMPTY;
-        let mut resa = Self::as_mut_slice(&mut res);
+        let resa = Self::as_mut_slice(&mut res);
 
         for i in 0..Self::lanes() {
             let idx: usize = indices[i].try_into().unwrap_or_else(#[cold] |_| panic!("Invalid index given for lookup"));
@@ -1285,7 +1285,7 @@ pub trait Register:
     ///
     /// The lane count travels as the slice length rather than in the type, which a
     /// future runtime-length backend can implement, while an array-typed borrow
-    /// cannot. The length is constructed directly from [`lanes()`](Self::lanes), so
+    /// cannot. The length is constructed directly from [`lanes()`](CoreRegister::lanes), so
     /// LLVM sees it as a constant on fixed-width backends.
     #[inline(always)]
     fn as_slice(storage: &Storage<Self>) -> &[Self::Element] {
@@ -1857,7 +1857,7 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
     /// can be safely read from based on the register's requirements.
     #[inline(always)]
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<IDX>) -> Storage<Self> {
-        let scale = size_of::<Self::Element>();
+        // let scale = size_of::<Self::Element>();
 
         unsafe {
             let mut result = Self::EMPTY;
@@ -1884,13 +1884,12 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
         ptr: *const Self::Element,
         indices: Storage<IDX>,
     ) -> Storage<Self> {
-        let scale = size_of::<Self::Element>();
+        // let scale = size_of::<Self::Element>();
 
         unsafe {
             let mut result = src;
 
             let res = Self::as_mut_slice(&mut result);
-            let src = Self::as_slice(&src);
             let indices = IDX::as_slice(&indices);
 
             for i in 0..Self::lanes() {
@@ -2974,77 +2973,77 @@ pub trait FloatRegister:
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
+    unsafe fn native_ldexp(_value: Storage<Self>, _exp: Storage<Self::SignedBits>) -> Storage<Self> {
         unreachable!("native_ldexp is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
+    unsafe fn native_frexp(_value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {
         unreachable!("native_frexp is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+    unsafe fn native_sin_cos<P: Policy>(_value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unreachable!("native_sin_cos is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_sin<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_sin<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_sin is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_cos<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_cos<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_cos is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_tan<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_tan<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_tan is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_exp2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_exp2<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp2 is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_log2<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_log2<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_ln2 is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_exp<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_exp<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_exp is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_ln<P: Policy>(value: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_ln<P: Policy>(_value: Storage<Self>) -> Storage<Self> {
         unreachable!("native_log is not implemented for this FloatRegister");
     }
 
     /// # Safety
     /// This method interfaces with underlying intrinsics and may produce undefined behavior on
     /// invalid inputs. Use with caution.
-    unsafe fn native_powf<P: Policy>(base: Storage<Self>, exp: Storage<Self>) -> Storage<Self> {
+    unsafe fn native_powf<P: Policy>(_base: Storage<Self>, _exp: Storage<Self>) -> Storage<Self> {
         unreachable!("native_powf is not implemented for this FloatRegister");
     }
 

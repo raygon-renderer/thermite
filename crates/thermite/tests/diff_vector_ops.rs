@@ -26,7 +26,6 @@ use core::ops::{
 use thermite::Vector;
 use thermite::prelude::*;
 use thermite::simd::Simd;
-use thermite::vector::ops::*;
 
 use thermite::backend::scalar::Scalar;
 

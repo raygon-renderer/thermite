@@ -201,7 +201,7 @@ impl SortOrder for Descending {
 // ---------------------------------------------------------------------------
 
 use crate::register::SwizzleIndices;
-use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
+use generic_array::{ArrayLength, GenericArray};
 
 /// Lane `i` faces lane `i ^ K`: the partner set of a distance-`K`
 /// compare-exchange, and the shuffle behind Highway's `SortPairsDistance{K}` /
@@ -395,7 +395,7 @@ where
 /// Same depth-minimal construction as the register-layer `sort_lanes` (the
 /// widening tails at one chunk); covers power-of-two lane counts up to 16.
 /// Ties by key keep the input's lane order within each compare-exchange (see
-/// [`key_stage`]) but the sort as a whole is not stable.
+/// `key_stage`) but the sort as a whole is not stable.
 #[inline(always)]
 pub fn sort_lanes_by_key<V, O, K>(v: V) -> V
 where

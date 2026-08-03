@@ -1,14 +1,13 @@
 use generic_array::{
     GenericArray,
-    sequence::GenericSequence,
-    typenum::{self, Unsigned},
+    typenum::{self},
 };
 
 use crate::register::{
-    BitCastRegister, BitshiftRegister, BitwiseRegister, CoreRegister, Element, FloatElement, FloatRegister,
-    IndexableRegister, InterleaveRegister, LinAlg3Register, MaskElement, MaskRegister, NativeCapability,
+    BitwiseRegister, CoreRegister, FloatElement, FloatRegister,
+    IndexableRegister, InterleaveRegister, MaskElement, NativeCapability,
     NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-    UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
+    UnsignedIntegerRegister, ZeroUpper,
 };
 
 use crate::element::float::algebraic::AlgebraicFloat;
@@ -101,7 +100,7 @@ impl Register for [<f $width>] {
 
     const HAS_PERMUTEV: bool = false;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, _idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
         value
     }
 

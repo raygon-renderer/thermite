@@ -1,5 +1,7 @@
 use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
 use crate::LargeInt;
+// Named only by the `std` arm of the `cfg_if!` below.
+#[cfg(feature = "std")]
 use crate::register::FloatRegister;
 use crate::vector::SplatConst;
 use crate::vector::ops::MulAddExt;

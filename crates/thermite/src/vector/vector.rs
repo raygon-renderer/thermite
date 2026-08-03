@@ -10,29 +10,29 @@ use super::ops::*;
 use super::*;
 
 use crate::{
-    divider::{BranchfreeDivider, Denominator, Divider, UnsupportedDivisor, vector::VectorDivider},
+    divider::{BranchfreeDivider, Denominator, Divider, vector::VectorDivider},
     mask::{CastMask, GenericSelectable, Mask},
-    math::{FloatConsts, policy::Policy},
+    math::{policy::Policy},
     register::{
-        self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, ConcatRegister,
+        self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister,
         ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        MaskRegister, NewRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
+        NewRegister, NumericRegister, PartialOrdRegister, Register,
+        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage,
         UnsignedIntegerRegister,
     },
 };
 
 use core::ops::{
-    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut,
-    Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+    Add, Div, Index, IndexMut,
+    Mul, 
 };
 
 use num_traits::{
-    ConstOne, ConstZero, MulAdd, MulAddAssign, Num, One, Saturating, SaturatingAdd, SaturatingSub, Signed, WrappingAdd,
+    One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd,
     WrappingMul, WrappingSub, Zero,
 };
 
-use generic_array::{GenericArray, typenum::Unsigned};
+use generic_array::GenericArray;
 
 // pub mod streaming;
 // pub mod unaligned;

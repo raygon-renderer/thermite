@@ -1,6 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc, clippy::let_and_return)]
 
-use generic_array::GenericArray;
 
 pub use crate::backend::generic::polyfills::*;
 
