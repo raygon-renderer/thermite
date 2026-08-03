@@ -36,6 +36,22 @@ fn nightly_check() {
     compile_error!("The `nightly` feature requires a nightly compiler.");
 }
 
+#[cfg(all(feature = "algebraic-scalar", feature = "strict_ieee754"))]
+fn algebraic_scalar_check() {
+    compile_error!(
+        "The `algebraic-scalar` and `strict_ieee754` features are contradictory: one asks the \
+         optimizer to rearrange float arithmetic, the other asks it to follow the spec exactly."
+    );
+}
+
+/// Whether the `algebraic-scalar` feature is enabled, i.e. whether scalar-backend
+/// float arithmetic is reassociable rather than strict IEEE-754.
+///
+/// Exposed as a `const` so downstream crates whose algorithms depend on exact
+/// cancellation (double-double arithmetic, error-free transformations) can reject
+/// the combination with a `const` assertion.
+pub const ALGEBRAIC_SCALAR: bool = cfg!(feature = "algebraic-scalar");
+
 #[cfg(feature = "bitvec")]
 pub extern crate bitvec;
 pub extern crate const_default;
@@ -130,6 +146,7 @@ pub mod prelude {
             SimdVectors, SimdVectorsWithRegisters, SizedSimd,
         },
         slice::SimdSlice as _,
+        sort::{Ascending, Descending, SortOrder},
         swizzle::Swizzle as _,
         vector::ops::{
             AddSubExt as _, AddSubExtMasked as _,
@@ -168,6 +185,7 @@ pub mod mask;
 pub mod math;
 pub mod register;
 pub mod slice;
+pub mod sort;
 pub mod transform;
 
 #[doc(hidden)]

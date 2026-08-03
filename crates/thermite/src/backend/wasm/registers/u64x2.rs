@@ -260,6 +260,8 @@ impl PartialOrdRegister for U64x2Wasm {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for U64x2Wasm {
+    sort_via_network!(2);
+
     const ZERO: Storage<Self> = arch::u64x2(0, 0);
     const ONE: Storage<Self> = arch::u64x2(1, 1);
     const TWO: Storage<Self> = arch::u64x2(2, 2);

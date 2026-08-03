@@ -313,6 +313,8 @@ impl PartialOrdRegister for F32x4V2 {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for F32x4V2 {
+    sort_via_network!(4);
+
     const ZERO: Storage<Self> = reg::<Self, 4>([0.0; 4]);
     const ONE: Storage<Self> = reg::<Self, 4>([1.0; 4]);
     const TWO: Storage<Self> = reg::<Self, 4>([2.0; 4]);
@@ -389,9 +391,6 @@ impl NumericRegister for F32x4V2 {
         arch::fix_max::<Self>(lhs, rhs, unsafe { arch::_mm_max_ps(lhs, rhs) })
     }
 
-    fn sort(value: Storage<Self>) -> Storage<Self> {
-        arch::sort_4::<Self>(value)
-    }
 }
 
 #[thermite_macros::inline_always]

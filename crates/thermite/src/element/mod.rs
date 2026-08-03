@@ -28,6 +28,38 @@ pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + c
     const ZERO: Self;
     const ONE: Self;
 
+    /// The greatest value under this type's natural total order, and the least.
+    ///
+    /// **Not the same as the greatest finite value for floats**, where these are
+    /// the infinities. That distinction is the entire reason they exist: a
+    /// sorting network pads a partial register with a value that must sort past
+    /// every real input, and `f32::MAX` does not sort past `f32::INFINITY`. The
+    /// prefix-scan ladder was bitten by exactly this once, with a `+inf` input
+    /// lane coming back as `f32::MAX`.
+    ///
+    /// NaN is deliberately not accounted for - it is unordered, so no value
+    /// sorts past it and no sentinel can. A float sort has to handle NaN before
+    /// the network sees it; see `thermite-sort`.
+    const ORDER_MAX: Self;
+    /// The least value under this type's natural total order. See
+    /// [`ORDER_MAX`](Self::ORDER_MAX).
+    const ORDER_MIN: Self;
+
+    /// Whether values of this type can be *unordered* under [`PartialOrd`] -
+    /// float NaN. `false` for every integer type.
+    ///
+    /// This is a compile-time gate, not a detector: sorting and searching
+    /// algorithms use it to skip their NaN pre-pass entirely for types that
+    /// cannot contain one, folding the code away at monomorphization. The
+    /// runtime test for the lanes themselves is order-theoretic and needs no
+    /// per-type code: a value is unordered iff `v != v`, so
+    /// `v.cmp_eq(v)` masks the ordered lanes on any vector - including
+    /// composite vectors, whose comparisons delegate to their value part.
+    ///
+    /// Composite element types (e.g. `Compensated<E>`) should forward their
+    /// inner element's value rather than restate it.
+    const HAS_UNORDERED: bool = false;
+
     fn from_i8(value: i8) -> Self;
     fn from_u8(value: u8) -> Self;
     fn from_u16(value: u16) -> Self;
@@ -78,6 +110,9 @@ macro_rules! impl_element {
             const ZERO: Self = 0;
             const ONE: Self = 1;
 
+            const ORDER_MAX: Self = <$t>::MAX;
+            const ORDER_MIN: Self = <$t>::MIN;
+
             #[inline(always)] fn from_i8(value: i8) -> Self { value as $t }
             #[inline(always)] fn from_u8(value: u8) -> Self { value as $t }
             #[inline(always)] fn from_u16(value: u16) -> Self { value as $t }
@@ -107,6 +142,11 @@ macro_rules! impl_element {
 
             const ZERO: Self = 0.0;
             const ONE: Self = 1.0;
+
+            const ORDER_MAX: Self = <$f>::INFINITY;
+            const ORDER_MIN: Self = <$f>::NEG_INFINITY;
+
+            const HAS_UNORDERED: bool = true;
 
             #[inline(always)] fn from_i8(value: i8) -> Self { value as $f }
             #[inline(always)] fn from_u8(value: u8) -> Self { value as $f }

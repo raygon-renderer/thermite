@@ -297,6 +297,8 @@ impl PartialOrdRegister for I16x8V2 {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for I16x8V2 {
+    sort_via_network!(8);
+
     const ZERO: Storage<Self> = reg::<Self, 8>([0; 8]);
     const ONE: Storage<Self> = reg::<Self, 8>([1; 8]);
     const TWO: Storage<Self> = reg::<Self, 8>([2; 8]);

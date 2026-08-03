@@ -244,6 +244,8 @@ impl PartialOrdRegister for I16x8Wasm {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for I16x8Wasm {
+    sort_via_network!(8);
+
     const ZERO: Storage<Self> = arch::i16x8(0, 0, 0, 0, 0, 0, 0, 0);
     const ONE: Storage<Self> = arch::i16x8(1, 1, 1, 1, 1, 1, 1, 1);
     const TWO: Storage<Self> = arch::i16x8(2, 2, 2, 2, 2, 2, 2, 2);

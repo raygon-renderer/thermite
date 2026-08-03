@@ -316,6 +316,8 @@ impl PartialOrdRegister for U64x2V2 {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for U64x2V2 {
+    sort_via_network!(2);
+
     const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
     const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
     const TWO: Storage<Self> = reg::<Self, 2>([2; 2]);

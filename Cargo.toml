@@ -9,6 +9,7 @@ default-members = [
     "crates/thermite-geometry",
     "crates/thermite-macros",
     "crates/thermite-sdf",
+    "crates/thermite-sort",
     "crates/thermite-special",
     "tests/dispatch_dyn",
     "tests/wasm-runner",
@@ -63,6 +64,7 @@ thermite-geometry = { path = "crates/thermite-geometry", version = "0.2.0-beta.0
 thermite-dual = { path = "crates/thermite-dual", version = "0.2.0-beta.0", default-features = false }
 thermite-compensated = { path = "crates/thermite-compensated", version = "0.2.0-beta.0", default-features = false }
 thermite-complex = { path = "crates/thermite-complex", version = "0.2.0-beta.0", default-features = false }
+thermite-sort = { path = "crates/thermite-sort", version = "0.2.0-beta.0", default-features = false }
 
 spirv-builder = { version = "0.9.0" }
 spirv-std-macros = { version = "0.9.0" }

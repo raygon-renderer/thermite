@@ -57,6 +57,31 @@ preserve_denormals = []
 # so this mode will be significantly slower in some workloads.
 strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
 
+# Unlock autovectorization on the scalar backend: the 1-lane `f32`/`f64` registers
+# (and therefore every emulated `ArrayRegister` lane built on them) use LLVM's
+# `algebraic_*` float ops instead of strict IEEE-754 `+ - * / %`.
+#
+# Strict scalar ops block vectorization of a loop written against the scalar
+# backend entirely - LLVM may not reassociate the accumulator - so a reduction
+# stays a serial `addss` dependency chain. The algebraic ops lift that, and pick
+# up FMA contraction along the way.
+#
+# Scoped to the scalar backend on purpose. The SIMD backends issue ISA intrinsics
+# whose semantics are already fixed, and the element layer stays strict so const
+# evaluation and bit-exact helpers are unaffected.
+#
+# These ops carry all fast-math flags EXCEPT `nnan`/`ninf`, so NaN and infinity
+# still behave; the optimizer may reassociate, contract into FMA, turn division
+# into a reciprocal multiply, and ignore the sign of zero. What it costs is exact
+# cancellation: `thermite-compensated` is incompatible outright (reassociation
+# zeroes the error terms of `two_sum`/`two_prod`) and rejects this at compile
+# time, and hand-written extended-precision splits elsewhere lose their guarantee.
+#
+# For now this needs the `nightly` feature, which supplies the intrinsics. The
+# equivalent `f32::algebraic_add` methods stabilize in 1.98, at which point
+# `algebraic-scalar` works on stable with no code change.
+algebraic-scalar = []
+
 std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 

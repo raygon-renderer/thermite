@@ -1009,6 +1009,27 @@ where
     fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> { ArrayRegister(array_zip2(lhs.0, rhs.0, R::ne)) }
 }
 
+/// One rung of the literal-`N` sort ladder: when `N` equals the literal, cast
+/// the chunk array to its literal-size twin, run the network, and return.
+///
+/// The casts are identity reinterprets guarded by `if const { N == $n }`; the
+/// dead arms of other instantiations still monomorphise (which is why this is
+/// a cast and not a type equality - same pattern as `deinterleave_radix`'s
+/// `N == 3` arm), but never execute.
+macro_rules! sort_arm {
+    ($n:literal, $f:ident, $value:ident, $order:ident) => {
+        if const { N == $n } {
+            // SAFETY: `N == $n` per the guard, so `[Storage<R>; N]` and
+            // `[Storage<R>; $n]` are the same type.
+            unsafe {
+                let chunks = *(&$value.0 as *const [Storage<R>; N] as *const [Storage<R>; $n]);
+                let sorted = crate::backend::generic::polyfills::sort::$f::<R, $order>(chunks);
+                return Self(*(&sorted as *const [Storage<R>; $n] as *const [Storage<R>; N]));
+            }
+        }
+    };
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: NumericRegister, const N: usize> NumericRegister for ArrayRegister<R, N>
 where
@@ -1034,6 +1055,39 @@ where
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::min)) }
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::max)) }
     #[conditional] fn square(lhs: Storage<Self>) -> Storage<Self> {}
+
+    /// Sort all `N * R::LANES` elements into one ascending run (not N sorted
+    /// chunks, not sorted columns).
+    ///
+    /// Bitonic decomposition by comparator distance: cross-chunk comparators
+    /// are whole-register `R::min`/`R::max` (columnar, zero shuffles); every
+    /// within-chunk stage routes through `R::sort`/`R::bitonic_clean`, so this
+    /// body knows no lane count. Power-of-two `N` only, spelled as a literal
+    /// ladder - a const-generic merge-tree loop is the documented shape that
+    /// defeats the unroller. Other `N` (3 exists) keep the scalar fallback:
+    /// bitonic needs a power of two, and padding with `NumericRegister::MAX`
+    /// (finite!) is the +inf trap the prefix-scan ladder already hit once.
+    fn sort_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
+        sort_arm!(2, sort_array_2, value, O);
+        sort_arm!(4, sort_array_4, value, O);
+        sort_arm!(8, sort_array_8, value, O);
+        sort_arm!(16, sort_array_16, value, O);
+        crate::backend::generic::polyfills::sort::sort_any::<Self, O>(value)
+    }
+
+    /// Sort a **bitonic** `N * R::LANES`-element register: chunk-stride
+    /// columnar min/max layers, then `R::bitonic_clean` per chunk. Emitted
+    /// alongside [`sort`](Self::sort) under the same ladder (no-drift rule: a
+    /// fast `sort` with a defaulted clean would make cross-register merges
+    /// silently quadratic). Garbage in, garbage out on the network arms;
+    /// the fallback happens to fully sort.
+    fn bitonic_clean_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
+        sort_arm!(2, bitonic_clean_array_2, value, O);
+        sort_arm!(4, bitonic_clean_array_4, value, O);
+        sort_arm!(8, bitonic_clean_array_8, value, O);
+        sort_arm!(16, bitonic_clean_array_16, value, O);
+        crate::backend::generic::polyfills::sort::sort_any::<Self, O>(value)
+    }
 
     fn min_element(mut value: Storage<Self>) -> Self::Element {
         crate::math::algorithms::reduce_in_place(&mut value.0, R::min);

@@ -2398,8 +2398,68 @@ pub trait NumericRegister:
         (min, max)
     }
 
+    /// Sort the lanes of this register in `O` order.
+    ///
+    /// Backed by a sorting network at every lane count up to 16. A register
+    /// whose width has a hand-tuned in-lane network gets it via
+    /// `sort_via_network!`; everything else gets the default
+    /// [`sort_lanes`](crate::backend::generic::polyfills::sort::sort_lanes) -
+    /// the one-chunk degenerate case of the array sort's widening merge, which
+    /// is depth-minimal and needs no lane-count type equality, so it can serve
+    /// as a default where `sort_8` and friends cannot.
+    ///
+    /// Past 16 lanes it is still a scalar compare-and-swap walk over the element
+    /// slice, which is branchless and data-independent but quadratic and spills
+    /// to memory.
+    ///
+    /// The direction is free on the network path: a layer emits the same
+    /// permute + min + max + blend either way, with only the blend operands
+    /// swapped. See [`crate::sort`] for the measurements and for why this is
+    /// generic over a marker type rather than parameterized on the register.
+    fn sort_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::sort::sort_lanes::<Self, O>(value)
+    }
+
+    /// Sort the lanes of a **bitonic** register in `O` order - one that rises
+    /// then falls, or a rotation of one.
+    ///
+    /// `log2(LANES)` compare-exchange layers instead of a full sort, which is
+    /// what a caller merging two already-sorted registers needs: reverse one,
+    /// compare across the pair, then clean each side. That decomposition is how
+    /// a multi-register sort gets its cross-register stages for free (whole
+    /// register `min`/`max`, no shuffles) and confines shuffles to the cleanup.
+    ///
+    /// Note that "bitonic" is order-independent: two *descending* runs with the
+    /// second reversed form a valley rather than a mountain, which is equally
+    /// bitonic and equally cleanable. A merge therefore needs no direction
+    /// handling of its own beyond passing `O` down.
+    ///
+    /// **Garbage in, garbage out**: on non-bitonic input the result is a
+    /// permutation of the lanes but is not sorted. Use
+    /// [`sort_by`](Self::sort_by) when the input is arbitrary. Past 16 lanes the
+    /// default body *is* a full sort, so it happens to be correct for any input
+    /// there, but that is an accident of the fallback - neither the default at
+    /// 16 lanes and below nor an overriding backend's is.
+    fn bitonic_clean_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
+        crate::backend::generic::polyfills::sort::bitonic_clean_lanes::<Self, O>(value)
+    }
+
+    /// Sort the lanes of this register ascending.
+    ///
+    /// Shorthand for [`sort_by::<Ascending>`](Self::sort_by); never override
+    /// this one, override `sort_by`.
+    #[inline(always)]
     fn sort(value: Storage<Self>) -> Storage<Self> {
-        crate::backend::generic::polyfills::sort::sort_any::<Self>(value)
+        Self::sort_by::<crate::sort::Ascending>(value)
+    }
+
+    /// Sort the lanes of a **bitonic** register ascending.
+    ///
+    /// Shorthand for [`bitonic_clean_by::<Ascending>`](Self::bitonic_clean_by);
+    /// never override this one, override `bitonic_clean_by`.
+    #[inline(always)]
+    fn bitonic_clean(value: Storage<Self>) -> Storage<Self> {
+        Self::bitonic_clean_by::<crate::sort::Ascending>(value)
     }
 
     fn min_element(value: Storage<Self>) -> Self::Element;

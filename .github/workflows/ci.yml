@@ -47,7 +47,7 @@ jobs:
         run: >
           cargo check -p thermite-special -p thermite-sdf
           -p thermite-geometry -p thermite-dual -p thermite-compensated
-          -p thermite-complex -p thermite-blas
+          -p thermite-complex -p thermite-blas -p thermite-sort
       - name: Check benches build
         run: cargo check -p thermite --benches
 

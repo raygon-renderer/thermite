@@ -4,11 +4,27 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
 use num_traits::{NumAssignOps, NumOps};
+use thermite::Swizzle;
 use thermite::element::SignedElement;
+use thermite::generic_array::GenericArray;
+use thermite::register::SwizzleIndices;
 use thermite::vector::{NewConst, NewVector, SplatVector, VectorValue};
 use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
 use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddExt, Square, SquareMasked};
+
+// Every error-free transformation here (`two_sum`, `two_diff`, `two_prod`,
+// Veltkamp splitting) recovers the rounding error of an operation by relying on
+// the compiler evaluating the expression exactly as written. Thermite's
+// `algebraic-scalar` feature makes scalar-backend arithmetic reassociable, at
+// which point LLVM is entitled to fold `(a - (s - v)) + (b - v)` to zero and
+// every error term silently vanishes - the results stay plausible and lose all
+// the extra precision this crate exists to provide. Refuse the combination.
+const _: () = assert!(
+    !thermite::ALGEBRAIC_SCALAR,
+    "thermite-compensated cannot be used with thermite's `algebraic-scalar` feature: reassociable \
+     float arithmetic silently zeroes the error terms of double-double arithmetic."
+);
 
 pub mod consts;
 pub mod math;
@@ -222,8 +238,54 @@ where
 // }
 
 /// Trait for float vector types that can be used in compensated arithmetic.
-pub trait CompensatedFloatVector: ScalarValue + FloatVector<Element: ScalarValue> + CastVector<Self> {}
-impl<V> CompensatedFloatVector for V where V: ScalarValue + FloatVector<Element: ScalarValue> + CastVector<V> {}
+pub trait CompensatedFloatVector:
+    ScalarValue + FloatVector<Element: ScalarValue> + CastVector<Self> + SwizzleVector
+{
+}
+impl<V> CompensatedFloatVector for V where
+    V: ScalarValue + FloatVector<Element: ScalarValue> + CastVector<V> + SwizzleVector
+{
+}
+
+// Lane swizzles apply to both components: value and error move through the
+// same permutation, so a swizzled compensated number stays a valid
+// (value, error) pair.
+impl<V: CompensatedFloatVector> Swizzle<V::Lanes> for Compensated<V> {
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        Self {
+            value: self.value.swizzle(other.value, indices.clone()),
+            error: self.error.swizzle(other.error, indices),
+        }
+    }
+
+    #[inline(always)]
+    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        Self {
+            value: self.value.permute(indices.clone()),
+            error: self.error.permute(indices),
+        }
+    }
+
+    // Forward the `_const` forms per component - the trait defaults route
+    // through the runtime-index methods and lose the immediate-encoded
+    // shuffles.
+    #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
+        Self {
+            value: self.value.swizzle_const::<I>(other.value),
+            error: self.error.swizzle_const::<I>(other.error),
+        }
+    }
+
+    #[inline(always)]
+    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+        Self {
+            value: self.value.permute_const::<I>(),
+            error: self.error.permute_const::<I>(),
+        }
+    }
+}
 
 #[rustfmt::skip]
 impl<E: ScalarValue + Element> Element for Compensated<E> {
@@ -232,6 +294,12 @@ impl<E: ScalarValue + Element> Element for Compensated<E> {
 
     const ONE: Self = Self { value: E::ONE, error: E::ZERO };
     const ZERO: Self = Self { value: E::ZERO, error: E::ZERO };
+
+    // The order extremes carry a zero error term (`inf + 0` is exact), and
+    // unordered values (NaN) exist exactly when the inner type has them.
+    const ORDER_MAX: Self = Self { value: E::ORDER_MAX, error: E::ZERO };
+    const ORDER_MIN: Self = Self { value: E::ORDER_MIN, error: E::ZERO };
+    const HAS_UNORDERED: bool = E::HAS_UNORDERED;
 
     fn from_i8(value: i8) -> Self { Self { value: E::from_i8(value), error: E::ZERO } }
     fn from_u8(value: u8) -> Self { Self { value: E::from_u8(value), error: E::ZERO } }
@@ -1184,6 +1252,44 @@ impl<V: CompensatedFloatVector, E: SplatConst<Compensated<V::Element>>> VectorVa
 }
 
 #[rustfmt::skip]
+/// The lane-sort key: strictly-before under the lexicographic (value, error)
+/// order, i.e. `cmp_lt`. See `thermite::sort::SortKey` for why this is a
+/// static trait method and not a closure.
+impl<V: CompensatedFloatVector> thermite::sort::SortKey<Self> for Compensated<V> {
+    #[inline(always)]
+    fn key_lt(a: Self, b: Self) -> V::Mask {
+        a.cmp_lt(b)
+    }
+}
+
+/// Scalar insertion walk over whole lanes, for widths past the network ladder.
+/// Quadratic, like core's `sort_any`; compares composite elements through
+/// `PartialOrd` (lexicographic, matching the vector comparisons).
+#[inline(always)]
+fn sort_lanes_scalar<V: NumericVector, O: thermite::sort::SortOrder>(v: V) -> V
+where
+    V::Element: PartialOrd,
+{
+    let mut out = v;
+    let mut i = 1;
+    while i < V::LANES {
+        let key = out.extractv(i);
+        let mut j = i;
+        while j > 0 {
+            let prev = out.extractv(j - 1);
+            let misplaced = if O::IS_ASCENDING { prev > key } else { prev < key };
+            if !misplaced {
+                break;
+            }
+            out = out.insertv(j, prev);
+            j -= 1;
+        }
+        out = out.insertv(j, key);
+        i += 1;
+    }
+    out
+}
+
 impl<V: CompensatedFloatVector> Interleave for Compensated<V> {
     #[inline(always)]
     fn interleave(self, other: Self) -> (Self, Self) {
@@ -1803,6 +1909,30 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
         value: V::MAX,
         error: V::MAX,
     };
+
+    /// Lane sorts are keyed on the lexicographic (value, error) order - which
+    /// is exactly `cmp_lt` here, so the key IS the comparison and ties are
+    /// deterministic. Each compare-exchange derives one routing mask from it
+    /// and moves both components through the same permutation and select
+    /// (`thermite::sort::sort_lanes_by_key`).
+    #[inline(always)]
+    fn sort_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::sort_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
+
+    #[inline(always)]
+    fn bitonic_clean_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::bitonic_clean_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            // A full sort trivially cleans a bitonic input.
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
 
     #[inline(always)]
     fn is_zero(self) -> Self::Mask {

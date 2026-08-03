@@ -250,6 +250,8 @@ impl PartialOrdRegister for F32x4Wasm {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for F32x4Wasm {
+    sort_via_network!(4);
+
     const ZERO: Storage<Self> = arch::f32x4(0.0, 0.0, 0.0, 0.0);
     const ONE: Storage<Self> = arch::f32x4(1.0, 1.0, 1.0, 1.0);
     const TWO: Storage<Self> = arch::f32x4(2.0, 2.0, 2.0, 2.0);

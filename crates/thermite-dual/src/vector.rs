@@ -28,7 +28,9 @@ use core::ops::{Add, Div, Mul, Rem, Sub};
 
 use num_traits::Bounded;
 
+use thermite::Swizzle;
 use thermite::element::{Element, FloatElement, SignedElement};
+use thermite::register::SwizzleIndices;
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::algorithms::reduce_in_place;
@@ -59,8 +61,61 @@ macro_rules! array_each {
 /// Requires the value type to support dual arithmetic ([`DualValue`]), to be a
 /// real float vector whose element is itself a [`DualValue`], and to be castable
 /// to itself.
-pub trait DualFloatVector: DualValue + FloatVector<Element: DualValue> + CastVector<Self> {}
-impl<V> DualFloatVector for V where V: DualValue + FloatVector<Element: DualValue> + CastVector<V> {}
+pub trait DualFloatVector: DualValue + FloatVector<Element: DualValue> + CastVector<Self> + SwizzleVector {}
+impl<V> DualFloatVector for V where V: DualValue + FloatVector<Element: DualValue> + CastVector<V> + SwizzleVector {}
+
+// Lane swizzles apply to every component: the primal and each derivative move
+// through the same permutation, so a swizzled dual is the dual of the
+// swizzled inputs.
+impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        let mut out = Self { re: self.re.swizzle(other.re, indices.clone()), dual: [V::ZERO; N] };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].swizzle(other.dual[i], indices.clone());
+            i += 1;
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        let mut out = Self { re: self.re.permute(indices.clone()), dual: [V::ZERO; N] };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].permute(indices.clone());
+            i += 1;
+        }
+        out
+    }
+
+    // The `_const` forms must forward per component rather than take the trait
+    // defaults: the defaults route through the runtime-index methods, losing
+    // the immediate-encoded shuffles the component vectors' own `_const`
+    // overrides produce.
+    #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
+        let mut out = Self { re: self.re.swizzle_const::<I>(other.re), dual: [V::ZERO; N] };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].swizzle_const::<I>(other.dual[i]);
+            i += 1;
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+        let mut out = Self { re: self.re.permute_const::<I>(), dual: [V::ZERO; N] };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].permute_const::<I>();
+            i += 1;
+        }
+        out
+    }
+}
 
 // =====================================================================================
 // Element stack: Dual<E, N> as a scalar element
@@ -73,6 +128,13 @@ impl<E: DualValue + Element, const N: usize> Element for Dual<E, N> {
 
     const ZERO: Self = Self::ZERO;
     const ONE: Self = Self::ONE;
+
+    // Ordering is by the primal value, so the order extremes are constants
+    // (zero derivative) at the primal's extremes, and unordered values (NaN)
+    // exist exactly when the primal type has them.
+    const ORDER_MAX: Self = Self::constant(E::ORDER_MAX);
+    const ORDER_MIN: Self = Self::constant(E::ORDER_MIN);
+    const HAS_UNORDERED: bool = E::HAS_UNORDERED;
 
     #[inline(always)] fn from_i8(value: i8) -> Self { Self::constant(E::from_i8(value)) }
     #[inline(always)] fn from_u8(value: u8) -> Self { Self::constant(E::from_u8(value)) }
@@ -268,6 +330,44 @@ impl<V: DualFloatVector, const N: usize> Interleave for Dual<V, N> {
         }
         (lo, hi)
     }
+}
+
+/// The lane-sort key: strictly-before by the primal alone. See
+/// `thermite::sort::SortKey` for why this is a static trait method and not a
+/// closure.
+impl<V: DualFloatVector, const N: usize> thermite::sort::SortKey<Self> for Dual<V, N> {
+    #[inline(always)]
+    fn key_lt(a: Self, b: Self) -> V::Mask {
+        a.re.cmp_lt(b.re)
+    }
+}
+
+/// Scalar insertion walk over whole lanes, for widths past the network ladder.
+/// Quadratic, like core's `sort_any`; compares composite elements through
+/// `PartialOrd`.
+#[inline(always)]
+fn sort_lanes_scalar<V: NumericVector, O: thermite::sort::SortOrder>(v: V) -> V
+where
+    V::Element: PartialOrd,
+{
+    let mut out = v;
+    let mut i = 1;
+    while i < V::LANES {
+        let key = out.extractv(i);
+        let mut j = i;
+        while j > 0 {
+            let prev = out.extractv(j - 1);
+            let misplaced = if O::IS_ASCENDING { prev > key } else { prev < key };
+            if !misplaced {
+                break;
+            }
+            out = out.insertv(j, prev);
+            j -= 1;
+        }
+        out = out.insertv(j, key);
+        i += 1;
+    }
+    out
 }
 
 // =====================================================================================
@@ -1133,6 +1233,31 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
 
     #[inline(always)] fn min(self, other: Self) -> Self { self.cmp_lt(other).select(self, other) }
     #[inline(always)] fn max(self, other: Self) -> Self { self.cmp_gt(other).select(self, other) }
+
+    // Lane sorts are keyed on the PRIMAL alone: each compare-exchange derives its
+    // routing mask from `re` and moves every derivative component through the same
+    // permutation and select (`thermite::sort::sort_lanes_by_key`), so a sorted dual
+    // is the dual of the sorted inputs. Widths past the network ladder take the
+    // scalar walk (whose composite `PartialOrd` tie-breaks by derivatives - ties by
+    // key are unspecified order either way).
+    #[inline(always)]
+    fn sort_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::sort_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
+
+    #[inline(always)]
+    fn bitonic_clean_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::bitonic_clean_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            // A full sort trivially cleans a bitonic input.
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
 
     // Compare the primal against both bounds once, then select per component, rather than
     // `self.max(min).min(max)` which builds an intermediate `max` dual and recompares it.

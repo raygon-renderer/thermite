@@ -1914,6 +1914,36 @@ pub trait NumericVector:
     /// Return the maximum of two vectors, element-wise.
     #[conditional] fn max(self, other: Self) -> Self;
 
+    /// Sort the lanes of this vector in `O` order.
+    ///
+    /// Backed by a sorting network where one exists for the lane count, and by
+    /// a scalar compare-and-swap walk otherwise - see
+    /// [`NumericRegister::sort_by`](crate::register::NumericRegister::sort_by),
+    /// which this delegates to so a backend override is picked up here too.
+    /// The direction is free; see [`crate::sort`].
+    fn sort_by<O: crate::sort::SortOrder>(self) -> Self;
+
+    /// Sort the lanes of a **bitonic** vector in `O` order - one that rises then
+    /// falls, or a rotation of one.
+    ///
+    /// Garbage in, garbage out on non-bitonic input. See
+    /// [`NumericRegister::bitonic_clean_by`](crate::register::NumericRegister::bitonic_clean_by).
+    fn bitonic_clean_by<O: crate::sort::SortOrder>(self) -> Self;
+
+    /// Sort the lanes ascending. Shorthand for
+    /// [`sort_by::<Ascending>`](Self::sort_by).
+    #[inline(always)]
+    fn sort(self) -> Self {
+        self.sort_by::<crate::sort::Ascending>()
+    }
+
+    /// Sort the lanes of a **bitonic** vector ascending. Shorthand for
+    /// [`bitonic_clean_by::<Ascending>`](Self::bitonic_clean_by).
+    #[inline(always)]
+    fn bitonic_clean(self) -> Self {
+        self.bitonic_clean_by::<crate::sort::Ascending>()
+    }
+
     /// Clamps the elements of the vector between the given minimum and maximum values.
     fn clamp(self, min: Self, max: Self) -> Self;
 

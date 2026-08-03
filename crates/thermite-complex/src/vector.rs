@@ -13,8 +13,10 @@ use core::ops::{Add, Div, Mul, Rem, Sub};
 
 use num_traits::Bounded;
 
+use thermite::Swizzle;
 use thermite::element::{Element, FloatElement, SignedElement};
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
+use thermite::register::SwizzleIndices;
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::RealMathWithPolicy;
 use thermite::math::algorithms::reduce_in_place;
@@ -32,13 +34,53 @@ use crate::{Complex, ComplexValue};
 /// here. `Dual`/`Compensated` split theirs into a separate tier; there is no useful
 /// math-free tier to split out of this one.
 pub trait ComplexFloatVector:
-    ComplexValue + FloatVector<Element: ComplexValue> + CastVector<Self> + RealMathWithPolicy
+    ComplexValue + FloatVector<Element: ComplexValue> + CastVector<Self> + RealMathWithPolicy + SwizzleVector
 {
 }
 
 impl<V> ComplexFloatVector for V where
-    V: ComplexValue + FloatVector<Element: ComplexValue> + CastVector<V> + RealMathWithPolicy
+    V: ComplexValue + FloatVector<Element: ComplexValue> + CastVector<V> + RealMathWithPolicy + SwizzleVector
 {
+}
+
+// Lane swizzles apply to both components: re and im move through the same
+// permutation, so a swizzled complex vector is the complex of the swizzled
+// inputs.
+impl<V: ComplexFloatVector> Swizzle<V::Lanes> for Complex<V> {
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        Self {
+            re: self.re.swizzle(other.re, indices.clone()),
+            im: self.im.swizzle(other.im, indices),
+        }
+    }
+
+    #[inline(always)]
+    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
+        Self {
+            re: self.re.permute(indices.clone()),
+            im: self.im.permute(indices),
+        }
+    }
+
+    // Forward the `_const` forms per component - the trait defaults route
+    // through the runtime-index methods and lose the immediate-encoded
+    // shuffles.
+    #[inline(always)]
+    fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
+        Self {
+            re: self.re.swizzle_const::<I>(other.re),
+            im: self.im.swizzle_const::<I>(other.im),
+        }
+    }
+
+    #[inline(always)]
+    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+        Self {
+            re: self.re.permute_const::<I>(),
+            im: self.im.permute_const::<I>(),
+        }
+    }
 }
 
 // --- Element stack: Complex<E> as a scalar element ---
@@ -50,6 +92,14 @@ impl<E: ComplexValue + Element> Element for Complex<E> {
 
     const ZERO: Self = Self::ZERO;
     const ONE: Self = Self::ONE;
+
+    // The (documented, if artificial) order on complex numbers here is
+    // lexicographic (re, im) - see `PartialOrdVector for Complex` - so the
+    // order extremes are extreme in both components, and unordered values
+    // (NaN in either part) exist exactly when the component type has them.
+    const ORDER_MAX: Self = Self { re: E::ORDER_MAX, im: E::ORDER_MAX };
+    const ORDER_MIN: Self = Self { re: E::ORDER_MIN, im: E::ORDER_MIN };
+    const HAS_UNORDERED: bool = E::HAS_UNORDERED;
 
     #[inline(always)] fn from_i8(value: i8) -> Self { Self::real(E::from_i8(value)) }
     #[inline(always)] fn from_u8(value: u8) -> Self { Self::real(E::from_u8(value)) }
@@ -964,6 +1014,44 @@ impl<V: ComplexFloatVector> Bounded for Complex<V> {
 }
 
 #[rustfmt::skip]
+/// The lane-sort key: strictly-before under the lexicographic (re, im)
+/// order, i.e. `cmp_lt`. See `thermite::sort::SortKey` for why this is a
+/// static trait method and not a closure.
+impl<V: ComplexFloatVector> thermite::sort::SortKey<Self> for Complex<V> {
+    #[inline(always)]
+    fn key_lt(a: Self, b: Self) -> V::Mask {
+        a.cmp_lt(b)
+    }
+}
+
+/// Scalar insertion walk over whole lanes, for widths past the network ladder.
+/// Quadratic, like core's `sort_any`; compares composite elements through
+/// `PartialOrd` (lexicographic, matching the vector comparisons).
+#[inline(always)]
+fn sort_lanes_scalar<V: NumericVector, O: thermite::sort::SortOrder>(v: V) -> V
+where
+    V::Element: PartialOrd,
+{
+    let mut out = v;
+    let mut i = 1;
+    while i < V::LANES {
+        let key = out.extractv(i);
+        let mut j = i;
+        while j > 0 {
+            let prev = out.extractv(j - 1);
+            let misplaced = if O::IS_ASCENDING { prev > key } else { prev < key };
+            if !misplaced {
+                break;
+            }
+            out = out.insertv(j, prev);
+            j -= 1;
+        }
+        out = out.insertv(j, key);
+        i += 1;
+    }
+    out
+}
+
 impl<V: ComplexFloatVector> NumericVector for Complex<V> {
     const ZERO: Self = Complex::new(V::ZERO, V::ZERO);
     const ONE: Self = Complex::new(V::ONE, V::ZERO);
@@ -975,6 +1063,29 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
 
     #[inline(always)] fn is_zero(self) -> Self::Mask { self.re.is_zero() & self.im.is_zero() }
     #[inline(always)] fn is_all_zero(self) -> bool { self.re.is_all_zero() && self.im.is_all_zero() }
+
+    // Lane sorts are keyed on the lexicographic (re, im) order - which is exactly
+    // `cmp_lt` here, so the key IS the comparison. Each compare-exchange derives one
+    // routing mask from it and moves both components through the same permutation
+    // and select (`thermite::sort::sort_lanes_by_key`).
+    #[inline(always)]
+    fn sort_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::sort_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
+
+    #[inline(always)]
+    fn bitonic_clean_by<O: thermite::sort::SortOrder>(self) -> Self {
+        if const { Self::LANES <= 16 && Self::LANES.is_power_of_two() } {
+            thermite::sort::bitonic_clean_lanes_by_key::<Self, O, Self>(self)
+        } else {
+            // A full sort trivially cleans a bitonic input.
+            sort_lanes_scalar::<Self, O>(self)
+        }
+    }
 
     #[inline(always)] fn min(self, other: Self) -> Self { self.cmp_lt(other).select(self, other) }
     #[inline(always)] fn max(self, other: Self) -> Self { self.cmp_gt(other).select(self, other) }

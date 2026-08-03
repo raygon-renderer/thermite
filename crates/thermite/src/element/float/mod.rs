@@ -6,6 +6,8 @@ use crate::vector::ops::MulAddExt;
 
 pub mod spec;
 
+pub(crate) mod algebraic;
+
 /// Marker type for a compile-time integer constant cast to a float element type.
 ///
 /// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with

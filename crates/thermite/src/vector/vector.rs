@@ -601,6 +601,11 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     #[conditional] fn min(self, other: Self) -> Self {}
     #[conditional] fn max(self, other: Self) -> Self {}
 
+    // Explicit bodies: the delegation macro fills non-generic stubs, and these
+    // carry a type parameter (same as the `native_*<P: Policy>` family below).
+    fn sort_by<O: crate::sort::SortOrder>(self) -> Self { Vector(R::sort_by::<O>(self.0)) }
+    fn bitonic_clean_by<O: crate::sort::SortOrder>(self) -> Self { Vector(R::bitonic_clean_by::<O>(self.0)) }
+
     fn prefix_sum(self) -> Self {}
     fn prefix_min(self) -> Self {}
     fn prefix_max(self) -> Self {}

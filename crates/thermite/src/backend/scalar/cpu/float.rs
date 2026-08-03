@@ -11,6 +11,7 @@ use crate::register::{
     UnsignedIntegerRegister, ZeroUpper, empty_reg, reg,
 };
 
+use crate::element::float::algebraic::AlgebraicFloat;
 use crate::isa::InstructionSet;
 use crate::vector::ops::MulAddExt;
 
@@ -151,14 +152,19 @@ impl NumericRegister for [<f $width>] {
     fn max_element(value: Storage<Self>) -> Self::Element { value }
     fn sum_elements(value: Storage<Self>) -> Self::Element { value }
     fn prod_elements(value: Storage<Self>) -> Self::Element { value }
-    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> { lo + hi }
+    fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> { lo.alg_add(hi) }
     fn offset() -> Storage<Self> { 1.0 }
     fn indexed() -> Storage<Self> { 0.0 }
-    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs + rhs }
-    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs - rhs }
-    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs * rhs }
-    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs / rhs }
-    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs % rhs }
+
+    // Strict IEEE-754 by default; reassociable under `algebraic-scalar`, which is
+    // what lets LLVM vectorize a loop over these. Every emulated register built
+    // out of scalar lanes (`ArrayRegister<f32, N>` and friends) delegates here,
+    // so this is the single point of control.
+    fn add(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_add(rhs) }
+    fn sub(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_sub(rhs) }
+    fn mul(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_mul(rhs) }
+    fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_div(rhs) }
+    fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_rem(rhs) }
     fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]

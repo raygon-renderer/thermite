@@ -812,6 +812,8 @@ macro_rules! neon_int_numeric {
         paste::paste! {
             #[thermite_macros::inline_always]
             impl NumericRegister for $reg {
+                sort_via_network!($n);
+
                 const ZERO: Storage<Self> = reg::<Self, $n>([0 as $e; $n]);
                 const ONE: Storage<Self> = reg::<Self, $n>([1 as $e; $n]);
                 const TWO: Storage<Self> = reg::<Self, $n>([2 as $e; $n]);
@@ -1031,6 +1033,8 @@ macro_rules! neon_float_register {
         paste::paste! {
             #[thermite_macros::inline_always]
             impl NumericRegister for $reg {
+                sort_via_network!($n);
+
                 const ZERO: Storage<Self> = reg::<Self, $n>([0.0; $n]);
                 const ONE: Storage<Self> = reg::<Self, $n>([1.0; $n]);
                 const TWO: Storage<Self> = reg::<Self, $n>([2.0; $n]);
@@ -1357,6 +1361,8 @@ macro_rules! neon_int64_register {
         paste::paste! {
             #[thermite_macros::inline_always]
             impl NumericRegister for $reg {
+                sort_via_network!(2); // i64x2 / u64x2
+
                 const ZERO: Storage<Self> = reg::<Self, 2>([0; 2]);
                 const ONE: Storage<Self> = reg::<Self, 2>([1; 2]);
                 const TWO: Storage<Self> = reg::<Self, 2>([2; 2]);

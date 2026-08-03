@@ -321,6 +321,8 @@ impl PartialOrdRegister for U32x4V2 {
 
 #[thermite_macros::inline_always]
 impl NumericRegister for U32x4V2 {
+    sort_via_network!(4);
+
     const ZERO: Storage<Self> = reg::<Self, 4>([0; 4]);
     const ONE: Storage<Self> = reg::<Self, 4>([1; 4]);
     const TWO: Storage<Self> = reg::<Self, 4>([2; 4]);

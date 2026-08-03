@@ -845,12 +845,24 @@ impl<R: NumericRegister, N: Unsigned> NumericRegister for ReducedRegister<R, N> 
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
 
-    fn sort(value: Storage<Self>) -> Storage<Self> {
+    fn sort_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
         if const { N::USIZE == 0 } {
-            Self(R::sort(value.0), PhantomData)
+            Self(R::sort_by::<O>(value.0), PhantomData)
         } else {
             // fallback to generic sort
-            crate::backend::generic::polyfills::sort::sort_any::<Self>(value)
+            crate::backend::generic::polyfills::sort::sort_any::<Self, O>(value)
+        }
+    }
+
+    // Paired with `sort_by` on purpose: with no dead lanes this register *is*
+    // the wider one, so the same delegation applies, and a fast `sort_by` beside
+    // a defaulted clean would make every cross-register merge silently quadratic
+    // with all tests still green (the `sort_via_network!` no-drift rule).
+    fn bitonic_clean_by<O: crate::sort::SortOrder>(value: Storage<Self>) -> Storage<Self> {
+        if const { N::USIZE == 0 } {
+            Self(R::bitonic_clean_by::<O>(value.0), PhantomData)
+        } else {
+            crate::backend::generic::polyfills::sort::sort_any::<Self, O>(value)
         }
     }
 

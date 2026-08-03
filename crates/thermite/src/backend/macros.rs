@@ -1106,3 +1106,57 @@ macro_rules! impl_native_radix3 {
         }
     };
 }
+
+/// Stamp `NumericRegister::sort` + `bitonic_clean` onto a register from the
+/// sorting-network polyfills. Invoke inside `impl NumericRegister for <Reg>`,
+/// passing the register's LANE COUNT: `sort_via_network!(8);`
+///
+/// Only 2, 4 and 8 have networks. Wider registers keep the trait defaults (a
+/// scalar compare-and-swap walk), which is correct but quadratic - so a register
+/// that grows a network later must be added here, and one that is missing here
+/// is silently slow rather than wrong.
+///
+/// Both methods are emitted together on purpose. A cross-register merge needs
+/// `bitonic_clean` to be the cheap `log2(LANES)`-layer form; if a register had a
+/// fast `sort` and a defaulted `bitonic_clean`, the merge would silently pay a
+/// full scalar sort per chunk with every test still green. Same no-drift rule as
+/// `compress_via_table!`.
+/// Lane counts with no arm here (8, 16, 32, ...) keep the trait defaults, so a
+/// macro-stamped backend can pass its lane count straight through without the
+/// caller filtering widths. Since the defaults became a real network
+/// (`sort_lanes`) rather than a scalar walk, falling through is no longer a
+/// silent de-optimization at any width up to 16 - and at 8 lanes it is a 21%
+/// latency *win*, which is why that arm was removed. See the note in the body.
+macro_rules! sort_via_network {
+    (2) => { sort_via_network!(@emit sort_2, bitonic_clean_2); };
+    (4) => { sort_via_network!(@emit sort_4, bitonic_clean_4); };
+
+    // NOTE there is deliberately no `(8)` arm. It used to select `sort_8`, and
+    // the trait default beat it: measured identical (30 insns, 31 uOps, 9.0
+    // RThroughput) and **34 cycles latency against 43**, which is the metric a
+    // lane sort pays. Both are depth-6 bitonic; the default fuses the "reverse
+    // the second half" shuffle into a comparator's partner permutation instead
+    // of issuing it standalone, so its critical path is 6 serial shuffles rather
+    // than 7. `bitonic_clean` at 8 lanes is unaffected - the default's halving
+    // strides generate `bitonic_clean_8`'s exact indices and keep-masks.
+    //
+    // Widths with no arm fall through to the trait defaults, which are a real
+    // network up to 16 lanes and the scalar walk past that.
+    ($other:tt) => {};
+
+    (@emit $sort:ident, $clean:ident) => {
+        #[inline(always)]
+        fn sort_by<O: $crate::sort::SortOrder>(
+            value: $crate::register::Storage<Self>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::sort::$sort::<Self, O>(value)
+        }
+
+        #[inline(always)]
+        fn bitonic_clean_by<O: $crate::sort::SortOrder>(
+            value: $crate::register::Storage<Self>,
+        ) -> $crate::register::Storage<Self> {
+            $crate::backend::generic::polyfills::sort::$clean::<Self, O>(value)
+        }
+    };
+}
