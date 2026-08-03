@@ -36,21 +36,68 @@ fn nightly_check() {
     compile_error!("The `nightly` feature requires a nightly compiler.");
 }
 
-#[cfg(all(feature = "algebraic-scalar", feature = "strict_ieee754"))]
-fn algebraic_scalar_check() {
-    compile_error!(
-        "The `algebraic-scalar` and `strict_ieee754` features are contradictory: one asks the \
-         optimizer to rearrange float arithmetic, the other asks it to follow the spec exactly."
-    );
-}
+/// Inventory of the crate features Thermite was built with, so that downstream
+/// crates and algorithms can vary behavior based on them.
+pub mod features {
+    /// Whether the `strict_ieee754` feature is enabled: follow IEEE-754 exactly
+    /// even where SIMD instructions intentionally do not, at a significant cost.
+    ///
+    /// Implies [`PRESERVE_DENORMALS`] and [`DISABLE_FAST_FMA`], and turns off the
+    /// approximate reciprocal/rsqrt estimates on backends that have them.
+    pub const STRICT_IEEE754: bool = cfg!(feature = "strict_ieee754");
 
-/// Whether the `algebraic-scalar` feature is enabled, i.e. whether scalar-backend
-/// float arithmetic is reassociable rather than strict IEEE-754.
-///
-/// Exposed as a `const` so downstream crates whose algorithms depend on exact
-/// cancellation (double-double arithmetic, error-free transformations) can reject
-/// the combination with a `const` assertion.
-pub const ALGEBRAIC_SCALAR: bool = cfg!(feature = "algebraic-scalar");
+    /// Whether the `preserve_denormals` feature is enabled, making every default
+    /// math policy preserve denormal inputs rather than flushing or crushing them.
+    ///
+    /// Takes precedence over [`IGNORE_DENORMALS`] if both are somehow enabled.
+    pub const PRESERVE_DENORMALS: bool = cfg!(feature = "preserve_denormals") || STRICT_IEEE754;
+
+    /// Whether the `ignore_denormals` feature is enabled, making every default
+    /// math policy leave denormals alone on the assumption that the hardware
+    /// already flushes them.
+    ///
+    /// Ignored when [`PRESERVE_DENORMALS`] is also enabled.
+    pub const IGNORE_DENORMALS: bool = cfg!(feature = "ignore_denormals") && !PRESERVE_DENORMALS;
+
+    /// Whether the `disable_fast_fma` feature is enabled, replacing the accurate
+    /// emulated (compensated) FMA with scalar `libm::fma` on backends without a
+    /// hardware FMA.
+    ///
+    /// Bitwise-identical to a scalar `fma`, and very much slower. When this is
+    /// `false`, `mul_add` is still correctly rounded to within the emulation's
+    /// accuracy guarantee, just not bit-for-bit equal to `libm`.
+    pub const DISABLE_FAST_FMA: bool = cfg!(feature = "disable_fast_fma") || STRICT_IEEE754;
+
+    /// Whether the `algebraic-scalar` feature is enabled, i.e. whether scalar-backend
+    /// float arithmetic is reassociable rather than strict IEEE-754.
+    ///
+    /// Exposed as a `const` so downstream crates whose algorithms depend on exact
+    /// cancellation (double-double arithmetic, error-free transformations) can reject
+    /// the combination with a `const` assertion.
+    ///
+    /// [`STRICT_IEEE754`] overrides this: asking for the spec exactly always wins over
+    /// asking the optimizer to rearrange, so the two together yield strict arithmetic
+    /// rather than a build error.
+    pub const ALGEBRAIC_SCALAR: bool = cfg!(feature = "algebraic-scalar") && !STRICT_IEEE754;
+
+    /// Whether the `disable_dispatch` feature is enabled, replacing every static
+    /// ISA dispatch with a plain `#[inline(always)]` signature.
+    ///
+    /// Only correct for builds that pin the target ISA at compile time. If a
+    /// dispatched function then fails to inline, it loses its target features and
+    /// gets dramatically slower, which is the whole problem dispatch exists to solve.
+    pub const DISABLE_DISPATCH: bool = cfg!(feature = "disable_dispatch");
+
+    /// Whether the `avx2-f16c` feature is enabled, assuming `f16c` is present
+    /// whenever AVX2 is (true of every AVX2 CPU) so half-precision conversion needs
+    /// no separate runtime check. No effect off x86.
+    pub const AVX2_F16C: bool = cfg!(feature = "avx2-f16c");
+
+    /// Whether the `avx2-pclmul` feature is enabled, assuming `pclmulqdq` is present
+    /// whenever AVX2 is, which enables the CLMUL 2D-Morton fast path on `u64` lanes.
+    /// No effect off x86.
+    pub const AVX2_PCLMUL: bool = cfg!(feature = "avx2-pclmul");
+}
 
 #[cfg(feature = "bitvec")]
 pub extern crate bitvec;

@@ -22,6 +22,13 @@
 //! arithmetic routes through here; the SIMD backends issue intrinsics whose
 //! semantics are fixed by the ISA, and the element layer stays strict so
 //! `const` evaluation and bit-exact helpers are unaffected.
+//!
+//! `strict_ieee754` wins over `algebraic-scalar`. The two ask for opposite
+//! things - one for the spec exactly, the other for the optimizer's freedom to
+//! rearrange - and a feature-unified build can easily end up with both when some
+//! other crate in the graph turns one on. Resolving it by precedence rather than
+//! a hard error means asking for strictness always gets strictness, and the
+//! strict arm below is what compiles.
 
 /// Scalar float ops whose strictness is controlled by the `algebraic-scalar` feature.
 ///
@@ -34,9 +41,9 @@ pub(crate) trait AlgebraicFloat: Copy {
     fn alg_rem(self, rhs: Self) -> Self;
 }
 
-// Feature off: strict IEEE-754, identical to what the backend did before the
-// feature existed.
-#[cfg(not(feature = "algebraic-scalar"))]
+// Feature off (or overridden by `strict_ieee754`): strict IEEE-754, identical to
+// what the backend did before the feature existed.
+#[cfg(any(not(feature = "algebraic-scalar"), feature = "strict_ieee754"))]
 macro_rules! impl_algebraic_float {
     ($($t:ty),* $(,)?) => {$(
         impl AlgebraicFloat for $t {
@@ -52,7 +59,7 @@ macro_rules! impl_algebraic_float {
 // Feature on, nightly: the intrinsics. Available on every nightly, and the crate
 // already turns on `core_intrinsics` for the const-splat paths, so this is the
 // only route until the methods actually ship on stable.
-#[cfg(all(feature = "algebraic-scalar", feature = "nightly"))]
+#[cfg(all(feature = "algebraic-scalar", not(feature = "strict_ieee754"), feature = "nightly"))]
 macro_rules! impl_algebraic_float {
     ($($t:ty),* $(,)?) => {$(
         impl AlgebraicFloat for $t {
@@ -69,7 +76,7 @@ macro_rules! impl_algebraic_float {
 // Until that ships this branch is unreachable in practice - anything older is
 // rejected by `algebraic_scalar_version_check` below - but it means the feature
 // starts working on stable the day 1.98 lands, with no code change here.
-#[cfg(all(feature = "algebraic-scalar", not(feature = "nightly")))]
+#[cfg(all(feature = "algebraic-scalar", not(feature = "strict_ieee754"), not(feature = "nightly")))]
 macro_rules! impl_algebraic_float {
     ($($t:ty),* $(,)?) => {$(
         impl AlgebraicFloat for $t {
@@ -87,7 +94,7 @@ impl_algebraic_float!(f32, f64);
 /// `f32::algebraic_add` and friends only stabilize in 1.98, above the crate MSRV,
 /// so on anything older `algebraic-scalar` needs `nightly` for the intrinsics.
 /// Without this the failure is a wall of E0658s about `float_algebraic`.
-#[cfg(all(feature = "algebraic-scalar", not(feature = "nightly")))]
+#[cfg(all(feature = "algebraic-scalar", not(feature = "strict_ieee754"), not(feature = "nightly")))]
 #[rustversion::before(1.98)]
 fn algebraic_scalar_version_check() {
     compile_error!(

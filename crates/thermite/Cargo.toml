@@ -77,6 +77,11 @@ strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
 # zeroes the error terms of `two_sum`/`two_prod`) and rejects this at compile
 # time, and hand-written extended-precision splits elsewhere lose their guarantee.
 #
+# `strict_ieee754` overrides this feature rather than conflicting with it: the two
+# ask for opposite things, and a feature-unified build can pick up both from
+# unrelated crates in the graph, so asking for strictness wins and the scalar
+# backend stays IEEE-754. `features::ALGEBRAIC_SCALAR` reports the resolved answer.
+#
 # For now this needs the `nightly` feature, which supplies the intrinsics. The
 # equivalent `f32::algebraic_add` methods stabilize in 1.98, at which point
 # `algebraic-scalar` works on stable with no code change.

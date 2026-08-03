@@ -21,7 +21,7 @@ use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddE
 // every error term silently vanishes - the results stay plausible and lose all
 // the extra precision this crate exists to provide. Refuse the combination.
 const _: () = assert!(
-    !thermite::ALGEBRAIC_SCALAR,
+    !thermite::features::ALGEBRAIC_SCALAR,
     "thermite-compensated cannot be used with thermite's `algebraic-scalar` feature: reassociable \
      float arithmetic silently zeroes the error terms of double-double arithmetic."
 );
