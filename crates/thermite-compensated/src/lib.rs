@@ -1223,6 +1223,8 @@ impl<V: CompensatedFloatVector> GenericSelectable for Compensated<V> {
 }
 
 impl<V: thermite::simd::HasIsa> thermite::simd::HasIsa for Compensated<V> {
+    type Native = V::Native;
+
     const ISA: thermite::isa::InstructionSet = V::ISA;
 }
 

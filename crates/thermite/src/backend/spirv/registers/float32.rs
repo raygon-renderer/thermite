@@ -50,12 +50,12 @@ macro_rules! decl_f32xN {
 
         #[thermite_macros::inline_always]
         impl CoreRegister for $name {
+            type NativeIsa = crate::backend::spirv::SPIRV;
             type Lanes = typenum::[<U $N>];
             type Storage = Self;
             type Mask = super::[<Mx $N>];
 
             const IS_EMULATED: bool = false;
-            const ISA: InstructionSet = InstructionSet::SPIRV;
             const EMPTY: Self = <Self as const_default::ConstDefault>::DEFAULT;
             const HAS_EQUAL_SIZE_MASK: bool = false;
 

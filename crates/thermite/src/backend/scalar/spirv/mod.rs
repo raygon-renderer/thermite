@@ -15,6 +15,8 @@ use crate::{
 use generic_array::{GenericArray, typenum};
 
 impl HasIsa for super::Scalar {
+    type Native = Self;
+
     const ISA: InstructionSet = InstructionSet::SPIRV;
 }
 

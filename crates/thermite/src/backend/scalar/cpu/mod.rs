@@ -10,6 +10,8 @@ use crate::{
 };
 
 impl HasIsa for super::Scalar {
+    type Native = Self;
+
     const ISA: InstructionSet = InstructionSet::Scalar;
 }
 

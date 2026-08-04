@@ -332,7 +332,8 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     dispatch::dispatch_dyn_inner(input)
 }
 
-/// Derives `thermite::simd::HasIsa` by forwarding the `ISA` constant from a generic parameter.
+/// Derives `thermite::simd::HasIsa` by forwarding the `ISA` constant and the `Native`
+/// backend type from a generic parameter.
 ///
 /// By default the first type parameter is used as the source. Use `#[isa = S]` to pick a
 /// different one. When the `thermite` crate is renamed, use `#[thermite = "other"]` to

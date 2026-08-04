@@ -19,12 +19,12 @@ macro_rules! decl_spirv_signed_scalar { ($i:ty: $u:ty => $width:literal) => { pa
 
 #[thermite_macros::inline_always]
 impl CoreRegister for [<i $width>] {
+    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes   = typenum::U1;
     type Storage = $i;
     type Mask    = bool;
 
     const IS_EMULATED:         bool = false;
-    const ISA:                 InstructionSet = InstructionSet::SPIRV;
     const EMPTY:               Storage<Self> = 0;
     const HAS_EQUAL_SIZE_MASK: bool = false;
 

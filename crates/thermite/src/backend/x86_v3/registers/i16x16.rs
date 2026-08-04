@@ -25,12 +25,12 @@ pub struct I16x16V3;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for I16x16V3 {
+    type NativeIsa = crate::backend::x86_v3::X86V3;
     type Lanes = typenum::U16;
     type Storage = arch::__m256i;
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
-    const ISA: InstructionSet = InstructionSet::X86V3;
     const EMPTY: Storage<Self> = empty_reg::<Self>();
     const HAS_EQUAL_SIZE_MASK: bool = true;
 

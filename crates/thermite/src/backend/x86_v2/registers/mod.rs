@@ -51,6 +51,8 @@ use crate::{
 pub struct X86V2;
 
 impl HasIsa for X86V2 {
+    type Native = Self;
+
     const ISA: InstructionSet = InstructionSet::X86V2;
 }
 

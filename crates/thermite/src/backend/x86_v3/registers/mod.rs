@@ -77,6 +77,8 @@ pub struct X86V3;
 
 #[thermite_macros::inline_always]
 impl HasIsa for X86V3 {
+    type Native = Self;
+
     const ISA: InstructionSet = InstructionSet::X86V3;
 }
 

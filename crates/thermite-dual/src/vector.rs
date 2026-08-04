@@ -275,6 +275,8 @@ impl_float_consts!(
 );
 
 impl<V: thermite::simd::HasIsa, const N: usize> thermite::simd::HasIsa for Dual<V, N> {
+    type Native = V::Native;
+
     const ISA: thermite::isa::InstructionSet = V::ISA;
 }
 

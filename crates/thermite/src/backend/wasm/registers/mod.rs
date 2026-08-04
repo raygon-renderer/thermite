@@ -56,6 +56,8 @@ impl_newregister!(
 impl_native_extend_from_scalar!(F32x4Wasm => f32, I32x4Wasm => i32, U32x4Wasm => u32);
 
 impl HasIsa for Wasm {
+    type Native = Self;
+
     const ISA: InstructionSet = arch::ISA;
 }
 

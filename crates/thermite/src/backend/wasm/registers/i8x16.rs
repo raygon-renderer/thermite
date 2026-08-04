@@ -26,12 +26,12 @@ pub struct I8x16Wasm;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for I8x16Wasm {
+    type NativeIsa = crate::backend::wasm::Wasm;
     type Lanes = typenum::U16;
     type Storage = arch::v128;
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
-    const ISA: InstructionSet = arch::ISA;
     const HAS_EQUAL_SIZE_MASK: bool = true;
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 

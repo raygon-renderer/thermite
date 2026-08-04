@@ -22,13 +22,12 @@ pub struct U32x4V1;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for U32x4V1 {
+    type NativeIsa = crate::backend::x86_v1::X86V1;
     type Lanes = typenum::U4;
     type Storage = arch::__m128i;
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
-
-    const ISA: InstructionSet = InstructionSet::X86V1;
 
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 

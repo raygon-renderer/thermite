@@ -15,12 +15,12 @@ macro_rules! decl_unsigned_scalar { ($i:ty: $ei:ty => $width:literal) => {paste:
 
 #[thermite_macros::inline_always]
 impl CoreRegister for [<u $width>] {
+    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes = typenum::U1;
     type Storage = $i;
     type Mask = bool;
 
     const IS_EMULATED: bool = false;
-    const ISA: InstructionSet = InstructionSet::Scalar;
     const EMPTY: Storage<Self> = 0;
     const HAS_EQUAL_SIZE_MASK: bool = false;
 

@@ -206,6 +206,8 @@ impl<E: ComplexValue + FloatElement> FloatElement for Complex<E> {
 // --- HasIsa / Selectable / Interleave ---
 
 impl<V: thermite::simd::HasIsa> thermite::simd::HasIsa for Complex<V> {
+    type Native = V::Native;
+
     const ISA: thermite::isa::InstructionSet = V::ISA;
 }
 

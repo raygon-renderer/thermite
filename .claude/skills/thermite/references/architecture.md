@@ -79,6 +79,30 @@ HasIsa -> NativeIsa -> NativeSimd -> Simd -> SizedSimd<F,I,U> -> FloatSimd<F>
 Use only when you need a width *by name*; otherwise stay on the `*Vector`
 traits.
 
+`HasIsa` is the root and is implemented by far more than the backends -
+`GenericVector: HasIsa`, so every vector and composite has one. Besides the
+`ISA` constant it names `type Native: NativeIsa`, the backend type itself, so
+a function bounded only on `V: FloatVector` can reach the per-ISA properties
+below without threading a separate `S: Simd` parameter:
+
+```rust
+<V::Native as NativeIsa>::Registers          // architectural register count
+<V::Native as NativeIsa>::Native32Width      // widest native 32-bit lane count
+<V::Native as NativeIsa>::NativeAlignment    // the alignment marker type
+V::Native::prefetch::<3, false>(ptr);        // and the CPU knobs below
+```
+
+**`Native` describes the value, not the host.** It answers "what executes
+*this* vector". Sub-native slots (`i16x2`, `u8x2`) are `ArrayRegister`s of
+scalar lanes on every backend, so they report `Scalar` even on an AVX2 host -
+correct for that vector, wrong if you wanted the machine's register budget.
+Emulated *wide* slots are fine (`f32x16<X86V1>` is four `F32x4V1`s, so it
+reports `X86V1`). Tuning that is about the machine should still read the
+dispatched `S`. Registers carry the same thing one layer down, spelled
+`CoreRegister::NativeIsa`, and `CoreRegister::ISA` defaults to
+`<Self::NativeIsa as HasIsa>::ISA`, so a backend states its ISA once.
+`Vector<R>` bridges the two names (`type Native = R::NativeIsa`).
+
 `NativeIsa` also carries the whole-CPU knobs, each defaulting to
 unsupported/no-op: `disable_denormals`/`enable_denormals` (+ the
 `DisableDenormals` RAII guard), `zeroupper`, and **`prefetch`**:

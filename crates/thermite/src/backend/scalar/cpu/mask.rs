@@ -4,12 +4,12 @@ use generic_array::GenericArray;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for bool {
+    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes = generic_array::typenum::U1;
     type Mask = Self;
     type Storage = Self;
 
     const IS_EMULATED: bool = false;
-    const ISA: crate::InstructionSet = crate::InstructionSet::Scalar;
     const EMPTY: Storage<Self> = false;
     const HAS_EQUAL_SIZE_MASK: bool = true;
 

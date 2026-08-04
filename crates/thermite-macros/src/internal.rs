@@ -204,6 +204,8 @@ pub fn derive_has_isa_inner(input: TokenStream) -> TokenStream {
 
     quote! {
         impl #impl_generics #krate::simd::HasIsa for #name #ty_generics #where_clause {
+            type Native = <#isa_param as #krate::simd::HasIsa>::Native;
+
             const ISA: #krate::isa::InstructionSet = <#isa_param as #krate::simd::HasIsa>::ISA;
         }
     }

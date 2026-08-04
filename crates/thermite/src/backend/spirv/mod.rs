@@ -12,6 +12,8 @@ use crate::{
 pub struct SPIRV;
 
 impl HasIsa for SPIRV {
+    type Native = Self;
+
     const ISA: InstructionSet = InstructionSet::SPIRV;
 }
 

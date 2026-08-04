@@ -787,6 +787,19 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   the same thing. Same discipline elsewhere: `compress_via_table!` /
   `compress_via_wide!` emit `compress` *and* `expand` together so a backend cannot
   take a fast one and a scalar other.
+- **A new register states `type NativeIsa`, not `const ISA`.** `CoreRegister::ISA`
+  defaults to `<Self::NativeIsa as HasIsa>::ISA`, so a register names the backend
+  that owns it (`type NativeIsa = crate::backend::x86_v3::X86V3;`) and the ISA
+  follows. Backend types themselves are the exception: they implement `HasIsa`
+  directly with `type Native = Self`, so they must still spell `const ISA` or the
+  default would recurse. (The register-layer name is `NativeIsa` and the
+  vector-layer one on `HasIsa` is `Native` -- `Vector<R>` bridges them with
+  `type Native = R::NativeIsa`.) Emulated wrappers forward
+  (`ArrayRegister`/`ReducedRegister` use `R::NativeIsa`), which is
+  why `f32x16<X86V1>` correctly reports `X86V1` while the scalar-lane
+  `ArrayRegister<i16, 2>` shared by every backend reports `Scalar`.
+  `tests/native_isa.rs` asserts both the mapping and that `ISA` agrees with
+  `Native::ISA`.
 - **The scalar backend is mandatory and is the oracle.** Must compile and be
   correct for every primitive. Simple over fast.
 - **x86_v1 is real and limited.** SSE2 has no `pshufb`, `blendv`, `round`,

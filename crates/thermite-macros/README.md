@@ -21,8 +21,9 @@ The macros users interact with (via `thermite`):
   when the callee has extra generics or is a method on a receiver
   (`for<S> kernel.run::<S>(&data)`).
 - `#[derive(HasIsa)]` - derives `thermite::simd::HasIsa` for types generic
-  over a `Simd` ISA parameter, forwarding the `ISA` constant from that
-  parameter (first type parameter by default; override with `#[isa = S]`).
+  over a `Simd` ISA parameter, forwarding the `ISA` constant and the `Native`
+  backend type from that parameter (first type parameter by default; override
+  with `#[isa = S]`).
 
 ```rust
 use thermite::prelude::*;

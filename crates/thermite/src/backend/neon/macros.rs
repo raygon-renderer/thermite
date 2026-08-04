@@ -177,12 +177,12 @@ macro_rules! neon_mask_core {
         paste::paste! {
             #[thermite_macros::inline_always]
             impl CoreRegister for $reg {
+                type NativeIsa = crate::backend::neon::Neon;
                 type Lanes = $lt;
                 type Storage = arch::$st;
                 type Mask = Self;
 
                 const IS_EMULATED: bool = false;
-                const ISA: InstructionSet = InstructionSet::NEON;
                 const HAS_EQUAL_SIZE_MASK: bool = true;
                 const EMPTY: Storage<Self> = empty_reg::<Self>();
 

@@ -11,7 +11,8 @@
 //! # The ISA stack
 //!
 //! ```text
-//! HasIsa            -- just announces which `InstructionSet` a backend targets
+//! HasIsa            -- announces which `InstructionSet` a backend targets, and
+//!   |                  names the backend type itself as `Native`
 //!   |
 //! NativeIsa         -- adds register count, native 32/64-bit widths, alignment,
 //!   |                  and the `enable_denormals` / `zeroupper` knobs
@@ -101,16 +102,47 @@ pub struct Align32;
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Align64;
 
-/// Root of the ISA trait stack: every backend type advertises which
-/// [`InstructionSet`] it targets via this constant.
+/// Root of the ISA trait stack: every type that can be traced back to a
+/// backend advertises which [`InstructionSet`] it targets via this trait.
 ///
 /// Implementors include the per-tier x86 types (`X86V1`/`X86V2`/`X86V3`),
-/// the `Scalar` fallback backend, `SPIRV`, and the WASM backend. The
-/// `dispatch!` macro reads this constant to pick the right specialization
-/// at runtime.
+/// the `Scalar` fallback backend, `SPIRV`, and the WASM backend, but also
+/// every [`Vector`] and composite vector type ([`GenericVector`] requires
+/// `HasIsa`). The `dispatch!` macro reads [`ISA`](Self::ISA) to pick the
+/// right specialization at runtime.
+///
+/// [`Native`](Self::Native) additionally names the backend type itself, so
+/// generic code holding only a vector can reach the per-ISA properties on
+/// [`NativeIsa`] -- register count, native lane widths, the
+/// [`NativeAlignment`](NativeIsa::NativeAlignment) marker, `prefetch`, and
+/// the denormal toggles -- without threading a separate `S: Simd` parameter.
+///
+/// # `Native` describes the value, not the host
+///
+/// `Native` answers "what executes *this* vector", which is not always the
+/// machine you are running on. A sub-native slot such as `i16x2<S>` is an
+/// [`ArrayRegister`](crate::register::ArrayRegister) of scalar lanes on every
+/// backend, so its `Native` is `Scalar` even on an AVX2 host -- correct for
+/// that vector, but wrong if you wanted the host's register budget. Tuning
+/// decisions that are about the *machine* (unroll factors, register
+/// pressure) should still read the dispatched `S`, not `V::Native`.
 pub trait HasIsa {
+    /// The backend this type executes on.
+    ///
+    /// Backend types name themselves (`type Native = Self`); registers name
+    /// the backend that owns them; [`Vector`] and the composite vector types
+    /// forward their inner register's. Emulated registers forward the
+    /// register they are built from, so an `ArrayRegister<F32x4V1, 2>` still
+    /// reports `X86V1` while an `ArrayRegister<i16, 2>` reports `Scalar`.
+    type Native: NativeIsa;
+
     /// The instruction set this backend implements.
-    const ISA: InstructionSet;
+    ///
+    /// Defaults to the ISA of [`Native`](Self::Native), which is the right
+    /// answer for everything except the backend types themselves -- their
+    /// `Native` is `Self`, so they must state it explicitly or the default
+    /// would recurse.
+    const ISA: InstructionSet = <Self::Native as HasIsa>::ISA;
 }
 
 /// Properties of a runnable native ISA: register count, native widths,

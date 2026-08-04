@@ -45,6 +45,8 @@ impl_newregister!(
 );
 
 impl HasIsa for Neon {
+    type Native = Self;
+
     const ISA: InstructionSet = arch::ISA;
 }
 

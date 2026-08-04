@@ -127,6 +127,7 @@ impl<R: CoreRegister, N: Unsigned> CoreRegister for ReducedRegister<R, N>
 where
     R: CoreReducible<N>,
 {
+    type NativeIsa = R::NativeIsa;
     type Lanes = Diff<R::Lanes, N>;
     type Storage = Self;
     type Mask = ReducedRegister<R::Mask, N>;

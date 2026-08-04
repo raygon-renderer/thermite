@@ -40,13 +40,12 @@ fn transpose_4x4_pairs(i: [arch::__m256; 4]) -> [arch::__m256; 4] {
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F32x8V3 {
+    type NativeIsa = crate::backend::x86_v3::X86V3;
     type Lanes = generic_array::typenum::U8;
     type Storage = arch::__m256;
     type Mask = Self;
 
     const IS_EMULATED: bool = false;
-
-    const ISA: InstructionSet = InstructionSet::X86V3;
 
     const EMPTY: Storage<Self> = empty_reg::<Self>();
 

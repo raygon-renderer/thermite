@@ -87,6 +87,7 @@ impl<R: CoreRegister, const N: usize> CoreRegister for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
 {
+    type NativeIsa = R::NativeIsa;
     type Lanes = Prod<typenum::U<N>, R::Lanes>;
     type Storage = Self;
     type Mask = ArrayRegister<R::Mask, N>;
