@@ -22,7 +22,9 @@ macro_rules! check {
         let lanes = <C as GenericVector>::LANES;
 
         // Small exact integers, non-monotonic so a dropped ladder stage shows up.
-        const PATTERN: [f64; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
+        const PATTERN: [f64; 16] = [
+            5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+        ];
 
         let mut v = C::default();
         let mut want = Vec::with_capacity(lanes);
@@ -119,8 +121,18 @@ macro_rules! check {
             }
             let mask = sel.cmp_gt(C::ZERO);
 
-            assert_eq!(got(v.compress(mask).expand(mask)), want, "{}: expand(compress) bits={bits:b}", $label);
-            assert_eq!(got(v.expand(mask).compress(mask)), want, "{}: compress(expand) bits={bits:b}", $label);
+            assert_eq!(
+                got(v.compress(mask).expand(mask)),
+                want,
+                "{}: expand(compress) bits={bits:b}",
+                $label
+            );
+            assert_eq!(
+                got(v.expand(mask).compress(mask)),
+                want,
+                "{}: compress(expand) bits={bits:b}",
+                $label
+            );
             assert_eq!(
                 got(v.expand_m(src, mask)),
                 got(mask.select(v.expand(mask), src)),
@@ -129,7 +141,10 @@ macro_rules! check {
             );
 
             let count = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).count();
-            let selected: Vec<f64> = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).map(|l| want[l]).collect();
+            let selected: Vec<f64> = (0..lanes)
+                .filter(|&l| (bits >> (l % 64)) & 1 == 1)
+                .map(|l| want[l])
+                .collect();
             let src_arr = got(src);
             let cm: Vec<f64> = (0..lanes)
                 .map(|i| if i < count { selected[i] } else { src_arr[i] })

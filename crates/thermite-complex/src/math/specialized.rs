@@ -17,7 +17,7 @@
 //!   that take no [`Policy`] (`conj`, `norm_sqr`, `inv`, `norm_l1`).
 //! - [`SpecializedComplexMath`] carries the algorithms, mirroring
 //!   [`thermite::math::specialized`].
-//! - [`ComplexMathWithPolicy`] and [`ComplexMath`] are generated from it by
+//! - [`ComplexMathWithPolicy`](crate::math::ComplexMathWithPolicy) and [`ComplexMath`](crate::math::ComplexMath) are generated from it by
 //!   `decl_complex_math!` (a copy of core's `decl_math!`), giving each operation a
 //!   `foo_p::<P>()` and a default-policy `foo()` form.
 //!
@@ -26,19 +26,21 @@
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
 
-use thermite::element::FloatElement;
-use thermite::math::policy::{DefaultPolicy, Policy};
+use thermite::math::policy::Policy;
 use thermite::prelude::*;
 use thermite::vector::ops::{self, MulAddAssignExt, MulAddExt};
 
-use crate::vector::ComplexFloatVector;
+use crate::vector::RealFloatVector;
+
+#[cfg(feature = "special")]
+pub use crate::math::special::SpecializedComplexSpecialMath;
 
 /// A vector of complex numbers over a real vector type.
 ///
 /// The structural half of the complex math family: it names the underlying real
 /// vector ([`Real`](ComplexVector::Real)) and the operations that take no
 /// [`Policy`]. The policy-dependent ones (modulus, argument, polar form, ...) are
-/// in [`ComplexMath`].
+/// in [`ComplexMath`](crate::math::ComplexMath).
 ///
 /// # Mixed complex/real arithmetic
 ///
@@ -52,7 +54,7 @@ use crate::vector::ComplexFloatVector;
 ///
 /// // Horner evaluation of a real-coefficient polynomial at a complex point.
 /// fn horner<T: ComplexVector>(z: T, coeffs: &[T::Real]) -> T {
-///     let mut acc = T::from_real(coeffs[0]);
+///     let mut acc = T::real(coeffs[0]);
 ///
 ///     for &c in &coeffs[1..] {
 ///         acc = acc * z + c; // Complex * Complex, then Complex + Real
@@ -101,10 +103,10 @@ pub trait ComplexVector:
     ///
     /// The core [`SpatialMath`] family has no such associated type, so its norms
     /// must return `Self` and come back as real-valued *complex* numbers.
-    /// [`ComplexMath::norm`] returns this instead.
+    /// [`ComplexMath::norm`](crate::math::ComplexMath::norm) returns this instead.
     ///
     /// [`SpatialMath`]: thermite::math::SpatialMath
-    type Real: ComplexFloatVector;
+    type Real: RealFloatVector;
 
     /// The real part.
     fn re(self) -> Self::Real;
@@ -113,6 +115,12 @@ pub trait ComplexVector:
     fn im(self) -> Self::Real;
 
     /// Builds a complex vector from its real and imaginary parts.
+    ///
+    /// Not spelled `new`, tempting as it is to match the inherent
+    /// [`Complex::new`](crate::Complex::new): [`GenericVector::new`] is already in
+    /// scope on every implementor and takes a lane array, so a second `new` is
+    /// ambiguous (E0034) in precisely the generic code this trait exists for.
+    /// [`real`](Self::real) has no such clash and does match its inherent twin.
     fn from_parts(re: Self::Real, im: Self::Real) -> Self;
 
     /// Non-temporal store of the whole block to `ptr`, in `Self`'s own memory layout (the
@@ -139,7 +147,7 @@ pub trait ComplexVector:
 
     /// Builds a complex vector from a real part, with zero imaginary part.
     #[inline(always)]
-    fn from_real(re: Self::Real) -> Self {
+    fn real(re: Self::Real) -> Self {
         Self::from_parts(re, <Self::Real as NumericVector>::ZERO)
     }
 
@@ -148,7 +156,7 @@ pub trait ComplexVector:
 
     /// The squared modulus `$|z|^2 = re^2 + im^2$`.
     ///
-    /// Cheaper than [`norm`](ComplexMath::norm) (no square root), but it squares
+    /// Cheaper than [`norm`](crate::math::ComplexMath::norm) (no square root), but it squares
     /// the range, so it overflows or underflows near the limits of the format.
     fn norm_sqr(self) -> Self::Real;
 
@@ -158,18 +166,18 @@ pub trait ComplexVector:
     /// The multiplicative inverse `$1/z = \bar{z}/|z|^2$`.
     ///
     /// Inherits the range limits of [`norm_sqr`](ComplexVector::norm_sqr); the
-    /// scaled form is [`ComplexMath::finv`].
+    /// scaled form is [`ComplexMath::finv`](crate::math::ComplexMath::finv).
     fn inv(self) -> Self;
 }
 
-/// Element-parameterized implementations behind [`ComplexMath`].
+/// Element-parameterized implementations behind [`ComplexMath`](crate::math::ComplexMath).
 ///
 /// The complex counterpart of [`thermite::math::specialized`]: implementing this
-/// for a complex vector type gives it [`ComplexMath`] and
-/// [`ComplexMathWithPolicy`], as implementing `SpecializedTranscendentalMath`
+/// for a complex vector type gives it [`ComplexMath`](crate::math::ComplexMath) and
+/// [`ComplexMathWithPolicy`](crate::math::ComplexMathWithPolicy), as implementing `SpecializedTranscendentalMath`
 /// gives it `TranscendentalMath`.
 ///
-/// Bound on [`ComplexMath`]; this trait is for implementors.
+/// Bound on [`ComplexMath`](crate::math::ComplexMath); this trait is for implementors.
 pub trait SpecializedComplexMath<E>: ComplexVector<Element = E> {
     /// The modulus (magnitude) `|z|`.
     fn norm<P: Policy>(self) -> Self::Real;
@@ -211,104 +219,3 @@ pub trait SpecializedComplexMath<E>: ComplexVector<Element = E> {
     }
 }
 
-// A copy of thermite::math's (private) decl_math!, dropping the ScalarMath
-// aggregate, which only makes sense for bare f32/f64. The rest is unchanged, so
-// ComplexMath is generated as TranscendentalMath is, #[dispatch] trampolines and
-// all.
-macro_rules! decl_complex_math {
-    ($(
-        $(#[$trait_meta:meta])*
-        trait $trait:ident<$element:ident> $(: $($bound:ident)&+ )? { $(
-            $(#[$meta:meta])*
-            fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident : $arg_ty:ty),* $(,)?) -> $ret:ty;
-        )*}
-    )*) => {paste::paste! {$(
-        #[doc = "" $trait " math functions with customizable policies."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "Each function takes a [`Policy`] as its first generic argument. For the"]
-        #[doc = "default-policy versions (same names, no `_p` suffix), see [`" $trait "Math`]."]
-        #[doc = ""]
-        #[doc = "Implemented automatically for every type implementing [`Specialized" $trait "Math`]."]
-        #[thermite::dispatch(Self)]
-        pub trait [<$trait MathWithPolicy>] $(: $($bound +)+)? {$(
-            $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret;
-        )*}
-
-        #[doc = "" $trait " math functions using the default policy."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "Every method here has a counterpart in [`" $trait "MathWithPolicy`] with a `_p`"]
-        #[doc = "suffix that takes an explicit [`Policy`]."]
-        #[doc = ""]
-        #[doc = "Implementors of [`" $trait "MathWithPolicy`] implement this automatically."]
-        #[thermite::dispatch(Self)]
-        pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
-            $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
-            { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*}
-
-        impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
-
-        // The FloatVector<Element = E> bound is what ties E down, as in core.
-        #[thermite::dispatch(Self)]
-        impl<E: $element, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
-            where V: [<Specialized $trait Math>]<E>
-        {$(
-            $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-            { <V as [<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*})*
-    }};
-}
-
-decl_complex_math! {
-    /// Operations whose result is real (modulus, argument, polar form) or whose
-    /// argument is (a real power, base, or logarithm base), which the `Self -> Self`
-    /// core families cannot express.
-    ///
-    /// The purely complex operations (`exp`, `ln`, `sin`, `sqrt`, `powf`, ...) fit
-    /// the core families and come from
-    /// [`TranscendentalMath`](thermite::math::TranscendentalMath) as they do for
-    /// any other vector.
-    trait Complex<FloatElement>: ComplexVector {
-        /// The modulus `$|z|$`, as a real value.
-        ///
-        /// Uses `hypot`, so it does not overflow for large components the way
-        /// `sqrt(norm_sqr())` would.
-        fn norm[][](self: Self) -> Self::Real;
-
-        /// The principal argument `arg(z)`, in `(-pi, pi]`, as a real value.
-        fn arg[][](self: Self) -> Self::Real;
-
-        /// Converts to polar form `(r, theta)`, such that `self == r * exp(i*theta)`.
-        fn to_polar[][](self: Self) -> (Self::Real, Self::Real);
-
-        /// Builds a complex number from a polar representation `r * exp(i*theta)`.
-        fn from_polar[][](r: Self::Real, theta: Self::Real) -> Self;
-
-        /// Raises `self` to a real power.
-        ///
-        /// The complex-exponent form is [`powf`](thermite::math::TranscendentalMath::powf).
-        fn powfr[][](self: Self, e: Self::Real) -> Self;
-
-        /// Raises a real base to the complex power `self`.
-        fn expf[][](self: Self, base: Self::Real) -> Self;
-
-        /// The logarithm of `self` in an arbitrary real base.
-        ///
-        /// The complex-base form is [`log`](thermite::math::TranscendentalMath::log).
-        fn logr[][](self: Self, base: Self::Real) -> Self;
-
-        /// `1/self`, scaling by the modulus and not its square.
-        ///
-        /// Survives the magnitudes where [`inv`](ComplexVector::inv) would have
-        /// `norm_sqr()` overflow to infinity or underflow to zero.
-        fn finv[][](self: Self) -> Self;
-
-        /// `self/rhs`, scaling by the modulus and not its square.
-        ///
-        /// Survives the magnitudes where `/` would have `rhs.norm_sqr()` overflow
-        /// to infinity or underflow to zero.
-        fn fdiv[][](self: Self, rhs: Self) -> Self;
-    }
-}

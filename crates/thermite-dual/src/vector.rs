@@ -30,10 +30,10 @@ use num_traits::Bounded;
 
 use thermite::Swizzle;
 use thermite::element::{Element, FloatElement, SignedElement};
-use thermite::register::SwizzleIndices;
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::algorithms::reduce_in_place;
+use thermite::register::SwizzleIndices;
 use thermite::vector::ops::{AddSubExt, AddSubExtMasked, NegMasked, Square, SquareMasked};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
 use thermite::{LargeInt, prelude::*};
@@ -70,7 +70,10 @@ impl<V> DualFloatVector for V where V: DualValue + FloatVector<Element: DualValu
 impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
     #[inline(always)]
     fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        let mut out = Self { re: self.re.swizzle(other.re, indices.clone()), dual: [V::ZERO; N] };
+        let mut out = Self {
+            re: self.re.swizzle(other.re, indices.clone()),
+            dual: [V::ZERO; N],
+        };
         let mut i = 0;
         while i < N {
             out.dual[i] = self.dual[i].swizzle(other.dual[i], indices.clone());
@@ -81,7 +84,10 @@ impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
 
     #[inline(always)]
     fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        let mut out = Self { re: self.re.permute(indices.clone()), dual: [V::ZERO; N] };
+        let mut out = Self {
+            re: self.re.permute(indices.clone()),
+            dual: [V::ZERO; N],
+        };
         let mut i = 0;
         while i < N {
             out.dual[i] = self.dual[i].permute(indices.clone());
@@ -96,7 +102,10 @@ impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
     // overrides produce.
     #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
-        let mut out = Self { re: self.re.swizzle_const::<I>(other.re), dual: [V::ZERO; N] };
+        let mut out = Self {
+            re: self.re.swizzle_const::<I>(other.re),
+            dual: [V::ZERO; N],
+        };
         let mut i = 0;
         while i < N {
             out.dual[i] = self.dual[i].swizzle_const::<I>(other.dual[i]);
@@ -107,7 +116,10 @@ impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
 
     #[inline(always)]
     fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
-        let mut out = Self { re: self.re.permute_const::<I>(), dual: [V::ZERO; N] };
+        let mut out = Self {
+            re: self.re.permute_const::<I>(),
+            dual: [V::ZERO; N],
+        };
         let mut i = 0;
         while i < N {
             out.dual[i] = self.dual[i].permute_const::<I>();
@@ -618,8 +630,14 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     #[inline(always)]
     fn interleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
         let (re_lo, re_hi) = self.re.interleave_by::<GROUP>(other.re);
-        let mut lo = Self { re: re_lo, dual: [V::ZERO; N] };
-        let mut hi = Self { re: re_hi, dual: [V::ZERO; N] };
+        let mut lo = Self {
+            re: re_lo,
+            dual: [V::ZERO; N],
+        };
+        let mut hi = Self {
+            re: re_hi,
+            dual: [V::ZERO; N],
+        };
         for i in 0..N {
             let (d_lo, d_hi) = self.dual[i].interleave_by::<GROUP>(other.dual[i]);
             lo.dual[i] = d_lo;
@@ -631,8 +649,14 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     #[inline(always)]
     fn deinterleave_by<const GROUP: usize>(self, other: Self) -> (Self, Self) {
         let (re_lo, re_hi) = self.re.deinterleave_by::<GROUP>(other.re);
-        let mut lo = Self { re: re_lo, dual: [V::ZERO; N] };
-        let mut hi = Self { re: re_hi, dual: [V::ZERO; N] };
+        let mut lo = Self {
+            re: re_lo,
+            dual: [V::ZERO; N],
+        };
+        let mut hi = Self {
+            re: re_hi,
+            dual: [V::ZERO; N],
+        };
         for i in 0..N {
             let (d_lo, d_hi) = self.dual[i].deinterleave_by::<GROUP>(other.dual[i]);
             lo.dual[i] = d_lo;
@@ -1172,29 +1196,68 @@ fn neg_even_dual<V: DualFloatVector, const N: usize>(x: Dual<V, N>) -> Dual<V, N
         dual[i] = V::ZERO.addsub(dual[i]);
         i += 1;
     }
-    Dual { re: V::ZERO.addsub(x.re), dual }
+    Dual {
+        re: V::ZERO.addsub(x.re),
+        dual,
+    }
 }
 
 impl<V: DualFloatVector, const N: usize> AddSubExt for Dual<V, N> {
     type Output = Self;
 
-    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_dual(b) }
-    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_dual(c)) }
-    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_dual(c)) }
+    #[inline(always)]
+    fn addsub(self, b: Self) -> Self {
+        self + neg_even_dual(b)
+    }
+    #[inline(always)]
+    fn fmaddsub(self, b: Self, c: Self) -> Self {
+        self.mul_adde(b, neg_even_dual(c))
+    }
+    #[inline(always)]
+    fn fmsubadd(self, b: Self, c: Self) -> Self {
+        self.mul_sube(b, neg_even_dual(c))
+    }
 }
 
 impl<V: DualFloatVector, const N: usize> AddSubExtMasked<V::Mask> for Dual<V, N> {
-    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
-    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
-    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+    #[inline(always)]
+    fn addsub_c(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), self)
+    }
+    #[inline(always)]
+    fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), src)
+    }
+    #[inline(always)]
+    fn addsub_z(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
-    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
-    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), self)
+    }
+    #[inline(always)]
+    fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), src)
+    }
+    #[inline(always)]
+    fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
-    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
-    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), self)
+    }
+    #[inline(always)]
+    fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), src)
+    }
+    #[inline(always)]
+    fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), Self::EMPTY)
+    }
 }
 
 // `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
@@ -1224,6 +1287,29 @@ macro_rules! dual_masked {
 
 #[rustfmt::skip]
 impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
+    // The integer conversions are real/value-only in both directions: an integer has no
+    // derivative, no imaginary part and no error term, so converting one in yields a
+    // constant, and converting out is the value part alone.
+    #[inline(always)]
+    fn to_signed_integer(self) -> Self::Signed {
+        self.re.to_signed_integer()
+    }
+
+    #[inline(always)]
+    fn from_signed_integer(v: Self::Signed) -> Self {
+        Self::constant(V::from_signed_integer(v))
+    }
+
+    #[inline(always)]
+    fn to_unsigned_integer(self) -> Self::Unsigned {
+        self.re.to_unsigned_integer()
+    }
+
+    #[inline(always)]
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self {
+        Self::constant(V::from_unsigned_integer(v))
+    }
+
     const ZERO: Self = <Self as crate::DualValue>::VAL_ZERO;
     const ONE: Self = <Self as crate::DualValue>::VAL_ONE;
     const TWO: Self = Self::constant(V::TWO);

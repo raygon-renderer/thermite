@@ -12,25 +12,18 @@ use super::*;
 use crate::{
     divider::{BranchfreeDivider, Denominator, Divider, vector::VectorDivider},
     mask::{CastMask, GenericSelectable, Mask},
-    math::{policy::Policy},
+    math::policy::Policy,
     register::{
-        self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister,
-        ExtendRegister, FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register,
-        NewRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage,
-        UnsignedIntegerRegister,
+        self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, ExtendRegister,
+        FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register, NewRegister,
+        NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister, SignedRegister,
+        Storage, UnsignedIntegerRegister,
     },
 };
 
-use core::ops::{
-    Add, Div, Index, IndexMut,
-    Mul, 
-};
+use core::ops::{Add, Div, Index, IndexMut, Mul};
 
-use num_traits::{
-    One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd,
-    WrappingMul, WrappingSub, Zero,
-};
+use num_traits::{One, Saturating, SaturatingAdd, SaturatingSub, WrappingAdd, WrappingMul, WrappingSub, Zero};
 
 use generic_array::GenericArray;
 
@@ -595,6 +588,16 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     const TWO: Self = Vector(R::TWO);
     const MIN: Self = Vector(R::MIN);
     const MAX: Self = Vector(R::MAX);
+
+    // Concrete vectors already have the `CastVector` relationship in both directions;
+    // these just name it, so that generic code needing a float <-> integer conversion
+    // does not have to carry a bound the composites cannot satisfy.
+    fn to_signed_integer(self) -> Self::Signed { <Self::Signed as CastVector<Self>>::cast_from(self) }
+    fn from_signed_integer(v: Self::Signed) -> Self { <Self::Signed as CastVector<Self>>::cast_into(v) }
+    fn to_unsigned_integer(self) -> Self::Unsigned { <Self::Unsigned as CastVector<Self>>::cast_from(self) }
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self { <Self::Unsigned as CastVector<Self>>::cast_into(v) }
+    fn fast_to_signed_integer(self) -> Self::Signed { <Self::Signed as CastVector<Self>>::fast_cast_from(self) }
+    fn fast_to_unsigned_integer(self) -> Self::Unsigned { <Self::Unsigned as CastVector<Self>>::fast_cast_from(self) }
 
     fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
 

@@ -1,6 +1,5 @@
 use crate::register::{
-    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister,
-    Storage,
+    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister, Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };
 

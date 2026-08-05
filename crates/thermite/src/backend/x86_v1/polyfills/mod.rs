@@ -1,6 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc, clippy::let_and_return)]
 
-
 pub use crate::backend::generic::polyfills::*;
 
 use super::arch::*;

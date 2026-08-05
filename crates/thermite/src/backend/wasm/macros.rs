@@ -38,7 +38,6 @@ macro_rules! reduce_64x2 {
     }}};
 }
 
-
 /// Native two-register element align (`Register::align`) for any full-width
 /// (128-bit) wasm register, via `i8x16.shuffle`.
 ///

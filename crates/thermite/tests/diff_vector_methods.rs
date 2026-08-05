@@ -199,7 +199,12 @@ macro_rules! radix3_semantic {
             .collect();
         for m in 0..(3 * n) {
             let (q, s) = (m / 3, m % 3);
-            assert_eq!(flat[m], (q + s * n) as f64, concat!("radix3 semantic pos {} ", stringify!($reg)), m);
+            assert_eq!(
+                flat[m],
+                (q + s * n) as f64,
+                concat!("radix3 semantic pos {} ", stringify!($reg)),
+                m
+            );
         }
     }};
 }
@@ -217,12 +222,21 @@ macro_rules! group2_semantic {
         let b = a + V::splat(n as $e);
         let (lo, hi) = a.interleave_by::<2>(b);
         let (al, ah) = (lo.into_array(), hi.into_array());
-        let flat: Vec<f64> = al.as_slice().iter().chain(ah.as_slice().iter()).map(|&x| x as f64).collect();
+        let flat: Vec<f64> = al
+            .as_slice()
+            .iter()
+            .chain(ah.as_slice().iter())
+            .map(|&x| x as f64)
+            .collect();
         for e in 0..(2 * n) {
             let (k, sub) = (e / 2, e % 2);
             let src = (k / 2) * 2 + sub;
             let expect = if k % 2 == 0 { src } else { src + n };
-            assert_eq!(flat[e], expect as f64, concat!("group2 semantic pos {} ", stringify!($reg)), e);
+            assert_eq!(
+                flat[e], expect as f64,
+                concat!("group2 semantic pos {} ", stringify!($reg)),
+                e
+            );
         }
     }};
 }
@@ -238,7 +252,11 @@ macro_rules! radix_by_transpose {
     ($reg:ty, $e:ty, $N:expr, $GROUP:expr) => {{
         type V = Vector<$reg>;
         let n = <V as GenericVector>::LANES;
-        assert_eq!($N, n / $GROUP, concat!("square transpose needs N==LANES/GROUP ", stringify!($reg)));
+        assert_eq!(
+            $N,
+            n / $GROUP,
+            concat!("square transpose needs N==LANES/GROUP ", stringify!($reg))
+        );
         let mut inputs = [V::ZERO; $N];
         for i in 0..$N {
             inputs[i] = V::indexed() + V::splat((i * n) as $e);
@@ -298,7 +316,14 @@ macro_rules! radix_by_semantic {
                     let want = ((c / groups) * n + (c % groups) * $GROUP + sub) as f64;
                     assert_eq!(
                         got, want,
-                        concat!("radix_by deinterleave semantic ", stringify!($reg), " N=", stringify!($N), " G=", stringify!($GROUP)),
+                        concat!(
+                            "radix_by deinterleave semantic ",
+                            stringify!($reg),
+                            " N=",
+                            stringify!($N),
+                            " G=",
+                            stringify!($GROUP)
+                        ),
                     );
                 }
             }
@@ -315,7 +340,14 @@ macro_rules! radix_by_semantic {
                     let want = ((c % $N) * n + (c / $N) * $GROUP + sub) as f64;
                     assert_eq!(
                         got, want,
-                        concat!("radix_by interleave semantic ", stringify!($reg), " N=", stringify!($N), " G=", stringify!($GROUP)),
+                        concat!(
+                            "radix_by interleave semantic ",
+                            stringify!($reg),
+                            " N=",
+                            stringify!($N),
+                            " G=",
+                            stringify!($GROUP)
+                        ),
                     );
                 }
             }
@@ -357,17 +389,41 @@ macro_rules! radix_by_vs_default {
 
         for i in 0..$N {
             let g: Vec<f64> = spec_de[i].into_array().as_slice().iter().map(|&x| x as f64).collect();
-            let w: Vec<f64> = Vector::<$reg>(ref_de[i]).into_array().as_slice().iter().map(|&x| x as f64).collect();
+            let w: Vec<f64> = Vector::<$reg>(ref_de[i])
+                .into_array()
+                .as_slice()
+                .iter()
+                .map(|&x| x as f64)
+                .collect();
             assert_eq!(
                 g, w,
-                concat!("deinterleave override != default: ", stringify!($reg), " N=", stringify!($N), " GROUP=", stringify!($GROUP)),
+                concat!(
+                    "deinterleave override != default: ",
+                    stringify!($reg),
+                    " N=",
+                    stringify!($N),
+                    " GROUP=",
+                    stringify!($GROUP)
+                ),
             );
 
             let g: Vec<f64> = spec_il[i].into_array().as_slice().iter().map(|&x| x as f64).collect();
-            let w: Vec<f64> = Vector::<$reg>(ref_il[i]).into_array().as_slice().iter().map(|&x| x as f64).collect();
+            let w: Vec<f64> = Vector::<$reg>(ref_il[i])
+                .into_array()
+                .as_slice()
+                .iter()
+                .map(|&x| x as f64)
+                .collect();
             assert_eq!(
                 g, w,
-                concat!("interleave override != default: ", stringify!($reg), " N=", stringify!($N), " GROUP=", stringify!($GROUP)),
+                concat!(
+                    "interleave override != default: ",
+                    stringify!($reg),
+                    " N=",
+                    stringify!($N),
+                    " GROUP=",
+                    stringify!($GROUP)
+                ),
             );
         }
     }};

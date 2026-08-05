@@ -66,11 +66,7 @@ macro_rules! lanes {
 /// real, and the width has to be one the forward offset table covers.
 macro_rules! use_ladder {
     ($r:ty) => {
-        const {
-            <$r as Register>::HAS_NATIVE_ALIGN
-                && lanes!($r).is_power_of_two()
-                && lanes!($r) <= 64
-        }
+        const { <$r as Register>::HAS_NATIVE_ALIGN && lanes!($r).is_power_of_two() && lanes!($r) <= 64 }
     };
 }
 
@@ -116,7 +112,7 @@ macro_rules! forward_ladder {
             // unreachable: `use_ladder!` gates on a power-of-two width <= 64. Panicking
             // is the right failure mode if a new width ever slips past that guard.
             _ => unreachable!(),
-        };
+                    };
         v
     }};
 }
@@ -139,7 +135,7 @@ macro_rules! reverse_ladder {
             if const { lanes!($r) >  8 } { v = $op(v, <$r as Register>::align::<8>(v, f)); }
             if const { lanes!($r) > 16 } { v = $op(v, <$r as Register>::align::<16>(v, f)); }
             if const { lanes!($r) > 32 } { v = $op(v, <$r as Register>::align::<32>(v, f)); }
-        };
+                    };
         v
     }};
 }
@@ -184,8 +180,16 @@ scalar_scan!(scalar_prefix_sum, forward, |cur, acc| cur + acc);
 scalar_scan!(scalar_prefix_min, forward, |cur, acc| if cur < acc { cur } else { acc });
 scalar_scan!(scalar_prefix_max, forward, |cur, acc| if cur > acc { cur } else { acc });
 scalar_scan!(scalar_reverse_prefix_sum, reverse, |cur, acc| cur + acc);
-scalar_scan!(scalar_reverse_prefix_min, reverse, |cur, acc| if cur < acc { cur } else { acc });
-scalar_scan!(scalar_reverse_prefix_max, reverse, |cur, acc| if cur > acc { cur } else { acc });
+scalar_scan!(scalar_reverse_prefix_min, reverse, |cur, acc| if cur < acc {
+    cur
+} else {
+    acc
+});
+scalar_scan!(scalar_reverse_prefix_max, reverse, |cur, acc| if cur > acc {
+    cur
+} else {
+    acc
+});
 
 /// Broadcast of lane 0 - the `min`/`max` forward fill (see the module docs).
 #[inline(always)]

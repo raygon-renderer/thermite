@@ -324,7 +324,10 @@ mod tests {
             assert!(isa.num_registers() >= 1, "{isa:?}: zero registers");
             assert!(isa.unroll_factor() >= 1, "{isa:?}: zero unroll factor");
             // Masked operations are a SIMD feature; nothing scalar can have them.
-            assert!(!isa.has_masked_operations() || isa.is_simd(), "{isa:?}: masked but not SIMD");
+            assert!(
+                !isa.has_masked_operations() || isa.is_simd(),
+                "{isa:?}: masked but not SIMD"
+            );
         }
 
         assert!(!InstructionSet::Scalar.is_simd());
@@ -395,6 +398,9 @@ mod tests {
     #[test]
     fn get_is_available() {
         let isa = InstructionSet::get();
-        assert!(all().contains(&isa) || isa == InstructionSet::Scalar, "{isa:?} is not a compiled variant");
+        assert!(
+            all().contains(&isa) || isa == InstructionSet::Scalar,
+            "{isa:?} is not a compiled variant"
+        );
     }
 }

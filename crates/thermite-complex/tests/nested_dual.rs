@@ -1,6 +1,6 @@
 //! `Complex<Dual<V, N>>` -- complex arithmetic whose parts carry derivatives.
 //!
-//! Nothing here is written against `Dual`; it is written against `ComplexValue`,
+//! Nothing here is written against `Dual`; it is written against `RealValue`,
 //! which `Dual` satisfies, so the complex kernels differentiate themselves. For a
 //! holomorphic `f` seeded along the real axis (`dz = 1`) the dual parts are `f'(z)`:
 //!
@@ -13,7 +13,8 @@
 
 use thermite::math::TranscendentalMath;
 use thermite::prelude::*;
-use thermite_complex::{Complex, ComplexMath};
+use thermite_complex::Complex;
+use thermite_complex::prelude::ComplexMath;
 use thermite_dual::Dual;
 
 /// Inner: a 1-lane f64 vector carrying one derivative direction.

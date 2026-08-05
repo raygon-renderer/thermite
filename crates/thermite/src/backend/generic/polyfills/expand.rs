@@ -445,8 +445,16 @@ mod tests {
             let there = expand_permute::<R>(compress_permute::<R>(value, mask), mask);
             let back = compress_permute::<R>(expand_permute::<R>(value, mask), mask);
 
-            assert_eq!(<R>::as_slice(&there), <R>::as_slice(&value), "expand(compress(v)) bits={bits:b}");
-            assert_eq!(<R>::as_slice(&back), <R>::as_slice(&value), "compress(expand(v)) bits={bits:b}");
+            assert_eq!(
+                <R>::as_slice(&there),
+                <R>::as_slice(&value),
+                "expand(compress(v)) bits={bits:b}"
+            );
+            assert_eq!(
+                <R>::as_slice(&back),
+                <R>::as_slice(&value),
+                "compress(expand(v)) bits={bits:b}"
+            );
         }
     }
 
@@ -460,7 +468,11 @@ mod tests {
             let mask = make_mask::<16>(bits);
 
             let there = expand_permute_wide::<R>(compress_permute_wide::<R>(value, mask), mask);
-            assert_eq!(<R>::as_slice(&there), <R>::as_slice(&value), "expand(compress(v)) bits={bits:b}");
+            assert_eq!(
+                <R>::as_slice(&there),
+                <R>::as_slice(&value),
+                "expand(compress(v)) bits={bits:b}"
+            );
         }
     }
 }

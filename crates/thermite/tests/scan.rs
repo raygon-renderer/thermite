@@ -50,8 +50,20 @@ macro_rules! check {
             let mut want_max = [0 as $elem; N];
             for i in 0..N {
                 want_sum[i] = if i == 0 { d[0] } else { want_sum[i - 1] + d[i] };
-                want_min[i] = if i == 0 { d[0] } else if d[i] < want_min[i - 1] { d[i] } else { want_min[i - 1] };
-                want_max[i] = if i == 0 { d[0] } else if d[i] > want_max[i - 1] { d[i] } else { want_max[i - 1] };
+                want_min[i] = if i == 0 {
+                    d[0]
+                } else if d[i] < want_min[i - 1] {
+                    d[i]
+                } else {
+                    want_min[i - 1]
+                };
+                want_max[i] = if i == 0 {
+                    d[0]
+                } else if d[i] > want_max[i - 1] {
+                    d[i]
+                } else {
+                    want_max[i - 1]
+                };
             }
 
             // --- reverse oracles
@@ -60,8 +72,20 @@ macro_rules! check {
             let mut want_rmax = [0 as $elem; N];
             for i in (0..N).rev() {
                 want_rsum[i] = if i == N - 1 { d[i] } else { want_rsum[i + 1] + d[i] };
-                want_rmin[i] = if i == N - 1 { d[i] } else if d[i] < want_rmin[i + 1] { d[i] } else { want_rmin[i + 1] };
-                want_rmax[i] = if i == N - 1 { d[i] } else if d[i] > want_rmax[i + 1] { d[i] } else { want_rmax[i + 1] };
+                want_rmin[i] = if i == N - 1 {
+                    d[i]
+                } else if d[i] < want_rmin[i + 1] {
+                    d[i]
+                } else {
+                    want_rmin[i + 1]
+                };
+                want_rmax[i] = if i == N - 1 {
+                    d[i]
+                } else if d[i] > want_rmax[i + 1] {
+                    d[i]
+                } else {
+                    want_rmax[i + 1]
+                };
             }
 
             let cases: [(&str, V, &[$elem; N]); 6] = [
@@ -79,7 +103,10 @@ macro_rules! check {
                         got.as_slice()[i],
                         want[i],
                         "{} width={} lane={} input={:?}",
-                        label, N, i, d
+                        label,
+                        N,
+                        i,
+                        d
                     );
                 }
             }

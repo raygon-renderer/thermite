@@ -10,8 +10,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
         IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
-        PartialOrdRegister, Register, ShuffleRegister, SignedRegister, Storage,
-        UnsignedIntegerRegister, WideRegister, array::ArrayRegister, empty_reg, reg,
+        PartialOrdRegister, Register, ShuffleRegister, SignedRegister, Storage, UnsignedIntegerRegister, WideRegister,
+        array::ArrayRegister, empty_reg, reg,
     },
     simd::Simd,
 };

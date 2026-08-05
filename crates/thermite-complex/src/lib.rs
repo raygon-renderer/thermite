@@ -37,9 +37,10 @@
 //!
 //! The operations whose result or argument is *real* (`norm`, `arg`, polar form,
 //! real powers and bases) have no place in those families and get their own; see
-//! [`specialized`] for [`ComplexVector`] and [`ComplexMath`].
+//! [`math::specialized`] for [`ComplexVector`](math::specialized::ComplexVector)
+//! and [`ComplexMath`](math::ComplexMath).
 //!
-//! The inner `V` need not be a plain vector. Anything implementing [`ComplexValue`]
+//! The inner `V` need not be a plain vector. Anything implementing [`RealValue`]
 //! will do, including the other composites:
 //!
 //! ```text
@@ -67,7 +68,7 @@
 //! [`RealMath`] is *not* implemented: `atan2`, `wrap_angle`, `step`, `smoothstep`
 //! and the rest of that family are defined over an ordered field, so a
 //! `V: RealMath` bound will not accept a complex vector. For the argument of `z`,
-//! use [`ComplexMath::arg`], which returns the real vector it is.
+//! use [`ComplexMath::arg`](math::ComplexMath::arg), which returns the real vector it is.
 //!
 //! [`GenericVector`]: thermite::prelude::GenericVector
 //! [`FloatVector`]: thermite::prelude::FloatVector
@@ -101,14 +102,29 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square};
 
 pub mod math;
-pub mod specialized;
-pub mod vector;
+mod vector;
 
-#[cfg(feature = "special")]
-pub mod special;
+pub use crate::vector::RealFloatVector;
 
-pub use specialized::{ComplexMath, ComplexMathWithPolicy, ComplexVector, SpecializedComplexMath};
-pub use vector::ComplexFloatVector;
+/// Everything needed to work with [`Complex`], in one glob.
+///
+/// ```
+/// use thermite::prelude::*;
+/// use thermite_complex::prelude::*;
+/// ```
+///
+/// [`Complex`] itself lives at the crate root, being the type this crate is about;
+/// the traits are spread across [`math`] and its submodules, and that layout is an
+/// implementation detail. Import from here.
+pub mod prelude {
+    pub use crate::math::specialized::{ComplexVector, SpecializedComplexMath};
+    pub use crate::math::{ComplexMath, ComplexMathWithPolicy};
+    pub use crate::RealFloatVector;
+    pub use crate::{Complex, RealValue};
+
+    #[cfg(feature = "special")]
+    pub use crate::math::special::{ComplexSpecialMath, ComplexSpecialMathWithPolicy, SpecializedComplexSpecialMath};
+}
 
 /// A value usable as the real/imaginary storage of a [`Complex`].
 ///
@@ -116,8 +132,8 @@ pub use vector::ComplexFloatVector;
 /// [`Vector`](thermite::prelude::Vector). The arithmetic below is written once
 /// against it and serves both the element level (`Complex<f32>`) and the vector
 /// level (`Complex<Vector<R>>`). The math library wants the stronger
-/// [`ComplexFloatVector`].
-pub trait ComplexValue:
+/// [`RealFloatVector`].
+pub trait RealValue:
     Copy
     + Add<Output = Self>
     + Sub<Output = Self>
@@ -135,7 +151,7 @@ pub trait ComplexValue:
     fn val_trunc(self) -> Self;
 }
 
-impl ComplexValue for f32 {
+impl RealValue for f32 {
     const VAL_ZERO: Self = 0.0;
     const VAL_ONE: Self = 1.0;
 
@@ -145,7 +161,7 @@ impl ComplexValue for f32 {
     }
 }
 
-impl ComplexValue for f64 {
+impl RealValue for f64 {
     const VAL_ZERO: Self = 0.0;
     const VAL_ONE: Self = 1.0;
 
@@ -155,7 +171,7 @@ impl ComplexValue for f64 {
     }
 }
 
-impl<R: thermite::register::FloatRegister> ComplexValue for thermite::prelude::Vector<R> {
+impl<R: thermite::register::FloatRegister> RealValue for thermite::prelude::Vector<R> {
     const VAL_ZERO: Self = <Self as thermite::prelude::NumericVector>::ZERO;
     const VAL_ONE: Self = <Self as thermite::prelude::NumericVector>::ONE;
 
@@ -168,13 +184,13 @@ impl<R: thermite::register::FloatRegister> ComplexValue for thermite::prelude::V
 /// `Complex<Dual<V, N>>`: a complex number whose parts each carry `N` derivative
 /// components, giving forward-mode AD through the complex functions.
 ///
-/// Everything here is written against [`ComplexValue`], which [`Dual`] satisfies,
+/// Everything here is written against [`RealValue`], which [`Dual`] satisfies,
 /// so this impl is all it takes. Seeded along the real axis (`dz = 1`), the dual
 /// parts of `f(z)` are `f'(z)` for holomorphic `f`.
 ///
 /// [`Dual`]: thermite_dual::Dual
 #[cfg(feature = "dual")]
-impl<V: thermite_dual::DualValue, const N: usize> ComplexValue for thermite_dual::Dual<V, N> {
+impl<V: thermite_dual::DualValue, const N: usize> RealValue for thermite_dual::Dual<V, N> {
     const VAL_ZERO: Self = Self::ZERO;
     const VAL_ONE: Self = Self::ONE;
 
@@ -194,7 +210,7 @@ impl<V: thermite_dual::DualValue, const N: usize> ComplexValue for thermite_dual
 ///
 /// [`Compensated`]: thermite_compensated::Compensated
 #[cfg(feature = "compensated")]
-impl<V: thermite_compensated::ScalarValue> ComplexValue for thermite_compensated::Compensated<V> {
+impl<V: thermite_compensated::ScalarValue> RealValue for thermite_compensated::Compensated<V> {
     const VAL_ZERO: Self = thermite_compensated::Compensated {
         value: V::SCALAR_ZERO,
         error: V::SCALAR_ZERO,
@@ -227,11 +243,11 @@ pub struct Complex<V> {
     pub im: V,
 }
 
-impl<V: ComplexValue> thermite::const_default::ConstDefault for Complex<V> {
+impl<V: RealValue> thermite::const_default::ConstDefault for Complex<V> {
     const DEFAULT: Self = Self::ZERO;
 }
 
-impl<V: ComplexValue> Complex<V> {
+impl<V: RealValue> Complex<V> {
     /// Zero: `0 + 0i`.
     pub const ZERO: Self = Self::new(V::VAL_ZERO, V::VAL_ZERO);
     /// One: `1 + 0i`.
@@ -275,7 +291,7 @@ impl<V: ComplexValue> Complex<V> {
     /// The multiplicative inverse `$1/z = \bar{z}/|z|^2$`.
     ///
     /// Inherits the range limits of [`norm_sqr`](Complex::norm_sqr); the scaled
-    /// form is [`finv`](crate::ComplexMath::finv).
+    /// form is [`finv`](crate::math::ComplexMath::finv).
     #[inline(always)]
     pub fn inv(self) -> Self {
         self.conj() / self.norm_sqr()
@@ -284,7 +300,7 @@ impl<V: ComplexValue> Complex<V> {
 
 // --- Arithmetic: Complex op Complex ---
 
-impl<V: ComplexValue> Neg for Complex<V> {
+impl<V: RealValue> Neg for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -293,7 +309,7 @@ impl<V: ComplexValue> Neg for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Add for Complex<V> {
+impl<V: RealValue> Add for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -302,7 +318,7 @@ impl<V: ComplexValue> Add for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Sub for Complex<V> {
+impl<V: RealValue> Sub for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -311,7 +327,7 @@ impl<V: ComplexValue> Sub for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Mul for Complex<V> {
+impl<V: RealValue> Mul for Complex<V> {
     type Output = Self;
 
     // (a + bi)(c + di) = (ac - bd) + (ad + bc)i
@@ -324,7 +340,7 @@ impl<V: ComplexValue> Mul for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Div for Complex<V> {
+impl<V: RealValue> Div for Complex<V> {
     type Output = Self;
 
     // (a + bi)/(c + di) = ((ac + bd) + (bc - ad)i) / (c^2 + d^2), taking one
@@ -345,7 +361,7 @@ impl<V: ComplexValue> Div for Complex<V> {
 // z % w = z - trunc(z/w)*w, truncating the quotient componentwise. Required by
 // num_traits::NumOps for NumericVector; not a complex-analytic operation.
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl<V: ComplexValue> Rem for Complex<V> {
+impl<V: RealValue> Rem for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -359,7 +375,7 @@ impl<V: ComplexValue> Rem for Complex<V> {
 
 // --- Arithmetic: Complex op real value ---
 
-impl<V: ComplexValue> Add<V> for Complex<V> {
+impl<V: RealValue> Add<V> for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -368,7 +384,7 @@ impl<V: ComplexValue> Add<V> for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Sub<V> for Complex<V> {
+impl<V: RealValue> Sub<V> for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -377,7 +393,7 @@ impl<V: ComplexValue> Sub<V> for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Mul<V> for Complex<V> {
+impl<V: RealValue> Mul<V> for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -386,7 +402,7 @@ impl<V: ComplexValue> Mul<V> for Complex<V> {
     }
 }
 
-impl<V: ComplexValue> Div<V> for Complex<V> {
+impl<V: RealValue> Div<V> for Complex<V> {
     type Output = Self;
 
     // single reciprocal, then multiply through
@@ -401,7 +417,7 @@ impl<V: ComplexValue> Div<V> for Complex<V> {
 }
 
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl<V: ComplexValue> Rem<V> for Complex<V> {
+impl<V: RealValue> Rem<V> for Complex<V> {
     type Output = Self;
 
     #[inline(always)]
@@ -430,7 +446,7 @@ macro_rules! complex_real_fma {
 }
 
 #[rustfmt::skip]
-impl<V: ComplexValue> MulAddExt<V, Self> for Complex<V> {
+impl<V: RealValue> MulAddExt<V, Self> for Complex<V> {
     type Output = Self;
 
     const HAS_TRUE_FMA: bool = <V as MulAddExt<V, V>>::HAS_TRUE_FMA;
@@ -442,7 +458,7 @@ impl<V: ComplexValue> MulAddExt<V, Self> for Complex<V> {
 
 macro_rules! impl_assign {
     ($($assign_trait:ident::$assign_method:ident => $op_trait:ident::$op_method:ident),* $(,)?) => {$(
-        impl<V: ComplexValue, T> $assign_trait<T> for Complex<V>
+        impl<V: RealValue, T> $assign_trait<T> for Complex<V>
         where
             Self: $op_trait<T, Output = Self>,
         {
@@ -495,7 +511,7 @@ macro_rules! complex_mul_add {
 }
 
 #[rustfmt::skip]
-impl<V: ComplexValue> MulAddExt<Self, Self> for Complex<V> {
+impl<V: RealValue> MulAddExt<Self, Self> for Complex<V> {
     type Output = Self;
 
     // A complex "FMA" rounds each component several times whatever the inner FMA
@@ -515,7 +531,7 @@ impl<V: ComplexValue> MulAddExt<Self, Self> for Complex<V> {
 }
 
 #[rustfmt::skip]
-impl<V: ComplexValue, A, B> MulAddAssignExt<A, B> for Complex<V>
+impl<V: RealValue, A, B> MulAddAssignExt<A, B> for Complex<V>
 where
     Self: MulAddExt<A, B, Output = Self>,
 {
@@ -529,7 +545,7 @@ where
     #[inline(always)] fn nmul_sube_assign(&mut self, a: A, b: B) { *self = self.nmul_sube(a, b); }
 }
 
-impl<V: ComplexValue> Square for Complex<V> {
+impl<V: RealValue> Square for Complex<V> {
     type Output = Self;
 
     // z^2 = (re^2 - im^2) + 2*re*im*i. The imaginary part is one add and one
@@ -545,14 +561,14 @@ impl<V: ComplexValue> Square for Complex<V> {
 
 // --- Iterator reductions ---
 
-impl<V: ComplexValue> core::iter::Sum for Complex<V> {
+impl<V: RealValue> core::iter::Sum for Complex<V> {
     #[inline]
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::ZERO, |a, b| a + b)
     }
 }
 
-impl<V: ComplexValue> core::iter::Product for Complex<V> {
+impl<V: RealValue> core::iter::Product for Complex<V> {
     #[inline]
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::ONE, |a, b| a * b)
@@ -563,7 +579,7 @@ impl<V: ComplexValue> core::iter::Product for Complex<V> {
 
 macro_rules! impl_float_consts {
     ($($name:ident),* $(,)?) => {
-        impl<V: ComplexValue + thermite::math::FloatConsts> thermite::math::FloatConsts for Complex<V> {
+        impl<V: RealValue + thermite::math::FloatConsts> thermite::math::FloatConsts for Complex<V> {
             $(const $name: Self = Self::real(<V as thermite::math::FloatConsts>::$name);)*
         }
     };

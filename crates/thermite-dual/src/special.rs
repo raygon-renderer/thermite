@@ -15,15 +15,23 @@
 //!
 //! ## Not implemented (`todo!()`)
 //!
-//! The Γ-family derivatives (`tgamma`, `lgamma`, `beta`, `lgamma_r`) all require
-//! the digamma function ψ, which `thermite_special` does not provide. `bessel_j`
-//! only implements order 0 upstream, so its derivative `J_n' = (J_{n-1} -
-//! J_{n+1})/2` cannot be formed. These panic if called; everything that does not
-//! depend on them works.
+//! `trigamma`, because the Γ-derivative family is not closed under
+//! differentiation: ψ₁' is ψ₂, whose derivative is ψ₃, and so on. Adding an
+//! order to the trait moves the hole one step out instead of filling it, so the
+//! ladder is cut here - one order past what the rest of the family needs.
+//! Closing it properly means a general `polygamma(n)`, which *is* closed, since
+//! its derivative is `polygamma(n + 1)`.
+//!
+//! `bessel_j`, because only order 0 exists upstream, so `J_n' = (J_{n-1} -
+//! J_{n+1})/2` cannot be formed.
+//!
+//! Both panic if called; everything that does not depend on them works.
 
 use thermite::math::policy::Policy;
 use thermite_special::specialized::{SpecializedRealSpecialMath, SpecializedSpecialMath};
 use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
+
+use thermite::prelude::*;
 
 use crate::Dual;
 use crate::math::DualMathVector;
@@ -32,7 +40,16 @@ use crate::math::DualMathVector;
 pub trait DualSpecialVector: DualMathVector + SpecialMathWithPolicy + RealSpecialMathWithPolicy {}
 impl<V> DualSpecialVector for V where V: DualMathVector + SpecialMathWithPolicy + RealSpecialMathWithPolicy {}
 
-impl<V: DualSpecialVector, const N: usize> SpecializedSpecialMath<Dual<V::Element, N>> for Dual<V, N> {
+// `SpecializedSpecialMath<E>` buys exactly one thing here: `trigamma`, which lives
+// only on the specialized trait (see its docs) and is what `digamma`'s derivative
+// needs. The element type is spelled as a separate `E` rather than `V::Element`
+// because a bound that mentions `V`'s own associated type while computing `V`'s
+// bounds is a cycle - the same reason the generic kernels upstream are written
+// `V: FloatVector<Element = E> + SpecializedSpecialMath<E>`.
+impl<V, E, const N: usize> SpecializedSpecialMath<Dual<E, N>> for Dual<V, N>
+where
+    V: DualSpecialVector + FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
         let v = self.re.erf_p::<P>();
@@ -50,36 +67,71 @@ impl<V: DualSpecialVector, const N: usize> SpecializedSpecialMath<Dual<V::Elemen
         (self.chain(w0, f0), self.chain(wm1, fm1))
     }
 
-    // --- require the digamma function psi, which thermite-special lacks ---
     #[inline(always)]
     fn tgamma<P: Policy>(self) -> Self {
-        todo!("Dual tgamma requires the digamma function (not provided by thermite-special)")
+        let v = self.re.tgamma_p::<P>();
+        // Gamma'(x) = Gamma(x) psi(x)
+        self.chain(v, v * self.re.digamma_p::<P>())
     }
 
     #[inline(always)]
     fn lgamma<P: Policy>(self) -> Self {
-        todo!("Dual lgamma requires the digamma function (not provided by thermite-special)")
+        let v = self.re.lgamma_p::<P>();
+        // d/dx ln|Gamma(x)| = psi(x), on either side of the poles
+        self.chain(v, self.re.digamma_p::<P>())
     }
 
-    // psi' = trigamma, which thermite-special does not provide
     #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        todo!("Dual digamma requires the trigamma function (not provided by thermite-special)")
+        let v = self.re.digamma_p::<P>();
+        // psi'(x) = psi_1(x), the trigamma function. Reached through the specialized
+        // trait because `trigamma` is deliberately not on the public one.
+        self.chain(v, SpecializedSpecialMath::trigamma::<P>(self.re))
     }
 
     #[inline(always)]
-    fn beta<P: Policy>(_a: Self, _b: Self) -> Self {
-        todo!("Dual beta requires the digamma function (not provided by thermite-special)")
+    fn beta<P: Policy>(a: Self, b: Self) -> Self {
+        let v = a.re.beta_p::<P>(b.re);
+
+        // B = Gamma(a)Gamma(b)/Gamma(a+b), so ln B = lnGamma(a) + lnGamma(b) - lnGamma(a+b)
+        // and dB/da = B (psi(a) - psi(a+b)), dB/db = B (psi(b) - psi(a+b)). The shared
+        // psi(a+b) is computed once.
+        let psi_ab = (a.re + b.re).digamma_p::<P>();
+        let fa = v * (a.re.digamma_p::<P>() - psi_ab);
+        let fb = v * (b.re.digamma_p::<P>() - psi_ab);
+
+        // Two independent variables, so both gradients accumulate into one dual part.
+        let mut dual = a.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = fa.mul_adde(a.dual[i], fb * b.dual[i]);
+            i += 1;
+        }
+        Dual { re: v, dual }
     }
 
-    // --- requires adjacent Bessel orders; thermite-special only implements J_0 ---
+    // psi_1' = psi_2 (tetragamma). Left unimplemented on purpose: the Gamma-derivative
+    // family is not closed under differentiation, so every order added to the trait
+    // moves this hole one step further out rather than filling it. Closing it for good
+    // needs a general `polygamma(n)`, whose derivative is just `polygamma(n + 1)`.
     #[inline(always)]
-    fn bessel_j<P: Policy, const M: usize>(self) -> Self {
-        todo!("Dual bessel_j requires adjacent orders J_(n-1), J_(n+1); only J_0 is available")
+    fn trigamma<P: Policy>(self) -> Self {
+        todo!("Dual trigamma requires the tetragamma function psi_2; see polygamma")
     }
+
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
+    // Would need adjacent orders J_(n-1), J_(n+1) for J_n' anyway.
+    //#[inline(always)]
+    //fn bessel_j<P: Policy, const M: usize>(self) -> Self {
+    //    todo!()
+    //}
 }
 
-impl<V: DualSpecialVector, const N: usize> SpecializedRealSpecialMath<Dual<V::Element, N>> for Dual<V, N> {
+// Same bound as the `SpecializedSpecialMath` impl above, which this one requires.
+impl<V, E, const N: usize> SpecializedRealSpecialMath<Dual<E, N>> for Dual<V, N>
+where
+    V: DualSpecialVector + FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         let v = self.re.erfinv_p::<P>();
@@ -96,9 +148,11 @@ impl<V: DualSpecialVector, const N: usize> SpecializedRealSpecialMath<Dual<V::El
         self.chain(v, factor)
     }
 
-    // requires the digamma function psi (for ln|Gamma|'); sign is locally constant
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
-        todo!("Dual lgamma_r requires the digamma function (not provided by thermite-special)")
+        let (v, sign) = self.re.lgamma_r_p::<P>();
+        // Same derivative as `lgamma`. The sign is piecewise constant in x, so it
+        // carries a zero derivative rather than the incoming one.
+        (self.chain(v, self.re.digamma_p::<P>()), Self::constant(sign))
     }
 }

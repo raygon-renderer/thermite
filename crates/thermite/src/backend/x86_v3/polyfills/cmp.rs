@@ -96,7 +96,7 @@ pub unsafe fn _mm256_movm_epi64x_v3(bitmask: u64) -> __m256i {
 pub unsafe fn _mm256_movm_epi16x_v3(bitmask: u64) -> __m256i {
     let bits = _mm256_setr_epi16(
         1, 2, 4, 8, 16, 32, 64, 128, //
-        256, 512, 1024, 2048, 4096, 8192, 16384, -32768 /* 0x8000 */,
+        256, 512, 1024, 2048, 4096, 8192, 16384, -32768, /* 0x8000 */
     );
     let broadcast = _mm256_set1_epi16(bitmask as i16);
 

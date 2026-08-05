@@ -394,7 +394,10 @@ static MERGE_CTRL_32: GenericArray<GenericArray<u32, U64>, generic_array::typenu
 /// Compact one 8-lane chunk (zeroing) and return its population count: the chunk
 /// becomes `[selected..., 0...]` and `count` is how many lanes are selected.
 #[inline(always)]
-fn compress_chunk_z<B: WidenIndexRegister<Lanes = U8>>(chunk: Storage<B>, mask: Storage<B::Mask>) -> (Storage<B>, usize) {
+fn compress_chunk_z<B: WidenIndexRegister<Lanes = U8>>(
+    chunk: Storage<B>,
+    mask: Storage<B::Mask>,
+) -> (Storage<B>, usize) {
     let packed = compress_permute::<B>(B::zz(mask, chunk), mask);
     // `native_bitmask` of an 8-lane mask yields exactly 8 bits, so `bm <= 255`.
     let bm = unsafe { <B::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;

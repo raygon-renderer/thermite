@@ -14,7 +14,7 @@ mod harness;
 
 use generic_array::typenum::Unsigned;
 use thermite::register::{CoreRegister, InterleaveRegister as _};
-use thermite::simd::{Simd};
+use thermite::simd::Simd;
 
 macro_rules! interleave_roundtrip {
     ($name:ident, $backend:ty, $reg:ident, $e:ty) => {

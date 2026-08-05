@@ -82,13 +82,25 @@ macro_rules! check {
                 for lane in 0..N {
                     let selected = (bits >> lane) & 1 == 1;
 
-                    assert_eq!(got.as_slice()[lane], want[lane], "expand N={N} bits={bits:b} lane={lane}");
+                    assert_eq!(
+                        got.as_slice()[lane],
+                        want[lane],
+                        "expand N={N} bits={bits:b} lane={lane}"
+                    );
 
                     let want_z = if selected { want[lane] } else { 0 as $elem };
-                    assert_eq!(got_z.as_slice()[lane], want_z, "expand_z N={N} bits={bits:b} lane={lane}");
+                    assert_eq!(
+                        got_z.as_slice()[lane],
+                        want_z,
+                        "expand_z N={N} bits={bits:b} lane={lane}"
+                    );
 
                     let want_m = if selected { want[lane] } else { back[lane] };
-                    assert_eq!(got_m.as_slice()[lane], want_m, "expand_m N={N} bits={bits:b} lane={lane}");
+                    assert_eq!(
+                        got_m.as_slice()[lane],
+                        want_m,
+                        "expand_m N={N} bits={bits:b} lane={lane}"
+                    );
 
                     // compress_m: packed selected values below the count,
                     // src's own lanes at and above it.
@@ -109,7 +121,11 @@ macro_rules! check {
                     } else {
                         back[lane]
                     };
-                    assert_eq!(got_cm.as_slice()[lane], want_cm, "compress_m N={N} bits={bits:b} lane={lane}");
+                    assert_eq!(
+                        got_cm.as_slice()[lane],
+                        want_cm,
+                        "compress_m N={N} bits={bits:b} lane={lane}"
+                    );
                 }
 
                 // --- laws -------------------------------------------------

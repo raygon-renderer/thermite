@@ -453,13 +453,19 @@ impl<R: FloatRegister> AddSubExt for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
-    fn addsub(self, b: Self) -> Self { Vector(R::addsub(self.0, b.0)) }
+    fn addsub(self, b: Self) -> Self {
+        Vector(R::addsub(self.0, b.0))
+    }
 
     #[inline(always)]
-    fn fmaddsub(self, b: Self, c: Self) -> Self { Vector(R::fmaddsub(self.0, b.0, c.0)) }
+    fn fmaddsub(self, b: Self, c: Self) -> Self {
+        Vector(R::fmaddsub(self.0, b.0, c.0))
+    }
 
     #[inline(always)]
-    fn fmsubadd(self, b: Self, c: Self) -> Self { Vector(R::fmsubadd(self.0, b.0, c.0)) }
+    fn fmsubadd(self, b: Self, c: Self) -> Self {
+        Vector(R::fmsubadd(self.0, b.0, c.0))
+    }
 }
 
 /// Masked variants of [`AddSubExt`] (mask-first argument order, matching the rest
@@ -489,25 +495,43 @@ pub trait AddSubExtMasked<Mask>: AddSubExt {
 
 impl<R: FloatRegister> AddSubExtMasked<Mask<R>> for Vector<R> {
     #[inline(always)]
-    fn addsub_c(self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_c(mask.0, self.0, b.0)) }
+    fn addsub_c(self, mask: Mask<R>, b: Self) -> Self {
+        Vector(R::addsub_c(mask.0, self.0, b.0))
+    }
     #[inline(always)]
-    fn addsub_m(self, src: Self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_m(src.0, mask.0, self.0, b.0)) }
+    fn addsub_m(self, src: Self, mask: Mask<R>, b: Self) -> Self {
+        Vector(R::addsub_m(src.0, mask.0, self.0, b.0))
+    }
     #[inline(always)]
-    fn addsub_z(self, mask: Mask<R>, b: Self) -> Self { Vector(R::addsub_z(mask.0, self.0, b.0)) }
+    fn addsub_z(self, mask: Mask<R>, b: Self) -> Self {
+        Vector(R::addsub_z(mask.0, self.0, b.0))
+    }
 
     #[inline(always)]
-    fn fmaddsub_c(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_c(mask.0, self.0, b.0, c.0)) }
+    fn fmaddsub_c(self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmaddsub_c(mask.0, self.0, b.0, c.0))
+    }
     #[inline(always)]
-    fn fmaddsub_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_m(src.0, mask.0, self.0, b.0, c.0)) }
+    fn fmaddsub_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmaddsub_m(src.0, mask.0, self.0, b.0, c.0))
+    }
     #[inline(always)]
-    fn fmaddsub_z(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmaddsub_z(mask.0, self.0, b.0, c.0)) }
+    fn fmaddsub_z(self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmaddsub_z(mask.0, self.0, b.0, c.0))
+    }
 
     #[inline(always)]
-    fn fmsubadd_c(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_c(mask.0, self.0, b.0, c.0)) }
+    fn fmsubadd_c(self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmsubadd_c(mask.0, self.0, b.0, c.0))
+    }
     #[inline(always)]
-    fn fmsubadd_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_m(src.0, mask.0, self.0, b.0, c.0)) }
+    fn fmsubadd_m(self, src: Self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmsubadd_m(src.0, mask.0, self.0, b.0, c.0))
+    }
     #[inline(always)]
-    fn fmsubadd_z(self, mask: Mask<R>, b: Self, c: Self) -> Self { Vector(R::fmsubadd_z(mask.0, self.0, b.0, c.0)) }
+    fn fmsubadd_z(self, mask: Mask<R>, b: Self, c: Self) -> Self {
+        Vector(R::fmsubadd_z(mask.0, self.0, b.0, c.0))
+    }
 }
 
 // Vector shifts

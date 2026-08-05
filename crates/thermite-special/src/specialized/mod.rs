@@ -16,7 +16,7 @@ use thermite::{
 
 use super::SpecialMathWithPolicy as _;
 
-mod generic;
+pub(crate) mod generic;
 mod pd;
 mod ps;
 
@@ -239,6 +239,20 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     fn tgamma<P: Policy>(self) -> Self;
     fn lgamma<P: Policy>(self) -> Self;
     fn digamma<P: Policy>(self) -> Self;
+
+    /// The trigamma function `psi_1(x) = d/dx psi(x)`, the second derivative of `ln Gamma`.
+    ///
+    /// Deliberately absent from the public `SpecialMath` trait, unlike every sibling
+    /// here. It exists only so that `digamma` is differentiable - forward-mode AD over
+    /// the Gamma family needs `psi_1` the way `ln Gamma` needs `psi` - and keeping it
+    /// off the public trait is what stops that need from cascading: a public
+    /// `trigamma` would oblige `Dual` to implement it, which requires `psi_2`, which
+    /// requires `psi_3`, and so on, because the Gamma-derivative family is not closed
+    /// under differentiation. Closing it for real means a general `polygamma(n)`,
+    /// whose derivative is simply `polygamma(n + 1)`.
+    ///
+    /// Not defined at zero or the negative integers.
+    fn trigamma<P: Policy>(self) -> Self;
 
     #[inline(always)]
     fn hermite<P: Policy, const N: usize>(mut x: Self) -> Self {
@@ -626,7 +640,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     fn lambert_w<P: Policy>(self) -> (Self, Self);
 
-    fn bessel_j<P: Policy, const N: usize>(self) -> Self;
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
+    //fn bessel_j<P: Policy, const N: usize>(self) -> Self;
 }
 
 // The Carlson / Legendre entry points are kind-dispatched (`SpecialMath::carlson` / `::ellint`),

@@ -179,23 +179,52 @@ mod native_align_flag {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[test]
     fn x86() {
-        use thermite::backend::{
-            x86_v1::registers as v1, x86_v2::registers as v2, x86_v3::registers as v3,
-        };
+        use thermite::backend::{x86_v1::registers as v1, x86_v2::registers as v2, x86_v3::registers as v3};
         assert_native!(
-            v1::F32x4V1, v1::F64x2V1, v1::I8x16V1, v1::I16x8V1, v1::I32x4V1, v1::I64x2V1,
-            v1::U8x16V1, v1::U16x8V1, v1::U32x4V1, v1::U64x2V1,
+            v1::F32x4V1,
+            v1::F64x2V1,
+            v1::I8x16V1,
+            v1::I16x8V1,
+            v1::I32x4V1,
+            v1::I64x2V1,
+            v1::U8x16V1,
+            v1::U16x8V1,
+            v1::U32x4V1,
+            v1::U64x2V1,
         );
         assert_native!(
-            v2::F32x4V2, v2::F64x2V2, v2::I8x16V2, v2::I16x8V2, v2::I32x4V2, v2::I64x2V2,
-            v2::U8x16V2, v2::U16x8V2, v2::U32x4V2, v2::U64x2V2,
+            v2::F32x4V2,
+            v2::F64x2V2,
+            v2::I8x16V2,
+            v2::I16x8V2,
+            v2::I32x4V2,
+            v2::I64x2V2,
+            v2::U8x16V2,
+            v2::U16x8V2,
+            v2::U32x4V2,
+            v2::U64x2V2,
         );
         assert_native!(
-            v3::F32x4V3, v3::F32x8V3, v3::F64x2V3, v3::F64x4V3,
-            v3::I8x16V3, v3::I8x32V3, v3::I16x8V3, v3::I16x16V3,
-            v3::I32x4V3, v3::I32x8V3, v3::I64x2V3, v3::I64x4V3,
-            v3::U8x16V3, v3::U8x32V3, v3::U16x8V3, v3::U16x16V3,
-            v3::U32x4V3, v3::U32x8V3, v3::U64x2V3, v3::U64x4V3,
+            v3::F32x4V3,
+            v3::F32x8V3,
+            v3::F64x2V3,
+            v3::F64x4V3,
+            v3::I8x16V3,
+            v3::I8x32V3,
+            v3::I16x8V3,
+            v3::I16x16V3,
+            v3::I32x4V3,
+            v3::I32x8V3,
+            v3::I64x2V3,
+            v3::I64x4V3,
+            v3::U8x16V3,
+            v3::U8x32V3,
+            v3::U16x8V3,
+            v3::U16x16V3,
+            v3::U32x4V3,
+            v3::U32x8V3,
+            v3::U64x2V3,
+            v3::U64x4V3,
         );
     }
 
@@ -204,8 +233,16 @@ mod native_align_flag {
     fn wasm() {
         use thermite::backend::wasm::registers as w;
         assert_native!(
-            w::F32x4Wasm, w::F64x2Wasm, w::I8x16Wasm, w::I16x8Wasm, w::I32x4Wasm,
-            w::I64x2Wasm, w::U8x16Wasm, w::U16x8Wasm, w::U32x4Wasm, w::U64x2Wasm,
+            w::F32x4Wasm,
+            w::F64x2Wasm,
+            w::I8x16Wasm,
+            w::I16x8Wasm,
+            w::I32x4Wasm,
+            w::I64x2Wasm,
+            w::U8x16Wasm,
+            w::U16x8Wasm,
+            w::U32x4Wasm,
+            w::U64x2Wasm,
         );
     }
 
@@ -214,8 +251,16 @@ mod native_align_flag {
     fn neon() {
         use thermite::backend::neon::registers as n;
         assert_native!(
-            n::F32x4Neon, n::F64x2Neon, n::I8x16Neon, n::I16x8Neon, n::I32x4Neon,
-            n::I64x2Neon, n::U8x16Neon, n::U16x8Neon, n::U32x4Neon, n::U64x2Neon,
+            n::F32x4Neon,
+            n::F64x2Neon,
+            n::I8x16Neon,
+            n::I16x8Neon,
+            n::I32x4Neon,
+            n::I64x2Neon,
+            n::U8x16Neon,
+            n::U16x8Neon,
+            n::U32x4Neon,
+            n::U64x2Neon,
         );
     }
 

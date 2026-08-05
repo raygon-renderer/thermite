@@ -9,8 +9,8 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister,
         IndexableRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
-        PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
-        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
+        empty_reg, reg, reg_splat,
     },
 };
 

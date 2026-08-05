@@ -339,7 +339,6 @@ impl_native_extend_from_scalar!(
     I16x16V3 => i16,
 );
 
-
 const fn shuffle_to_m256i(bitmask: i32) -> arch::__m256i {
     let mut masks = [0i32; 8];
 

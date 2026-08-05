@@ -22,9 +22,10 @@ where
     V: TranscendentalMathWithPolicy<Element = f64>,
     V: SpecializedTranscendentalMath<f64>,
 {
-    fn bessel_j<P: Policy, const N: usize>(self) -> Self {
-        todo!()
-    }
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
+    //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+    //    todo!()
+    //}
 
     #[inline(always)]
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
@@ -199,205 +200,23 @@ where
             return lgamma.exp_p::<ExtraPrecision<P>>() * sign;
         }
 
-        let mut z = z.flush_denormals_p::<P>();
+        // 172 is the largest integer whose factorial is finite in f64.
+        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F64, 172.0, crate::tables::LN_MAX_F64)
+    }
 
-        let orig_z = z;
-
-        let is_negative = z.is_negative();
-        let mut reflected = GenericMask::FALSY;
-
-        let mut res = Self::ONE;
-
-        // Reflect ALL negative values via Γ(z) = -π / (z*sin(πz)*Γ(|z|))
-        // This avoids the repeated-division recurrence which accumulates rounding error.
-        if const { P::POLICY.avoid_branching } || is_negative.any() {
-            reflected = is_negative;
-            let refl_res = z * z.sin_pi_p::<P>(); // z * sin(πz)
-            res = reflected.select(refl_res, res);
-            z = z.abs();
-        }
-
-        // Negative integer poles and ±0
-        let is_neg_int = is_negative & orig_z.cmp_eq(orig_z.floor()) & orig_z.cmp_ne(Self::ZERO);
-        let is_zero = orig_z.cmp_eq(Self::ZERO);
-
-        // Shift z ∈ (SQRT_EPSILON, 1) up by 1 via Γ(z) = Γ(z+1)/z.
-        // The Lanczos polynomial is fit for z >= 1; evaluating below that is the
-        // primary source of error in the (0, 1) range.
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let needs_shift = z.cmp_lt(Self::ONE) & z.cmp_ge(Self::SQRT_EPSILON);
-            res = needs_shift.select(res / z, res);
-            z = needs_shift.select(z + Self::ONE, z);
-        }
-
-        // Integers (positive, after reflection)
-
-        let mut is_int = GenericMask::FALSY;
-        let mut int_res = Self::ONE;
-
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let zf = z.floor();
-            // Cap at 172 - Γ overflows f64 beyond that, and this bounds the loop.
-            is_int = zf.cmp_eq(z) & zf.cmp_lt(Self::splat(172.0)) & !is_neg_int & !is_zero;
-
-            if thermite::unlikely(is_int.any()) {
-                let mut j = Self::ONE;
-                // Mask with is_int so non-integer lanes with large zf can't keep the loop alive.
-                let mut k = j.cmp_lt(zf) & is_int;
-
-                while k.any() {
-                    int_res = k.select(int_res * j, int_res);
-                    j += Self::ONE;
-                    k = j.cmp_lt(zf) & is_int;
-                }
-
-                if thermite::unlikely(is_int.all()) {
-                    return int_res;
-                }
-            }
-        }
-
-        // Full
-
-        let gh = Self::splat(const { LANCZOS_G - 0.5 });
-
-        // Uses the leading-term-first (reversed) Lanczos arrays - see LANCZOS_P_REV.
-        let lanczos_sum = z.poly_rev_p::<P, _>(&LANCZOS_P_REV) / z.poly_rev_p::<P, _>(&LANCZOS_Q_REV);
-
-        let zgh = z + gh;
-        let lzgh = zgh.ln_p::<P>();
-
-        // (z * lzfg) > ln(f64::MAX)
-        let very_large = (z * lzgh).cmp_gt(Self::splat(709.782712893383973096206318586483));
-
-        // only compute powf once
-        let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(Self::HALF, Self::splat(0.25)), z - Self::HALF));
-
-        // save a couple cycles by avoiding this division, but worst-case precision is slightly worse
-        let denom = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            lanczos_sum / zgh.exp_p::<P>()
-        } else {
-            lanczos_sum * (-zgh).exp_p::<P>()
-        };
-
-        let normal_res = very_large.select(h * h, h) * denom;
-
-        // Tiny
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let is_tiny = z.cmp_lt(Self::SQRT_EPSILON);
-            let tiny_res = z.reciprocal_p::<P>() - Self::EULER_GAMMA;
-            res *= is_tiny.select(tiny_res, normal_res);
-        } else {
-            res *= normal_res;
-        }
-
-        // Edge cases: Γ(-int) = NaN, Γ(±0) = ±∞
-        let zero_res = is_negative.select(Self::NEG_INFINITY, Self::INFINITY);
-        let result = reflected.select(-Self::PI / res, is_int.select(int_res, res));
-        let mut result = is_neg_int.select(Self::NAN, result);
-
-        if const {
-            P::POLICY.precision.ge(PrecisionPolicy::Best)
-                && matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
-        } {
-            let is_subnormal = z.is_subnormal();
-
-            if thermite::unlikely(is_subnormal.any()) {
-                result = is_subnormal.select(Self::ONE / orig_z, result);
-            }
-        }
-
-        is_zero.select(zero_res, result)
+    #[inline(always)]
+    fn trigamma<P: Policy>(self) -> Self {
+        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::TRIGAMMA_F64)
     }
 
     #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        // Asymptotic expansion coefficients for x >= 10 (17-digit precision, 53-bit mantissa).
-        // Coefficients from Boost.Math digamma_imp_large (BSL-1.0).
-        const P_LARGE: [f64; 8] = [
-            0.083333333333333333333333333333333333333333333333333,
-            -0.0083333333333333333333333333333333333333333333333333,
-            0.003968253968253968253968253968253968253968253968254,
-            -0.0041666666666666666666666666666666666666666666666667,
-            0.0075757575757575757575757575757575757575757575757576,
-            -0.021092796092796092796092796092796092796092796092796,
-            0.083333333333333333333333333333333333333333333333333,
-            -0.44325980392156862745098039215686274509803921568627,
-        ];
-
-        // Rational approximation on [1, 2]: digamma(x) = (x - root) * (Y + R(x-1)).
-        // 18-digit precision (53-bit mantissa). Coefficients from Boost.Math
-        // digamma_imp_1_2 (BSL-1.0).
-        // root = ROOTS[0] + ROOTS[1] + ROOTS[2], summed via staged subtraction for bits.
-        const Y: f64 = 0.99558162689208984;
-        const ROOTS: [f64; 3] = [
-            1569415565.0 / 1073741824.0,                 // / 2^30
-            (381566830.0 / 1073741824.0) / 1073741824.0, // / 2^60
-            0.9016312093258695918615325266959189453125e-19,
-        ];
-        const P_12: [f64; 6] = [
-            0.25479851061131551,
-            -0.32555031186804491,
-            -0.65031853770896507,
-            -0.28919126444774784,
-            -0.045251321448739056,
-            -0.0020713321167745952,
-        ];
-        const Q_12: [f64; 7] = [
-            1.0,
-            2.0767117023730469,
-            1.4606242909763515,
-            0.43593529692665969,
-            0.054151797245674225,
-            0.0021284987017821144,
-            -0.55789841321675513e-6,
-        ];
-
-        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, Y, &ROOTS, &P_LARGE, &P_12, &Q_12)
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::DIGAMMA_F64)
     }
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
-        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
-
-        let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
-
-        if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {
-            return Self::NAN;
-        }
-
-        let c = a + b;
-
-        // if a < b then swap
-        let (a, b) = (a.max(b), a.min(b));
-
-        let mut result = a.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-            * (b.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-                / c.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q));
-
-        let gh = Self::splat(LANCZOS_G - 0.5);
-
-        let agh = a + gh;
-        let bgh = b + gh;
-        let cgh = c + gh;
-
-        let agh_d_cgh = agh / cgh;
-        let bgh_d_cgh = bgh / cgh;
-        let agh_p_bgh = agh * bgh;
-        let cgh_p_cgh = cgh * cgh;
-
-        let base = cgh
-            .cmp_gt(Self::splat(1e10))
-            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
-
-        // encourage instruction-level parallelism
-        result *= agh_d_cgh.powf_p::<P>(a - Self::HALF - b) * base.powf_p::<P>(b) * (Self::SQRT_E / bgh.sqrt());
-
-        if P::POLICY.check_overflow {
-            result = is_valid.select(result, Self::NAN);
-        }
-
-        result
+        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::LANCZOS_F64)
     }
 
     #[inline(always)]
@@ -405,77 +224,6 @@ where
         generic::expint::expint_double::<P, f64, Self, N>(self)
     }
 }
-
-const LANCZOS_G: f64 = 6.024680040776729583740234375;
-
-// `tgamma` evaluates the unscaled Lanczos sum with `poly_rev_p` (Horner from the
-// leading coefficient), which often optimizes better. `poly_rev_p` wants
-// leading-term-first order, so these are the canonical (constant-term-first)
-// arrays written out in reverse. `LANCZOS_Q` below is kept in constant-term-first
-// order for `lgamma_r`/`beta`, which consume it through `poly_rational_p`.
-const LANCZOS_P_REV: [f64; 13] = [
-    2.506628274631000270164908177133837338626,
-    210.8242777515793458725097339207133627117,
-    8071.672002365816210638002902272250613822,
-    186056.2653952234950402949897160456992822,
-    2876370.628935372441225409051620849613599,
-    31426415.58540019438061423162831820536287,
-    248874557.8620541565114603864132294232163,
-    1439720407.311721673663223072794912393972,
-    6039542586.352028005064291644307297921070,
-    17921034426.03720969991975575445893111267,
-    35711959237.35566804944018545154716670596,
-    42919803642.64909876895789904700198885093,
-    23531376880.41075968857200767445163675473,
-];
-
-const LANCZOS_Q_REV: [f64; 13] = [
-    1.0,
-    66.0,
-    1925.0,
-    32670.0,
-    357423.0,
-    2637558.0,
-    13339535.0,
-    45995730.0,
-    105258076.0,
-    150917976.0,
-    120543840.0,
-    39916800.0,
-    0.0,
-];
-
-const LANCZOS_Q: [f64; 13] = [
-    0.0,
-    39916800.0,
-    120543840.0,
-    150917976.0,
-    105258076.0,
-    45995730.0,
-    13339535.0,
-    2637558.0,
-    357423.0,
-    32670.0,
-    1925.0,
-    66.0,
-    1.0,
-];
-
-const LANCZOS_P_EXPG_SCALED: [f64; 13] = [
-    56906521.91347156388090791033559122686859,
-    103794043.1163445451906271053616070238554,
-    86363131.28813859145546927288977868422342,
-    43338889.32467613834773723740590533316085,
-    14605578.08768506808414169982791359218571,
-    3481712.15498064590882071018964774556468,
-    601859.6171681098786670226533699352302507,
-    75999.29304014542649875303443598909137092,
-    6955.999602515376140356310115515198987526,
-    449.9445569063168119446858607650988409623,
-    19.51992788247617482847860966235652136208,
-    0.5098416655656676188125178644804694509993,
-    0.006061842346248906525783753964555936883222,
-];
 
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealSpecialMath<f64> for V
 where
@@ -537,49 +285,7 @@ where
 
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
-        let mut z = self.flush_denormals_p::<P>();
-        let mut signum = Self::ONE;
-
-        let reflect = z.is_negative();
-
-        let mut t = Self::ONE;
-
-        if const { P::POLICY.avoid_branching } || reflect.any() {
-            let pix = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
-
-            signum |= reflect.select(pix.signed_zero(), signum);
-
-            t = reflect.select(pix.abs(), t);
-            z = z.abs();
-        }
-
-        let b = z - Self::HALF;
-        let g = Self::splat(LANCZOS_G);
-
-        let mut lanczos_sum = z.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q);
-
-        // Full A term
-        let mut a = (b + g).ln_p::<P>() - Self::ONE;
-
-        // tiny value handling
-        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
-            let is_not_tiny = z.cmp_ge(Self::SQRT_EPSILON);
-
-            // shove the tiny result into the log down below
-            lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - Self::EULER_GAMMA);
-
-            // force multiplier to zero for tiny case, allowing the modified
-            // lanczos sum and ln(t) to be combined for cheap
-            a = a.zz(is_not_tiny);
-        }
-
-        let c = (lanczos_sum * t).ln_p::<P>();
-
-        let res = a.mul_adde(b, c);
-
-        let y = reflect.select(Self::LN_PI - res, res);
-
-        (y, signum)
+        generic::gamma::lgamma_r_impl::<P, _, _, _>(self, &crate::tables::LANCZOS_F64)
     }
 
     /// Uses the algorithm from Peter John Acklam, sourced from here:

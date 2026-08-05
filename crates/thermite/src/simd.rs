@@ -68,9 +68,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitCastRegister, CastRegister, ConcatRegister, ExtendRegister, FloatRegister, FullyInteroperable,
-        IndexableRegister, Lanes, LinAlg3Register, LinAlg4Register, PackedFloatRegister, Register,
-        Sad16Register, Sad32Register, Sad64Register, SaturatingCastRegister, SignedIntegerRegister,
-        UnsignedIntegerRegister,
+        IndexableRegister, Lanes, LinAlg3Register, LinAlg4Register, PackedFloatRegister, Register, Sad16Register,
+        Sad32Register, Sad64Register, SaturatingCastRegister, SignedIntegerRegister, UnsignedIntegerRegister,
         reduced::ReducedRegister,
         well_formed::{
             WellFormedFloatElement, WellFormedFloatRegister, WellFormedSignedIntegerElement,
@@ -1421,10 +1420,10 @@ macro_rules! decl_aliases {
 }
 
 use crate::vector::{
-    CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithRegister,
-    FullyInteroperable as FIV, GenericVector, IndexableVector, LinAlg3Vector, LinAlg4Vector, PackedFloatVector,
-    Sad16Vector, Sad32Vector, Sad64Vector, SaturatingCastVector, SignedIntegerVector, SignedIntegerVectorWithRegister,
-    SwizzleVector, UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,
+    CastVector, ConcatVector, ExtendVector, FloatVector, FloatVectorWithRegister, FullyInteroperable as FIV,
+    GenericVector, IndexableVector, LinAlg3Vector, LinAlg4Vector, PackedFloatVector, Sad16Vector, Sad32Vector,
+    Sad64Vector, SaturatingCastVector, SignedIntegerVector, SignedIntegerVectorWithRegister, SwizzleVector,
+    UnsignedIntegerVector, UnsignedIntegerVectorWithRegister,
 };
 
 /// Vector-level mirror of [`NativeSimd`]: names the native-width register
@@ -1459,14 +1458,19 @@ pub trait NativeSimdVectors: NativeIsa {
     /// Native-width signed 16-bit integer vector. Lane count matches [`NativeIsa::Native16Width`].
     type i16xN: SignedIntegerVector<Lanes = <Self as NativeIsa>::Native16Width, Element = i16> + SwizzleVector;
     /// Native-width unsigned 16-bit integer vector.
-    type u16xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native16Width, Element = u16> + SwizzleVector
-        + Sad32Vector<Self::u32xN> + Sad64Vector<Self::u64xN>;
+    type u16xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native16Width, Element = u16>
+        + SwizzleVector
+        + Sad32Vector<Self::u32xN>
+        + Sad64Vector<Self::u64xN>;
 
     /// Native-width signed 8-bit integer vector. Lane count matches [`NativeIsa::Native8Width`].
     type i8xN: SignedIntegerVector<Lanes = <Self as NativeIsa>::Native8Width, Element = i8> + SwizzleVector;
     /// Native-width unsigned 8-bit integer vector.
-    type u8xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native8Width, Element = u8> + SwizzleVector
-        + Sad16Vector<Self::u16xN> + Sad32Vector<Self::u32xN> + Sad64Vector<Self::u64xN>;
+    type u8xN: UnsignedIntegerVector<Lanes = <Self as NativeIsa>::Native8Width, Element = u8>
+        + SwizzleVector
+        + Sad16Vector<Self::u16xN>
+        + Sad32Vector<Self::u32xN>
+        + Sad64Vector<Self::u64xN>;
 }
 
 /// Marker companion to [`NativeSimdVectors`] that also exposes each vector's

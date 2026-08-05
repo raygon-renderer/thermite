@@ -1988,9 +1988,7 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
 pub trait WidenIndexRegister: Register {
     /// Widen the leading `LANES` bytes of `idxs` into `u32` lanes. Bytes past
     /// `LANES` are ignored (the table rows are always 8 wide).
-    fn widen_indices(
-        idxs: &GenericArray<u8, generic_array::typenum::U8>,
-    ) -> GenericArray<u32, Self::Lanes>;
+    fn widen_indices(idxs: &GenericArray<u8, generic_array::typenum::U8>) -> GenericArray<u32, Self::Lanes>;
 
     /// Permute `value` directly by a compress/expand table row.
     ///

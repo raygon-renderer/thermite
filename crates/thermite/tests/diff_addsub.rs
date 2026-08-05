@@ -70,7 +70,16 @@ macro_rules! oracle_fused {
                 assert!(
                     diff <= bound,
                     "{} [{}]: lane {} mismatch\n  a={:?} b={:?} c={:?}\n  got={:?} want={:?} diff={:e} bound={:e}",
-                    $label, stringify!($method), i, ai, bi, ci, got[i], want, diff, bound,
+                    $label,
+                    stringify!($method),
+                    i,
+                    ai,
+                    bi,
+                    ci,
+                    got[i],
+                    want,
+                    diff,
+                    bound,
                 );
             }
         }

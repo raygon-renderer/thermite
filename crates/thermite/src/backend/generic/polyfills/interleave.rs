@@ -359,7 +359,7 @@ macro_rules! unroll {
 /// leftover (at most once, first), then every 3, then every 2. Each radix gets
 /// its OWN loop, with only that radix's code in the body.
 ///
-/// That split is load-bearing, not cosmetic. With one loop carrying a `match p`
+/// That split is not cosmetic. With one loop carrying a `match p`
 /// over all radices, the body is large enough that LLVM's unroller gives up,
 /// `size` never const-folds, and even a pure power-of-two `n` drags the whole
 /// gather path (permutes, blends, mask materialization) into the output and
@@ -687,9 +687,17 @@ pub fn interleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) ->
         for e in 0..lanes {
             let k = e / group;
             let sub = e % group;
-            dlo[e] = if k % 2 == 0 { sa[(k / 2) * group + sub] } else { sb[(k / 2) * group + sub] };
+            dlo[e] = if k % 2 == 0 {
+                sa[(k / 2) * group + sub]
+            } else {
+                sb[(k / 2) * group + sub]
+            };
             let kh = groups + k;
-            dhi[e] = if kh % 2 == 0 { sa[(kh / 2) * group + sub] } else { sb[(kh / 2) * group + sub] };
+            dhi[e] = if kh % 2 == 0 {
+                sa[(kh / 2) * group + sub]
+            } else {
+                sb[(kh / 2) * group + sub]
+            };
         }
     }
     (lo, hi)
@@ -713,8 +721,16 @@ pub fn deinterleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) 
         for e in 0..lanes {
             let m = e / group;
             let sub = e % group;
-            let (s0, p0) = if 2 * m < groups { (sa, 2 * m) } else { (sb, 2 * m - groups) };
-            let (s1, p1) = if 2 * m + 1 < groups { (sa, 2 * m + 1) } else { (sb, 2 * m + 1 - groups) };
+            let (s0, p0) = if 2 * m < groups {
+                (sa, 2 * m)
+            } else {
+                (sb, 2 * m - groups)
+            };
+            let (s1, p1) = if 2 * m + 1 < groups {
+                (sa, 2 * m + 1)
+            } else {
+                (sb, 2 * m + 1 - groups)
+            };
             d0[e] = s0[p0 * group + sub];
             d1[e] = s1[p1 * group + sub];
         }
@@ -728,7 +744,10 @@ pub fn deinterleave_by<R: Register>(a: Storage<R>, b: Storage<R>, group: usize) 
 /// `GROUP` to the lane-wise [`interleave_by`] fallback. Backends that add a native
 /// group size (e.g. `GROUP == 2`) call this for the sizes they do not handle.
 #[inline(always)]
-pub fn interleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b: Storage<R>) -> (Storage<R>, Storage<R>) {
+pub fn interleave_by_default<R: Register, const GROUP: usize>(
+    a: Storage<R>,
+    b: Storage<R>,
+) -> (Storage<R>, Storage<R>) {
     if const { GROUP == 1 } {
         R::interleave(a, b)
     } else {
@@ -739,7 +758,10 @@ pub fn interleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b: 
 /// The non-native body of [`Register::deinterleave_by`] - the exact inverse of
 /// [`interleave_by_default`].
 #[inline(always)]
-pub fn deinterleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b: Storage<R>) -> (Storage<R>, Storage<R>) {
+pub fn deinterleave_by_default<R: Register, const GROUP: usize>(
+    a: Storage<R>,
+    b: Storage<R>,
+) -> (Storage<R>, Storage<R>) {
     if const { GROUP == 1 } {
         R::deinterleave(a, b)
     } else {
@@ -767,7 +789,9 @@ pub fn deinterleave_by_default<R: Register, const GROUP: usize>(a: Storage<R>, b
 /// no within-128 sublane op to express that, so the hot square cases keep their native
 /// arms; this raises the floor for every *other* `(N, GROUP)`.
 #[inline(always)]
-fn deinterleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+fn deinterleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
     let mut buf = inputs;
     let mut tmp = [R::EMPTY; N];
 
@@ -866,7 +890,9 @@ pub fn deinterleave_radix_by<R: Register, const N: usize, const GROUP: usize>(
 /// native [`Register::interleave_by`](crate::register::Register::interleave_by)`::<GROUP>`.
 /// Power-of-two `N` only, exactly as its inverse.
 #[inline(always)]
-fn interleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(inputs: [Storage<R>; N]) -> [Storage<R>; N] {
+fn interleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(
+    inputs: [Storage<R>; N],
+) -> [Storage<R>; N] {
     // Scatter into the bit-reversed order the stages expect.
     let perm = const { digit_reversal::<N>() };
     let mut buf = [R::EMPTY; N];
@@ -889,7 +915,8 @@ fn interleave_radix_by_pow2<R: Register, const N: usize, const GROUP: usize>(inp
                 let g = base + 2 * i;
                 // SAFETY: g + 1 < base + size <= N.
                 unsafe {
-                    let (lo, hi) = R::interleave_by::<GROUP>(*buf.get_unchecked(base + i), *buf.get_unchecked(base + sub + i));
+                    let (lo, hi) =
+                        R::interleave_by::<GROUP>(*buf.get_unchecked(base + i), *buf.get_unchecked(base + sub + i));
                     *tmp.get_unchecked_mut(g) = lo;
                     *tmp.get_unchecked_mut(g + 1) = hi;
                 }

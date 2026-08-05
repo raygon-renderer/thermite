@@ -1,16 +1,14 @@
 use generic_array::{
     GenericArray,
-    
     typenum::{self, Unsigned},
 };
 
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, ExtendRegister,
-        IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
-        
+        BitshiftRegister, BitwiseRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
     },
     swizzle::SwizzleIndices,
 };
@@ -218,7 +216,10 @@ impl Register for I64x2Wasm {
     impl_wasm_align_shuffle!();
 
     fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<2>(unsafe { core::mem::transmute(idxs) }))
+        arch::u8x16_relaxed_swizzle(
+            value,
+            arch::wasm_lane_table_dyn::<2>(unsafe { core::mem::transmute(idxs) }),
+        )
     }
 
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {

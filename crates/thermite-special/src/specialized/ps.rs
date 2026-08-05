@@ -23,13 +23,16 @@ where
     V: TranscendentalMathWithPolicy<Element = f32>,
     V: SpecializedTranscendentalMath<f32>,
 {
-    #[inline(always)]
-    fn bessel_j<P: Policy, const N: usize>(self) -> Self {
-        match N {
-            0 => bessel_j0::<Self, P>(self),
-            _ => todo!(),
-        }
-    }
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
+    // The `bessel_j0`/`bessel_j0_pqzero` machinery this called is kept below under the
+    // same marker.
+    //#[inline(always)]
+    //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+    //    match N {
+    //        0 => bessel_j0::<Self, P>(self),
+    //        _ => todo!(),
+    //    }
+    //}
 
     #[inline(always)]
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
@@ -269,202 +272,23 @@ where
             return lgamma.exp_p::<ExtraPrecision<P>>() * sign;
         }
 
-        let mut z = z.flush_denormals_p::<P>();
+        // 36 is the largest integer whose factorial is finite in f32.
+        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F32, 36.0, crate::tables::LN_MAX_F32)
+    }
 
-        let orig_z = z;
-
-        let is_negative = z.is_negative();
-        let mut reflected = GenericMask::FALSY;
-
-        let mut res = Self::ONE;
-
-        // Reflect ALL negative values via Γ(z) = -π / (z*sin(πz)*Γ(|z|))
-        // This avoids the repeated-division recurrence which accumulates rounding error.
-        if const { P::POLICY.avoid_branching } || is_negative.any() {
-            reflected = is_negative;
-            let refl_res = z * z.sin_pi_p::<P>(); // z * sin(πz)
-            res = reflected.select(refl_res, res);
-            z = z.abs();
-        }
-
-        // Negative integer poles and ±0
-        let is_neg_int = is_negative & orig_z.cmp_eq(orig_z.floor()) & orig_z.cmp_ne(Self::ZERO);
-        let is_zero = orig_z.cmp_eq(Self::ZERO);
-
-        // Shift z ∈ (SQRT_EPSILON, 1) up by 1 via Γ(z) = Γ(z+1)/z.
-        // The Lanczos polynomial is fit for z >= 1; evaluating below that is the
-        // primary source of error in the (0, 1) range.
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let needs_shift = z.cmp_lt(Self::ONE) & z.cmp_ge(Self::SQRT_EPSILON);
-            res = needs_shift.select(res / z, res);
-            z = needs_shift.select(z + Self::ONE, z);
-        }
-
-        // Integers (positive, after reflection)
-
-        let mut is_int = GenericMask::FALSY;
-        let mut int_res = Self::ONE;
-
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let zf = z.floor();
-            // Cap at 36 - Γ overflows f32 beyond that, and this bounds the loop.
-            is_int = zf.cmp_eq(z) & zf.cmp_lt(Self::splat(36.0)) & !is_neg_int & !is_zero;
-
-            if thermite::unlikely(is_int.any()) {
-                let mut j = Self::ONE;
-                // Mask with is_int so non-integer lanes with large zf can't keep the loop alive.
-                let mut k = j.cmp_lt(zf) & is_int;
-
-                while k.any() {
-                    int_res = k.select(int_res * j, int_res);
-                    j += Self::ONE;
-                    k = j.cmp_lt(zf) & is_int;
-                }
-
-                if thermite::unlikely(is_int.all()) {
-                    return int_res;
-                }
-            }
-        }
-
-        // Full
-
-        let gh = Self::splat(const { LANCZOS_G - 0.5 });
-
-        let lanczos_sum = z.poly_rev_p::<P, _>(&[2.5066285, 27.519201, 112.252655, 211.0971, 182.5249, 58.520615])
-            / z.poly_rev_p::<P, _>(&[1.0, 10.0, 35.0, 50.0, 24.0, 0.0]);
-
-        let zgh = z + gh;
-        let lzgh = zgh.ln_p::<P>();
-
-        // (z * lzfg) > ln(f32::MAX)
-        let very_large = (z * lzgh).cmp_gt(Self::splat(
-            88.722839053130621324601674778549183073943430402325230485234240247,
-        ));
-
-        // only compute powf once
-        let h = zgh.powf_p::<P>(very_large.select(z.mul_sube(Self::HALF, Self::splat(0.25)), z - Self::HALF));
-
-        // save a couple cycles by avoiding this division, but worst-case precision is slightly worse
-        let denom = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            lanczos_sum / zgh.exp_p::<P>()
-        } else {
-            lanczos_sum * (-zgh).exp_p::<P>()
-        };
-
-        let normal_res = very_large.select(h * h, h) * denom;
-
-        // Tiny
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-            let is_tiny = z.cmp_lt(Self::SQRT_EPSILON);
-            let tiny_res = z.reciprocal_p::<P>() - Self::EULER_GAMMA;
-            res *= is_tiny.select(tiny_res, normal_res);
-        } else {
-            res *= normal_res;
-        }
-
-        // Edge cases: Γ(-int) = NaN, Γ(±0) = ±∞
-        let zero_res = is_negative.select(Self::NEG_INFINITY, Self::INFINITY);
-        let result = reflected.select(-Self::PI / res, is_int.select(int_res, res));
-        let mut result = is_neg_int.select(Self::NAN, result);
-
-        if const {
-            P::POLICY.precision.ge(PrecisionPolicy::Best)
-                && matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
-        } {
-            let is_subnormal = z.is_subnormal();
-
-            if thermite::unlikely(is_subnormal.any()) {
-                result = is_subnormal.select(Self::ONE / orig_z, result);
-            }
-        }
-
-        is_zero.select(zero_res, result)
+    #[inline(always)]
+    fn trigamma<P: Policy>(self) -> Self {
+        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::TRIGAMMA_F32)
     }
 
     #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        // Asymptotic expansion coefficients for x >= 10 (9-digit precision, 24-bit mantissa).
-        // Coefficients from Boost.Math digamma_imp_large (BSL-1.0).
-        const P_LARGE: [f32; 3] = [
-            0.083333333333333333333333333333333333333333333333333,
-            -0.0083333333333333333333333333333333333333333333333333,
-            0.003968253968253968253968253968253968253968253968254,
-        ];
-
-        // Rational approximation on [1, 2]: digamma(x) = (x - root) * (Y + R(x-1)).
-        // 9-digit precision (24-bit mantissa). Coefficients from Boost.Math
-        // digamma_imp_1_2 (BSL-1.0).
-        // root = ROOTS[0] + ROOTS[1], summed via staged subtraction for bits.
-        const Y: f32 = 0.99558162689208984;
-        const ROOTS: [f32; 2] = [
-            1532632.0 / 1048576.0, // / 2^20
-            0.3700660185912626595423257213284682051735604e-6,
-        ];
-        const P_12: [f32; 4] = [
-            0.25479851023250261,
-            -0.44981331915268368,
-            -0.43916936919946835,
-            -0.061041765350579073,
-        ];
-        const Q_12: [f32; 4] = [
-            0.1e1,
-            0.15890202430554952e1,
-            0.65341249856146947,
-            0.63851690523355715e-1,
-        ];
-
-        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, Y, &ROOTS, &P_LARGE, &P_12, &Q_12)
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::DIGAMMA_F32)
     }
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
-        let (a, b) = (a.flush_denormals_p::<P>(), b.flush_denormals_p::<P>());
-
-        let is_valid = a.cmp_gt(Self::ZERO) & b.cmp_gt(Self::ZERO);
-
-        if const { P::POLICY.check_overflow && !P::POLICY.avoid_branching } && is_valid.none() {
-            return Self::NAN;
-        }
-
-        let c = a + b;
-
-        // if a < b then swap
-        let (a, b) = (a.max(b), a.min(b));
-
-        let mut result = a.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-            * (b.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q)
-                / c.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q));
-
-        let gh = Self::splat(LANCZOS_G - 0.5);
-
-        let agh = a + gh;
-        let bgh = b + gh;
-        let cgh = c + gh;
-
-        let agh_d_cgh = agh / cgh;
-        let bgh_d_cgh = bgh / cgh;
-        let agh_p_bgh = agh * bgh;
-        let cgh_p_cgh = cgh * cgh;
-
-        let base = cgh
-            .cmp_gt(Self::splat(1e10))
-            .select(agh_d_cgh * bgh_d_cgh, agh_p_bgh / cgh_p_cgh);
-
-        let denom = if P::POLICY.precision > PrecisionPolicy::Average {
-            Self::SQRT_E / bgh.sqrt()
-        } else {
-            // bump up the precision a little to improve beta function accuracy
-            Self::SQRT_E * bgh.inverse_sqrt_p::<ExtraPrecision<P>>()
-        };
-
-        result *= agh_d_cgh.powf_p::<P>(a - Self::HALF - b) * (base.powf_p::<P>(b) * denom);
-
-        if P::POLICY.check_overflow {
-            result = is_valid.select(result, Self::NAN);
-        }
-
-        result
+        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::LANCZOS_F32)
     }
 
     #[inline(always)]
@@ -472,28 +296,6 @@ where
         generic::expint::expint_double::<P, f32, Self, N>(self)
     }
 }
-
-const LANCZOS_G: f32 = 1.428456135094165802001953125;
-
-const LANCZOS_P: [f32; 6] = [
-    2.50662858515256974113978724717473206342,
-    27.5192015197455403062503721613097825345,
-    112.2526547883668146736465390902227161763,
-    211.0971093028510041839168287718170827259,
-    182.5248962595894264831189414768236280862,
-    58.52061591769095910314047740215847630266,
-];
-
-const LANCZOS_Q: [f32; 6] = [1.0, 10.0, 35.0, 50.0, 24.0, 0.0];
-
-const LANCZOS_P_EXPG_SCALED: [f32; 6] = [
-    14.0261432874996476619570577285003839357,
-    43.74732405540314316089531289293124360129,
-    50.59547402616588964511581430025589038612,
-    26.90456680562548195593733429204228910299,
-    6.595765571169314946316366571954421695196,
-    0.6007854010515290065101128585795542383721,
-];
 
 #[inline(always)]
 fn bessel_j0_pqzero<V, P: Policy>(x: V, ix: V::Bits) -> (V, V)
@@ -710,6 +512,8 @@ where
     (pzero, qzero)
 }
 
+// TEMP(bessel_j): see above.
+#[cfg(any())]
 #[inline(always)]
 fn bessel_j0<V, P: Policy>(x: V) -> V
 where
@@ -891,7 +695,7 @@ where
 
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
-        let mut z = self.flush_denormals_p::<P>();
+        let z = self.flush_denormals_p::<P>();
         let mut signum = Self::ONE;
 
         let reflect = z.is_negative();
@@ -946,44 +750,7 @@ where
             return (y, signum);
         }
 
-        let mut t = Self::ONE;
-
-        if const { P::POLICY.avoid_branching } || reflect.any() {
-            let pix = z * z.sin_pi_p::<P>(); // z * sin(pi * z)
-
-            signum |= reflect.select(pix.signed_zero(), signum);
-
-            t = reflect.select(pix.abs(), t);
-            z = z.abs();
-        }
-
-        let b = z - Self::HALF;
-        let g = Self::splat(LANCZOS_G);
-
-        let mut lanczos_sum = z.poly_rational_p::<P, _, _>(&LANCZOS_P_EXPG_SCALED, &LANCZOS_Q);
-
-        // Full A term
-        let mut a = (b + g).ln_p::<P>() - Self::ONE;
-
-        // tiny value handling
-        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
-            let is_not_tiny = z.cmp_ge(Self::SQRT_EPSILON);
-
-            // shove the tiny result into the log down below
-            lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - Self::EULER_GAMMA);
-
-            // force multiplier to zero for tiny case, allowing the modified
-            // lanczos sum and ln(t) to be combined for cheap
-            a = a.zz(is_not_tiny);
-        }
-
-        let c = (lanczos_sum * t).ln_p::<P>();
-
-        let res = a.mul_adde(b, c);
-
-        let y = reflect.select(Self::LN_PI - res, res);
-
-        (y, signum)
+        generic::gamma::lgamma_r_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F32)
     }
 
     #[inline(always)]

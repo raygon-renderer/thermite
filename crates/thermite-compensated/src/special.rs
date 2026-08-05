@@ -428,7 +428,12 @@ where
         todo!()
     }
 
-    fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+    fn trigamma<P: Policy>(self) -> Self {
         todo!()
     }
+
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
+    //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+    //    todo!()
+    //}
 }

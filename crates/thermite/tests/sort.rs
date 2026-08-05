@@ -237,9 +237,10 @@ mod x86 {
                 p
             );
             assert_eq!(
-                lanes_of::<F32x8V3>(<F32x8V3 as NumericRegister>::bitonic_clean(
-                    sort::sort_8::<F32x8V3, Ascending>(v)
-                )),
+                lanes_of::<F32x8V3>(<F32x8V3 as NumericRegister>::bitonic_clean(sort::sort_8::<
+                    F32x8V3,
+                    Ascending,
+                >(v))),
                 lanes_of::<F32x8V3>(sort::sort_8::<F32x8V3, Ascending>(v)),
                 "bitonic_clean of a sorted register is the identity"
             );

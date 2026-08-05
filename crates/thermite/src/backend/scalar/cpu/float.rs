@@ -4,10 +4,9 @@ use generic_array::{
 };
 
 use crate::register::{
-    BitwiseRegister, CoreRegister, FloatElement, FloatRegister,
-    IndexableRegister, InterleaveRegister, MaskElement, NativeCapability,
-    NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage,
-    UnsignedIntegerRegister, ZeroUpper,
+    BitwiseRegister, CoreRegister, FloatElement, FloatRegister, IndexableRegister, InterleaveRegister, MaskElement,
+    NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister,
+    Storage, UnsignedIntegerRegister, ZeroUpper,
 };
 
 use crate::element::float::algebraic::AlgebraicFloat;

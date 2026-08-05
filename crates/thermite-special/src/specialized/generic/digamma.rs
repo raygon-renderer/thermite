@@ -9,6 +9,7 @@ use thermite::{
 };
 
 use crate::specialized::SpecializedSpecialMath;
+use crate::tables::{DIGAMMA_F32, DIGAMMA_F64, Digamma};
 
 /// Shared digamma (`psi`) implementation for all real element types.
 ///
@@ -22,11 +23,7 @@ use crate::specialized::SpecializedSpecialMath;
 #[inline(always)]
 pub fn digamma_impl<P, E, V, const NR: usize, const NL: usize, const NP: usize, const NQ: usize>(
     x_in: V,
-    y: E,
-    roots: &[E; NR],
-    p_large: &[E; NL],
-    p_12: &[E; NP],
-    q_12: &[E; NQ],
+    t: &Digamma<E, NR, NL, NP, NQ>,
 ) -> V
 where
     P: Policy,
@@ -87,17 +84,17 @@ where
     let mut g = x;
     let mut i = 0;
     while i < NR {
-        g -= V::splat(roots[i]);
+        g -= V::splat(t.roots[i]);
         i += 1;
     }
-    let r = xm1.poly_p::<P, _>(p_12) / xm1.poly_p::<P, _>(q_12);
-    let rational = g * (V::splat(y) + r);
+    let r = xm1.poly_p::<P, _>(&t.p_12) / xm1.poly_p::<P, _>(&t.q_12);
+    let rational = g * (V::splat(t.y) + r);
 
     // --- Asymptotic expansion for x >= 10 (large lanes) ---
     // ln(x-1) + 1/(2(x-1)) - z*P(z), with the trailing product fused into an FMA.
     let z = (xm1 * xm1).reciprocal_p::<P>();
     let asymptotic = z.nmul_adde(
-        z.poly_p::<P, _>(p_large),
+        z.poly_p::<P, _>(&t.p_large),
         xm1.ln_p::<P>() + (xm1 + xm1).reciprocal_p::<P>(),
     );
 

@@ -12,7 +12,9 @@ use thermite::sort::{Ascending, Descending};
 use thermite_complex::Complex;
 
 fn re_part(lane: usize) -> f32 {
-    const PATTERN: [f32; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
+    const PATTERN: [f32; 16] = [
+        5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+    ];
     PATTERN[lane % 16]
 }
 
@@ -35,7 +37,10 @@ macro_rules! check {
         let mut v = C::default();
         let mut input: Vec<Complex<f32>> = Vec::with_capacity(lanes);
         for lane in 0..lanes {
-            let e = Complex { re: re_part(lane), im: im_part(lane) };
+            let e = Complex {
+                re: re_part(lane),
+                im: im_part(lane),
+            };
             v = v.insertv(lane, e);
             input.push(e);
         }

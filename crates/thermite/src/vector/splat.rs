@@ -2,7 +2,7 @@ use core::ops::Add;
 
 use generic_array::{ArrayLength, GenericArray};
 
-use super::{GenericVector};
+use super::GenericVector;
 
 /// Macro to splat a compile-time constant value into all lanes of a generic vector.
 ///

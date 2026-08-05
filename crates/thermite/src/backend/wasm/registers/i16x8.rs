@@ -4,7 +4,6 @@
 
 use generic_array::{
     GenericArray,
-    
     typenum::{self, Unsigned},
 };
 
@@ -201,7 +200,10 @@ impl Register for I16x8Wasm {
         // fixes an out-of-range difference from the other backends: the old
         // `wrapping_mul(2)` build aliased a valid lane for large indices where
         // the clamping builder zeroes, matching `neon_lane_table`/x86.
-        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<8>(unsafe { core::mem::transmute(idxs) }))
+        arch::u8x16_relaxed_swizzle(
+            value,
+            arch::wasm_lane_table_dyn::<8>(unsafe { core::mem::transmute(idxs) }),
+        )
     }
 
     compress_via_table!();

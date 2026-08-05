@@ -23,7 +23,9 @@ use thermite_dual::Dual;
 /// Non-monotonic: a prefix min/max that dropped or duplicated a stage would still
 /// look plausible on a sorted input.
 fn primal(lane: usize) -> f32 {
-    const PATTERN: [f32; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
+    const PATTERN: [f32; 16] = [
+        5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+    ];
     PATTERN[lane % 16]
 }
 
@@ -166,13 +168,29 @@ macro_rules! check {
             let mut sel = D::default();
             for lane in 0..lanes {
                 let on = (bits >> (lane % 64)) & 1 == 1;
-                sel = sel.insertv(lane, Dual { re: if on { 1.0 } else { 0.0 }, dual: [0.0; N] });
+                sel = sel.insertv(
+                    lane,
+                    Dual {
+                        re: if on { 1.0 } else { 0.0 },
+                        dual: [0.0; N],
+                    },
+                );
             }
             let mask = sel.cmp_gt(D::ZERO);
 
             // The defining law: the plain forms are mutual inverses.
-            assert_eq!(got(v.compress(mask).expand(mask)), want, "{}: expand(compress) bits={bits:b}", $label);
-            assert_eq!(got(v.expand(mask).compress(mask)), want, "{}: compress(expand) bits={bits:b}", $label);
+            assert_eq!(
+                got(v.compress(mask).expand(mask)),
+                want,
+                "{}: expand(compress) bits={bits:b}",
+                $label
+            );
+            assert_eq!(
+                got(v.expand(mask).compress(mask)),
+                want,
+                "{}: compress(expand) bits={bits:b}",
+                $label
+            );
 
             // The masked forms compose off the plain one.
             assert_eq!(
@@ -191,7 +209,10 @@ macro_rules! check {
             // compress_m: packed selected values below the count, src's own lanes
             // at and above it. Oracle over whole duals.
             let count = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).count();
-            let selected: Vec<_> = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).map(|l| want[l]).collect();
+            let selected: Vec<_> = (0..lanes)
+                .filter(|&l| (bits >> (l % 64)) & 1 == 1)
+                .map(|l| want[l])
+                .collect();
             let src_arr = got(src);
             let cm: Vec<_> = (0..lanes)
                 .map(|i| if i < count { selected[i] } else { src_arr[i] })

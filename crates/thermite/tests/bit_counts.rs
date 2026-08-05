@@ -23,14 +23,14 @@ macro_rules! probes {
         let max = <$elem>::MAX;
         let bits = <$elem>::BITS as $elem;
         [
-            0,                  // all-zero: the leading/trailing degenerate case
-            max,                // all-one: the other degenerate case
-            1,                  // tz = 0, lz = BITS - 1
-            1 << (bits - 1),    // the mirror image of the above
-            0b1011_0000,        // tz = 4, to = 0, lz depends on width
-            0b0000_1101,        // tz = 0, to = 1
-            max ^ 0b0111,       // trailing ones run, leading ones run
-            max >> 1,           // lz = 1, tz = 0, to = BITS - 1
+            0,               // all-zero: the leading/trailing degenerate case
+            max,             // all-one: the other degenerate case
+            1,               // tz = 0, lz = BITS - 1
+            1 << (bits - 1), // the mirror image of the above
+            0b1011_0000,     // tz = 4, to = 0, lz depends on width
+            0b0000_1101,     // tz = 0, to = 1
+            max ^ 0b0111,    // trailing ones run, leading ones run
+            max >> 1,        // lz = 1, tz = 0, to = BITS - 1
         ]
     }};
 }
@@ -63,12 +63,36 @@ macro_rules! check {
                     let v = data[lane];
                     let ctx = format!("{} lane={lane} value={v:#x}", stringify!($width));
 
-                    assert_eq!(got_co.as_slice()[lane], v.count_ones() as $elem, "count_ones {ctx}");
-                    assert_eq!(got_cz.as_slice()[lane], v.count_zeros() as $elem, "count_zeros {ctx}");
-                    assert_eq!(got_lo.as_slice()[lane], v.leading_ones() as $elem, "leading_ones {ctx}");
-                    assert_eq!(got_lz.as_slice()[lane], v.leading_zeros() as $elem, "leading_zeros {ctx}");
-                    assert_eq!(got_to.as_slice()[lane], v.trailing_ones() as $elem, "trailing_ones {ctx}");
-                    assert_eq!(got_tz.as_slice()[lane], v.trailing_zeros() as $elem, "trailing_zeros {ctx}");
+                    assert_eq!(
+                        got_co.as_slice()[lane],
+                        v.count_ones() as $elem,
+                        "count_ones {ctx}"
+                    );
+                    assert_eq!(
+                        got_cz.as_slice()[lane],
+                        v.count_zeros() as $elem,
+                        "count_zeros {ctx}"
+                    );
+                    assert_eq!(
+                        got_lo.as_slice()[lane],
+                        v.leading_ones() as $elem,
+                        "leading_ones {ctx}"
+                    );
+                    assert_eq!(
+                        got_lz.as_slice()[lane],
+                        v.leading_zeros() as $elem,
+                        "leading_zeros {ctx}"
+                    );
+                    assert_eq!(
+                        got_to.as_slice()[lane],
+                        v.trailing_ones() as $elem,
+                        "trailing_ones {ctx}"
+                    );
+                    assert_eq!(
+                        got_tz.as_slice()[lane],
+                        v.trailing_zeros() as $elem,
+                        "trailing_zeros {ctx}"
+                    );
                 }
 
                 i += LANES;

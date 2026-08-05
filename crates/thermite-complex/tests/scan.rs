@@ -21,8 +21,12 @@ macro_rules! check {
 
         // Real parts repeat so the lexicographic tie-break on the imaginary part
         // is exercised; both are small exact integers so comparisons are exact.
-        const RE: [f64; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
-        const IM: [f64; 16] = [3.0, 8.0, 1.0, 4.0, 9.0, 2.0, 7.0, 5.0, 0.0, 6.0, 2.0, 8.0, 5.0, 1.0, 9.0, 4.0];
+        const RE: [f64; 16] = [
+            5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+        ];
+        const IM: [f64; 16] = [
+            3.0, 8.0, 1.0, 4.0, 9.0, 2.0, 7.0, 5.0, 0.0, 6.0, 2.0, 8.0, 5.0, 1.0, 9.0, 4.0,
+        ];
 
         let mut v = C::default();
         let mut want: Vec<Complex64> = Vec::with_capacity(lanes);
@@ -137,8 +141,18 @@ macro_rules! check {
             }
             let mask = sel.cmp_gt(C::ZERO);
 
-            assert_eq!(got(v.compress(mask).expand(mask)), want, "{}: expand(compress) bits={bits:b}", $label);
-            assert_eq!(got(v.expand(mask).compress(mask)), want, "{}: compress(expand) bits={bits:b}", $label);
+            assert_eq!(
+                got(v.compress(mask).expand(mask)),
+                want,
+                "{}: expand(compress) bits={bits:b}",
+                $label
+            );
+            assert_eq!(
+                got(v.expand(mask).compress(mask)),
+                want,
+                "{}: compress(expand) bits={bits:b}",
+                $label
+            );
             assert_eq!(
                 got(v.expand_z(mask)),
                 got(mask.select(v.expand(mask), C::ZERO)),
@@ -153,7 +167,10 @@ macro_rules! check {
             );
 
             let count = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).count();
-            let selected: Vec<_> = (0..lanes).filter(|&l| (bits >> (l % 64)) & 1 == 1).map(|l| want[l]).collect();
+            let selected: Vec<_> = (0..lanes)
+                .filter(|&l| (bits >> (l % 64)) & 1 == 1)
+                .map(|l| want[l])
+                .collect();
             let src_arr = got(src);
             let cm: Vec<_> = (0..lanes)
                 .map(|i| if i < count { selected[i] } else { src_arr[i] })

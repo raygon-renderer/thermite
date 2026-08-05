@@ -560,7 +560,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         // this the `not_special` fast return below leaks x's exponent for y == 0.
         z = yzero.select(V::ONE, z);
 
-        let not_special = xfinite & yfinite & (efinite | xzero) ;
+        let not_special = xfinite & yfinite & (efinite | xzero);
 
         if crate::likely(not_special.all()) {
             return z; // fast return
@@ -997,6 +997,28 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         1.0 / 6227020800.0,
     ]);
 
+    // `pow2n_d` builds the exponent field with an integer add, so an `r` past the
+    // format's exponent range carries into the *sign* bit and the result wraps to a
+    // negative number rather than saturating: `exp(800)` returned -8.436e-270, and
+    // `sinh_cosh(800)` a negative `cosh`. The range fixup below repairs that, but only
+    // under `check_overflow` - the two policies that turn it off (`UltraPerformance`,
+    // `HighPerformance`) were left with the wrap.
+    //
+    // Two instructions restore saturation for them. The bounds are the ends of the
+    // biased exponent: `r = -1023` is the all-zero field, i.e. +0, so underflow lands
+    // on exactly zero, and `r = 1023` is the largest finite power of two.
+    //
+    // Deliberately 1023 and not 1024. The all-ones field would be infinity, and the
+    // recombination below is `z * n2 + n2` - where `z` is exactly zero whenever the
+    // reduced argument is (every integer input to `exp2`, for one), so `0 * inf` would
+    // hand back NaN for the cleanest inputs in the range. Saturating one exponent
+    // lower keeps everything finite: overflow tops out near MAX rather than at
+    // infinity, which is the same contract the f32 path has always had, and it is why
+    // `sinh/cosh` at these policies now cancels to 1.0 instead of `inf/inf`.
+    if const { !P::POLICY.check_overflow } {
+        r = r.clamp(crate::const_splat!(f64: -1023.0), crate::const_splat!(f64: 1023.0));
+    }
+
     let n2 = pow2n_d::<V>(r);
 
     z = match MODE {
@@ -1027,10 +1049,21 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
     z
 }
 
+/// Cody-Waite range reduction for double-precision trig, the counterpart to `ps.rs`'s.
+///
+/// Reduces `xa` (absolute value, flushed) modulo pi/2, returning `(x_hi, x_lo, quadrant)`.
+/// `x_lo` is always zero here: unlike f32 there is no Payne-Hanek fallback, so beyond
+/// the limit below the argument is zeroed rather than reduced. Three-part pi/2 is
+/// enough that the arguments this gives up on are rare enough not to pay for on every
+/// call.
+///
+/// When `PI` is true this performs the sinpi/cospi reduction instead - the argument is
+/// reduced in units of one half turn and scaled by pi afterwards, which needs no
+/// extended-precision split at all.
 #[inline(always)]
-fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(xx: V) -> (V, V) {
-    let mut xa = xx.abs().flush_denormals::<P>();
-
+pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(
+    mut xa: V,
+) -> (V, V, V::Bits) {
     let y = if PI {
         xa + xa // 2x for sinpi/cospi
     } else {
@@ -1070,6 +1103,15 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
         ((xa - y * dp1) - y * dp2) - y * dp3
     };
 
+    (x, V::ZERO, q)
+}
+
+#[inline(always)]
+fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(xx: V) -> (V, V) {
+    let xa = xx.abs().flush_denormals::<P>();
+
+    let (x, _x_lo, q) = trig_range_reduction::<P, V, PI>(xa);
+
     // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
     let x2 = x * x;
     let x4 = x2 * x2;
@@ -1099,9 +1141,13 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
     let swap = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
 
     if const { P::POLICY.check_overflow } {
-        let overflow = y.cmp_gt(crate::const_splat!(f64: (1u64 << 52) as f64 - 1.0)) & xa.is_finite();
+        // `q` is the exact integer form of the quotient the reduction rounded, and the
+        // quotient is non-negative because `xa` is an absolute value, so testing it is
+        // equivalent to the old test on that float. `xa` here is pre-clamp, which also
+        // agrees: the clamp only fires above the limit, and there the quotient is zero.
+        let overflow = q.cmp_gt(V::Bits::splat((1u64 << 52) - 1)).cast::<V::Mask>() & xa.is_finite();
 
-        s = overflow.select(V::ZERO, s);
+        s = s.nz(overflow); // overflow.select(V::ZERO, s);
         c = overflow.select(V::ONE, c);
     }
 

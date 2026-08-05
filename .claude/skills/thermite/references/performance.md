@@ -108,6 +108,11 @@ x.mul_adde(c!(-3 / 14), acc)   // (-3/14)x + acc   <-- prefer; ConstRatio allows
 
 Reserve `nmul_*`/`mul_sub*` for negating genuine *variables*.
 
+An FMA against a *structural* constant is not free either: IEEE forbids folding
+`a*0.0 + b` to `b` (`a` may be infinite, and the zero has a sign), so `z.mul_add(I, w)`
+really does emit four inner FMAs over a table of zeros and ones. Spell the swap by
+hand -- `iz = Complex::new(-z.im, z.re)` is two moves.
+
 ## 3. Gate hardware paths with `if const`
 
 Capability constants resolve at compile time inside the dispatcher's
@@ -165,6 +170,12 @@ Check `FloatConsts` first -- `V::SQRT_EPSILON`, `V::FRAC_1_PI`, etc. already exi
 prefer them to `V::EPSILON.sqrt()`. Guard hand-entered literals with a test that
 recomputes and asserts bit-equality.
 
+For plain integer/rational literals prefer `const_splat!(int <V::Element>: N)` /
+`const_splat!(ratio <E>: N, D)` over `V::splat(E::from_int(N))` -- a true const splat,
+no runtime conversion. It will *not* accept a generic const parameter (`N as LargeInt`
+where `N: const usize`): that is a const operation over a generic, which rustc rejects.
+Fall back to `from_int` there. A `let` binding may need an explicit `: V`.
+
 ## 6. Polynomials
 
 - Univariate: `t.poly_rev_p::<P, _>(&coeffs)` (leading-coeff-first, hybrid
@@ -185,6 +196,60 @@ The enemy is **catastrophic cancellation**.
 - Accuracy is **policy-gated**: `reciprocal_p`/`inverse_sqrt_p`/transcendentals are
   exact under `Precision`, approximate under perf policies. If a kernel needs one
   exact, say so and test it under the precision policy.
+
+### 7a. Keep both forms, pick with `precision` (best-of-both)
+
+Where the accurate form costs more, keep both and choose with
+`if const { P::POLICY.precision.le(PrecisionPolicy::Average) }`. Measured cases:
+
+- `2^z` through the *real* `exp2`, not `exp(z ln 2)` -- scaling the argument rounds
+  it and `exp` then amplifies by the argument. `exp2(1000)` was ~300 ulp out.
+  Same for `exp10`/`exp2_m1`/`exp10_m1`.
+- `z^w` as one fused `exp(c ln r - d t)` vs `powf(r,c) * exp(-d t)`. The fused form
+  is *cheaper* (`ln r` is needed for the angle anyway, and `powf` is `exp(c ln r)`
+  underneath) and cannot overflow an intermediate; the split form measured ~1.7x
+  more accurate. Cheap below `Average`, accurate above -- plus the fused form as a
+  `check_overflow` fallback for lanes where the split one left the range.
+
+### 7b. Cancellation: reach for the algebraic conjugate
+
+When `w = a + b` cancels, `w' = a - b` does not, and often `w * w' = const`. Every
+inverse trig/hyperbolic log has `w * w' = 1`, so `ln w = -ln w'`. Blend the
+*argument* before the transcendental and it is still one `ln`:
+
+```rust
+let flip = w.norm_sqr().cmp_lt(V::ONE) & p.norm_sqr().cmp_gt(V::ONE);
+let l = flip.select(companion, w).ln_p::<P>();   // one ln, then negate where flipped
+```
+
+The second half of that test is load-bearing: `|w| < 1` alone also fires for tiny
+`w = 1 + p`, where nothing cancelled. At *that* end the fix is `ln_1p` on `w - 1`,
+computed without a subtraction (`s - 1 = p^2/(s + 1)`) -- worth 8 digits.
+
+### 7c. Range guards: key on the damage, not on a threshold
+
+`tan`/`tanh` saturate but their `sinh/cosh` overflow to `inf/inf`. Testing
+`denom.is_infinite()` fires on exactly the broken lanes and needs no per-element
+constant; use `is_infinite`, not `!is_finite`, so a NaN argument still yields NaN.
+Gate on `P::POLICY.check_overflow`.
+
+When saturating an exponent by hand, stop one below the all-ones field. Recombination
+is `z * n2 + n2`, and `z` is *exactly* zero whenever the reduced argument is (every
+integer input to `exp2`), so an infinite `n2` yields `0 * inf = NaN` on the cleanest
+inputs in the range.
+
+### 7d. A cold branch is often free
+
+If a mask is already computed to drive a blend, branch on it instead and move the
+blend inside. The hot path loses an unconditional `select` from its dependency chain
+and gains a test the predictor calls correctly. That is what makes an exact
+subnormal/overflow fallback affordable in a policy-free method like `FloatVector::sqrt`.
+
+### 7e. Do not rig your own reference
+
+Compute expected values with an independent oracle (mpmath at 50 dps), not with the
+same expression the code uses. Two "measurements" once agreed to 0.00e0 purely
+because reference and implementation were both the fused form.
 
 ## 8. `scale` for scalar multiply (SPIR-V codegen)
 

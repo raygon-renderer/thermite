@@ -6,7 +6,8 @@ use thermite::math::policy::policies::Precision;
 use thermite::math::{CoreMath, SpatialMath, TranscendentalMath};
 use thermite::prelude::*;
 
-use thermite_complex::{Complex, ComplexMath, ComplexMathWithPolicy, ComplexVector};
+use thermite_complex::Complex;
+use thermite_complex::prelude::{ComplexMath, ComplexMathWithPolicy, ComplexVector};
 
 /// A 1-lane f64 vector: the scalar reference backend, so a `Complex<V>` lane is
 /// directly comparable to a `Complex64`.
@@ -373,7 +374,7 @@ fn generic_mixed_real_arithmetic() {
 
     fn affine<T: ComplexVector + MulAddExt<T::Real, T, Output = T>>(z: T, scale: T::Real, offset: T::Real) -> T {
         // z * scale + offset, where both parameters are *real*
-        z.mul_adde(scale, T::from_real(offset))
+        z.mul_adde(scale, T::real(offset))
     }
 
     let z = c(3.0, -4.0);
@@ -443,4 +444,138 @@ fn masked_mixed_real_arithmetic() {
     assert_eq!(parts(z.mul_c(on, r)), (20.0, 30.0));
     assert_eq!(parts(z.mul_c(off, r)), (2.0, 3.0)); // unmasked lanes keep self
     assert_eq!(parts(z.mul_z(off, r)), (0.0, 0.0));
+}
+
+// --- overridden trait defaults ----------------------------------------------
+//
+// Both of these are inherited defaults that are wrong or inconsistent over C. The
+// tests are written so they fail against the defaults, not just so they pass against
+// the overrides.
+
+/// `sinc_pi` must be *exactly* zero at every non-zero integer - the property that
+/// makes it an interpolating kernel. The default (`sinc(z * pi)`) is accurate to about
+/// an ulp there but not exact, returning ~1e-16, so this asserts equality with zero
+/// rather than a tolerance.
+#[test]
+fn sinc_pi_is_exact_at_the_integers() {
+    for k in [1.0, 2.0, 5.0, 17.0, 64.0, -33.0, 1024.0] {
+        let (re, im) = parts(c(k, 0.0).sinc_pi());
+
+        assert!(re == 0.0 && im == 0.0, "sinc_pi({k}) = ({re}, {im}), want exactly 0");
+    }
+}
+
+#[test]
+fn sinc_pi_matches_its_definition_off_axis() {
+    for &(x, y) in &[(0.25, 0.5), (2.5, -1.0), (-3.75, 0.25)] {
+        let z = Complex64::new(x, y);
+        let pz = z * std::f64::consts::PI;
+        let want = pz.sin() / pz;
+
+        assert_close("sinc_pi", c(x, y).sinc_pi(), want, 1e-12);
+    }
+
+    // Removable singularity.
+    assert_close("sinc_pi(0)", c(0.0, 0.0).sinc_pi(), Complex64::new(1.0, 0.0), 0.0);
+}
+
+/// `hypot` over C must mean `sqrt(sum |z_i|^2)` at *every* policy.
+///
+/// The generic default did not: its high-precision path opens with `abs()` (the
+/// modulus here) and yields the norm, while the `Worst` path squares directly and
+/// yields the analytic continuation `sqrt(z^2 + w^2)`. For these inputs the two
+/// disagree in the first digit, so this pins the meaning rather than the accuracy.
+#[test]
+fn hypot_is_the_norm_at_every_policy() {
+    use thermite::math::SpatialMathWithPolicy;
+    use thermite::math::policy::policies::{Performance, UltraPerformance};
+
+    for &(a, b, cc, d) in &[(3.0, 4.0, 5.0, 12.0), (1.0, -1.0, 0.5, 2.0), (-2.5, 0.25, 1.5, -3.0)] {
+        let z = Complex64::new(a, b);
+        let w = Complex64::new(cc, d);
+        let want = (z.norm().powi(2) + w.norm().powi(2)).sqrt();
+
+        let ultra = c(a, b).hypot_p::<UltraPerformance>(c(cc, d));
+        let perf = c(a, b).hypot_p::<Performance>(c(cc, d));
+        let prec = c(a, b).hypot_p::<Precision>(c(cc, d));
+
+        for (name, got) in [("UltraPerformance", ultra), ("Performance", perf), ("Precision", prec)] {
+            let (re, im) = parts(got);
+
+            assert!(
+                (re - want).abs() < 1e-6 * want.max(1.0),
+                "hypot re @ {name} ({z}, {w}): got {re}, want {want}"
+            );
+            assert!(im.abs() < 1e-12, "hypot im @ {name}: got {im}, want 0 (a norm is real)");
+        }
+    }
+}
+
+#[test]
+fn hypot_agrees_with_l2_norm() {
+    // hypot of one argument is that argument's modulus.
+    for &(x, y) in &[(3.0, 4.0), (-1.5, 0.5), (0.0, 0.0)] {
+        let h = parts(c(x, y).hypot(c(0.0, 0.0)));
+        let n = parts(c(x, y).l2_norm());
+
+        assert!(
+            (h.0 - n.0).abs() < 1e-12 && h.1.abs() < 1e-12 && n.1.abs() < 1e-12,
+            "hypot vs l2_norm @ ({x}, {y}): {h:?} vs {n:?}"
+        );
+    }
+}
+
+#[test]
+fn inv_hypot_is_the_reciprocal_norm() {
+    use thermite::math::SpatialMathWithPolicy;
+
+    let (a, b, cc, d) = (3.0, 4.0, 5.0, 12.0);
+    let want = 1.0 / (25.0f64 + 169.0).sqrt();
+
+    let got = parts(<C as SpatialMathWithPolicy>::inv_hypot_n_p::<Precision, 2>([
+        c(a, b),
+        c(cc, d),
+    ]));
+
+    assert!(
+        (got.0 - want).abs() < 1e-12 && got.1.abs() < 1e-12,
+        "inv_hypot_n: got {got:?}, want {want}"
+    );
+}
+
+/// `poly_rational` must pick its evaluation form on `|z|`, not on the lexicographic
+/// order. At `z = 10^150 i` the real part is 0, so the generic default judges `z` "not
+/// greater than one" and evaluates the direct form, where `z^3` overflows to infinity
+/// and the ratio comes back NaN. Through `1/z` it is the ratio of leading coefficients.
+#[test]
+fn poly_rational_inverts_on_modulus_not_lexicographic_order() {
+    use thermite::math::CoreMathWithPolicy;
+
+    // constant-term-first, equal degree: the limit as |z| -> inf is 4/8.
+    let num = [c(1.0, 0.0), c(2.0, 0.0), c(3.0, 0.0), c(4.0, 0.0)];
+    let den = [c(5.0, 0.0), c(6.0, 0.0), c(7.0, 0.0), c(8.0, 0.0)];
+
+    let numc = num.map(|z| Complex::new(z.re.extract::<0>(), z.im.extract::<0>()));
+    let denc = den.map(|z| Complex::new(z.re.extract::<0>(), z.im.extract::<0>()));
+
+    // Purely imaginary, so Re z = 0 < 1 while |z| is enormous.
+    let got = c(0.0, 1.0e150).poly_rational_p::<Precision, 4, 4>(&numc, &denc);
+    let (re, im) = parts(got);
+
+    assert!(
+        re.is_finite() && im.is_finite(),
+        "poly_rational @ 1e150i: got ({re}, {im}), want finite"
+    );
+    assert!(
+        (re - 0.5).abs() < 1e-12 && im.abs() < 1e-12,
+        "poly_rational @ 1e150i: got ({re}, {im}), want (0.5, 0)"
+    );
+
+    // And it still agrees with the direct form well inside the unit disc.
+    let small = c(0.25, -0.125).poly_rational_p::<Precision, 4, 4>(&numc, &denc);
+    let z = Complex64::new(0.25, -0.125);
+    let want = (Complex64::new(1.0, 0.0) + 2.0 * z + 3.0 * z * z + 4.0 * z * z * z)
+        / (Complex64::new(5.0, 0.0) + 6.0 * z + 7.0 * z * z + 8.0 * z * z * z);
+
+    assert_close("poly_rational small", small, want, 1e-13);
 }

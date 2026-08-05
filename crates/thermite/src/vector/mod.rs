@@ -95,7 +95,7 @@ use generic_array::{GenericArray, typenum};
 use crate::{
     BranchfreeDivider, Divider,
     divider::Denominator,
-    element::{FloatElementWithBits},
+    element::FloatElementWithBits,
     isa::InstructionSet,
     mask::{CastMask, GenericMask, GenericSelectable},
     math::{FloatConsts, policy::Policy},
@@ -1810,7 +1810,10 @@ pub trait PartialOrdVector: GenericVector + PartialEq {
     /// `Self::Mask::TRUTHY` to group every lane.
     #[inline(always)]
     fn group_by_value(self, valid: Self::Mask) -> ValueGroups<Self> {
-        ValueGroups { value: self, remaining: valid }
+        ValueGroups {
+            value: self,
+            remaining: valid,
+        }
     }
 
     /// Lane-wise `self < other`.
@@ -1892,6 +1895,49 @@ pub trait NumericVector:
     const MIN: Self;
     /// A vector of the maximum value the element type of this vector can represent.
     const MAX: Self;
+
+    /// Convert each lane to the companion signed integer type, with `as` semantics -
+    /// round toward zero, saturating at the bounds, NaN to zero.
+    ///
+    /// This is the numeric conversion, *not* a bit reinterpretation; for the bit
+    /// pattern of a float see [`FloatVectorWithBits::into_bits`].
+    ///
+    /// # Why a method and not a `CastVector` bound
+    ///
+    /// A bound would have to be written either as `Self::Signed: CastVector<Self>`,
+    /// whose impl `Self` type is an associated-type projection and so cannot be
+    /// written at all, or as `Self: CastVector<Self::Signed>`, which collides with the
+    /// blanket self-casts the composite types already carry. A method has no coherence
+    /// surface and every implementor can simply provide it.
+    fn to_signed_integer(self) -> Self::Signed;
+
+    /// Convert each lane from the companion signed integer type, with `as` semantics.
+    ///
+    /// For composite element types this produces a value with no imaginary part, no
+    /// derivative and no error term: an integer carries none of those.
+    fn from_signed_integer(v: Self::Signed) -> Self;
+
+    /// Convert each lane to the companion unsigned integer type, with `as` semantics.
+    /// See [`to_signed_integer`](Self::to_signed_integer).
+    fn to_unsigned_integer(self) -> Self::Unsigned;
+
+    /// Convert each lane from the companion unsigned integer type, with `as` semantics.
+    /// See [`from_signed_integer`](Self::from_signed_integer).
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self;
+
+    /// Like [`to_signed_integer`](Self::to_signed_integer), but may relax IEEE corner
+    /// cases (out-of-range and NaN inputs) for speed. Defaults to the exact form.
+    #[inline(always)]
+    fn fast_to_signed_integer(self) -> Self::Signed {
+        self.to_signed_integer()
+    }
+
+    /// Like [`to_unsigned_integer`](Self::to_unsigned_integer), but may relax IEEE
+    /// corner cases. Defaults to the exact form.
+    #[inline(always)]
+    fn fast_to_unsigned_integer(self) -> Self::Unsigned {
+        self.to_unsigned_integer()
+    }
 
     /// For each element in the vector, return a mask indicating whether that element is zero.
     fn is_zero(self) -> Self::Mask;
@@ -2614,7 +2660,7 @@ macro_rules! scan_ladder {
             if const { Self::LANES >  8 } { v = $op(v, v.align::<8>(f)); }
             if const { Self::LANES > 16 } { v = $op(v, v.align::<16>(f)); }
             if const { Self::LANES > 32 } { v = $op(v, v.align::<32>(f)); }
-        };
+                    };
         v
     }};
 
@@ -2648,11 +2694,11 @@ macro_rules! scan_ladder {
                         v = $op(v, f.align::<60>(v));
                         v = $op(v, f.align::<56>(v));
                         v = $op(v, f.align::<48>(v));
-                        v = $op(v, f.align::<32>(v)); }
-                // unreachable: guarded by the `if const` above. Panicking is the right
-                // failure mode if a width ever slips past that guard.
-                _ => unreachable!(),
-            };
+                                    v = $op(v, f.align::<32>(v)); }
+                            // unreachable: guarded by the `if const` above. Panicking is the right
+                            // failure mode if a width ever slips past that guard.
+                            _ => unreachable!(),
+                        };
             v
         } else {
             // `fill` is the lane-0 broadcast either way: reversing makes it the last

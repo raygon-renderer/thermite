@@ -5,9 +5,9 @@ use generic_array::{
 
 use crate::isa::InstructionSet;
 use crate::register::{
-    BitshiftRegister, BitwiseRegister, CoreRegister, IndexableRegister,
-    IntegerRegister, InterleaveRegister, MaskElement, NumericRegister,
-    PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage, UnsignedIntegerRegister, ZeroUpper,
+    BitshiftRegister, BitwiseRegister, CoreRegister, IndexableRegister, IntegerRegister, InterleaveRegister,
+    MaskElement, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, Storage,
+    UnsignedIntegerRegister, ZeroUpper,
 };
 
 #[rustfmt::skip]

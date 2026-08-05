@@ -1,8 +1,4 @@
-use crate::{
-    divider::Divider,
-    math::policy::policies::MediumPrecision,
-    vector::ops::{AddMasked as _},
-};
+use crate::{divider::Divider, math::policy::policies::MediumPrecision, vector::ops::AddMasked as _};
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -663,7 +659,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             z = xsign.select(z1, z);
         }
 
-        let not_special = xfinite & yfinite & (efinite | xzero) ;
+        let not_special = xfinite & yfinite & (efinite | xzero);
 
         if crate::likely(not_special.all()) {
             return z; // fast return
@@ -1044,7 +1040,7 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
 /// `x_lo` is nonzero only when Payne-Hanek is used (large args, Best+ precision).
 /// When `PI` is true, performs sinpi/cospi reduction instead (no CW, no Payne-Hanek).
 #[inline(always)]
-fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(
+pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI: bool>(
     mut xa: V,
 ) -> (V, V, V::Bits) {
     let mut is_large = V::Mask::FALSY;
@@ -1300,12 +1296,26 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 
     let mut z = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
         // Compute t such that b^x = 2^t
-        let t = match MODE {
+        let mut t = match MODE {
             EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_EXPM1 => x.scale(FloatConsts::LOG2_E),
             EXP_MODE_POW10 | EXP_MODE_POW10M1 => x.scale(FloatConsts::LOG2_10),
             EXP_MODE_POW2 | EXP_MODE_POW2M1 => x,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         };
+
+        // `ci` below scales by adding `i << 23` into the exponent field, which carries
+        // into the sign bit once `127 + i` leaves `[0, 255]` - the result wraps to a
+        // negative number instead of saturating. The range fixup at the end of this
+        // function repairs it, but only under `check_overflow`; `UltraPerformance` and
+        // `HighPerformance` turn that off and Medium precision lands right here.
+        //
+        // Clamping the base-2 exponent saturates to roughly `f32::MAX` rather than to
+        // infinity (the field tops out at 254, `cf`'s mantissa being non-zero - pinning
+        // it to 255 would make a NaN, which is worse than a large finite). Monotone and
+        // sign-correct, which the wrap was not.
+        if const { !P::POLICY.check_overflow } {
+            t = t.clamp(crate::const_splat!(f32: -127.0), crate::const_splat!(f32: 127.0));
+        }
 
         let fi = t.floor();
         let f = t - fi;
@@ -1385,6 +1395,14 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         let z = x
             .poly_rev_p::<P, _>(&[1.0 / 5040.0, 1.0 / 720.0, 1.0 / 120.0, 1.0 / 24.0, 1.0 / 6.0, 1.0 / 2.0])
             .mul_adde(x * x, x);
+
+        // As in the Medium path above and `exp_d_internal`: `pow2n_f` wraps through the
+        // sign bit without the range fixup. No built-in policy reaches here with
+        // `check_overflow` off (they are all Average or better *and* checked), so this
+        // is for custom policies; it costs nothing for the rest.
+        if const { !P::POLICY.check_overflow } {
+            r = r.clamp(crate::const_splat!(f32: -127.0), crate::const_splat!(f32: 127.0));
+        }
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             let n2 = pow2n_f::<V>(r);

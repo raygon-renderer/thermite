@@ -602,8 +602,19 @@ where
         }
     } else {
         // Range-reduce phi into [-pi/2, pi/2]; m counts the half-periods stripped off.
+        //
+        // A single `m*PI` deliberately, rather than a Cody-Waite split of pi. Such a
+        // split exists because a naive reduction leaves an absolute error of about
+        // |phi|*eps in the reduced angle - but here
+        // the result is `F(phi_red) + 2m*K`, which grows with |phi| in the same
+        // proportion, so that error stays at roughly one ULP of the returned value no
+        // matter how large phi gets. Measured at m = 1e9: reduction error ~7e-7 against
+        // a result of ~3.4e9 whose ULP is ~4.8e-7.
+        //
+        // Reduction precision pays off when the output does *not* grow with the input -
+        // sin and cos, whose range is fixed, are where it is worth the extra products.
         let m = (phi * V::FRAC_1_PI).round();
-        let phi_red = m.nmul_adde(V::PI, phi); // phi - m*pi
+        let phi_red = m.nmul_adde(V::PI, phi);
 
         let (s, cphi) = phi_red.sin_cos_p::<P>();
         let c2 = cphi * cphi;
@@ -1191,6 +1202,36 @@ mod tests {
                 "Pi({phi},{n},{k}): got {}",
                 got.extract::<0>()
             );
+        }
+    }
+
+    /// The same identity at *large* `|phi|`, where the reduced angle has lost most of
+    /// its digits to `m*PI` rounding - the point being that the result does not care.
+    /// The periodic term grows with `m` at the same rate the reduction error does, so
+    /// the identity keeps holding to near f64 relative accuracy regardless.
+    #[test]
+    fn ellint_phi_range_reduction_large() {
+        use thermite::math::policy::policies::Precision;
+
+        // A representative interior point rather than the whole table: this is about the
+        // reduction, not the integrand.
+        let (phi, k) = (0.7, 0.5);
+
+        let kk = f64x4::splat(k);
+        let zero = f64x4::splat(0.0);
+
+        let comp_k = ellint_impl::<Precision, f64, _, KIND_F, true>(zero, kk, zero).extract::<0>();
+        let base = ellint_impl::<Precision, f64, _, KIND_F, false>(f64x4::splat(phi), kk, zero).extract::<0>();
+
+        for m in [1_000i64, 100_000, 10_000_000, 1_000_000_000] {
+            let shifted = f64x4::splat(phi + m as f64 * core::f64::consts::PI);
+            let f = ellint_impl::<Precision, f64, _, KIND_F, false>(shifted, kk, zero).extract::<0>();
+
+            let want = base + 2.0 * m as f64 * comp_k;
+
+            // Relative, because the value grows with m.
+            let err = (f - want).abs() / want.abs();
+            assert!(err < 1e-12, "F(phi + {m}*pi): got {f}, want {want} (rel {err})");
         }
     }
 }

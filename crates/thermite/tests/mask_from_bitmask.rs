@@ -46,7 +46,11 @@ macro_rules! check {
             // per-lane mask accessor and fails loudly on a lane permutation.
             let same = |a: M, b: M| -> bool { a.select(V::ONE, V::ZERO).cmp_eq(b.select(V::ONE, V::ZERO)).all() };
 
-            let full: u64 = if LANES >= 64 { u64::MAX } else { (1u64 << LANES) - 1 };
+            let full: u64 = if LANES >= 64 {
+                u64::MAX
+            } else {
+                (1u64 << LANES) - 1
+            };
 
             let mut patterns = vec![0u64, full];
             for k in 0..LANES {
@@ -62,11 +66,19 @@ macro_rules! check {
 
                 // Bits above the lane count must not leak into a lane.
                 let noisy = M::from_native_bitmask(bits | !full);
-                assert!(same(noisy, want), "from_native_bitmask({:#x}) lanes={LANES}", bits | !full);
+                assert!(
+                    same(noisy, want),
+                    "from_native_bitmask({:#x}) lanes={LANES}",
+                    bits | !full
+                );
 
                 // native_bitmask round-trip, where the backend has one.
                 if let Some(bm) = want.native_bitmask() {
-                    assert_eq!(bm & full, bits, "native_bitmask round-trip bits={bits:#x} lanes={LANES}");
+                    assert_eq!(
+                        bm & full,
+                        bits,
+                        "native_bitmask round-trip bits={bits:#x} lanes={LANES}"
+                    );
                     assert!(
                         same(M::from_native_bitmask(bm), want),
                         "from_native_bitmask(native_bitmask) bits={bits:#x} lanes={LANES}"

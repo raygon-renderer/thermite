@@ -571,11 +571,27 @@ pub fn sort_lanes<R: NumericRegister, O: SortOrder>(v: Storage<R>) -> Storage<R>
         return sort_any::<R, O>(v);
     }
 
-    let v = if const { <R::Lanes as Unsigned>::USIZE >= 2 } { tail_c2::<R, O>(v) } else { v };
-    let v = if const { <R::Lanes as Unsigned>::USIZE >= 4 } { tail_c4::<R, O>(v) } else { v };
-    let v = if const { <R::Lanes as Unsigned>::USIZE >= 8 } { tail_c8::<R, O>(v) } else { v };
+    let v = if const { <R::Lanes as Unsigned>::USIZE >= 2 } {
+        tail_c2::<R, O>(v)
+    } else {
+        v
+    };
+    let v = if const { <R::Lanes as Unsigned>::USIZE >= 4 } {
+        tail_c4::<R, O>(v)
+    } else {
+        v
+    };
+    let v = if const { <R::Lanes as Unsigned>::USIZE >= 8 } {
+        tail_c8::<R, O>(v)
+    } else {
+        v
+    };
 
-    if const { <R::Lanes as Unsigned>::USIZE >= 16 } { tail_c16::<R, O>(v) } else { v }
+    if const { <R::Lanes as Unsigned>::USIZE >= 16 } {
+        tail_c16::<R, O>(v)
+    } else {
+        v
+    }
 }
 
 /// Sort the lanes of a **bitonic** register of at most `MERGE_MAX_LANES`
@@ -713,11 +729,41 @@ macro_rules! merged_array_fn {
     };
 }
 
-merged_array_fn!(merged_array_2, 2, columns_2, merge_2_c2, merge_2_c4, merge_2_c8, merge_2_c16);
-merged_array_fn!(merged_array_4, 4, columns_4, merge_4_c2, merge_4_c4, merge_4_c8, merge_4_c16);
-merged_array_fn!(merged_array_8, 8, columns_8, merge_8_c2, merge_8_c4, merge_8_c8, merge_8_c16);
 merged_array_fn!(
-    merged_array_16, 16, columns_16, merge_16_c2, merge_16_c4, merge_16_c8, merge_16_c16
+    merged_array_2,
+    2,
+    columns_2,
+    merge_2_c2,
+    merge_2_c4,
+    merge_2_c8,
+    merge_2_c16
+);
+merged_array_fn!(
+    merged_array_4,
+    4,
+    columns_4,
+    merge_4_c2,
+    merge_4_c4,
+    merge_4_c8,
+    merge_4_c16
+);
+merged_array_fn!(
+    merged_array_8,
+    8,
+    columns_8,
+    merge_8_c2,
+    merge_8_c4,
+    merge_8_c8,
+    merge_8_c16
+);
+merged_array_fn!(
+    merged_array_16,
+    16,
+    columns_16,
+    merge_16_c2,
+    merge_16_c4,
+    merge_16_c8,
+    merge_16_c16
 );
 
 /// The bitonic 2-chunk sort.
@@ -733,7 +779,10 @@ pub fn bitonic_array_2<R: NumericRegister, O: SortOrder>(c: [Storage<R>; 2]) -> 
 /// The bitonic 4-chunk sort. See [`sort_array_2`].
 #[inline(always)]
 pub fn bitonic_array_4<R: NumericRegister, O: SortOrder>(c: [Storage<R>; 4]) -> [Storage<R>; 4] {
-    merge_runs_2::<R, O>(bitonic_array_2::<R, O>([c[0], c[1]]), bitonic_array_2::<R, O>([c[2], c[3]]))
+    merge_runs_2::<R, O>(
+        bitonic_array_2::<R, O>([c[0], c[1]]),
+        bitonic_array_2::<R, O>([c[2], c[3]]),
+    )
 }
 
 /// The bitonic 8-chunk sort. See [`sort_array_2`].

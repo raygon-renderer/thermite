@@ -301,60 +301,76 @@ macro_rules! impl_native_extract {
     // ===== 128-bit integer =====
     (@epi64x2) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_extract_epi64::<0>(value) as _,
-                _ => core::arch::x86_64::_mm_extract_epi64::<1>(value) as _,
-            } }
+            const {
+                assert!(I < 2, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi64::<0>(value) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi64::<1>(value) as _,
+                }
+            }
         }
     };
     (@epi32x4) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_extract_epi32::<0>(value) as _,
-                1 => core::arch::x86_64::_mm_extract_epi32::<1>(value) as _,
-                2 => core::arch::x86_64::_mm_extract_epi32::<2>(value) as _,
-                _ => core::arch::x86_64::_mm_extract_epi32::<3>(value) as _,
-            } }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi32::<0>(value) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi32::<1>(value) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi32::<2>(value) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi32::<3>(value) as _,
+                }
+            }
         }
     };
     (@epi16x8) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_extract_epi16::<0>(value) as _,
-                1 => core::arch::x86_64::_mm_extract_epi16::<1>(value) as _,
-                2 => core::arch::x86_64::_mm_extract_epi16::<2>(value) as _,
-                3 => core::arch::x86_64::_mm_extract_epi16::<3>(value) as _,
-                4 => core::arch::x86_64::_mm_extract_epi16::<4>(value) as _,
-                5 => core::arch::x86_64::_mm_extract_epi16::<5>(value) as _,
-                6 => core::arch::x86_64::_mm_extract_epi16::<6>(value) as _,
-                _ => core::arch::x86_64::_mm_extract_epi16::<7>(value) as _,
-            } }
+            const {
+                assert!(I < 8, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi16::<0>(value) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi16::<1>(value) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi16::<2>(value) as _,
+                    3 => core::arch::x86_64::_mm_extract_epi16::<3>(value) as _,
+                    4 => core::arch::x86_64::_mm_extract_epi16::<4>(value) as _,
+                    5 => core::arch::x86_64::_mm_extract_epi16::<5>(value) as _,
+                    6 => core::arch::x86_64::_mm_extract_epi16::<6>(value) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi16::<7>(value) as _,
+                }
+            }
         }
     };
     (@epi8x16) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_extract_epi8::<0>(value) as _,
-                1 => core::arch::x86_64::_mm_extract_epi8::<1>(value) as _,
-                2 => core::arch::x86_64::_mm_extract_epi8::<2>(value) as _,
-                3 => core::arch::x86_64::_mm_extract_epi8::<3>(value) as _,
-                4 => core::arch::x86_64::_mm_extract_epi8::<4>(value) as _,
-                5 => core::arch::x86_64::_mm_extract_epi8::<5>(value) as _,
-                6 => core::arch::x86_64::_mm_extract_epi8::<6>(value) as _,
-                7 => core::arch::x86_64::_mm_extract_epi8::<7>(value) as _,
-                8 => core::arch::x86_64::_mm_extract_epi8::<8>(value) as _,
-                9 => core::arch::x86_64::_mm_extract_epi8::<9>(value) as _,
-                10 => core::arch::x86_64::_mm_extract_epi8::<10>(value) as _,
-                11 => core::arch::x86_64::_mm_extract_epi8::<11>(value) as _,
-                12 => core::arch::x86_64::_mm_extract_epi8::<12>(value) as _,
-                13 => core::arch::x86_64::_mm_extract_epi8::<13>(value) as _,
-                14 => core::arch::x86_64::_mm_extract_epi8::<14>(value) as _,
-                _ => core::arch::x86_64::_mm_extract_epi8::<15>(value) as _,
-            } }
+            const {
+                assert!(I < 16, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi8::<0>(value) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi8::<1>(value) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi8::<2>(value) as _,
+                    3 => core::arch::x86_64::_mm_extract_epi8::<3>(value) as _,
+                    4 => core::arch::x86_64::_mm_extract_epi8::<4>(value) as _,
+                    5 => core::arch::x86_64::_mm_extract_epi8::<5>(value) as _,
+                    6 => core::arch::x86_64::_mm_extract_epi8::<6>(value) as _,
+                    7 => core::arch::x86_64::_mm_extract_epi8::<7>(value) as _,
+                    8 => core::arch::x86_64::_mm_extract_epi8::<8>(value) as _,
+                    9 => core::arch::x86_64::_mm_extract_epi8::<9>(value) as _,
+                    10 => core::arch::x86_64::_mm_extract_epi8::<10>(value) as _,
+                    11 => core::arch::x86_64::_mm_extract_epi8::<11>(value) as _,
+                    12 => core::arch::x86_64::_mm_extract_epi8::<12>(value) as _,
+                    13 => core::arch::x86_64::_mm_extract_epi8::<13>(value) as _,
+                    14 => core::arch::x86_64::_mm_extract_epi8::<14>(value) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi8::<15>(value) as _,
+                }
+            }
         }
     };
     // ===== SSE2-only (x86_v1) counterparts =====
@@ -364,37 +380,47 @@ macro_rules! impl_native_extract {
     // are already SSE2-legal, so v1 uses those arms directly rather than getting `_v1` twins.
     (@epi64x2_v1) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_cvtsi128_si64(value) as _,
-                _ => core::arch::x86_64::_mm_cvtsi128_si64(
-                    core::arch::x86_64::_mm_unpackhi_epi64(value, value),
-                ) as _,
-            } }
+            const {
+                assert!(I < 2, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtsi128_si64(value) as _,
+                    _ => {
+                        core::arch::x86_64::_mm_cvtsi128_si64(core::arch::x86_64::_mm_unpackhi_epi64(value, value)) as _
+                    }
+                }
+            }
         }
     };
     (@epi32x4_v1) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_cvtsi128_si32(value) as _,
-                1 => core::arch::x86_64::_mm_cvtsi128_si32(
-                    core::arch::x86_64::_mm_shuffle_epi32::<0b01_01_01_01>(value),
-                ) as _,
-                2 => core::arch::x86_64::_mm_cvtsi128_si32(
-                    core::arch::x86_64::_mm_unpackhi_epi64(value, value),
-                ) as _,
-                _ => core::arch::x86_64::_mm_cvtsi128_si32(
-                    core::arch::x86_64::_mm_shuffle_epi32::<0b11_11_11_11>(value),
-                ) as _,
-            } }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtsi128_si32(value) as _,
+                    1 => core::arch::x86_64::_mm_cvtsi128_si32(core::arch::x86_64::_mm_shuffle_epi32::<0b01_01_01_01>(
+                        value,
+                    )) as _,
+                    2 => {
+                        core::arch::x86_64::_mm_cvtsi128_si32(core::arch::x86_64::_mm_unpackhi_epi64(value, value)) as _
+                    }
+                    _ => core::arch::x86_64::_mm_cvtsi128_si32(core::arch::x86_64::_mm_shuffle_epi32::<0b11_11_11_11>(
+                        value,
+                    )) as _,
+                }
+            }
         }
     };
     // Byte `I` is the low half of word `I / 2` when `I` is even, the high half when odd.
     // The `as u8` before `as _` makes this bit-preserving for a signed OR unsigned element.
     (@epi8x16_v1) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 16, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let word = match I / 2 {
                     0 => core::arch::x86_64::_mm_extract_epi16::<0>(value),
@@ -412,36 +438,52 @@ macro_rules! impl_native_extract {
     };
     (@ps128_v1) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_cvtss_f32(value),
-                1 => core::arch::x86_64::_mm_cvtss_f32(
-                    core::arch::x86_64::_mm_shuffle_ps::<0b01_01_01_01>(value, value),
-                ),
-                2 => core::arch::x86_64::_mm_cvtss_f32(
-                    core::arch::x86_64::_mm_unpackhi_ps(value, value),
-                ),
-                _ => core::arch::x86_64::_mm_cvtss_f32(
-                    core::arch::x86_64::_mm_shuffle_ps::<0b11_11_11_11>(value, value),
-                ),
-            } }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtss_f32(value),
+                    1 => core::arch::x86_64::_mm_cvtss_f32(core::arch::x86_64::_mm_shuffle_ps::<0b01_01_01_01>(
+                        value, value,
+                    )),
+                    2 => core::arch::x86_64::_mm_cvtss_f32(core::arch::x86_64::_mm_unpackhi_ps(value, value)),
+                    _ => core::arch::x86_64::_mm_cvtss_f32(core::arch::x86_64::_mm_shuffle_ps::<0b11_11_11_11>(
+                        value, value,
+                    )),
+                }
+            }
         }
     };
     // ===== 256-bit integer: extract the 128-bit lane, then the element =====
     (@epi64x4) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<0>(value)) as _,
-                1 => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<0>(value)) as _,
-                2 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<1>(value)) as _,
-                _ => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<1>(value)) as _,
-            } }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<0>(
+                        value,
+                    )) as _,
+                    1 => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<0>(
+                        value,
+                    )) as _,
+                    2 => core::arch::x86_64::_mm_extract_epi64::<0>(core::arch::x86_64::_mm256_extracti128_si256::<1>(
+                        value,
+                    )) as _,
+                    _ => core::arch::x86_64::_mm_extract_epi64::<1>(core::arch::x86_64::_mm256_extracti128_si256::<1>(
+                        value,
+                    )) as _,
+                }
+            }
         }
     };
     (@epi32x8) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 8, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let (lo, hi) = (
                     core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
@@ -462,7 +504,9 @@ macro_rules! impl_native_extract {
     };
     (@epi16x16) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 16, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 16, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let (lo, hi) = (
                     core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
@@ -491,7 +535,9 @@ macro_rules! impl_native_extract {
     };
     (@epi8x32) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 32, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 32, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let (lo, hi) = (
                     core::arch::x86_64::_mm256_extracti128_si256::<0>(value),
@@ -537,18 +583,24 @@ macro_rules! impl_native_extract {
     // ===== floats: lane 0 stays in xmm via cvt; other lanes via extract_ps/unpackhi =====
     (@ps128) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_cvtss_f32(value),
-                1 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<1>(value) as u32),
-                2 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<2>(value) as u32),
-                _ => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<3>(value) as u32),
-            } }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtss_f32(value),
+                    1 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<1>(value) as u32),
+                    2 => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<2>(value) as u32),
+                    _ => f32::from_bits(core::arch::x86_64::_mm_extract_ps::<3>(value) as u32),
+                }
+            }
         }
     };
     (@ps256) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 8, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 8, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let (lo, hi) = (
                     core::arch::x86_64::_mm256_extractf128_ps::<0>(value),
@@ -569,16 +621,22 @@ macro_rules! impl_native_extract {
     };
     (@pd128) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 2, "Index out of bounds for register lane extraction"); }
-            unsafe { match I {
-                0 => core::arch::x86_64::_mm_cvtsd_f64(value),
-                _ => core::arch::x86_64::_mm_cvtsd_f64(core::arch::x86_64::_mm_unpackhi_pd(value, value)),
-            } }
+            const {
+                assert!(I < 2, "Index out of bounds for register lane extraction");
+            }
+            unsafe {
+                match I {
+                    0 => core::arch::x86_64::_mm_cvtsd_f64(value),
+                    _ => core::arch::x86_64::_mm_cvtsd_f64(core::arch::x86_64::_mm_unpackhi_pd(value, value)),
+                }
+            }
         }
     };
     (@pd256) => {
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
-            const { assert!(I < 4, "Index out of bounds for register lane extraction"); }
+            const {
+                assert!(I < 4, "Index out of bounds for register lane extraction");
+            }
             unsafe {
                 let (lo, hi) = (
                     core::arch::x86_64::_mm256_extractf128_pd::<0>(value),
@@ -1067,8 +1125,13 @@ macro_rules! impl_native_radix3 {
         ) -> [$crate::register::Storage<Self>; N] {
             if const { N == 3 } {
                 // SAFETY: `N == 3` on this arm, so lanes 0/1/2 are in bounds.
-                let (x, y, z) =
-                    unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2)) };
+                let (x, y, z) = unsafe {
+                    (
+                        *inputs.get_unchecked(0),
+                        *inputs.get_unchecked(1),
+                        *inputs.get_unchecked(2),
+                    )
+                };
                 let (a, b, c) = unsafe { $ilv3(x, y, z) };
                 let mut out = [<Self as $crate::register::CoreRegister>::EMPTY; N];
                 // SAFETY: as above.
@@ -1089,8 +1152,13 @@ macro_rules! impl_native_radix3 {
         ) -> [$crate::register::Storage<Self>; N] {
             if const { N == 3 } {
                 // SAFETY: `N == 3` on this arm.
-                let (a, b, c) =
-                    unsafe { (*inputs.get_unchecked(0), *inputs.get_unchecked(1), *inputs.get_unchecked(2)) };
+                let (a, b, c) = unsafe {
+                    (
+                        *inputs.get_unchecked(0),
+                        *inputs.get_unchecked(1),
+                        *inputs.get_unchecked(2),
+                    )
+                };
                 let (x, y, z) = unsafe { $dilv3(a, b, c) };
                 let mut out = [<Self as $crate::register::CoreRegister>::EMPTY; N];
                 // SAFETY: as above.

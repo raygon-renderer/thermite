@@ -148,7 +148,10 @@ pub unsafe fn neon_lane_table_dyn<const N: usize, const AVAIL: usize>(idxs: [u32
         //    index out of range rather than aliasing a valid lane.
         let bytes: uint8x16_t = if const { N == 16 } {
             let lo = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));
-            let hi = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p.add(8))), vqmovn_u32(vld1q_u32(p.add(12)))));
+            let hi = vqmovn_u16(vcombine_u16(
+                vqmovn_u32(vld1q_u32(p.add(8))),
+                vqmovn_u32(vld1q_u32(p.add(12))),
+            ));
             vcombine_u8(lo, hi)
         } else if const { N == 8 } {
             let b = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));

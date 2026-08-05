@@ -19,7 +19,7 @@ use thermite::register::{
     BitshiftRegister as _, BitwiseRegister as _, IntegerRegister as _, NumericRegister as _,
     SignedIntegerRegister as _, SignedRegister as _,
 };
-use thermite::simd::{Simd};
+use thermite::simd::Simd;
 
 use thermite::backend::scalar::Scalar;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

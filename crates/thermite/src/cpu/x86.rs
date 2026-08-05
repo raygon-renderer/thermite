@@ -74,9 +74,9 @@ pub enum Avx10Version {
 }
 
 #[cfg(target_arch = "x86")]
-use core::arch::x86::{CpuidResult, __cpuid_count, _xgetbv};
+use core::arch::x86::{__cpuid_count, _xgetbv, CpuidResult};
 #[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::{CpuidResult, __cpuid_count, _xgetbv};
+use core::arch::x86_64::{__cpuid_count, _xgetbv, CpuidResult};
 
 #[inline]
 fn bit(value: u32, index: u32) -> bool {
@@ -248,9 +248,17 @@ pub fn detect() -> CpuInfo {
     // Try both cache leaves, most-likely-first by vendor, and fall through if
     // the preferred one came back empty. An unrecognised vendor therefore still
     // gets whichever it implements instead of being written off.
-    let (first, second) = if is_amd_lineage() { (0x8000_001D, 4) } else { (4, 0x8000_001D) };
+    let (first, second) = if is_amd_lineage() {
+        (0x8000_001D, 4)
+    } else {
+        (4, 0x8000_001D)
+    };
     for leaf in [first, second] {
-        let available = if leaf >= 0x8000_0000 { max_ext >= leaf } else { max_basic >= leaf };
+        let available = if leaf >= 0x8000_0000 {
+            max_ext >= leaf
+        } else {
+            max_basic >= leaf
+        };
         if available {
             read_caches(&mut info, leaf);
         }
@@ -326,7 +334,7 @@ pub fn current_core_type() -> CoreType {
     }
 
     match cpuid(0x1A, 0).eax >> 24 {
-        0x20 => CoreType::Efficiency, // Atom
+        0x20 => CoreType::Efficiency,  // Atom
         0x40 => CoreType::Performance, // Core
         _ => CoreType::Unknown,
     }

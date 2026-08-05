@@ -1,10 +1,8 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::missing_safety_doc)]
 
-
 use super::arch::*;
 
 pub use crate::backend::x86_v2::polyfills::*;
-
 
 pub mod bits;
 pub mod casts;

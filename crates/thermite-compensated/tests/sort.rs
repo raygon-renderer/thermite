@@ -11,7 +11,9 @@ use thermite::sort::{Ascending, Descending};
 use thermite_compensated::Compensated;
 
 fn value(lane: usize) -> f64 {
-    const PATTERN: [f64; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
+    const PATTERN: [f64; 16] = [
+        5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+    ];
     PATTERN[lane % 16]
 }
 
@@ -34,7 +36,10 @@ macro_rules! check {
         let mut v = C::default();
         let mut input: Vec<Compensated<f64>> = Vec::with_capacity(lanes);
         for lane in 0..lanes {
-            let e = Compensated { value: value(lane), error: error(lane) };
+            let e = Compensated {
+                value: value(lane),
+                error: error(lane),
+            };
             v = v.insertv(lane, e);
             input.push(e);
         }

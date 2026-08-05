@@ -4,7 +4,6 @@
 
 use generic_array::{
     GenericArray,
-    
     typenum::{self, Unsigned},
 };
 

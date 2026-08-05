@@ -243,7 +243,6 @@ impl CpuInfo {
     pub fn is_hybrid(&self) -> bool {
         self.hybrid
     }
-
 }
 
 const UNINIT: u8 = 0;
@@ -266,7 +265,10 @@ unsafe impl Sync for Cache {}
 impl Cache {
     #[inline(never)]
     fn init(&self) {
-        match self.state.compare_exchange(UNINIT, BUSY, Ordering::AcqRel, Ordering::Acquire) {
+        match self
+            .state
+            .compare_exchange(UNINIT, BUSY, Ordering::AcqRel, Ordering::Acquire)
+        {
             Ok(_) => {
                 let detected = CpuInfo::detect();
                 // SAFETY: the CAS made this thread the unique writer, and no
@@ -335,7 +337,10 @@ mod tests {
         for c in [info.l1d(), info.l1i(), info.l2(), info.l3()].into_iter().flatten() {
             assert!(c.size > 0, "cache reported with zero size: {c:?}");
             if let Some(line) = c.line_size {
-                assert!(line.is_power_of_two() && (16..=256).contains(&line), "implausible line size {line}");
+                assert!(
+                    line.is_power_of_two() && (16..=256).contains(&line),
+                    "implausible line size {line}"
+                );
             }
         }
 
@@ -347,7 +352,10 @@ mod tests {
         }
 
         if let Some(line) = info.cache_line_size() {
-            assert!(line.is_power_of_two() && (16..=256).contains(&line), "implausible line size {line}");
+            assert!(
+                line.is_power_of_two() && (16..=256).contains(&line),
+                "implausible line size {line}"
+            );
         }
 
         let topo = info.topology();
@@ -451,9 +459,17 @@ mod tests {
         assert_eq!(f.avx512dq, std::is_x86_feature_detected!("avx512dq"), "avx512dq");
         assert_eq!(f.avx512vl, std::is_x86_feature_detected!("avx512vl"), "avx512vl");
         assert_eq!(f.avx512vbmi, std::is_x86_feature_detected!("avx512vbmi"), "avx512vbmi");
-        assert_eq!(f.avx512vbmi2, std::is_x86_feature_detected!("avx512vbmi2"), "avx512vbmi2");
+        assert_eq!(
+            f.avx512vbmi2,
+            std::is_x86_feature_detected!("avx512vbmi2"),
+            "avx512vbmi2"
+        );
         assert_eq!(f.avx512vnni, std::is_x86_feature_detected!("avx512vnni"), "avx512vnni");
-        assert_eq!(f.avx512bitalg, std::is_x86_feature_detected!("avx512bitalg"), "avx512bitalg");
+        assert_eq!(
+            f.avx512bitalg,
+            std::is_x86_feature_detected!("avx512bitalg"),
+            "avx512bitalg"
+        );
         assert_eq!(
             f.avx512vpopcntdq,
             std::is_x86_feature_detected!("avx512vpopcntdq"),
@@ -491,7 +507,11 @@ mod tests {
 
         // Synthesise each rung and check it reports exactly that rung: this pins
         // the ladder itself, on any host, including CI without AVX-512.
-        let mut synthetic = Features { avx512f: true, avx512cd: true, ..Default::default() };
+        let mut synthetic = Features {
+            avx512f: true,
+            avx512cd: true,
+            ..Default::default()
+        };
         assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
 
         // BW + DQ alone is not tier 2: VL is required with them. (No real CPU
@@ -507,7 +527,11 @@ mod tests {
         // Tier 3 needs all nine; check it does not promote on a partial set.
         synthetic.avx512vbmi = true;
         synthetic.avx512vnni = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2), "promoted on a partial tier 3");
+        assert_eq!(
+            synthetic.avx512_tier(),
+            Some(Avx512Tier::Tier2),
+            "promoted on a partial tier 3"
+        );
 
         synthetic.avx512vbmi2 = true;
         synthetic.avx512bitalg = true;
@@ -526,14 +550,25 @@ mod tests {
         // most of what this crate would want from AVX-512.
         let mut no_vl = synthetic;
         no_vl.avx512vl = false;
-        assert_eq!(no_vl.avx512_tier(), Some(Avx512Tier::Tier1), "VL must gate tier 2 and up");
+        assert_eq!(
+            no_vl.avx512_tier(),
+            Some(Avx512Tier::Tier1),
+            "VL must gate tier 2 and up"
+        );
 
         // The Knights Landing shape: F + CD and nothing else.
-        let knl = Features { avx512f: true, avx512cd: true, ..Default::default() };
+        let knl = Features {
+            avx512f: true,
+            avx512cd: true,
+            ..Default::default()
+        };
         assert_eq!(knl.avx512_tier(), Some(Avx512Tier::Tier1));
 
         // F alone is not a tier: tier1 requires CD too.
-        let f_only = Features { avx512f: true, ..Default::default() };
+        let f_only = Features {
+            avx512f: true,
+            ..Default::default()
+        };
         assert_eq!(f_only.avx512_tier(), None);
 
         assert!(Avx512Tier::Tier1 < Avx512Tier::Tier4, "tiers must order");
@@ -566,11 +601,14 @@ mod tests {
         s.avx10_version = 2;
         assert_eq!(s.avx10(), Some(Avx10Version::V10_2));
         s.avx10_version = 9;
-        assert_eq!(s.avx10(), Some(Avx10Version::V10_2), "future versions are supersets of 10.2");
+        assert_eq!(
+            s.avx10(),
+            Some(Avx10Version::V10_2),
+            "future versions are supersets of 10.2"
+        );
 
         assert!(Avx10Version::V10_1 < Avx10Version::V10_2, "versions must order");
     }
-
 
     #[cfg(target_arch = "aarch64")]
     #[test]
@@ -584,7 +622,10 @@ mod tests {
         // specified" and qemu-user reports exactly that, so `None` is the
         // correct answer there rather than a bogus 2048-byte padding hint.
         if let Some(cwg) = info.writeback_granule() {
-            assert!(cwg.is_power_of_two() && (16..=2048).contains(&cwg), "implausible CWG {cwg}");
+            assert!(
+                cwg.is_power_of_two() && (16..=2048).contains(&cwg),
+                "implausible CWG {cwg}"
+            );
         }
     }
 }

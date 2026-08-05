@@ -40,10 +40,7 @@ impl_newregister!(
 use crate::{
     element::FindUSize,
     isa::InstructionSet,
-    register::{
-        IndexableRegister, Storage,
-        array::ArrayRegister,
-    },
+    register::{IndexableRegister, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 

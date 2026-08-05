@@ -16,16 +16,16 @@ use num_traits::Bounded;
 use thermite::Swizzle;
 use thermite::element::{Element, FloatElement, SignedElement};
 use thermite::generic_array::{GenericArray, IntoArrayLength, typenum::Const};
-use thermite::register::SwizzleIndices;
 use thermite::mask::{GenericMask, GenericSelectable};
 use thermite::math::RealMathWithPolicy;
 use thermite::math::algorithms::reduce_in_place;
 use thermite::math::policy::DefaultPolicy;
+use thermite::register::SwizzleIndices;
 use thermite::vector::ops::{AddSubExt, AddSubExtMasked, NegMasked, Square, SquareMasked};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_new, const_splat};
-use thermite::{LargeInt, prelude::*};
+use thermite::{LargeInt, features, prelude::*};
 
-use crate::{Complex, ComplexValue};
+use crate::{Complex, RealValue};
 
 /// A real [`FloatVector`] usable as the inner storage of a [`Complex`] vector.
 ///
@@ -33,20 +33,20 @@ use crate::{Complex, ComplexValue};
 /// the inner vector's `hypot`/`reciprocal`, so the policy math library is required
 /// here. `Dual`/`Compensated` split theirs into a separate tier; there is no useful
 /// math-free tier to split out of this one.
-pub trait ComplexFloatVector:
-    ComplexValue + FloatVector<Element: ComplexValue> + CastVector<Self> + RealMathWithPolicy + SwizzleVector
+pub trait RealFloatVector:
+    RealValue + FloatVector<Element: RealValue> + CastVector<Self> + RealMathWithPolicy + SwizzleVector
 {
 }
 
-impl<V> ComplexFloatVector for V where
-    V: ComplexValue + FloatVector<Element: ComplexValue> + CastVector<V> + RealMathWithPolicy + SwizzleVector
+impl<V> RealFloatVector for V where
+    V: RealValue + FloatVector<Element: RealValue> + CastVector<V> + RealMathWithPolicy + SwizzleVector
 {
 }
 
 // Lane swizzles apply to both components: re and im move through the same
 // permutation, so a swizzled complex vector is the complex of the swizzled
 // inputs.
-impl<V: ComplexFloatVector> Swizzle<V::Lanes> for Complex<V> {
+impl<V: RealFloatVector> Swizzle<V::Lanes> for Complex<V> {
     #[inline(always)]
     fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
         Self {
@@ -86,7 +86,7 @@ impl<V: ComplexFloatVector> Swizzle<V::Lanes> for Complex<V> {
 // --- Element stack: Complex<E> as a scalar element ---
 
 #[rustfmt::skip]
-impl<E: ComplexValue + Element> Element for Complex<E> {
+impl<E: RealValue + Element> Element for Complex<E> {
     type Signed = <E as Element>::Signed;
     type Unsigned = <E as Element>::Unsigned;
 
@@ -106,7 +106,7 @@ impl<E: ComplexValue + Element> Element for Complex<E> {
     #[inline(always)] fn from_u16(value: u16) -> Self { Self::real(E::from_u16(value)) }
 }
 
-impl<E: ComplexValue + FloatElement> Complex<E> {
+impl<E: RealValue + FloatElement> Complex<E> {
     /// The modulus `$|z|$` of a complex element, the vector math library not being
     /// available at the element level.
     #[inline(always)]
@@ -115,7 +115,7 @@ impl<E: ComplexValue + FloatElement> Complex<E> {
     }
 }
 
-impl<E: ComplexValue + FloatElement> SignedElement for Complex<E> {
+impl<E: RealValue + FloatElement> SignedElement for Complex<E> {
     /// The modulus `$|z|$`, as a real complex number.
     #[inline(always)]
     fn abs(self) -> Self {
@@ -141,18 +141,18 @@ pub struct ComplexIntConst<E, const VAL: LargeInt>(PhantomData<E>);
 /// Splats a compile-time rational constant `N/D` as a real `Complex<E>`.
 pub struct ComplexRatioConst<E, const NUM: LargeInt, const DEN: LargeInt>(PhantomData<E>);
 
-impl<E: ComplexValue + FloatElement, const VAL: LargeInt> SplatConst<Complex<E>> for ComplexIntConst<E, VAL> {
+impl<E: RealValue + FloatElement, const VAL: LargeInt> SplatConst<Complex<E>> for ComplexIntConst<E, VAL> {
     const VALUE: Complex<E> = Complex::real(<E::ConstInt<VAL> as SplatConst<E>>::VALUE);
 }
 
-impl<E: ComplexValue + FloatElement, const NUM: LargeInt, const DEN: LargeInt> SplatConst<Complex<E>>
+impl<E: RealValue + FloatElement, const NUM: LargeInt, const DEN: LargeInt> SplatConst<Complex<E>>
     for ComplexRatioConst<E, NUM, DEN>
 {
     const VALUE: Complex<E> = Complex::real(<E::ConstRatio<NUM, DEN> as SplatConst<E>>::VALUE);
 }
 
 #[rustfmt::skip]
-impl<E: ComplexValue + FloatElement> FloatElement for Complex<E> {
+impl<E: RealValue + FloatElement> FloatElement for Complex<E> {
     /// The principal square root, in Kahan's form; see `FloatVector::sqrt` below for
     /// why the symmetric formula is unusable.
     #[inline(always)]
@@ -211,7 +211,7 @@ impl<V: thermite::simd::HasIsa> thermite::simd::HasIsa for Complex<V> {
     const ISA: thermite::isa::InstructionSet = V::ISA;
 }
 
-impl<V: ComplexFloatVector> GenericSelectable for Complex<V> {
+impl<V: RealFloatVector> GenericSelectable for Complex<V> {
     type SelectableMask = <V as GenericSelectable>::SelectableMask;
 
     #[inline(always)]
@@ -226,7 +226,7 @@ impl<V: ComplexFloatVector> GenericSelectable for Complex<V> {
 }
 
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> Interleave for Complex<V> {
+impl<V: RealFloatVector> Interleave for Complex<V> {
     #[inline(always)]
     fn interleave(self, other: Self) -> (Self, Self) {
         let (re_lo, re_hi) = self.re.interleave(other.re);
@@ -250,25 +250,25 @@ impl<V: ComplexFloatVector> Interleave for Complex<V> {
 struct ComplexReSplat<E, V>(PhantomData<(E, V)>);
 struct ComplexImSplat<E, V>(PhantomData<(E, V)>);
 
-impl<E, V: ComplexFloatVector> SplatConst<V::Element> for ComplexReSplat<E, V>
+impl<E, V: RealFloatVector> SplatConst<V::Element> for ComplexReSplat<E, V>
 where
     E: SplatConst<Complex<V::Element>>,
 {
     const VALUE: V::Element = <E as SplatConst<Complex<V::Element>>>::VALUE.re;
 }
 
-impl<E, V: ComplexFloatVector> SplatConst<V::Element> for ComplexImSplat<E, V>
+impl<E, V: RealFloatVector> SplatConst<V::Element> for ComplexImSplat<E, V>
 where
     E: SplatConst<Complex<V::Element>>,
 {
     const VALUE: V::Element = <E as SplatConst<Complex<V::Element>>>::VALUE.im;
 }
 
-impl<V: ComplexFloatVector> SplatVector<Complex<V::Element>> for Complex<V> {
+impl<V: RealFloatVector> SplatVector<Complex<V::Element>> for Complex<V> {
     type Splat<T: SplatConst<Complex<V::Element>>> = Self;
 }
 
-impl<V: ComplexFloatVector, E: SplatConst<Complex<V::Element>>> VectorValue<E, Complex<V>> for Complex<V> {
+impl<V: RealFloatVector, E: SplatConst<Complex<V::Element>>> VectorValue<E, Complex<V>> for Complex<V> {
     const VALUE: Complex<V> = Complex {
         re: const_splat::<V, ComplexReSplat<E, V>>(),
         im: const_splat::<V, ComplexImSplat<E, V>>(),
@@ -281,7 +281,7 @@ struct ComplexImNew<C, V>(PhantomData<(C, V)>);
 
 macro_rules! impl_new_const {
     ($($carrier:ident => $field:ident),* $(,)?) => {$(
-        impl<C, V: ComplexFloatVector> NewConst<V::Element, V::Lanes> for $carrier<C, V>
+        impl<C, V: RealFloatVector> NewConst<V::Element, V::Lanes> for $carrier<C, V>
         where
             C: NewConst<Complex<V::Element>, V::Lanes>,
         {
@@ -307,7 +307,7 @@ impl_new_const!(ComplexReNew => re, ComplexImNew => im);
 /// `VectorValue` implementor for per-lane (`new`) construction of `Complex` vectors.
 pub struct ComplexNewImpl;
 
-impl<T, V: ComplexFloatVector> VectorValue<T, Complex<V>> for ComplexNewImpl
+impl<T, V: RealFloatVector> VectorValue<T, Complex<V>> for ComplexNewImpl
 where
     T: NewConst<Complex<V::Element>, V::Lanes>,
 {
@@ -317,7 +317,7 @@ where
     };
 }
 
-impl<V: ComplexFloatVector> NewVector<Complex<V::Element>, V::Lanes> for Complex<V> {
+impl<V: RealFloatVector> NewVector<Complex<V::Element>, V::Lanes> for Complex<V> {
     type New<T: NewConst<Complex<V::Element>, V::Lanes>> = ComplexNewImpl;
 }
 
@@ -325,8 +325,8 @@ impl<V: ComplexFloatVector> NewVector<Complex<V::Element>, V::Lanes> for Complex
 
 impl<FROM, TO> CastVector<Complex<FROM>> for Complex<TO>
 where
-    FROM: ComplexFloatVector + CastVector<TO>,
-    TO: ComplexFloatVector + CastVector<FROM>,
+    FROM: RealFloatVector + CastVector<TO>,
+    TO: RealFloatVector + CastVector<FROM>,
 {
     #[inline(always)]
     fn cast_into(self) -> Complex<FROM> {
@@ -342,12 +342,12 @@ where
 // --- ComplexVector ---
 
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> crate::specialized::ComplexVector for Complex<V> {
+impl<V: RealFloatVector> crate::math::specialized::ComplexVector for Complex<V> {
     type Real = V;
 
     #[inline(always)] fn re(self) -> V { self.re }
     #[inline(always)] fn im(self) -> V { self.im }
-    #[inline(always)] fn from_parts(re: V, im: V) -> Self { Self::new(re, im) }
+    #[inline(always)] fn from_parts(re: V, im: V) -> Self { Complex::new(re, im) }
 
     #[inline(always)]
     unsafe fn store_streaming_block(self, ptr: *mut Self) {
@@ -373,7 +373,41 @@ impl<V: ComplexFloatVector> crate::specialized::ComplexVector for Complex<V> {
 
 // --- GenericVector ---
 
-impl<V: ComplexFloatVector> Complex<V> {
+/// Applies one of the inner vector's radix (de)interleaves to both components.
+///
+/// The four `*_radix*` members differ only in which inner routine they call, so they
+/// share this: split the planar parts out, permute each, weave them back. `f` is a
+/// monomorphized fn item (`V::interleave_radix::<N>` and friends), not a closure over
+/// runtime state, so nothing survives inlining but the permutation itself.
+#[inline(always)]
+fn radix_per_component<V: RealFloatVector, const N: usize>(
+    inputs: [Complex<V>; N],
+    f: impl Fn([V; N]) -> [V; N],
+) -> [Complex<V>; N] {
+    let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
+
+    let mut i = 0;
+    while i < N {
+        re[i] = inputs[i].re;
+        im[i] = inputs[i].im;
+        i += 1;
+    }
+
+    let re = f(re);
+    let im = f(im);
+
+    let mut out = [Complex::<V>::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = Complex::new(re[i], im[i]);
+        i += 1;
+    }
+
+    out
+}
+
+impl<V: RealFloatVector> Complex<V> {
     /// Splat a real and imaginary part across every lane.
     #[inline(always)]
     pub fn splat_parts(re: V::Element, im: V::Element) -> Self {
@@ -381,7 +415,7 @@ impl<V: ComplexFloatVector> Complex<V> {
     }
 }
 
-impl<V: ComplexFloatVector> GenericVector for Complex<V> {
+impl<V: RealFloatVector> GenericVector for Complex<V> {
     type Element = Complex<V::Element>;
 
     const EMPTY: Self = Self::ZERO;
@@ -469,66 +503,22 @@ impl<V: ComplexFloatVector> GenericVector for Complex<V> {
 
     #[inline(always)]
     fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
-        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
-        for i in 0..N {
-            re[i] = inputs[i].re;
-            im[i] = inputs[i].im;
-        }
-        let re = V::interleave_radix::<N>(re);
-        let im = V::interleave_radix::<N>(im);
-        let mut out = [Self::EMPTY; N];
-        for i in 0..N {
-            out[i] = Self::new(re[i], im[i]);
-        }
-        out
+        radix_per_component::<V, N>(inputs, V::interleave_radix::<N>)
     }
 
     #[inline(always)]
     fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
-        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
-        for i in 0..N {
-            re[i] = inputs[i].re;
-            im[i] = inputs[i].im;
-        }
-        let re = V::deinterleave_radix::<N>(re);
-        let im = V::deinterleave_radix::<N>(im);
-        let mut out = [Self::EMPTY; N];
-        for i in 0..N {
-            out[i] = Self::new(re[i], im[i]);
-        }
-        out
+        radix_per_component::<V, N>(inputs, V::deinterleave_radix::<N>)
     }
 
     #[inline(always)]
     fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
-        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
-        for i in 0..N {
-            re[i] = inputs[i].re;
-            im[i] = inputs[i].im;
-        }
-        let re = V::deinterleave_radix_by::<N, GROUP>(re);
-        let im = V::deinterleave_radix_by::<N, GROUP>(im);
-        let mut out = [Self::EMPTY; N];
-        for i in 0..N {
-            out[i] = Self::new(re[i], im[i]);
-        }
-        out
+        radix_per_component::<V, N>(inputs, V::deinterleave_radix_by::<N, GROUP>)
     }
 
     #[inline(always)]
     fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
-        let (mut re, mut im) = ([V::EMPTY; N], [V::EMPTY; N]);
-        for i in 0..N {
-            re[i] = inputs[i].re;
-            im[i] = inputs[i].im;
-        }
-        let re = V::interleave_radix_by::<N, GROUP>(re);
-        let im = V::interleave_radix_by::<N, GROUP>(im);
-        let mut out = [Self::EMPTY; N];
-        for i in 0..N {
-            out[i] = Self::new(re[i], im[i]);
-        }
-        out
+        radix_per_component::<V, N>(inputs, V::interleave_radix_by::<N, GROUP>)
     }
 
     /// `M` interleaved `Complex` streams are `2 * M` interleaved float streams, i.e.
@@ -793,7 +783,7 @@ impl<V: ComplexFloatVector> GenericVector for Complex<V> {
 // --- PartialOrdVector: lexicographic by (re, im) ---
 
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> PartialOrdVector for Complex<V> {
+impl<V: RealFloatVector> PartialOrdVector for Complex<V> {
     #[inline(always)]
     fn cmp_eq(self, other: Self) -> Self::Mask {
         self.re.cmp_eq(other.re) & self.im.cmp_eq(other.im)
@@ -846,7 +836,7 @@ impl<V: ComplexFloatVector> PartialOrdVector for Complex<V> {
 
 macro_rules! impl_masked {
     (MUL_ADD: $($method:ident),*) => {paste::paste! {
-        impl<V: ComplexFloatVector, A, B> thermite::vector::ops::MulAddExtMasked<V::Mask, A, B> for Complex<V>
+        impl<V: RealFloatVector, A, B> thermite::vector::ops::MulAddExtMasked<V::Mask, A, B> for Complex<V>
         where
             Complex<V>: thermite::vector::ops::MulAddExt<A, B, Output = Self>,
         {
@@ -866,7 +856,7 @@ macro_rules! impl_masked {
             )*
         }
 
-        impl<V: ComplexFloatVector, A, B> thermite::vector::ops::MulAddAssignExtMasked<V::Mask, A, B> for Complex<V>
+        impl<V: RealFloatVector, A, B> thermite::vector::ops::MulAddAssignExtMasked<V::Mask, A, B> for Complex<V>
         where
             Complex<V>: thermite::vector::ops::MulAddExt<A, B, Output = Self>,
         {
@@ -888,7 +878,7 @@ macro_rules! impl_masked {
     }};
 
     ($trait:ident::$method:ident) => {paste::paste! {
-        impl<V: ComplexFloatVector, Rhs> thermite::vector::ops::[<$trait Masked>]<V::Mask, Rhs> for Complex<V>
+        impl<V: RealFloatVector, Rhs> thermite::vector::ops::[<$trait Masked>]<V::Mask, Rhs> for Complex<V>
         where
             Complex<V>: core::ops::$trait<Rhs, Output = Self>,
         {
@@ -906,7 +896,7 @@ macro_rules! impl_masked {
             }
         }
 
-        impl<V: ComplexFloatVector, Rhs> thermite::vector::ops::[<$trait AssignMasked>]<V::Mask, Rhs> for Complex<V>
+        impl<V: RealFloatVector, Rhs> thermite::vector::ops::[<$trait AssignMasked>]<V::Mask, Rhs> for Complex<V>
         where
             Complex<V>: core::ops::$trait<Rhs, Output = Self>,
         {
@@ -944,34 +934,70 @@ impl_masked!(Rem::rem);
 // =====================================================================================
 
 #[inline(always)]
-fn neg_even_complex<V: ComplexFloatVector>(x: Complex<V>) -> Complex<V> {
+fn neg_even_complex<V: RealFloatVector>(x: Complex<V>) -> Complex<V> {
     // `addsub(0, w) = [-w0, w1, -w2, ...]` flips the even lanes exactly.
     Complex::new(V::ZERO.addsub(x.re), V::ZERO.addsub(x.im))
 }
 
-impl<V: ComplexFloatVector> AddSubExt for Complex<V> {
+impl<V: RealFloatVector> AddSubExt for Complex<V> {
     type Output = Self;
 
-    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_complex(b) }
-    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_complex(c)) }
-    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_complex(c)) }
+    #[inline(always)]
+    fn addsub(self, b: Self) -> Self {
+        self + neg_even_complex(b)
+    }
+    #[inline(always)]
+    fn fmaddsub(self, b: Self, c: Self) -> Self {
+        self.mul_adde(b, neg_even_complex(c))
+    }
+    #[inline(always)]
+    fn fmsubadd(self, b: Self, c: Self) -> Self {
+        self.mul_sube(b, neg_even_complex(c))
+    }
 }
 
-impl<V: ComplexFloatVector> AddSubExtMasked<V::Mask> for Complex<V> {
-    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
-    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
-    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+impl<V: RealFloatVector> AddSubExtMasked<V::Mask> for Complex<V> {
+    #[inline(always)]
+    fn addsub_c(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), self)
+    }
+    #[inline(always)]
+    fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), src)
+    }
+    #[inline(always)]
+    fn addsub_z(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
-    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
-    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), self)
+    }
+    #[inline(always)]
+    fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), src)
+    }
+    #[inline(always)]
+    fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
-    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
-    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), self)
+    }
+    #[inline(always)]
+    fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), src)
+    }
+    #[inline(always)]
+    fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), Self::EMPTY)
+    }
 }
 
-impl<V: ComplexFloatVector> SquareMasked<V::Mask> for Complex<V> {
+impl<V: RealFloatVector> SquareMasked<V::Mask> for Complex<V> {
     #[inline(always)]
     fn square_c(self, mask: V::Mask) -> Self::Output {
         mask.select(self.square(), self)
@@ -1010,7 +1036,7 @@ macro_rules! complex_masked {
 // --- NumericVector ---
 
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> Bounded for Complex<V> {
+impl<V: RealFloatVector> Bounded for Complex<V> {
     #[inline(always)] fn min_value() -> Self { Complex::new(V::MIN, V::MIN) }
     #[inline(always)] fn max_value() -> Self { Complex::new(V::MAX, V::MAX) }
 }
@@ -1019,7 +1045,7 @@ impl<V: ComplexFloatVector> Bounded for Complex<V> {
 /// The lane-sort key: strictly-before under the lexicographic (re, im)
 /// order, i.e. `cmp_lt`. See `thermite::sort::SortKey` for why this is a
 /// static trait method and not a closure.
-impl<V: ComplexFloatVector> thermite::sort::SortKey<Self> for Complex<V> {
+impl<V: RealFloatVector> thermite::sort::SortKey<Self> for Complex<V> {
     #[inline(always)]
     fn key_lt(a: Self, b: Self) -> V::Mask {
         a.cmp_lt(b)
@@ -1054,7 +1080,30 @@ where
     out
 }
 
-impl<V: ComplexFloatVector> NumericVector for Complex<V> {
+impl<V: RealFloatVector> NumericVector for Complex<V> {
+    // The integer conversions are real/value-only in both directions: an integer has no
+    // derivative, no imaginary part and no error term, so converting one in yields a
+    // constant, and converting out is the value part alone.
+    #[inline(always)]
+    fn to_signed_integer(self) -> Self::Signed {
+        self.re.to_signed_integer()
+    }
+
+    #[inline(always)]
+    fn from_signed_integer(v: Self::Signed) -> Self {
+        Self::real(V::from_signed_integer(v))
+    }
+
+    #[inline(always)]
+    fn to_unsigned_integer(self) -> Self::Unsigned {
+        self.re.to_unsigned_integer()
+    }
+
+    #[inline(always)]
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self {
+        Self::real(V::from_unsigned_integer(v))
+    }
+
     const ZERO: Self = Complex::new(V::ZERO, V::ZERO);
     const ONE: Self = Complex::new(V::ONE, V::ZERO);
     const TWO: Self = Self::real(V::TWO);
@@ -1063,8 +1112,14 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
     const MIN: Self = Complex::new(V::MIN, V::MIN);
     const MAX: Self = Complex::new(V::MAX, V::MAX);
 
-    #[inline(always)] fn is_zero(self) -> Self::Mask { self.re.is_zero() & self.im.is_zero() }
-    #[inline(always)] fn is_all_zero(self) -> bool { self.re.is_all_zero() && self.im.is_all_zero() }
+    #[inline(always)]
+    fn is_zero(self) -> Self::Mask {
+        self.re.is_zero() & self.im.is_zero()
+    }
+    #[inline(always)]
+    fn is_all_zero(self) -> bool {
+        self.re.is_all_zero() && self.im.is_all_zero()
+    }
 
     // Lane sorts are keyed on the lexicographic (re, im) order - which is exactly
     // `cmp_lt` here, so the key IS the comparison. Each compare-exchange derives one
@@ -1089,8 +1144,14 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
         }
     }
 
-    #[inline(always)] fn min(self, other: Self) -> Self { self.cmp_lt(other).select(self, other) }
-    #[inline(always)] fn max(self, other: Self) -> Self { self.cmp_gt(other).select(self, other) }
+    #[inline(always)]
+    fn min(self, other: Self) -> Self {
+        self.cmp_lt(other).select(self, other)
+    }
+    #[inline(always)]
+    fn max(self, other: Self) -> Self {
+        self.cmp_gt(other).select(self, other)
+    }
 
     // Compare against both bounds once, then blend per component.
     #[inline(always)]
@@ -1133,8 +1194,12 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
         let (mut lo, mut hi) = (0, 0);
 
         for i in 1..Self::LANES {
-            if arr[i] < arr[lo] { lo = i; }
-            if arr[i] > arr[hi] { hi = i; }
+            if arr[i] < arr[lo] {
+                lo = i;
+            }
+            if arr[i] > arr[hi] {
+                hi = i;
+            }
         }
 
         (lo, hi)
@@ -1194,14 +1259,32 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
         arr[0]
     }
 
-    #[inline(always)] fn offset() -> Self { Self::real(V::offset()) }
-    #[inline(always)] fn indexed() -> Self { Self::real(V::indexed()) }
+    #[inline(always)]
+    fn offset() -> Self {
+        Self::real(V::offset())
+    }
+    #[inline(always)]
+    fn indexed() -> Self {
+        Self::real(V::indexed())
+    }
 
-    #[inline(always)] fn scale(self, factor: Self::Element) -> Self { self * Self::splat(factor) }
+    #[inline(always)]
+    fn scale(self, factor: Self::Element) -> Self {
+        self * Self::splat(factor)
+    }
 
-    #[inline(always)] fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(<Self as NumericVector>::scale(self, factor), self) }
-    #[inline(always)] fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(<Self as NumericVector>::scale(self, factor), src) }
-    #[inline(always)] fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self { mask.select(<Self as NumericVector>::scale(self, factor), Self::ZERO) }
+    #[inline(always)]
+    fn scale_c(self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(<Self as NumericVector>::scale(self, factor), self)
+    }
+    #[inline(always)]
+    fn scale_m(self, src: Self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(<Self as NumericVector>::scale(self, factor), src)
+    }
+    #[inline(always)]
+    fn scale_z(self, mask: Self::Mask, factor: Self::Element) -> Self {
+        mask.select(<Self as NumericVector>::scale(self, factor), Self::ZERO)
+    }
     complex_masked!(binary: min, max);
 
     // pairwise_sum is a lane rearrange-and-add, and a lane's components sit at the
@@ -1222,7 +1305,7 @@ impl<V: ComplexFloatVector> NumericVector for Complex<V> {
 
 // --- SignedVector ---
 
-impl<V: ComplexFloatVector> NegMasked<V::Mask> for Complex<V> {
+impl<V: RealFloatVector> NegMasked<V::Mask> for Complex<V> {
     #[inline(always)]
     fn neg_c(self, mask: V::Mask) -> Self {
         Complex::new(self.re.neg_c(mask), self.im.neg_c(mask))
@@ -1239,10 +1322,10 @@ impl<V: ComplexFloatVector> NegMasked<V::Mask> for Complex<V> {
     }
 }
 
-impl<V: ComplexFloatVector> Complex<V> {
+impl<V: RealFloatVector> Complex<V> {
     /// The modulus `$|z|$` under the default policy, for the vector-trait methods
     /// that take no policy. The policy-aware form is
-    /// [`norm_p`](crate::ComplexMathWithPolicy::norm_p).
+    /// [`norm_p`](crate::math::ComplexMathWithPolicy::norm_p).
     #[inline(always)]
     pub(crate) fn modulus(self) -> V {
         self.re.hypot_p::<DefaultPolicy>(self.im)
@@ -1250,7 +1333,7 @@ impl<V: ComplexFloatVector> Complex<V> {
 }
 
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> SignedVector for Complex<V> {
+impl<V: RealFloatVector> SignedVector for Complex<V> {
     const NEG_ONE: Self = Self::real(V::NEG_ONE);
     const MIN_POSITIVE: Self = Self::real(V::MIN_POSITIVE);
 
@@ -1291,8 +1374,82 @@ impl<V: ComplexFloatVector> SignedVector for Complex<V> {
 
 // --- FloatVector ---
 
+/// Kahan's principal square root, plus a mask of the lanes that degenerated.
+///
+/// Split out so those lanes can re-enter it on a rescaled argument; see
+/// [`sqrt_rescaled`]. Both `t` and the modulus have to be tested, and which one fires
+/// depends on how the build handles denormals - see the mask's own comment.
+#[inline(always)]
+fn sqrt_kahan<V: RealFloatVector>(z: Complex<V>) -> (Complex<V>, V::Mask) {
+    let half = <V as FloatVector>::HALF;
+
+    let m = z.modulus();
+
+    // Halving each term before the sum, not after: `|re| + |z|` overflows for a `re`
+    // near the top of the range even though `sqrt(z)` is comfortably representable
+    // there (`sqrt(1.7e308)` gave `inf` for a true 1.3e154). Scaling by a power of two
+    // is exact, so this is the same value at no extra instruction - the multiply folds
+    // into the FMA.
+    let t = z.re.abs().mul_adde(half, m * half).sqrt(); // sqrt((|re| + |z|)/2)
+    let half_im = z.im * half;
+
+    // One quotient serves both branches: t >= 0, so |im/2|/t is |im/2t| exactly.
+    let q = half_im / t;
+
+    // re >= 0: (t, im/2t).   re < 0: (|im|/2t, sign(im)*t).
+    let re_pos = z.re.is_positive();
+
+    // *Which* of the two goes to zero depends on how the build handles denormals, and
+    // neither implies the other - so the flag picks the test, at one instruction either
+    // way. Testing only one unconditionally returns silent garbage in the other
+    // configuration, which is exactly how this was found.
+    //
+    // - Flushing (the default): `hypot` drops a subnormal `|z|` to zero while the
+    //   `|re|` beside it survives, so `m == 0` while `t == sqrt(|re|/2)` is non-zero -
+    //   and a factor of sqrt(2) below the answer. A normal `|z|` keeps `t >= sqrt(m/2)`
+    //   positive, so `m` alone decides.
+    // - Preserving or ignoring: `m` keeps the subnormal, so it is zero only for a true
+    //   zero - but halving the *smallest* subnormals underflows, leaving `t == 0` with
+    //   `m != 0`. A true zero sets `t` too, so `t` alone decides.
+    let degenerate = if const { features::PRESERVE_DENORMALS || features::IGNORE_DENORMALS } {
+        t.is_zero()
+    } else {
+        m.is_zero()
+    };
+
+    (
+        Complex::new(re_pos.select(t, q.abs()), re_pos.select(q, t.mul_sign(z.im))),
+        degenerate,
+    )
+}
+
+/// The degenerate lanes of [`sqrt_kahan`].
+///
+/// That means one of two things. Either `z` is genuinely zero, where the root is zero
+/// and both quotients were `0/0`; or `|z|` is subnormal, and either `hypot` flushed it
+/// even though the *answer* is an entirely ordinary number - `sqrt(5e-324)` is 2.2e-162,
+/// a perfectly normal double. Denormal flushing exists to avoid hardware stalls on
+/// denormal intermediates and results; here there are none, only a denormal input, so
+/// preserving it costs nothing at runtime and buys back 160 orders of magnitude.
+///
+/// Scaling into the normal range recovers it. `1/MIN_POSITIVE` is an exact power of two
+/// whose exponent is even in both binary formats (2^1022 for f64, 2^126 for f32), so
+/// `sqrt(MIN_POSITIVE)` is exact as well and undoing the scale introduces no rounding of
+/// its own.
+#[inline(always)]
+fn sqrt_rescaled<V: RealFloatVector>(z: Complex<V>) -> Complex<V> {
+    let up = V::ONE / <V as SignedVector>::MIN_POSITIVE;
+    let down = <V as SignedVector>::MIN_POSITIVE.sqrt();
+
+    let (r, _) = sqrt_kahan(Complex::new(z.re * up, z.im * up));
+
+    let is_zero = z.is_zero();
+
+    Complex::new((r.re * down).nz(is_zero), (r.im * down).nz(is_zero))
+}
+
 #[rustfmt::skip]
-impl<V: ComplexFloatVector> FloatVector for Complex<V> {
+impl<V: RealFloatVector> FloatVector for Complex<V> {
     const HALF: Self = Self::real(<V as FloatVector>::HALF);
     const NEG_ZERO: Self = Self::real(<V as FloatVector>::NEG_ZERO);
     const EPSILON: Self = Self::real(<V as FloatVector>::EPSILON);
@@ -1333,21 +1490,16 @@ impl<V: ComplexFloatVector> FloatVector for Complex<V> {
         // exactly that shape). Take the large component from the modulus, always
         // adding, and recover the small one from re*im_out = im/2. One division, no
         // cancellation.
-        let half = <V as FloatVector>::HALF;
+        let (res, degenerate) = sqrt_kahan(self);
 
-        let t = ((self.re.abs() + self.modulus()) * half).sqrt(); // sqrt((|re| + |z|)/2)
-        let half_im = self.im * half;
+        // Branching rather than blending costs the common path nothing: it trades the two
+        // unconditional `nz` this used to end with for a test the predictor will call
+        // correctly essentially always, and takes them off the dependency chain.
+        if thermite::unlikely(degenerate.any()) {
+            return degenerate.select(sqrt_rescaled(self), res);
+        }
 
-        // re >= 0: (t, im/2t).   re < 0: (|im|/2t, sign(im)*t).
-        let re_pos = self.re.cmp_ge(V::ZERO);
-
-        let re = re_pos.select(t, half_im.abs() / t);
-        let im = re_pos.select(half_im / t, t.mul_sign(self.im));
-
-        // z == 0 makes t == 0, so both quotients are 0/0 = NaN; sqrt(0) is 0.
-        let is_zero = t.is_zero();
-
-        Complex::new(re.nz(is_zero), im.nz(is_zero))
+        res
     }
 
     /// `$1/z = \bar{z}/|z|^2$`
@@ -1388,8 +1540,9 @@ impl<V: ComplexFloatVector> FloatVector for Complex<V> {
         }
     }
 
-    // mix(t) = a*(1 - t) + b*t = a + (b - a)*t, through complex arithmetic.
-    #[inline(always)] fn mix(self, a: Self, b: Self) -> Self { a + (b - a) * self }
+    // mix(t) = a*(1 - t) + b*t = (b - a)*t + a, one complex FMA (four inner FMAs)
+    // rather than a complex multiply and a complex add.
+    #[inline(always)] fn mix(self, a: Self, b: Self) -> Self { (b - a).mul_adde(self, a) }
 
     complex_masked!(unary: sqrt, rsqrt, rcp, floor, ceil, round, trunc, fract, signed_zero, next_up, next_down);
     complex_masked!(binary: mul_sign);

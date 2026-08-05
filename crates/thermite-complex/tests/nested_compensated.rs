@@ -1,7 +1,7 @@
 //! `Complex<Compensated<V>>`: complex arithmetic carried in double-double.
 //!
 //! Nothing here is written against `Compensated`; it is written against
-//! `ComplexValue`, which `Compensated` satisfies, so the complex arithmetic and the
+//! `RealValue`, which `Compensated` satisfies, so the complex arithmetic and the
 //! complex kernels pick up the extra precision on their own.
 
 #![cfg(feature = "compensated")]
@@ -9,7 +9,8 @@
 use thermite::math::TranscendentalMath;
 use thermite::prelude::*;
 use thermite_compensated::Compensated;
-use thermite_complex::{Complex, ComplexMath};
+use thermite_complex::Complex;
+use thermite_complex::prelude::ComplexMath;
 
 /// A 1-lane f64 double-double, i.e. ~106 bits of mantissa.
 type C = Compensated<Vector<f64>>;

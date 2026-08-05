@@ -8,9 +8,9 @@ use crate::{
     backend::scalar::Scalar,
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister,
-        PartialOrdRegister, Register, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage,
-        ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, ShuffleRegister,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
     simd::Simd,
 };

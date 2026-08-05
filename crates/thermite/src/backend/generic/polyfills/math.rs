@@ -1,6 +1,7 @@
 use super::*;
 
-#[inline(always)] #[allow(unused)]
+#[inline(always)]
+#[allow(unused)]
 pub fn fix_min<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut min: Storage<R>) -> Storage<R> {
     #[cfg(not(feature = "strict_ieee754"))]
     return min;
@@ -15,7 +16,8 @@ pub fn fix_min<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut min: Storage<
     R::blendv(is_nan, min, a)
 }
 
-#[inline(always)] #[allow(unused)]
+#[inline(always)]
+#[allow(unused)]
 pub fn fix_max<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut max: Storage<R>) -> Storage<R> {
     #[cfg(not(feature = "strict_ieee754"))]
     return max;

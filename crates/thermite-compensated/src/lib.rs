@@ -1159,29 +1159,68 @@ impl_masked!(Rem::rem);
 #[inline(always)]
 fn neg_even_compensated<V: CompensatedFloatVector>(x: Compensated<V>) -> Compensated<V> {
     // `addsub(0, w) = [-w0, w1, -w2, ...]` flips the even lanes exactly.
-    Compensated { value: V::ZERO.addsub(x.value), error: V::ZERO.addsub(x.error) }
+    Compensated {
+        value: V::ZERO.addsub(x.value),
+        error: V::ZERO.addsub(x.error),
+    }
 }
 
 impl<V: CompensatedFloatVector> AddSubExt for Compensated<V> {
     type Output = Self;
 
-    #[inline(always)] fn addsub(self, b: Self) -> Self { self + neg_even_compensated(b) }
-    #[inline(always)] fn fmaddsub(self, b: Self, c: Self) -> Self { self.mul_adde(b, neg_even_compensated(c)) }
-    #[inline(always)] fn fmsubadd(self, b: Self, c: Self) -> Self { self.mul_sube(b, neg_even_compensated(c)) }
+    #[inline(always)]
+    fn addsub(self, b: Self) -> Self {
+        self + neg_even_compensated(b)
+    }
+    #[inline(always)]
+    fn fmaddsub(self, b: Self, c: Self) -> Self {
+        self.mul_adde(b, neg_even_compensated(c))
+    }
+    #[inline(always)]
+    fn fmsubadd(self, b: Self, c: Self) -> Self {
+        self.mul_sube(b, neg_even_compensated(c))
+    }
 }
 
 impl<V: CompensatedFloatVector> AddSubExtMasked<V::Mask> for Compensated<V> {
-    #[inline(always)] fn addsub_c(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), self) }
-    #[inline(always)] fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), src) }
-    #[inline(always)] fn addsub_z(self, mask: V::Mask, b: Self) -> Self { mask.select(self.addsub(b), Self::EMPTY) }
+    #[inline(always)]
+    fn addsub_c(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), self)
+    }
+    #[inline(always)]
+    fn addsub_m(self, src: Self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), src)
+    }
+    #[inline(always)]
+    fn addsub_z(self, mask: V::Mask, b: Self) -> Self {
+        mask.select(self.addsub(b), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), self) }
-    #[inline(always)] fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), src) }
-    #[inline(always)] fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmaddsub(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmaddsub_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), self)
+    }
+    #[inline(always)]
+    fn fmaddsub_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), src)
+    }
+    #[inline(always)]
+    fn fmaddsub_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmaddsub(b, c), Self::EMPTY)
+    }
 
-    #[inline(always)] fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), self) }
-    #[inline(always)] fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), src) }
-    #[inline(always)] fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self { mask.select(self.fmsubadd(b, c), Self::EMPTY) }
+    #[inline(always)]
+    fn fmsubadd_c(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), self)
+    }
+    #[inline(always)]
+    fn fmsubadd_m(self, src: Self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), src)
+    }
+    #[inline(always)]
+    fn fmsubadd_z(self, mask: V::Mask, b: Self, c: Self) -> Self {
+        mask.select(self.fmsubadd(b, c), Self::EMPTY)
+    }
 }
 
 // `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
@@ -1299,8 +1338,14 @@ impl<V: CompensatedFloatVector> Interleave for Compensated<V> {
         let (error_lo, error_hi) = self.error.interleave(other.error);
 
         (
-            Self { value: value_lo, error: error_lo },
-            Self { value: value_hi, error: error_hi },
+            Self {
+                value: value_lo,
+                error: error_lo,
+            },
+            Self {
+                value: value_hi,
+                error: error_hi,
+            },
         )
     }
 
@@ -1310,8 +1355,14 @@ impl<V: CompensatedFloatVector> Interleave for Compensated<V> {
         let (error_lo, error_hi) = self.error.deinterleave(other.error);
 
         (
-            Self { value: value_lo, error: error_lo },
-            Self { value: value_hi, error: error_hi },
+            Self {
+                value: value_lo,
+                error: error_lo,
+            },
+            Self {
+                value: value_hi,
+                error: error_hi,
+            },
         )
     }
 }
@@ -1898,6 +1949,29 @@ impl<V: CompensatedFloatVector> num_traits::Bounded for Compensated<V> {
 }
 
 impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
+    // The integer conversions are real/value-only in both directions: an integer has no
+    // derivative, no imaginary part and no error term, so converting one in yields a
+    // constant, and converting out is the value part alone.
+    #[inline(always)]
+    fn to_signed_integer(self) -> Self::Signed {
+        self.value().to_signed_integer()
+    }
+
+    #[inline(always)]
+    fn from_signed_integer(v: Self::Signed) -> Self {
+        Self::new(V::from_signed_integer(v))
+    }
+
+    #[inline(always)]
+    fn to_unsigned_integer(self) -> Self::Unsigned {
+        self.value().to_unsigned_integer()
+    }
+
+    #[inline(always)]
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self {
+        Self::new(V::from_unsigned_integer(v))
+    }
+
     const ZERO: Self = Self::new(V::ZERO);
     const ONE: Self = Self::new(V::ONE);
     const TWO: Self = Self::new(V::TWO);

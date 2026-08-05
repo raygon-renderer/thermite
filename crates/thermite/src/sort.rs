@@ -412,7 +412,11 @@ where
         "sort_lanes_by_key covers power-of-two lane counts up to 16"
     );
 
-    let v = if const { V::LANES >= 2 } { key_stage::<V, O, RevPairs<2>, K>(v) } else { v };
+    let v = if const { V::LANES >= 2 } {
+        key_stage::<V, O, RevPairs<2>, K>(v)
+    } else {
+        v
+    };
     let v = if const { V::LANES >= 4 } {
         let v = key_stage::<V, O, RevPairs<4>, K>(v);
         key_stage::<V, O, Distance<1>, K>(v)
@@ -453,9 +457,25 @@ where
         "bitonic_clean_lanes_by_key covers power-of-two lane counts up to 16"
     );
 
-    let v = if const { V::LANES >= 16 } { key_stage::<V, O, Distance<8>, K>(v) } else { v };
-    let v = if const { V::LANES >= 8 } { key_stage::<V, O, Distance<4>, K>(v) } else { v };
-    let v = if const { V::LANES >= 4 } { key_stage::<V, O, Distance<2>, K>(v) } else { v };
+    let v = if const { V::LANES >= 16 } {
+        key_stage::<V, O, Distance<8>, K>(v)
+    } else {
+        v
+    };
+    let v = if const { V::LANES >= 8 } {
+        key_stage::<V, O, Distance<4>, K>(v)
+    } else {
+        v
+    };
+    let v = if const { V::LANES >= 4 } {
+        key_stage::<V, O, Distance<2>, K>(v)
+    } else {
+        v
+    };
 
-    if const { V::LANES >= 2 } { key_stage::<V, O, Distance<1>, K>(v) } else { v }
+    if const { V::LANES >= 2 } {
+        key_stage::<V, O, Distance<1>, K>(v)
+    } else {
+        v
+    }
 }

@@ -1,11 +1,10 @@
 use super::arch;
 
 use crate::register::{
-        CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register,
-        SaturatingCastRegister, Storage,
-        array::ArrayRegister,
-        reduced::{HalfRegister2, ReducedRegister},
-    };
+    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister, Storage,
+    array::ArrayRegister,
+    reduced::{HalfRegister2, ReducedRegister},
+};
 
 pub type F32x2V3 = HalfRegister2<super::F32x4V3>;
 pub type I32x2V3 = HalfRegister2<super::I32x4V3>;

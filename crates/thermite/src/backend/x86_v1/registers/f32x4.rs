@@ -7,10 +7,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitwiseRegister, BlendRegister, CastRegister, CoreRegister,
-        ExtendRegister, FloatRegister, InterleaveRegister, LinAlg3Register, LinAlg4Register, MaskElement,
-        MaskRegister, NativeCapability, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        ShuffleRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg,
+        BitwiseRegister, BlendRegister, CastRegister, CoreRegister, ExtendRegister, FloatRegister, InterleaveRegister,
+        LinAlg3Register, LinAlg4Register, MaskElement, MaskRegister, NativeCapability, NumericRegister,
+        PartialOrdRegister, PermuteRegister, Register, ShuffleRegister, SignedRegister, Storage, ZeroUpper,
+        array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -368,7 +368,6 @@ impl NumericRegister for F32x4V1 {
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::fix_max::<Self>(lhs, rhs, unsafe { arch::_mm_max_ps(lhs, rhs) })
     }
-
 }
 
 #[thermite_macros::inline_always]

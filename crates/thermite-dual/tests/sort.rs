@@ -14,7 +14,9 @@ use thermite_dual::Dual;
 
 /// Duplicates on purpose - ties are the hazard.
 fn primal(lane: usize) -> f32 {
-    const PATTERN: [f32; 16] = [5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0];
+    const PATTERN: [f32; 16] = [
+        5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
+    ];
     PATTERN[lane % 16]
 }
 

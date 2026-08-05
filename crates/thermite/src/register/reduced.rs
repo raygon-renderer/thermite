@@ -14,9 +14,9 @@ use crate::{
 
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
-    FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister,
-    NativeCapability, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister,
-    SignedRegister, Storage, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
+    FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister, NativeCapability,
+    NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister, SignedRegister,
+    Storage, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{

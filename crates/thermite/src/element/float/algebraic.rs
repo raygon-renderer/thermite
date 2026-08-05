@@ -76,7 +76,11 @@ macro_rules! impl_algebraic_float {
 // Until that ships this branch is unreachable in practice - anything older is
 // rejected by `algebraic_scalar_version_check` below - but it means the feature
 // starts working on stable the day 1.98 lands, with no code change here.
-#[cfg(all(feature = "algebraic-scalar", not(feature = "strict_ieee754"), not(feature = "nightly")))]
+#[cfg(all(
+    feature = "algebraic-scalar",
+    not(feature = "strict_ieee754"),
+    not(feature = "nightly")
+))]
 macro_rules! impl_algebraic_float {
     ($($t:ty),* $(,)?) => {$(
         impl AlgebraicFloat for $t {
@@ -94,7 +98,11 @@ impl_algebraic_float!(f32, f64);
 /// `f32::algebraic_add` and friends only stabilize in 1.98, above the crate MSRV,
 /// so on anything older `algebraic-scalar` needs `nightly` for the intrinsics.
 /// Without this the failure is a wall of E0658s about `float_algebraic`.
-#[cfg(all(feature = "algebraic-scalar", not(feature = "strict_ieee754"), not(feature = "nightly")))]
+#[cfg(all(
+    feature = "algebraic-scalar",
+    not(feature = "strict_ieee754"),
+    not(feature = "nightly")
+))]
 #[rustversion::before(1.98)]
 fn algebraic_scalar_version_check() {
     compile_error!(

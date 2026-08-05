@@ -4,7 +4,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //
-#![allow(clippy::missing_transmute_annotations, clippy::let_and_return, unused_braces, unused_imports)]
+#![allow(
+    clippy::missing_transmute_annotations,
+    clippy::let_and_return,
+    unused_braces,
+    unused_imports
+)]
 #![deny(rustdoc::invalid_rust_codeblocks)]
 // used for more intelligent const splat
 #![cfg_attr(feature = "nightly", feature(core_intrinsics, const_eval_select))]
@@ -196,11 +201,10 @@ pub mod prelude {
         sort::{Ascending, Descending, SortOrder},
         swizzle::Swizzle as _,
         vector::ops::{
-            AddSubExt as _, AddSubExtMasked as _,
-            AddAssignMasked as _, AddMasked as _, BitAndAssignMasked as _, BitAndMasked as _, BitAndNot as _,
-            BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _, BitOrAssignMasked as _,
-            BitOrMasked as _, BitXorAssignMasked as _, BitXorMasked as _, DivAssignMasked as _, DivMasked as _,
-            MulAddAssignExt as _, MulAddAssignExtMasked as _, MulAddExt as _, MulAddExtMasked as _,
+            AddAssignMasked as _, AddMasked as _, AddSubExt as _, AddSubExtMasked as _, BitAndAssignMasked as _,
+            BitAndMasked as _, BitAndNot as _, BitAndNotAssign as _, BitAndNotAssignMasked as _, BitAndNotMasked as _,
+            BitOrAssignMasked as _, BitOrMasked as _, BitXorAssignMasked as _, BitXorMasked as _, DivAssignMasked as _,
+            DivMasked as _, MulAddAssignExt as _, MulAddAssignExtMasked as _, MulAddExt as _, MulAddExtMasked as _,
             MulAssignMasked as _, MulMasked as _, NegMasked as _, NotMasked as _, RemAssignMasked as _, RemMasked as _,
             ShlAssignMasked as _, ShlMasked as _, ShrAssignMasked as _, ShrMasked as _, Square as _, SquareMasked as _,
             SubAssignMasked as _, SubMasked as _,

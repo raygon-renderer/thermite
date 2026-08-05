@@ -32,7 +32,7 @@
 //! sysfs mirror (`regs/identification/midr_el1`) is the safe way to the same
 //! data, and it is subject to the same SELinux limits as everything else here.
 
-use super::{CpuInfo};
+use super::CpuInfo;
 
 /// `CTR_EL0`: cache type register, readable at EL0 by default.
 ///
@@ -175,7 +175,6 @@ mod apple {
             info.topology.performance_cores = u16_of(b"hw.perflevel0.logicalcpu\0");
             info.topology.efficiency_cores = u16_of(b"hw.perflevel1.logicalcpu\0");
         }
-
     }
 }
 

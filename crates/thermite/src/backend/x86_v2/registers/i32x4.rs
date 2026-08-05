@@ -7,10 +7,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister,
-        IntegerRegister, InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister,
-        PermuteRegister, Register, SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister,
-        Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
+        array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 

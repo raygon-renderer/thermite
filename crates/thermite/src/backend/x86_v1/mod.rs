@@ -9,7 +9,6 @@ pub mod arch {
 pub mod polyfills;
 pub mod registers;
 
-
 pub use registers::X86V1;
 
 decl_aliases!(X86V1);

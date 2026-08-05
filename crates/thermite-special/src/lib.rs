@@ -12,6 +12,7 @@ use thermite::{
 };
 
 pub mod specialized;
+pub mod tables;
 
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
 
@@ -385,7 +386,11 @@ decl_math! {
         /// Outside these domains, the respective result is NaN (when overflow checking is enabled).
         fn lambert_w[][](self: Self) -> (Self, Self);
 
-        fn bessel_j[const N: usize][N](self: Self) -> Self;
+        // TEMP(bessel_j): disabled until orders beyond J_0 exist. Only f32 `J_0` was
+        // ever implemented, so every composite type (Dual, Complex, Compensated) could
+        // do nothing but `todo!()`. Re-enable this line and the ones marked
+        // TEMP(bessel_j) elsewhere together.
+        //fn bessel_j[const N: usize][N](self: Self) -> Self;
 
         /// Computes the generalized exponential integral `E_n(x)` for integer order `n`.
         fn expint[const N: usize][N](self: Self) -> Self;

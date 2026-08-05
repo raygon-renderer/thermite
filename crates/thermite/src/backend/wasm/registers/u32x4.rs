@@ -1,16 +1,14 @@
 use generic_array::{
     GenericArray,
-    
     typenum::{self, Unsigned},
 };
 
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister, InterleaveRegister,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
         SaturatingCastRegister, ShuffleRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
-        
     },
 };
 

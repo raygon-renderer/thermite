@@ -18,12 +18,7 @@ type U64x2 = Vector<ArrayRegister<u64, 2>>;
 fn reference<const GROUP: usize>(a: &[u8; 16], b: &[u8; 16]) -> Vec<u64> {
     a.chunks(GROUP)
         .zip(b.chunks(GROUP))
-        .map(|(x, y)| {
-            x.iter()
-                .zip(y)
-                .map(|(p, q)| u64::from(p.abs_diff(*q)))
-                .sum()
-        })
+        .map(|(x, y)| x.iter().zip(y).map(|(p, q)| u64::from(p.abs_diff(*q))).sum())
         .collect()
 }
 
@@ -35,9 +30,9 @@ fn vectors(a: &[u8; 16], b: &[u8; 16]) -> (U8x16, U8x16) {
 fn cases() -> Vec<([u8; 16], [u8; 16])> {
     let mut out = vec![
         ([0u8; 16], [0u8; 16]),
-        ([255u8; 16], [0u8; 16]),      // every group at its maximum
-        ([0u8; 16], [255u8; 16]),      // ... and with the operands swapped
-        ([128u8; 16], [127u8; 16]),    // adjacent values, |diff| == 1
+        ([255u8; 16], [0u8; 16]),   // every group at its maximum
+        ([0u8; 16], [255u8; 16]),   // ... and with the operands swapped
+        ([128u8; 16], [127u8; 16]), // adjacent values, |diff| == 1
     ];
 
     // A few scrambled patterns; a simple LCG keeps this reproducible without a dep.
@@ -46,9 +41,13 @@ fn cases() -> Vec<([u8; 16], [u8; 16])> {
         let mut a = [0u8; 16];
         let mut b = [0u8; 16];
         for i in 0..16 {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             a[i] = (state >> 33) as u8;
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             b[i] = (state >> 33) as u8;
         }
         out.push((a, b));
@@ -200,7 +199,11 @@ fn wider_element_inputs() {
     }
     for i in 0..2 {
         let r: Vector<ArrayRegister<u64, 2>> = va.sad64(vb);
-        assert_eq!(r.extractv(i), d[4 * i..4 * i + 4].iter().sum::<u64>(), "u16 sad64 lane {i}");
+        assert_eq!(
+            r.extractv(i),
+            d[4 * i..4 * i + 4].iter().sum::<u64>(),
+            "u16 sad64 lane {i}"
+        );
     }
 
     let a32: [u32; 4] = [0, 4_000_000_000, 17, 1];
@@ -289,19 +292,36 @@ fn native_width_xn_ladder() {
     // against the same prefix rather than the whole buffer.
     let (got, lanes) = thermite::dispatch_dyn!(for<S> |a: &[u8], b: &[u8]| -> (u64, usize) {
         let n = <u8xN as GenericVector>::LANES;
-        (u8xN::from_slice(&a[..n]).sad64(u8xN::from_slice(&b[..n])).sum_elements(), n)
+        (
+            u8xN::from_slice(&a[..n])
+                .sad64(u8xN::from_slice(&b[..n]))
+                .sum_elements(),
+            n,
+        )
     });
-    let want_n: u64 = a[..lanes].iter().zip(&b[..lanes]).map(|(p, q)| u64::from(p.abs_diff(*q))).sum();
+    let want_n: u64 = a[..lanes]
+        .iter()
+        .zip(&b[..lanes])
+        .map(|(p, q)| u64::from(p.abs_diff(*q)))
+        .sum();
     assert_eq!(got, want_n, "u8xN sad64 over {lanes} lanes");
 
     let (got, lanes) = thermite::dispatch_dyn!(for<S> |a: &[u8], b: &[u8]| -> (u64, usize) {
         let n = <u8xN as GenericVector>::LANES;
         (
-            u64::from(u8xN::from_slice(&a[..n]).sad32(u8xN::from_slice(&b[..n])).sum_elements()),
+            u64::from(
+                u8xN::from_slice(&a[..n])
+                    .sad32(u8xN::from_slice(&b[..n]))
+                    .sum_elements(),
+            ),
             n,
         )
     });
-    let want_n: u64 = a[..lanes].iter().zip(&b[..lanes]).map(|(p, q)| u64::from(p.abs_diff(*q))).sum();
+    let want_n: u64 = a[..lanes]
+        .iter()
+        .zip(&b[..lanes])
+        .map(|(p, q)| u64::from(p.abs_diff(*q)))
+        .sum();
     assert_eq!(got, want_n, "u8xN sad32 over {lanes} lanes");
 
     let _ = want;

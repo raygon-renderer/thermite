@@ -155,3 +155,35 @@ These power the inverse-smoothstep and special-function kernels.
   denormals/NaNs elsewhere, at a perf cost).
 - `ldexp_f32` at extreme exponents (`ldexp(f32::MAX, i32::MIN)`) only flushes
   correctly under `strict_ieee754`.
+- **Denormals are handled unevenly, and mixing the two halves is silently wrong.**
+  `hypot` flushes them -- at *every* policy, `Precision` included -- while `*`, `+`
+  and `sqrt` beside it do not. A formula combining both gives an answer that is
+  neither the flushed one nor the true one: complex `sqrt` of a subnormal came out a
+  factor of `sqrt(2)` low, because `|z|` was flushed while the `|re|` added to it
+  survived. If a kernel touches the bottom of the range, make the two agree.
+- Low-precision `hypot` (`Worst`) squares directly, so it underflows to zero for
+  inputs as large as `1e-300` -- well above the subnormal range.
+- At policies with `check_overflow = false` (`UltraPerformance`, `HighPerformance`)
+  `exp` **saturates to roughly MAX rather than to infinity**, deliberately: the
+  recombination would otherwise hand back `0 * inf = NaN` for exact-integer inputs.
+  Consumers that divide two saturated values (`sinh/cosh`) therefore still cancel to
+  `1.0`; consumers expecting a literal `inf` should ask for a checked policy.
+
+## Denormal configuration is a *behaviour* switch, not just a dial
+
+`thermite::features` exposes const bools -- `PRESERVE_DENORMALS`, `IGNORE_DENORMALS`,
+`STRICT_IEEE754`, `DISABLE_FAST_FMA`, `ALGEBRAIC_SCALAR` -- usable in `if const`.
+Reach for them when a formula's *degenerate case moves* between configurations:
+
+```rust
+// Which value hits zero first depends on the build; neither implies the other.
+let degenerate = if const { features::PRESERVE_DENORMALS || features::IGNORE_DENORMALS } {
+    t.is_zero()   // modulus keeps the subnormal, but halving the smallest underflows
+} else {
+    m.is_zero()   // hypot flushed the modulus, while |re| beside it survived
+};
+```
+
+Test both. A guard keyed on the right value for the default build was silently wrong
+under `preserve_denormals` -- same function, same input, opposite failure. Nothing in
+the default test suite catches that.

@@ -32,9 +32,8 @@ macro_rules! check {
             const A: usize = $alphabet;
 
             // No per-lane accessor on `Mask`; materialize through `select`.
-            let set_at = |m: <V as GenericVector>::Mask, i: usize| {
-                m.select(V::ONE, V::ZERO).as_slice()[i] != 0 as $elem
-            };
+            let set_at =
+                |m: <V as GenericVector>::Mask, i: usize| m.select(V::ONE, V::ZERO).as_slice()[i] != 0 as $elem;
 
             let total = A.pow(N as u32);
             for pattern in 0..total {
@@ -75,7 +74,13 @@ macro_rules! check {
                 let first = got.cmp_eq(V::ZERO);
                 for i in 0..N {
                     let is_first = !d[..i].contains(&d[i]);
-                    assert_eq!(set_at(first, i), is_first, "first-occurrence lane={} input={:?}", i, d);
+                    assert_eq!(
+                        set_at(first, i),
+                        is_first,
+                        "first-occurrence lane={} input={:?}",
+                        i,
+                        d
+                    );
                 }
 
                 // --- group_by_value --------------------------------------
@@ -111,7 +116,13 @@ macro_rules! check {
 
                 // Every valid lane yielded exactly once, invalid lanes never.
                 for i in 0..N {
-                    assert_eq!(seen[i], (valid_bits >> i) & 1 == 1, "coverage lane={} input={:?}", i, d);
+                    assert_eq!(
+                        seen[i],
+                        (valid_bits >> i) & 1 == 1,
+                        "coverage lane={} input={:?}",
+                        i,
+                        d
+                    );
                 }
                 assert!(groups.is_empty(), "iterator finished with lanes remaining");
 
@@ -160,11 +171,19 @@ macro_rules! suite {
                 assert_eq!(val, 7);
                 assert_eq!(lanes.count_set(), 8);
                 assert!(g.next_group().is_none());
-                assert_eq!(uniform.count_conflicts().into_array(), [0i32, 1, 2, 3, 4, 5, 6, 7].into());
+                assert_eq!(
+                    uniform.count_conflicts().into_array(),
+                    [0i32, 1, 2, 3, 4, 5, 6, 7].into()
+                );
 
                 let distinct = V::indexed();
                 assert_eq!(distinct.count_conflicts().into_array(), [0i32; 8].into());
-                assert_eq!(distinct.group_by_value(<V as GenericVector>::Mask::TRUTHY).count(), 8);
+                assert_eq!(
+                    distinct
+                        .group_by_value(<V as GenericVector>::Mask::TRUTHY)
+                        .count(),
+                    8
+                );
 
                 // An empty `valid` yields nothing at all.
                 let mut none = distinct.group_by_value(<V as GenericVector>::Mask::FALSY);
