@@ -51,8 +51,11 @@
 //! `$|w| \sim 1/(\sqrt{\pi}x)$`, so a uniform normwise error `$\epsilon$` lands as
 //! about `$\epsilon\,x/y$` on the real part alone. Consumers of the complex value -
 //! `erf`, `erfc`, `erfi`, Dawson - are unaffected. A Voigt profile, which *is*
-//! `$\operatorname{Re} w$`, is not; that wants an exact `$y \to 0$` path seeded from
-//! Dawson's integral, which is not implemented here yet.
+//! `$\operatorname{Re} w$`, is not, so `real_axis_w` takes that strip over at
+//! `Best` and above. It needs no separate Dawson kernel: on the axis
+//! `$\operatorname{Im} w(x) = \frac{2}{\sqrt{\pi}}F(x)$` *is* Dawson's integral, and it
+//! is the component this approximation delivers to full relative accuracy, so the seed
+//! is already in hand and only `$\operatorname{Re} w = e^{-x^2}$` has to be restored.
 
 use thermite::math::policy::{Policy, PrecisionPolicy};
 use thermite::math::{CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _};
