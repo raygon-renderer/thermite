@@ -84,13 +84,17 @@ pub fn detect() -> CpuInfo {
 
 /// macOS / iOS, including Apple silicon.
 ///
-/// `sysctlbyname` lives in libSystem, which every Apple target links
-/// unconditionally, so this needs neither `std` nor a `libc` dependency.
+/// `sysctlbyname` lives in libSystem, so this needs neither `std` nor a `libc`
+/// dependency. It does need libSystem to actually be linked, which is *not*
+/// automatic: a `no_std` crate graph makes rustc pass `-nodefaultlibs`, and then
+/// nothing pulls it in. Hence the explicit `#[link]` below rather than relying on
+/// the platform default.
 #[cfg(target_vendor = "apple")]
 mod apple {
     use crate::cpu::{CacheInfo, CacheKind, CpuInfo};
     use core::ffi::{c_char, c_int, c_void};
 
+    #[link(name = "System")]
     unsafe extern "C" {
         fn sysctlbyname(
             name: *const c_char,
