@@ -5,7 +5,7 @@ use thermite::prelude::*;
 use thermite::element::FloatElementWithBits;
 use thermite::vector::AsFloatVectorWithBitsKernel;
 
-use thermite::math::policy::{PrecisionPolicy, policies::CheckOverflow};
+use thermite::math::policy::{PrecisionPolicy, policies::{CheckOverflow, PreserveDenormals}};
 use thermite::math::specialized::{
     SpecializedCoreMath, SpecializedRealMath, SpecializedSpatialMath, SpecializedTranscendentalMath,
 };
@@ -22,6 +22,34 @@ impl<V: CompensatedFloatVector> SpecializedTranscendentalMath<Compensated<V::Ele
 where
     V: TranscendentalMathWithPolicy,
 {
+    /// `$(\sin \pi x, \cos \pi x)$`, reducing **before** multiplying by pi.
+    ///
+    /// The inherited default is `sin_cos(self * PI)`, which throws away most of what
+    /// this type exists for. Forming `x * PI` rounds the product, so the argument handed
+    /// to `sin_cos` already carries an absolute error of about `|x| * 2^-106`; at
+    /// `x = -1000.5` - an ordinary argument for the gamma reflection - that is three or
+    /// four digits gone before any trigonometry happens.
+    ///
+    /// Reducing first avoids it entirely. `sin(pi(n + r)) = (-1)^n sin(pi r)` for integer
+    /// `n`, and `x - round(x)` is *exact*, so the only rounded product is `r * PI` with
+    /// `|r| <= 1/2`. Same for cosine, with the same sign flip.
+    #[inline(always)]
+    fn sincos_pi<P: Policy>(self) -> (Self, Self) {
+        // n = round(x), r = x - n exactly, |r| <= 1/2.
+        let n = self.value().round();
+        let r = self - Self::new(n);
+
+        let (s, c) = <Self as SpecializedTranscendentalMath<Compensated<V::Element>>>::sin_cos::<P>(r * Self::PI);
+
+        // (-1)^n: odd n flips both. Halving is exact, so `n/2` having a fractional part
+        // is the oddness test. Past 2^mantissa every representable value is even, which
+        // this reports correctly rather than by accident.
+        let half = n * V::HALF;
+        let odd = half.cmp_ne(half.floor());
+
+        (s.neg_c(odd), c.neg_c(odd))
+    }
+
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
         // 1. Argument Reduction
@@ -358,16 +386,23 @@ where
 
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
-        // ln(x + sqrt(x^2 + 1))
-        // To avoid overflow for large x, use ln(2|x|) + ... or similar,
-        // but for now direct implementation:
-        // if x is negative, asinh(-x) = -asinh(x)
+        // asinh(x) = ln(x + sqrt(x^2 + 1)), rearranged so the argument never approaches 1.
+        //
+        // Written directly, small x sends `x + sqrt(x^2 + 1)` to 1 + x + O(x^2). A
+        // double-double holds that to 106 bits *relative to 1*, so the part that carries
+        // the answer keeps only 106 - log2(1/x) of them - at x = 1e-14 the result was good
+        // to ~65 bits, not 106.
+        //
+        // With s = sqrt(1 + x^2), the offset from 1 is available in closed form:
+        //   x + s - 1 = x + (s^2 - 1)/(s + 1) = x + x^2/(1 + s)
+        // so feeding that to ln_1p keeps the small quantity small the whole way.
 
         let x_abs = self.abs();
-        let y = x_abs + (x_abs.square() + V::ONE).sqrt();
+        let s = (x_abs.square() + V::ONE).sqrt();
+        let offset = x_abs.square() / (Self::ONE + s) + x_abs;
 
         // negate result if input was negative
-        y.ln_p::<P>().neg_c(self.value().is_negative())
+        offset.ln_1p_p::<P>().neg_c(self.value().is_negative())
     }
 
     #[inline(always)]
@@ -379,8 +414,16 @@ where
 
     #[inline(always)]
     fn atanh<P: Policy>(self) -> Self {
-        // 0.5 * ln((1+x)/(1-x))
-        ((self + V::ONE) / (Self::ONE - self)).ln_p::<P>() * Self::HALF
+        // atanh(x) = 0.5 * ln((1+x)/(1-x)), through ln_1p for the same reason as `asinh`:
+        // the ratio tends to 1 as x -> 0, and a double-double near 1 knows the part that
+        // matters to only 106 - log2(1/x) bits.
+        //
+        //   (1 + x)/(1 - x) = 1 + 2x/(1 - x)
+        //
+        // so the offset from 1 is exact and small, and ln_1p costs the same as ln.
+        let two_x = self + self;
+
+        (two_x / (Self::ONE - self)).ln_1p_p::<P>() * Self::HALF
     }
 
     #[inline(always)]
@@ -552,8 +595,13 @@ where
         }
     }
 
+    /// The `_ext` form exists so a caller who already has `ln(x)` can hand it to the
+    /// low-precision approximation instead of paying for it twice. The compensated
+    /// path never takes that approximation - it evaluates `ln(1 - e^-x)` exactly - so
+    /// there is nothing to reuse and the hint is dropped, the same way the f64 kernel
+    /// (`math/specialized/pd.rs`) and `Complex` do.
     #[inline(always)]
-    fn ln1m_expnx_ext<P: Policy>(self, lnx: Self) -> Self {
+    fn ln1m_expnx_ext<P: Policy>(self, _lnx: Self) -> Self {
         self.ln1m_expnx_p::<P>()
     }
 }
@@ -574,7 +622,6 @@ where
         // y = self
         let y = self;
         let x_value = x.value();
-        let zero = Self::ZERO;
 
         // Handle x = 0
         let x_is_zero = x_value.is_zero();
@@ -805,7 +852,26 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 // 2^k * exp(r), go through W WithBits type for ldexp
                 // don't bother with overflow checks in ldexp, we've already done that
                 y.value = W::cast_from(y.value).ldexp_p::<CheckOverflow<P, false>>(k).cast_into();
-                y.error = W::cast_from(y.error).ldexp_p::<CheckOverflow<P, false>>(k).cast_into();
+                // The low word gets `Preserve`. The overflow pre-check above bounds the
+                // *value*, which is what justifies scaling it with the exponent clamp
+                // turned off - but it says nothing about the low word, which sits ~53
+                // binades below and leaves the representable range first. An unclamped
+                // `ldexp` writes a negative biased exponent straight into the exponent
+                // field: exp(-700) came back with a value of 9.86e-305 and a low word of
+                // -2.74e+295, which then poisoned everything refining through `exp`
+                // (`ln(1e-300)` was off by exactly 2.0, `ln(1e300)` was NaN, because
+                // Halley's `(x - e_y)/(x + e_y)` collapses to -1 on a garbage `e_y`).
+                //
+                // `PreserveDenormals` takes `ldexp`'s two-multiply path, which lets IEEE
+                // gradual underflow produce the subnormal instead of wrapping - so the
+                // correction survives rather than merely not being poison.
+                y.error = W::cast_from(y.error)
+                    .ldexp_p::<PreserveDenormals<CheckOverflow<P, false>>>(k)
+                    .cast_into();
+
+                // Backstop: a correction can never be as large as the value it corrects.
+                // Cannot fire on a well-formed result, and costs one compare.
+                y.error = y.error.nz(y.error.abs().cmp_ge(y.value.abs()));
 
                 if const { EXP_MODE_EXPM1 == MODE || EXP_MODE_POW2M1 == MODE || EXP_MODE_POW10M1 == MODE } {
                     // small input values get the raw unscaled result

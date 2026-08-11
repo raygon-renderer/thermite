@@ -8,7 +8,7 @@
 //!
 //! As with the core math module, only the handful of *required* primitives are
 //! written by hand (value from the inner primitive, derivative via the chain
-//! rule); every default (`erfc`, `expint`, `logistic_sigmoid`, `softplus`,
+//! rule); every default (`erfc`, `logistic_sigmoid`, `softplus`,
 //! `hermite`, `chebyshev`, `jacobi`, `legendre`, `gaussian`, `gelu`, `swish`,
 //! `algebraic_*`, `gaussian_integral`, ...) composes out of dual arithmetic and
 //! is therefore differentiated automatically.
@@ -50,12 +50,32 @@ impl<V, E, const N: usize> SpecializedSpecialMath<Dual<E, N>> for Dual<V, N>
 where
     V: DualSpecialVector + FloatVector<Element = E> + SpecializedSpecialMath<E>,
 {
+    type ExpIntDetails = Self;
+
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
         let v = self.re.erf_p::<P>();
         // d/dx erf(x) = 2/sqrt(pi) * e^(-x^2)
         let factor = V::FRAC_2_SQRT_PI * (self.re * self.re).neg().exp_p::<P>();
         self.chain(v, factor)
+    }
+
+    /// `M` rather than `N` because `N` is already this impl's dual-part count.
+    #[inline(always)]
+    fn expint<P: Policy, const M: usize>(self) -> Self {
+        // Differentiating E_M(x) = \int_1^inf e^-xt / t^M dt under the integral sign
+        // pulls down a factor of -t, which is exactly one order lower:
+        //   E_M'(x) = -E_{M-1}(x)
+        // and at M = 1 that bottoms out in E_0(x) = e^-x / x, plain exp.
+        //
+        // So the whole thing is a real evaluation plus a chain rule, and the pair comes
+        // out of one call because the order recurrence passes through E_{M-1} on its way
+        // to E_M. Worth doing beyond the obvious cost saving: the real path guards that
+        // recurrence with RECURRENCE_THRESHOLD and swaps in an asymptotic series above
+        // it, which the generic dual-arithmetic default this used to inherit does not.
+        let (v, prev) = <V as SpecializedSpecialMath<E>>::expint_primal::<P, M>(self.re);
+
+        self.chain(v, -prev)
     }
 
     #[inline(always)]
@@ -155,4 +175,14 @@ where
         // carries a zero derivative rather than the incoming one.
         (self.chain(v, self.re.digamma_p::<P>()), Self::constant(sign))
     }
+}
+
+/// `Dual` overrides `expint` outright and delegates to the inner vector, so these are
+/// never consulted on the hot path - but the real-line defaults are the right answer
+/// anyway, since a dual number orders and compares by its real part.
+impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails<Dual<E, N>, Dual<V, N>>
+    for Dual<V, N>
+where
+    Dual<V, N>: thermite::vector::FloatVector<Element = Dual<E, N>>,
+{
 }

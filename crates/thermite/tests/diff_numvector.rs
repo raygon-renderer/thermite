@@ -3,6 +3,11 @@
 //! `is_zero`/`is_one`/`eq` are **all-lane**, `ne`/`is_nan`/`is_sign_negative` are
 //! **any-lane**, plus `partial_cmp` and `classify`. The forwarded arithmetic /
 //! math ops just need to execute (correctness is covered elsewhere).
+// `num_traits::Float for NumVector<V>` is `#[cfg(feature = "std")]`-gated in
+// `vector/num.rs`, but the dev-dependency on num-traits enables *its* `std`, so the
+// trait exists here regardless. Without this gate the file fails to compile under a
+// plain `cargo check --all-targets` (196 x E0277) while passing under `--features std`.
+#![cfg(feature = "std")]
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",

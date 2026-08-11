@@ -2660,7 +2660,7 @@ macro_rules! scan_ladder {
             if const { Self::LANES >  8 } { v = $op(v, v.align::<8>(f)); }
             if const { Self::LANES > 16 } { v = $op(v, v.align::<16>(f)); }
             if const { Self::LANES > 32 } { v = $op(v, v.align::<32>(f)); }
-                    };
+                        };
         v
     }};
 
@@ -2694,11 +2694,11 @@ macro_rules! scan_ladder {
                         v = $op(v, f.align::<60>(v));
                         v = $op(v, f.align::<56>(v));
                         v = $op(v, f.align::<48>(v));
-                                    v = $op(v, f.align::<32>(v)); }
-                            // unreachable: guarded by the `if const` above. Panicking is the right
-                            // failure mode if a width ever slips past that guard.
-                            _ => unreachable!(),
-                        };
+                                        v = $op(v, f.align::<32>(v)); }
+                                // unreachable: guarded by the `if const` above. Panicking is the right
+                                // failure mode if a width ever slips past that guard.
+                                _ => unreachable!(),
+                            };
             v
         } else {
             // `fill` is the lane-0 broadcast either way: reversing makes it the last

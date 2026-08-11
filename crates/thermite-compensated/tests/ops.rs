@@ -175,8 +175,8 @@ mod wide {
 
         // and the documented contract explicitly
         let contract = [1.0 + 2.0, 3.0 + 4.0, 10.0 + 20.0, 30.0 + 40.0];
-        for i in 0..f64x4::LANES {
-            assert_eq!(got.value().extractv(i), contract[i], "lane {i}");
+        for (i, expected) in contract.iter().enumerate() {
+            assert_eq!(got.value().extractv(i), *expected, "lane {i}");
         }
     }
 

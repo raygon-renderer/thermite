@@ -71,7 +71,12 @@ fn v3_table() {
     check::<<X86V3 as Simd>::u16x8>(0..256);
     check::<<X86V3 as Simd>::f32x4>(0..16);
     check::<<X86V3 as Simd>::f64x4>(0..16);
+    // The integer 64x4 registers route compress through their own `permutev`
+    // override (the doubled-index `vpermd`), not f64x4's - cover both.
+    check::<<X86V3 as Simd>::i64x4>(0..16);
+    check::<<X86V3 as Simd>::u64x4>(0..16);
     check::<<X86V3 as Simd>::i64x2>(0..4);
+    check::<<X86V3 as Simd>::f64x2>(0..4);
 }
 
 #[test]
@@ -96,6 +101,11 @@ fn v3_emulated() {
 #[test]
 fn v2() {
     check::<<X86V2 as Simd>::f32x4>(0..16);
+    // The 64-bit v2 registers gained pshufb-based `permutev` overrides
+    // (2026-08-08); compress routes through them.
+    check::<<X86V2 as Simd>::f64x2>(0..4);
+    check::<<X86V2 as Simd>::i64x2>(0..4);
+    check::<<X86V2 as Simd>::u64x2>(0..4);
     check::<<X86V2 as Simd>::i16x8>(0..256);
     check::<<X86V2 as Simd>::i8x16>(0..(1 << 16));
     check::<<X86V2 as Simd>::u8x16>(0..(1 << 16));

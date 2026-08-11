@@ -20,7 +20,57 @@ pub(crate) mod generic;
 mod pd;
 mod ps;
 
+/// The decisions the [`expint`](SpecializedSpecialMath::expint) kernel has to make
+/// differently depending on the arithmetic it is running in.
+///
+/// These are choices *inside* one algorithm, not part of the math surface, so they live
+/// here rather than on [`SpecializedSpecialMath`] itself. They exist because a single
+/// series/continued-fraction body serves both the real line and the complex cut plane,
+/// and "the unit disc", "out of domain" and "negligible but nonzero" are three different
+/// comparisons in those two worlds.
+///
+/// Every method defaults to the real-line answer, so a real vector's implementation is
+/// empty and its [`ExpIntDetails`](SpecializedSpecialMath::ExpIntDetails) is `Self`.
+pub trait ExpIntDetails<E, V: thermite::vector::FloatVector<Element = E>> {
+    /// Lanes that should take the power series rather than the continued fraction.
+    ///
+    /// On the real line this is `x < 1`. Over C it is `|z| < 1`, which is *not* what a
+    /// complex `cmp_lt` means - that is a lexicographic sort order, and reading it as a
+    /// magnitude silently routes far-off-axis points into the wrong regime.
+    #[inline(always)]
+    fn use_series(z: V) -> V::Mask {
+        z.cmp_lt(V::ONE)
+    }
+
+    /// Lanes outside the domain, forced to NaN when the policy checks overflow.
+    ///
+    /// Real `E_N` is defined for `x >= 0` only. The complex principal branch covers the
+    /// whole cut plane `|Arg z| < pi`, so there the negative reals are in-domain and the
+    /// cut is carried entirely by the principal `ln` inside the series.
+    #[inline(always)]
+    fn invalid(z: V) -> V::Mask {
+        z.cmp_lt(V::ZERO) | z.is_nan()
+    }
+
+    /// Lentz sentinel: the stand-in for a denominator that came out exactly zero, small
+    /// enough to be negligible against any real term.
+    ///
+    /// The safe magnitude depends on the arithmetic, not just the format. Real division
+    /// only needs this to be tiny and nonzero, so `MIN_POSITIVE` is ideal. A complex
+    /// reciprocal divides by `|z|^2`, so both the sentinel and its reciprocal have to
+    /// survive being *squared* - `MIN_POSITIVE` underflows to zero there, which takes
+    /// the whole fraction to NaN.
+    #[inline(always)]
+    fn cf_tiny() -> V {
+        V::MIN_POSITIVE
+    }
+}
+
 pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTranscendentalMath<E> {
+    /// Per-arithmetic details of the [`expint`](Self::expint) kernel. Almost always
+    /// `Self`, with an empty [`ExpIntDetails`] impl taking every default.
+    type ExpIntDetails: ExpIntDetails<E, Self>;
+
     fn erf<P: Policy>(self) -> Self;
 
     #[inline(always)]
@@ -28,14 +78,53 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         Self::ONE - self.erf_p::<P>()
     }
 
-    /// Computes the exponential integral `E_n(x)` for integer order `N`.
+    /// Computes the exponential integral `E_N(x)` for integer order `N`.
+    #[inline(always)]
+    fn expint<P: Policy, const N: usize>(self) -> Self {
+        self.expint_primal::<P, N>().0
+    }
+
+    /// Computes `$E_N(x)$` together with the adjacent lower order `$E_{N-1}(x)$`.
+    ///
+    /// Differentiating the integral definition under the integral sign gives
+    /// `$E_N'(x) = -E_{N-1}(x)$`, so the second element is the derivative up to sign.
+    /// The order recurrence already walks `E_1 -> E_N`, which makes `E_{N-1}` simply
+    /// the previous iterate: the pair costs no more than the value alone. `thermite-dual`
+    /// uses this to take the (guarded) real path for both parts rather than running
+    /// this entire routine in dual arithmetic.
     ///
     /// Uses the power series for x < 1 and the Stieltjes continued fraction for x >= 1,
     /// computed in parallel across SIMD lanes and blended at the end.
     /// For N > 1, applies the recurrence `$E_{n+1}(x) = (e^{-x} - x \cdot E_n(x)) / n$`.
     #[inline(always)]
-    fn expint<P: Policy, const N: usize>(self) -> Self {
+    fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
         let x = self;
+
+        // The series/continued-fraction path below produces E_1, so the two orders
+        // beneath it come from their closed forms instead:
+        //   E_0(x)    = e^-x / x
+        //   E_{-1}(x) = e^-x (1 + 1/x) / x
+        let exp_neg_x = (-x).exp_p::<P>();
+        let inv_x = x.reciprocal_p::<P>();
+        let e0 = exp_neg_x * inv_x;
+
+        if const { N == 0 } {
+            let mut value = e0;
+            let mut prev = e0 * (Self::ONE + inv_x);
+
+            if const { P::POLICY.check_overflow } {
+                // Both orders have a pole at the branch point x = 0.
+                let x_is_zero = x.is_zero();
+                value = x_is_zero.select(Self::INFINITY, value);
+                prev = x_is_zero.select(Self::INFINITY, prev);
+
+                let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
+                value = bad.select(Self::NAN, value);
+                prev = bad.select(Self::NAN, prev);
+            }
+
+            return (value, prev);
+        }
 
         // E_n(x) is only defined for x > 0 (and x >= 0 for n > 1).
         // Compute E_1(x) first, then apply recurrence for higher orders.
@@ -51,7 +140,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         //   Bootstrap j=1 outside the loop, iterate j≥2 inside.
         //   Result: E_1(x) = f * e^{-x}
 
-        let use_series = x.cmp_lt(Self::ONE);
+        let use_series = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::use_series(x);
 
         // --- Power series state ---
         let neg_x = -x;
@@ -67,7 +156,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         //   j=1: a_1 = 1,       b_1 = x+1
         //   j≥2: a_j = -(j-1)^2, b_j = x + 2j - 1
         //
-        let tiny = Self::MIN_POSITIVE;
+        let tiny = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::cf_tiny();
 
         // b_0 = 0, so f_0 = tiny, C_0 = tiny, D_0 = 0
         let mut cf_f = tiny;
@@ -158,19 +247,22 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         }
 
         if !use_series.all() {
-            cf_result = cf_f * (-x).exp_p::<P>();
+            cf_result = cf_f * exp_neg_x;
         }
 
         let mut e_n = use_series.select(series_result, cf_result);
 
+        // Order beneath the current one. Before the recurrence runs, E_N is E_1, so the
+        // order below it is E_0.
+        let mut e_prev = e0;
+
         // --- Apply recurrence for N > 1 ---
         // E_{n+1}(x) = (e^{-x} - x * E_n(x)) / n
         if const { N > 1 } {
-            let exp_neg_x = (-x).exp_p::<P>();
-
             let mut n = 1u32;
             while n < N as u32 {
                 let nf = Self::splat(E::from_int(n as thermite::LargeInt));
+                e_prev = e_n;
                 e_n = x.nmul_adde(e_n, exp_neg_x) / nf;
                 n += 1;
             }
@@ -186,14 +278,20 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
                 e_n = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 1)), e_n);
             }
 
-            // Negative x: NaN
-            e_n = x.cmp_lt(Self::ZERO).select(Self::NAN, e_n);
+            // Same rule one order down: E_0 and E_1 both diverge at zero, E_n does not.
+            if const { N <= 2 } {
+                e_prev = x_is_zero.select(Self::INFINITY, e_prev);
+            } else {
+                e_prev = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 2)), e_prev);
+            }
 
-            // NaN in, NaN out
-            e_n = x.is_nan().select(Self::NAN, e_n);
+            // Negative x: NaN, and NaN in, NaN out.
+            let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
+            e_n = bad.select(Self::NAN, e_n);
+            e_prev = bad.select(Self::NAN, e_prev);
         }
 
-        e_n
+        (e_n, e_prev)
     }
 
     #[inline(always)]

@@ -226,7 +226,7 @@ impl Register for U64x4V3 {
         unsafe { arch::_mm256_bswap_epi64x_v3(value) }
     }
 
-    const HAS_PERMUTEV: bool = false;
+    const HAS_PERMUTEV: bool = true;
 
     // Square transpose via the shared 256-bit family body (identical to `I64x4V3` -
     // both are raw `__m256i`): `(4, 1)` -> the 4x4 W=8 transpose. Self-inverse.
@@ -251,6 +251,13 @@ impl Register for U64x4V3 {
         } else {
             crate::backend::generic::polyfills::interleave_radix_by_default::<Self, N, GROUP>(inputs)
         }
+    }
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // Byte-identical to `I64x4V3::permutev` (both raw `__m256i`); see the
+        // note there - `compress` sits on this, and the generic scalar
+        // fallback it replaces was 6.9x per partition pass.
+        super::I64x4V3::permutev(value, idxs)
     }
 
     compress_via_table!();

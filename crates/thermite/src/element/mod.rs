@@ -63,6 +63,15 @@ pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + c
     fn from_i8(value: i8) -> Self;
     fn from_u8(value: u8) -> Self;
     fn from_u16(value: u16) -> Self;
+
+    /// Returns a scalar `Vector<Self>`.
+    #[inline(always)]
+    fn as_vector(self) -> crate::Vector<Self>
+    where
+        Self: crate::register::Register<Storage = Self>,
+    {
+        crate::Vector(self)
+    }
 }
 
 pub trait ElementExt: Element {

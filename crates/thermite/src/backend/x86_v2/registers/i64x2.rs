@@ -243,9 +243,20 @@ impl Register for I64x2V2 {
         f(arr[0], arr[1])
     }
 
-    const HAS_PERMUTEV: bool = false;
+    const HAS_PERMUTEV: bool = true;
 
     impl_byte_align_alignr!();
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // The pshufb-based variable 64-bit permute lives in this backend's own
+        // polyfills; `compress` sits on `permutev`, so without this override
+        // every 64-bit partition step ran the generic scalar re-gather.
+        unsafe {
+            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
+            let idxs = arch::_mm_cvtepu32_epi64(idxs);
+            arch::_mm_permutevarx_epi64x_v2(value, idxs)
+        }
+    }
 
     compress_via_table!();
 }

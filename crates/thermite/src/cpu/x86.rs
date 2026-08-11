@@ -84,7 +84,7 @@ fn bit(value: u32, index: u32) -> bool {
 }
 
 #[inline]
-fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
+pub(super) fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
     // SAFETY: `cpuid` is unprivileged and has no preconditions on any CPU this
     // crate can target (486+). Callers bound `leaf` by the reported maximum.
     __cpuid_count(leaf, sub)
@@ -109,7 +109,7 @@ fn max_leaves() -> (u32, u32) {
 /// probe-then-fall-through structure below is that an unrecognised vendor still
 /// gets whichever leaves it does implement. This only picks the order to try.
 #[inline]
-fn is_amd_lineage() -> bool {
+pub(super) fn is_amd_lineage() -> bool {
     let r = cpuid(0, 0);
     // Vendor string arrives split across EBX, EDX, ECX.
     let amd = r.ebx == 0x6874_7541 && r.edx == 0x6974_6e65 && r.ecx == 0x444d_4163; // "AuthenticAMD"
@@ -117,12 +117,46 @@ fn is_amd_lineage() -> bool {
     amd || hygon
 }
 
+/// Whether this is a genuine Intel part. Unlike [`is_amd_lineage`], which only
+/// picks which leaves to *try*, this gates a model-number table
+/// ([`quirks`](super::quirks)) whose entries are meaningless on a clone.
+#[inline]
+pub(super) fn is_intel() -> bool {
+    let r = cpuid(0, 0);
+    r.ebx == 0x756e_6547 && r.edx == 0x4965_6e69 && r.ecx == 0x6c65_746e // "GenuineIntel"
+}
+
 /// CPU family, with the extended-family field folded in per the x86 rules.
 #[inline]
 fn family() -> u32 {
+    family_model().0
+}
+
+/// Family *and* model, with both extended fields folded in per the x86 rules.
+///
+/// The two fields have different rules and mixing them up is the classic bug:
+/// the extended-family field applies only to base family `0xf`, while the
+/// extended-model field applies to base families `0x6` **and** `0xf` -- which
+/// is exactly the pair that matters, since every Intel Core part is family 6
+/// and every AMD Zen part is family `0x17`+ (base `0xf`, extended).
+#[inline]
+pub(super) fn family_model() -> (u32, u32) {
     let eax = cpuid(1, 0).eax;
-    let base = (eax >> 8) & 0xf;
-    if base == 0xf { base + ((eax >> 20) & 0xff) } else { base }
+    let base_family = (eax >> 8) & 0xf;
+    let base_model = (eax >> 4) & 0xf;
+
+    let family = if base_family == 0xf {
+        base_family + ((eax >> 20) & 0xff)
+    } else {
+        base_family
+    };
+    let model = if base_family == 0x6 || base_family == 0xf {
+        (((eax >> 16) & 0xf) << 4) | base_model
+    } else {
+        base_model
+    };
+
+    (family, model)
 }
 
 /// Walk the deterministic-cache-parameter leaf. Intel uses `4`; AMD uses the

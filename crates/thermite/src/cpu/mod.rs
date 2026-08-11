@@ -6,6 +6,12 @@
 //! clock, or guessed from a model-number table -- if the machine does not say,
 //! the answer is `None`.
 //!
+//! [`quirks`] is the deliberate exception, and is kept in its own module for
+//! exactly that reason: which instructions a CPU implements in *microcode* is
+//! not enumerated anywhere, by any vendor, so that table is guessed from
+//! family and model. Its values are performance hints and nothing branches on
+//! them for correctness.
+//!
 //! This is deliberately *not* on [`NativeIsa`](crate::simd::NativeIsa). Nothing
 //! here varies by backend -- `rdtsc` is the same instruction whether the caller
 //! is running SSE2 or AVX2 kernels -- it varies by **target and host**, so it
@@ -63,6 +69,10 @@ pub mod apple;
 
 #[cfg(target_arch = "aarch64")]
 mod aarch64;
+
+/// Which instructions this CPU implements in microcode. The one model-number
+/// table in this module -- see its own docs for why there is no alternative.
+pub mod quirks;
 
 /// What a cache level holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -158,20 +168,12 @@ impl CpuInfo {
     /// live view on hybrid parts.
     #[inline]
     pub fn get() -> &'static CpuInfo {
-        static CACHE: Cache = Cache {
+        static CACHE: Cache<CpuInfo> = Cache {
             state: AtomicU8::new(UNINIT),
-            info: UnsafeCell::new(CpuInfo::UNKNOWN),
+            value: UnsafeCell::new(CpuInfo::UNKNOWN),
         };
 
-        // Fast path: already published by whoever won the race.
-        if CACHE.state.load(Ordering::Acquire) != READY {
-            CACHE.init();
-        }
-
-        // SAFETY: the state is `READY`, reached through an `Acquire` load that
-        // synchronizes with the writer's `Release` store, so the write has
-        // completed and no writer can still be running. Nothing mutates it again.
-        unsafe { &*CACHE.info.get() }
+        CACHE.get(CpuInfo::detect)
     }
 
     /// Detect **now**, bypassing the cache. Pin the thread first if you are on
@@ -245,35 +247,54 @@ impl CpuInfo {
     }
 }
 
-const UNINIT: u8 = 0;
+pub(crate) const UNINIT: u8 = 0;
 const BUSY: u8 = 1;
 const READY: u8 = 2;
 
-/// Write-once cell for the snapshot, in the same shape as the ISA detector
+/// Write-once cell, in the same shape as the ISA detector
 /// (`isa/x86_detector.rs`): a state machine in an atomic guarding a single
 /// publish, rather than a lock.
-struct Cache {
-    state: AtomicU8,
-    info: UnsafeCell<CpuInfo>,
+///
+/// Generic over the payload so the snapshot and the [`quirks`] table share one
+/// implementation -- both are "run a short `cpuid` sequence once, publish the
+/// result forever", and a second hand-rolled copy of this is exactly the kind
+/// of thing that acquires a subtle ordering bug in only one of its versions.
+pub(crate) struct Cache<T: 'static> {
+    pub(crate) state: AtomicU8,
+    pub(crate) value: UnsafeCell<T>,
 }
 
-// SAFETY: `info` is written exactly once, by whichever thread wins the CAS to
+// SAFETY: `value` is written exactly once, by whichever thread wins the CAS to
 // `BUSY`, and is only ever read after an `Acquire` load observes `READY` --
 // which synchronizes with that writer's `Release` store.
-unsafe impl Sync for Cache {}
+unsafe impl<T: Send> Sync for Cache<T> {}
 
-impl Cache {
+impl<T> Cache<T> {
+    /// The cached value, running `detect` exactly once across all threads.
+    #[inline]
+    pub(crate) fn get(&'static self, detect: fn() -> T) -> &'static T {
+        // Fast path: already published by whoever won the race.
+        if self.state.load(Ordering::Acquire) != READY {
+            self.init(detect);
+        }
+
+        // SAFETY: the state is `READY`, reached through an `Acquire` load that
+        // synchronizes with the writer's `Release` store, so the write has
+        // completed and no writer can still be running. Nothing mutates it again.
+        unsafe { &*self.value.get() }
+    }
+
     #[inline(never)]
-    fn init(&self) {
+    fn init(&self, detect: fn() -> T) {
         match self
             .state
             .compare_exchange(UNINIT, BUSY, Ordering::AcqRel, Ordering::Acquire)
         {
             Ok(_) => {
-                let detected = CpuInfo::detect();
+                let detected = detect();
                 // SAFETY: the CAS made this thread the unique writer, and no
                 // reader can observe the cell until the store below publishes it.
-                unsafe { *self.info.get() = detected };
+                unsafe { *self.value.get() = detected };
                 self.state.store(READY, Ordering::Release);
             }
             // Another thread is detecting. It is a short, lock-free, non-blocking

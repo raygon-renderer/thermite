@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 #![allow(unused_braces)]
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
@@ -8,7 +8,7 @@ use thermite::Swizzle;
 use thermite::element::SignedElement;
 use thermite::generic_array::GenericArray;
 use thermite::register::SwizzleIndices;
-use thermite::vector::{NewConst, NewVector, SplatVector, VectorValue};
+use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_splat};
 use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
 use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddExt, Square, SquareMasked};
@@ -31,6 +31,7 @@ pub mod math;
 
 #[cfg(feature = "special")]
 pub mod special;
+pub mod specialized;
 
 /// Scalar values that can be used in compensated arithmetic.
 ///
@@ -181,14 +182,33 @@ impl ScalarValue for f64 {
     type CompensatedConstRatio<const N: LargeInt, const D: LargeInt> = F64CompensatedRatioConst<N, D>;
 }
 
+/// `SplatConst` carrier for [`ScalarValue::SPLITTER`] at a generic element type.
+///
+/// The `const_splat!` macro cannot generate this one: its carrier takes a single path
+/// bound per generic parameter, and this needs `E: ScalarValue` on the *element*, not
+/// on the vector. Hand-rolling the carrier is what keeps the vector impl below off the
+/// deprecated `Vector::splat_const`. Same pattern as the table carriers in `consts.rs`.
+struct SplitterValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for SplitterValue<E> {
+    const VALUE: E = <E as ScalarValue>::SPLITTER;
+}
+
+/// `SplatConst` carrier for [`ScalarValue::MAX_ERFINV_SERIES`]. See [`SplitterValue`].
+struct MaxErfinvSeriesValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for MaxErfinvSeriesValue<E> {
+    const VALUE: E = <E as ScalarValue>::MAX_ERFINV_SERIES;
+}
+
 impl<R: thermite::register::FloatRegister> ScalarValue for Vector<R>
 where
     R::Element: ScalarValue,
 {
-    const SPLITTER: Self = Self::splat_const(<R::Element as ScalarValue>::SPLITTER);
+    const SPLITTER: Self = const_splat::<Self, SplitterValue<R::Element>>();
     const SCALAR_ZERO: Self = Self::ZERO;
     const SCALAR_ONE: Self = Self::ONE;
-    const MAX_ERFINV_SERIES: Self = Self::splat_const(<R::Element as ScalarValue>::MAX_ERFINV_SERIES);
+    const MAX_ERFINV_SERIES: Self = const_splat::<Self, MaxErfinvSeriesValue<R::Element>>();
 
     #[inline(always)]
     fn scalar_trunc(self) -> Self {
@@ -2472,7 +2492,7 @@ impl PrettyPrintScalar for f64 {
 
         let c = Compensated { value, error };
 
-        let int_part = Compensated::new(c.value().trunc());
+        let int_part = Compensated::new(FloatElement::trunc(c.value()));
         let mut frac_part = c - int_part;
 
         write!(f, "{}", int_part.value as u64)?;
@@ -2488,7 +2508,7 @@ impl PrettyPrintScalar for f64 {
         for _ in 0..p {
             frac_part *= 10.0;
 
-            let digit = frac_part.value().trunc();
+            let digit = FloatElement::trunc(frac_part.value());
 
             write!(f, "{}", digit as u64)?;
 

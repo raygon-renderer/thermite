@@ -112,12 +112,25 @@ avx2-pclmul = ["thermite-macros/avx2-pclmul"]
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
 wasm = []
 
-avx512-tier1 = []               # Oldest AVX512 CPUs
-avx512-tier2 = ["avx512-tier1"] # Common AVX512 CPUs
-avx512-tier3 = ["avx512-tier2"] # Modern AVX512 CPUs
-avx512-tier4 = ["avx512-tier3"] # Cutting-edge AVX512 CPUs
+# RESERVED - NOT YET IMPLEMENTED. The x86-v4 backend is currently the
+# `Avx512Features` tier ladder and register stubs, with no register
+# implementations, so these flags select nothing and enabling them changes no
+# codegen. They are kept so the tier names are stable when the backend lands.
+#
+# AVX-512 hardware is fully supported today, it just runs the x86-v3 (AVX2)
+# backend: `InstructionSet::get()` reports `X86V4`, and the dispatch table maps
+# that rung onto `backend::x86_v3::X86V3` (see thermite-macros/src/dispatch.rs).
+# That is the widest working backend until v4 exists.
+avx512-tier1 = []               # RESERVED: oldest AVX512 CPUs (Knights Landing)
+avx512-tier2 = ["avx512-tier1"] # RESERVED: common AVX512 CPUs (Skylake-SP, Cascade Lake)
+avx512-tier3 = ["avx512-tier2"] # RESERVED: modern AVX512 CPUs (Ice Lake, Zen 4)
+avx512-tier4 = ["avx512-tier3"] # RESERVED: cutting-edge AVX512 CPUs (Sapphire Rapids, Zen 5)
 
-spirv = ["nightly"] # Uses SPIR-V backend, only available on nightly
+# EXPERIMENTAL, INCOMPLETE. The SPIR-V backend has f32/i32/u32/mask registers and
+# implements `NativeIsa`/`NativeSimd`, but not `Simd` - so it carries no vector
+# type aliases and cannot be used as a dispatch target. No 64-bit or 8/16-bit
+# registers exist. Only compiles for `target_arch = "spirv"` on nightly.
+spirv = ["nightly"]
 
 # Nightly features
 nightly = []

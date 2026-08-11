@@ -8,7 +8,15 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 description = "Double-double compensated arithmetic built on Thermite"
-publish = false                                                        # not ready for release yet
+keywords = ["simd", "double-double", "precision", "float", "no-std"]
+categories = ["mathematics", "science", "no-std", "hardware-support"]
+publish = false                                                                           # not ready for release yet
+readme = "README.md"
+include = ["/src", "/README.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
+
+[package.metadata.docs.rs]
+features = ["std"]
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
 default = ["special"]
@@ -26,7 +34,7 @@ paste = "1"
 
 [dev-dependencies]
 libm = "0.2"
-rand = "0.9.2"
+rand = "0.10"
 
 [lints]
 workspace = true

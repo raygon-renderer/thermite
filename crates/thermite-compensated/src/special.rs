@@ -3,13 +3,17 @@ use super::{Compensated, CompensatedFloatVector};
 use thermite::math::TranscendentalMathWithPolicy;
 use thermite::prelude::*;
 
-use thermite_special::SpecialMathWithPolicy;
+use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 use thermite_special::specialized::{SpecializedRealPrimalMath, SpecializedRealSpecialMath, SpecializedSpecialMath};
+
+use crate::specialized::special::SpecializedCompensatedSpecialMath;
 
 // Compensated is a single-value real, so it belongs in the "primal" tier and gains the
 // value-and-derivative (`_d`) activation forms (via the trait defaults).
-impl<V: CompensatedFloatVector> SpecializedRealPrimalMath<Compensated<V::Element>> for Compensated<V> where
-    V: SpecialMathWithPolicy
+impl<V: CompensatedFloatVector> SpecializedRealPrimalMath<Compensated<V::Element>> for Compensated<V>
+where
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecializedCompensatedSpecialMath<V::Element>,
 {
 }
 
@@ -22,10 +26,21 @@ where
         let x = self;
         let abs_x = x.abs();
 
-        // threshold can be tuned
+        // Series below this, continued fraction above.
+        //
+        // 2 rather than 3, because the series computes *erf* and erfc comes out of it as
+        // 1 - erf: the cancellation in that subtraction is what sets erfc's accuracy, and
+        // it grows with erf. erf(2) = 0.9953 costs ~8 bits, erf(3) = 0.99998 costs ~16 -
+        // and erfc at 2.751 measured 89 bits against the 104 it holds below 1. Handing
+        // [2, 3) to the continued fraction, which computes erfc directly, brings that to
+        // 101 and erf with it (102 -> 111, since erf = 1 - erfc barely cancels when erfc
+        // is the small one). Nothing below 2 or above 3 changes.
+        //
+        // This matters beyond erf: `erfinv` refines against erfc, and needs it most
+        // exactly where it was weakest, since large x corresponds to y near 1.
         let use_series: V::Mask = abs_x
             .value()
-            .cmp_lt(V::splat(<V::Element as FloatElement>::ConstInt::<3>::VALUE));
+            .cmp_lt(V::splat(<V::Element as FloatElement>::ConstInt::<2>::VALUE));
 
         let use_only_series = use_series.all();
         let use_only_cf = use_series.none();
@@ -38,7 +53,20 @@ where
 
         // --- Init Continued Fraction (erfc) ---
         // Lentz's method vars
-        let tiny = Self::MIN_POSITIVE;
+        //
+        // `tiny` is the stand-in for a denominator that came out non-positive, so it only
+        // has to be negligible against any real term - but it also gets *reciprocated* on
+        // the very first step, and that is what constrains it here.
+        //
+        // `MIN_POSITIVE` cannot be used: 1/2.2e-308 is 4.5e307, and compensated
+        // multiplication splits its operands with Dekker's 2^27+1 factor, which overflows
+        // to infinity for anything past ~1.3e300. The next `f *= c * d` then produced NaN,
+        // which is why erf and erfc returned NaN for every |x| >= 3 - the entire
+        // continued-fraction tail, the only regime that reaches this code.
+        //
+        // sqrt(MIN_POSITIVE)/EPSILON leaves both the sentinel and its reciprocal far
+        // inside the splitter's range while staying utterly negligible as a floor.
+        let tiny = Self::new(V::MIN_POSITIVE.sqrt() / <V as FloatVector>::EPSILON);
         let mut f = tiny;
         let mut a = Self::ONE; // a_1 = 1
         let mut c = tiny;
@@ -193,7 +221,8 @@ where
 
 impl<V: CompensatedFloatVector> SpecializedRealSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: SpecialMathWithPolicy,
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecializedCompensatedSpecialMath<V::Element>,
 {
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
@@ -276,37 +305,35 @@ where
         let is_zero = abs_y_value.cmp_eq(V::ZERO);
         let is_one = abs_y_value.cmp_eq(V::ONE);
 
-        // 1. Initial Guess via Winitzki's Approximation, using non-compensated math
-        //    since the initial guess does not need to be incredibly accurate.
-        // Relative error < 0.00035 across the domain.
-        // Original: x ~ sqrt( sqrt(T1^2 - T2) - T1 )
-        // Stable:   x ~ sqrt( -T2 / (sqrt(T1^2 - T2) + T1) )
-        // This avoids catastrophic cancellation when y -> 0 (and thus T2 -> 0).
-
-        // Constants
-        let a = V::splat(FloatElement::from_ratio(147, 1000)); // a = 0.147
-        let c = <V as FloatConsts>::FRAC_2_PI / a; // C = 2 / (pi * a)
-        // L = ln(1 - y^2), use ln_1p for accuracy: ln(1 - y^2) = ln_1p(-y^2)
-        let l = (-y.square().value()).ln_1p_p::<P>();
-
-        let half_l = l * V::HALF;
-        let t1 = c + half_l;
-        let t2 = l / a;
-
-        // Stable Winitzki guess
-        let root_term = t1.mul_sube(t1, t2).sqrt();
-        let inner = -t2 / (root_term + t1);
-
-        // Clamp inner to 0 to avoid NaN if y ~ 0 results in tiny negative due to noise
-        let mut x = Self::new(inner.max(V::ZERO).sqrt());
+        // 1. Initial guess: the inner vector's own `erfinv`, which is already correct to
+        //    the element's full width (~53 bits for f64).
+        //
+        //    This used to be Winitzki's approximation, good to a relative 3.5e-4 - about
+        //    11 bits. Halley is cubic, so 11 bits needs three passes to clear 106 and 53
+        //    bits needs one, and every pass costs a compensated `erf` *and* a compensated
+        //    `exp` to form f and f'. Seeding from the cheaper, far better starting point
+        //    trades a scalar `erfinv` for two of each. The loop below is unchanged and
+        //    still exits on its own convergence test, so a seed that ever disappoints
+        //    simply iterates again rather than returning something wrong.
+        let mut x = Self::new(abs_y_value.erfinv_p::<P>());
 
         // 2. Halley's Method Iterations (Cubic Convergence)
         // x_{n+1} = x_n - u / (1 + x_n * u) where u = f(x_n) / f'(x_n)
         let skip = is_zero | is_one; // cannot be solved as roots
 
-        for i in 0..P::POLICY.max_iterations {
+        for _ in 0..P::POLICY.max_iterations {
             let prev_x = x;
-            let f = x.erf_p::<P>() - abs_y; // Work with absolute y for stability
+            // f = erf(x) - y, routed through erf = 1 - erfc so that near y = 1 the two
+            // quantities being subtracted are both *small* rather than both near 1.
+            //
+            // Measured, this changes nothing: erfinv(0.9999) sits at 3.43e-27 either way,
+            // bit for bit. The cancellation it avoids is not the one that limits this -
+            // f -> 0 at the root by definition, so some cancellation is unavoidable, and
+            // the compensated erfc was already exact at these arguments. Kept because it
+            // is the better-conditioned spelling and costs nothing (the kernel computes
+            // erf and erfc together), but the y -> 1 shortfall has a different cause that
+            // is not yet identified.
+            let f = (Self::ONE - abs_y) - x.erfc_p::<P>();
 
             // f / f'(x) = f * (sqrt(pi)/2) * exp(x^2)
             let u = f * (Self::FRAC_SQRT_PI_2 * x.square().exp_p::<P>());
@@ -316,7 +343,6 @@ where
             x.reduce_unnormalized(u / x.mul_adde(u, V::ONE));
 
             if (skip | x.cmp_eq(prev_x)).all() {
-                // println!("erf_inv converged in Halley in {} iterations", i);
                 break;
             }
         }
@@ -338,15 +364,23 @@ where
         Self::erfinv::<P>(self + self - Self::ONE) * Self::SQRT_2
     }
 
+    #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
-        todo!()
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_lgamma_r::<P>(self)
     }
 }
 
+// The gamma family is blanket-implemented over `SpecializedCompensatedSpecialMath`, the
+// same way `SpecialMath` is blanket-implemented over *this* trait. Adding a gamma method
+// therefore touches only the lower rung; see `crate::specialized` for why that rung has
+// to exist at all (the two Compensated widths need different coefficients).
 impl<V: CompensatedFloatVector> SpecializedSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: SpecialMathWithPolicy,
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecializedCompensatedSpecialMath<V::Element>,
 {
+    type ExpIntDetails = Self;
+
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
         Self::erf_internal_p::<P>(self).0
@@ -357,12 +391,14 @@ where
         Self::erf_internal_p::<P>(self).1
     }
 
+    #[inline(always)]
     fn tgamma<P: Policy>(self) -> Self {
-        todo!()
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_tgamma::<P>(self)
     }
 
+    #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
-        todo!()
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_beta::<P>(a, b)
     }
 
     fn lambert_w<P: Policy>(self) -> (Self, Self) {
@@ -424,16 +460,40 @@ where
         Self::lgamma_r::<P>(self).0
     }
 
+    #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        todo!()
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_digamma::<P>(self)
     }
 
+    #[inline(always)]
     fn trigamma<P: Policy>(self) -> Self {
-        todo!()
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_trigamma::<P>(self)
     }
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
     //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
     //    todo!()
     //}
+}
+
+/// Double-double is still real arithmetic, so the regime and domain rules apply
+/// unchanged - but the Lentz sentinel does not.
+impl<V: CompensatedFloatVector> thermite_special::specialized::ExpIntDetails<Compensated<V::Element>, Compensated<V>>
+    for Compensated<V>
+where
+    Compensated<V>: thermite::vector::FloatVector<Element = Compensated<V::Element>>,
+{
+    /// The default, `MIN_POSITIVE`, is reciprocated on the first Lentz step, and
+    /// 1/2.2e-308 = 4.5e307 is past the ~1.3e300 where compensated multiplication's
+    /// Dekker 2^27+1 splitter overflows to infinity - so every continued-fraction lane
+    /// came back NaN. `expint` takes the fraction for x >= 1, which is exactly where it
+    /// failed.
+    ///
+    /// Same defect and same fix as `Complex`, and as the `erf`/`erfc` tail in this crate:
+    /// a sentinel only has to be negligible as a *floor*, but this one also has to
+    /// survive being inverted.
+    #[inline(always)]
+    fn cf_tiny() -> Compensated<V> {
+        Compensated::new(V::MIN_POSITIVE.sqrt() / <V as FloatVector>::EPSILON)
+    }
 }

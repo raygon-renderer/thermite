@@ -1,6 +1,6 @@
 ---
 name: thermite
-description: Thermite, the generic ISA-portable Rust SIMD library, and its companion crates (thermite-special, -dual autodiff, -compensated double-double, -sdf, -geometry, -ffi). Load when writing/reviewing/debugging code using thermite/thermite-* crates - GenericVector/NumericVector/FloatVector bounds, the policy math library, masks, dispatch, slice iteration, or composite vector types (Dual/Compensated). ALWAYS load before modifying Thermite's OWN source (register op, backend, math kernel, polyfill, macro, trait) and read references/development.md first. Triggers - "write a SIMD kernel", "generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", thermite build/test errors, edits under crates/thermite*/src.
+description: Thermite, the generic ISA-portable Rust SIMD library, and its thermite-* companions (special, dual/autodiff, compensated/double-double, sort, sdf, geometry, ffi). Load when writing/reviewing/debugging code using thermite/thermite-* crates - GenericVector/NumericVector/FloatVector bounds, the policy math library, masks, dispatch, slice iteration, sorting, or composite vector types (Dual/Compensated). ALWAYS load before modifying Thermite's OWN source (register op, backend, math kernel, polyfill, macro, trait) and read references/development.md first. Triggers - "write a SIMD kernel", "generic over vector types", "use thermite", "FloatVector bound", "autodiff with Dual", "compensated arithmetic", "SDF", "SIMD sort"/"sort by key", thermite build/test errors, edits under crates/thermite*/src.
 ---
 
 # Thermite
@@ -29,9 +29,9 @@ Not on crates.io (core `0.2.0-beta.0`; companions are `publish = false`). Git de
 
 All git-only, same URL `https://github.com/raygon-renderer/thermite`. Add
 `thermite` plus only the companions you use (see the sub-file list for what each
-provides): `thermite-special`, `-dual`, `-compensated`, `-sdf`, `-geometry`.
-`-dual`/`-compensated`/`-sdf` pull in `thermite` transitively, but list it anyway
-when you name its types (you usually do).
+provides): `thermite-special`, `-dual`, `-compensated`, `-sort`, `-sdf`,
+`-geometry`. `-dual`/`-compensated`/`-sdf`/`-sort` pull in `thermite`
+transitively, but list it anyway when you name its types (you usually do).
 
 **Toolchain: stable Rust** (MSRV **1.95**, edition 2024). The `nightly` feature
 unlocks nightly-only paths (smarter const splat, wasm64 SIMD, SPIR-V) and then
@@ -84,7 +84,8 @@ fn gaussian<V: FloatVector + TranscendentalMath>(x: V) -> V { (-(x * x)).exp() }
 type V = Vector<f64>;
 
 fn main() {
-    let s = gaussian(V::splat(0.5)).extract::<0>();            // 0.7788007830714049 (scalar)
+    let s = gaussian(0.5_f64.as_vector()).extract::<0>();      // 0.7788007830714049 (scalar)
+                                                               // as_vector: bare f64 -> 1-lane V
 
     let simd = thermite::dispatch_dyn!(for<S> || -> f32 {      // runtime-dispatched to best ISA
         gaussian(f32xN::splat(0.5)).extract::<0>()
@@ -164,6 +165,9 @@ v.sqrt_c(mask)  a.add_c(mask, b)                // masked variants: mask is the 
 v.compress_z(m) / v.expand_m(src, m)            // stream compaction and its exact inverse
 v.prefix_sum()  v.count_conflicts()             // inclusive lane scan; duplicate-lane ranks
 v.group_by_value(valid)                         // divergent packet -> uniform sub-packets
+v.total_order()                                 // FloatVectorWithBits: NaN-safe integer sort keys
+
+thermite_sort::sort::<i32x8>(&mut keys)         // thermite-sort: see references/sort.md
 ```
 
 Build/test as part of your own crate -- normal `cargo build`/`cargo test`, no
@@ -182,6 +186,7 @@ Core usage:
 Composite & companions:
 - [composite-types.md](references/composite-types.md) -- **the compose story.** `Dual<V,N>` and `Compensated<V>` delegate the vector traits to inner `V` so generic code differentiates/error-tracks free. Nesting (`Dual<Compensated<V>>`).
 - [special.md](references/special.md) -- `thermite-special`: erf, gamma, activations (gelu/swish), Lambert W, elliptic integrals.
+- [sort.md](references/sort.md) -- `thermite-sort`: slice quicksort (`sort`/`sort_by`), key-value (`sort_kv_by`), cached-key object sort; partition/network building blocks.
 - [sdf.md](references/sdf.md) -- `thermite-sdf`: primitives, boolean/smooth combinators, transforms, fractals; `SDF`/`GradientSdf`/`BoundedSdf`.
 - [geometry.md](references/geometry.md) -- `thermite-geometry`: SoA `Vector`/`Point`/`Ray`/`Bounds`/`Matrix`.
 - [ffi.md](references/ffi.md) -- `thermite-ffi`: C ABI, header gen, `release-ffi` profile.
@@ -194,11 +199,12 @@ Cross-cutting:
 ## Gotchas (full list in sub-files)
 
 - **Missing `#[thermite::dispatch]` / `#[inline(always)]` is the #1 silent perf bug** -- no compile error, no test failure, but the kernel degenerates to a `call` per intrinsic. See Rule zero above; check it first when a kernel underperforms.
-- **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
+- **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `x.as_vector()` (`Element` method, in the prelude) / `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
 - **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`, `a.add_m(src, mask, b)` (merge: `src` then `mask`). Old `add_c(b, mask)` order is wrong.
 - **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.
 - **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to vectorized emulated FMA (single-rounding-accurate, still SIMD) by default -- only becomes slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So `mul_add` is a valid accuracy choice.
 - **`>>` is LOGICAL even on signed vectors.** Use `srai`/`sra`/`srav` for sign-filling shifts.
 - **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
 - **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.
+- **`thermite-sort`: instantiate it at a NATIVE register width** (`i32x8` on AVX2, `i32x4` on SSE4.2/NEON), never an `ArrayRegister` composite - a two-chunk composite sorts ~30% slower than the width it is built from, because `compress` and the merge swizzles do not scale across sub-registers. See [references/sort.md](references/sort.md).
 - **`-dual`/`-compensated`/`-special` are `publish = false` (pre-release).** Vector-trait surfaces are complete but some special fns `todo!()`-panic: `bessel_j` beyond f32 `J_0`; the gamma family (`tgamma`/`lgamma`/`digamma`/`beta`) + `bessel_j` on `Dual`/`Compensated`. Grep `todo!` before relying on a special function.

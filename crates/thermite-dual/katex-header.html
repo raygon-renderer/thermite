@@ -1,0 +1,171 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.css" integrity="sha384-UA8juhPf75SzzAMA/4fo3yOU7sBJ0om7SCD2GHq0fZqZco6tr1UCV7nUbk9J90JM" crossorigin="anonymous">
+
+<!-- The loading of KaTeX is deferred to speed up page rendering -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/katex.min.js" integrity="sha384-Tt7wBxLKwSzFVRET4O4U9H6v8MNaQ/CjN2FMP4xFm0ErrFu6aNqoonRVW5W40iGI" crossorigin="anonymous"></script>
+
+<script>
+    var KATEX_LS_KEY = "katex-render";
+
+    // Whether rendering is enabled. Defaults to true when unset or when
+    // localStorage is unavailable (e.g. file:// pages, which is exactly the
+    // case for a SingleFile-saved offline copy — so it renders anew there).
+    function kaTexEnabled() {
+        try {
+            return window.localStorage.getItem(KATEX_LS_KEY) !== "false";
+        } catch (_) {
+            return true;
+        }
+    }
+
+    function renderKaTexDocs() {
+        addKaTexToggle();
+
+        if (!kaTexEnabled()) return; // leave source untouched for offline save
+
+        let to_do = [];
+        for(let e of document.getElementsByTagName("code")) {
+            if(e.parentElement.tagName == "PRE" && (e.parentElement.classList.contains("language-math") || e.parentElement.classList.contains("math"))) {
+                to_do.push(function() {
+                    let x = document.createElement('p');
+                    katex.render(e.innerText, x, { displayMode: true, throwOnError: false, trust: true });
+                    let pre = e.parentNode;
+                    let wrap = pre.parentNode;
+                    // rustdoc wraps fenced code blocks in <div class="example-wrap">
+                    // and its deferred JS injects a hover copy-button into that
+                    // wrapper. Replace the whole wrapper (not just the <pre>) so
+                    // the button has nothing to attach to, and so the example
+                    // padding/background doesn't apply to rendered math. Fall
+                    // back to the old behavior when there is no example-wrap.
+                    if (wrap.classList && wrap.classList.contains("example-wrap")) {
+                        wrap.parentNode.replaceChild(x, wrap);
+                    } else {
+                        wrap.replaceChild(x, pre);
+                    }
+                });
+            } else if(e.parentElement.tagName != "PRE" && e.parentElement.nodeType == 1 && e.innerHTML.indexOf('$') != -1) {
+                to_do.push(function() {
+                    let x = document.createElement('span');
+                    x.innerHTML = e.innerHTML;
+                    renderMathInElement(x, {
+                        displayMode: false, throwOnError: false, delimiters: [
+                            { left: "$", right: "$", display: false },
+                        ]
+                    });
+
+                    if(e.innerHTML != x.innerHTML) {
+                        e.replaceWith(x);
+                    }
+                });
+            }
+        }
+
+        for(let f of to_do) f();
+    }
+
+    // A checkbox in rustdoc's .main-heading that persists the render
+    // preference and reloads so it takes effect. Disable it, reload, then
+    // save the page offline to capture raw source with no KaTeX expansion;
+    // the offline copy has no localStorage entry so it renders anew.
+    function addKaTexToggle() {
+        let old = document.getElementById("katex-toggle");
+        if (old) old.remove(); // a saved page may have serialized a stale one
+
+        let label = document.createElement("label");
+        label.id = "katex-toggle";
+        label.style.cssText =
+            "font:13px/1.4 sans-serif;margin-left:1em;white-space:nowrap;" +
+            "display:inline-flex;align-items:center;gap:4px;cursor:pointer;";
+
+        let cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = kaTexEnabled();
+        cb.addEventListener("change", function() {
+            try {
+                window.localStorage.setItem(KATEX_LS_KEY, cb.checked ? "true" : "false");
+            } catch (_) { /* file://: nothing to persist; default applies */ }
+            location.reload();
+        });
+
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode("Render math"));
+
+        let heading = document.querySelector(".main-heading");
+        if (heading) heading.appendChild(label);
+        else {
+            label.style.position = "fixed";
+            label.style.top = "8px";
+            label.style.right = "8px";
+            label.style.zIndex = "2147483647";
+            document.body.appendChild(label);
+        }
+    }
+
+    // Self-trigger once the DOM is ready. In rustdoc the external script
+    // tags use `defer` + `onload="renderKaTexDocs()"`, but Pandoc's
+    // --embed-resources inlines those scripts and strips both attributes,
+    // so the onload trigger never fires there. Bootstrapping from our own
+    // inline script works in both: by DOMContentLoaded, katex and
+    // renderMathInElement are defined (deferred external scripts in
+    // rustdoc; synchronous inlined scripts in the Pandoc bundle).
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", renderKaTexDocs);
+    } else {
+        renderKaTexDocs();
+    }
+</script>
+
+<!-- To automatically render math in text elements, include the auto-render extension: -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.45/dist/contrib/auto-render.min.js"
+    integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+
+<style>
+    .katex-display>.katex {
+        text-align: left;
+    }
+
+    /* Pin KaTeX's scale so it can't inherit rustdoc's :hover font-size /
+       line-height changes. KaTeX lays every glyph out with em-relative
+       struts, so a small inherited change rescales the whole formula.
+       1.21em matches katex.min.css's own default — visual size is
+       unchanged, only the inheritance chain is broken. */
+    .katex {
+        font-size: 1.21em !important;
+        line-height: normal;
+    }
+
+    .katex-display {
+        line-height: normal;
+        /* Keep horizontal scroll for genuinely wide formulas, but kill the
+           spurious sub-pixel scrollbar: hide the scrollbar chrome and the
+           vertical axis entirely. Wide math still scrolls via shift+wheel
+           / trackpad. */
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;          /* Firefox */
+
+        margin-left: 2em;
+    }
+
+    .katex-display::-webkit-scrollbar { /* Chromium / WebKit */
+        display: none;
+    }
+
+    .docblock > :not(.more-examples-toggle):not(.example-wrap) {
+        scrollbar-width: none;
+    }
+</style>
+
+<style>
+    .flex-container {
+        display: flex;
+        margin-bottom: 1em;
+    }
+
+    .flex-child {
+        flex: 1;
+    }
+
+    .flex-child:first-child {
+        margin-right: 20px;
+    }
+</style>

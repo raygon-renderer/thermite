@@ -216,9 +216,15 @@ pub mod policies {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AvoidBranching<P: Policy, const AVOID_BRANCHING: bool>(PhantomData<P>);
 
-    // /// Policy adapter that modifies the base policy to change denormal preserving behavior.
-    // #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    // pub struct PreserveDenormals<P: Policy, const PRESERVE_DENORMALS: bool>(PhantomData<P>);
+    /// Preserves denormal values rather than flushing or crushing them.
+    ///
+    /// Reach for this on a *part* of a computation whose magnitude runs below the rest of
+    /// it. The motivating case is the low word of a double-double: it sits ~53 binades
+    /// under the value, so scaling can push it into the subnormal range while the value
+    /// is still comfortably normal, and flushing it there costs the whole point of the
+    /// representation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct PreserveDenormals<P: Policy>(PhantomData<P>);
 
     /// Policy adapter that modifies the base policy to change the maximum number of iterations for numerical methods.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -385,6 +391,18 @@ pub mod policies {
             max_iterations: MAX_ITERATIONS,
             use_compensation: P::POLICY.use_compensation,
             denormal_behavior: P::POLICY.denormal_behavior,
+        };
+    }
+
+    impl<P: Policy> Policy for PreserveDenormals<P> {
+        const POLICY: PolicyParameters = PolicyParameters {
+            check_overflow: P::POLICY.check_overflow,
+            unroll_loops: P::POLICY.unroll_loops,
+            precision: P::POLICY.precision,
+            avoid_branching: P::POLICY.avoid_branching,
+            max_iterations: P::POLICY.max_iterations,
+            use_compensation: P::POLICY.use_compensation,
+            denormal_behavior: DenormalBehavior::Preserve,
         };
     }
 

@@ -200,7 +200,28 @@ impl_expint_consts! {
 }
 
 #[inline(always)]
+/// `$E_N(x)$` only. See [`expint_double_primal`] for the shape of the computation.
+#[inline(always)]
 pub fn expint_double<P: Policy, E, V, const N: usize>(x: V) -> V
+where
+    E: FloatElementWithBits + ExpIntConsts<N>,
+    V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
+{
+    expint_double_primal::<P, E, V, N>(x).0
+}
+
+/// `$E_N(x)$` together with the adjacent lower order `$E_{N-1}(x)$`, which is
+/// `$-E_N'(x)$` by differentiation under the integral sign.
+///
+/// The lower order comes from whichever direction is stable in the regime the value
+/// itself was computed in: below [`ExpIntConsts::RECURRENCE_THRESHOLD`] the forward
+/// recurrence is running anyway, so `E_{N-1}` is just its previous iterate; above it,
+/// where the asymptotic series takes over, the recurrence is inverted instead --
+/// `$E_{N-1}(x) = (e^{-x} - (N-1) E_N(x)) / x$`. Inverting is the *stable* direction
+/// (it damps by `1/x` where the forward one amplifies by `x`) and its only weakness,
+/// the cancellation as `x -> 0`, is unreachable here because that branch only runs for
+/// very large `x`.
+pub fn expint_double_primal<P: Policy, E, V, const N: usize>(x: V) -> (V, V)
 where
     E: FloatElementWithBits + ExpIntConsts<N>,
     V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
@@ -210,14 +231,20 @@ where
 
     if const { N == 0 } {
         let mut result = x_ex;
+        // E_{-1}(x) = e^-x (1 + 1/x) / x
+        let mut prev = x_ex * (V::ONE + x.reciprocal_p::<P>());
 
         if const { P::POLICY.check_overflow } {
-            result = x.is_zero().select(V::INFINITY, result);
-            result = x.cmp_lt(V::ZERO).select(V::NAN, result);
-            result = x.is_nan().select(V::NAN, result);
+            let x_is_zero = x.is_zero();
+            result = x_is_zero.select(V::INFINITY, result);
+            prev = x_is_zero.select(V::INFINITY, prev);
+
+            let bad = x.cmp_lt(V::ZERO) | x.is_nan();
+            result = bad.select(V::NAN, result);
+            prev = bad.select(V::NAN, prev);
         }
 
-        return result;
+        return (result, prev);
     }
 
     let is_large = x.cmp_gt(V::ONE);
@@ -244,13 +271,19 @@ where
     //
     // The n=1 step has no division (divides by 1), so it is peeled out to avoid a
     // runtime `if n > 1` check inside the loop.
+    // One order below whatever `e_n` currently holds. The rational path above produced
+    // E_1, so before any recurrence step that is E_0 = e^-x / x.
+    let mut e_prev = x_ex;
+
     if const { N > 1 } {
+        e_prev = e_n;
         e_n = x.nmul_adde(e_n, exp_neg_x);
 
         if const { N > 2 } {
             if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
                 let mut n = 0;
                 while n < (N - 2) {
+                    e_prev = e_n;
                     e_n = x.nmul_adde(e_n, exp_neg_x) / V::splat(E::FACTORS[n]);
                     n += 1;
                 }
@@ -261,12 +294,14 @@ where
                     ($($len:tt),*) => {
                         $( if const { N == ($len + 2) } {
                             unroll! { for n in 0..$len {
+                                e_prev = e_n;
                                 e_n = x.nmul_adde(e_n, exp_neg_x)
                                     .scale(const { if n < N { E::RECIPROCALS[n] } else { E::ONE } });
                             }}
                         } else )* {
                             let mut n = 0;
                             while n < const { if N > 2 { N - 2 } else { 0 } } {
+                                e_prev = e_n;
                                 e_n = x.nmul_adde(e_n, exp_neg_x).scale(E::RECIPROCALS[n]);
                                 n += 1;
                             }
@@ -313,6 +348,14 @@ where
 
         // E_n is always positive for x > 0; abs() clamps truncation artifacts.
         e_n = is_very_large.select(x_ex * partial_sum.abs(), e_n);
+
+        // The forward-carried `e_prev` came from a recurrence this branch just rejected
+        // as unreliable, so re-derive it by inverting that recurrence instead:
+        //   E_N = (e^-x - x*E_{N-1}) / (N-1)  =>  E_{N-1} = (e^-x - (N-1)*E_N) / x
+        // Backward is the stable direction, and this branch only runs for very large x,
+        // far from the x -> 0 cancellation that would otherwise spoil it.
+        let back = (exp_neg_x - e_n.scale(E::from_int(const { N as thermite::LargeInt - 1 }))) / x;
+        e_prev = is_very_large.select(back, e_prev);
     }
 
     if const { P::POLICY.check_overflow } {
@@ -325,12 +368,19 @@ where
             e_n = x_is_zero.select(V::splat(E::ONE_OVER_N_MINUS_1), e_n);
         }
 
-        // Negative x: NaN
-        e_n = x.cmp_lt(V::ZERO).select(V::NAN, e_n);
+        // Same rule one order down: E_0 and E_1 both diverge at zero, E_n (n >= 2) does not.
+        if const { N <= 2 } {
+            e_prev = x_is_zero.select(V::INFINITY, e_prev);
+        } else {
+            e_prev = x_is_zero
+                .select(V::splat(E::ONE / E::from_int(const { N as thermite::LargeInt - 2 })), e_prev);
+        }
 
-        // NaN in, NaN out
-        e_n = x.is_nan().select(V::NAN, e_n);
+        // Negative x: NaN, and NaN in, NaN out.
+        let bad = x.cmp_lt(V::ZERO) | x.is_nan();
+        e_n = bad.select(V::NAN, e_n);
+        e_prev = bad.select(V::NAN, e_prev);
     }
 
-    e_n
+    (e_n, e_prev)
 }

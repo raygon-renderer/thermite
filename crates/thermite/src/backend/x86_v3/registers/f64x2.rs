@@ -253,9 +253,18 @@ impl Register for F64x2V3 {
         f(arr[0], arr[1])
     }
 
-    const HAS_PERMUTEV: bool = false;
+    const HAS_PERMUTEV: bool = true;
 
     impl_float_align_via_bits!(super::U64x2V3);
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // Same construction as `I64x2V3::permutev`, through the pd wrapper.
+        unsafe {
+            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
+            let idxs = arch::_mm_cvtepu32_epi64(idxs);
+            arch::_mm_permutevar_pd_v2(value, idxs)
+        }
+    }
 
     compress_via_table!();
 }

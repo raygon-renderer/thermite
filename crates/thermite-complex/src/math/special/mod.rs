@@ -37,12 +37,25 @@
 //! are minimax fits to real intervals and are unusable here - so `digamma` and
 //! `trigamma` lean on a recurrence where the real versions reach for a rational.
 //!
+//! [`expint`](SpecializedSpecialMath::expint) is inherited whole and simply runs in
+//! complex arithmetic; what changes is [`ExpIntDetails`], all three methods of it.
+//! [`use_series`](ExpIntDetails::use_series) picks the regime by `norm_sqr` rather than
+//! the lexicographic `cmp_lt`, and additionally claims the whole left half-plane, where
+//! the Stieltjes continued fraction degrades toward the cut but the series stops
+//! alternating and converges cleanly. [`invalid`](ExpIntDetails::invalid) drops the real
+//! version's `x < 0` hole, since the principal branch covers the cut plane; the cut
+//! itself needs no handling, as all of the multivaluedness is the `-ln z` term and the
+//! principal `ln` already carries it. [`cf_tiny`](ExpIntDetails::cf_tiny) backs the Lentz
+//! sentinel off `MIN_POSITIVE`, which a complex reciprocal squares into zero.
+//!
+//! `E_1` holds machine precision over the cut plane. Higher orders come off the order
+//! recurrence and lose roughly `|z|^(N-1)/(N-1)!`, matching what the real path considers
+//! reliable - but the asymptotic series that path swaps in past its threshold has no
+//! complex counterpart yet, so very large `|z|` at high `N` is not covered.
+//!
 //! # Not implemented
 //!
-//! `expint` picks its regime by comparing `|x|` against 1; over C that wants
-//! `norm_sqr` and a continued fraction validated in the left half-plane, neither of
-//! which the inherited default provides. `bessel_j` is disabled crate-wide until
-//! orders beyond `J_0` exist upstream.
+//! `bessel_j` is disabled crate-wide until orders beyond `J_0` exist upstream.
 //!
 //! `Complex<Compensated<..>>` gets the element-agnostic functions but `todo!()`s the
 //! table-driven ones; `Complex<Dual<..>>` has all of them, and differentiates through
@@ -51,7 +64,7 @@
 use thermite::math::policy::{DefaultPolicy, Policy};
 use thermite::math::{CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _};
 use thermite::prelude::*;
-use thermite_special::specialized::SpecializedSpecialMath;
+use thermite_special::specialized::{ExpIntDetails, SpecializedSpecialMath};
 
 use crate::Complex;
 use crate::math::ComplexMathWithPolicy as _;
@@ -219,6 +232,8 @@ impl<E, V: RealFloatVector<Element = E>> SpecializedSpecialMath<Complex<E>> for 
 where
     Complex<V>: SpecializedComplexSpecialMath<Complex<E>> + GenericVector<Mask = V::Mask>,
 {
+    type ExpIntDetails = Self;
+
     /// The error function over the whole complex plane.
     ///
     /// `erf` is entire and odd. The negative-real half-plane comes from
@@ -311,13 +326,57 @@ where
     //    todo!()
     //}
 
-    /// The default picks between a power series and a continued fraction by comparing
-    /// `|x|` against 1, an ordering C does not have.
+}
+
+/// All three of the shared `expint` kernel's decisions change over C. Everything else
+/// about that kernel - the series, the Lentz continued fraction, the order recurrence -
+/// is inherited unchanged and simply runs in complex arithmetic.
+impl<E, V: RealFloatVector<Element = E>> ExpIntDetails<Complex<E>, Complex<V>> for Complex<V>
+where
+    Complex<V>: FloatVector<Element = Complex<E>, Mask = V::Mask>,
+{
     #[inline(always)]
-    fn expint<P: Policy, const N: usize>(self) -> Self {
-        todo!(
-            "Complex expint needs a complex-specific series/continued-fraction split; the default regime test is an ordering on |x|"
-        )
+    fn use_series(z: Complex<V>) -> V::Mask {
+        // Two regions, for two different reasons.
+        //
+        // The unit disc is the real rule, but by modulus rather than by `cmp_lt` (which
+        // on `Complex` is the lexicographic sort order, and would hand a point like
+        // 0.5 + 100i to the series, where it diverges). Compared as `norm_sqr < 1` to
+        // skip the root - squaring is monotone and the threshold is its own square.
+        //
+        // The whole left half-plane is added because the Stieltjes continued fraction
+        // degrades as arg z approaches the cut - measurably by |Arg z| ~ 177 deg, and
+        // completely on the cut itself. The series has no such trouble there: its terms
+        // are (-z)^k / (k k!), so for Re z < 0 they stop alternating and the sum simply
+        // accumulates, which is the cancellation-free direction. (The reverse of the
+        // real line, where positive x is exactly what makes the series cancel and the
+        // fraction is preferred.)
+        z.norm_sqr().cmp_lt(V::ONE) | z.re.is_negative()
+    }
+
+    /// Nothing but NaN is out of domain.
+    ///
+    /// Real `E_N` is a half-line function and the default NaNs out `x < 0`. `E_N(z)` is
+    /// holomorphic on the whole cut plane `|Arg z| < pi`, so the negative reals are
+    /// in-domain here, approached from above. The cut needs no handling of its own: all
+    /// of the multivaluedness sits in the `-ln z` term of the series, and the principal
+    /// `ln` this crate provides already carries exactly that branch.
+    #[inline(always)]
+    fn invalid(z: Complex<V>) -> V::Mask {
+        z.is_nan()
+    }
+
+    /// The default sentinel, `MIN_POSITIVE`, cannot be used here: a complex reciprocal
+    /// is `conj(z) / |z|^2`, and `MIN_POSITIVE^2` underflows to zero, so the very first
+    /// Lentz step divides by zero and every continued-fraction lane comes back NaN.
+    ///
+    /// `sqrt(MIN_POSITIVE) / EPSILON` is the principled choice: the square root is the
+    /// hard floor for surviving the squaring, and dividing by EPSILON backs off it far
+    /// enough that the reciprocal's square stays inside the exponent range too. Holds
+    /// with room to spare for f32 and f64 alike.
+    #[inline(always)]
+    fn cf_tiny() -> Complex<V> {
+        Complex::real(V::MIN_POSITIVE.sqrt() / <V as FloatVector>::EPSILON)
     }
 }
 

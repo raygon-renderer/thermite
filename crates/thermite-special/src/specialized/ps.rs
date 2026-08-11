@@ -23,6 +23,8 @@ where
     V: TranscendentalMathWithPolicy<Element = f32>,
     V: SpecializedTranscendentalMath<f32>,
 {
+    type ExpIntDetails = Self;
+
     // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
     // The `bessel_j0`/`bessel_j0_pqzero` machinery this called is kept below under the
     // same marker.
@@ -294,6 +296,11 @@ where
     #[inline(always)]
     fn expint<P: Policy, const N: usize>(self) -> Self {
         generic::expint::expint_double::<P, f32, Self, N>(self)
+    }
+
+    #[inline(always)]
+    fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
+        generic::expint::expint_double_primal::<P, f32, Self, N>(self)
     }
 }
 
@@ -1031,3 +1038,6 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         }
     }
 }
+
+/// Every default applies: `expint` on the real line is what they were written for.
+impl<V: FloatVectorWithBits<Element = f32>> super::ExpIntDetails<f32, V> for V {}

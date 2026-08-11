@@ -1,6 +1,12 @@
 #![allow(clippy::approx_constant)]
 
-use thermite::{Vector, math::FloatConsts, vector::GenericVector as _};
+use core::marker::PhantomData;
+
+use thermite::{
+    Vector,
+    math::FloatConsts,
+    vector::{SplatConst, const_splat},
+};
 
 use super::{Compensated, ScalarValue};
 
@@ -15,44 +21,68 @@ pub trait CompensatedLogTable<T = Self>: FloatConsts {
     const LN_2_EXTENDED: [T; 3];
 }
 
+// The tables below reach every lane through the `SplatConst`/`const_splat` carrier
+// path rather than the deprecated `Vector::splat_const`.
+//
+// `const_splat::<V, C>()` is purely type-level: it wants a carrier *type* `C` exposing
+// one `const VALUE: V::Element`. A `while`-loop index inside a const initializer cannot
+// become a type, so the carriers below take the table index as a `const I: usize`
+// parameter and the loop is unrolled into one carrier instantiation per entry. The
+// element stays generic (`E = R::Element`), which is what the `const_splat!` macro's
+// generic arm cannot express here - its carrier takes a single path bound and these
+// need `where E: CompensatedLogTable<E>`.
+
+/// Carrier for the high limb of `LOG_TABLE[I]`.
+struct LogTableValue<E, const I: usize>(PhantomData<E>);
+
+impl<E: CompensatedLogTable<E> + Copy, const I: usize> SplatConst<E> for LogTableValue<E, I> {
+    const VALUE: E = <E as CompensatedLogTable<E>>::LOG_TABLE[I].value;
+}
+
+/// Carrier for the low (error) limb of `LOG_TABLE[I]`.
+struct LogTableError<E, const I: usize>(PhantomData<E>);
+
+impl<E: CompensatedLogTable<E> + Copy, const I: usize> SplatConst<E> for LogTableError<E, I> {
+    const VALUE: E = <E as CompensatedLogTable<E>>::LOG_TABLE[I].error;
+}
+
+/// Carrier for `LN_2_EXTENDED[I]`.
+struct Ln2Extended<E, const I: usize>(PhantomData<E>);
+
+impl<E: CompensatedLogTable<E> + Copy, const I: usize> SplatConst<E> for Ln2Extended<E, I> {
+    const VALUE: E = <E as CompensatedLogTable<E>>::LN_2_EXTENDED[I];
+}
+
+/// Unrolls the log table: one `Compensated` entry per index literal.
+///
+/// `Self` and `R` resolve at the expansion site (inside the impl block below).
+/// The declared array length `LOG_TABLE_SIZE` is what checks the index list is
+/// complete - a missing or extra literal is a compile error, not a silent truncation.
+macro_rules! log_table {
+    ($($i:literal),* $(,)?) => {
+        [$(Compensated {
+            value: const_splat::<Self, LogTableValue<R::Element, $i>>(),
+            error: const_splat::<Self, LogTableError<R::Element, $i>>(),
+        }),*]
+    };
+}
+
 impl<R: thermite::register::FloatRegister> CompensatedLogTable<Self> for Vector<R>
 where
     R::Element: CompensatedLogTable<R::Element>,
 {
-    const LOG_TABLE: [Compensated<Self>; LOG_TABLE_SIZE] = {
-        let mut table = [Compensated {
-            value: Vector::EMPTY,
-            error: Vector::EMPTY,
-        }; LOG_TABLE_SIZE];
+    #[rustfmt::skip]
+    const LOG_TABLE: [Compensated<Self>; LOG_TABLE_SIZE] = log_table!(
+         0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+        10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+    );
 
-        let mut i = 0;
-
-        while i < LOG_TABLE_SIZE {
-            let c = <R::Element as CompensatedLogTable<R::Element>>::LOG_TABLE[i];
-
-            table[i] = Compensated {
-                value: Vector::splat_const(c.value),
-                error: Vector::splat_const(c.error),
-            };
-
-            i += 1;
-        }
-
-        table
-    };
-
-    const LN_2_EXTENDED: [Self; 3] = {
-        let mut table = [Vector::EMPTY; 3];
-        let mut i = 0;
-
-        while i < 3 {
-            table[i] = Vector::splat_const(<R::Element as CompensatedLogTable<R::Element>>::LN_2_EXTENDED[i]);
-
-            i += 1;
-        }
-
-        table
-    };
+    const LN_2_EXTENDED: [Self; 3] = [
+        const_splat::<Self, Ln2Extended<R::Element, 0>>(),
+        const_splat::<Self, Ln2Extended<R::Element, 1>>(),
+        const_splat::<Self, Ln2Extended<R::Element, 2>>(),
+    ];
 }
 
 macro_rules! impl_consts {
@@ -68,15 +98,37 @@ macro_rules! impl_consts {
             };)*
         }
 
+        // One `SplatConst` carrier pair per constant name, so the `Vector` impl below can
+        // go through `const_splat` instead of the deprecated `Vector::splat_const`. These
+        // are indexed by *name* rather than by a const-generic, so unlike the log table
+        // there is nothing to unroll - but they still cannot use the `const_splat!` macro,
+        // whose generated carrier has no way to carry
+        // `where E: SplitFloatConsts<E>`.
+        //
+        // The names are SCREAMING_CASE constants, so the generated carrier idents are too.
+        paste::paste! {$(
+            #[allow(non_camel_case_types)]
+            struct [<$const _Value>]<E>(PhantomData<E>);
+
+            impl<E: SplitFloatConsts<E> + Copy> SplatConst<E> for [<$const _Value>]<E> {
+                const VALUE: E = <E as SplitFloatConsts<E>>::$const.value;
+            }
+
+            #[allow(non_camel_case_types)]
+            struct [<$const _Error>]<E>(PhantomData<E>);
+
+            impl<E: SplitFloatConsts<E> + Copy> SplatConst<E> for [<$const _Error>]<E> {
+                const VALUE: E = <E as SplitFloatConsts<E>>::$const.error;
+            }
+        )*}
+
         impl<R: thermite::register::FloatRegister> SplitFloatConsts<Self> for Vector<R>
             where R::Element: SplitFloatConsts<R::Element>,
         {
-            $(const $const: Compensated<Self> = {
-                let c = <R::Element as SplitFloatConsts<R::Element>>::$const;
-
+            $(const $const: Compensated<Self> = paste::paste! {
                 Compensated {
-                    value: Vector::splat_const(c.value),
-                    error: Vector::splat_const(c.error),
+                    value: const_splat::<Self, [<$const _Value>]<R::Element>>(),
+                    error: const_splat::<Self, [<$const _Error>]<R::Element>>(),
                 }
             };)*
         }
@@ -235,7 +287,23 @@ impl_consts!(LOG f32 [
     ("0x1.2d12080000000p-2", "0x1.02e7c00000000p-27"),
     ("0x1.2a32160000000p-2", "-0x1.8a11340000000p-27"),
     ("0x1.2776c60000000p-2", "-0x1.e20c800000000p-27"),
-], ["0x1.62e4300000000p-1", "-0x1.05c6100000000p-29", "-0x1.950d880000000p-54"]);
+],
+// LN_2_EXTENDED: Cody-Waite pieces, NOT simply ln(2) to ever more digits.
+//
+// `exp_internal` reduces with `r -= k * LN_2_EXTENDED[i]`, where both `k` and the piece
+// are plain (uncompensated) vectors - so each product is a single rounded multiply. The
+// pieces therefore have to be narrow enough that those products are *exact*, which is
+// what buys the reduction its accuracy; the compensated subtraction around them is
+// already exact on its own.
+//
+// f32 carries 24 mantissa bits and `exp` overflows near 88.7, so |k| <= 128 needs 8 of
+// them: the leading pieces get 24 - 8 = 16 bits each and the tail takes the remainder.
+// Verified exact for |k| <= 160; worst-case reduction error 5.2e-17, against the ~3.6e-15
+// that double-single needs.
+//
+// Widening these to "more accurate" full-precision values silently makes `exp` *worse* -
+// it was previously ~21 bits per piece, which is inexact past about k = 16.
+["0x1.62e4000000000p-1", "0x1.7f7e000000000p-20", "-0x1.c610ca0000000p-37"]);
 
 impl_consts!(LOG f64 [
     ("0x1.d20ae03bcc153p-1", "-0x1.3a34bf2f1ab83p-55"),
@@ -268,4 +336,16 @@ impl_consts!(LOG f64 [
     ("0x1.2d12088173e01p-2", "0x1.bffac2f932436p-57"),
     ("0x1.2a32153af765ep-2", "0x1.c22c8956209efp-56"),
     ("0x1.2776c50ef9bfep-2", "0x1.e4b29ccc535d4p-56"),
-], ["0x1.62e42fefa39efp-1", "0x1.abc9e3b39803fp-56", "0x1.7b57a079a1934p-111"]);
+],
+// LN_2_EXTENDED: Cody-Waite pieces - see the f32 table above for why these are narrow.
+//
+// f64 carries 53 mantissa bits and `exp` overflows near 709.8, so |k| <= 1024 needs 11
+// of them: 53 - 11 = 42 bits per leading piece, tail takes the remainder. Verified exact
+// for |k| <= 1100; worst-case reduction error 2.9e-42, against the ~1.2e-32 that
+// double-double needs.
+//
+// These were previously full-precision f64 values, which made every `k * piece` a rounded
+// multiply and capped `exp` at about 50 bits - 1.1e-15 relative at x = 29, growing with
+// |k|. `ln` inherited that ceiling through its Halley step, and everything built on the
+// pair (`powf`, the gamma family) inherited it in turn.
+["0x1.62e42fefa3800p-1", "0x1.ef35793c76800p-45", "-0x1.9ff0342542fc3p-90"]);

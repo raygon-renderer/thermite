@@ -318,7 +318,13 @@ mod x86_rt {
     rt!(rt_v3_f32x8, <X86V3 as Simd>::f32x8);
     rt!(rt_v3_i32x8, <X86V3 as Simd>::i32x8);
     rt!(rt_v3_i64x4, <X86V3 as Simd>::i64x4);
+    rt!(rt_v3_u64x4, <X86V3 as Simd>::u64x4);
+    rt!(rt_v3_f64x2, <X86V3 as Simd>::f64x2);
     rt!(rt_v2_f32x4, <X86V2 as Simd>::f32x4);
+    // The v2 64-bit registers gained pshufb-based `permutev` (2026-08-08).
+    rt!(rt_v2_f64x2, <X86V2 as Simd>::f64x2);
+    rt!(rt_v2_i64x2, <X86V2 as Simd>::i64x2);
+    rt!(rt_v2_u64x2, <X86V2 as Simd>::u64x2);
     rt!(rt_v2_i32x4, <X86V2 as Simd>::i32x4);
     rt!(rt_v2_f32x8, <X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
     rt!(rt_v1_f32x4, <X86V1 as Simd>::f32x4);

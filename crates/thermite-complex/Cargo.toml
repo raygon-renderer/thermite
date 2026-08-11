@@ -8,18 +8,27 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 description = "Generic SIMD complex numbers built on Thermite"
-publish = false                                                # not ready for release yet
+keywords = ["simd", "complex", "complex-numbers", "math", "no-std"]
+categories = ["mathematics", "science", "no-std", "hardware-support"]
+publish = false                                                             # not ready for release yet
+readme = "README.md"
+include = ["/src", "/README.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
+
+# `compensated` is off by default but documented, so the `Complex<Compensated<..>>`
+# impls show up on docs.rs.
+[package.metadata.docs.rs]
+features = ["std", "compensated", "dual", "special"]
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
-default = ["dual", "special"]
+# default = ["dual", "special"]
 std = ["thermite/std"]
 # Lets a `Dual` be the storage of a `Complex`, i.e. `Complex<Dual<V, N>>`:
 # complex arithmetic that also carries derivatives.
 dual = ["dep:thermite-dual"]
 # Special functions (erf/erfc and the polynomial families) over the complex plane.
 special = ["dep:thermite-special"]
-# Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`.
-# Not on by default: thermite-compensated is not no_std.
+# Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`
 compensated = ["dep:thermite-compensated"]
 
 [dependencies]

@@ -117,7 +117,8 @@ let s = 0.5_f64.scalar_sin();
 let e = 2.0_f32.scalar_exp_p::<HighPerformance>();
 ```
 
-For *generic* code that must accept scalars, wrap: `Vector::<f64>::splat(x)`.
+For *generic* code that must accept scalars, wrap the element: `x.as_vector()`
+(or the longhand `Vector::<f64>::splat(x)`).
 
 ## FloatConsts: ~45 constants
 

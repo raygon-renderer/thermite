@@ -78,6 +78,7 @@ panic="abort".
 | `crates/thermite-special` | erf/gamma/activations/elliptic; same `_p::<P>()` + `Specialized*` pattern as core math. |
 | `crates/thermite-dual` | `Dual<V,N>` autodiff; implements `Specialized*Math` by chain rule. |
 | `crates/thermite-compensated` | `Compensated<V>` double-double via error-free transforms. WIP (`todo!()` in places). |
+| `crates/thermite-sort` | Vectorized quicksort + key-value/cached-key sorts on the core traits. See [sort.md](sort.md); `SORT_HANDOFF.md` at the repo root is its authoritative design/measurement record. Core owns the *primitives* it builds on (`NumericRegister::sort_by`, `bitonic_clean_by`, `thermite::sort`'s order markers and index math) - the dividing line is whether a backend could plausibly want to override it. |
 | `crates/thermite-geometry`, `-sdf`, `-complex`, `-blas`, `-bignum`, `-rng` | Companions on the core traits; some mid-rewrite. |
 | `crates/thermite-ffi` | C ABI `cdylib`, nightly-only. See [ffi.md](ffi.md). |
 | `crates/testing` | Internal differential-test helpers. |

@@ -157,6 +157,10 @@ macro_rules! check {
 /// `Compensated` must report its inner vector's align capability, in both
 /// directions: the scans are an `align` ladder, and a wrong answer here picks the
 /// wrong lowering without changing any result.
+// `HAS_NATIVE_ALIGN` is an associated const, so clippy sees constant-valued assertions.
+// That is the point: this test pins the const's value, and a regression flips it at
+// compile time rather than producing a wrong result at runtime.
+#[allow(clippy::assertions_on_constants)]
 #[test]
 fn forwards_native_align() {
     assert!(

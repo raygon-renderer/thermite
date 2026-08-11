@@ -237,9 +237,18 @@ impl Register for U64x2V2 {
         f(arr[0], arr[1])
     }
 
-    const HAS_PERMUTEV: bool = false;
+    const HAS_PERMUTEV: bool = true;
 
     impl_byte_align_alignr!();
+
+    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+        // Same as `I64x2V2::permutev` (raw `__m128i`).
+        unsafe {
+            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
+            let idxs = arch::_mm_cvtepu32_epi64(idxs);
+            arch::_mm_permutevarx_epi64x_v2(value, idxs)
+        }
+    }
 
     compress_via_table!();
 }

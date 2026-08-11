@@ -91,8 +91,10 @@ needed; ideal for tests and for seeding composites. (This is the main place
 naming a concrete `Vector<R>` is legitimate -- scalar code has no alternative.)
 
 ```rust
-let y = f(Vector::<f64>::splat(0.5));
+let y = f(0.5_f64.as_vector());          // Element::as_vector -> Vector<f64>, 1 lane
 let s = y.extract::<0>();
+
+let z = f(Vector::<f64>::splat(0.5));    // longhand, identical
 ```
 
 **2. Native-width SIMD via runtime dispatch.** `dispatch_dyn!` detects the best
@@ -183,7 +185,8 @@ More constant idioms:
 
 ## Pitfalls
 
-- **Bare `f32`/`f64` are not `FloatVector`.** Wrap: `Vector::<f64>::splat(x)`.
+- **Bare `f32`/`f64` are not `FloatVector`.** Wrap: `x.as_vector()` (the
+  `Element` method, prelude-imported) or the longhand `Vector::<f64>::splat(x)`.
   One-off scalar math: `use thermite::math::ScalarMath; let s = x.scalar_sin();`
   (`scalar_`-prefixed to avoid clashing with inherent `f64::sin`). See [math.md](math.md).
 - **Don't over-constrain.** `FloatVector` when you only `+`/`*` excludes integer

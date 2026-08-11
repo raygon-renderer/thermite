@@ -8,16 +8,20 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 description = "Extended special functions for the Thermite SIMD library"
-publish = false                                                          # not ready for release yet
+keywords = ["simd", "special-functions", "erf", "gamma", "math"]
+categories = ["mathematics", "science", "no-std", "hardware-support"]
+publish = false                                                             # not ready for release yet
+include = ["/src", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
 
 [package.metadata.docs.rs]
-features = ["document_registers", "std"]
+features = ["std"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [lints]
 workspace = true
 
 [features]
+std = ["thermite/std"]
 disable_dispatch = ["thermite/disable_dispatch"] # Disable dispatch in thermite for maximum performance, but massive code bloat
 
 [dependencies]

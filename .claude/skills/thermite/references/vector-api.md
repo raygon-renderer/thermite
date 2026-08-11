@@ -13,6 +13,8 @@ and `vector/ops.rs`.
 ```rust
 // Construction
 V::new([e0, e1, ...])        V::splat(e)         V::single(e)   // single: lane 0 = e, rest 0
+e.as_vector() -> Vector<E>   // Element trait (prelude): wrap a bare f32/f64/int as its 1-lane
+                             // scalar vector - the ergonomic form of Vector::<f32>::splat(e)
 V::EMPTY                                              // all-zero (also ZERO/ONE/... on NumericVector)
 const X: V = thermite::const_new!(f32: [1.0, 0.0, 0.0]);  // const vector value (usable in const fn / assoc consts)
 v.into_array() -> GenericArray<E, V::Lanes>          V::from_slice(&[E])     v.copy_to_slice(&mut [E])
@@ -28,7 +30,7 @@ v.x() v.y() v.z() v.w()                                                         
 v.reverse()                  v.swap_bytes()
 
 // Memory (unsafe load/store; ptr must satisfy alignment for the aligned forms).
-// FOOTGUN: V::load is ALIGNED -- loading a table from a plain Box/Vec faults
+// FOOTGUN: V::load is ALIGNED - loading a table from a plain Box/Vec faults
 // NONDETERMINISTICALLY (0xc0000005) since heap alloc may or may not be aligned
 // enough. Use load_unaligned or an aligned container for heap-allocated tables.
 V::load(ptr)  V::load_unaligned(ptr)  V::load_streaming(ptr)
@@ -61,7 +63,7 @@ V::load_deinterleaved(...)  v.store_interleaved(...)   // AoS<->SoA memory form,
 v.compress(mask)            // stable left-pack of true lanes
 v.compress_z(mask)          // left-pack true lanes, zero the rest
 v.compress_m(src, mask)     // left-pack; lanes at/beyond popcount keep src's own lanes
-                            // (position-addressed, not mask-addressed) -- the accumulator
+                            // (position-addressed, not mask-addressed) - the accumulator
                             // step of a buffered stream compactor
 v.expand(mask)              // scatter the packed low lanes back out to the true lanes;
                             // the EXACT inverse permutation of compress, so
@@ -94,7 +96,7 @@ a.swizzle(b, indices)              // runtime-index two-vector shuffle
 a.permute(indices)                 // runtime-index single-vector permute (pshufb/vqtbl/i8x16.swizzle class)
 a.swizzle_const::<I>(b)  a.permute_const::<I>()   // compile-time indices via SwizzleIndices
 thermite::swizzle!(v, [1, 0, 3, 2])  // const shuffle macro; stay in-register in hot loops
-// (register layer also has permutev / shuffle::<IMM8> -- backend impls only)
+// (register layer also has permutev / shuffle::<IMM8> - backend impls only)
 
 // Mask helpers
 v.zz(mask)   // zero lanes where mask is FALSE   (keep where true)
@@ -150,10 +152,10 @@ v.min_max_element() -> (E, E)    v.arg_minmax() -> (usize, usize)
 v.prefix_sum()   v.prefix_min()   v.prefix_max()            // out[i] = op(v[0]..=v[i])
 v.reverse_prefix_sum()  v.reverse_prefix_min()  v.reverse_prefix_max()  // out[i] = op(v[i]..)
 // O(log2 LANES) align ladder where the backend has a native align, a sequential lane
-// walk where it does not -- chosen at compile time. No masked variants: neutralise the
+// walk where it does not - chosen at compile time. No masked variants: neutralise the
 // lanes you want out first, e.g. `v.zz(mask).prefix_sum()`.
 // After prefix_sum the LAST lane is the whole-register total, so the carry into the
-// next chunk is `scanned.reverse().broadcast::<0>()` -- no horizontal reduction.
+// next chunk is `scanned.reverse().broadcast::<0>()` - no horizontal reduction.
 // min/max: exact including infinities; on NaN input, which operand wins is unspecified.
 v.is_zero() -> M    v.is_all_zero() -> bool
 V::pairwise_sum(lo, hi)    V::relaxed_pairwise_sum(lo, hi)
@@ -224,7 +226,7 @@ a.fmsubadd(b, c)     // opposite parity: even lanes add, odd subtract
 // complex mul over [re, im, ...] lanes: fmaddsub(a, wr_splat, a_swapped * wi_splat)
 
 // FMA family. Sign conventions:
-a.mul_adde(b, c)   // a*b + c   <-- PREFER the `e` (estimating) forms by default
+a.mul_adde(b, c)   // a*b + c   <- PREFER the `e` (estimating) forms by default
 a.mul_sube(b, c)   // a*b - c
 a.nmul_adde(b, c)  // c - a*b
 a.nmul_sube(b, c)  // -a*b - c
@@ -232,7 +234,7 @@ a.mul_add(b, c)    // a*b + c, always single-rounded: real FMA, else vectorized 
                    // emulation (scalar libm::fma only under disable_fast_fma). See math.md.
 ```
 
-See [performance.md](performance.md) for which FMA variant to use -- this is the
+See [performance.md](performance.md) for which FMA variant to use - this is the
 single most common perf footgun.
 
 ## 8. FloatVectorWithBits
@@ -251,13 +253,13 @@ the concrete type lacks bit views, e.g. some composites).
 
 Sub-f32 formats live in **unsigned integer vectors** (u16 for the 16-bit
 formats, u8 for fp8) and are transcoded to/from the same-lane-count `f32`
-vector at boundaries -- compute stays in f32. Formats
+vector at boundaries - compute stays in f32. Formats
 (`thermite::element::float::spec`, all implementing `FloatSpec`):
 
 | Format | Layout (s/e/m, bias) | Specials |
 |---|---|---|
 | `Fp16` | 1/5/10, 15 | IEEE binary16: inf + NaN |
-| `Fp16Fast` | same layout | `Unchecked`: inf/NaN elided for speed -- unpack decodes all-ones-exponent as large normals, pack flushes non-finite/overflow to signed zero. Finite data only. |
+| `Fp16Fast` | same layout | `Unchecked`: inf/NaN elided for speed - unpack decodes all-ones-exponent as large normals, pack flushes non-finite/overflow to signed zero. Finite data only. |
 | `Bf16` | 1/8/7, 127 | exactly the top 16 bits of an f32; inf + NaN |
 | `Fp8E4M3` | 1/4/3, 7 | OCP: no inf, single NaN `S.1111.111`, max finite 448, out-of-range saturates |
 | `Fp8E5M2` | 1/5/2, 15 | OCP, IEEE-style: inf + NaN |
@@ -275,7 +277,7 @@ U::pack(f32_vec) -> U   // encode: round-to-nearest-ties-even; overflow per form
 u.unpack() -> F         // decode: EXACT (every sub-f32 value is representable in f32)
 ```
 
-Backends override with hardware where it exists (F16C `vcvtph2ps` -- assumed
+Backends override with hardware where it exists (F16C `vcvtph2ps` - assumed
 with AVX2 under the default `avx2-f16c` feature; AVX512-BF16 on that tier);
 otherwise a generic branchless shift/mask/select fallback that is denormal-safe
 (exact independent of the FPU's flush-to-zero mode).
@@ -304,7 +306,7 @@ output lane sums the whole register (e.g. `u8x2.sad64()` sums both bytes).
 
 The **`xN` native-width slots carry it too** (`u8xN`/`u16xN`/`u32xN`), and the lane
 ratios line up on every backend: `u8xN.sad16()` is `u16xN`, `.sad32()` is `u32xN`,
-`.sad64()` is `u64xN`. That is how AVX2's 256-bit byte register is reached -- there
+`.sad64()` is `u64xN`. That is how AVX2's 256-bit byte register is reached - there
 is no fixed-width `u8x32` slot, but `u8xN` *is* `u8x32` on v3, so `_mm256_sad_epu8`
 (and the 256-bit `pmaddubsw`/`pmaddwd`) are on that path.
 
@@ -318,7 +320,7 @@ the inner register, since a group never spans two of them.
 > `Simd`/`SimdVectors` bounds pin the output, but a *concrete* `a.sad16(b)` on such
 > a vector may need an explicit output type.
 
-> `Sad16` exists only for `u8` inputs -- on `u16` its group would be one lane,
+> `Sad16` exists only for `u8` inputs - on `u16` its group would be one lane,
 > i.e. just `abs_diff`.
 
 ```rust
@@ -328,8 +330,8 @@ a.sad16(b) -> u16x8    // groups of 2 bytes, each result <= 510
 a.sad32(b) -> u32x4    // groups of 4 bytes, each result <= 1020
 a.sad64(b) -> u64x2    // groups of 8 bytes, each result <= 2040 (x86 PSADBW semantics)
 
-a.sad32_accum(acc, b)  // acc + a.sad32(b) -- ~4.2e6 accumulations of headroom
-a.sad64_accum(acc, b)  // acc + a.sad64(b) -- effectively unbounded (~9e15)
+a.sad32_accum(acc, b)  // acc + a.sad32(b) - ~4.2e6 accumulations of headroom
+a.sad64_accum(acc, b)  // acc + a.sad64(b) - effectively unbounded (~9e15)
 ```
 
 `sad64`'s u64 lanes are deliberate accumulation headroom, so the intended shape of
@@ -342,7 +344,7 @@ for (a, b) in blocks { acc = a.sad64_accum(acc, b); }
 let total = acc.sum_elements();
 ```
 
-**No `sad16_accum` exists** -- a u16 lane saturates after only ~128 accumulations,
+**No `sad16_accum` exists** - a u16 lane saturates after only ~128 accumulations,
 so widen deliberately (`sad32`/`sad64`) rather than accumulating the narrow form.
 
 Instruction count past the absolute difference, per backend:
@@ -368,7 +370,7 @@ u16 / u32 input:
 
 **x86 has no native form for the wider inputs.** `pmaddwd` against ones looks like
 the `pmaddubsw` trick one size up, but it reads its inputs as **signed i16**, and a
-u16 absolute difference reaches 65535 -- anything over 32767 is treated as negative
+u16 absolute difference reaches 65535 - anything over 32767 is treated as negative
 and the result is wrong. (The u8 case is safe only because byte-pair sums cap at
 510.) Same reasoning rules it out for u32.
 

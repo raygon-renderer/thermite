@@ -212,3 +212,60 @@ fn digamma_negative_argument_derivative() {
     assert!(close(r.re.extract::<0>(), digamma_ref(-2.5), 1e-12));
     assert!(close(r.dual[0].extract::<0>(), ndiff(digamma_ref, -2.5), 1e-6));
 }
+
+#[test]
+fn expint_derivative_is_the_next_lower_order() {
+    // Differentiating E_N under the integral sign pulls down a factor of -t, dropping
+    // the order by one: E_N'(x) = -E_{N-1}(x). Checked against the real E_{N-1} rather
+    // than a finite difference so it is an identity test, not an accuracy test.
+    for &x in &[0.25, 0.75, 1.5, 4.0, 12.0] {
+        let r = D::variable(V::splat(x), 0).expint::<3>();
+        let expect = -V::splat(x).expint::<2>().extract::<0>();
+
+        assert!(close(r.re.extract::<0>(), V::splat(x).expint::<3>().extract::<0>(), 1e-15));
+        assert!(close(r.dual[0].extract::<0>(), expect, 1e-15), "E_3'({x}) != -E_2({x})");
+        assert!(close(r.dual[1].extract::<0>(), 0.0, 1e-15));
+    }
+}
+
+#[test]
+fn expint_order_one_derivative_is_plain_exp() {
+    // E_1'(x) = -E_0(x) = -e^-x / x, the bottom of the ladder.
+    for &x in &[0.5, 2.0, 9.0] {
+        let r = D::variable(V::splat(x), 0).expint::<1>();
+
+        assert!(close(r.dual[0].extract::<0>(), -(-x).exp() / x, 1e-14), "E_1'({x})");
+    }
+}
+
+#[test]
+fn expint_high_order_large_argument_takes_the_guarded_path() {
+    // Regression: `Dual` used to inherit the generic default, which applies the forward
+    // order recurrence unconditionally. That recurrence amplifies error by
+    // |x|^(N-1)/(N-1)!, and the real path switches to an asymptotic series above
+    // RECURRENCE_THRESHOLD (~33 for f32 at N=8) precisely to avoid it. Dual now
+    // delegates the value, so these must agree bit for bit.
+    type VF = Vector<f32>;
+    type DF = Dual<VF, 1>;
+
+    for &x in &[40.0f32, 55.0, 70.0, 85.0] {
+        let real = VF::splat(x).expint::<8>().extract::<0>();
+        let dual = DF::variable(VF::splat(x), 0).expint::<8>().re.extract::<0>();
+
+        assert_eq!(dual, real, "E_8({x}) diverged from the guarded real path");
+    }
+}
+
+#[test]
+fn expint_order_zero_is_the_closed_form() {
+    // The generic default used to fall through to E_1 for N = 0; both paths now return
+    // E_0(x) = e^-x / x.
+    for &x in &[0.5, 3.0, 20.0] {
+        let r = D::variable(V::splat(x), 0).expint::<0>();
+
+        assert!(close(r.re.extract::<0>(), (-x).exp() / x, 1e-14), "E_0({x})");
+        // E_0'(x) = -E_{-1}(x) = -e^-x (1 + 1/x) / x
+        let expect = -(-x).exp() * (1.0 + 1.0 / x) / x;
+        assert!(close(r.dual[0].extract::<0>(), expect, 1e-14), "E_0'({x})");
+    }
+}
