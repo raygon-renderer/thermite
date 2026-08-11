@@ -10,12 +10,31 @@ crate-type = ["cdylib"]
 doc = false
 
 [features]
-default = ["high_performance", "high_precision"] # Enable all policies by default
+default = ["high_performance", "high_precision", "disable_dispatch"]
 
 high_performance = [] # Enable high-performance policy
 high_precision = []   # Enable high-precision policy
 
-# Disable dispatch in thermite for maximum performance, but massive code bloat
+# Inline the math instead of routing it through Thermite's per-ISA dispatch.
+#
+# ON BY DEFAULT HERE, which is the opposite of the advice for a normal consumer.
+# Dispatch exists to pick an ISA at the point of the call, and this crate has
+# already picked one: the vtable is populated per backend at init, so every
+# function in it is monomorphized for exactly one ISA before it is ever called.
+# The dispatch inside was re-deciding something the caller already knew, and
+# paying a call plus a stack round-trip of the vectors for it.
+#
+# Measured on a 5950X, `sin_cosf_vv` over 32K f32 (x86-v3, HighPerformance):
+#
+#   default (dispatch)  0.659 ns/elem   2,419,200 B .dll     643,120 B .so
+#   disable_dispatch    0.398 ns/elem   2,404,352 B .dll     646,848 B .so
+#
+# So 39% faster and slightly SMALLER on both targets. The usual warning about
+# code bloat does not apply, because there is no second ISA to duplicate the
+# inlined math for - `llvm-mca` puts the removed overhead at ~3.8 cycles of the
+# ~23 per 8-lane block, on top of the call itself.
+#
+# Turn it off with `--no-default-features --features high_performance,high_precision`.
 disable_dispatch = ["thermite/disable_dispatch", "thermite-special/disable_dispatch"]
 
 # Make no attempts to handle denormal values in Thermite. This assumes

@@ -31,6 +31,19 @@ jobs:
             artifact_name: libthermite.so
             archive_name: thermite-linux-aarch64.tar.gz
             rustflags: "-C target-feature=-crt-static"
+          # Apple Silicon, which is the same NEON backend: AdvSIMD is mandatory in
+          # AArch64 whatever the OS. `macos-latest` is arm64, so this builds
+          # natively and needs no SDK wrangling.
+          #
+          # No `-nostdlib` here. Every macOS system ships libSystem, so linking it
+          # costs nothing at runtime, and Apple's linker is different enough that
+          # adding an untested flag is more likely to break the link than to
+          # remove a dependency the crate does not have in the first place.
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: libthermite.dylib
+            archive_name: thermite-macos-aarch64.tar.gz
+            rustflags: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: thermite.dll
@@ -87,6 +100,19 @@ jobs:
             exit 1
           fi
           echo "OK: no DT_NEEDED entries, no undefined symbols"
+
+      # Informational, not a gate. The Linux check above asserts a hard property;
+      # nobody has seen a real Mach-O run yet, so this just prints what the dylib
+      # ended up depending on. Tighten it into an assertion once the expected
+      # output is known.
+      - name: Report dylib dependencies
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          SO="target/${{ matrix.target }}/release-ffi/${{ matrix.artifact_name }}"
+          echo "--- otool -L ---"
+          otool -L "$SO"
+          echo "--- undefined symbols ---"
+          nm -u "$SO" || true
 
       - name: Package artifacts
         shell: bash

@@ -88,7 +88,7 @@ pub fn detect() -> CpuInfo {
 /// unconditionally, so this needs neither `std` nor a `libc` dependency.
 #[cfg(target_vendor = "apple")]
 mod apple {
-    use super::{CacheInfo, CacheKind, CpuInfo};
+    use crate::cpu::{CacheInfo, CacheKind, CpuInfo};
     use core::ffi::{c_char, c_int, c_void};
 
     unsafe extern "C" {
@@ -189,7 +189,7 @@ mod apple {
 /// from a native binary, a system app, or `adb shell`.
 #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "std"))]
 mod linux {
-    use super::{CacheInfo, CacheKind, CpuInfo};
+    use crate::cpu::{CacheInfo, CacheKind, CpuInfo};
 
     fn read(path: &str) -> Option<std::string::String> {
         std::fs::read_to_string(path).ok().map(|s| s.trim().into())

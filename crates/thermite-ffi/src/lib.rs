@@ -17,16 +17,33 @@
 //! which affects the speed and accuracy of the results. See [`ThermitePrecisionPolicy`]
 //! for more on that.
 //!
-//! This library is primarily intended to be dynamically linked. To that end, code size has
-//! been reduced as much as reasonably possible while retaining performance, but as a result
-//! not all functions are inlined nor all loops unrolled. If a larger library binary is
-//! acceptable, the `disable_dispatch` crate feature will disable dispatch indirection and
-//! force all algorithms to be inlined. An example of this is how many functions here rely on
-//! the `exp` function internally. Enabling `disable_dispatch` will force the compiler to
-//! copy the entire `exp` implementation into each and every function that uses it,
-//! potentially improving performance by removing a function call and allowing LLVM
-//! to interweave the `exp` computation better, at the cost of bumping the binary size
-//! considerably.
+//! This library is primarily intended to be dynamically linked, so code size matters and
+//! not all functions are inlined nor all loops unrolled.
+//!
+//! The `disable_dispatch` feature is nonetheless **on by default here**, which is the
+//! opposite of the advice for a normal Thermite consumer. Dispatch exists to choose an ISA
+//! at the point of the call, and this crate has already chosen one: [`thermite_init`]
+//! populates the vtable from a single backend, so every function in it is monomorphized for
+//! exactly one ISA before anything calls it. The dispatch inside was re-deciding that, and
+//! charging a function call plus a stack round-trip of the vectors to do it.
+//!
+//! Measured on a 5950X, `sin_cosf_vv` over 32K f32 (x86-v3, HighPerformance), turning it on
+//! is **39% faster and slightly smaller** on both x86 and AArch64:
+//!
+//! ```text
+//!                      ns/elem      .dll (x86)     .so (aarch64)
+//!   dispatch            0.659        2,419,200        646,848
+//!   disable_dispatch    0.398        2,404,352        643,120
+//! ```
+//!
+//! The usual warning that inlining the math "bloats the binary considerably" is true when a
+//! caller dispatches over several ISAs, and false here: there is only ever one ISA per
+//! vtable, so there is nothing for the inlined math to be duplicated across. `llvm-mca` puts
+//! the removed overhead at roughly 3.8 of the ~23 cycles per 8-lane block, before counting
+//! the call itself.
+//!
+//! Build with `--no-default-features --features high_performance,high_precision` to get the
+//! dispatched form back.
 //!
 //! Furthermore, using a tool like `mpress` to compress the binary may be desired, but that's
 //! more of a personal preference in the end.
@@ -43,6 +60,22 @@ mod map;
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
+
+/// Apple's linker refuses to produce a dylib that does not link libSystem:
+///
+/// ```text
+/// ld: dynamic executables or dylibs must link with libSystem.dylib
+/// ```
+///
+/// Normally the platform default supplies it, but this crate graph is `no_std`,
+/// so rustc passes `-nodefaultlibs` and nothing does. Asking for it here rather
+/// than through `RUSTFLAGS` keeps a plain `cargo build` working on macOS.
+///
+/// Unconditional across Apple targets, not just aarch64: the requirement is the
+/// linker's, and applies to an Intel Mac build just as much.
+#[cfg(target_vendor = "apple")]
+#[link(name = "System")]
+unsafe extern "C" {}
 
 // `panic = "abort"` still leaves a reference to the unwinding personality routine
 // on ELF targets, and this library links against nothing (no DT_NEEDED entries at
