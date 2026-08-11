@@ -1,30 +1,6 @@
+#![doc = include_str!("../README.md")]
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-
-//! # Multidual numbers for forward-mode automatic differentiation
-//!
-//! A [`Dual<V, N>`] carries a primal value plus `N` first-order derivative
-//! components (the "dual" parts). Arithmetic propagates derivatives via the
-//! usual rules of differentiation, so evaluating a function on a `Dual` yields
-//! both the value and its gradient with respect to the `N` seeded directions in
-//! a single pass.
-//!
-//! ```text
-//! Dual<V, 0>  =>  just a value (no derivatives tracked)
-//! Dual<V, 1>  =>  value + one derivative direction (a classic dual number)
-//! Dual<V, N>  =>  value + N partials (a gradient of an N-variable function)
-//! ```
-//!
-//! The inner type `V` is any Thermite [`FloatVector`] (so each lane is an
-//! independent dual number, SIMD-parallel) -- or, at the element level, an
-//! `f32`/`f64`. The derivative components are stored as a separate `[V; N]`
-//! (struct-of-arrays).
-//!
-//! This is a *first-order multidual* ("hyperdual" in some libraries, though that
-//! name properly denotes the second-order algebra). It tracks gradients, not
-//! Hessians.
-//!
-//! [`FloatVector`]: thermite::prelude::FloatVector
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 

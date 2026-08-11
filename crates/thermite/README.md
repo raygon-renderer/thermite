@@ -48,12 +48,41 @@ thermite::dispatch_dyn!(for<S> |data: &mut [f32]| {
 assert!((data[500] - 0.5).abs() < 1e-6); // sigmoid(0) == 0.5
 ```
 
-## What you get
+## The Rules
 
-Generic code is written against a trait hierarchy, `GenericVector` to
-`NumericVector` to `FloatVector`, plus the math traits. Nothing in a kernel names
-a register width or an instruction set, so one function body is the source for
-every target.
+Read these before writing anything. They are not style advice, and breaking
+rule 1 in particular is worse than not using SIMD at all.
+
+0. **Do not touch the `Register` layer** unless you know exactly what you're
+   doing. Stick with the `*Vector` traits.
+1. **`#[thermite::dispatch]` and `#[inline(always)]` are MANDATORY**, or else
+   your code will be abysmally slow.
+2. **Prefer trait bounds over concrete vector types.** Commit to a fixed lane
+   count when the data structure is genuinely defined by it, not out of
+   convenience.
+3. **Thermite isn't magic.** You must consider what you're doing before you
+   expect it to be fast.
+4. **Look for any built-in methods before re-implementing things yourself.**
+   All of Thermite's standard library is highly optimized.
+5. **Avoid scalar work whenever possible.**
+6. **Doing nothing is better than doing something clever.**
+
+### Why rule 1 is not a suggestion
+
+`rustc` will not inline a `#[target_feature]` function into a caller that lacks
+those features, and every intrinsic is one. A generic SIMD body with no
+`#[thermite::dispatch]` above it compiles featureless: every operation becomes an
+out-of-line call, with no scheduling or register allocation across them. It still
+compiles. It is still correct. However, it is catastrophically slow.
+
+Two attributes avoid it. Put `#[thermite::dispatch]` on the outermost SIMD entry
+point, and `#[inline(always)]` on the helpers called beneath it. The guide covers
+the details, and this is the first thing to check when a kernel underperforms.
+
+## What's in it
+
+The trait ladder runs `GenericVector` to `NumericVector` to `FloatVector`, with
+the math traits on top. A kernel is bounded on the weakest one it needs.
 
 Beyond arithmetic and the usual transcendentals, the vector API covers stream
 compaction (`compress` / `expand`), lane prefix scans, duplicate-lane conflict
@@ -84,18 +113,6 @@ dispatch maps that rung onto `x86_v3`.
 
 Which backends are compiled in the first place is covered under
 [Reaching the other backends](#reaching-the-other-backends) below.
-
-## The one rule worth reading first
-
-`rustc` will not inline a `#[target_feature]` function into a caller that lacks
-those features, and every intrinsic is one. A generic SIMD body with no
-`#[thermite::dispatch]` above it compiles featureless: every operation becomes an
-out-of-line call, with no scheduling or register allocation across them. It still
-compiles and it is still correct, and it is catastrophically slow.
-
-Two attributes avoid it. Put `#[thermite::dispatch]` on the outermost SIMD entry
-point, and `#[inline(always)]` on the helpers called beneath it. The guide covers
-the details, and it is the first thing to check when a kernel underperforms.
 
 ## Feature flags
 

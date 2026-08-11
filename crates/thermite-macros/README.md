@@ -11,18 +11,19 @@ an exact version so the generated code always matches its internals.
 
 The macros users interact with (via `thermite`):
 
-- `#[dispatch]` - rewrites functions, impl blocks, or traits to propagate
+- **`#[dispatch]`** rewrites functions, impl blocks, or traits to propagate
   `#[target_feature]` statically across call boundaries, so runtime-dispatched
   SIMD code stays fully optimized without forcing everything to inline.
-- `dispatch_dyn!` - the runtime dispatch boundary: picks the best available
-  ISA on the current CPU and monomorphizes the given closure for it. Also has
+- **`dispatch_dyn!`** is the runtime dispatch boundary. It picks the best
+  available ISA on the current CPU and monomorphizes the given closure for it.
+  Also has
   a call form for invoking a `#[dispatch]` function directly:
   `dispatch_dyn!(my_kernel(a, b))`, or `dispatch_dyn!(for<S> my_kernel::<S, f32>(a, b))`
   when the callee has extra generics or is a method on a receiver
   (`for<S> kernel.run::<S>(&data)`).
-- `#[derive(HasIsa)]` - derives `thermite::simd::HasIsa` for types generic
+- **`#[derive(HasIsa)]`** derives `thermite::simd::HasIsa` for types generic
   over a `Simd` ISA parameter, forwarding the `ISA` constant and the `Native`
-  backend type from that parameter (first type parameter by default; override
+  backend type from that parameter (first type parameter by default, override
   with `#[isa = S]`).
 
 ```rust
@@ -44,5 +45,4 @@ on dispatch and the vector trait system.
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or
-[Apache-2.0](LICENSE-APACHE), at your option.
+MIT or Apache-2.0, at your option.

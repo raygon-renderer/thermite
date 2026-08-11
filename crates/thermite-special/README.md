@@ -39,12 +39,26 @@ lanes.
 use thermite::prelude::*;
 use thermite_special::SpecialMath;
 
-// Vector<f64> is the 1-lane scalar seed. Swap it for f64xN inside a
-// `#[thermite::dispatch]` function and the same call is a wide kernel.
-let x = Vector::<f64>::splat(0.5);
+// The standard normal CDF, built from `erf`. Written once against the vector
+// traits, so nothing here names an ISA, a lane count, or an element type.
+// `#[dispatch]` is mandatory: without it the intrinsics never inline.
+#[thermite::dispatch(V)]
+fn phi<V: FloatVector + SpecialMath>(x: V) -> V {
+    (V::ONE + (x * V::FRAC_1_SQRT_2).erf()) * V::HALF
+}
 
-let e = x.erf();
-let g = x.tgamma();
+let xs: Vec<f64> = (0..1024).map(|i| i as f64 * 0.01 - 5.0).collect();
+let mut ys = vec![0.0f64; xs.len()];
+
+let (xs, ys) = (xs.as_slice(), ys.as_mut_slice());
+thermite::dispatch_dyn!(|xs: &[f64], ys: &mut [f64]| {
+    let n = f64xN::lanes();
+    for (x, y) in xs.chunks_exact(n).zip(ys.chunks_exact_mut(n)) {
+        phi(f64xN::from_slice(x)).copy_to_slice(y);
+    }
+});
+
+assert!((ys[500] - 0.5).abs() < 1e-12); // Phi(0) == 0.5
 ```
 
 The traits are auto-implemented for every float vector, so there is nothing to

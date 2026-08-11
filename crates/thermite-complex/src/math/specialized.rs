@@ -50,7 +50,7 @@ pub use crate::math::special::SpecializedComplexSpecialMath;
 ///
 /// ```
 /// use thermite::prelude::*;
-/// use thermite_complex::{Complex, ComplexVector};
+/// use thermite_complex::prelude::*;
 ///
 /// // Horner evaluation of a real-coefficient polynomial at a complex point.
 /// fn horner<T: ComplexVector>(z: T, coeffs: &[T::Real]) -> T {

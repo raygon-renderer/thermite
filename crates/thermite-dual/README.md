@@ -1,8 +1,9 @@
 thermite-dual
 =============
 
-Forward-mode automatic differentiation for [Thermite](../thermite), built on
-multidual numbers.
+Forward-mode automatic differentiation for
+[Thermite](https://github.com/raygon-renderer/thermite), built on multidual
+numbers.
 
 `Dual<V, N>` carries a primal value plus `N` first-order derivative components.
 Arithmetic propagates derivatives by the usual chain rule, so evaluating a
@@ -19,14 +20,18 @@ independent dual number, SIMD-parallel), or an `f32`/`f64` at the element level.
 The derivative components live in a separate `[V; N]`, so the layout is
 struct-of-arrays.
 
-This is a *first-order multidual*. It tracks gradients, not Hessians.
+This is a _first-order multidual_. It tracks gradients, not Hessians. Some
+libraries call this a hyperdual, though that name properly denotes the
+second-order algebra.
 
 ```rust
 use thermite::prelude::*;
 use thermite::math::TranscendentalMath;
 use thermite_dual::AutoDiff;
 
-// Written once against trait bounds - no ISA, lane count, or element type named.
+// Written once against trait bounds, with no ISA, lane count, or element type
+// named. `#[dispatch]` is mandatory: without it the intrinsics never inline.
+#[thermite::dispatch(V)]
 fn gaussian<V: FloatVector + TranscendentalMath>(x: V) -> V { (-(x * x)).exp() }
 
 type V = Vector<f64>;
@@ -52,19 +57,19 @@ Features
 Relationship to the other crates
 --------------------------------
 
-- **thermite** - the base. `Dual` delegates every vector-trait method to its
+- **thermite** is the base. `Dual` delegates every vector-trait method to its
   inner `V`, so it works on every backend and at every lane count.
-- **thermite-special** - the `special` feature. `Dual` implements
+- **thermite-special**, via the `special` feature. `Dual` implements
   `SpecializedSpecialMath`/`SpecializedRealSpecialMath` on top of it.
-- **thermite-complex** - its `dual` feature makes `Complex<Dual<V, N>>` valid:
+- **thermite-complex**, whose `dual` feature makes `Complex<Dual<V, N>>` valid:
   complex arithmetic that also carries derivatives.
-- **thermite-compensated** - composes the other way: `Dual<Compensated<V>, N>`
+- **thermite-compensated** composes the other way: `Dual<Compensated<V>, N>`
   differentiates in double-double precision.
 
 Status
 ------
 
-Pre-release (`publish = false`). Core autodiff is complete and tested.
+Pre-release. Core autodiff is complete and tested.
 `trigamma` is deliberately unimplemented: the Gamma-derivative family is not
 closed under differentiation (psi_1' is psi_2, whose derivative is psi_3, ...),
 so closing it properly needs a general `polygamma(n)`. See `src/special.rs`.

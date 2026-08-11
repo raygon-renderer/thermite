@@ -115,10 +115,10 @@ Five of the feature flags matter in practice:
   proposal an engine may not have enabled. There is no `neon` feature at all, since
   NEON is mandatory on AArch64 and the backend is always compiled there.
 - **`strict_ieee754`** gives spec-exact denormals, NaNs, and min/max. It implies
-  `preserve_denormals` and `disable_fast_fma`, and it is much slower. Turn it on knowing
+  `preserve_denormals` and `disable_fast_fma`, and is much slower. Turn it on knowing
   what you're buying.
 - **`disable_dispatch`** replaces runtime dispatch with `#[inline(always)]`. It is an
-  advanced option that bloats or slows most builds, and it is not the way to make dispatch
+  advanced option that bloats or slows most builds, and is not the way to make dispatch
   cheaper.
 - **`nightly`** unlocks the nightly-only paths, and then requires a nightly compiler. The
   AVX-512 tiers and the experimental SPIR-V backend live behind their own flags.
@@ -201,7 +201,7 @@ four. However, it cannot make that free.
 When you ask for a width the hardware doesn't have, Thermite builds it out of the widths
 the hardware does have. A sixteen-lane `f32` vector on a machine with eight-lane registers
 is represented as two of them, and every operation is applied to both halves. This is not a
-scalar fallback, and it is not slow in the way a fallback would be. It's still real vector
+scalar fallback, nor is it slow in the way a fallback would be. It's still real vector
 code, and for a straight-line arithmetic kernel it costs about what you would expect, which
 is roughly twice the work for twice the lanes.
 
@@ -270,7 +270,7 @@ Going the other direction has its own story. A two-lane vector on a machine with
 registers is not a smaller register, because there is no such thing. It's the full register
 with the upper lanes carried along and ignored.
 
-That's the right choice, and it beats falling back to scalars, but it isn't free either.
+That's the right choice, and beats falling back to scalars, but it isn't free either.
 The unused lanes hold whatever they hold, and for most operations that's harmless, since
 adding two lanes you'll never read costs nothing extra. For some it isn't harmless, and the
 ignored lanes have to be cleaned up so their garbage doesn't leak into the answer. Anything
@@ -318,8 +318,8 @@ vector padded into four lanes is larger than three elements. A width assembled f
 native registers may carry its own arrangement. None of this is a defect, it's what lets one
 type name work across backends that disagree about what registers exist.
 
-`align_of::<V>()` is a different matter, and it is exactly as trustworthy as it looks. It's
-the real alignment of the underlying register, and it's the number that decides whether an
+`align_of::<V>()` is a different matter, and is trustworthy. It's
+the real alignment of the underlying register, which decides whether an
 aligned access is legal. When something asks for an aligned pointer, this is the value it
 means. Allocate to it, assert against it, and build your containers around it with
 confidence.
@@ -343,7 +343,7 @@ of Rule 2: commit to a fixed lane count when the data structure is genuinely def
 
 Some structures are defined by their width, not merely implemented at it. A wide
 tree whose nodes fan out to exactly eight children is the clearest case. That eight is not
-a SIMD detail that leaked into the design, it's the branching factor, and it determines the
+a SIMD detail that leaked into the design, it's the branching factor, and determines the
 shape of the tree, how deep traversal goes, how much of a node a single test rejects, and
 how well the whole thing behaves statistically. Change it to four or sixteen and you have a
 different data structure with different properties, not the same one running at a different
@@ -377,7 +377,7 @@ themselves, and the important ones form a short ladder:
 - `FloatVectorWithBits` opens up the bit representation of a float vector, for
   algorithms that work on exponents and mantissas directly.
 
-I highly suggest browsing the [`crate::vector`] module docs at least once; the
+I highly suggest browsing the [`crate::vector`] module docs at least once. The
 surface is far larger than this list.
 
 This is the part that takes the most getting used to.
@@ -442,7 +442,7 @@ that it's faster and more accurate than what you were about to write.
 | `erf`, `gamma`, activation functions | `SpecialMath` |
 
 `SpecialMath` is the only entry above that isn't in core thermite. It comes from the
-`thermite-special` companion crate, covered later, and it's listed here because a reader
+`thermite-special` companion crate, covered later, and is listed here because a reader
 hunting for `erf` needs to know it exists somewhere.
 
 The math traits already require what they need, so they usually replace a bound rather
@@ -494,12 +494,12 @@ covers everything else.
 
 ### What not to do
 
-The failure mode is writing code that only makes sense at one width. It compiles, it
-passes tests on your machine, and it does the wrong thing (or the slow thing) on
-every other backend.
+The failure mode is writing code that only makes sense at one width. It compiles and it
+passes tests on your machine. On every other backend it does the wrong thing, or the
+slow thing.
 
 ```rust,ignore
-// Don't. This is a scalar loop wearing a vector costume, and it will be
+// Don't. This is a scalar loop wearing a vector costume, and will be
 // slower than honest scalar code. `v.sqrt()` does the whole thing
 // in one instruction.
 fn bad<V: FloatVector>(v: V) -> V {
@@ -575,7 +575,7 @@ assert!((dot - expected).abs() < 1e-3);
 ```
 
 The anti-pattern is calling `sum_elements` inside the loop and adding into a scalar. It
-produces the right answer, which is what makes it dangerous, and it pays the whole
+produces the right answer, which is what makes it dangerous, and pays the whole
 shuffle cascade per iteration while serializing the loop through a scalar add. Eight
 lanes of hardware, running slower than the scalar version it replaced.
 
@@ -693,7 +693,7 @@ of keeping the unselected lanes, and `compress_m` takes the tail from a second v
 is the accumulator step of a buffered compactor, paired with `align`, which slides a window
 across two registers so the packed lanes can be carried forward by the running count.
 `expand` is the exact inverse of `compress`, scattering a packed vector back out to the
-positions a mask names, and it has the same `_z` and `_m` variants. On AVX-512 these lower
+positions a mask names, with the same `_z` and `_m` variants. On AVX-512 these lower
 to `vpcompress`, elsewhere to a permute table or a portable partition.
 
 **Scans.** `prefix_sum` gives a running total per lane, so `[1, 2, 3, 4]` becomes
@@ -914,7 +914,7 @@ which do the checking once.
 
 `load` and `store` are the raw pointer forms, and **`load` is an aligned load**. This
 goes wrong constantly. A lookup table living in an ordinary `Box` or `Vec` is not
-aligned to a vector, so `load` on it faults, and it faults based on where the allocator
+aligned to a vector, so `load` on it faults, and faults based on where the allocator
 happened to put the data, which means it can pass every test you run. Use `load_unaligned`
 or hold the data in something aligned.
 
@@ -927,8 +927,8 @@ ragged slice, so you find out early.
 
 So three families need an aligned pointer: the plain `load` and `store`, the masked accesses,
 and the streaming pair. Only the `_unaligned` forms and the safe `from_slice` and
-`copy_to_slice` are exempt. `align_of::<V>()` is the value they all mean, and it is
-dependable, which is discussed under vector widths above.
+`copy_to_slice` are exempt. `align_of::<V>()` is the value they all mean, and is
+dependable, as discussed under vector widths above.
 
 ### When the data isn't contiguous
 
@@ -944,7 +944,7 @@ buffer or sampling a texture. Do not reach for them to paper over a layout you c
 gather costs many times a contiguous load even on hardware that implements it natively,
 because it is still one memory access per lane underneath.
 
-`lookup` is easy to miss, and it is not the same thing as `gather`:
+`lookup` is easy to miss, and is not the same thing as `gather`:
 
 ```rust
 use thermite::backend::scalar::prelude::*;
@@ -1005,7 +1005,7 @@ The layout question matters more than the iteration question, and there are two 
 
 **Structure of arrays** keeps each component in its own buffer, so `x` for eight objects is
 one load and a kernel over `FloatVector` processes eight objects at a time. This is the
-throughput layout, it's what most of this guide assumes, and it's the default because most
+throughput layout, and what most of this guide assumes. It's the default because most
 kernels are batched.
 
 **Array of structs** puts `x, y, z, x, y, z` in memory, one object at a time, and a register
@@ -1038,7 +1038,7 @@ covering vectors, points, rays, bounds, matrices, quaternions, tangents, and tra
 
 `LinAlg3Vector` and `LinAlg4Vector` are the AoS side of the library, and they are the most
 specialized code in it. Every method assumes one object per register with its components in
-the lanes, and every one of them is tuned for that assumption. If you are writing an AoS
+the lanes, and is tuned for that assumption. If you are writing an AoS
 library, a scene graph, a transform stack, or anything that walks single objects, these are
 not a convenience layer over the general operations. Without them that code cannot be
 fast at all.
@@ -1068,7 +1068,7 @@ Several methods take a const generic that picks between real alternatives, and t
 choice is yours to make, not something the library can infer.
 
 `cross3` and `quat4_vec3_product` take `DOP`, selecting the difference-of-products
-formulation. It's more accurate, and it needs hardware FMA to be efficient. Set it `false`
+formulation. It's more accurate, but needs hardware FMA to be efficient. Set it `false`
 for speed, `true` for accuracy or when you know FMA is present. Getting this backwards on a
 machine without FMA is a silent slowdown, not an error.
 
@@ -1100,11 +1100,11 @@ finite but unreliable result, so inspecting the returned value is the entire poi
 
 ### Two things to know before you start
 
-The lane count has to be three or four. That's what the traits are for, and it's why the
+The lane count has to be three or four. That's what the traits are for, and why the
 `x3A` and `x3` types from the vector widths chapter exist.
 
 Where a method's output has a fourth lane, such as `mat3_transpose` or `quat_to_mat3`, that
-lane is **unspecified**. Not zero, not preserved, unspecified. Read it and you're reading
+lane is **unspecified**. Not zero, and not preserved. Read it and you're reading
 whatever the implementation found convenient. If you need it clean, `zero4` or `one4` is
 one instruction.
 
@@ -1157,16 +1157,16 @@ function you call to execute a single instruction. There is no scheduling across
 register allocation across them, and no constant folding across them.
 
 That's the tell to look for. Streams of `call` into `__mm256_*` stubs, `xmm` where you
-expected `ymm`, and no `vfmadd` anywhere. It compiles, it passes every test, and it is
-slower than not using SIMD at all.
+expected `ymm`, and no `vfmadd` anywhere. It compiles. It passes every test. It is slower
+than not using SIMD at all.
 
 The reason is that `core::arch` intrinsics are `#[target_feature]` functions, and rustc
 will not inline one of those into a caller that doesn't enable those features.
 `#[dispatch]` is what creates the enabled context, by emitting a `#[target_feature]`
 trampoline per backend. `#[inline(always)]` is what carries the context down into helpers,
 because features propagate into a callee only when it's actually inlined. Plain `#[inline]`
-is a hint the optimizer routinely declines, and it declines most often in exactly the large
-bodies where this matters.
+is a hint the optimizer routinely declines, most often in exactly the large bodies where
+this matters.
 
 None of that costs code size the way it sounds like it should. The trampoline holds the
 target features itself, so the dispatched function is free to stay out of line as one copy
@@ -1211,7 +1211,7 @@ if const { V::HAS_TRUE_FMA } {
 }
 ```
 
-`V::HAS_APPROX_RSQRT` is the other big one, and it differs by element type
+`V::HAS_APPROX_RSQRT` is the other big one, and differs by element type
 rather than only by ISA. `f32` has a hardware reciprocal square root and `f64` does not,
 where it becomes a square root followed by a division. So `a * rsqrt(b)` wins on `f32`
 while `a / sqrt(b)` wins on `f64`, and a kernel that serves both should gate on it.
@@ -1291,7 +1291,7 @@ let dydx  = r.dual[0].extract::<0>(); // -0.7788007830714049, which is -2x e^(-x
 ```
 
 `Compensated` is a double-double, tracking the rounding error of every operation in a second
-limb. It buys **106 bits of significand against `f64`'s 53**, and it charges for them: an
+limb. It buys **106 bits of significand against `f64`'s 53**, and charges for them: an
 addition is roughly eleven float operations, and a multiplication is two with hardware FMA
 or around seventeen without, where it falls back to Dekker splitting.
 
@@ -1308,11 +1308,6 @@ They nest. `Complex<Compensated<V>>` is complex arithmetic carried out in compen
 reals, and `Dual<Compensated<V>, N>` differentiates in double-double. The most practical
 use of that last one is on hardware without `f64` at all, where `Compensated<f32>` recovers
 most of double precision from single-precision units.
-
-The honest status: all the companion crates are `publish = false` and pre-release. The
-vector-trait surfaces are complete, but a handful of special functions still panic rather
-than compute, mostly in the gamma family and the higher Bessel functions on the composite
-types. Grep for `todo!` in the crate you depend on before relying on a specific function.
 
 ## The Companion Crates
 
@@ -1331,7 +1326,7 @@ the previous section.
 transforms, and fractals, over the `SDF`, `GradientSdf`, and `BoundedSdf` traits.
 
 `thermite-sort` is a SIMD sort. It beats the standard library's `sort_unstable` across the
-input distributions it has been measured on, and it is dramatically faster on data that is
+input distributions it has been measured on, and is dramatically faster on data that is
 already ordered. Because it is written against the same trait bounds as everything else, it
 sorts composite types too, so a double-double or complex sort comes free in their SoA forms.
 
@@ -1373,7 +1368,7 @@ vectorized compensated emulation, not to `libm`. Only `disable_fast_fma` or
 **`strict_ieee754` costs real performance.** It implies both `preserve_denormals` and
 `disable_fast_fma`. Turn it on knowing what you're buying.
 
-**`PartialOrd` on vectors is feature-gated** behind `partial-ord`, and it's only meaningful
+**`PartialOrd` on vectors is feature-gated** behind `partial-ord`, but it's only meaningful
 when every lane agrees on the ordering.
 
 **`mix` takes the interpolant as `self`.** It's `t.mix(a, b)`, not `a.mix(b, t)`, which is
@@ -1413,7 +1408,7 @@ coefficient array in either order, fusing with FMA where the hardware has it, an
 than dividing two `poly` calls yourself.
 
 **Masks turn into real bitmasks, and back.** `native_bitmask()` packs a mask into a
-plain `u64`, lane 0 in the low bit, and it is usually the one you want: it lowers to the
+plain `u64`, lane 0 in the low bit, and is usually the one you want: it lowers to the
 movemask-style instruction and hands you an ordinary integer to shift, count, and store.
 It returns an `Option` because a few representations, mostly very wide emulated masks,
 have no native packing. `bitmask()`, under the default `bitvec` feature, always succeeds
@@ -1424,7 +1419,7 @@ is the bridge between SIMD comparisons and scalar-side index work.
 
 ## Where Everything Lives
 
-Reference documentation for every trait and method is on docs.rs, and it is the right place
+Reference documentation for every trait and method is on docs.rs, which is the right place
 for "what does this method do". This guide is the tour, not the index.
 
 The `#[dispatch]` and `dispatch_dyn!` macros carry their own documentation, including the
