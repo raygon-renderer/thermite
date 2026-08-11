@@ -377,7 +377,7 @@ themselves, and the important ones form a short ladder:
 - `FloatVectorWithBits` opens up the bit representation of a float vector, for
   algorithms that work on exponents and mantissas directly.
 
-I highly suggest browsing the [`thermite::vector`] module docs at least once; the
+I highly suggest browsing the [`crate::vector`] module docs at least once; the
 surface is far larger than this list.
 
 This is the part that takes the most getting used to.
@@ -425,8 +425,8 @@ most with a policy-aware `_p` twin and a masked variant.
 Some of them exist because the obvious spelling is wrong. `one_minus_sq` is not
 a convenience wrapper around `1 - x * x`. That spelling loses all its significant digits
 as `x` approaches `±1`, so the built-in picks a cancellation-free formulation based on
-whether the backend has FMA. Skim [`thermite::vector`] and
-[`thermite::math`] before writing a helper. The odds are good that it already exists, and
+whether the backend has FMA. Skim [`crate::vector`] and
+[`crate::math`] before writing a helper. The odds are good that it already exists, and
 that it's faster and more accurate than what you were about to write.
 
 ### What to write after `V:`

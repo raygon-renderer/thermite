@@ -25,13 +25,12 @@ math, performance) remain load-bearing when changing the code behind them.
 
 ## Add to a project
 
-Not on crates.io (core `0.2.0-beta.0`; companions are `publish = false`). Git deps:
-
-All git-only, same URL `https://github.com/raygon-renderer/thermite`. Add
-`thermite` plus only the companions you use (see the sub-file list for what each
-provides): `thermite-special`, `-dual`, `-compensated`, `-sort`, `-sdf`,
-`-geometry`. `-dual`/`-compensated`/`-sdf`/`-sort` pull in `thermite`
-transitively, but list it anyway when you name its types (you usually do).
+On crates.io at `0.2.0`. Add `thermite = "0.2.0"` (its proc-macro crate
+`thermite-macros` comes along automatically), plus only the companions you use -
+`thermite-special`, `-dual`, `-complex`, `-compensated`, `-sort`, `-sdf`,
+`-geometry`. See the sub-file list for what each provides. Every companion pulls
+in `thermite` transitively, but list it anyway when you name its types (you
+usually do), and keep all of them on the same version.
 
 **Toolchain: stable Rust** (MSRV **1.95**, edition 2024). The `nightly` feature
 unlocks nightly-only paths (smarter const splat, wasm64 SIMD, SPIR-V) and then
@@ -53,11 +52,12 @@ Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 | `preserve_denormals` | off | Keep denormals (required for strict IEEE-754); slower on denormal-heavy data. |
 | `ignore_denormals` | off | Flush denormals by default. |
 | `disable_fast_fma` | off | Exact but very slow scalar `libm::fma` instead of accurate emulated FMA on non-FMA backends. |
+| `algebraic-scalar` | off | Scalar (1-lane) backend uses LLVM `algebraic_*` ops so loops written against it can autovectorize. Costs exact cancellation: `thermite-compensated` rejects it at compile time. `strict_ieee754` overrides it. Needs `nightly` until 1.98. |
 | `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
 | `nightly` | off | Nightly-only paths (requires nightly compiler). |
 | `wasm` | off | wasm32/wasm64 SIMD128 backend. |
-| `avx512-tier1..4` | off | AVX-512 tiers (tier4 cutting-edge; each implies lower). |
-| `spirv` | off | Experimental SPIR-V GPU backend (implies `nightly`). |
+| `avx512-tier1..4` | off | **RESERVED, no-op.** The x86-v4 backend has no registers; these select nothing. AVX-512 CPUs run the x86-v3 (AVX2) backend, which dispatch maps `X86V4` onto. |
+| `spirv` | off | **HARD COMPILE ERROR in released versions.** Incomplete: no `impl Simd` (so no vector type aliases, not a dispatch target), f32/i32/u32 only, nothing off `target_arch = "spirv"`. Needs a git dep plus `RUSTFLAGS='--cfg thermite_unstable_spirv'`. |
 
 **No `neon` feature**: NEON/AdvSIMD is mandatory in AArch64, so the backend is
 gated on `target_arch = "aarch64"` and is **always compiled** there -- nothing to
@@ -207,4 +207,4 @@ Cross-cutting:
 - **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
 - **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.
 - **`thermite-sort`: instantiate it at a NATIVE register width** (`i32x8` on AVX2, `i32x4` on SSE4.2/NEON), never an `ArrayRegister` composite - a two-chunk composite sorts ~30% slower than the width it is built from, because `compress` and the merge swizzles do not scale across sub-registers. See [references/sort.md](references/sort.md).
-- **`-dual`/`-compensated`/`-special` are `publish = false` (pre-release).** Vector-trait surfaces are complete but some special fns `todo!()`-panic: `bessel_j` beyond f32 `J_0`; the gamma family (`tgamma`/`lgamma`/`digamma`/`beta`) + `bessel_j` on `Dual`/`Compensated`. Grep `todo!` before relying on a special function.
+- **Two special functions still `todo!()`-panic, both on composites**: `Dual::trigamma` (its derivative needs the tetragamma `psi_2`), and six functions on the doubly-nested `Complex<Compensated<..>>` (`tgamma`/`lgamma`/`digamma`/`trigamma`/`lambert_w`/Faddeeva). Everything on `Vector<R>`, `Dual`, `Complex` and `Compensated` alone is implemented for both f32 and f64. Grep `todo!` before relying on a special function.

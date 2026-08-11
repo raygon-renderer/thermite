@@ -126,10 +126,10 @@ avx512-tier2 = ["avx512-tier1"] # RESERVED: common AVX512 CPUs (Skylake-SP, Casc
 avx512-tier3 = ["avx512-tier2"] # RESERVED: modern AVX512 CPUs (Ice Lake, Zen 4)
 avx512-tier4 = ["avx512-tier3"] # RESERVED: cutting-edge AVX512 CPUs (Sapphire Rapids, Zen 5)
 
-# EXPERIMENTAL, INCOMPLETE. The SPIR-V backend has f32/i32/u32/mask registers and
-# implements `NativeIsa`/`NativeSimd`, but not `Simd` - so it carries no vector
-# type aliases and cannot be used as a dispatch target. No 64-bit or 8/16-bit
-# registers exist. Only compiles for `target_arch = "spirv"` on nightly.
+# EXPERIMENTAL, INCOMPLETE, and a HARD COMPILE ERROR in released versions.
+#
+# Consumers who want it must take a git dependency and pass
+# `RUSTFLAGS='--cfg thermite_unstable_spirv'`.
 spirv = ["nightly"]
 
 # Nightly features

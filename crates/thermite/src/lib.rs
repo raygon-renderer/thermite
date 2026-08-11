@@ -41,6 +41,16 @@ fn nightly_check() {
     compile_error!("The `nightly` feature requires a nightly compiler.");
 }
 
+/// The SPIR-V backend is not finished, so the released crate refuses to build it.
+#[cfg(all(feature = "spirv", not(thermite_unstable_spirv)))]
+fn spirv_readiness_check() {
+    compile_error!(
+        "the `spirv` feature is incomplete and disabled in released versions of Thermite. \
+         To work on it anyway, depend on thermite \
+         from git and build with RUSTFLAGS='--cfg thermite_unstable_spirv'."
+    );
+}
+
 /// Inventory of the crate features Thermite was built with, so that downstream
 /// crates and algorithms can vary behavior based on them.
 pub mod features {

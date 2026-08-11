@@ -131,8 +131,10 @@ use crate::{
 /// Some types are able to provide optimized implementations of squaring that are
 /// faster or more accurate than a simple multiplication with itself.
 pub trait Square {
+    /// The squared value. Not always `Self`: a type may widen to hold the product.
     type Output;
 
+    /// Computes `self * self`.
     fn square(self) -> Self::Output;
 }
 
@@ -152,14 +154,19 @@ impl_binary_op!(Rem::rem for NumericRegister, Self);
 
 /// Trait for the bitwise AND NOT operation: `self & !rhs`
 pub trait BitAndNot<Rhs = Self> {
+    /// The result of the AND NOT.
     type Output;
 
+    /// Computes `self & !rhs`, one instruction on every SIMD backend.
+    ///
+    /// The **second** operand is the negated one here.
     #[must_use]
     fn bitandnot(self, rhs: Rhs) -> Self::Output;
 }
 
 /// Trait for the bitwise AND NOT assignment operation: `self &= !rhs`
 pub trait BitAndNotAssign<Rhs = Self> {
+    /// Assigns `self & !rhs` into `self`.
     fn bitandnot_assign(&mut self, rhs: Rhs);
 }
 
@@ -298,6 +305,7 @@ macro_rules! mul_add_ext {
         /// it as a supertrait due to the potential for multiple
         /// conflicting implementation warnings.
         pub trait MulAddExt<A = Self, B = Self> {
+            /// The result of the fused operation.
             type Output;
 
             /// Indicates whether the implementation uses true fused-multiply-add instructions.
@@ -437,6 +445,7 @@ mul_add_ext! {
 /// [`FloatRegister::addsub`] for the
 /// interleaved complex-multiply lowering these are built for.
 pub trait AddSubExt: Sized {
+    /// The result of the lane-alternating operation.
     type Output;
 
     /// `[a0 - b0, a1 + b1, a2 - b2, ...]` - even lanes subtract, odd lanes add.

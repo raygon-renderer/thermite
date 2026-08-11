@@ -5,12 +5,16 @@
 //! element-specific but not real-specific. The shared real implementations that
 //! consume them are re-exported at the bottom.
 //!
+//! The module is `#[doc(hidden)]`: sibling crates are the whole intended audience,
+//! and none of this is stable surface. Coefficients, array orders and names follow
+//! whatever the current approximation needs.
+//!
 //! A warning about reuse. The *tables* generalize; the *implementations* do not.
 //! Every `*_impl` below branches on real orderings (`cmp_lt`, `floor`, `signum`) and
 //! is bounded on `FloatVectorWithBits`, so none of them applies over C even where the
 //! coefficients do. And within a single table, parts differ: the Lanczos sums and
-//! [`Digamma::p_large`] are genuine analytic approximations valid off the real axis,
-//! whereas [`Digamma`]'s `[1, 2]` rational and every [`Trigamma`] region are minimax
+//! `Digamma::p_large` are genuine analytic approximations valid off the real axis,
+//! whereas `Digamma`'s `[1, 2]` rational and every `Trigamma` region are minimax
 //! fits to intervals of the real line and mean nothing away from it.
 
 /// The Lanczos approximation parameters for one element type.

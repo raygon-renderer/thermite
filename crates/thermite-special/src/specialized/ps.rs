@@ -4,8 +4,7 @@ use thermite::{
         policy::{
             DenormalBehavior, PrecisionPolicy,
             policies::{
-                AveragePrecision, CheckOverflow, CmpLessPrecision, ExtraPrecision, LessPrecision, MediumPrecision,
-                ReferencePrecision, WorstPrecision,
+                CheckOverflow, ExtraPrecision, MediumPrecision, WorstPrecision,
             },
         },
         specialized::SpecializedTranscendentalMath,
@@ -304,6 +303,10 @@ where
     }
 }
 
+// TEMP(bessel_j): dead while `bessel_j` is off the public trait. Kept, not deleted,
+// because it is the working f32 `J_0` kernel and comes back with the rest of the
+// family. Re-enable it together with the other TEMP(bessel_j) markers.
+#[allow(dead_code)]
 #[inline(always)]
 fn bessel_j0_pqzero<V, P: Policy>(x: V, ix: V::Bits) -> (V, V)
 where
@@ -501,7 +504,7 @@ where
     let qn = m3.select(m5.select(m8.select(qn8, qn5), qn3), qn2);
     let qd = m3.select(m5.select(m8.select(qd8, qd5), qd3), qd2);
 
-    let mut pzero = V::ONE + pn / pd.mul_adde(z2, V::ONE);
+    let pzero = V::ONE + pn / pd.mul_adde(z2, V::ONE);
     let mut qzero = qn / qd.mul_adde(z2, V::ONE);
 
     let neg_eighth: V = thermite::const_splat!(f32: -0.125);
@@ -834,7 +837,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
 
         // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
         // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
-        let mut tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
+        let tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
             let t = x.poly_rev_p::<P, _>(&[0.078108, 0.000972, 0.230389, 0.278393, 1.0]);
 
             t.powi_p::<P>(4)

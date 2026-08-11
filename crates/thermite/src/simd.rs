@@ -120,7 +120,7 @@ pub struct Align64;
 ///
 /// `Native` answers "what executes *this* vector", which is not always the
 /// machine you are running on. A sub-native slot such as `i16x2<S>` is an
-/// [`ArrayRegister`](crate::register::ArrayRegister) of scalar lanes on every
+/// [`ArrayRegister`](crate::register::array::ArrayRegister) of scalar lanes on every
 /// backend, so its `Native` is `Scalar` even on an AVX2 host -- correct for
 /// that vector, but wrong if you wanted the host's register budget. Tuning
 /// decisions that are about the *machine* (unroll factors, register

@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;

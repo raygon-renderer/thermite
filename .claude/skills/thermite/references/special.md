@@ -29,9 +29,12 @@ v.legendre(n, m)            v.jacobi(alpha, beta, n, m)
 v.chebyshev::<K, N>(&coeffs)// Clenshaw eval of an N-term series; K = kind 1..=4 (T/U/V/W)
 v.lambert_w()  -> (V, V)    // (W_0(x), W_{-1}(x)), both branches at once
 v.expint::<N>()            // exponential integral E_n(x)
-v.bessel_j::<N>()          // J_N(x)  -- WIP: ONLY f32 J_0 works; f32 N>0 and ALL
-                           // f64 orders are todo!() and PANIC (ps.rs / pd.rs)
 ```
+
+There is no Bessel function. `bessel_j` was removed from `SpecialMath`: only f32
+`J_0` was ever implemented, which left every order beyond it - and every
+composite type built on it - with nothing to do but panic. It will come back as a
+whole family or not at all.
 
 ## `RealSpecialMath` (real vectors only; uses ordering/sign/|x|)
 
@@ -91,6 +94,8 @@ let (y, _dy) = 1.0_f64.scalar_swish(1.0_f64);
 
 ## WIP flags
 
-- `bessel_j` PANICS via `todo!()` except for f32 `J_0` (all f64 orders and f32
-  `N > 0` are unimplemented -- `src/specialized/pd.rs` / `ps.rs`). Do not call
-  it in generic code that may instantiate at f64.
+Nothing in `thermite-special` panics: every function on the public traits is
+implemented for both f32 and f64, and the 209-test suite covers them against
+libm. The remaining `todo!()`s in the family live *downstream*, in the composite
+wrappers - `Dual::trigamma`, and six functions on `Complex<Compensated<..>>`.
+See [composite-types.md](composite-types.md).

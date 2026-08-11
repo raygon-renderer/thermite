@@ -29,6 +29,7 @@ jobs:
       # not support doctests, so those get their own step - dropping it would
       # silently stop gating ~24 tests.
       - name: Run tests
+        if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
         run: cargo nextest run -p thermite --features std
 
       - name: Run doctests
@@ -40,14 +41,31 @@ jobs:
           rustup target add wasm32-unknown-unknown
           cargo check -p thermite --target wasm32-unknown-unknown --no-default-features --features wasm
 
-      # Compile-gate the companion crates (they are publish=false, but silent
-      # rot is how the FFI crate once broke unnoticed) and the bench suite
-      # (x86-only kernels; not run here, just kept compiling).
+      # Compile-gate every companion, including the ones with no test suite of
+      # their own (thermite-blas), since silent rot is how the FFI crate once
+      # broke unnoticed. This runs even under `[skip tests]`.
       - name: Check companion crates
         run: >
           cargo check -p thermite-special -p thermite-sdf
           -p thermite-geometry -p thermite-dual -p thermite-compensated
           -p thermite-complex -p thermite-blas -p thermite-sort
+
+      # ...and actually run their suites.
+      #
+      # thermite-complex needs its optional features named explicitly: `dual`,
+      # `special` and `compensated` gate the nested-storage impls, and more than
+      # half its tests (64 of 116) only compile with them on. Package-qualified
+      # (`crate/feature`) because the flag spans several `-p` packages.
+      - name: Test companion crates
+        if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
+        run: >
+          cargo nextest run
+          -p thermite-special -p thermite-dual -p thermite-compensated
+          -p thermite-complex -p thermite-sort -p thermite-sdf
+          -p thermite-geometry
+          --features thermite-complex/dual,thermite-complex/special,thermite-complex/compensated
+
+      # The bench suite is x86-only kernels; not run here, just kept compiling.
       - name: Check benches build
         run: cargo check -p thermite --benches
 
@@ -71,9 +89,12 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: nightly
 
+  # Skipped wholesale under `[skip tests]` - measuring coverage means running the
+  # suite. The badge keeps whatever value the last measured commit published.
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

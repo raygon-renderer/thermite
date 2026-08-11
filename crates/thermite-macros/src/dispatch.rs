@@ -32,30 +32,54 @@ struct Backend {
     simd_type: Option<&'static str>,
 }
 
+/// Target features for the x86-v3 (AVX2 + FMA) backend.
+///
+/// Every CPU with AVX2 (Haswell, 2013) also has F16C (introduced one generation earlier
+/// with Ivy Bridge), so the `avx2-f16c` feature lets us assume F16C is present whenever the
+/// AVX2 backend is selected and unconditionally enable the half-precision conversion
+/// intrinsics in dispatched code without a separate runtime check. However, there are
+/// some AVX2-capable CPUs that do not have F16C, so this remains optional.
+/// `avx2-pclmul` additionally assumes PCLMULQDQ (present on every AVX2 CPU - it
+/// shipped with Westmere, three years before Haswell), enabling the CLMUL-based 2D
+/// Morton fast path on u64-lane registers.
+#[cfg(feature = "x86")]
+const X86V3_TARGET_FEATURE: &str = cfg_select! {
+    all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,popcnt,f16c,pclmulqdq",
+    feature = "avx2-f16c" => "avx2,fma,popcnt,f16c",
+    feature = "avx2-pclmul" => "avx2,fma,popcnt,pclmulqdq",
+    _ => "avx2,fma,popcnt",
+};
+
 static BACKENDS: &[Backend] = cfg_select! {
     feature = "x86" => &[
         Backend { isa: "Scalar", target_feature: "",       simd_type: Some("backend::scalar::Scalar") },
         Backend { isa: "X86V1",  target_feature: "sse2",   simd_type: Some("backend::x86_v1::X86V1")  },
         Backend { isa: "X86V2",  target_feature: "sse4.2,popcnt", simd_type: Some("backend::x86_v2::X86V2")  },
 
-        // Target features for the x86-v3 (AVX2 + FMA) backend.
-        //
-        // Every CPU with AVX2 (Haswell, 2013) also has F16C (introduced one generation earlier
-        // with Ivy Bridge), so the `avx2-f16c` feature lets us assume F16C is present whenever the
-        // AVX2 backend is selected and unconditionally enable the half-precision conversion
-        // intrinsics in dispatched code without a separate runtime check. However, there are
-        // some AVX2-capable CPUs that do not have F16C, so this remains optional.
-        // `avx2-pclmul` additionally assumes PCLMULQDQ (present on every AVX2 CPU - it
-        // shipped with Westmere, three years before Haswell), enabling the CLMUL-based 2D
-        // Morton fast path on u64-lane registers.
+        // See `X86V3_TARGET_FEATURE` for what the AVX2 rung assumes about F16C/PCLMULQDQ.
         Backend {
             isa: "X86V3",
-            target_feature: cfg_select! {
-                all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,popcnt,f16c,pclmulqdq",
-                feature = "avx2-f16c" => "avx2,fma,popcnt,f16c",
-                feature = "avx2-pclmul" => "avx2,fma,popcnt,pclmulqdq",
-                _ => "avx2,fma,popcnt",
-            },
+            target_feature: X86V3_TARGET_FEATURE,
+            simd_type: Some("backend::x86_v3::X86V3")
+        },
+
+        // x86-v4 (AVX-512) deliberately maps to the *x86-v3* backend for now.
+        //
+        // The detector reports `X86V4` for any CPU with AVX-512F, but the x86-v4
+        // backend is still register stubs (`backend::x86_v4` has the `Avx512Features`
+        // tier ladder and nothing else). Without an arm here, V4 hardware falls into
+        // the `_ =>` scalar fallback and the entire library runs one lane wide -
+        // correct, and roughly an order of magnitude slower. Verified under Intel SDE
+        // on skx/icx/spr/gnr/dmr: `f32xN::LANES` came back 1.
+        //
+        // Every AVX-512F part is strictly newer than Haswell, so it has AVX2, FMA,
+        // POPCNT, F16C and PCLMULQDQ - the v3 trampoline's feature set is always
+        // satisfiable here, and this is the widest working backend until v4 lands.
+        // When the x86-v4 registers exist, point `simd_type` at them and give this
+        // entry its own `target_feature` string.
+        Backend {
+            isa: "X86V4",
+            target_feature: X86V3_TARGET_FEATURE,
             simd_type: Some("backend::x86_v3::X86V3")
         },
     ],

@@ -5,12 +5,10 @@ use thermite::{
         CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{
             Policy, PrecisionPolicy,
-            policies::{ExtraPrecision, LessPrecision},
         },
-        specialized::FlushDenormals,
     },
-    register::{Element, FloatElement},
-    vector::{FloatVectorWithBits, NumericVector, PartialOrdVector, SplatConst},
+    register::FloatElement,
+    vector::FloatVectorWithBits,
 };
 
 // Computes the largest x for which the forward recurrence E_1 -> E_N is reliable.
@@ -201,7 +199,6 @@ impl_expint_consts! {
 
 #[inline(always)]
 /// `$E_N(x)$` only. See [`expint_double_primal`] for the shape of the computation.
-#[inline(always)]
 pub fn expint_double<P: Policy, E, V, const N: usize>(x: V) -> V
 where
     E: FloatElementWithBits + ExpIntConsts<N>,

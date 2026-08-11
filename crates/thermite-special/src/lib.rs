@@ -1,11 +1,12 @@
+#![doc = include_str!("../README.md")]
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![allow(unused, clippy::needless_arbitrary_self_type, clippy::needless_range_loop)]
+#![allow(clippy::needless_arbitrary_self_type, clippy::needless_range_loop)]
 
 use thermite::{
     element::{Element, ElementExt, FloatElementWithBits},
     math::{
-        FloatConsts, TranscendentalMathWithPolicy,
+        TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
         scalar::Unwrap,
     },
@@ -13,6 +14,15 @@ use thermite::{
 };
 
 pub mod specialized;
+
+/// Raw approximation coefficients behind the Gamma family.
+///
+/// Public because the sibling crates build their own kernels on the same
+/// constants (`thermite-complex` needs them for the complex Gamma family), and
+/// `#[doc(hidden)]` because that is the only audience it is meant for. Contents,
+/// layout and names track whatever the current approximation needs and change
+/// without notice - depend on the functions, not on these.
+#[doc(hidden)]
 pub mod tables;
 
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};

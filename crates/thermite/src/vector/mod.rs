@@ -1,4 +1,5 @@
-#![allow(missing_docs, clippy::missing_safety_doc)]
+#![warn(missing_docs)]
+#![allow(clippy::missing_safety_doc)]
 #![deny(unconditional_recursion)] // just in case we miss one
 
 //! User-facing vector types and the trait hierarchy that defines them.
@@ -110,6 +111,13 @@ pub mod splat;
 #[allow(clippy::module_inception)]
 mod vector;
 
+/// Operator traits behind the vector arithmetic, plus the masked `_c` / `_m` / `_z`
+/// forms of each.
+///
+/// The vector traits in this module's parent list these as supertraits, so a
+/// `V: NumericVector` bound already carries `+`, `-`, `*` and their masked
+/// variants. Import from here only to name one directly, such as writing a
+/// generic bound on [`ops::Square`] or [`ops::BitAndNot`] alone.
 pub mod ops;
 pub mod streaming;
 pub mod unaligned;
@@ -467,6 +475,17 @@ where
 pub trait SwizzleVector: GenericVector + crate::swizzle::Swizzle<Self::Lanes> {}
 impl<V> SwizzleVector for V where V: GenericVector + crate::swizzle::Swizzle<V::Lanes> {}
 
+/// Pairwise lane interleaving and its exact inverse, the building block for
+/// moving between array-of-structs and struct-of-arrays layouts.
+///
+/// [`interleave`](Self::interleave) zips two vectors into a low half and a high
+/// half, and [`deinterleave`](Self::deinterleave) undoes it. Both lower to one
+/// instruction per output on most backends (x86 `unpcklps` / `unpckhps`, NEON
+/// `zip1` / `zip2`).
+///
+/// This trait carries only that pair, so it can bound code that is not generic
+/// over a full vector. The radix-`N` generalizations for wider strides and
+/// group granularity live on [`GenericVector`] instead.
 pub trait Interleave: Sized {
     /// Unpack and interleave elements from two vectors.
     ///
@@ -1404,6 +1423,13 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     }
 }
 
+/// Bitwise operations over the lanes of a vector: `&`, `|`, `^`, `!`,
+/// `bitandnot`, and the arbitrary three-input [`ternlog`](Self::ternlog).
+///
+/// Implemented by integer and mask vectors. Float vectors have no direct bitwise
+/// ops, so reach their bits through [`FloatVectorWithBits`] first.
+///
+/// Note that `a.bitandnot(b)` is `a & !b` at this layer.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` does not support bitwise vector operations",
@@ -1499,6 +1525,18 @@ pub trait BitwiseVector:
     #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self;
 }
 
+/// Shifts and rotates over the lanes of an integer vector, by an immediate, by a
+/// runtime scalar, or by a per-lane count.
+///
+/// `<<` and `>>` are the operator forms. **`>>` is a logical shift even on a
+/// signed vector**, since the operator traits are shared with the unsigned
+/// vectors. Sign-filling shifts live on [`SignedIntegerVector`] as
+/// [`srai`](SignedIntegerVector::srai) / [`sra`](SignedIntegerVector::sra) /
+/// [`srav`](SignedIntegerVector::srav).
+///
+/// Per-lane variable shifts ([`shlv`](Self::shlv) and friends) are one
+/// instruction where the ISA has them (AVX2 `vpsllvd`) and a lane walk where it
+/// does not, which [`HAS_TRUE_SHIFTV`](Self::HAS_TRUE_SHIFTV) reports.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` does not support bit-shift vector operations",
@@ -1900,7 +1938,7 @@ pub trait NumericVector:
     /// round toward zero, saturating at the bounds, NaN to zero.
     ///
     /// This is the numeric conversion, *not* a bit reinterpretation; for the bit
-    /// pattern of a float see [`FloatVectorWithBits::into_bits`].
+    /// pattern of a float see [`GenericVector::into_bits`].
     ///
     /// # Why a method and not a `CastVector` bound
     ///
@@ -2297,6 +2335,12 @@ pub trait IntegerVector:
     fn count_conflicts(self) -> Self;
 }
 
+/// The operations that need both a sign and integer lanes: arithmetic
+/// (sign-filling) right shifts, the overflow-free averages, and the rounded
+/// high-half multiply.
+///
+/// The meeting point of [`SignedVector`] and [`IntegerVector`], implemented only
+/// by vectors of signed integer elements (`Vector<i32>`, `i16xN`, ...).
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a signed integer SIMD vector",
@@ -2326,6 +2370,13 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     #[conditional] fn mulhrs(self, other: Self) -> Self;
 }
 
+/// The operations that read better on unsigned lanes: the power-of-two and
+/// inclusive-range predicates, and the unsigned averages.
+///
+/// Implemented only by vectors of unsigned integer elements (`Vector<u32>`,
+/// `u8xN`, ...). Several of these exist here specifically because the unsigned
+/// form is cheaper: [`in_range`](Self::in_range) is one wrapping subtract and
+/// one compare, against the two compares an explicit `lo <= x && x <= hi` costs.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an unsigned integer SIMD vector",
@@ -2416,6 +2467,7 @@ pub trait VectorWithRegister<R: crate::register::Register>: GenericVector {
 pub trait FloatVectorWithRegister:
     FloatVectorWithBits<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
 {
+    /// The backing hardware register this vector is a thin wrapper over.
     type Register: crate::register::FloatRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
@@ -2423,6 +2475,7 @@ pub trait FloatVectorWithRegister:
 pub trait SignedIntegerVectorWithRegister:
     SignedIntegerVector<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
 {
+    /// The backing hardware register this vector is a thin wrapper over.
     type Register: crate::register::SignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
@@ -2430,9 +2483,28 @@ pub trait SignedIntegerVectorWithRegister:
 pub trait UnsignedIntegerVectorWithRegister:
     UnsignedIntegerVector<Mask = crate::Mask<Self::Register>> + VectorWithRegister<Self::Register>
 {
+    /// The backing hardware register this vector is a thin wrapper over.
     type Register: crate::register::UnsignedIntegerRegister<Element = Self::Element, Lanes = Self::Lanes>;
 }
 
+/// Floating-point vectors: the bound most user code should be written against.
+///
+/// Carries the float arithmetic, rounding, the FMA family, the predicates
+/// (`is_finite`, `is_nan`, ...) and the [`FloatConsts`] values, on top of
+/// everything [`SignedVector`] provides. The policy math library
+/// ([`CoreMath`](crate::math::CoreMath),
+/// [`TranscendentalMath`](crate::math::TranscendentalMath) and the rest) attaches
+/// to this bound, so `V: FloatVector + TranscendentalMath` is the usual signature
+/// for a numeric kernel.
+///
+/// Implemented by the 1-lane `Vector<f32>` / `Vector<f64>`, the native-width
+/// `f32xN` / `f64xN`, and the composite float types (`Dual`, `Complex`,
+/// `Compensated`), which is what lets one generic function run as plain SIMD, as
+/// autodiff, or in double-double precision without being edited.
+///
+/// Bare `f32` and `f64` do **not** implement it. Wrap the scalar first with
+/// `Vector::<f32>::splat(x)`, or use [`ScalarMath`](crate::math::ScalarMath) for
+/// one-off scalar math.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a floating-point SIMD vector",
@@ -2769,8 +2841,14 @@ macro_rules! with_bits {
 /// FloatVector. Therefore, this is a way of upcasting a FloatVector
 /// to a FloatVectorWithBits, if possible. If not possible, returns None.
 pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
+    /// Whatever the kernel body returns, threaded back out through the upcast.
     type Output;
 
+    /// Runs the kernel with `v` re-typed as a [`FloatVectorWithBits`].
+    ///
+    /// The bound is written on the method rather than the trait so the caller
+    /// stays generic over plain [`FloatVector`]. The bit-level type only exists
+    /// inside this call.
     fn with_bits<
         V: FloatVectorWithBits<
                 Element = O::Element,
@@ -2816,6 +2894,8 @@ pub trait FloatVectorWithBits:
         Unsigned: GenericVector<Mask: CastMask<<Self::Unsigned as GenericVector>::Mask>>,
     > + FullyInteroperable<Self::Bits, Self::SignedBits>
 {
+    /// This vector's bit pattern viewed as *signed* integer lanes of the same
+    /// width, for exponent arithmetic and the sign-aware bit tricks.
     type SignedBits: SignedIntegerVector<
             Mask: CastMask<<Self::Signed as GenericVector>::Mask>,
             Lanes = Self::Lanes,
@@ -2825,6 +2905,8 @@ pub trait FloatVectorWithBits:
         > + FullyInteroperable<Self, Self::Bits>
         + CastVector<Self::Signed>;
 
+    /// This vector's bit pattern viewed as *unsigned* integer lanes of the same
+    /// width, which is what masking and shifting the raw bits wants.
     type Bits: UnsignedIntegerVector<
             Mask: CastMask<<Self::Unsigned as GenericVector>::Mask>,
             Lanes = Self::Lanes,

@@ -1,7 +1,7 @@
 use thermite::{
     element::{FloatElement, FloatElementWithBits},
     math::{
-        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
+        CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _,
         policy::{Policy, PrecisionPolicy},
     },
     prelude::*,

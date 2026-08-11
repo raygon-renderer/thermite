@@ -1,15 +1,15 @@
 use thermite::{
-    element::{FloatElement, FloatElementWithBits},
+    element::FloatElementWithBits,
     mask::GenericMask,
     math::{
-        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _, policy::Policy,
+        CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _, policy::Policy,
         specialized::FlushDenormals,
     },
     prelude::*,
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::{DIGAMMA_F32, DIGAMMA_F64, Digamma};
+use crate::tables::Digamma;
 
 /// Shared digamma (`psi`) implementation for all real element types.
 ///

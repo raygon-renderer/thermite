@@ -2,14 +2,14 @@ use thermite::{
     element::FloatElementWithBits,
     mask::GenericMask,
     math::{
-        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
+        CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _,
         policy::{DenormalBehavior, Policy, PrecisionPolicy, policies::ExtraPrecision},
     },
     prelude::*,
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::{LANCZOS_F32, LANCZOS_F64, LN_MAX_F32, LN_MAX_F64, Lanczos};
+use crate::tables::Lanczos;
 
 /// Shared `tgamma` implementation for all real element types.
 ///

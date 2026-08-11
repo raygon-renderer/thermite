@@ -1,12 +1,12 @@
 use thermite::{
     element::FloatElementWithBits,
     mask::GenericMask,
-    math::{CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _, policy::Policy},
+    math::{CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _, policy::Policy},
     prelude::*,
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::{TRIGAMMA_F32, TRIGAMMA_F64, Trigamma};
+use crate::tables::Trigamma;
 
 /// Shared trigamma (`psi_1`) implementation for all real element types.
 ///

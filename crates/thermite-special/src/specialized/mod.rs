@@ -161,18 +161,19 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         // b_0 = 0, so f_0 = tiny, C_0 = tiny, D_0 = 0
         let mut cf_f = tiny;
         let mut cf_c = tiny;
-        let mut cf_d = Self::ZERO;
 
-        // Bootstrap j=1 step: a_1 = 1, b_1 = x+1
-        {
+        // Bootstrap j=1 step: a_1 = 1, b_1 = x+1. D_0 is only ever read here, so
+        // it stays a comment rather than an initializer the next line overwrites.
+        let mut cf_d = {
             let b1 = x + Self::ONE;
-            // D_1 = 1/(b_1 + a_1*D_0) = 1/(x+1)
-            cf_d = b1.reciprocal_p::<P>();
+            // D_1 = 1/(b_1 + a_1*D_0) = 1/(x+1), since D_0 = 0
+            let d1 = b1.reciprocal_p::<P>();
             // C_1 = b_1 + a_1/C_0 = (x+1) + 1/tiny ≈ 1/tiny
             cf_c = b1 + cf_c.reciprocal_p::<P>();
-            let delta = cf_c * cf_d;
+            let delta = cf_c * d1;
             cf_f *= delta; // tiny * (1/tiny)/(x+1) ≈ 1/(x+1)
-        }
+            d1
+        };
 
         // Convergence tolerance
         let eps = Self::splat(E::EPSILON);
@@ -768,10 +769,10 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 
         if Self::HAS_TRUE_FMA {
             // if we have true FMA, we can maintain precision while avoiding extra work.
-            let half_x = self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE);
+            let half_x = self.scale(E::ConstRatio::<1, 2>::VALUE);
             half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
         } else {
-            self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE) * (Self::ONE + erf)
+            self.scale(E::ConstRatio::<1, 2>::VALUE) * (Self::ONE + erf)
         }
     }
 
@@ -951,14 +952,14 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> {
         let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
 
         let y = if Self::HAS_TRUE_FMA {
-            let half_x = self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE);
+            let half_x = self.scale(E::ConstRatio::<1, 2>::VALUE);
             half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
         } else {
-            self.scale(E::ConstRatio::<{ 1 }, { 2 }>::VALUE) * (Self::ONE + erf)
+            self.scale(E::ConstRatio::<1, 2>::VALUE) * (Self::ONE + erf)
         };
 
         let dy = (alpha_x * alpha_x)
-            .scale(E::ConstRatio::<{ -1 }, { 2 }>::VALUE)
+            .scale(E::ConstRatio::<{ -1 }, 2>::VALUE)
             .exp_p::<P>()
             .scale(FloatConsts::FRAC_1_SQRT_TAU);
 

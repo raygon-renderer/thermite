@@ -10,7 +10,6 @@ authors.workspace = true
 description = "Generic SIMD complex numbers built on Thermite"
 keywords = ["simd", "complex", "complex-numbers", "math", "no-std"]
 categories = ["mathematics", "science", "no-std", "hardware-support"]
-publish = false                                                             # not ready for release yet
 readme = "README.md"
 include = ["/src", "/README.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
 
@@ -21,7 +20,6 @@ features = ["std", "compensated", "dual", "special"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
-# default = ["dual", "special"]
 std = ["thermite/std"]
 # Lets a `Dual` be the storage of a `Complex`, i.e. `Complex<Dual<V, N>>`:
 # complex arithmetic that also carries derivatives.

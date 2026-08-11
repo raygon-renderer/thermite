@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(unused_braces)]
@@ -370,7 +371,9 @@ const fn two_product_f64(a: f64, b: f64) -> (f64, f64) {
 
 // --- f32: uses f64 intermediate to capture rounding error in the error term ---
 
+#[doc(hidden)]
 pub struct F32CompensatedIntConst<const N: LargeInt>;
+#[doc(hidden)]
 pub struct F32CompensatedRatioConst<const N: LargeInt, const D: LargeInt>;
 
 impl<const N: LargeInt> SplatConst<Compensated<f32>> for F32CompensatedIntConst<N> {
@@ -394,7 +397,9 @@ impl<const N: LargeInt, const D: LargeInt> SplatConst<Compensated<f32>> for F32C
 
 // --- f64: double-double EFT to capture the rounding error without needing f128 ---
 
+#[doc(hidden)]
 pub struct F64CompensatedIntConst<const N: LargeInt>;
+#[doc(hidden)]
 pub struct F64CompensatedRatioConst<const N: LargeInt, const D: LargeInt>;
 
 impl<const N: LargeInt> SplatConst<Compensated<f64>> for F64CompensatedIntConst<N> {
@@ -442,10 +447,12 @@ impl<const N: LargeInt, const D: LargeInt> SplatConst<Compensated<f64>> for F64C
 // --- Vector: lifts a scalar SplatConst<Compensated<V::Element>> to SplatConst<Compensated<V>> ---
 // Delegates to the existing VectorValue impl which splats value and error independently.
 
+#[doc(hidden)]
 pub struct CompensatedVectorConst<Inner>(PhantomData<Inner>);
 
 // --- New (per-lane values) support for Compensated<V> ---
 
+#[doc(hidden)]
 pub struct CompensatedNewImpl;
 
 struct CompensatedValueConst<C, V>(PhantomData<(C, V)>);

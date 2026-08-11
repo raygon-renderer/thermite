@@ -10,7 +10,6 @@ authors.workspace = true
 description = "Double-double compensated arithmetic built on Thermite"
 keywords = ["simd", "double-double", "precision", "float", "no-std"]
 categories = ["mathematics", "science", "no-std", "hardware-support"]
-publish = false                                                                           # not ready for release yet
 readme = "README.md"
 include = ["/src", "/README.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
 

@@ -4,7 +4,7 @@ use thermite::{
         policy::{
             DenormalBehavior, PrecisionPolicy,
             policies::{
-                AveragePrecision, CheckOverflow, CmpLessPrecision, ExtraPrecision, MediumPrecision, ReferencePrecision,
+                CheckOverflow, ExtraPrecision,
                 WorstPrecision,
             },
         },
@@ -395,7 +395,7 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
     // Extract the sign bit once. abs(x0) = x0 ^ sign, and sign is reused
     // for the final operation in every branch, avoiding a redundant bitand.
     let sign = x0.signed_zero();
-    let mut x = (x0 ^ sign).flush_denormals_p::<P>();
+    let x = (x0 ^ sign).flush_denormals_p::<P>();
 
     // if ignoring denormals, just multiple x0 by itself to save like one cycle,
     // instead of waiting on abs(), otherwise use the denormal-flushed x value

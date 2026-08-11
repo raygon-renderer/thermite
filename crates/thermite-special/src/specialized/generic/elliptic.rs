@@ -575,12 +575,6 @@ where
             "ellint_impl: KIND must be KIND_F, KIND_E, KIND_D, or KIND_PI"
         );
     }
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
-
     if const { COMPLETE } {
         if const { KIND == KIND_PI } {
             // Pi(n, k) = R_F(0, 1-k^2, 1) + (n/3) R_J(0, 1-k^2, 1, 1-n)  (the AGM does not

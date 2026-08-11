@@ -3,9 +3,7 @@
 A composite wraps an inner vector `V` and **implements the same `*Vector` + math
 traits** by delegating to `V` and layering its own semantics. A function written
 over `V: FloatVector + TranscendentalMath` runs unchanged on the composite,
-producing derivatives (`Dual`) or extra precision (`Compensated`) for free. Both
-crates are `publish = false` (pre-release) but functional; git deps like the core
-crate.
+producing derivatives (`Dual`) or extra precision (`Compensated`) for free.
 
 ## Why it works: the Element/Vector tower
 
@@ -93,11 +91,14 @@ derivative, not differentiation through the internal Newton loop).
 
 ### `special` feature (default on)
 
-Pulls in `thermite-special` so `Dual` also differentiates `erf`, `gelu`, etc.
-BUT the gamma family (`tgamma`/`lgamma`/`lgamma_r`/`digamma`/`beta`) and
-`bessel_j` are `todo!()` in `src/special.rs` (derivatives need
-digamma/trigamma and adjacent Bessel orders, which `thermite-special` lacks).
-Calling those on a `Dual` panics.
+Pulls in `thermite-special` so `Dual` also differentiates `erf`, `gelu`, the
+gamma family (`tgamma`/`lgamma`/`lgamma_r`/`digamma`/`beta`), `expint`,
+`lambert_w`, `erfinv` and `probit`. The gamma derivatives run on
+`thermite-special`'s own `digamma`/`trigamma`.
+
+One hole: `Dual::trigamma` is `todo!()` in `src/special.rs`, because its
+derivative is the tetragamma `psi_2` and nothing provides that yet. Calling it on
+a `Dual` panics; `trigamma` on a plain vector is fine.
 
 ---
 
@@ -143,9 +144,11 @@ Full vector-trait surface implemented (`NumericVector`/`SignedVector`/
 `pairwise_sum`, `arg_minmax`, `mix`) -- covered by
 `crates/thermite-compensated/tests/ops.rs` -- plus
 `SpecializedTranscendentalMath` (high-precision compensated series, e.g. ~20-term
-reduced-argument Taylor `sin_cos`). Still `todo!()`-panicking in `src/special.rs`:
-gamma family (`lgamma_r`/`lgamma`/`tgamma`/`beta`), `digamma`, `bessel_j` (need
-genuine double-double algorithms). Grep `todo!` before relying on a special fn.
+reduced-argument Taylor `sin_cos`). The special-function surface is complete too:
+the gamma family (`lgamma_r`/`lgamma`/`tgamma`/`beta`), `digamma`, `trigamma`,
+`erf`/`erfc`/`erfinv` and `probit` all carry genuine double-double algorithms,
+covered by `tests/gamma.rs`, `tests/erfinv.rs` and `tests/erfc_tail.rs`. Nothing
+in the crate panics.
 
 Representation gotchas (intended semantics): `value()` folds `value + error`, so
 it normalizes `-0.0 + 0.0` to `+0.0` -- read `uncompensated()` when the sign of

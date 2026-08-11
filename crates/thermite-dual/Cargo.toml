@@ -10,7 +10,6 @@ authors.workspace = true
 description = "Forward-mode automatic differentiation (multidual numbers) built on Thermite"
 keywords = ["simd", "autodiff", "dual-numbers", "gradient", "no-std"]
 categories = ["mathematics", "science", "no-std", "hardware-support"]
-publish = false                                                                              # not ready for release yet
 readme = "README.md"
 include = ["/src", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT", "/katex-header.html"]
 

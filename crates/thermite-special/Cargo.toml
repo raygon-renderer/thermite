@@ -10,8 +10,8 @@ authors.workspace = true
 description = "Extended special functions for the Thermite SIMD library"
 keywords = ["simd", "special-functions", "erf", "gamma", "math"]
 categories = ["mathematics", "science", "no-std", "hardware-support"]
-publish = false                                                             # not ready for release yet
-include = ["/src", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
+readme = "README.md"
+include = ["/src", "/README.md", "/katex-header.html", "/LICENSE-APACHE", "/LICENSE-MIT"]
 
 [package.metadata.docs.rs]
 features = ["std"]

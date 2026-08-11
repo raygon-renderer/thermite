@@ -19,3 +19,11 @@ rustflags = ["-Ctarget-feature=+simd128,+relaxed-simd"]
 [target.aarch64-unknown-linux-musl]
 linker = "rust-lld"
 rustflags = ["-Ctarget-feature=+crt-static"]
+
+# The `spirv` feature is a hard compile error unless `thermite_unstable_spirv` is
+# set, so released versions cannot pull in the unfinished backend. Development on
+# it continues here, and the backend only ever compiles for `target_arch = "spirv"`
+# anyway, so scoping the opt-in to that target lets `bin/spirv_testing` build with
+# no extra flags while leaving every native build untouched.
+[target.'cfg(target_arch = "spirv")']
+rustflags = ["--cfg", "thermite_unstable_spirv"]

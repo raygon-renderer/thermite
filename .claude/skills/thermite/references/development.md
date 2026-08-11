@@ -66,7 +66,7 @@ them aggressively, down to individual registers.
 ## 1. The repository
 
 Workspace root: `members = ["bin/*", "crates/*", "tests/*"]`, edition 2024,
-MSRV 1.95, `resolver = "3"`, publishable crates share `0.2.0-beta.0` via
+MSRV 1.95, `resolver = "3"`, all crates share one version (`0.2.0`) via
 `[workspace.package]`. Profiles: `release` = opt-level=3, lto=true,
 codegen-units=1; `bench` same with lto="fat"; `release-ffi` adds strip,
 panic="abort".
@@ -845,9 +845,10 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   it.** They don't inherit kernels; generic code at those types won't compile
   (or hits `todo!()`). `Dual` usually needs a small chain-rule override or
   nothing; `Compensated` may need a re-derivation.
-- **Companion crates are publish=false / WIP.** `Compensated`'s masked
-  `FloatVector` ops are partly `todo!()`; some companions mid-rewrite. Don't
-  assume an op exists there because core has it.
+- **Don't assume an op exists on a companion because core has it.** The
+  composites are much closer to complete than they used to be (`Compensated`'s
+  masked `FloatVector` ops and its whole gamma family are done), but coverage is
+  still per-crate: check the impl before writing generic code that needs it.
 - **`#[skip_dispatch]`** opts a `decl_math!` method (or any `#[dispatch]` item)
   out of the per-ISA trampoline -- for things that must inline
   (`poly`/`poly_rev`/`poly_rational`) rather than cross a dispatch boundary.

@@ -19,7 +19,7 @@ resolver = "3"
 # Shared package metadata inherited by members via `field.workspace = true`.
 # Keep publishable crates in lockstep on this version.
 [workspace.package]
-version = "0.2.0-beta.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -28,7 +28,11 @@ homepage = "https://github.com/raygon-renderer/thermite"
 authors = ["novacrazy <novacrazy@gmail.com>"]
 
 [workspace.lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))', 'cfg(tarpaulin_include)'] }
+unexpected_cfgs = { level = "allow", check-cfg = [
+    'cfg(target_arch, values("spirv"))',
+    'cfg(tarpaulin_include)',
+    'cfg(thermite_unstable_spirv)',
+] }
 
 [profile.dev]
 opt-level = 1
@@ -56,15 +60,15 @@ panic = "abort"
 [workspace.dependencies]
 # Exact pin: the macros emit code that references thermite internals, so the
 # published pair must stay in lockstep (same reason serde pins serde_derive).
-thermite-macros = { path = "crates/thermite-macros", version = "=0.2.0-beta.0" }
+thermite-macros = { path = "crates/thermite-macros", version = "=0.2.0" }
 
-thermite = { path = "crates/thermite", version = "0.2.0-beta.0", default-features = false }
-thermite-special = { path = "crates/thermite-special", version = "0.2.0-beta.0", default-features = false }
-thermite-geometry = { path = "crates/thermite-geometry", version = "0.2.0-beta.0", default-features = false }
-thermite-dual = { path = "crates/thermite-dual", version = "0.2.0-beta.0", default-features = false }
-thermite-compensated = { path = "crates/thermite-compensated", version = "0.2.0-beta.0", default-features = false }
-thermite-complex = { path = "crates/thermite-complex", version = "0.2.0-beta.0", default-features = false }
-thermite-sort = { path = "crates/thermite-sort", version = "0.2.0-beta.0", default-features = false }
+thermite = { path = "crates/thermite", version = "0.2.0", default-features = false }
+thermite-special = { path = "crates/thermite-special", version = "0.2.0", default-features = false }
+thermite-geometry = { path = "crates/thermite-geometry", version = "0.2.0", default-features = false }
+thermite-dual = { path = "crates/thermite-dual", version = "0.2.0", default-features = false }
+thermite-compensated = { path = "crates/thermite-compensated", version = "0.2.0", default-features = false }
+thermite-complex = { path = "crates/thermite-complex", version = "0.2.0", default-features = false }
+thermite-sort = { path = "crates/thermite-sort", version = "0.2.0", default-features = false }
 
 spirv-builder = { version = "0.9.0" }
 spirv-std-macros = { version = "0.9.0" }
