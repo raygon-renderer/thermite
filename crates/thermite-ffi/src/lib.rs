@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Thermite SIMD-Accelerated batch operations for C-ABI applications.
 //!
 //! This crate provides a set of functions that take arbitrary length arrays and performs

@@ -35,8 +35,19 @@ jobs:
         run: |
           echo "<div style='position: absolute; bottom: 0; width: 100%; text-align: center; padding: 10px; font-size: 0.8em; color: #888;'>Last built: $(date -u +'%Y-%m-%d %H:%M:%S UTC')</div>" > doc-footer.html
 
+      # `cargo doc` ignores `[package.metadata.docs.rs]`; only the docs.rs builder
+      # reads it. Scrape each member's `features` list out of `cargo metadata` and
+      # pass it back as package-qualified features, so a local docs.rs config is
+      # the single source of truth and CI cannot drift from what docs.rs renders.
+      # Note the nesting: TOML `[package.metadata.docs.rs]` lands in the JSON as
+      # `metadata.docs.rs`, not a literal `"docs.rs"` key.
+      - name: Collect docs.rs features
+        run: |
+          echo "DOC_FEATURES=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '[.packages[] | .name as $n | (.metadata.docs.rs.features // [])[] | "\($n)/\(.)"] | join(",")')" >> "$GITHUB_ENV"
+
       - name: Build workspace documentation
-        run: cargo doc --workspace --no-deps --exclude "spirv*" --exclude "docgen"
+        run: cargo doc --workspace --no-deps --exclude "spirv*" --exclude "docgen" --features "$DOC_FEATURES"
         env:
           RUSTDOCFLAGS: "${{ env.RUSTDOCFLAGS }} --html-after-content doc-footer.html --html-in-header ${{ github.workspace }}/katex-header.html"
 

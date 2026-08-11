@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! # Multidual numbers for forward-mode automatic differentiation
 //!

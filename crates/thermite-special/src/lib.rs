@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(unused, clippy::needless_arbitrary_self_type, clippy::needless_range_loop)]
 
 use thermite::{
