@@ -38,6 +38,8 @@ use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
 ///   [`EllintPi`](elliptic::EllintPi)/[`EllintPiInc`](elliptic::EllintPiInc), implementing
 ///   [`EllipticKind`]. Completeness is encoded by the struct - a complete integral has no `phi` field.
 pub mod elliptic {
+    pub use crate::specialized::EllipticConsts;
+
     pub use crate::specialized::{CarlsonKind, CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj};
 
     pub use crate::specialized::{

@@ -35,6 +35,12 @@ v.reverse()                  v.swap_bytes()
 // enough. Use load_unaligned or an aligned container for heap-allocated tables.
 V::load(ptr)  V::load_unaligned(ptr)  V::load_streaming(ptr)
 v.store(ptr)  v.store_unaligned(ptr)  v.store_streaming(ptr)  v.store_masked(mask, ptr)
+// FOOTGUN: masked access does NOT license reading or writing past the end of an
+// allocation. Even where the ISA guarantees the masked-off lanes never fault,
+// forming a full-width access that extends beyond the buffer is UB in Rust today.
+// So a ragged tail cannot be a masked load at `len - LANES + k`. Fill a zeroed
+// vector's lanes instead (as_mut_slice / insert / extractv), or use the aligned
+// slice iterators, which never form an out-of-bounds access at all.
 V::align_slice(&[E])     -> (&[E], &[V], &[E])      // head, aligned middle, tail
 V::align_slice_mut(&mut [E])                          // (prefer the SimdSlice trait, see slices doc)
 

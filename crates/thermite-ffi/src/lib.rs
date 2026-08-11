@@ -37,19 +37,38 @@
 
 #![no_std]
 
+mod map;
+
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
+// `panic = "abort"` still leaves a reference to the unwinding personality routine
+// on ELF targets, and this library links against nothing (no DT_NEEDED entries at
+// all), so there is no libc to resolve it from. Defining it keeps the shared
+// object fully self-contained. It is never called: nothing here unwinds.
+#[cfg(not(target_env = "msvc"))]
+#[unsafe(no_mangle)]
+extern "C" fn rust_eh_personality() {}
+
 use core::ffi::c_char;
 
 use thermite::{
+    element::FloatElement,
     math::{CoreMathWithPolicy, RealMathWithPolicy, SpatialMathWithPolicy, TranscendentalMathWithPolicy},
-    prelude::Policy,
+    prelude::{FloatVector, Policy},
     simd::NativeIsa,
 };
-use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
+use thermite_special::{
+    RealPrimalMathWithPolicy, RealSpecialMathWithPolicy, SpecialMathWithPolicy,
+    specialized::SpecializedSpecialMath,
+    elliptic::{
+        EllipticConsts,
+        CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj, EllintD, EllintDInc, EllintE, EllintEInc, EllintF,
+        EllintK, EllintPi, EllintPiInc,
+    },
+};
 
 // The method deliberately isn't named `into_array`: on a generic `V` receiver,
 // method resolution prefers where-clause candidates, so a name shared with
@@ -67,7 +86,7 @@ const _: () = {
 /// Forms of RealMath methods with explicit generic parameters,
 /// such as order, dimensions, edges, etc.
 #[rustfmt::skip]
-pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealSpecialMathWithPolicy {
+pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     #[inline(always)] fn add_v_p<P: Policy>(self, other: Self) -> Self { self + other }
     #[inline(always)] fn sub_v_p<P: Policy>(self, other: Self) -> Self { self - other }
     #[inline(always)] fn mul_v_p<P: Policy>(self, other: Self) -> Self { self * other }
@@ -144,9 +163,186 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealSpecialMathWithPolicy 
     fn gaussian_vs_p<P: Policy>(self, a: Self::Element, c: Self::Element) -> Self {
         SpecialMathWithPolicy::gaussian_p::<P>(self, Self::splat(a), Self::splat(c))
     }
+
+    // --- Activations -------------------------------------------------------
+    //
+    // Each takes its shape parameter as a full vector in Rust. A C caller almost
+    // always wants one parameter for the whole array, so these splat it, the same
+    // way `gaussian_vs_p` above does.
+
+    #[inline(always)]
+    fn gelu_vs_p<P: Policy>(self, alpha: Self::Element) -> Self {
+        RealSpecialMathWithPolicy::gelu_p::<P>(self, Self::splat(alpha))
+    }
+
+    #[inline(always)]
+    fn swish_vs_p<P: Policy>(self, beta: Self::Element) -> Self {
+        RealSpecialMathWithPolicy::swish_p::<P>(self, Self::splat(beta))
+    }
+
+    /// `softplus` wants both `k` and its reciprocal, since it would otherwise
+    /// recompute the division per call. The C surface takes only `k` and derives
+    /// the reciprocal once, which is what the extra argument was avoiding anyway.
+    #[inline(always)]
+    fn softplus_vs_p<P: Policy>(self, k: Self::Element) -> Self {
+        let k = Self::splat(k);
+        SpecialMathWithPolicy::softplus_p::<P>(self, k, CoreMathWithPolicy::reciprocal_p::<P>(k))
+    }
+
+    /// `x / (1 + |x|)`, the softsign function.
+    #[inline(always)]
+    fn algebraic_sigmoid_1_p<P: Policy>(self) -> Self {
+        RealSpecialMathWithPolicy::algebraic_sigmoid_p::<P, 1>(self)
+    }
+
+    /// `x / sqrt(1 + x^2)`.
+    #[inline(always)]
+    fn algebraic_sigmoid_2_p<P: Policy>(self) -> Self {
+        RealSpecialMathWithPolicy::algebraic_sigmoid_p::<P, 2>(self)
+    }
+
+    // --- Activations, value and derivative together ------------------------
+    //
+    // One pass returns both, which is what a training loop wants.
+
+    #[inline(always)]
+    fn gelu_d_vs_p<P: Policy>(self, alpha: Self::Element) -> (Self, Self) {
+        RealPrimalMathWithPolicy::gelu_d_p::<P>(self, Self::splat(alpha))
+    }
+
+    #[inline(always)]
+    fn swish_d_vs_p<P: Policy>(self, beta: Self::Element) -> (Self, Self) {
+        RealPrimalMathWithPolicy::swish_d_p::<P>(self, Self::splat(beta))
+    }
+
+    #[inline(always)]
+    fn softplus_d_vs_p<P: Policy>(self, k: Self::Element) -> (Self, Self) {
+        let k = Self::splat(k);
+        RealPrimalMathWithPolicy::softplus_d_p::<P>(self, k, CoreMathWithPolicy::reciprocal_p::<P>(k))
+    }
+
+    #[inline(always)]
+    fn algebraic_sigmoid_d_1_p<P: Policy>(self) -> (Self, Self) {
+        RealPrimalMathWithPolicy::algebraic_sigmoid_d_p::<P, 1>(self)
+    }
+
+    #[inline(always)]
+    fn algebraic_sigmoid_d_2_p<P: Policy>(self) -> (Self, Self) {
+        RealPrimalMathWithPolicy::algebraic_sigmoid_d_p::<P, 2>(self)
+    }
+
+    // --- Fixed instantiations of const-generic orders ----------------------
+
+    /// The exponential integral `E_1(x)`, the order that actually gets called.
+    #[inline(always)]
+    fn expint_1_p<P: Policy>(self) -> Self {
+        SpecialMathWithPolicy::expint_p::<P, 1>(self)
+    }
+
+    /// Euclidean length of a 3-vector, without intermediate overflow.
+    #[inline(always)]
+    fn hypot_3_p<P: Policy>(self, y: Self, z: Self) -> Self {
+        SpatialMathWithPolicy::hypot_n_p::<P, 3>([self, y, z])
+    }
+
+    /// Euclidean length of a 4-vector, without intermediate overflow.
+    #[inline(always)]
+    fn hypot_4_p<P: Policy>(self, y: Self, z: Self, w: Self) -> Self {
+        SpatialMathWithPolicy::hypot_n_p::<P, 4>([self, y, z, w])
+    }
+
+    /// Remap from `[in_min, in_max]` onto `[out_min, out_max]`.
+    #[inline(always)]
+    fn rescale_vs_p<P: Policy>(
+        self,
+        in_min: Self::Element,
+        in_max: Self::Element,
+        out_min: Self::Element,
+        out_max: Self::Element,
+    ) -> Self {
+        RealMathWithPolicy::rescale_p::<P>(
+            self,
+            Self::splat(in_min),
+            Self::splat(in_max),
+            Self::splat(out_min),
+            Self::splat(out_max),
+        )
+    }
+
 }
 
-impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy + RealSpecialMathWithPolicy {}
+impl<T> RealMathWithPolicyFfi for T where T: RealMathWithPolicy + RealPrimalMathWithPolicy {}
+
+/// The elliptic integrals, one entry point per form.
+///
+/// The Rust API selects the form with a request struct, so the wrong argument
+/// shape is a compile error. C has no such mechanism, so each form is spelled out
+/// with exactly its own arguments.
+///
+/// The bounds live on the blanket impl below rather than in this trait's
+/// supertrait list. `EllipticKind` needs `Self: SpecializedSpecialMath<E>` with
+/// `E: EllipticConsts`, and naming `<Self as GenericVector>::Element` in a
+/// supertrait position sends the resolver into a cycle. Declaring the methods
+/// here and satisfying them in a bounded impl keeps `EllipticMathFfi<Element = _>`
+/// nameable, which is what the vtable macro writes.
+pub trait EllipticMathFfi: SpecialMathWithPolicy {
+    /// Complete elliptic integral of the first kind, `K(k)`.
+    fn ellint_k_p<P: Policy>(self) -> Self;
+    /// Complete elliptic integral of the second kind, `E(k)`.
+    fn ellint_e_p<P: Policy>(self) -> Self;
+    /// Complete `D(k) = (K(k) - E(k)) / k^2`.
+    fn ellint_d_p<P: Policy>(self) -> Self;
+    /// Complete elliptic integral of the third kind, `Pi(n, k)`.
+    fn ellint_pi_p<P: Policy>(self, k: Self) -> Self;
+
+    // The incomplete forms again, with the parameters that describe the geometry
+    // taken as scalars. Sweeping `phi` at a fixed modulus is the usual shape of
+    // the problem, and the all-vector forms above would make the caller allocate
+    // and stream an array holding one repeated constant.
+
+    /// `F(phi, k)` over a range of `phi` at one fixed modulus.
+    fn ellint_f_vs_p<P: Policy>(self, k: Self::Element) -> Self;
+    /// `E(phi, k)` over a range of `phi` at one fixed modulus.
+    fn ellint_e_inc_vs_p<P: Policy>(self, k: Self::Element) -> Self;
+    /// `D(phi, k)` over a range of `phi` at one fixed modulus.
+    fn ellint_d_inc_vs_p<P: Policy>(self, k: Self::Element) -> Self;
+    /// `Pi(n, phi, k)` over a range of `phi` at one fixed characteristic and modulus.
+    fn ellint_pi_inc_vs_p<P: Policy>(self, n: Self::Element, k: Self::Element) -> Self;
+
+    /// Carlson `R_F(x, y, z)`, the symmetric integral of the first kind.
+    fn carlson_rf_p<P: Policy>(self, y: Self, z: Self) -> Self;
+    /// Carlson `R_C(x, y)`, the degenerate form.
+    fn carlson_rc_p<P: Policy>(self, y: Self) -> Self;
+    /// Carlson `R_D(x, y, z)`, the symmetric integral of the second kind.
+    fn carlson_rd_p<P: Policy>(self, y: Self, z: Self) -> Self;
+    /// Carlson `R_J(x, y, z, p)`, the symmetric integral of the third kind.
+    fn carlson_rj_p<P: Policy>(self, y: Self, z: Self, p: Self) -> Self;
+    /// Carlson `R_G(x, y, z)`, the completely symmetric integral.
+    fn carlson_rg_p<P: Policy>(self, y: Self, z: Self) -> Self;
+}
+
+#[rustfmt::skip]
+impl<E, V> EllipticMathFfi for V
+where
+    E: FloatElement + EllipticConsts,
+    V: FloatVector<Element = E> + SpecializedSpecialMath<E> + SpecialMathWithPolicy,
+{
+    #[inline(always)] fn ellint_k_p<P: Policy>(self) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintK { k: self }) }
+    #[inline(always)] fn ellint_e_p<P: Policy>(self) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintE { k: self }) }
+    #[inline(always)] fn ellint_d_p<P: Policy>(self) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintD { k: self }) }
+    #[inline(always)] fn ellint_pi_p<P: Policy>(self, k: Self) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintPi { n: self, k }) }
+
+    #[inline(always)] fn ellint_f_vs_p<P: Policy>(self, k: E) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintF { phi: self, k: Self::splat(k) }) }
+    #[inline(always)] fn ellint_e_inc_vs_p<P: Policy>(self, k: E) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintEInc { phi: self, k: Self::splat(k) }) }
+    #[inline(always)] fn ellint_d_inc_vs_p<P: Policy>(self, k: E) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintDInc { phi: self, k: Self::splat(k) }) }
+    #[inline(always)] fn ellint_pi_inc_vs_p<P: Policy>(self, n: E, k: E) -> Self { SpecialMathWithPolicy::ellint_p::<P, _>(EllintPiInc { n: Self::splat(n), phi: self, k: Self::splat(k) }) }
+
+    #[inline(always)] fn carlson_rf_p<P: Policy>(self, y: Self, z: Self) -> Self { SpecialMathWithPolicy::carlson_p::<P, _>(CarlsonRf { x: self, y, z }) }
+    #[inline(always)] fn carlson_rc_p<P: Policy>(self, y: Self) -> Self { SpecialMathWithPolicy::carlson_p::<P, _>(CarlsonRc { x: self, y }) }
+    #[inline(always)] fn carlson_rd_p<P: Policy>(self, y: Self, z: Self) -> Self { SpecialMathWithPolicy::carlson_p::<P, _>(CarlsonRd { x: self, y, z }) }
+    #[inline(always)] fn carlson_rj_p<P: Policy>(self, y: Self, z: Self, p: Self) -> Self { SpecialMathWithPolicy::carlson_p::<P, _>(CarlsonRj { x: self, y, z, p }) }
+    #[inline(always)] fn carlson_rg_p<P: Policy>(self, y: Self, z: Self) -> Self { SpecialMathWithPolicy::carlson_p::<P, _>(CarlsonRg { x: self, y, z }) }
+}
 
 use thermite::math::policy::{
     DefaultPolicy,
@@ -216,23 +412,23 @@ unsafe extern "C" fn enable_denormals_template<S: NativeIsa>() -> ThermiteDenorm
 }
 
 macro_rules! decl_methods {
-    (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal]
+    (ISA $policy:ty => $path:ident::$isa:ident [$feature:literal] [$arch:meta]
         $( MAPPING [
             $(    ($($input:ident),+) $([ $($scalar:ident: $ty:ty),+ ])? $mapping:ident $suffix:ident ($($output:ident),+)    ),* $(,)?
         ] ),+
     ) => {paste::paste! {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg($arch)]
         const fn [<$isa:lower _ $policy:snake>]() -> Self {$($(
             #[inline(never)] #[target_feature(enable = $feature)]
             unsafe extern "C" fn [<$mapping f_ $suffix>](len: usize, $($input: *const f32,)+ $($output: *mut f32,)+ $( $($scalar: [<$ty f>],)+ )?) {
-                unsafe { thermite::transform::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
+                unsafe { map::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
                     len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel $suffix:upper KernelF>] { $( $($scalar: $scalar as _,)+ )? }
                 ) };
             }
 
             #[inline(never)] #[target_feature(enable = $feature)]
             unsafe extern "C" fn [<$mapping _ $suffix>](len: usize, $($input: *const f64,)+ $($output: *mut f64,)+ $( $($scalar: $ty,)+ )?) {
-                unsafe { thermite::transform::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
+                unsafe { map::map_overlapping::<thermite::backend::$path::$isa, _, _, _, _>(
                     len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel $suffix:upper Kernel>] { $( $($scalar,)+ )? }
                 ) };
             })*)+
@@ -247,22 +443,23 @@ macro_rules! decl_methods {
         }
     }};
 
-    (SCALAR $policy:ty =>
+    (SCALAR $policy:ty => [$arch:meta]
         $( MAPPING [
             $(    ($($input:ident),+) $([ $($scalar:ident: $ty:ty),+ ])? $mapping:ident $suffix:ident ($($output:ident),+)    ),* $(,)?
         ] ),+
     ) => {paste::paste! {
+        #[cfg($arch)]
         const fn [<scalar_ $policy:snake>]() -> Self {$($(
             #[inline(never)]
             unsafe extern "C" fn [<$mapping f_ $suffix>](len: usize, $($input: *const f32,)+ $($output: *mut f32,)+ $( $($scalar: [<$ty f>],)+ )?) {
-                unsafe { thermite::transform::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
+                unsafe { map::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
                     len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel $suffix:upper KernelF>] { $( $($scalar: $scalar as _,)+ )? }
                 ) };
             }
 
             #[inline(never)]
             unsafe extern "C" fn [<$mapping _ $suffix>](len: usize, $($input: *const f64,)+ $($output: *mut f64,)+ $( $($scalar: $ty,)+ )?) {
-                unsafe { thermite::transform::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
+                unsafe { map::map_overlapping::<thermite::backend::scalar::Scalar, _, _, _, _>(
                     len, [$($input,)+], [$($output,)+], &[<$policy $mapping:camel $suffix:upper Kernel>] { $( $($scalar,)+ )? }
                 ) };
             })*)+
@@ -299,13 +496,13 @@ macro_rules! decl_methods {
                 const I: usize = decl_methods!(@COUNT $($input),*);
                 const O: usize = decl_methods!(@COUNT $($output),*);
 
-                impl<V: $trait<Element = f64>> thermite::transform::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper Kernel>] {
+                impl<V: $trait<Element = f64>> map::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper Kernel>] {
                     #[inline(always)] fn map(&self, [$($input),+]: [V; I]) -> [V; O] {
                         <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_outputs()
                     }
                 }
 
-                impl<V: $trait<Element = f32>> thermite::transform::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper KernelF>] {
+                impl<V: $trait<Element = f32>> map::MapKernel2<V, I, O> for [<$policy $mapping:camel $suffix:upper KernelF>] {
                     #[inline(always)] fn map(&self, [$($input),+]: [V; I]) -> [V; O] {
                         <V as $trait>::[<$method _p>]::<$policy>($($input,)+ $( $(self.$scalar),+ )? ).into_outputs()
                     }
@@ -314,11 +511,17 @@ macro_rules! decl_methods {
         )*)+
 
         impl VTable {
-            decl_methods!(SCALAR $policy =>
+            // Not on AArch64: AdvSIMD is mandatory there, so the scalar table is
+            // unreachable and would only add ~250 dead functions to the binary.
+            decl_methods!(SCALAR $policy => [not(target_arch = "aarch64")]
                 MAPPING [$( $(($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix ($($output),+) ),* ),* ]);
-            decl_methods!(ISA $policy => x86_v2::X86V2 ["sse4.2"]
+            decl_methods!(ISA $policy => x86_v2::X86V2 ["sse4.2"] [any(target_arch = "x86", target_arch = "x86_64")]
                 MAPPING [$( $(($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix ($($output),+) ),* ),* ]);
-            decl_methods!(ISA $policy => x86_v3::X86V3 ["avx,avx2,fma"]
+            decl_methods!(ISA $policy => x86_v3::X86V3 ["avx,avx2,fma"] [any(target_arch = "x86", target_arch = "x86_64")]
+                MAPPING [$( $(($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix ($($output),+) ),* ),* ]);
+            // AdvSIMD is mandatory in AArch64, so this is the only backend there
+            // and there is nothing to detect at runtime.
+            decl_methods!(ISA $policy => neon::Neon ["neon"] [target_arch = "aarch64"]
                 MAPPING [$( $(($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix ($($output),+) ),* ),* ]);
         }
     }};
@@ -383,6 +586,12 @@ macro_rules! decl_methods {
 }
 
 static mut THERMITE_POLICY: ThermitePrecisionPolicy = ThermitePrecisionPolicy::DefaultPolicy;
+// AArch64 always has AdvSIMD, so the NEON table is correct before `thermite_init`
+// is ever called and there is no scalar stage to fall back through. Elsewhere the
+// scalar table is the safe pre-init default until dispatch runs.
+#[cfg(target_arch = "aarch64")]
+static mut THERMITE_VTABLE: VTable = VTable::neon_default_policy();
+#[cfg(not(target_arch = "aarch64"))]
 static mut THERMITE_VTABLE: VTable = VTable::scalar_default_policy();
 
 impl VTable {
@@ -413,7 +622,20 @@ impl VTable {
         }
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    /// AdvSIMD is mandatory in AArch64, so there is nothing to detect: the policy
+    /// is the only choice, and every rung below NEON is unreachable.
+    #[cfg(target_arch = "aarch64")]
+    pub fn get(policy: ThermitePrecisionPolicy) -> Self {
+        match policy {
+            #[cfg(feature = "high_performance")]
+            ThermitePrecisionPolicy::HighPerformance => Self::neon_high_performance(),
+            #[cfg(feature = "high_precision")]
+            ThermitePrecisionPolicy::HighPrecision => Self::neon_high_precision(),
+            _ => Self::neon_default_policy(),
+        }
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn init() {
         unsafe { THERMITE_VTABLE = Self::get(THERMITE_POLICY) };
     }
@@ -595,7 +817,35 @@ decl_methods! {
         /// Computes the cube root of a floating-point number
         (x)cbrt v cbrt(y),
         /// Computes x raised to the power of y, which may vary in accuracy and performance based on the chosen precision policy.
-        (x, e)powf v powf(y)
+        (x, e)powf v powf(y),
+        /// Computes cos(x) - 1, accurately for small inputs where computing the
+        /// cosine and subtracting one loses every significant digit to cancellation.
+        (x)cos_m1 v cos_m1(y),
+        /// Computes the versed sine, 1 - cos(x).
+        (x)versin v versin(y),
+        /// Computes the haversine, (1 - cos(x)) / 2, the kernel of the great-circle
+        /// distance formula.
+        (x)haversin v haversin(y),
+        /// Computes 2^x - 1, accurately for small inputs.
+        (x)exp2_m1 v exp2_m1(y),
+        /// Computes 10^x - 1, accurately for small inputs.
+        (x)exp10_m1 v exp10_m1(y),
+        /// Computes sqrt(1 + x) - 1, accurately for small inputs.
+        (x)sqrt1pm1 v sqrt1pm1(y),
+        /// Computes x^e - 1, accurately for results near zero.
+        (x, e)powf_m1 v powf_m1(y),
+        /// Computes (1 + x)^n, the compound-interest form, accurately for small x.
+        (x, n)compound v compound(y),
+        /// Computes log2(1 + x), accurately for small inputs.
+        (x)log2_p1 v log2_p1(y),
+        /// Computes log10(1 + x), accurately for small inputs.
+        (x)log10_p1 v log10_p1(y),
+        /// Computes ln(1 - exp(-x)), which is otherwise catastrophically inaccurate
+        /// for small x and overflows for large x.
+        (x)ln1m_expnx v ln1m_expnx(y),
+        /// Computes ln(1 - exp(-x)) given a precomputed ln(x), for callers that
+        /// already have it.
+        (x, lnx)ln1m_expnx_ext v ln1m_expnx_ext(y)
     ],
     MAPPING: RealMathWithPolicy [
         /// Wraps an angle in radians to the range [-π, π)
@@ -611,7 +861,11 @@ decl_methods! {
         /// This may vary in accuracy and performance based on the chosen precision policy.
         (y, x)atan2 v atan2(t),
         /// Performs linear interpolation between values a and b using t, where t is typically in the range [0, 1].
-        (t, a, b)lerp v lerp(y)
+        (t, a, b)lerp v lerp(y),
+        /// Computes ln(exp(a) + exp(b)) without overflowing on large inputs or
+        /// underflowing on small ones. The log-sum-exp primitive behind softmax
+        /// and most probability code that works in log space.
+        (a, b)logaddexp v logaddexp(y)
     ],
     MAPPING: SpatialMathWithPolicy [
         (x, y)hypot v hypot(out)
@@ -627,12 +881,33 @@ decl_methods! {
         (x, y)beta v beta(z),
 
         /// Computes the Logistic sigmoid function, defined as 1 / (1 + exp(-x)), which maps any real-valued number into the range (0, 1).
-        (x)logistic_sigmoid v logistic_sigmoid(y)
+        (x)logistic_sigmoid v logistic_sigmoid(y),
 
+        /// Computes the digamma function, the logarithmic derivative of the gamma
+        /// function.
+        (x)digamma v digamma(y),
+        /// Computes both real branches of the Lambert W function at once,
+        /// W_0(x) and W_-1(x), where each satisfies w * exp(w) = x.
+        ///
+        /// W_0 is valid for x >= -1/e and W_-1 for -1/e <= x < 0. Outside those
+        /// domains the respective output is NaN.
+        (x)lambert_w vv lambert_w(w0, wm1)
     ],
     MAPPING: RealSpecialMathWithPolicy [
         /// Computes the inverse error function, which may vary in accuracy and performance based on the chosen precision policy.
         (y)erfinv v erfinv(x),
+        /// Computes the probit function, the inverse of the standard normal
+        /// cumulative distribution function.
+        (p)probit v probit(x),
+        /// Computes the natural logarithm of the absolute value of the gamma
+        /// function, together with the sign of the gamma function itself.
+        (x)lgamma_r vv lgamma_r(y, sign),
+        /// Computes an exponential-free approximation of the swish activation.
+        (x)algebraic_swish v algebraic_swish(y)
+    ],
+    MAPPING: RealPrimalMathWithPolicy [
+        /// Computes the exponential-free swish activation and its derivative together.
+        (x)algebraic_swish_d vv algebraic_swish_d(y, dy)
     ],
     MAPPING: RealMathWithPolicyFfi [
         /// 3rd-order smoothstep interpolation function
@@ -654,6 +929,73 @@ decl_methods! {
         /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `a * exp(-0.5 * (self / c)^2)`.
         ///
         /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
-        (x) [a: Float, c: Float] gaussian vs gaussian_vs(y)
+        (x) [a: Float, c: Float] gaussian vs gaussian_vs(y),
+
+        /// Computes the GELU activation with shape parameter `alpha`.
+        (x) [alpha: Float] gelu vs gelu_vs(y),
+        /// Computes the swish (SiLU) activation, x * sigmoid(beta * x).
+        (x) [beta: Float] swish vs swish_vs(y),
+        /// Computes the softplus activation, a smooth approximation of ReLU, with
+        /// sharpness `k`.
+        (x) [k: Float] softplus vs softplus_vs(y),
+
+        /// Computes the GELU activation and its derivative together, in one pass.
+        (x) [alpha: Float] gelu_d vvs gelu_d_vs(y, dy),
+        /// Computes the swish activation and its derivative together, in one pass.
+        (x) [beta: Float] swish_d vvs swish_d_vs(y, dy),
+        /// Computes the softplus activation and its derivative together, in one pass.
+        (x) [k: Float] softplus_d vvs softplus_d_vs(y, dy),
+        /// Computes x / (1 + |x|), the softsign function.
+        (x)algebraic_sigmoid_1 v algebraic_sigmoid_1(y),
+        /// Computes x / sqrt(1 + x^2).
+        (x)algebraic_sigmoid_2 v algebraic_sigmoid_2(y),
+        /// Computes the softsign function and its derivative together, in one pass.
+        (x)algebraic_sigmoid_d_1 vv algebraic_sigmoid_d_1(y, dy),
+        /// Computes x / sqrt(1 + x^2) and its derivative together, in one pass.
+        (x)algebraic_sigmoid_d_2 vv algebraic_sigmoid_d_2(y, dy),
+
+        /// Computes the exponential integral E_1(x).
+        (x)expint_1 v expint_1(y),
+
+        /// Computes the Euclidean length of a 3-vector without intermediate
+        /// overflow or underflow.
+        (x, y, z)hypot_3 v hypot_3(out),
+        /// Computes the Euclidean length of a 4-vector without intermediate
+        /// overflow or underflow.
+        (x, y, z, w)hypot_4 v hypot_4(out),
+
+        /// Remaps a value from the range [in_min, in_max] onto [out_min, out_max].
+        (x) [in_min: Float, in_max: Float, out_min: Float, out_max: Float] rescale vs rescale_vs(y)
+    ],
+    MAPPING: EllipticMathFfi [
+        /// Computes the complete elliptic integral of the first kind, K(k).
+        (k)ellint_k v ellint_k(y),
+        /// Computes the complete elliptic integral of the second kind, E(k).
+        (k)ellint_e v ellint_e(y),
+        /// Computes the complete elliptic integral D(k) = (K(k) - E(k)) / k^2.
+        (k)ellint_d v ellint_d(y),
+        /// Computes the complete elliptic integral of the third kind, Pi(n, k).
+        (n, k)ellint_pi v ellint_pi(y),
+
+        /// Computes F(phi, k) over an array of phi at a single fixed modulus k.
+        (phi) [k: Float] ellint_f vs ellint_f_vs(y),
+        /// Computes E(phi, k) over an array of phi at a single fixed modulus k.
+        (phi) [k: Float] ellint_e_inc vs ellint_e_inc_vs(y),
+        /// Computes D(phi, k) over an array of phi at a single fixed modulus k.
+        (phi) [k: Float] ellint_d_inc vs ellint_d_inc_vs(y),
+        /// Computes Pi(n, phi, k) over an array of phi at a single fixed
+        /// characteristic n and modulus k.
+        (phi) [n: Float, k: Float] ellint_pi_inc vs ellint_pi_inc_vs(y),
+
+        /// Computes the Carlson symmetric elliptic integral of the first kind, R_F(x, y, z).
+        (x, y, z)carlson_rf v carlson_rf(out),
+        /// Computes the degenerate Carlson symmetric elliptic integral R_C(x, y).
+        (x, y)carlson_rc v carlson_rc(out),
+        /// Computes the Carlson symmetric elliptic integral of the second kind, R_D(x, y, z).
+        (x, y, z)carlson_rd v carlson_rd(out),
+        /// Computes the Carlson symmetric elliptic integral of the third kind, R_J(x, y, z, p).
+        (x, y, z, p)carlson_rj v carlson_rj(out),
+        /// Computes the completely symmetric Carlson elliptic integral R_G(x, y, z).
+        (x, y, z)carlson_rg v carlson_rg(out)
     ]
 }

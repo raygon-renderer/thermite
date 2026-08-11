@@ -247,7 +247,6 @@ pub mod math;
 pub mod register;
 pub mod slice;
 pub mod sort;
-pub mod transform;
 
 #[doc(hidden)]
 pub mod swizzle;

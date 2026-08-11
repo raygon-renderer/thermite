@@ -2,7 +2,7 @@
 name = "thermite-ffi"
 version = "0.1.0"
 edition = "2024"
-publish = false # C ABI cdylib build artifact, not a Rust dependency for crates.io
+publish = false       # C ABI cdylib build artifact, not a Rust dependency for crates.io
 
 [lib]
 name = "thermite"
