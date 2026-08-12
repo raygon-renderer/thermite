@@ -132,6 +132,56 @@ fn diff_powf() {
     }
 }
 
+/// The degenerate points of the polar form, where `ln|z|` is `+-inf`.
+///
+/// Two distinct failures live here. A REAL exponent multiplies that infinity by a
+/// zero imaginary part, so the angle is NaN where its limit is plainly 0. A COMPLEX
+/// exponent gives a genuine `+-inf` angle - the spiral never settles - but its modulus
+/// has already collapsed, and C99 takes `e^(-inf + iy)` to `+-0` for every non-finite
+/// `y`. Both used to come back NaN.
+#[test]
+fn degenerate_polar_points() {
+    // z^w at z = 0, against the same rules `num_complex` follows.
+    for &(re, im) in &[(2.0, 0.0), (0.5, 0.0), (1.0, 1.0), (0.25, 3.0)] {
+        let got = c(0.0, 0.0).powf(c(re, im));
+        let want = Complex64::new(0.0, 0.0).powc(Complex64::new(re, im));
+
+        assert_close(&format!("0^({re} + {im}i)"), got, want, 1e-14);
+    }
+
+    // 0^0 is 1, not NaN: the modulus never collapses, so only the angle needs saving.
+    assert_close("0^0", c(0.0, 0.0).powf(c(0.0, 0.0)), Complex64::new(1.0, 0.0), 1e-14);
+
+    // b^z at b = 0 has the identical shape through `expf`, for both exponent kinds.
+    for &(re, im) in &[(2.0, 0.0), (1.0, 1.0)] {
+        let got = c(re, im).expf(V::ZERO);
+        let want = Complex64::new(0.0, 0.0).powc(Complex64::new(re, im));
+
+        assert_close(&format!("0^({re} + {im}i) via expf"), got, want, 1e-14);
+    }
+
+    // `exp` inherits the C99 rule from `from_polar`. At the default policy the trig
+    // clamp hides this, so pin it at the tier that actually propagates non-finite
+    // angles - a modulus of zero must win over an angle that never resolved.
+    for &im in &[f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+        let got = c(f64::NEG_INFINITY, im).exp_p::<Precision>();
+        let (gr, gi) = parts(got);
+
+        assert!(
+            gr == 0.0 && gi == 0.0,
+            "exp(-inf + {im}i) should be 0 + 0i, got {gr} + {gi}i"
+        );
+    }
+
+    // A finite angle is still honoured, signed zeros included: `from_polar` must not
+    // flatten a legitimately underflowed modulus.
+    let (re, im) = parts(C::from_polar_p::<Precision>(V::ZERO, V::splat(std::f64::consts::PI)));
+    assert!(
+        re.is_sign_negative() && !im.is_sign_negative(),
+        "from_polar(0, pi) should be (-0, +0), got ({re}, {im})"
+    );
+}
+
 #[test]
 fn diff_sinc() {
     for z in samples() {

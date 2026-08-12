@@ -108,6 +108,61 @@ macro_rules! suite {
                 }
             }
 
+            /// `ln` leaves the denormal range downward. A subnormal has no exponent
+            /// field for the reduction to split, so `Preserve` must rescale it first
+            /// - without that every denormal comes back `-inf`, which is only the
+            /// right answer under the flushing tiers.
+            #[test]
+            fn ln_denormals_f32() {
+                for x in f32_denormals().into_iter().filter(|x| *x > 0.0) {
+                    let got = Vector::<<$b as Simd>::f32x8>::splat(x).ln_p::<Preserve>().extract::<0>();
+                    let want = libm::logf(x);
+
+                    let rel = ((got - want) / want).abs();
+                    assert!(
+                        got.is_finite() && rel <= 1e-6,
+                        "ln({x:e}): got {got:e}, want {want:e} (rel err {rel:e})"
+                    );
+                }
+            }
+
+            #[test]
+            fn ln_denormals_f64() {
+                for x in f64_denormals().into_iter().filter(|x| *x > 0.0) {
+                    let got = Vector::<<$b as Simd>::f64x4>::splat(x).ln_p::<Preserve>().extract::<0>();
+                    let want = libm::log(x);
+
+                    let rel = ((got - want) / want).abs();
+                    assert!(
+                        got.is_finite() && rel <= 1e-14,
+                        "ln({x:e}): got {got:e}, want {want:e} (rel err {rel:e})"
+                    );
+                }
+            }
+
+            /// Zero is still `-inf`, and a negative denormal is still NaN: the
+            /// rescale must not swallow the edge cases the tail hands out.
+            #[test]
+            fn ln_zero_and_negative_denormals() {
+                let zero = Vector::<<$b as Simd>::f64x4>::ZERO.ln_p::<Preserve>().extract::<0>();
+                assert_eq!(zero, f64::NEG_INFINITY, "ln(0) under Preserve");
+
+                for x in f64_denormals().into_iter().filter(|x| *x < 0.0) {
+                    let got = Vector::<<$b as Simd>::f64x4>::splat(x).ln_p::<Preserve>().extract::<0>();
+                    assert!(got.is_nan(), "ln({x:e}) should be NaN, got {got:e}");
+                }
+            }
+
+            /// The flushing tiers are untouched: a denormal is a zero there, so
+            /// `-inf` is what they should keep returning.
+            #[test]
+            fn ln_denormals_still_flush_by_default() {
+                for x in f64_denormals().into_iter().filter(|x| *x > 0.0) {
+                    let got = Vector::<<$b as Simd>::f64x4>::splat(x).ln_p::<Performance>().extract::<0>();
+                    assert_eq!(got, f64::NEG_INFINITY, "ln({x:e}) under Performance");
+                }
+            }
+
             /// `sqrt` also leaves the denormal range, and is exact there.
             #[test]
             fn sqrt_denormals() {

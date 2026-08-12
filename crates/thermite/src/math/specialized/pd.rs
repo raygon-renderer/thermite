@@ -1,5 +1,5 @@
 use crate::divider::Divider;
-use crate::vector::ops::{AddMasked as _, SubMasked as _};
+use crate::vector::ops::{AddMasked as _, MulMasked as _, SubMasked as _};
 use core::f64::consts::{LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -751,7 +751,21 @@ fn exponent_f<V: FloatVectorWithBits<Element = f64>>(x: V) -> V {
 fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: bool>(x0: V) -> V {
     let ln2_hi = crate::const_splat!(f64: 0.693359375);
     let ln2_lo = crate::const_splat!(f64: -2.121944400546905827679E-4);
-    let x1 = if P1 { x0 + V::ONE } else { x0 };
+    let mut x1 = if P1 { x0 + V::ONE } else { x0 };
+
+    // A subnormal has no exponent field to split, so `fraction2`/`exponent` cannot
+    // reduce it and the tail below hands every one of them back as -inf. That is the
+    // right answer only because denormals are flushed by default; under `Preserve`,
+    // scale them into the normal range by 2^54 and take those 54 powers of two back
+    // out of the exponent. The correction then rides the `ln2_hi`/`ln2_lo` multiplies
+    // that were happening anyway, so it keeps the full double-word accuracy and costs
+    // nothing beyond the scale itself - `ln(5e-324)` is -744.44, not -inf.
+    let mut scaled = GenericMask::FALSY;
+
+    if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+        scaled = x1.is_subnormal();
+        x1 = x1.mul_c(scaled, crate::const_splat!(f64: hexf::hexf64!("0x1.0p54")));
+    }
 
     let mut x = fraction2::<V>(x1);
     let mut fe = V::cast_from(exponent::<V>(x1));
@@ -760,6 +774,10 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
 
     x = x.add_c(!blend, x);
     fe = fe.add_c(blend, V::ONE);
+
+    if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+        fe = fe.sub_c(scaled, crate::const_splat!(f64: 54.0));
+    }
 
     let xp1 = x - V::ONE;
 

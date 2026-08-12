@@ -1,7 +1,7 @@
 use crate::{
     divider::Divider,
     math::policy::policies::MediumPrecision,
-    vector::ops::{AddMasked as _, BitAndNot as _},
+    vector::ops::{AddMasked as _, BitAndNot as _, MulMasked as _, SubMasked as _},
 };
 
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
@@ -1649,7 +1649,21 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
     let ln2f_hi = crate::const_splat!(f32: 0.693359375);
     let ln2f_lo = crate::const_splat!(f32: -2.12194440E-4);
 
-    let x1 = if P1 { x0 + V::ONE } else { x0 };
+    let mut x1 = if P1 { x0 + V::ONE } else { x0 };
+
+    // A subnormal has no exponent field to split, so `fraction2`/`exponent` cannot
+    // reduce it and the tail below hands every one of them back as -inf. That is the
+    // right answer only because denormals are flushed by default - the call above is
+    // a no-op precisely when they are not. Under `Preserve`, scale them into the
+    // normal range by 2^25 and take those 25 powers of two back out of the exponent,
+    // where the correction rides the `ln2f_hi`/`ln2f_lo` multiplies that were
+    // happening anyway: `ln(1e-45)` is -103.28, not -inf.
+    let mut scaled = GenericMask::FALSY;
+
+    if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+        scaled = x1.is_subnormal();
+        x1 = x1.mul_c(scaled, crate::const_splat!(f32: hexf::hexf32!("0x1.0p25")));
+    }
 
     let mut x = fraction2::<V>(x1);
     let mut e = exponent::<V>(x1);
@@ -1658,6 +1672,10 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
     x = x.add_c(!blend, x);
     e = e.add_c(blend.cast(), V::SignedBits::ONE);
+
+    if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+        e = e.sub_c(scaled.cast(), V::SignedBits::splat(25));
+    }
 
     let fe: V = e.cast();
 

@@ -151,6 +151,20 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
 
     #[inline(always)]
     fn from_polar<P: Policy>(r: V, theta: V) -> Self {
+        // C99 takes `e^(-inf + iy)` to +-0 for every non-finite `y`, and the same rule
+        // is what every caller here wants: once the modulus has collapsed to zero the
+        // result is the origin whatever direction it was approached from, but
+        // `r * cos(theta)` still reads `0 * NaN`. `z^(1 + i)` at z = 0 has a genuine
+        // -inf angle - the spiral never settles - and comes out NaN without this.
+        //
+        // The `is_finite` test is what keeps it honest: a finite angle is left exactly
+        // as it was, signed zeros included, so nothing well-defined moves.
+        let theta = if const { P::POLICY.check_overflow } {
+            theta.nz(r.cmp_eq(V::ZERO).bitandnot(theta.is_finite()))
+        } else {
+            theta
+        };
+
         let (s, c) = theta.sin_cos_p::<P>();
 
         Self::new(r * c, r * s)
@@ -167,7 +181,11 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
     #[inline(always)]
     fn expf<P: Policy>(self, base: V) -> Self {
         // b^(a + ci) = b^a * e^(i c ln b)
-        Self::from_polar_p::<P>(base.powf_p::<P>(self.re), self.im * base.ln_p::<P>())
+        //
+        // `ln b` only ever reaches the angle here, so it can be masked outright.
+        let ln_b = finite_log_term::<P, V>(base.ln_p::<P>(), self.im);
+
+        Self::from_polar_p::<P>(base.powf_p::<P>(self.re), self.im * ln_b)
     }
 
     #[inline(always)]
@@ -436,6 +454,24 @@ fn expm1_from<P: Policy, V: RealFloatVector>(bm1: V, phi: V) -> Complex<V> {
     Complex::new(bm1.mul_adde(c, cm1), s.mul_adde(bm1, s))
 }
 
+/// Masks `+-inf` out of a `d * ln r` angle term.
+///
+/// `ln r` is -inf at r = 0 and +inf at r = inf, so a real exponent - `d == 0`, the
+/// overwhelmingly common case - forms `0 * inf` where the limit is plainly 0, and one
+/// NaN there takes the whole result with it: `(0+0i)^2` was NaN on the strength of it.
+/// Killing the infinity before the product exists is a compare and an AND, no branch,
+/// and it leaves the term identical wherever `d` is not zero.
+///
+/// This is what reduces `powf` to the `powfr` formula, which never forms `ln r` at all.
+#[inline(always)]
+fn finite_log_term<P: Policy, V: RealFloatVector>(ln_r: V, d: V) -> V {
+    if const { !P::POLICY.check_overflow } {
+        return ln_r;
+    }
+
+    ln_r.zz(d.cmp_ne(V::ZERO))
+}
+
 impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for Complex<V> {
     /// `sin(a + bi) = sin(a)cosh(b) + i*cos(a)sinh(b)`,
     /// `cos(a + bi) = cos(a)cosh(b) - i*sin(a)sinh(b)`.
@@ -626,14 +662,20 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
         let (r, theta) = self.to_polar_p::<P>();
         let ln_r = r.ln_p::<P>();
 
-        let angle = e.im.mul_adde(ln_r, e.re * theta);
+        // Both products against `ln r` are `0 * inf` at the degenerate points, each for
+        // its own exponent part: `d ln r` in the angle, `c ln r` in the fused exponent.
+        // `0^0` is 1 and `0^2` is 0 only once both are masked.
+        let ln_r_angle = finite_log_term::<P, V>(ln_r, e.im);
+        let ln_r_mod = finite_log_term::<P, V>(ln_r, e.re);
+
+        let angle = e.im.mul_adde(ln_r_angle, e.re * theta);
 
         let mut modulus = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             // Fused exponent: one `exp` for the whole modulus. `ln r` is already in
             // hand and `powf` is `exp(c ln r)` underneath, so the split form costs a
             // second `exp` and a second `ln` for an extended-precision `c ln r` that
             // this tier is not paying for.
-            e.im.nmul_adde(theta, e.re * ln_r).exp_p::<P>()
+            e.im.nmul_adde(theta, e.re * ln_r_mod).exp_p::<P>()
         } else {
             // `powf` carries more precision through `c ln r` than the fused exponent
             // can, which is what keeps `|z^w|` near an ulp once `|c ln r|` is large.
@@ -648,9 +690,10 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
             let lost = !modulus.is_finite();
 
             if thermite::unlikely(lost.any()) {
-                modulus = lost.select(e.im.nmul_adde(theta, e.re * ln_r).exp_p::<P>(), modulus);
+                modulus = lost.select(e.im.nmul_adde(theta, e.re * ln_r_mod).exp_p::<P>(), modulus);
             }
         }
+
 
         Self::from_polar_p::<P>(modulus, angle)
     }
