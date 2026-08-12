@@ -255,9 +255,28 @@ decl_math! {
     )]
     trait Float<FloatElementWithBits>: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
+        ///
+        /// The default policy handles the full domain: overflow gives a signed
+        /// infinity, underflow a signed zero (or a subnormal under a
+        /// `Preserve` denormal policy), and infinities/NaNs pass through. That
+        /// costs a handful of compares and selects around the exponent
+        /// arithmetic.
+        ///
+        /// A caller whose exponent is known to stay in range (anything fed by
+        /// [`frexp`](Self::frexp), for instance) can drop all of it with
+        /// `ldexp_p::<CheckOverflow<P, false>>(exp)`, leaving an add, a shift
+        /// and an or. Out-of-domain inputs are then garbage in, garbage out.
         fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;
 
         /// Decomposes `self` into its normalized fraction and an integral power of two.
+        ///
+        /// `self == frac * 2^exp` with `0.5 <= |frac| < 1`; `+-0` gives
+        /// `(+-0, 0)`, and infinities and NaNs pass through unchanged.
+        ///
+        /// Unless the [`DenormalBehavior`](policy::DenormalBehavior) is set to `Ignore`,
+        /// denormal/subnormal values are properly handled regardless, not flushed. Mixed
+        /// workloads of normal and denormal values will be slower than all-similar workloads
+        /// due to branch prediction misprediction. This was the fastest approach overall.
         fn frexp[][](self: Self) -> (Self, Self::SignedBits);
 
         /// Removes denormal/subnormal values, flushing them to zero.

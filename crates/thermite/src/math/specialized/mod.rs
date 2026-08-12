@@ -77,18 +77,39 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         if const {
             matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
         } {
-            // Two-multiply approach: split the exponent in half so each
-            // intermediate value stays representable, and let IEEE gradual
-            // underflow produce subnormals naturally.
-            let exp1 = exp.srai::<1>();
-            let exp2 = exp - exp1;
+            // libm/musl-style product chain, branchless: peel off up to three
+            // power-of-two factors. The chunk bounds are chosen so that
+            // (a) every factor is a normal float, and (b) on the negative side
+            // (`exp_min + sig_total`: -102 for f32, -969 for f64) the running
+            // product cannot land subnormal until the FINAL multiply - so IEEE
+            // gradual underflow rounds exactly once. Three chunks cover the
+            // full useful range (max finite down past the smallest subnormal
+            // and back). In the common case the first chunk absorbs the whole
+            // exponent and the remaining two factors are an exact `* 1.0`.
+            //
+            // Wrap-free for extreme requests like `ldexp(x, i32::MIN)`: each
+            // step subtracts a same-sign clamped chunk, moving `exp`
+            // monotonically toward zero.
+            let mant_p2 = Self::SignedBits::splat(unsafe {
+                <E as FloatElementWithBits>::SignedBits::try_from(E::MANTISSA_BITS + 2).unwrap_unchecked()
+            });
+            let chunk_neg = mant_p2 - exp_bias; // exp_min + sig_total
+            let chunk_pos = exp_bias;
 
-            let pow2_1 = (exp1 + exp_bias).max(Self::SignedBits::ONE).min(exp_bias + exp_bias) << mantissa_bits;
-            let pow2_2 = (exp2 + exp_bias).max(Self::SignedBits::ONE).min(exp_bias + exp_bias) << mantissa_bits;
+            let mut exp = exp;
+            let mut result = self;
 
-            let mut result = self * Self::from_bits(pow2_1) * Self::from_bits(pow2_2);
+            let mut i = 0;
+            while i < 3 {
+                let k = exp.max(chunk_neg).min(chunk_pos);
+                result *= Self::from_bits((k + exp_bias) << mantissa_bits);
+                exp -= k;
+                i += 1;
+            }
 
             if const { P::POLICY.check_overflow } {
+                // preserve the exact input NaN payload rather than whatever the
+                // multiplies quiet it into
                 result = self.is_nan().select(self, result);
             }
 
@@ -99,26 +120,96 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
 
         let biased_exp = Self::SignedBits::from_bits((bits >> mantissa_bits) & exp_lsb_mask);
 
-        let mut exp = biased_exp + exp;
+        let mut exp = exp;
 
         if const { P::POLICY.check_overflow } {
-            // clamp exponent between 0 and max biased exponent
-            exp = exp.max(Self::SignedBits::ZERO).min(max_biased_exp);
+            // Saturate the requested shift so `biased_exp + exp` cannot wrap
+            // (e.g. `ldexp(1.0, i32::MAX)`); +-4*bias is already far past the
+            // overflow/underflow thresholds, so saturation doesn't change results.
+            let exp_limit = exp_bias.shli::<2>();
+            exp = exp.max(-exp_limit).min(exp_limit);
+        }
+
+        // the true (unclamped) new biased exponent; wrap-free thanks to the saturation above
+        let new_exp = biased_exp + exp;
+
+        if const { !P::POLICY.check_overflow } {
+            // garbage in, garbage out per the policy contract: assemble and return
+            let sign_mantissa = Self::SignedBits::from_bits(bits & sign_mantissa_mask);
+            return Self::from_bits((new_exp << mantissa_bits) | sign_mantissa);
+        }
+
+        // Checked tail. Both forms clamp the biased exponent - which already
+        // lands on the right FIELD value for the special cases (0 on underflow,
+        // MAX_BIASED_EXP on overflow) - and then fix up the specials:
+        // - out of range: zero the mantissa, so the clamped field reads as a
+        //   signed zero / signed infinity (never the NaN a mantissa-preserving
+        //   clamp would encode);
+        // - zero/subnormal input (flushed on this path): zero the exponent
+        //   field too, giving a signed zero regardless of the shift;
+        // - non-finite input: force the exponent field to all-ones and keep the
+        //   mantissa, so inf and NaN pass through (incl. `ldexp(inf, -k)`).
+        //
+        // Which lowering is cheaper depends on the hardware: the bit assembly
+        // is 4 ternlogs plus mask fixups (one instruction each with AVX-512),
+        // while without native ternary logic each ternlog expands to a DNF
+        // chain and the blend form wins - measured on znver3 with llvm-mca,
+        // 3.8 cyc/iter for blends against 5.8 for ternlogs.
+        let clamped_exp = new_exp.max(Self::SignedBits::ZERO).min(max_biased_exp);
+
+        let zero_sub = biased_exp.cmp_eq(Self::SignedBits::ZERO);
+
+        if const { <Self::SignedBits as BitwiseVector>::HAS_NATIVE_TERNLOG } {
+            let out_of_range = new_exp.cmp_le(Self::SignedBits::ZERO) | new_exp.cmp_ge(max_biased_exp);
+            let non_finite = biased_exp.cmp_eq(max_biased_exp);
+
+            let keep_mantissa =
+                GenericMask::ternlog::<{ crate::ternlog_imm!(!(A | B) | C) }>(out_of_range, zero_sub, non_finite);
+
+            let ibits = Self::SignedBits::from_bits(bits);
+            let sign_bit = Self::SignedBits::from_bits(<Self as FloatVector>::NEG_ZERO);
+            let sign_mantissa = Self::SignedBits::from_bits(sign_mantissa_mask);
+            let exp_field = max_biased_exp << mantissa_bits;
+
+            // ibits & mantissa-field mask (= sign_mantissa & !sign), gated by keep_mantissa
+            let mantissa =
+                Self::SignedBits::ternlog::<{ crate::ternlog_imm!(A & B & !C) }>(ibits, sign_mantissa, sign_bit)
+                    .zz(keep_mantissa);
+
+            // clamped exponent field | forced all-ones field | mantissa
+            let field = Self::SignedBits::ternlog::<{ crate::ternlog_imm!(A | B | C) }>(
+                (clamped_exp << mantissa_bits).nz(zero_sub),
+                exp_field.zz(non_finite),
+                mantissa,
+            );
+
+            // (bits & SIGN) | field
+            return Self::from_bits(Self::SignedBits::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(
+                ibits, sign_bit, field,
+            ));
         }
 
         let sign_mantissa = Self::SignedBits::from_bits(bits & sign_mantissa_mask);
 
-        let mut result = (exp << <Self::Element as FloatElementWithBits>::MANTISSA_BITS) | sign_mantissa;
+        let mut result = Self::from_bits((clamped_exp << mantissa_bits) | sign_mantissa);
 
-        if const { P::POLICY.check_overflow } {
-            let is_underflow = exp.is_negative();
-            let input_was_subnormal = biased_exp.is_zero();
+        let overflow = new_exp.cmp_ge(max_biased_exp);
 
-            // zero the result where underflow or the input was subnormal.
-            result = result.nz(is_underflow | input_was_subnormal);
-        }
+        // a zero/subnormal input flushes to a signed zero for ANY
+        // shift, so it must be applied after (and therefore win over) the
+        // overflow select - `ldexp(0.0, 300)` is 0.0, not infinity.
+        result = overflow
+            .cast::<Self::Mask>()
+            .select(Self::INFINITY.copysign(self), result);
+        result = (new_exp.cmp_le(Self::SignedBits::ZERO) | zero_sub)
+            .cast::<Self::Mask>()
+            .select(Self::ZERO.copysign(self), result);
+        result = biased_exp
+            .cmp_eq(max_biased_exp)
+            .cast::<Self::Mask>()
+            .select(self, result);
 
-        Self::from_bits(result)
+        result
     }
 
     #[inline(always)]
@@ -136,54 +227,96 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         let half_exp_bits: Self::Bits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
             <S::Bits as GenericVector>::Element: <S::Element as FloatElementWithBits>::HALF_EXP_BITS);
 
-        let mut bits: Self::Bits = self.into_bits();
-        let orig_bits = bits;
+        let bits: Self::Bits = self.into_bits();
 
-        // if preserving denormals, we need to shift subnormals up to the normal range so that the exponent extraction works correctly
-        let subnormal_correction = if const {
-            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
-        } {
-            let is_subnormal = self.is_subnormal();
-
-            let exp_bias: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
-                <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
-
-            let shift_amount = Self::SignedBits::splat(unsafe {
-                <E as FloatElementWithBits>::SignedBits::try_from(E::MANTISSA_BITS + 1).unwrap_unchecked()
-            });
-
-            let normalizer = Self::from_bits((exp_bias + shift_amount) << E::MANTISSA_BITS);
-
-            // conditional multiplication to normalize subnormal
-            bits = self.mul_c(is_subnormal, normalizer).into_bits();
-
-            shift_amount.zz(is_subnormal.cast()) // zero if not subnormal
-        } else {
-            Self::SignedBits::ZERO
-        };
-
-        // (bits >> mantissa) & mask
+        // Exponent field as given: zero means the input is a zero or a
+        // subnormal. This mask is needed for the validity guard below anyway,
+        // so reusing it as the renormalization predicate is free.
         let biased_exp = Self::SignedBits::from_bits((bits >> E::MANTISSA_BITS) & exp_lsb_mask);
+        let zero_exp = biased_exp.cmp_eq(Self::SignedBits::ZERO);
 
         // subtract bias to get actual exponent
         let mut exp: Self::SignedBits = biased_exp - frexp_bias_offset;
-
-        if const {
-            matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve if <Self::Element as FloatElement>::HAS_SUBNORMALS)
-        } {
-            exp -= subnormal_correction; // subtract additional amount if we had to normalize a subnormal
-        }
 
         // extract sign and mantissa, then give it the correct exponent
         // let mut fraction = (bits & sign_mantissa_mask) | half_exp_bits;
         let mut fraction =
             Self::Bits::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(bits, sign_mantissa_mask, half_exp_bits);
 
-        if const { P::POLICY.check_overflow } {
-            let is_finite = self.is_finite() & biased_exp.cmp_ne(Self::SignedBits::ZERO).cast();
+        // A subnormal carries no implicit leading one, so its exponent field
+        // means nothing until the value is renormalized - skip this and
+        // `frexp(1e-40f32)` answers `(1e-40, 0)`, silently breaking the
+        // `0.5 <= |frac| < 1` postcondition while still satisfying
+        // `x == frac * 2^exp`.
+        //
+        // Renormalizing costs a multiply, a second extraction and two selects.
+        // Under a flushing policy subnormals are rare by assumption, so that
+        // work sits behind a branch and the common path stays exactly as cheap
+        // as it was (llvm-mca, znver3: 2.2 cyc/iter, against 4.0 if the fixup
+        // runs unconditionally). Under `Preserve` they are expected instead, so
+        // the branch would only mispredict - run it straight-line there, as
+        // this kernel always used to.
+        //
+        // The branch is the right call well past "rare". Measured with rdtsc
+        // over 512 KiB of random input (TSC cycles per f32x8, subnormals placed
+        // in a random lane at the stated per-VECTOR rate):
+        //
+        //     P(subnormal)     0%     1%     5%    10%    25%    50%   100%
+        //     branchy        3.14   3.84   6.33   8.13  12.98  20.59  13.46
+        //     branchless     5.20   5.52   6.86   7.99  10.31  12.35  12.47
+        //
+        // Crossover is ~8-9% of vectors, i.e. ~1 element in 90. Past that the
+        // mispredicts dominate, peaking at 50% where the branch is maximally
+        // unpredictable (+67%); at 100% it is predictable again and the cost
+        // falls back. Callers who genuinely expect dense subnormals under a
+        // flushing policy should ask for `AvoidBranching<P, true>` - or, more
+        // likely, they wanted `PreserveDenormals<P>` all along.
+        // `Ignore` promises the hardware is running with denormals disabled
+        // (DAZ/FTZ), so one can never arrive here - skip the fixup and even its
+        // test entirely, exactly as `flush_denormals` does for that policy.
+        if const {
+            <Self::Element as FloatElement>::HAS_SUBNORMALS
+                && !matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore)
+        } {
+            if const {
+                P::POLICY.avoid_branching || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+            } || crate::unlikely(zero_exp.any())
+            {
+                let exp_bias: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
+                    <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);
 
-            exp = exp.zz(is_finite.cast());
-            fraction = is_finite.select(fraction, orig_bits);
+                let shift_amount = Self::SignedBits::splat(unsafe {
+                    <E as FloatElementWithBits>::SignedBits::try_from(E::MANTISSA_BITS + 1).unwrap_unchecked()
+                });
+
+                let normalizer = Self::from_bits((exp_bias + shift_amount) << E::MANTISSA_BITS);
+
+                // scale the zero-exponent lanes up into the normal range, then
+                // redo the extraction for them and undo the scale in `exp`
+                let scaled: Self::Bits = self.mul_c(zero_exp.cast(), normalizer).into_bits();
+                let scaled_exp = Self::SignedBits::from_bits((scaled >> E::MANTISSA_BITS) & exp_lsb_mask);
+
+                exp = zero_exp.select(scaled_exp - frexp_bias_offset - shift_amount, exp);
+                fraction = zero_exp.cast::<Self::Mask>().select(
+                    Self::Bits::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(
+                        scaled,
+                        sign_mantissa_mask,
+                        half_exp_bits,
+                    ),
+                    fraction,
+                );
+            }
+        }
+
+        if const { P::POLICY.check_overflow } {
+            // `+-0` must come back as `(+-0, 0)`, and inf/NaN pass through. The
+            // zero test is on the float rather than the exponent field: after
+            // the fixup above a subnormal is a legitimate result, so only a
+            // true zero should be rejected here.
+            let valid = self.is_finite() & self.cmp_ne(Self::ZERO);
+
+            exp = exp.zz(valid.cast());
+            fraction = valid.select(fraction, bits);
         }
 
         (Self::from_bits(fraction), exp)

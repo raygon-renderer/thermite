@@ -1,5 +1,6 @@
-// Scalar-based, so it could run on wasm, but the `ldexp` extreme-exponent case is a known
-// failure without `strict_ieee754`; keep it off the wasm run for now (revisit in a later phase).
+// Scalar-based, so it could run on wasm. The `ldexp` extreme-exponent case was a known
+// failure (Preserve path couldn't underflow MAX to zero); fixed by the saturated
+// three-multiply split - candidate to enable on the wasm run next time it's touched.
 #![cfg(not(target_arch = "wasm32"))]
 //! Tests for `ldexp` and `frexp` on FloatVectorWithBits.
 //!
@@ -464,7 +465,6 @@ fn ldexp_f32_frexp_roundtrip_subnormals() {
     }
 }
 
-#[cfg_attr(not(feature = "preserve_denormals"), should_panic)]
 #[test]
 fn ldexp_f32_extreme_exponents() {
     // Huge positive exponent
