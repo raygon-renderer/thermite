@@ -1,4 +1,5 @@
 use crate::divider::Divider;
+use crate::vector::ops::{AddMasked as _, SubMasked as _};
 use core::f64::consts::{LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -1060,22 +1061,145 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
 /// When `PI` is true this performs the sinpi/cospi reduction instead - the argument is
 /// reduced in units of one half turn and scaled by pi afterwards, which needs no
 /// extended-precision split at all.
+#[thermite_macros::dispatch(V, thermite = "crate")]
+fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f64>>(xa: &V) -> (V, V, V::Bits) {
+    let xa_bits: V::Bits = xa.into_bits();
+
+    // Extract unbiased exponent and significand
+    let exp =
+        (V::SignedBits::from_bits(xa_bits.shri::<52>()) & V::SignedBits::splat(0x7FF)) - V::SignedBits::splat(1023);
+    let exp_u: V::Unsigned = V::Bits::from_bits(exp.max(V::SignedBits::ZERO)).cast();
+
+    // 53-bit significand with implicit hidden bit restored
+    let sig = (xa_bits & V::Bits::splat(0x000F_FFFF_FFFF_FFFF)) | V::Bits::splat(0x0010_0000_0000_0000);
+
+    // Padded 2/pi table: one zero word prepended to absorb the -55 offset.
+    // Index with (exp + 9) instead of (exp - 55) to avoid unsigned underflow.
+    // 18 fraction words = 1152 bits, enough for the max f64 exponent (1023):
+    // window start (exp - 55) + 128 window bits <= 1096 < 1152.
+    const INVPI_TABLE: [u64; 19] = [
+        0x0000000000000000, // padding
+        0xA2F9836E4E441529,
+        0xFC2757D1F534DDC0,
+        0xDB6295993C439041,
+        0xFE5163ABDEBBC561,
+        0xB7246E3A424DD2E0,
+        0x06492EEA09D1921C,
+        0xFE1DEB1CB129A73E,
+        0xE88235F52EBB4484,
+        0xE99C7026B45F7E41,
+        0x3991D639835339F4,
+        0x9C845F8BBDF9283B,
+        0x1FF897FFDE05980F,
+        0xEF2F118B5A0A6D1F,
+        0x6D367ECF27CB09B7,
+        0x4F463F669E5FEA2D,
+        0x7527BAC7EBE5F17B,
+        0x3D0739F78A5292EA,
+        0x6BFB5FB11F8D5D08,
+    ];
+
+    let biased = exp_u + V::Unsigned::splat(9); // always >= 9, never underflows
+    let idx: V::Unsigned = biased.shri::<6>();
+    let shift = biased & V::Unsigned::splat(63);
+    let inv_shift = (V::Unsigned::splat(64) - shift) & V::Unsigned::splat(63);
+
+    let c0 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx) };
+    let c1 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx + V::Unsigned::ONE) };
+    let c2 = unsafe { V::Unsigned::lookup_unchecked(&INVPI_TABLE, idx + V::Unsigned::TWO) };
+
+    // Shift chunks to align binary point.
+    // Mask shifts by 63 to prevent UB on shift == 64 in some ISAs.
+    let mask = shift.cmp_ne(V::Unsigned::ZERO);
+    let aligned_hi = c0.shlv(shift) | c1.shrv(inv_shift).zz(mask);
+    let aligned_lo = c1.shlv(shift) | c2.shrv(inv_shift).zz(mask);
+
+    let aligned_hi: V::Bits = aligned_hi.cast();
+    let aligned_lo: V::Bits = aligned_lo.cast();
+
+    // Multiply significand by aligned chunks.
+    // 181-bit product: sig(53) * aligned(128); only the low 128 bits matter,
+    // everything above integer bit 127 is a multiple of 4 (discarded mod 4).
+    // Binary point at bit 125: bits 126:125 = quadrant, bits 124:0 = fraction.
+    let prod_hi = sig.mullo(aligned_hi); // bits 127:64 (low half of sig * hi)
+    let prod_lo = sig.mulhi(aligned_lo); // bits 116:64 (high half of sig * lo)
+    let mid_bits = prod_hi + prod_lo; // bits 127:64 of the product
+    let prod_lo_lo = sig.mullo(aligned_lo); // bits 63:0
+
+    // Extract quadrant from bits 62:61 of mid_bits.
+    let mut q_ph: V::Bits = mid_bits.shri::<61>() & V::Bits::splat(3);
+
+    // 61-bit fraction: mid_bits bits 60:0, extended by prod_lo_lo below.
+    let fraction_hi_int = mid_bits & V::Bits::splat(0x1FFF_FFFF_FFFF_FFFF);
+
+    // Reconstruct as double-double (two non-overlapping f64 values).
+    //
+    // frac_hi: top 52 bits of fraction_hi_int, injected as f64 mantissa (exact).
+    // Represents (fraction_hi_int >> 9) * 2^-52.
+    let frac_hi_bits = fraction_hi_int.shri::<9>() | V::Bits::splat(0x3FF0_0000_0000_0000);
+    let frac_hi = V::from_bits(frac_hi_bits) - V::ONE;
+
+    // frac_lo: bottom 9 bits of fraction_hi_int | top 43 bits of prod_lo_lo = 52 bits.
+    // Represents residual * 2^-104. Exact since residual <= 2^52 - 1.
+    let residual = (fraction_hi_int & V::Bits::splat(0x1FF)).shli::<43>() | prod_lo_lo.shri::<21>();
+    let frac_lo_int: V::SignedBits = residual.cast();
+    let frac_lo = V::cast_from(frac_lo_int) * crate::const_splat!(f64: hexf::hexf64!("0x1.0p-104"));
+
+    // Center from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round().
+    // Only frac_hi needs adjustment; frac_lo is unchanged since
+    // (frac_hi - 1) + frac_lo = old_total - 1.
+    let needs_round = frac_hi.cmp_ge(V::HALF);
+    let frac_hi = frac_hi.sub_c(needs_round, V::ONE);
+    q_ph = q_ph.add_c(needs_round.cast(), V::Bits::ONE);
+
+    // Multiply by π/2 as double-double.
+    // π/2 = pi2_hi + pi2_lo where pi2_hi = f64(π/2) and pi2_lo = π/2 - f64(π/2).
+    let pi2_hi = V::FRAC_PI_2;
+    let pi2_lo = crate::const_splat!(f64: 6.123233995736766e-17);
+
+    let x_hi = frac_hi * pi2_hi;
+
+    // Recover rounding error via exact FMA, then add cross terms.
+    // frac_lo * pi2_lo is O(2^-158), negligible.
+    let x_lo = frac_hi.mul_add(pi2_hi, -x_hi) + frac_hi * pi2_lo + frac_lo * pi2_hi;
+
+    (x_hi, x_lo, q_ph)
+}
+
 #[inline(always)]
 pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(
     mut xa: V,
 ) -> (V, V, V::Bits) {
+    let mut is_large = V::Mask::FALSY;
+
     let y = if PI {
         xa + xa // 2x for sinpi/cospi
     } else {
-        if const { P::POLICY.check_overflow } {
-            let limit: V = crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
+        // Without true FMA, `y * dp1` (30-bit dp1) is only exact while y fits in
+        // 23 bits, i.e. |x| <~ 1.3e7 - beyond that Cody-Waite quietly loses bits.
+        // At Best+ (where Payne-Hanek takes over) hand off there; at <= Average
+        // the limit only gates the bounded clamp, so keep the old wider window.
+        is_large = xa.cmp_gt(if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
+                match V::HAS_TRUE_FMA {
+                    true => 1e15,
+                    false => 1e7,
+                }
+            })
+        } else {
+            crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
                 match V::HAS_TRUE_FMA {
                     true => 1e15,
                     false => 1e13,
                 }
-            });
+            })
+        });
 
-            xa = xa.zz(xa.cmp_le(limit)); // set to zero if too large
+        // At Average precision and below there is no Payne-Hanek fallback (it is
+        // reserved for Best+; these tiers stay fast): zero out-of-range lanes so
+        // they at least produce a bounded result.
+        if const { P::POLICY.check_overflow && P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            xa = xa.nz(is_large); // set to zero if too large
         }
 
         xa.scale(FloatConsts::FRAC_2_PI)
@@ -1083,7 +1207,7 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
 
     let y = y.round();
 
-    let q = V::Bits::fast_cast_from(y);
+    let mut q = V::Bits::fast_cast_from(y);
 
     // pi/2 split into three parts for extended precision modular arithmetic
     let dp1 = crate::const_splat!(f64: 7.853981554508209228515625E-1 * 2.0);
@@ -1094,7 +1218,7 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
     // x = ((xa - y * DP1) - y * DP2) - y * DP3;
     // or if calculating sinpi/cospi:
     // x = pi * (xa - y * 0.5)
-    let x = if PI {
+    let mut x = if PI {
         y.nmul_adde(V::HALF, xa).scale(FloatConsts::PI)
     } else if const { V::HAS_TRUE_FMA } {
         // if true FMA is available, we only have to do two FMAs
@@ -1103,14 +1227,30 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
         ((xa - y * dp1) - y * dp2) - y * dp3
     };
 
-    (x, V::ZERO, q)
+    let mut x_lo = V::ZERO;
+
+    // Payne-Hanek fallback for large arguments (non-PI only, Best+ precision).
+    // Non-finite lanes are excluded so inf/NaN still propagate NaN via Cody-Waite.
+    if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
+        && (P::POLICY.avoid_branching || is_large.any())
+    {
+        let is_large = is_large & xa.is_finite();
+
+        let (x_ph, x_lo_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
+
+        x = is_large.select(x_ph, x);
+        x_lo = x_lo_ph.zz(is_large); // zero out x_lo when not using Payne-Hanek
+        q = is_large.select(q_ph, q);
+    }
+
+    (x, x_lo, q)
 }
 
 #[inline(always)]
 fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI: bool>(xx: V) -> (V, V) {
     let xa = xx.abs().flush_denormals::<P>();
 
-    let (x, _x_lo, q) = trig_range_reduction::<P, V, PI>(xa);
+    let (x, x_lo, q) = trig_range_reduction::<P, V, PI>(xa);
 
     // Taylor expansion of sin and cos, valid for -pi/4 <= x <= pi/4
     let x2 = x * x;
@@ -1134,8 +1274,18 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
         4.16666666666665929218E-2,
     ]);
 
-    s = s.mul_adde(x2 * x, x); // s = x + (x * x2) * s;
+    let mut x0 = x;
+
+    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        x0 += x_lo; // fold in the Payne-Hanek low word for Best+ precision
+    }
+
+    s = s.mul_adde(x2 * x, x0); // s = x + (x * x2) * s;
     c = c.mul_adde(x4, x2.nmul_adde(V::HALF, V::ONE)); // c = 1.0 - x2 * 0.5 + (x2 * x2) * c;
+
+    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        c = x.nmul_adde(x_lo, c); // d cos = -sin ~= -x for the low word
+    }
 
     // swap sin and cos if odd quadrant
     let swap = (q & V::Bits::ONE).cmp_ne(V::Bits::ZERO);
