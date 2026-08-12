@@ -580,7 +580,13 @@ impl Policy for GpuDefault {
 ///
 /// For example, this defaults to [`Size`] on WASM. On most CPU platforms this
 /// defaults to [`Performance`].
+///
+/// With the `strict_ieee754` feature the default becomes [`Precision`] (Best
+/// tier): spec-exactness is the entire point of that feature, so the default
+/// policy opts into the expensive-correctness paths (e.g. Payne-Hanek trig
+/// range reduction) that the performance tiers deliberately skip.
 pub type DefaultPolicy = cfg_select! {
+    feature = "strict_ieee754" => Precision,
     all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")) => Size,
     all(feature = "spirv", target_arch = "spirv") => GpuDefault,
     _ => Performance,
