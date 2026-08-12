@@ -636,12 +636,37 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         ui = (ui + V::Bits::splat(0x80000000)) & V::Bits::splat(0xffffffffc0000000);
         t = Self::from_bits(ui);
 
-        let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
-            // original form, 5 simple ops, 2 divisions
+        // Preserving denormals also forces the exact form: the fast one cubes
+        // the root, and for a denormal `x` that lands back in the denormal
+        // range with almost no precision left. `x / (t * t)` never does - see
+        // the matching note in `ps.rs`.
+        let r = if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::HAS_TRUE_FMA
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
+            // original form, 5 simple ops, 2 divisions. Every intermediate is
+            // provably well-behaved (`t*t` exact, `t+t` exact, `r-t` exact,
+            // |r| < |t|), which is what buys the <0.667 ulp bound - fdlibm,
+            // musl and Rust's own libm all use exactly this and never form t^3.
             let xtt = x / (t * t);
             (xtt - t) / ((t + t) + xtt)
+        } else if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            // fast form with the ratio scaled by 1/4: `2t^3 + x` is ~3x and
+            // overflows to NaN for |x| > ~MAX/3, but both scale factors are
+            // exact powers of two, so this is the same quotient with the
+            // intermediates capped near 0.75x. Keeps the single division.
+            //
+            // The 1/4 is folded INTO the cube rather than applied after: the
+            // guess is only ~5 bits, so an overshoot near MAX makes a plain
+            // `t*t*t` overflow before the ratio is ever formed.
+            let t3q = (t * t) * (t * Self::FRAC_1_4); // t^3/4
+            let xq = x * Self::FRAC_1_4;
+
+            (xq - t3q) / t3q.mul_add(Self::TWO, xq)
         } else {
-            // fast form, 3 simple ops, 1 division, 1 fma
+            // fast form, 3 simple ops, 1 division, 1 fma. Overflows for the top
+            // binade - accepted at Medium and below.
             let t3 = t * t * t;
             (x - t3) / t3.mul_add(Self::TWO, x)
         };
@@ -652,7 +677,22 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             return x.cmp_eq(Self::ZERO).select(x, t);
         }
 
-        (hx0.cmp_gt(V::Bits::splat(0x7f800000)) | hx0.cmp_eq(V::Bits::ZERO)).select(x, t)
+        // cbrt(NaN, INF, +-0) is itself.
+        //
+        // `hx0` is the HIGH word of the f64, so the non-finite threshold is
+        // 0x7FF00000 (f64's infinity there), NOT 0x7F800000 - that is f32's
+        // pattern, and using it misclassified every finite value with exponent
+        // >= 1017 (|x| > ~1.4e306, `f64::MAX` included) as non-finite and
+        // handed it straight back. `>=` rather than `>` so infinity itself is
+        // caught, matching musl.
+        //
+        // The zero test is on the float for the same reason: `hx0 == 0` is also
+        // true for every subnormal below 2^-1043, which would return those
+        // unchanged (`cbrt(5e-324)` giving `5e-324`). musl tests it after its
+        // 2^54 rescale to avoid exactly this.
+        let non_finite = hx0.cmp_ge(V::Bits::splat(0x7ff00000)).cast::<Self::Mask>();
+
+        (non_finite | x.cmp_eq(Self::ZERO)).select(x, t)
     }
 
     #[inline(always)]

@@ -1,4 +1,9 @@
-use crate::{divider::Divider, math::policy::policies::MediumPrecision, vector::ops::AddMasked as _};
+use crate::{
+    divider::Divider,
+    math::policy::policies::MediumPrecision,
+    vector::ops::{AddMasked as _, BitAndNot as _},
+};
+
 use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
@@ -721,7 +726,20 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // using extended precision is slower but perfectly accurate, but the single-precision
         // branch is only remotely accurate with fused multiply-adds.
-        if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
+        //
+        // Preserving denormals also forces this path: the fast branch cubes the
+        // root, and for a denormal `x` the root cubes straight back INTO the
+        // denormal range (x = 1e-45 -> t = 1.12e-15 -> t^3 = 1e-45, one
+        // significant bit left), which cost ~3% at the bottom of the range.
+        // Extended precision keeps t^3 comfortably normal. Asking to preserve
+        // denormals is already asking for care around them, so this is the
+        // cheap and coherent fix - the alternative, refining against the
+        // pre-scaled value, restructures the kernel for one policy corner.
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::HAS_TRUE_FMA
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
             let mut td: Self::ExtendedPrecision = t.cast();
             let xd: Self::ExtendedPrecision = x.cast();
 
@@ -733,21 +751,42 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             }
 
             t = td.cast();
-        } else {
-            let two = V::TWO;
+        } else if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            // Halley's method, with the ratio scaled by 1/4.
+            //
+            // `t^3` alone is ~x and always fine; it is the combination that
+            // bites - the raw form's `2t^3 + x` is ~3x and overflows to NaN for
+            // the last binade (|x| > ~MAX/3). Scaling numerator and denominator
+            // by 1/4 leaves the quotient bit-identical (both factors are exact
+            // powers of two) while capping the intermediates near 0.75x, so no
+            // input can overflow. Costs one multiply per iteration plus one
+            // hoisted, and still runs ONE division per iteration against the
+            // exact form's two.
+            let xq = x * V::FRAC_1_4;
 
-            // couple iterations of Halley's method
-            // This isn't perfect, as it's only limited to single-precision,
-            // but the fused multiply-adds helps
             for _ in 0..2 {
-                let t3 = t * t * t;
-                t *= two.mul_add(x, t3) / two.mul_add(t3, x); // try to use extended precision where possible
+                // t^3/4, with the 1/4 folded INTO the cube: the initial guess is
+                // only ~5 bits, so an overshoot near MAX makes a plain `t*t*t`
+                // overflow before the ratio is ever formed.
+                let t3q = (t * t) * (t * V::FRAC_1_4);
+
+                // (2x + t^3) / (2t^3 + x), scaled: (0.5x + 0.25t^3) / (0.5t^3 + 0.25x)
+                t *= x.mul_add(V::HALF, t3q) / t3q.mul_add(V::TWO, xq);
             }
 
             // FMA residual correction - compute t^3 - x precisely, then one Newton step
-            if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
-                let t2 = t * t;
-                t -= t2.mul_sub(t, x) / (t2 * crate::const_splat!(f32: 3.0)); // t^3 - x, exact to FMA precision
+            let t2 = t * t;
+            t -= t2.mul_sub(t, x) / (t2 * crate::const_splat!(f32: 3.0)); // t^3 - x, exact to FMA precision
+        } else {
+            // Medium and below: the raw ratio, one multiply per iteration
+            // cheaper. `2t^3 + x` overflows for |x| > ~MAX/3, so the top binade
+            // gives NaN - accepted at this tier, which trades edge-case range
+            // for speed by design.
+            let two = V::TWO;
+
+            for _ in 0..2 {
+                let t3 = t * t * t;
+                t *= two.mul_add(x, t3) / two.mul_add(t3, x);
             }
         }
 
@@ -755,8 +794,12 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             return x.cmp_eq(V::ZERO).select(x, t);
         }
 
-        // cbrt(NaN,INF,+-0) is itself
-        (hx0.cmp_gt(V::Bits::splat(0x7f800000)) | hx0.cmp_eq(V::Bits::ZERO)).select(x, t)
+        // cbrt(NaN, INF, +-0) is itself. `>=` rather than `>`: infinity IS
+        // 0x7f800000, so `>` let it fall through to the algorithm, where the
+        // Halley step divides inf by inf and produced NaN. musl uses `>=` here
+        // for the same reason. (`hx0 == 0` is a sound zero test for f32 - it is
+        // the whole word, unlike the f64 kernel's high word.)
+        (hx0.cmp_ge(V::Bits::splat(0x7f800000)) | hx0.cmp_eq(V::Bits::ZERO)).select(x, t)
     }
 
     #[inline(always)]
@@ -1055,6 +1098,9 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
             }
         }));
 
+        // At Average precision and below there is no Payne-Hanek fallback (it is
+        // reserved for Best+; these tiers stay fast): zero out-of-range lanes so
+        // they at least produce a bounded result.
         if const { P::POLICY.check_overflow && P::POLICY.precision.le(PrecisionPolicy::Average) } {
             xa = xa.nz(is_large); // set to zero if too large
         }
@@ -1091,10 +1137,13 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
 
     let mut x_lo = V::ZERO;
 
-    // Payne-Hanek fallback for large arguments (non-PI only, Best+ precision)
+    // Payne-Hanek fallback for large arguments (non-PI only, Best+ precision).
+    // Non-finite lanes are excluded so inf/NaN still propagate NaN via Cody-Waite.
     if const { P::POLICY.precision.gt(PrecisionPolicy::Average) && !PI }
         && (P::POLICY.avoid_branching || is_large.any())
     {
+        let is_large = is_large & xa.is_finite();
+
         let (x_ph, x_lo_ph, q_ph) = payne_hanek_reduction::<P, V>(&xa);
 
         x = is_large.select(x_ph, x);
@@ -1552,14 +1601,15 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
         // https://stackoverflow.com/a/39822314/2083075
         // natural log on [0x1.f7a5ecp-127, 0x1.fffffep127]. Maximum relative error 9.4529e-5
 
-        let a = V::SignedBits::from_bits(x0);
+        // ln_1p reduces to ln(1 + x); the bit-level exponent split below only
+        // works on the actual argument of ln, so form it first. The rounding
+        // this costs near zero is patched up after the polynomial.
+        let x1 = if P1 { x0 + V::ONE } else { x0 };
+
+        let a = V::SignedBits::from_bits(x1);
         let e = (a - V::SignedBits::splat(0x3f2aaaab)) & V::SignedBits::splat(0xff800000u32 as i32);
         let i = V::cast_from(e) * crate::const_splat!(f32: 1.19209290e-7);
-        let mut f = V::from_bits(a - e);
-
-        if !P1 {
-            f -= V::ONE;
-        }
+        let f = V::from_bits(a - e) - V::ONE;
 
         let s = f * f;
 
@@ -1573,7 +1623,23 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
             crate::const_splat!(f32: -0.498910338),
         ); // 0x1.53ca34p-2, -0x1.fee25ap-2
         let r = r.mul_adde(s, t).mul_adde(s, f);
-        let r = i.mul_adde(crate::const_splat!(f32: 0.693147182), r); // 0x1.62e430p-1 // log(2)
+        let mut r = i.mul_adde(crate::const_splat!(f32: 0.693147182), r); // 0x1.62e430p-1 // log(2)
+
+        if P1 {
+            // Forming 1 + x rounds away the low bits of x, which dominates the
+            // relative error once |x| < ~1e-4. There ln_1p(x) = x to ~5e-5
+            // relative, inside the Medium tolerance, so just return x.
+            let small = x0.abs().cmp_lt(crate::const_splat!(f32: 1e-4));
+            r = small.select(x0, r);
+        }
+
+        if const { P::POLICY.check_overflow } {
+            // the bit trick above returns garbage outside (0, inf); patch the edges
+            r = x1.cmp_lt(V::ZERO).select(V::NAN, r);
+            r = x1.cmp_eq(V::ZERO).select(V::NEG_INFINITY, r);
+            r = x1.is_infinite().bitandnot(x1.is_negative()).select(x1, r);
+            r = x1.is_nan().select(x1, r);
+        }
 
         return r;
     }
