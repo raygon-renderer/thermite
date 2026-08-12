@@ -566,6 +566,7 @@ macro_rules! decl_methods {
         ),* $(,)?]),+
     ) => {paste::paste! {
         #[repr(C)]
+        #[derive(Clone, Copy)]
         pub struct VTable {
             pub disable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
             pub enable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
@@ -587,6 +588,11 @@ macro_rules! decl_methods {
             pub name: *const c_char,
         }
 
+        // SAFETY: a `VTable` is immutable once constructed (all uses are `const`-built
+        // statics); `name` points to a static null-terminated string, and fn pointers
+        // are freely shareable. The raw pointer field is what blocks the auto impl.
+        unsafe impl Sync for VTable {}
+
         decl_methods!(POLICY DefaultPolicy =>
             $( MAPPING: $trait [$( $(#[$meta])* ($($input),+) $([ $($scalar: $ty),+ ])? $mapping $suffix $method ($($output),+) ),*] ),+ );
 
@@ -605,7 +611,7 @@ macro_rules! decl_methods {
             /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f32` elements.
             #[inline(never)] #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<thermite_ $mapping f_ $suffix>](len: usize, $( $input: *const f32, )+ $( $output: *mut f32, )+ $( $($scalar: [<$ty f>],)+ )?)
-            { unsafe { (THERMITE_VTABLE.[<$mapping f_ $suffix>])(len, $( $input, )+ $( $output, )+ $( $($scalar,)+ )? ) }; }
+            { unsafe { (vtable().[<$mapping f_ $suffix>])(len, $( $input, )+ $( $output, )+ $( $($scalar,)+ )? ) }; }
 
             $(#[$meta])*
             ///
@@ -613,64 +619,136 @@ macro_rules! decl_methods {
             /// The caller must ensure that pointers are valid for reads (const ptrs) or writes of `len` `f64` elements.
             #[inline(never)] #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<thermite_ $mapping _ $suffix>](len: usize, $( $input: *const f64, )+ $( $output: *mut f64, )+ $( $($scalar: $ty,)+ )?)
-            { unsafe { (THERMITE_VTABLE.[<$mapping _ $suffix>])(len, $( $input, )+ $( $output, )+ $( $($scalar,)+ )? ) }; }
+            { unsafe { (vtable().[<$mapping _ $suffix>])(len, $( $input, )+ $( $output, )+ $( $($scalar,)+ )? ) }; }
         )*)+
     }};
 }
 
-static mut THERMITE_POLICY: ThermitePrecisionPolicy = ThermitePrecisionPolicy::DefaultPolicy;
+use core::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
+
+static THERMITE_POLICY: AtomicI32 = AtomicI32::new(ThermitePrecisionPolicy::DefaultPolicy as i32);
+
 // AArch64 always has AdvSIMD, so the NEON table is correct before `thermite_init`
 // is ever called and there is no scalar stage to fall back through. Elsewhere the
 // scalar table is the safe pre-init default until dispatch runs.
+//
+// The active table is an atomic pointer into immutable per-(policy, ISA) statics
+// (see `VTable::get_static`), so concurrent `thermite_init` and math calls are
+// just an atomic pointer swap - no data race, and the tables themselves never
+// change.
+//
+// Every access is `SeqCst`. Nothing here needs it, each table is fully
+// initialized at compile time, so there is no data behind the pointer to publish
+// and `Relaxed` would be correct, but the ordering is not on any path where it
+// could pay for itself, so the strongest one is the honest default:
+//
+// - The store side runs once, inside `thermite_init`.
+// - A `SeqCst` load is a plain `mov` on x86-64, identical to `Relaxed`; on
+//   AArch64 it is one `ldar` instead of `ldr`, per exported call, against a
+//   whole array of work.
+//
+// If a table ever becomes lazily initialized, this must stay at least
+// Acquire/Release. The reasoning above is what would otherwise be lost.
 #[cfg(target_arch = "aarch64")]
-static mut THERMITE_VTABLE: VTable = VTable::neon_default_policy();
+static THERMITE_VTABLE: AtomicPtr<VTable> = {
+    static DEFAULT: VTable = VTable::neon_default_policy();
+    AtomicPtr::new(&DEFAULT as *const VTable as *mut VTable)
+};
 #[cfg(not(target_arch = "aarch64"))]
-static mut THERMITE_VTABLE: VTable = VTable::scalar_default_policy();
+static THERMITE_VTABLE: AtomicPtr<VTable> = {
+    static DEFAULT: VTable = VTable::scalar_default_policy();
+    AtomicPtr::new(&DEFAULT as *const VTable as *mut VTable)
+};
+
+/// The currently active vtable. One atomic pointer load; the pointee is an
+/// immutable `static`, valid for the life of the program.
+#[inline(always)]
+fn vtable() -> &'static VTable {
+    unsafe { &*THERMITE_VTABLE.load(Ordering::SeqCst) }
+}
+
+/// Names the immutable `static` table built by the given `const` constructor.
+///
+/// Each expansion gets its own function-local `static`, so a table exists only
+/// if some arm of [`VTable::get_static`] can actually select it.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+macro_rules! vt {
+    ($ctor:ident) => {{
+        static VT: VTable = VTable::$ctor();
+        &VT
+    }};
+}
 
 impl VTable {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    /// The table for `policy` on this machine, by value.
+    ///
+    /// Only for `thermite_init_vtable`, which fills a caller-owned struct.
+    /// Everything internal publishes [`VTable::get_static`] through
+    /// `THERMITE_VTABLE` instead, and never copies a table.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn get(policy: ThermitePrecisionPolicy) -> Self {
+        *Self::get_static(policy)
+    }
+
+    /// The immutable static table for `policy` on this machine.
+    ///
+    /// A reference rather than a value, so it can be published through an
+    /// atomic pointer and shared by every caller for the life of the program.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    pub fn get_static(policy: ThermitePrecisionPolicy) -> &'static Self {
         use thermite::isa::InstructionSet;
 
         match (policy, InstructionSet::get()) {
             #[cfg(feature = "high_performance")]
-            (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V2) => Self::x86v2_high_performance(),
+            (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V2) => vt!(x86v2_high_performance),
             #[cfg(feature = "high_performance")]
-            (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V3) => Self::x86v3_high_performance(),
+            (ThermitePrecisionPolicy::HighPerformance, InstructionSet::X86V3) => vt!(x86v3_high_performance),
 
             #[cfg(feature = "high_precision")]
-            (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V2) => Self::x86v2_high_precision(),
+            (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V2) => vt!(x86v2_high_precision),
             #[cfg(feature = "high_precision")]
-            (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V3) => Self::x86v3_high_precision(),
+            (ThermitePrecisionPolicy::HighPrecision, InstructionSet::X86V3) => vt!(x86v3_high_precision),
 
-            (_, InstructionSet::X86V2) => Self::x86v2_default_policy(),
-            (_, InstructionSet::X86V3) => Self::x86v3_default_policy(),
+            (_, InstructionSet::X86V2) => vt!(x86v2_default_policy),
+            (_, InstructionSet::X86V3) => vt!(x86v3_default_policy),
 
             #[cfg(feature = "high_performance")]
-            (ThermitePrecisionPolicy::HighPerformance, _) => Self::scalar_high_performance(),
+            (ThermitePrecisionPolicy::HighPerformance, _) => vt!(scalar_high_performance),
             #[cfg(feature = "high_precision")]
-            (ThermitePrecisionPolicy::HighPrecision, _) => Self::scalar_high_precision(),
+            (ThermitePrecisionPolicy::HighPrecision, _) => vt!(scalar_high_precision),
 
-            (_, _) => Self::scalar_default_policy(),
+            (_, _) => vt!(scalar_default_policy),
         }
     }
 
-    /// AdvSIMD is mandatory in AArch64, so there is nothing to detect: the policy
-    /// is the only choice, and every rung below NEON is unreachable.
+    /// See [`VTable::get_static`]; AdvSIMD is mandatory in AArch64, so there is
+    /// nothing to detect - the policy is the only choice, and every rung below
+    /// NEON is unreachable.
     #[cfg(target_arch = "aarch64")]
-    pub fn get(policy: ThermitePrecisionPolicy) -> Self {
+    pub fn get_static(policy: ThermitePrecisionPolicy) -> &'static Self {
         match policy {
             #[cfg(feature = "high_performance")]
-            ThermitePrecisionPolicy::HighPerformance => Self::neon_high_performance(),
+            ThermitePrecisionPolicy::HighPerformance => vt!(neon_high_performance),
             #[cfg(feature = "high_precision")]
-            ThermitePrecisionPolicy::HighPrecision => Self::neon_high_precision(),
-            _ => Self::neon_default_policy(),
+            ThermitePrecisionPolicy::HighPrecision => vt!(neon_high_precision),
+            _ => vt!(neon_default_policy),
         }
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn init() {
-        unsafe { THERMITE_VTABLE = Self::get(THERMITE_POLICY) };
+        const HIGH_PERFORMANCE: i32 = ThermitePrecisionPolicy::HighPerformance as i32;
+        const HIGH_PRECISION: i32 = ThermitePrecisionPolicy::HighPrecision as i32;
+
+        // Anything else, including a discriminant C invented, lands on the default.
+        let policy = match THERMITE_POLICY.load(Ordering::SeqCst) {
+            HIGH_PERFORMANCE => ThermitePrecisionPolicy::HighPerformance,
+            HIGH_PRECISION => ThermitePrecisionPolicy::HighPrecision,
+            _ => ThermitePrecisionPolicy::DefaultPolicy,
+        };
+
+        let table = Self::get_static(policy);
+        THERMITE_VTABLE.store(table as *const VTable as *mut VTable, Ordering::SeqCst);
     }
 }
 
@@ -702,32 +780,31 @@ pub extern "C" fn thermite_init() {
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub extern "C" fn thermite_init_with_policy(policy: ThermitePrecisionPolicy) {
-    unsafe { THERMITE_POLICY = policy };
+    THERMITE_POLICY.store(policy as i32, Ordering::SeqCst);
     thermite_init();
 }
 
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub extern "C" fn thermite_backend_name() -> *const c_char {
-    // SAFETY: The returned pointer is valid as long as the program is running,
-    // and points to a null-terminated string. Even if VTABLE is changed,
+    // The returned pointer is valid as long as the program is running,
+    // and points to a null-terminated string. Even if the vtable is swapped,
     // the string it points to will still be valid.
-    // #[allow(static_mut_refs)]
-    unsafe { THERMITE_VTABLE.name }
+    vtable().name
 }
 
 /// Attempt to disable denormal handling on the current thread.
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub extern "C" fn thermite_disable_denormals() -> ThermiteDenormalResult {
-    unsafe { (THERMITE_VTABLE.disable_denormals)() }
+    unsafe { (vtable().disable_denormals)() }
 }
 
 /// Attempt to enable denormal handling on the current thread.
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub extern "C" fn thermite_enable_denormals() -> ThermiteDenormalResult {
-    unsafe { (THERMITE_VTABLE.enable_denormals)() }
+    unsafe { (vtable().enable_denormals)() }
 }
 
 decl_methods! {
