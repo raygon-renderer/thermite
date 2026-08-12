@@ -256,6 +256,11 @@ pub trait GenericMask: 'static + Sized + Copy + Default + core::fmt::Debug
     /// [`BitwiseVector::ternlog`](crate::vector::BitwiseVector::ternlog); see
     /// that method for how to compute `IMM`.
     fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+
+    /// Whether [`ternlog`](Self::ternlog) is a single native instruction rather
+    /// than the DNF polyfill, forwarded from the underlying mask register. See
+    /// [`BitwiseVector::HAS_NATIVE_TERNLOG`](crate::vector::BitwiseVector::HAS_NATIVE_TERNLOG).
+    const HAS_NATIVE_TERNLOG: bool;
 }
 
 /// SIMD Mask Vector, where each lane is a boolean value represented by
@@ -448,6 +453,8 @@ impl<R: Register> GenericMask for Mask<R> {
     fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {
         Mask(<R::Mask as BitwiseRegister>::ternlog::<IMM>(a.0, b.0, c.0))
     }
+
+    const HAS_NATIVE_TERNLOG: bool = <R::Mask as BitwiseRegister>::HAS_NATIVE_TERNLOG;
 }
 
 /// Trait for types that support selection based on a mask.

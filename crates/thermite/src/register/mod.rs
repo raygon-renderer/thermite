@@ -349,6 +349,17 @@ pub trait BitwiseRegister: CoreRegister {
         Self::bitand(Self::not(lhs), rhs)
     }
 
+    /// Whether [`ternlog`](Self::ternlog) is a single native instruction
+    /// (AVX-512 `vpternlog{d,q}`) rather than the DNF polyfill below.
+    ///
+    /// Kernels with a choice between a mask + ternlog bit assembly and a
+    /// `blendv`-style select chain should fork on this: the polyfill expands
+    /// to up to 8 DNF terms, so below AVX-512 the blends win, while a native
+    /// ternlog collapses the whole assembly into one instruction per term.
+    /// Measured on znver3 (ldexp's checked tail): 3.8 cyc/iter for the blend
+    /// form against 5.8 for the ternlog form.
+    const HAS_NATIVE_TERNLOG: bool = false;
+
     /// const A = 0xF0, B = 0xCC, C = 0xAA
     #[conditional] fn ternlog<const IMM: i32>(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
         let mut acc = Self::EMPTY;
@@ -2271,6 +2282,14 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
 /// including of varying element types.
 pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     /// Cast a register from another register type.
+    ///
+    /// For float -> int casts this behaves like `as` (truncation toward zero)
+    /// **for in-range finite inputs only**: out-of-range or NaN lanes produce a
+    /// backend-defined value (x86 returns the hardware "indefinite" integer,
+    /// `INT::MIN`, where scalar `as` would saturate). For exact `as` semantics
+    /// on every input - NaN -> 0, out-of-range clamps - use
+    /// [`SaturatingCastRegister`]. Under the `strict_ieee754` feature,
+    /// float -> int `cast` itself routes to the saturating implementation.
     fn cast_from(value: Storage<FROM>) -> Storage<Self>;
 
     /// Cast a register to another register type, potentially faster
@@ -2284,15 +2303,23 @@ pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     }
 }
 
-/// A narrowing cast that clamps (saturates) out-of-range source values to the
+/// A cast that clamps (saturates) out-of-range source values to the
 /// destination element's representable range, instead of the wrapping
-/// truncation [`CastRegister`] performs.
+/// truncation (integer) or backend-defined indefinite value (float -> int)
+/// [`CastRegister`] produces.
 ///
-/// Implemented only in the **narrowing, same-signedness** direction
-/// (`i64 -> i32 -> i16 -> i8`, `u64 -> u32 -> u16 -> u8`, including skip-level
-/// pairs such as `i64 -> i8`). Widening conversions lose nothing and go through
-/// [`CastRegister`]; sign-changing conversions are intentionally out of scope
-/// (use [`CastRegister`], which wraps).
+/// Implemented in two directions:
+///
+/// - **narrowing, same-signedness integers**
+///   (`i64 -> i32 -> i16 -> i8`, `u64 -> u32 -> u16 -> u8`, including
+///   skip-level pairs such as `i64 -> i8`). Widening conversions lose nothing
+///   and go through [`CastRegister`]; sign-changing conversions are
+///   intentionally out of scope (use [`CastRegister`], which wraps).
+/// - **same-width float -> int** (`f32 -> i32/u32`, `f64 -> i64/u64`), with
+///   exact Rust `as` semantics: NaN -> 0, out-of-range clamps to the
+///   destination MIN/MAX. This is the checked counterpart to the fast
+///   [`CastRegister`] float -> int path, whose out-of-range/NaN results are
+///   backend-defined.
 ///
 /// # Reference semantics
 ///

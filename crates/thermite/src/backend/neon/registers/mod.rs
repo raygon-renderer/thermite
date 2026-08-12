@@ -154,6 +154,60 @@ impl_type_casts! {
     U64x2Neon as F64x2Neon => vcvtq_f64_u64,
 }
 
+// Float -> int saturating casts: aarch64 FCVTZS/FCVTZU already truncate toward
+// zero, saturate out-of-range values, and map NaN to 0 - exact `as` semantics -
+// so `cast` and `saturating_cast` are the same operation on NEON (and the
+// strict_ieee754 cast swap is a no-op here).
+macro_rules! impl_saturating_via_cast {
+    ($($from:ty as $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl crate::register::SaturatingCastRegister<$from> for $to {
+            fn saturating_cast_from(
+                value: crate::register::Storage<$from>,
+            ) -> crate::register::Storage<Self> {
+                <Self as crate::register::CastRegister<$from>>::cast_from(value)
+            }
+        }
+    )*};
+}
+
+impl_saturating_via_cast! {
+    F32x4Neon as I32x4Neon,
+    F32x4Neon as U32x4Neon,
+    F64x2Neon as I64x2Neon,
+    F64x2Neon as U64x2Neon,
+}
+
+// Cross-width float -> int saturating casts, one row per Simd lane count
+// (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
+// same-width saturating casts above and the integer-narrowing saturating matrix.
+impl_saturating_float_matrix! {
+    [F32x2Neon, F64x2Neon, I32x2Neon, U32x2Neon, I64x2Neon, U64x2Neon,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4Neon, ArrayRegister<F64x2Neon, 2>, I32x4Neon, U32x4Neon, ArrayRegister<I64x2Neon, 2>,
+        ArrayRegister<U64x2Neon, 2>, half16::I16x4Neon, half16::U16x4Neon, half8::I8x4Neon, half8::U8x4Neon],
+}
+
+impl_saturating_cast_via! {
+    // x8 (wide rows are partial: the ArrayRegister cast ladder bridges the
+    // factor-of-two array<->array pairs from the x4 impls stamped above)
+    ArrayRegister<F32x4Neon, 2> as I16x8Neon => via ArrayRegister<I32x4Neon, 2>,
+    ArrayRegister<F32x4Neon, 2> as half8::I8x8Neon => via ArrayRegister<I32x4Neon, 2>,
+    ArrayRegister<F32x4Neon, 2> as U16x8Neon => via ArrayRegister<U32x4Neon, 2>,
+    ArrayRegister<F32x4Neon, 2> as half8::U8x8Neon => via ArrayRegister<U32x4Neon, 2>,
+    ArrayRegister<F64x2Neon, 4> as I16x8Neon => via ArrayRegister<I64x2Neon, 4>,
+    ArrayRegister<F64x2Neon, 4> as half8::I8x8Neon => via ArrayRegister<I64x2Neon, 4>,
+    ArrayRegister<F64x2Neon, 4> as U16x8Neon => via ArrayRegister<U64x2Neon, 4>,
+    ArrayRegister<F64x2Neon, 4> as half8::U8x8Neon => via ArrayRegister<U64x2Neon, 4>,
+    // x16
+    ArrayRegister<F32x4Neon, 4> as I8x16Neon => via ArrayRegister<I32x4Neon, 4>,
+    ArrayRegister<F32x4Neon, 4> as U8x16Neon => via ArrayRegister<U32x4Neon, 4>,
+    ArrayRegister<F64x2Neon, 8> as ArrayRegister<I16x8Neon, 2> => via ArrayRegister<I64x2Neon, 8>,
+    ArrayRegister<F64x2Neon, 8> as ArrayRegister<U16x8Neon, 2> => via ArrayRegister<U64x2Neon, 8>,
+    ArrayRegister<F64x2Neon, 8> as I8x16Neon => via ArrayRegister<I64x2Neon, 8>,
+    ArrayRegister<F64x2Neon, 8> as U8x16Neon => via ArrayRegister<U64x2Neon, 8>,
+}
+
 use crate::{
     element::FindUSize,
     register::{IndexableRegister, array::ArrayRegister},

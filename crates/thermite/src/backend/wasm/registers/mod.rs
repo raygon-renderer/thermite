@@ -408,6 +408,58 @@ impl_type_casts! {
     U8x16Wasm as I8x16Wasm => identity,
 }
 
+// Float -> int saturating casts: wasm's `cast` already has exact `as` semantics
+// in both directions (`*_trunc_sat_*` for f32, per-lane scalar `as` for f64), so
+// the saturating variant simply reuses it. Only `fast_cast` (relaxed trunc /
+// `_limited` magic) has the narrow-domain behavior.
+macro_rules! impl_saturating_via_cast {
+    ($($from:ty as $to:ty),* $(,)?) => {$(
+        #[thermite_macros::inline_always]
+        impl crate::register::SaturatingCastRegister<$from> for $to {
+            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                <Self as crate::register::CastRegister<$from>>::cast_from(value)
+            }
+        }
+    )*};
+}
+
+impl_saturating_via_cast! {
+    F32x4Wasm as I32x4Wasm,
+    F32x4Wasm as U32x4Wasm,
+    F64x2Wasm as I64x2Wasm,
+    F64x2Wasm as U64x2Wasm,
+}
+
+// Cross-width float -> int saturating casts, one row per Simd lane count
+// (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
+// same-width saturating casts above and the integer-narrowing saturating matrix.
+impl_saturating_float_matrix! {
+    [F32x2Wasm, F64x2Wasm, I32x2Wasm, U32x2Wasm, I64x2Wasm, U64x2Wasm,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4Wasm, ArrayRegister<F64x2Wasm, 2>, I32x4Wasm, U32x4Wasm, ArrayRegister<I64x2Wasm, 2>,
+        ArrayRegister<U64x2Wasm, 2>, half16::I16x4Wasm, half16::U16x4Wasm, half8::I8x4Wasm, half8::U8x4Wasm],
+}
+
+impl_saturating_cast_via! {
+    // x8 (wide rows are partial: the ArrayRegister cast ladder bridges the
+    // factor-of-two array<->array pairs from the x4 impls stamped above)
+    ArrayRegister<F32x4Wasm, 2> as I16x8Wasm => via ArrayRegister<I32x4Wasm, 2>,
+    ArrayRegister<F32x4Wasm, 2> as half8::I8x8Wasm => via ArrayRegister<I32x4Wasm, 2>,
+    ArrayRegister<F32x4Wasm, 2> as U16x8Wasm => via ArrayRegister<U32x4Wasm, 2>,
+    ArrayRegister<F32x4Wasm, 2> as half8::U8x8Wasm => via ArrayRegister<U32x4Wasm, 2>,
+    ArrayRegister<F64x2Wasm, 4> as I16x8Wasm => via ArrayRegister<I64x2Wasm, 4>,
+    ArrayRegister<F64x2Wasm, 4> as half8::I8x8Wasm => via ArrayRegister<I64x2Wasm, 4>,
+    ArrayRegister<F64x2Wasm, 4> as U16x8Wasm => via ArrayRegister<U64x2Wasm, 4>,
+    ArrayRegister<F64x2Wasm, 4> as half8::U8x8Wasm => via ArrayRegister<U64x2Wasm, 4>,
+    // x16
+    ArrayRegister<F32x4Wasm, 4> as I8x16Wasm => via ArrayRegister<I32x4Wasm, 4>,
+    ArrayRegister<F32x4Wasm, 4> as U8x16Wasm => via ArrayRegister<U32x4Wasm, 4>,
+    ArrayRegister<F64x2Wasm, 8> as ArrayRegister<I16x8Wasm, 2> => via ArrayRegister<I64x2Wasm, 8>,
+    ArrayRegister<F64x2Wasm, 8> as ArrayRegister<U16x8Wasm, 2> => via ArrayRegister<U64x2Wasm, 8>,
+    ArrayRegister<F64x2Wasm, 8> as I8x16Wasm => via ArrayRegister<I64x2Wasm, 8>,
+    ArrayRegister<F64x2Wasm, 8> as U8x16Wasm => via ArrayRegister<U64x2Wasm, 8>,
+}
+
 macro_rules! impl_extend_same {
     ($($ty:ty),* $(,)?) => {$( impl crate::register::ExtendRegister<$ty> for $ty {
         #[inline(always)]

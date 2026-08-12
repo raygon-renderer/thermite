@@ -165,14 +165,43 @@ impl NumericRegister for [<f $width>] {
     fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { lhs.alg_rem(rhs) }
     fn sort(value: Storage<Self>) -> Storage<Self> { value } // no-op for scalar
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
+    // Strict IEEE-754: the scalar backend is the differential-test oracle, so it
+    // must define the same tie/NaN semantics the SIMD backends' `fix_min`/`fix_max`
+    // implement: min/max(x, NaN) = x (either operand order), min(-0, +0) = -0 and
+    // max(-0, +0) = +0 regardless of operand order.
+    #[cfg(feature = "strict_ieee754")]
+    fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        if rhs != rhs {
+            lhs
+        } else if lhs == rhs {
+            <$f>::from_bits(lhs.to_bits() | rhs.to_bits())
+        } else if lhs < rhs {
+            lhs
+        } else {
+            rhs
+        }
+    }
+    #[cfg(feature = "strict_ieee754")]
+    fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        if rhs != rhs {
+            lhs
+        } else if lhs == rhs {
+            <$f>::from_bits(lhs.to_bits() & rhs.to_bits())
+        } else if lhs < rhs {
+            rhs
+        } else {
+            lhs
+        }
+    }
+
+    #[cfg(all(not(feature = "strict_ieee754"), any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, lhs, rhs) }
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64"))]
+    #[cfg(all(not(feature = "strict_ieee754"), any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { core::hint::select_unpredictable(lhs < rhs, rhs, lhs) }
 
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
+    #[cfg(not(any(feature = "strict_ieee754", target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
     fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { lhs } else { rhs } }
-    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
+    #[cfg(not(any(feature = "strict_ieee754", target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
     fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { if lhs < rhs { rhs } else { lhs } }
 }
 

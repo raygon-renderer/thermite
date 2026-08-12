@@ -114,6 +114,8 @@ impl<R: BitwiseRegister, const N: usize> BitwiseRegister for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
 {
+    const HAS_NATIVE_TERNLOG: bool = R::HAS_NATIVE_TERNLOG;
+
     #[conditional] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}

@@ -90,6 +90,31 @@ impl_saturating_casts! {
     u16 as (u8),
 }
 
+// Float -> int saturating casts: Rust `as` already has exactly the saturating
+// semantics (NaN -> 0, out-of-range clamps to MIN/MAX), so the plain cast is
+// the reference implementation the SIMD backends must match.
+macro_rules! impl_saturating_float_casts {
+    ($($from:ty as ($($to:ty),+)),* $(,)?) => {$(
+        $(
+            #[thermite_macros::inline_always]
+            impl SaturatingCastRegister<$from> for $to {
+                fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                    value as $to
+                }
+            }
+        )+
+    )*};
+}
+
+impl_saturating_float_casts! {
+    // same-width
+    f32 as (i32, u32),
+    f64 as (i64, u64),
+    // cross-width (`as` saturates at the DESTINATION's range regardless of width)
+    f32 as (i8, i16, i64, u8, u16, u64),
+    f64 as (i8, i16, i32, u8, u16, u32),
+}
+
 // all different-sized casts
 impl_nontrivial_casts! {
     //     (f32, f64, i8, i16, i32, i64, u8, u16, u32, u64)

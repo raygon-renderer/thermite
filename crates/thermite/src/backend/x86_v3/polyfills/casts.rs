@@ -103,6 +103,62 @@ pub unsafe fn _mm256_cvtpd_epi64x_v3(x: __m256d) -> __m256i {
     _mm256_setr_epi64x(x0, x1, x2, x3)
 }
 
+/// POLYFILL: full-range `f64x4 -> u64x4` conversion (truncating, matching
+/// `f64 as u64` for in-range values). See `_mm_cvtpd_epu64x_v1`.
+#[inline(always)]
+pub unsafe fn _mm256_cvtpd_epu64x_v3(x: __m256d) -> __m256i {
+    let bound = _mm256_set1_pd(9223372036854775808.0); // 2^63
+    let big = _mm256_cmp_pd(x, bound, _CMP_GE_OQ);
+    let xs = _mm256_sub_pd(x, _mm256_and_pd(big, bound));
+
+    _mm256_or_si256(
+        _mm256_cvtpd_epi64x_v3(xs),
+        _mm256_and_si256(_mm256_castpd_si256(big), _mm256_set1_epi64x(i64::MIN)),
+    )
+}
+
+/// POLYFILL: `f32x8 -> i32x8` saturating cast (`f32 as i32`).
+/// See `_mm_cvtps_epi32_satx_v1` for the MIN-XOR trick.
+#[inline(always)]
+pub unsafe fn _mm256_cvtps_epi32_satx_v3(x: __m256) -> __m256i {
+    let t = _mm256_cvttps_epi32(x);
+    let hi = _mm256_castps_si256(_mm256_cmp_ps(x, _mm256_set1_ps(2147483648.0), _CMP_GE_OQ)); // 2^31
+    let nan = _mm256_castps_si256(_mm256_cmp_ps(x, x, _CMP_UNORD_Q));
+
+    _mm256_andnot_si256(nan, _mm256_xor_si256(t, hi))
+}
+
+/// POLYFILL: `f32x8 -> u32x8` saturating cast (`f32 as u32`).
+/// See `_mm_cvtps_epu32_satx_v1`.
+#[inline(always)]
+pub unsafe fn _mm256_cvtps_epu32_satx_v3(x: __m256) -> __m256i {
+    let x0 = _mm256_max_ps(x, _mm256_setzero_ps()); // NaN and negatives -> 0
+    let t = _mm256_cvtps_epu32x_v3(x0);
+    let hi = _mm256_castps_si256(_mm256_cmp_ps(x0, _mm256_set1_ps(4294967296.0), _CMP_GE_OQ)); // 2^32
+
+    _mm256_or_si256(t, hi)
+}
+
+/// POLYFILL: `f64x4 -> i64x4` saturating cast (`f64 as i64`).
+#[inline(always)]
+pub unsafe fn _mm256_cvtpd_epi64_satx_v3(x: __m256d) -> __m256i {
+    let t = _mm256_cvtpd_epi64x_v3(x);
+    let hi = _mm256_castpd_si256(_mm256_cmp_pd(x, _mm256_set1_pd(9223372036854775808.0), _CMP_GE_OQ)); // 2^63
+    let nan = _mm256_castpd_si256(_mm256_cmp_pd(x, x, _CMP_UNORD_Q));
+
+    _mm256_andnot_si256(nan, _mm256_xor_si256(t, hi))
+}
+
+/// POLYFILL: `f64x4 -> u64x4` saturating cast (`f64 as u64`).
+#[inline(always)]
+pub unsafe fn _mm256_cvtpd_epu64_satx_v3(x: __m256d) -> __m256i {
+    let x0 = _mm256_max_pd(x, _mm256_setzero_pd()); // NaN and negatives -> 0
+    let t = _mm256_cvtpd_epu64x_v3(x0);
+    let hi = _mm256_castpd_si256(_mm256_cmp_pd(x0, _mm256_set1_pd(18446744073709551616.0), _CMP_GE_OQ)); // 2^64
+
+    _mm256_or_si256(t, hi)
+}
+
 #[inline(always)]
 pub unsafe fn _mm256_cvtps_epu32x_v3(x: __m256) -> __m256i {
     // TODO: This is exactly what LLVM generates for `simd_cast(f32x4 -> u32x4)`, but it's not ideal and

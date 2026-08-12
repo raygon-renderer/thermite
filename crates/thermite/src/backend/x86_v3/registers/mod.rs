@@ -426,29 +426,13 @@ impl_type_casts! {
     U64x2V3 as U64x2V3 => identity, // u64x2 -> u64x2
     U64x4V3 as U64x4V3 => identity, // u64x4 -> u64x4
 
-    // f32x4 casts
-    // NOTE: `cvtt` (truncate toward zero) - `cast` is "like `as`", which
-    // truncates; plain `cvtps_epi32` rounds in the current mode.
-    F32x4V3 as I32x4V3 => _mm_cvttps_epi32, // f32x4 -> i32x4
-    F32x4V3 as U32x4V3 => _mm_cvtps_epu32x_v2, // f32x4 -> u32x4
+    // int -> float casts (float -> int live in `impl_float_to_int_casts!` below)
     I32x4V3 as F32x4V3 => _mm_cvtepi32_ps, // i32x4 -> f32x4
     U32x4V3 as F32x4V3 => _mm_cvtepu32_psx_v2, // u32x4 -> f32x4
-
-    // f32x8 casts
-    F32x8V3 as I32x8V3 => _mm256_cvttps_epi32, // f32x8 -> i32x8 (truncate, like `as`)
-    F32x8V3 as U32x8V3 => _mm256_cvtps_epu32x_v3, // f32x8 -> u32x8
     I32x8V3 as F32x8V3 => _mm256_cvtepi32_ps, // i32x4 -> f32x4
     U32x8V3 as F32x8V3 => _mm256_cvtepu32_psx_v3, // i32x8 -> f32x8
-
-    // f64x2 casts
-    F64x2V3 as I64x2V3 => _mm_cvtpd_epi64x_v2 | _mm_cvtpd_epi64x_limited_v1, // f64x2 -> i64x2
-    F64x2V3 as U64x2V3 => _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
     I64x2V3 as F64x2V3 => _mm_cvtepi64_pdx_v2 | _mm_cvtepi64_pdx_limited_v1, // i64x2 -> f64x2
     U64x2V3 as F64x2V3 => _mm_cvtepu64_pdx_v2 | _mm_cvtepu64_pdx_limited_v1, // u64x2 -> f64x2
-
-    // f64x4 casts
-    F64x4V3 as I64x4V3 => _mm256_cvtpd_epi64x_v3 | _mm256_cvtpd_epi64x_limited_v3, // f64x4 -> i64x4
-    F64x4V3 as U64x4V3 => _mm256_cvtpd_epu64x_limited_v3, // f64x4 -> u64x4
     I64x4V3 as F64x4V3 => _mm256_cvtepi64_pdx_v3 | _mm256_cvtepi64_pdx_limited_v3, // i64x4 -> f64x4
     U64x4V3 as F64x4V3 => _mm256_cvtepu64_pdx_v3 | _mm256_cvtepu64_pdx_limited_v3, // u64x4 -> f64x4
 
@@ -481,6 +465,46 @@ impl_type_casts! {
     I8x32V3 as U8x32V3 => identity, U8x32V3 as I8x32V3 => identity,
     I8x16V3 as I8x16V3 => identity, U8x16V3 as U8x16V3 => identity,
     I8x16V3 as U8x16V3 => identity, U8x16V3 as I8x16V3 => identity,
+}
+
+impl_float_to_int_casts! {
+    // NOTE: `cvtt` (truncate toward zero) everywhere - `cast` is "like `as`"
+    // for in-range inputs; plain `cvtps_epi32` rounds in the current mode.
+    // `sat` = the `as`-exact saturating variant (also `cast` under strict_ieee754).
+    F32x4V3 as I32x4V3 => _mm_cvttps_epi32 sat _mm_cvtps_epi32_satx_v1, // f32x4 -> i32x4
+    F32x4V3 as U32x4V3 => _mm_cvtps_epu32x_v2 sat _mm_cvtps_epu32_satx_v1, // f32x4 -> u32x4
+    F32x8V3 as I32x8V3 => _mm256_cvttps_epi32 sat _mm256_cvtps_epi32_satx_v3, // f32x8 -> i32x8
+    F32x8V3 as U32x8V3 => _mm256_cvtps_epu32x_v3 sat _mm256_cvtps_epu32_satx_v3, // f32x8 -> u32x8
+
+    F64x2V3 as I64x2V3 => _mm_cvtpd_epi64x_v2 sat _mm_cvtpd_epi64_satx_v1 | _mm_cvtpd_epi64x_limited_v1, // f64x2 -> i64x2
+    F64x2V3 as U64x2V3 => _mm_cvtpd_epu64x_v1 sat _mm_cvtpd_epu64_satx_v1 | _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
+    F64x4V3 as I64x4V3 => _mm256_cvtpd_epi64x_v3 sat _mm256_cvtpd_epi64_satx_v3 | _mm256_cvtpd_epi64x_limited_v3, // f64x4 -> i64x4
+    F64x4V3 as U64x4V3 => _mm256_cvtpd_epu64x_v3 sat _mm256_cvtpd_epu64_satx_v3 | _mm256_cvtpd_epu64x_limited_v3, // f64x4 -> u64x4
+}
+
+// Cross-width float -> int saturating casts, one row per Simd lane count
+// (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
+// same-width saturating casts above and the integer-narrowing saturating matrix.
+impl_saturating_float_matrix! {
+    [F32x2V3, F64x2V3, I32x2V3, U32x2V3, I64x2V3, U64x2V3,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4V3, F64x4V3, I32x4V3, U32x4V3, I64x4V3, U64x4V3,
+        half16::I16x4V3, half16::U16x4V3, half8::I8x4V3, half8::U8x4V3],
+    [F32x8V3, ArrayRegister<F64x4V3, 2>, I32x8V3, U32x8V3, ArrayRegister<I64x4V3, 2>, ArrayRegister<U64x4V3, 2>,
+        I16x8V3, U16x8V3, half8::I8x8V3, half8::U8x8V3],
+}
+
+impl_saturating_cast_via! {
+    // x16: pairs the ArrayRegister cast ladder cannot bridge (the ladder covers
+    // the factor-of-two array<->array pairs from the impls stamped above)
+    ArrayRegister<F32x8V3, 2> as I16x16V3 => via ArrayRegister<I32x8V3, 2>,
+    ArrayRegister<F32x8V3, 2> as U16x16V3 => via ArrayRegister<U32x8V3, 2>,
+    ArrayRegister<F32x8V3, 2> as I8x16V3 => via ArrayRegister<I32x8V3, 2>,
+    ArrayRegister<F32x8V3, 2> as U8x16V3 => via ArrayRegister<U32x8V3, 2>,
+    ArrayRegister<F64x4V3, 4> as I16x16V3 => via ArrayRegister<I64x4V3, 4>,
+    ArrayRegister<F64x4V3, 4> as U16x16V3 => via ArrayRegister<U64x4V3, 4>,
+    ArrayRegister<F64x4V3, 4> as I8x16V3 => via ArrayRegister<I64x4V3, 4>,
+    ArrayRegister<F64x4V3, 4> as U8x16V3 => via ArrayRegister<U64x4V3, 4>,
 }
 
 impl_mask_casts! {

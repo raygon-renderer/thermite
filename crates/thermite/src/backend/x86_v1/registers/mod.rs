@@ -283,15 +283,9 @@ impl_type_casts! {
     U32x4V1 as U32x4V1 => identity, // u32x4 -> u32x4
     U64x2V1 as U64x2V1 => identity, // u64x2 -> u64x2
 
-    // f32x4 casts (truncate toward zero - `cast` is "like `as`")
-    F32x4V1 as I32x4V1 => _mm_cvttps_epi32, // f32x4 -> i32x4
-    F32x4V1 as U32x4V1 => _mm_cvtps_epu32x_v1, // f32x4 -> u32x4
+    // int -> float casts (float -> int live in `impl_float_to_int_casts!` below)
     I32x4V1 as F32x4V1 => _mm_cvtepi32_ps, // i32x4 -> f32x4
     U32x4V1 as F32x4V1 => _mm_cvtepu32_psx_v1, // u32x4 -> f32x4
-
-    // f64x2 casts
-    F64x2V1 as I64x2V1 => _mm_cvtpd_epi64x_v1 | _mm_cvtpd_epi64x_limited_v1, // f64x2 -> i64x2
-    F64x2V1 as U64x2V1 => _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
     I64x2V1 as F64x2V1 => _mm_cvtepi64_pdx_v1 | _mm_cvtepi64_pdx_limited_v1, // i64x2 -> f64x2
     U64x2V1 as F64x2V1 => _mm_cvtepu64_pdx_v1 | _mm_cvtepu64_pdx_limited_v1, // u64x2 -> f64x2
 
@@ -308,6 +302,48 @@ impl_type_casts! {
     // 8-bit self + sibling (i8<->u8)
     I8x16V1 as I8x16V1 => identity, U8x16V1 as U8x16V1 => identity,
     I8x16V1 as U8x16V1 => identity, U8x16V1 as I8x16V1 => identity,
+}
+
+impl_float_to_int_casts! {
+    // truncate toward zero - `cast` is "like `as`" for in-range inputs;
+    // `sat` = the `as`-exact saturating variant (also `cast` under strict_ieee754)
+    F32x4V1 as I32x4V1 => _mm_cvttps_epi32 sat _mm_cvtps_epi32_satx_v1, // f32x4 -> i32x4
+    F32x4V1 as U32x4V1 => _mm_cvtps_epu32x_v1 sat _mm_cvtps_epu32_satx_v1, // f32x4 -> u32x4
+    F64x2V1 as I64x2V1 => _mm_cvtpd_epi64x_v1 sat _mm_cvtpd_epi64_satx_v1 | _mm_cvtpd_epi64x_limited_v1, // f64x2 -> i64x2
+    F64x2V1 as U64x2V1 => _mm_cvtpd_epu64x_v1 sat _mm_cvtpd_epu64_satx_v1 | _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
+}
+
+// Cross-width float -> int saturating casts, one row per Simd lane count
+// (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
+// same-width saturating casts above and the integer-narrowing saturating matrix.
+// Only x2/x4 use the full matrix; the wider rows list just the pairs the
+// `ArrayRegister` cast ladder in `register/array.rs` cannot bridge (the ladder
+// covers array<->array pairs whose lengths differ by a factor of two, bottoming
+// out in the x4 impls stamped here).
+impl_saturating_float_matrix! {
+    [half::F32x2V1, F64x2V1, half::I32x2V1, half::U32x2V1, I64x2V1, U64x2V1,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4V1, ArrayRegister<F64x2V1, 2>, I32x4V1, U32x4V1, ArrayRegister<I64x2V1, 2>, ArrayRegister<U64x2V1, 2>,
+        half16::I16x4V1, half16::U16x4V1, half8::I8x4V1, half8::U8x4V1],
+}
+
+impl_saturating_cast_via! {
+    // x8
+    ArrayRegister<F32x4V1, 2> as I16x8V1 => via ArrayRegister<I32x4V1, 2>,
+    ArrayRegister<F32x4V1, 2> as half8::I8x8V1 => via ArrayRegister<I32x4V1, 2>,
+    ArrayRegister<F32x4V1, 2> as U16x8V1 => via ArrayRegister<U32x4V1, 2>,
+    ArrayRegister<F32x4V1, 2> as half8::U8x8V1 => via ArrayRegister<U32x4V1, 2>,
+    ArrayRegister<F64x2V1, 4> as I16x8V1 => via ArrayRegister<I64x2V1, 4>,
+    ArrayRegister<F64x2V1, 4> as half8::I8x8V1 => via ArrayRegister<I64x2V1, 4>,
+    ArrayRegister<F64x2V1, 4> as U16x8V1 => via ArrayRegister<U64x2V1, 4>,
+    ArrayRegister<F64x2V1, 4> as half8::U8x8V1 => via ArrayRegister<U64x2V1, 4>,
+    // x16
+    ArrayRegister<F32x4V1, 4> as I8x16V1 => via ArrayRegister<I32x4V1, 4>,
+    ArrayRegister<F32x4V1, 4> as U8x16V1 => via ArrayRegister<U32x4V1, 4>,
+    ArrayRegister<F64x2V1, 8> as ArrayRegister<I16x8V1, 2> => via ArrayRegister<I64x2V1, 8>,
+    ArrayRegister<F64x2V1, 8> as ArrayRegister<U16x8V1, 2> => via ArrayRegister<U64x2V1, 8>,
+    ArrayRegister<F64x2V1, 8> as I8x16V1 => via ArrayRegister<I64x2V1, 8>,
+    ArrayRegister<F64x2V1, 8> as U8x16V1 => via ArrayRegister<U64x2V1, 8>,
 }
 
 impl_mask_casts! {

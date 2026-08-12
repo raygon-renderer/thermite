@@ -76,6 +76,73 @@ pub unsafe fn _mm_cvtpd_epi64x_v1(x: __m128d) -> __m128i {
     _mm_set_epi64x(x1, x0)
 }
 
+/// POLYFILL: full-range `f64x2 -> u64x2` conversion (truncating, matching
+/// `f64 as u64` for in-range values). Lanes >= 2^63 are offset into the signed
+/// range before the scalar converts, then the high bit is OR'd back on.
+#[inline(always)]
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn _mm_cvtpd_epu64x_v1(x: __m128d) -> __m128i {
+    let bound = _mm_set1_pd(9223372036854775808.0); // 2^63
+    let big = _mm_cmpge_pd(x, bound);
+    let xs = _mm_sub_pd(x, _mm_and_pd(big, bound));
+
+    _mm_or_si128(
+        _mm_cvtpd_epi64x_v1(xs),
+        _mm_and_si128(_mm_castpd_si128(big), _mm_set1_epi64x(i64::MIN)),
+    )
+}
+
+/// POLYFILL: `f32x4 -> i32x4` saturating cast (`f32 as i32` semantics: NaN -> 0,
+/// out-of-range clamps). `cvttps2dq` already returns `i32::MIN` for NaN and both
+/// overflow directions, which is correct for negative overflow; positive overflow
+/// flips to `i32::MAX` with one XOR against the compare mask (MIN ^ !0 == MAX),
+/// and NaN lanes are zeroed with an ANDNOT.
+#[inline(always)]
+pub unsafe fn _mm_cvtps_epi32_satx_v1(x: __m128) -> __m128i {
+    let t = _mm_cvttps_epi32(x);
+    let hi = _mm_castps_si128(_mm_cmpge_ps(x, _mm_set1_ps(2147483648.0))); // 2^31
+    let nan = _mm_castps_si128(_mm_cmpunord_ps(x, x));
+
+    _mm_andnot_si128(nan, _mm_xor_si128(t, hi))
+}
+
+/// POLYFILL: `f32x4 -> u32x4` saturating cast (`f32 as u32`: NaN and negatives
+/// -> 0, >= 2^32 -> `u32::MAX`). `maxps` returns its second operand on unordered
+/// inputs, handling NaN and the low clamp in one instruction; lanes >= 2^32 come
+/// out of the in-range converter as 0 and are forced to MAX with an OR.
+#[inline(always)]
+pub unsafe fn _mm_cvtps_epu32_satx_v1(x: __m128) -> __m128i {
+    let x0 = _mm_max_ps(x, _mm_setzero_ps());
+    let t = _mm_cvtps_epu32x_v1(x0);
+    let hi = _mm_castps_si128(_mm_cmpge_ps(x0, _mm_set1_ps(4294967296.0))); // 2^32
+
+    _mm_or_si128(t, hi)
+}
+
+/// POLYFILL: `f64x2 -> i64x2` saturating cast (`f64 as i64`). Same shape as
+/// [`_mm_cvtps_epi32_satx_v1`]: scalar `cvttsd` gives `i64::MIN` for NaN and
+/// overflow, positive overflow XORs to MAX, NaN zeroes.
+#[inline(always)]
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn _mm_cvtpd_epi64_satx_v1(x: __m128d) -> __m128i {
+    let t = _mm_cvtpd_epi64x_v1(x);
+    let hi = _mm_castpd_si128(_mm_cmpge_pd(x, _mm_set1_pd(9223372036854775808.0))); // 2^63
+    let nan = _mm_castpd_si128(_mm_cmpunord_pd(x, x));
+
+    _mm_andnot_si128(nan, _mm_xor_si128(t, hi))
+}
+
+/// POLYFILL: `f64x2 -> u64x2` saturating cast (`f64 as u64`).
+#[inline(always)]
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn _mm_cvtpd_epu64_satx_v1(x: __m128d) -> __m128i {
+    let x0 = _mm_max_pd(x, _mm_setzero_pd()); // NaN and negatives -> 0
+    let t = _mm_cvtpd_epu64x_v1(x0);
+    let hi = _mm_castpd_si128(_mm_cmpge_pd(x0, _mm_set1_pd(18446744073709551616.0))); // 2^64
+
+    _mm_or_si128(t, hi)
+}
+
 /// POLYFILL: full-range `u64x2 -> f64x2` conversion.
 ///
 /// Same magic-number algorithm as the v2 version; the `_mm_blend_epi16`

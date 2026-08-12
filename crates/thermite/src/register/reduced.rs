@@ -172,6 +172,8 @@ where
 
 #[rustfmt::skip] #[thermite_macros::reduced_impl]
 impl<R: BitwiseRegister, N: Unsigned> BitwiseRegister for ReducedRegister<R, N> where R: CoreReducible<N> {
+    const HAS_NATIVE_TERNLOG: bool = R::HAS_NATIVE_TERNLOG;
+
     #[conditional] fn bitxor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn bitand(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}

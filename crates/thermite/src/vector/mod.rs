@@ -1367,12 +1367,19 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         F: Fn(Self::Element, Self::Element) -> Self::Element;
 
     /// Numeric cast to another vector type, matching the semantics of Rust's
-    /// `as` operator on the underlying scalar elements.
+    /// `as` operator on the underlying scalar elements **for in-range, finite
+    /// inputs**.
     ///
     /// Lane count is preserved; only the element type changes. The cast may
-    /// be widening, narrowing, signed/unsigned, or float/int. Out-of-range
-    /// float-to-int conversions follow the same saturating behavior as
-    /// scalar `as` on the host backend.
+    /// be widening, narrowing, signed/unsigned, or float/int.
+    ///
+    /// Float-to-int lanes that are NaN or out of the destination's range
+    /// produce a backend-defined value (x86 hardware conversions return the
+    /// "indefinite" integer, `INT::MIN`, where scalar `as` would saturate).
+    /// For exact `as` semantics on every input - NaN -> 0, out-of-range
+    /// clamps - use [`saturating_cast`](Self::saturating_cast). Under the
+    /// `strict_ieee754` feature, float-to-int `cast` itself routes to the
+    /// saturating implementation.
     #[inline(always)] fn cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
@@ -1408,13 +1415,16 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
         INTO::from_bits(self)
     }
 
-    /// Narrowing cast that saturates (clamps) out-of-range values to the
-    /// destination element range, rather than wrapping like [`cast`](Self::cast).
+    /// Cast that saturates (clamps) out-of-range values to the destination
+    /// element range, rather than wrapping (integers) or producing a
+    /// backend-defined value (float-to-int) like [`cast`](Self::cast).
     ///
-    /// Only resolves for narrowing, same-signedness integer conversions
-    /// (`i64 -> ... -> i8`, `u64 -> ... -> u8`); widening or sign-changing
-    /// casts have no `SaturatingCastVector` impl and must use [`cast`](Self::cast).
-    /// See [`SaturatingCastVector`].
+    /// Resolves for narrowing, same-signedness integer conversions
+    /// (`i64 -> ... -> i8`, `u64 -> ... -> u8`) and for same-width
+    /// float-to-int conversions (`f32 -> i32/u32`, `f64 -> i64/u64`), where it
+    /// has exact Rust `as` semantics: NaN -> 0, out-of-range clamps to
+    /// MIN/MAX. Widening or sign-changing casts have no `SaturatingCastVector`
+    /// impl and must use [`cast`](Self::cast). See [`SaturatingCastVector`].
     #[inline(always)] fn saturating_cast<INTO>(self) -> INTO
     where
         INTO: SaturatingCastVector<Self>,
@@ -1508,7 +1518,23 @@ pub trait BitwiseVector:
     /// into the most efficient sequence of native instructions (AND, OR, XOR, NOT)
     /// for your specific architecture. If using AVX512, there actually exists a single
     /// instruction for this.
+    ///
+    /// Gate on [`HAS_NATIVE_TERNLOG`](Self::HAS_NATIVE_TERNLOG) when choosing
+    /// between a ternlog bit assembly and a `select`/blend chain.
     #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self;
+
+    /// Whether [`ternlog`](Self::ternlog) is a single native instruction
+    /// (AVX-512 `vpternlog{d,q}`), forwarded from
+    /// [`BitwiseRegister::HAS_NATIVE_TERNLOG`](crate::register::BitwiseRegister::HAS_NATIVE_TERNLOG).
+    ///
+    /// Both paths compute the same function, so this only selects a lowering:
+    /// one instruction where the hardware has ternary logic, up to eight DNF
+    /// terms of AND/ANDNOT/OR where it does not. Fork on it when the
+    /// alternative to a ternlog assembly is a `blendv`-style select chain -
+    /// below AVX-512 the blends win (measured on znver3 in `ldexp`'s checked
+    /// tail: 3.8 cyc/iter for blends against 5.8 for ternlogs), while a native
+    /// ternlog makes the bit assembly strictly cheaper.
+    const HAS_NATIVE_TERNLOG: bool;
 
     /// Two-input version of [`ternlog`](Self::ternlog).
     ///

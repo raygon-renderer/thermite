@@ -542,6 +542,8 @@ where
 #[rustfmt::skip] #[thermite_macros::vector_impl]
 #[diagnostic::do_not_recommend]
 impl<R: BitwiseRegister + Register> BitwiseVector for Vector<R> {
+    const HAS_NATIVE_TERNLOG: bool = R::HAS_NATIVE_TERNLOG;
+
     #[conditional] fn ternlog<const IMM: i32>(a: Self, b: Self, c: Self) -> Self {}
     #[conditional] fn bilog<const IMM: i32>(a: Self, b: Self) -> Self {}
 }
