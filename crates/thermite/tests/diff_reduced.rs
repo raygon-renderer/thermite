@@ -677,12 +677,32 @@ macro_rules! fextra {
             |a, b| a.copysign(b),
             |x: $e, y: $e| x.copysign(y)
         );
+        // Under `strict_ieee754` min/max define the tie semantics exactly:
+        // min(-0, +0) = -0 and max(-0, +0) = +0 in either operand order, and
+        // min/max(x, NaN) = x. The plain oracle leaves ties to operand order.
         bint!(
             concat!($l, " [min]"),
             V,
             $e,
             |a, b| a.min(b),
-            |x: $e, y: $e| if x < y { x } else { y },
+            |x: $e, y: $e| {
+                #[cfg(feature = "strict_ieee754")]
+                {
+                    if y != y {
+                        x
+                    } else if x == y {
+                        <$e>::from_bits(x.to_bits() | y.to_bits())
+                    } else if x < y {
+                        x
+                    } else {
+                        y
+                    }
+                }
+                #[cfg(not(feature = "strict_ieee754"))]
+                {
+                    if x < y { x } else { y }
+                }
+            },
             Tol::ExactOrNan
         );
         bint!(
@@ -690,7 +710,24 @@ macro_rules! fextra {
             V,
             $e,
             |a, b| a.max(b),
-            |x: $e, y: $e| if x > y { x } else { y },
+            |x: $e, y: $e| {
+                #[cfg(feature = "strict_ieee754")]
+                {
+                    if y != y {
+                        x
+                    } else if x == y {
+                        <$e>::from_bits(x.to_bits() & y.to_bits())
+                    } else if x > y {
+                        x
+                    } else {
+                        y
+                    }
+                }
+                #[cfg(not(feature = "strict_ieee754"))]
+                {
+                    if x > y { x } else { y }
+                }
+            },
             Tol::ExactOrNan
         );
 

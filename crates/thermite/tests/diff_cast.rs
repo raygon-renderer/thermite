@@ -6,11 +6,13 @@
 //! built-in `as` - the documented "like `as`" contract for `cast`.
 //!
 //! `mod gate` is the always-green correctness gate. Float→int conversions are
-//! kept in the **in-range, finite** domain there (where the contract is
-//! unambiguous and the `_limited` polyfills' precondition holds). The
-//! out-of-range / NaN behaviour, where the x86 hardware path returns the
-//! "indefinite" integer instead of saturating like `as`, is a documented
-//! divergence captured (ignored) in `mod divergence`.
+//! kept in the **in-range, finite** domain there, matching `cast`'s documented
+//! precondition (out-of-range/NaN lanes are backend-defined - x86 returns the
+//! hardware "indefinite" integer). The total, `as`-exact op is
+//! `saturating_cast`, verified over the raw corpus (NaN/inf/out-of-range
+//! included) in each backend's `mod saturating`; those modules also pin that
+//! `cast` f64→u64 is full-range truncating (it used to route to the rounding,
+//! `[0, 2^52)`-only `_limited` polyfill that now only backs `fast_cast`).
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -560,49 +562,178 @@ mod x86 {
         cast_suite!(v1, X86V1, "x86_v1");
     }
 
-    // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the x86 hardware
-    // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
-    // divergence, not auto-failed - see TESTING.md.
-    mod divergence {
+    // Out-of-range / NaN float→int: `cast` documents backend-defined results
+    // there (x86 returns the hardware "indefinite" integer). The total,
+    // `as`-exact op is `saturating_cast`, verified here over the RAW corpus
+    // (NaN, infinities, out-of-range included) against the scalar oracle.
+    mod saturating {
         use super::*;
 
-        #[test]
-        #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
-                indefinite integer instead of saturating like `as` (scalar). \
-                The general `cast` contract is 'like as'; x86 needs a clamp or \
-                the `_limited` precondition must be documented."]
-        fn float_to_int_out_of_range() {
-            cast_diff!(
-                "x86_v3 f64x4->i64x4 OOR",
-                <X86V3 as Simd>::f64x4,
-                <X86V3 as Simd>::i64x4,
-                <Scalar as Simd>::f64x4,
-                <Scalar as Simd>::i64x4,
-                f64,
-                |x| x,
-                Tol::Exact
-            );
-            cast_diff!(
-                "x86_v3 f32x4->i32x4 OOR",
-                <X86V3 as Simd>::f32x4,
-                <X86V3 as Simd>::i32x4,
-                <Scalar as Simd>::f32x4,
-                <Scalar as Simd>::i32x4,
-                f32,
-                |x| x,
-                Tol::Exact
-            );
+        macro_rules! sat_suite {
+            ($b:ty, $tag:expr) => {
+                sat_cast_diff!(
+                    concat!($tag, " f32x4->i32x4 sat"),
+                    <$b as Simd>::f32x4,
+                    <$b as Simd>::i32x4,
+                    <Scalar as Simd>::f32x4,
+                    <Scalar as Simd>::i32x4,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f32x8->i32x8 sat"),
+                    <$b as Simd>::f32x8,
+                    <$b as Simd>::i32x8,
+                    <Scalar as Simd>::f32x8,
+                    <Scalar as Simd>::i32x8,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f32x4->u32x4 sat"),
+                    <$b as Simd>::f32x4,
+                    <$b as Simd>::u32x4,
+                    <Scalar as Simd>::f32x4,
+                    <Scalar as Simd>::u32x4,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x2->i64x2 sat"),
+                    <$b as Simd>::f64x2,
+                    <$b as Simd>::i64x2,
+                    <Scalar as Simd>::f64x2,
+                    <Scalar as Simd>::i64x2,
+                    f64
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x4->i64x4 sat"),
+                    <$b as Simd>::f64x4,
+                    <$b as Simd>::i64x4,
+                    <Scalar as Simd>::f64x4,
+                    <Scalar as Simd>::i64x4,
+                    f64
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x4->u64x4 sat"),
+                    <$b as Simd>::f64x4,
+                    <$b as Simd>::u64x4,
+                    <Scalar as Simd>::f64x4,
+                    <Scalar as Simd>::u64x4,
+                    f64
+                );
+
+                // cross-width compositions: narrow via same-width int...
+                sat_cast_diff!(
+                    concat!($tag, " f32x8->i16x8 sat"),
+                    <$b as Simd>::f32x8,
+                    <$b as Simd>::i16x8,
+                    <Scalar as Simd>::f32x8,
+                    <Scalar as Simd>::i16x8,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f32x4->i8x4 sat"),
+                    <$b as Simd>::f32x4,
+                    <$b as Simd>::i8x4,
+                    <Scalar as Simd>::f32x4,
+                    <Scalar as Simd>::i8x4,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x4->i32x4 sat"),
+                    <$b as Simd>::f64x4,
+                    <$b as Simd>::i32x4,
+                    <Scalar as Simd>::f64x4,
+                    <Scalar as Simd>::i32x4,
+                    f64
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x4->u8x4 sat"),
+                    <$b as Simd>::f64x4,
+                    <$b as Simd>::u8x4,
+                    <Scalar as Simd>::f64x4,
+                    <Scalar as Simd>::u8x4,
+                    f64
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f64x16->i16x16 sat"),
+                    <$b as Simd>::f64x16,
+                    <$b as Simd>::i16x16,
+                    <Scalar as Simd>::f64x16,
+                    <Scalar as Simd>::i16x16,
+                    f64
+                );
+                // ...and the f32 -> 64-bit widen-then-saturate arm
+                sat_cast_diff!(
+                    concat!($tag, " f32x4->u64x4 sat"),
+                    <$b as Simd>::f32x4,
+                    <$b as Simd>::u64x4,
+                    <Scalar as Simd>::f32x4,
+                    <Scalar as Simd>::u64x4,
+                    f32
+                );
+                sat_cast_diff!(
+                    concat!($tag, " f32x8->i64x8 sat"),
+                    <$b as Simd>::f32x8,
+                    <$b as Simd>::i64x8,
+                    <Scalar as Simd>::f32x8,
+                    <Scalar as Simd>::i64x8,
+                    f32
+                );
+            };
+        }
+
+        // Bound smoke: `S: Simd` alone must be enough for generic saturating
+        // float -> int casts (the pairs are bound on the `Simd` trait's slots),
+        // including the reduced x2 width.
+        fn generic_over_simd<S: thermite::simd::Simd>() {
+            use thermite::prelude::*;
+
+            let v = Vector::<S::f32x8>::splat(f32::NAN).saturating_cast::<Vector<S::i32x8>>();
+            assert_eq!(v.extract::<0>(), 0);
+
+            let v = Vector::<S::f64x4>::splat(1e300).saturating_cast::<Vector<S::u64x4>>();
+            assert_eq!(v.extract::<0>(), u64::MAX);
+
+            let v = Vector::<S::f32x2>::splat(-1e10).saturating_cast::<Vector<S::i32x2>>();
+            assert_eq!(v.extract::<0>(), i32::MIN);
+
+            // cross-width pairs resolve from the Simd bounds too
+            let v = Vector::<S::f64x4>::splat(-1e300).saturating_cast::<Vector<S::i8x4>>();
+            assert_eq!(v.extract::<0>(), i8::MIN);
+
+            let v = Vector::<S::f32x4>::splat(1e30).saturating_cast::<Vector<S::u64x4>>();
+            assert_eq!(v.extract::<0>(), u64::MAX);
         }
 
         #[test]
-        #[ignore = "DIVERGENCE: f64→u64 `cast` routes to `_mm*_cvtpd_epu64x_limited_*` \
-                which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
-                instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
-                but the cast yields 3, and values ≥ 2^52 are corrupted. \
-                f64→i64 is full-range-correct and truncating; f64→u64 needs an \
-                equivalent path or a documented precondition."]
-        fn f64_to_u64_nonconforming() {
-            // (b) rounds vs truncates, even for tiny in-range values.
+        fn saturating_cast_generic_bounds() {
+            generic_over_simd::<Scalar>();
+            generic_over_simd::<X86V1>();
+            generic_over_simd::<X86V2>();
+            generic_over_simd::<X86V3>();
+        }
+
+        #[test]
+        fn v1_float_to_int_saturates() {
+            sat_suite!(X86V1, "x86_v1");
+        }
+
+        #[test]
+        fn v2_float_to_int_saturates() {
+            sat_suite!(X86V2, "x86_v2");
+        }
+
+        #[test]
+        fn v3_float_to_int_saturates() {
+            sat_suite!(X86V3, "x86_v3");
+        }
+
+        // `cast` f64->u64 is full-range truncating now (previously it routed to
+        // the `_limited` magic-add polyfill, which ROUNDS and only covers
+        // [0, 2^52) - the fractional and the beyond-2^52 case both regressed to
+        // `as` behavior). `fast_cast` keeps the 2-op limited trick.
+        #[test]
+        fn f64_to_u64_cast_truncates() {
+            // fractional in-range values must truncate like `as`, not round
             cast_diff!(
                 "x86_v3 f64x4->u64x4 frac",
                 <X86V3 as Simd>::f64x4,
@@ -611,6 +742,27 @@ mod x86 {
                 <Scalar as Simd>::u64x4,
                 f64,
                 |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
+                Tol::Exact
+            );
+            // the full in-range domain, including beyond the old 2^52 limit
+            cast_diff!(
+                "x86_v3 f64x4->u64x4 full range",
+                <X86V3 as Simd>::f64x4,
+                <X86V3 as Simd>::u64x4,
+                <Scalar as Simd>::f64x4,
+                <Scalar as Simd>::u64x4,
+                f64,
+                |x: f64| if x.is_finite() { x.abs().clamp(0.0, 1.8e19) } else { 2.7 },
+                Tol::Exact
+            );
+            cast_diff!(
+                "x86_v1 f64x2->u64x2 full range",
+                <X86V1 as Simd>::f64x2,
+                <X86V1 as Simd>::u64x2,
+                <Scalar as Simd>::f64x2,
+                <Scalar as Simd>::u64x2,
+                f64,
+                |x: f64| if x.is_finite() { x.abs().clamp(0.0, 1.8e19) } else { 2.7 },
                 Tol::Exact
             );
         }
@@ -627,17 +779,14 @@ mod wasm {
         cast_suite!(wasm, Wasm, "wasm");
     }
 
-    // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
-    // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
-    // divergence, not auto-failed - see TESTING.md.
-    mod divergence {
+    // wasm's `cast` is already total and `as`-exact in both directions
+    // (`*_trunc_sat_*` for f32, per-lane scalar `as` for f64), so the raw
+    // corpus - NaN, infinities, out-of-range - must match the scalar oracle.
+    // Only `fast_cast` (relaxed trunc / `_limited` magic) is narrow-domain.
+    mod saturating {
         use super::*;
 
         #[test]
-        #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
-                indefinite integer instead of saturating like `as` (scalar). \
-                The general `cast` contract is 'like as'; backend needs a clamp or \
-                the `_limited` precondition must be documented."]
         fn float_to_int_out_of_range() {
             cast_diff!(
                 "wasm f64x4->i64x4 OOR",
@@ -662,14 +811,7 @@ mod wasm {
         }
 
         #[test]
-        #[ignore = "DIVERGENCE: f64→u64 `cast` routes to a `_limited` polyfill \
-                which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
-                instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
-                but the cast yields 3, and values ≥ 2^52 are corrupted. \
-                f64→i64 is full-range-correct and truncating; f64→u64 needs an \
-                equivalent path or a documented precondition."]
-        fn f64_to_u64_nonconforming() {
-            // (b) rounds vs truncates, even for tiny in-range values.
+        fn f64_to_u64_cast_truncates() {
             cast_diff!(
                 "wasm f64x4->u64x4 frac",
                 <Wasm as Simd>::f64x4,
@@ -679,6 +821,42 @@ mod wasm {
                 f64,
                 |x: f64| if x.is_finite() { (x.abs() % 1000.0) + 0.7 } else { 2.7 },
                 Tol::Exact
+            );
+        }
+
+        #[test]
+        fn float_to_int_saturates() {
+            sat_cast_diff!(
+                "wasm f32x4->i32x4 sat",
+                <Wasm as Simd>::f32x4,
+                <Wasm as Simd>::i32x4,
+                <Scalar as Simd>::f32x4,
+                <Scalar as Simd>::i32x4,
+                f32
+            );
+            sat_cast_diff!(
+                "wasm f32x4->u32x4 sat",
+                <Wasm as Simd>::f32x4,
+                <Wasm as Simd>::u32x4,
+                <Scalar as Simd>::f32x4,
+                <Scalar as Simd>::u32x4,
+                f32
+            );
+            sat_cast_diff!(
+                "wasm f64x2->i64x2 sat",
+                <Wasm as Simd>::f64x2,
+                <Wasm as Simd>::i64x2,
+                <Scalar as Simd>::f64x2,
+                <Scalar as Simd>::i64x2,
+                f64
+            );
+            sat_cast_diff!(
+                "wasm f64x2->u64x2 sat",
+                <Wasm as Simd>::f64x2,
+                <Wasm as Simd>::u64x2,
+                <Scalar as Simd>::f64x2,
+                <Scalar as Simd>::u64x2,
+                f64
             );
         }
     }
